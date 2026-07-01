@@ -14,8 +14,8 @@ type ReadinessChecker interface {
 
 type Options struct {
 	CORS       CORSOptions
-	Debug      http.Handler
 	Middleware []func(http.Handler) http.Handler
+	Profiler   http.Handler
 	Readiness  ReadinessChecker
 	Tenants    TenantService
 }
@@ -37,8 +37,8 @@ func NewRouter(options Options) http.Handler {
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/readyz", handleReady(options.Readiness))
-	if options.Debug != nil {
-		r.Mount("/debug", options.Debug)
+	if options.Profiler != nil {
+		r.Mount("/debug", options.Profiler)
 	}
 
 	return r

@@ -28,11 +28,11 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Database.MinConns != config.DefaultDBMinConns {
 		t.Fatalf("database min conns = %d, want %d", cfg.Database.MinConns, config.DefaultDBMinConns)
 	}
-	if cfg.Observability.Pprof {
-		t.Fatal("pprof = true, want false")
+	if cfg.Observability.Profiler {
+		t.Fatal("profiler = true, want false")
 	}
-	if cfg.Observability.TraceLogs {
-		t.Fatal("trace logs = true, want false")
+	if cfg.Observability.OperationLogs {
+		t.Fatal("operation logs = true, want false")
 	}
 	if cfg.Observability.Service != config.DefaultServiceName {
 		t.Fatalf("service = %q, want %q", cfg.Observability.Service, config.DefaultServiceName)
@@ -126,12 +126,12 @@ func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
 	t.Setenv(config.APILogFormat, "text")
 	t.Setenv(config.APILogLevel, "debug")
-	t.Setenv(config.APIPprof, "true")
+	t.Setenv(config.APIProfiler, "true")
+	t.Setenv(config.APIOperationLogs, "1")
 	t.Setenv(config.APIRequestLogs, "sampled")
 	t.Setenv(config.APIRequestSampleRate, "0.25")
 	t.Setenv(config.APIService, "chalk-api-test")
 	t.Setenv(config.APISlowRequestMS, "75")
-	t.Setenv(config.APITraceLogs, "1")
 	t.Setenv(config.APIVersion, "2026.07.01")
 
 	cfg, err := config.Load()
@@ -139,11 +139,11 @@ func TestLoadObservability(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if !cfg.Observability.Pprof {
-		t.Fatal("pprof = false, want true")
+	if !cfg.Observability.Profiler {
+		t.Fatal("profiler = false, want true")
 	}
-	if !cfg.Observability.TraceLogs {
-		t.Fatal("trace logs = false, want true")
+	if !cfg.Observability.OperationLogs {
+		t.Fatal("operation logs = false, want true")
 	}
 	if cfg.Observability.Service != "chalk-api-test" {
 		t.Fatalf("service = %q, want chalk-api-test", cfg.Observability.Service)
@@ -171,8 +171,8 @@ func TestLoadObservability(t *testing.T) {
 	}
 }
 
-func TestLoadTraceLogsDefaultToAllRequestLogs(t *testing.T) {
-	t.Setenv(config.APITraceLogs, "1")
+func TestLoadOperationLogsDefaultToAllRequestLogs(t *testing.T) {
+	t.Setenv(config.APIOperationLogs, "1")
 
 	cfg, err := config.Load()
 	if err != nil {

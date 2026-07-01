@@ -14,12 +14,12 @@ const (
 	APIEnvironment        = "CHALK_API_ENV"
 	APILogFormat          = "CHALK_API_LOG_FORMAT"
 	APILogLevel           = "CHALK_API_LOG_LEVEL"
-	APIPprof              = "CHALK_API_PPROF"
+	APIOperationLogs      = "CHALK_API_OPERATION_LOGS"
+	APIProfiler           = "CHALK_API_PROFILER"
 	APIRequestLogs        = "CHALK_API_REQUEST_LOGS"
 	APIRequestSampleRate  = "CHALK_API_REQUEST_SAMPLE_RATE"
 	APIService            = "CHALK_API_SERVICE"
 	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
-	APITraceLogs          = "CHALK_API_TRACE_LOGS"
 	APIVersion            = "CHALK_API_VERSION"
 
 	DatabaseURL      = "CHALK_DATABASE_URL"
@@ -55,12 +55,12 @@ type ObservabilityConfig struct {
 	Environment          string
 	LogFormat            string
 	LogLevel             string
-	Pprof                bool
+	OperationLogs        bool
+	Profiler             bool
 	RequestLogs          string
 	RequestSampleRate    float64
 	Service              string
 	SlowRequestThreshold time.Duration
-	TraceLogs            bool
 	Version              string
 }
 
@@ -99,8 +99,8 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	traceLogs := envBool(APITraceLogs)
-	requestLogs, err := envRequestLogs(traceLogs)
+	operationLogs := envBool(APIOperationLogs)
+	requestLogs, err := envRequestLogs(operationLogs)
 	if err != nil {
 		return Config{}, err
 	}
@@ -133,12 +133,12 @@ func Load() (Config, error) {
 			Environment:          envOrDefault(APIEnvironment, DefaultEnvironment),
 			LogFormat:            logFormat,
 			LogLevel:             logLevel,
-			Pprof:                envBool(APIPprof),
+			OperationLogs:        operationLogs,
+			Profiler:             envBool(APIProfiler),
 			RequestLogs:          requestLogs,
 			RequestSampleRate:    requestSampleRate,
 			Service:              envOrDefault(APIService, DefaultServiceName),
 			SlowRequestThreshold: slowRequestThreshold,
-			TraceLogs:            traceLogs,
 			Version:              envOrDefault(APIVersion, DefaultVersion),
 		},
 	}, nil
@@ -224,10 +224,10 @@ func envEnum(name string, fallback string, allowed ...string) (string, error) {
 	return "", fmt.Errorf("%s must be one of: %s", name, strings.Join(allowed, ", "))
 }
 
-func envRequestLogs(traceLogs bool) (string, error) {
+func envRequestLogs(operationLogs bool) (string, error) {
 	value, ok := os.LookupEnv(APIRequestLogs)
 	if !ok || value == "" {
-		if traceLogs {
+		if operationLogs {
 			return "all", nil
 		}
 		return DefaultRequestLogs, nil

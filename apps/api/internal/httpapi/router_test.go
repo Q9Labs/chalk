@@ -195,18 +195,18 @@ func TestMiddleware(t *testing.T) {
 	}
 }
 
-func TestDebugMount(t *testing.T) {
+func TestProfilerMount(t *testing.T) {
 	res := requestWithOptions(t, http.MethodGet, "/debug/healthz", httpapi.Options{
-		Debug: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			writeDebugTestResponse(w)
+		Profiler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeProfilerTestResponse(w)
 		}),
 	})
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
 	}
-	if strings.TrimSpace(res.Body.String()) != "debug" {
-		t.Fatalf("debug body = %q, want debug", res.Body.String())
+	if strings.TrimSpace(res.Body.String()) != "profiler" {
+		t.Fatalf("profiler body = %q, want profiler", res.Body.String())
 	}
 }
 
@@ -722,6 +722,6 @@ func mustTenantID(t *testing.T, value string) utilities.ID {
 	return id
 }
 
-func writeDebugTestResponse(w http.ResponseWriter) {
-	_, _ = w.Write([]byte("debug"))
+func writeProfilerTestResponse(w http.ResponseWriter) {
+	_, _ = w.Write([]byte("profiler"))
 }

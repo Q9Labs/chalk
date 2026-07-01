@@ -35,12 +35,12 @@ func run() error {
 		Environment:          cfg.Observability.Environment,
 		LogFormat:            observability.LogFormat(cfg.Observability.LogFormat),
 		LogLevel:             cfg.Observability.LogLevel,
-		Pprof:                cfg.Observability.Pprof,
+		OperationLogs:        cfg.Observability.OperationLogs,
+		Profiler:             cfg.Observability.Profiler,
 		RequestLogs:          observability.RequestLogMode(cfg.Observability.RequestLogs),
 		RequestSampleRate:    cfg.Observability.RequestSampleRate,
 		Service:              cfg.Observability.Service,
 		SlowRequestThreshold: cfg.Observability.SlowRequestThreshold,
-		TraceLogs:            cfg.Observability.TraceLogs,
 		Version:              cfg.Observability.Version,
 	}, os.Stdout)
 	logger := diagnostics.Logger()
@@ -49,9 +49,9 @@ func run() error {
 		"address", cfg.API.Address,
 		"log_format", cfg.Observability.LogFormat,
 		"log_level", cfg.Observability.LogLevel,
+		"operation_logs", cfg.Observability.OperationLogs,
+		"profiler", cfg.Observability.Profiler,
 		"request_logs", cfg.Observability.RequestLogs,
-		"trace_logs", cfg.Observability.TraceLogs,
-		"pprof", cfg.Observability.Pprof,
 	)
 
 	pool, err := postgres.Open(context.Background(), cfg.Database)
@@ -62,7 +62,8 @@ func run() error {
 	logger.Info("postgres connected", "event", "postgres.connected")
 
 	queries := postgresdb.New(pool)
-	tenantRepository := postgres.NewTenantRepository(diagnostics.Queries(queries))
+	operationQueries := diagnostics.Queries(queries)
+	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	tenantService := tenants.NewService(tenantRepository)
 	routerOptions := httpapi.Options{
 		CORS: httpapi.CORSOptions{

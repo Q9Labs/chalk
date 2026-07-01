@@ -31,12 +31,12 @@ type Config struct {
 	Environment          string
 	LogFormat            LogFormat
 	LogLevel             string
-	Pprof                bool
+	OperationLogs        bool
+	Profiler             bool
 	RequestLogs          RequestLogMode
 	RequestSampleRate    float64
 	Service              string
 	SlowRequestThreshold time.Duration
-	TraceLogs            bool
 	Version              string
 }
 
@@ -79,26 +79,26 @@ func (d Diagnostics) Logger() *slog.Logger {
 }
 
 func (d Diagnostics) Queries(next db.Querier) db.Querier {
-	if !d.config.TraceLogs {
+	if !d.config.OperationLogs {
 		return next
 	}
 
-	return TraceQueries(next, d.logger)
+	return OperationQueries(next, d.logger)
 }
 
 func (d Diagnostics) ApplyHTTP(options *httpapi.Options) {
 	if options == nil {
 		return
 	}
-	if d.config.TraceLogs || d.config.RequestLogs != RequestLogOff {
+	if d.config.RequestLogs != RequestLogOff {
 		options.Middleware = append(options.Middleware, RequestMiddleware(d.logger, RequestLogConfig{
 			Mode:          d.config.RequestLogs,
 			SampleRate:    d.config.RequestSampleRate,
 			SlowThreshold: d.config.SlowRequestThreshold,
 		}))
 	}
-	if d.config.Pprof {
-		options.Debug = DebugHandler()
+	if d.config.Profiler {
+		options.Profiler = ProfilerHandler()
 	}
 }
 

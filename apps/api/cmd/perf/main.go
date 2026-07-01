@@ -23,8 +23,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
 
 type endpoint struct {
@@ -75,6 +73,8 @@ type endpointSummary struct {
 
 type phaseSummary struct {
 	Name         string
+	StartedAt    time.Time
+	EndedAt      time.Time
 	Duration     time.Duration
 	Concurrency  int
 	Total        int
@@ -93,11 +93,10 @@ type processSample struct {
 }
 
 type runner struct {
-	baseURL        string
-	client         *http.Client
-	tenantIDs      []string
-	counter        atomic.Uint64
-	requestCounter atomic.Uint64
+	baseURL   string
+	client    *http.Client
+	tenantIDs []string
+	counter   atomic.Uint64
 }
 
 func main() {
@@ -185,9 +184,9 @@ func run(ctx context.Context, cfg config) (result, error) {
 	cmd := exec.CommandContext(ctx, cfg.server)
 	cmd.Env = append(os.Environ(),
 		"CHALK_API_ADDR="+cfg.addr,
-		"CHALK_API_PPROF=1",
+		"CHALK_API_OPERATION_LOGS=1",
+		"CHALK_API_PROFILER=1",
 		"CHALK_API_REQUEST_LOGS=all",
-		"CHALK_API_TRACE_LOGS=1",
 	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -249,7 +248,7 @@ func run(ctx context.Context, cfg config) (result, error) {
 		return result{}, fmt.Errorf("sync server log: %w", err)
 	}
 
-	serverTimings, err := readServerTimings(serverLog)
+	serverTimings, err := readServerTimings(serverLog, load, stress)
 	if err != nil {
 		return result{}, fmt.Errorf("read server timings: %w", err)
 	}
@@ -353,7 +352,9 @@ func (r *runner) runPhase(ctx context.Context, name string, duration time.Durati
 
 	summary := <-summaryDone
 	summary.Name = name
+	summary.StartedAt = startedAt
 	summary.Duration = time.Since(startedAt)
+	summary.EndedAt = startedAt.Add(summary.Duration)
 	summary.Concurrency = concurrency
 
 	if summary.Duration > 0 {
@@ -451,7 +452,7 @@ func (r *runner) doSample(ctx context.Context, phase string, endpoint endpoint) 
 	return res
 }
 
-func (r *runner) do(ctx context.Context, phase string, endpoint endpoint) (sample, error) {
+func (r *runner) do(ctx context.Context, _ string, endpoint endpoint) (sample, error) {
 	var body io.Reader
 	if endpoint.Body != nil {
 		body = strings.NewReader(endpoint.Body())
@@ -465,11 +466,7 @@ func (r *runner) do(ctx context.Context, phase string, endpoint endpoint) (sampl
 	if endpoint.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	traceID := fmt.Sprintf("%s-%d", phase, r.requestCounter.Add(1))
-	req.Header.Set(observability.RequestIDHeader, traceID)
-	req.Header.Set(observability.TraceIDHeader, traceID)
-
-	var t traceState
+	var t clientTraceState
 	trace := &httptrace.ClientTrace{
 		DNSStart: func(httptrace.DNSStartInfo) {
 			t.dnsStart = time.Now()
@@ -534,7 +531,7 @@ func (r *runner) do(ctx context.Context, phase string, endpoint endpoint) (sampl
 	return res, nil
 }
 
-type traceState struct {
+type clientTraceState struct {
 	dnsStart     time.Time
 	dnsDone      time.Time
 	connectStart time.Time
@@ -637,30 +634,41 @@ type serverTiming struct {
 	DB     time.Duration
 }
 
-type serverLogRequest struct {
-	Phase    string
-	Endpoint string
-	Server   time.Duration
-	DB       time.Duration
+type phaseWindow struct {
+	Name  string
+	Start time.Time
+	End   time.Time
 }
 
 type serverLogEvent struct {
 	Event      string  `json:"event"`
-	TraceID    string  `json:"trace_id"`
+	Time       string  `json:"time"`
 	Method     string  `json:"method"`
 	Route      string  `json:"route"`
 	Path       string  `json:"path"`
 	DurationMS float64 `json:"duration_ms"`
 }
 
-func readServerTimings(path string) (map[string]map[string]serverTiming, error) {
+func readServerTimings(path string, phases ...phaseSummary) (map[string]map[string]serverTiming, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	requests := make(map[string]*serverLogRequest)
+	windows := make([]phaseWindow, 0, len(phases))
+	for _, phase := range phases {
+		if phase.Name == "" || phase.StartedAt.IsZero() || phase.EndedAt.IsZero() {
+			continue
+		}
+		windows = append(windows, phaseWindow{
+			Name:  phase.Name,
+			Start: phase.StartedAt,
+			End:   phase.EndedAt,
+		})
+	}
+
+	timings := make(map[string]map[string]serverTiming)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 	for scanner.Scan() {
@@ -673,48 +681,50 @@ func readServerTimings(path string) (map[string]map[string]serverTiming, error) 
 		if err := json.Unmarshal(line, &event); err != nil {
 			continue
 		}
-		if event.TraceID == "" {
+		if event.Event != "http.request" {
 			continue
 		}
 
-		request := requests[event.TraceID]
-		if request == nil {
-			request = &serverLogRequest{Phase: tracePhase(event.TraceID)}
-			requests[event.TraceID] = request
+		phaseName := eventPhase(event.Time, windows)
+		if phaseName == "" {
+			continue
 		}
 
-		switch event.Event {
-		case "http.request":
-			request.Endpoint = endpointName(event.Method, event.Route, event.Path)
-			request.Server = milliseconds(event.DurationMS)
-		case "db.query":
-			request.DB += milliseconds(event.DurationMS)
+		phase := timings[phaseName]
+		if phase == nil {
+			phase = make(map[string]serverTiming)
+			timings[phaseName] = phase
 		}
+
+		endpoint := endpointName(event.Method, event.Route, event.Path)
+		timing := phase[endpoint]
+		timing.Count++
+		timing.Server += milliseconds(event.DurationMS)
+		phase[endpoint] = timing
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 
-	timings := make(map[string]map[string]serverTiming)
-	for _, request := range requests {
-		if request.Phase == "" || request.Endpoint == "" {
-			continue
-		}
+	return timings, nil
+}
 
-		phase := timings[request.Phase]
-		if phase == nil {
-			phase = make(map[string]serverTiming)
-			timings[request.Phase] = phase
-		}
-
-		timing := phase[request.Endpoint]
-		timing.Count++
-		timing.Server += request.Server
-		timing.DB += request.DB
-		phase[request.Endpoint] = timing
+func eventPhase(value string, windows []phaseWindow) string {
+	if value == "" {
+		return ""
 	}
 
-	return timings, nil
+	eventTime, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return ""
+	}
+
+	for _, window := range windows {
+		if (eventTime.Equal(window.Start) || eventTime.After(window.Start)) && eventTime.Before(window.End) {
+			return window.Name
+		}
+	}
+	return ""
 }
 
 func applyServerTimings(phase *phaseSummary, timings map[string]serverTiming) {
@@ -731,17 +741,6 @@ func applyServerTimings(phase *phaseSummary, timings map[string]serverTiming) {
 			summary.ServerOther = 0
 		}
 	}
-}
-
-func tracePhase(traceID string) string {
-	phase, _, ok := strings.Cut(traceID, "-")
-	if !ok {
-		return ""
-	}
-	if phase != "load" && phase != "stress" {
-		return ""
-	}
-	return phase
 }
 
 func endpointName(method string, route string, path string) string {
@@ -775,7 +774,7 @@ func writeReport(path string, input reportInput) error {
 	b.WriteString("## Scope\n\n")
 	b.WriteString(fmt.Sprintf("- Seed tenants: %d\n", input.SeedTenants))
 	b.WriteString("- Endpoints exercised: `/healthz`, `/readyz`, `GET /v1/regions`, `GET /v1/tenants`, `POST /v1/tenants`, `GET /v1/tenants/{id}`, `PATCH /v1/tenants/{id}`\n")
-	b.WriteString("- Server trace log: local raw JSONL under `.private/`, not intended for commit.\n\n")
+	b.WriteString("- Server log: local raw JSONL under `.private/`, not intended for commit.\n\n")
 	b.WriteString("## Lifecycle\n\n")
 	b.WriteString("| Measurement | Duration |\n")
 	b.WriteString("| --- | ---: |\n")
@@ -784,10 +783,10 @@ func writeReport(path string, input reportInput) error {
 	b.WriteString(fmt.Sprintf("| Graceful shutdown after SIGTERM | %s |\n\n", roundDuration(input.Shutdown)))
 	writePhase(&b, input.Load)
 	writePhase(&b, input.Stress)
-	b.WriteString("## Trace Shape\n\n")
-	b.WriteString("With `CHALK_API_TRACE_LOGS=1`, each request gets `X-Request-Id` and `X-Trace-Id` response headers. Server logs contain `http.request` events and Postgres adapter logs contain `db.query` events using the same IDs. Client-side timings come from Go `httptrace`: connect, write, first byte, total response read. Local HTTP has no TLS timing.\n\n")
+	b.WriteString("## Timing Shape\n\n")
+	b.WriteString("With `CHALK_API_OPERATION_LOGS=1`, server logs contain `http.request` events and Postgres adapter `db.query` operation events. Client-side timings come from Go `httptrace`: connect, write, first byte, total response read. Local HTTP has no TLS timing. DB operation logs are intentionally not request-correlated.\n\n")
 	b.WriteString("## Teardown\n\n")
-	b.WriteString("The reusable observability layer is opt-in. To disable it, leave `CHALK_API_TRACE_LOGS` and `CHALK_API_PPROF` unset. To strip it from the codebase later, remove `internal/observability`, the observability fields in config, the generic router middleware/debug options, and `cmd/perf` plus `scripts/perf-local.sh`.\n")
+	b.WriteString("The reusable observability layer is opt-in. To disable it, leave `CHALK_API_OPERATION_LOGS`, `CHALK_API_PROFILER`, and `CHALK_API_REQUEST_LOGS` unset. To strip it from the codebase later, remove `internal/observability`, the observability fields in config, the generic router middleware/profiler options, and `cmd/perf` plus `scripts/perf-local.sh`.\n")
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
@@ -865,13 +864,13 @@ func writeHTMLReport(path string, input reportInput) error {
 	writeHTMLSummary(&b, input)
 	writeHTMLLegend(&b)
 	b.WriteString(`<section class="viewer"><div class="controls"><div class="phase-toggle" id="phase-toggle"></div><select id="endpoint-select" aria-label="Endpoint"></select></div><div id="profile"></div></section>`)
-	b.WriteString("<p class=\"foot\">Raw trace log: ")
+	b.WriteString("<p class=\"foot\">Raw server log: ")
 	b.WriteString(html.EscapeString(input.ServerLog))
-	b.WriteString(". Local HTTP has no TLS layer, and keep-alive means DNS/connect mostly disappear after connection warmup. The wait segment is client-observed time from request write to first response byte; the server bar is independently observed from server JSON traces joined by trace ID.</p>")
+	b.WriteString(". Local HTTP has no TLS layer, and keep-alive means DNS/connect mostly disappear after connection warmup. The wait segment is client-observed time from request write to first response byte; the server bar is independently observed from server request logs bucketed into each test phase by timestamp.</p>")
 	b.WriteString("<script id=\"profile-data\" type=\"application/json\">")
 	b.WriteString(strings.ReplaceAll(string(data), "</", "<\\/"))
 	b.WriteString("</script><script>")
-	b.WriteString(`const profileData=JSON.parse(document.getElementById("profile-data").textContent);const colors={dns:"DNS",connect:"TCP connect",tls:"TLS",write:"request write",wait:"wait to first byte",read:"response read"};let phase="stress";let endpoint="";const phaseToggle=document.getElementById("phase-toggle");const endpointSelect=document.getElementById("endpoint-select");const profile=document.getElementById("profile");function fmt(ms){if(ms===0)return"0.000ms";if(ms<1)return ms.toFixed(3)+"ms";if(ms<10)return ms.toFixed(2).replace(/0$/,"").replace(/\.0$/,"")+"ms";return ms.toFixed(1).replace(/\.0$/,"")+"ms"}function pct(value,total){return total>0?value/total*100:0}function esc(value){return String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}function phases(){return Object.keys(profileData.phases)}function endpoints(){return profileData.phases[phase].endpoints}function current(){return endpoints().find(e=>e.name===endpoint)||endpoints()[0]}function renderPhaseToggle(){phaseToggle.innerHTML=phases().map(p=>` + "`" + `<button type="button" class="${p===phase?"active":""}" data-phase="${p}">${p[0].toUpperCase()+p.slice(1)}</button>` + "`" + `).join("");phaseToggle.querySelectorAll("button").forEach(btn=>btn.addEventListener("click",()=>{phase=btn.dataset.phase;endpoint=endpoints()[0].name;render()}))}function renderEndpointSelect(){endpointSelect.innerHTML=endpoints().map(e=>` + "`" + `<option value="${esc(e.name)}"${e.name===endpoint?" selected":""}>${esc(e.name)}</option>` + "`" + `).join("");endpointSelect.onchange=()=>{endpoint=endpointSelect.value;renderProfile()}}function segment(name,value,total){const width=pct(value,total);if(width<=0)return"";const label=width>9?` + "`" + `<span>${colors[name]} ${fmt(value)}</span>` + "`" + `:"";return` + "`" + `<div class="seg ${name}" style="width:${width.toFixed(3)}%">${label}</div>` + "`" + `}function serverSegment(cls,label,value,total){const width=pct(value,total);if(width<=0)return"";const inner=width>11?` + "`" + `<span>${label} ${fmt(value)}</span>` + "`" + `:"";return` + "`" + `<div class="${cls}" style="width:${width.toFixed(3)}%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:650">${inner}</div>` + "`" + `}function renderProfile(){const e=current();const clientTotal=e.dns+e.connect+e.tls+e.write+e.wait+e.read||e.client_mean;const serverTotal=e.server||e.db+e.server_other;profile.innerHTML=` + "`" + `<div class="profile-head"><h2>${esc(e.name)}</h2><div class="meta">${e.count.toLocaleString()} requests · ${e.errors} errors · statuses ${esc(e.statuses)}</div></div><div class="hero"><div><div class="label-row"><span>client request waterfall</span><span>${fmt(e.client_mean)} mean · p95 ${fmt(e.p95)} · p99 ${fmt(e.p99)}</span></div><div class="timeline">${segment("dns",e.dns,clientTotal)}${segment("connect",e.connect,clientTotal)}${segment("tls",e.tls,clientTotal)}${segment("write",e.write,clientTotal)}${segment("wait",e.wait,clientTotal)}${segment("read",e.read,clientTotal)}</div></div><aside class="stat-card"><div class="big">${fmt(e.client_mean)}</div><div class="sub">client mean latency</div></aside></div><div class="breakdown"><div><div class="label-row"><span>server observed breakdown</span><span>${fmt(e.server)} server · ${fmt(e.db)} DB · ${fmt(e.server_other)} other</span></div><div class="serverbar">${serverSegment("db","DB",e.db,serverTotal)}${serverSegment("server-other","other",e.server_other,serverTotal)}</div></div><aside class="stat-card"><div class="big">${e.rps.toLocaleString(undefined,{maximumFractionDigits:1})}</div><div class="sub">phase req/s</div></aside></div><div class="details"><div class="detail"><b>${fmt(e.write)}</b><span>request write</span></div><div class="detail"><b>${fmt(e.wait)}</b><span>wait to first byte</span></div><div class="detail"><b>${fmt(e.read)}</b><span>response read</span></div><div class="detail"><b>${fmt(e.max)}</b><span>max observed</span></div></div><p class="note">This is a latency profile, not a packet capture. Client timing comes from Go httptrace. Server and DB timing comes from correlated JSON trace events inside the API process.</p>` + "`" + `}function render(){renderPhaseToggle();if(!endpoint)endpoint=endpoints()[0].name;renderEndpointSelect();renderProfile()}render();`)
+	b.WriteString(`const profileData=JSON.parse(document.getElementById("profile-data").textContent);const colors={dns:"DNS",connect:"TCP connect",tls:"TLS",write:"request write",wait:"wait to first byte",read:"response read"};let phase="stress";let endpoint="";const phaseToggle=document.getElementById("phase-toggle");const endpointSelect=document.getElementById("endpoint-select");const profile=document.getElementById("profile");function fmt(ms){if(ms===0)return"0.000ms";if(ms<1)return ms.toFixed(3)+"ms";if(ms<10)return ms.toFixed(2).replace(/0$/,"").replace(/\.0$/,"")+"ms";return ms.toFixed(1).replace(/\.0$/,"")+"ms"}function pct(value,total){return total>0?value/total*100:0}function esc(value){return String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}function phases(){return Object.keys(profileData.phases)}function endpoints(){return profileData.phases[phase].endpoints}function current(){return endpoints().find(e=>e.name===endpoint)||endpoints()[0]}function renderPhaseToggle(){phaseToggle.innerHTML=phases().map(p=>` + "`" + `<button type="button" class="${p===phase?"active":""}" data-phase="${p}">${p[0].toUpperCase()+p.slice(1)}</button>` + "`" + `).join("");phaseToggle.querySelectorAll("button").forEach(btn=>btn.addEventListener("click",()=>{phase=btn.dataset.phase;endpoint=endpoints()[0].name;render()}))}function renderEndpointSelect(){endpointSelect.innerHTML=endpoints().map(e=>` + "`" + `<option value="${esc(e.name)}"${e.name===endpoint?" selected":""}>${esc(e.name)}</option>` + "`" + `).join("");endpointSelect.onchange=()=>{endpoint=endpointSelect.value;renderProfile()}}function segment(name,value,total){const width=pct(value,total);if(width<=0)return"";const label=width>9?` + "`" + `<span>${colors[name]} ${fmt(value)}</span>` + "`" + `:"";return` + "`" + `<div class="seg ${name}" style="width:${width.toFixed(3)}%">${label}</div>` + "`" + `}function serverSegment(cls,label,value,total){const width=pct(value,total);if(width<=0)return"";const inner=width>11?` + "`" + `<span>${label} ${fmt(value)}</span>` + "`" + `:"";return` + "`" + `<div class="${cls}" style="width:${width.toFixed(3)}%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:650">${inner}</div>` + "`" + `}function renderProfile(){const e=current();const clientTotal=e.dns+e.connect+e.tls+e.write+e.wait+e.read||e.client_mean;const serverTotal=e.server||e.db+e.server_other;profile.innerHTML=` + "`" + `<div class="profile-head"><h2>${esc(e.name)}</h2><div class="meta">${e.count.toLocaleString()} requests · ${e.errors} errors · statuses ${esc(e.statuses)}</div></div><div class="hero"><div><div class="label-row"><span>client request waterfall</span><span>${fmt(e.client_mean)} mean · p95 ${fmt(e.p95)} · p99 ${fmt(e.p99)}</span></div><div class="timeline">${segment("dns",e.dns,clientTotal)}${segment("connect",e.connect,clientTotal)}${segment("tls",e.tls,clientTotal)}${segment("write",e.write,clientTotal)}${segment("wait",e.wait,clientTotal)}${segment("read",e.read,clientTotal)}</div></div><aside class="stat-card"><div class="big">${fmt(e.client_mean)}</div><div class="sub">client mean latency</div></aside></div><div class="breakdown"><div><div class="label-row"><span>server observed timing</span><span>${fmt(e.server)} server</span></div><div class="serverbar">${serverSegment("db","DB",e.db,serverTotal)}${serverSegment("server-other","other",e.server_other,serverTotal)}</div></div><aside class="stat-card"><div class="big">${e.rps.toLocaleString(undefined,{maximumFractionDigits:1})}</div><div class="sub">phase req/s</div></aside></div><div class="details"><div class="detail"><b>${fmt(e.write)}</b><span>request write</span></div><div class="detail"><b>${fmt(e.wait)}</b><span>wait to first byte</span></div><div class="detail"><b>${fmt(e.read)}</b><span>response read</span></div><div class="detail"><b>${fmt(e.max)}</b><span>max observed</span></div></div><p class="note">This is a latency profile, not a packet capture. Client timing comes from Go httptrace. Server timing comes from API request logs bucketed by test phase. DB operation logs are available in the raw server log but are not request-correlated.</p>` + "`" + `}function render(){renderPhaseToggle();if(!endpoint)endpoint=endpoints()[0].name;renderEndpointSelect();renderProfile()}render();`)
 	b.WriteString("</script>")
 	b.WriteString("</main></body></html>")
 
