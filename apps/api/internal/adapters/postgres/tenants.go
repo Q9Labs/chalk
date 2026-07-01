@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/postgres/db"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -18,10 +18,10 @@ type TenantRepository struct {
 }
 
 type tenantQuerier interface {
-	CreateTenant(ctx context.Context, arg db.CreateTenantParams) (db.Tenant, error)
-	GetTenant(ctx context.Context, id pgtype.UUID) (db.Tenant, error)
-	ListTenants(ctx context.Context, arg db.ListTenantsParams) ([]db.Tenant, error)
-	UpdateTenant(ctx context.Context, arg db.UpdateTenantParams) (db.Tenant, error)
+	CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.Tenant, error)
+	GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.Tenant, error)
+	ListTenants(ctx context.Context, arg sqlc.ListTenantsParams) ([]sqlc.Tenant, error)
+	UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.Tenant, error)
 }
 
 func NewTenantRepository(queries tenantQuerier) TenantRepository {
@@ -29,7 +29,7 @@ func NewTenantRepository(queries tenantQuerier) TenantRepository {
 }
 
 func (s TenantRepository) CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
-	tenant, err := s.queries.CreateTenant(ctx, db.CreateTenantParams{
+	tenant, err := s.queries.CreateTenant(ctx, sqlc.CreateTenantParams{
 		ID:                pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
 		Name:              input.Name,
 		DefaultRegion:     text(input.DefaultRegion),
@@ -91,7 +91,7 @@ func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageR
 }
 
 func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
-	tenant, err := s.queries.UpdateTenant(ctx, db.UpdateTenantParams{
+	tenant, err := s.queries.UpdateTenant(ctx, sqlc.UpdateTenantParams{
 		ID:                   pgtype.UUID{Bytes: id.Bytes(), Valid: true},
 		NameSet:              input.Name.Set,
 		Name:                 requiredText(input.Name),
@@ -114,9 +114,9 @@ func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, inp
 	return mapTenant(tenant), nil
 }
 
-func listTenantsParams(page pagination.PageRequest) db.ListTenantsParams {
+func listTenantsParams(page pagination.PageRequest) sqlc.ListTenantsParams {
 	cursor := page.Cursor()
-	params := db.ListTenantsParams{
+	params := sqlc.ListTenantsParams{
 		PageSize: int32(page.Size() + 1),
 	}
 	if cursor == nil {
@@ -129,7 +129,7 @@ func listTenantsParams(page pagination.PageRequest) db.ListTenantsParams {
 	return params
 }
 
-func mapTenant(tenant db.Tenant) tenants.Tenant {
+func mapTenant(tenant sqlc.Tenant) tenants.Tenant {
 	return tenants.Tenant{
 		ID:                utilities.IDFromBytes(tenant.ID.Bytes),
 		Name:              tenant.Name,

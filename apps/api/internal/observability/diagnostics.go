@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
-	"github.com/q9labs/chalk/apps/api/internal/postgres/db"
 )
 
 type LogFormat string
@@ -78,7 +78,7 @@ func (d Diagnostics) Logger() *slog.Logger {
 	return d.logger
 }
 
-func (d Diagnostics) Queries(next db.Querier) db.Querier {
+func (d Diagnostics) Queries(next sqlc.Querier) sqlc.Querier {
 	if !d.config.OperationLogs {
 		return next
 	}

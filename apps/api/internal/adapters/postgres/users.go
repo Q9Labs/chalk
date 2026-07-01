@@ -7,16 +7,16 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/postgres/db"
 	"github.com/q9labs/chalk/apps/api/internal/users"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type userQuerier interface {
-	CreateUser(ctx context.Context, arg db.CreateUserParams) (db.User, error)
-	GetUser(ctx context.Context, id pgtype.UUID) (db.User, error)
-	ListUsers(ctx context.Context, arg db.ListUsersParams) ([]db.User, error)
+	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
+	GetUser(ctx context.Context, id pgtype.UUID) (sqlc.User, error)
+	ListUsers(ctx context.Context, arg sqlc.ListUsersParams) ([]sqlc.User, error)
 }
 
 type UserRepository struct {
@@ -28,7 +28,7 @@ func NewUserRepository(queries userQuerier) UserRepository {
 }
 
 func (r UserRepository) CreateUser(ctx context.Context, input users.CreateUserInput) (users.User, error) {
-	user, err := r.queries.CreateUser(ctx, db.CreateUserParams{
+	user, err := r.queries.CreateUser(ctx, sqlc.CreateUserParams{
 		ID:    pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
 		Name:  input.Name,
 		Email: input.Email,
@@ -86,9 +86,9 @@ func (r UserRepository) ListUsers(ctx context.Context, page pagination.PageReque
 	return response, nil
 }
 
-func listUsersParams(page pagination.PageRequest) db.ListUsersParams {
+func listUsersParams(page pagination.PageRequest) sqlc.ListUsersParams {
 	cursor := page.Cursor()
-	params := db.ListUsersParams{
+	params := sqlc.ListUsersParams{
 		PageSize: int32(page.Size() + 1),
 	}
 	if cursor == nil {
@@ -101,7 +101,7 @@ func listUsersParams(page pagination.PageRequest) db.ListUsersParams {
 	return params
 }
 
-func mapUser(user db.User) users.User {
+func mapUser(user sqlc.User) users.User {
 	return users.User{
 		ID:        utilities.IDFromBytes(user.ID.Bytes),
 		Name:      user.Name,

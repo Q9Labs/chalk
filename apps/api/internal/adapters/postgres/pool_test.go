@@ -3,8 +3,8 @@ package postgres_test
 import (
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/config"
-	"github.com/q9labs/chalk/apps/api/internal/postgres"
 )
 
 func TestPoolConfig(t *testing.T) {

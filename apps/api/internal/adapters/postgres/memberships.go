@@ -7,16 +7,16 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/postgres/db"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type membershipQuerier interface {
-	CreateMembership(ctx context.Context, arg db.CreateMembershipParams) (db.Membership, error)
-	ListTenantMemberships(ctx context.Context, arg db.ListTenantMembershipsParams) ([]db.Membership, error)
-	UpdateTenantMembership(ctx context.Context, arg db.UpdateTenantMembershipParams) (db.Membership, error)
+	CreateMembership(ctx context.Context, arg sqlc.CreateMembershipParams) (sqlc.Membership, error)
+	ListTenantMemberships(ctx context.Context, arg sqlc.ListTenantMembershipsParams) ([]sqlc.Membership, error)
+	UpdateTenantMembership(ctx context.Context, arg sqlc.UpdateTenantMembershipParams) (sqlc.Membership, error)
 }
 
 type MembershipRepository struct {
@@ -28,7 +28,7 @@ func NewMembershipRepository(queries membershipQuerier) MembershipRepository {
 }
 
 func (r MembershipRepository) CreateMembership(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
-	membership, err := r.queries.CreateMembership(ctx, db.CreateMembershipParams{
+	membership, err := r.queries.CreateMembership(ctx, sqlc.CreateMembershipParams{
 		ID:       pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
 		TenantID: pgtype.UUID{Bytes: input.TenantID.Bytes(), Valid: true},
 		UserID:   pgtype.UUID{Bytes: input.UserID.Bytes(), Valid: true},
@@ -76,7 +76,7 @@ func (r MembershipRepository) ListTenantMemberships(ctx context.Context, tenantI
 }
 
 func (r MembershipRepository) UpdateTenantMembership(ctx context.Context, tenantID utilities.ID, membershipID utilities.ID, input memberships.UpdateMembershipInput) (memberships.Membership, error) {
-	membership, err := r.queries.UpdateTenantMembership(ctx, db.UpdateTenantMembershipParams{
+	membership, err := r.queries.UpdateTenantMembership(ctx, sqlc.UpdateTenantMembershipParams{
 		Role:     string(input.Role),
 		TenantID: pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true},
 		ID:       pgtype.UUID{Bytes: membershipID.Bytes(), Valid: true},
@@ -91,9 +91,9 @@ func (r MembershipRepository) UpdateTenantMembership(ctx context.Context, tenant
 	return mapMembership(membership), nil
 }
 
-func listTenantMembershipsParams(tenantID utilities.ID, page pagination.PageRequest) db.ListTenantMembershipsParams {
+func listTenantMembershipsParams(tenantID utilities.ID, page pagination.PageRequest) sqlc.ListTenantMembershipsParams {
 	cursor := page.Cursor()
-	params := db.ListTenantMembershipsParams{
+	params := sqlc.ListTenantMembershipsParams{
 		TenantID: pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true},
 		PageSize: int32(page.Size() + 1),
 	}
@@ -107,7 +107,7 @@ func listTenantMembershipsParams(tenantID utilities.ID, page pagination.PageRequ
 	return params
 }
 
-func mapMembership(membership db.Membership) memberships.Membership {
+func mapMembership(membership sqlc.Membership) memberships.Membership {
 	return memberships.Membership{
 		ID:        utilities.IDFromBytes(membership.ID.Bytes),
 		TenantID:  utilities.IDFromBytes(membership.TenantID.Bytes),

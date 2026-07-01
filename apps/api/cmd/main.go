@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
+	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/postgres"
-	postgresdb "github.com/q9labs/chalk/apps/api/internal/postgres/db"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/users"
 )
@@ -63,7 +63,7 @@ func run() error {
 	defer pool.Close()
 	logger.Info("postgres connected", "event", "postgres.connected")
 
-	queries := postgresdb.New(pool)
+	queries := postgressqlc.New(pool)
 	operationQueries := diagnostics.Queries(queries)
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	tenantService := tenants.NewService(tenantRepository)

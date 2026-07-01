@@ -8,9 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/postgres"
-	"github.com/q9labs/chalk/apps/api/internal/postgres/db"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -46,7 +46,7 @@ func TestTenantRepositoryGetTenant(t *testing.T) {
 	createdAt := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 6, 30, 10, 5, 0, 0, time.UTC)
 	repository := postgres.NewTenantRepository(&tenantQuerier{
-		tenant: db.Tenant{
+		tenant: sqlc.Tenant{
 			ID:                mustUUID(t, tenantID),
 			Name:              "Acme",
 			DefaultRegion:     text("us"),
@@ -91,7 +91,7 @@ func TestTenantRepositoryGetTenant(t *testing.T) {
 
 func TestTenantRepositoryGetTenantKeepsNullableFieldsNil(t *testing.T) {
 	repository := postgres.NewTenantRepository(&tenantQuerier{
-		tenant: db.Tenant{
+		tenant: sqlc.Tenant{
 			ID:   mustUUID(t, tenantID),
 			Name: "Acme",
 		},
@@ -148,7 +148,7 @@ func TestTenantRepositoryListTenants(t *testing.T) {
 	createdAt := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
 	nextCreatedAt := time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC)
 	querier := &tenantQuerier{
-		tenants: []db.Tenant{
+		tenants: []sqlc.Tenant{
 			{
 				ID:        mustUUID(t, "11111111-1111-1111-1111-111111111111"),
 				Name:      "Acme",
@@ -275,23 +275,23 @@ func TestTenantRepositoryUpdateTenantMapsNotFound(t *testing.T) {
 type tenantQuerier struct {
 	called       bool
 	requestedID  pgtype.UUID
-	createParams db.CreateTenantParams
-	listParams   db.ListTenantsParams
-	updateParams db.UpdateTenantParams
-	tenant       db.Tenant
-	tenants      []db.Tenant
+	createParams sqlc.CreateTenantParams
+	listParams   sqlc.ListTenantsParams
+	updateParams sqlc.UpdateTenantParams
+	tenant       sqlc.Tenant
+	tenants      []sqlc.Tenant
 	err          error
 }
 
-func (q *tenantQuerier) CreateTenant(ctx context.Context, arg db.CreateTenantParams) (db.Tenant, error) {
+func (q *tenantQuerier) CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.Tenant, error) {
 	q.called = true
 	q.createParams = arg
 
 	if q.err != nil {
-		return db.Tenant{}, q.err
+		return sqlc.Tenant{}, q.err
 	}
 
-	return db.Tenant{
+	return sqlc.Tenant{
 		ID:                arg.ID,
 		Name:              arg.Name,
 		DefaultRegion:     arg.DefaultRegion,
@@ -301,18 +301,18 @@ func (q *tenantQuerier) CreateTenant(ctx context.Context, arg db.CreateTenantPar
 	}, nil
 }
 
-func (q *tenantQuerier) GetTenant(ctx context.Context, id pgtype.UUID) (db.Tenant, error) {
+func (q *tenantQuerier) GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.Tenant, error) {
 	q.called = true
 	q.requestedID = id
 
 	if q.err != nil {
-		return db.Tenant{}, q.err
+		return sqlc.Tenant{}, q.err
 	}
 
 	return q.tenant, nil
 }
 
-func (q *tenantQuerier) ListTenants(ctx context.Context, arg db.ListTenantsParams) ([]db.Tenant, error) {
+func (q *tenantQuerier) ListTenants(ctx context.Context, arg sqlc.ListTenantsParams) ([]sqlc.Tenant, error) {
 	q.called = true
 	q.listParams = arg
 
@@ -323,15 +323,15 @@ func (q *tenantQuerier) ListTenants(ctx context.Context, arg db.ListTenantsParam
 	return q.tenants, nil
 }
 
-func (q *tenantQuerier) UpdateTenant(ctx context.Context, arg db.UpdateTenantParams) (db.Tenant, error) {
+func (q *tenantQuerier) UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.Tenant, error) {
 	q.called = true
 	q.updateParams = arg
 
 	if q.err != nil {
-		return db.Tenant{}, q.err
+		return sqlc.Tenant{}, q.err
 	}
 
-	return db.Tenant{
+	return sqlc.Tenant{
 		ID:                arg.ID,
 		Name:              arg.Name,
 		DefaultRegion:     arg.DefaultRegion,
