@@ -15,6 +15,7 @@ import (
 
 type membershipQuerier interface {
 	CreateMembership(ctx context.Context, arg sqlc.CreateMembershipParams) (sqlc.Membership, error)
+	GetTenantMembershipForUser(ctx context.Context, arg sqlc.GetTenantMembershipForUserParams) (sqlc.Membership, error)
 	ListTenantMemberships(ctx context.Context, arg sqlc.ListTenantMembershipsParams) ([]sqlc.Membership, error)
 	UpdateTenantMembership(ctx context.Context, arg sqlc.UpdateTenantMembershipParams) (sqlc.Membership, error)
 }
@@ -36,6 +37,21 @@ func (r MembershipRepository) CreateMembership(ctx context.Context, input member
 	})
 	if err != nil {
 		return memberships.Membership{}, fmt.Errorf("create membership: %w", err)
+	}
+
+	return mapMembership(membership), nil
+}
+
+func (r MembershipRepository) GetTenantMembershipForUser(ctx context.Context, tenantID utilities.ID, userID utilities.ID) (memberships.Membership, error) {
+	membership, err := r.queries.GetTenantMembershipForUser(ctx, sqlc.GetTenantMembershipForUserParams{
+		TenantID: pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true},
+		UserID:   pgtype.UUID{Bytes: userID.Bytes(), Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return memberships.Membership{}, memberships.ErrMembershipNotFound
+	}
+	if err != nil {
+		return memberships.Membership{}, fmt.Errorf("get tenant membership for user: %w", err)
 	}
 
 	return mapMembership(membership), nil

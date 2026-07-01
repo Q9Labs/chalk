@@ -15,6 +15,7 @@ type Querier interface {
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error)
+	GetTenantMembershipForUser(ctx context.Context, arg GetTenantMembershipForUserParams) (Membership, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
 	ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]Membership, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)

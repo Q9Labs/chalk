@@ -60,6 +60,13 @@ func (q operationQuerier) GetUser(ctx context.Context, id pgtype.UUID) (sqlc.Use
 	return user, err
 }
 
+func (q operationQuerier) GetTenantMembershipForUser(ctx context.Context, arg sqlc.GetTenantMembershipForUserParams) (sqlc.Membership, error) {
+	startedAt := time.Now()
+	membership, err := q.next.GetTenantMembershipForUser(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetTenantMembershipForUser", startedAt, err)
+	return membership, err
+}
+
 func (q operationQuerier) ListTenantMemberships(ctx context.Context, arg sqlc.ListTenantMembershipsParams) ([]sqlc.Membership, error) {
 	startedAt := time.Now()
 	memberships, err := q.next.ListTenantMemberships(ctx, arg)

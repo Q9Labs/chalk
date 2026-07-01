@@ -68,11 +68,25 @@ func TestServiceUpdateMembershipRejectsZeroMembershipID(t *testing.T) {
 	}
 }
 
+func TestServiceGetTenantMembershipForUserRejectsZeroUserID(t *testing.T) {
+	repository := &membershipRepository{}
+	service := memberships.NewService(repository)
+
+	_, err := service.GetTenantMembershipForUser(context.Background(), mustID(t, "11111111-1111-1111-1111-111111111111"), utilities.ID{})
+	if !errors.Is(err, memberships.ErrInvalidUserID) {
+		t.Fatalf("error = %v, want %v", err, memberships.ErrInvalidUserID)
+	}
+	if repository.called {
+		t.Fatal("repository was called")
+	}
+}
+
 type membershipRepository struct {
 	called       bool
 	createInput  memberships.CreateMembershipInput
 	updateInput  memberships.UpdateMembershipInput
 	tenantID     utilities.ID
+	userID       utilities.ID
 	membershipID utilities.ID
 	page         pagination.PageRequest
 	err          error
@@ -90,6 +104,21 @@ func (r *membershipRepository) CreateMembership(ctx context.Context, input membe
 		TenantID: input.TenantID,
 		UserID:   input.UserID,
 		Role:     input.Role,
+	}, nil
+}
+
+func (r *membershipRepository) GetTenantMembershipForUser(ctx context.Context, tenantID utilities.ID, userID utilities.ID) (memberships.Membership, error) {
+	r.called = true
+	r.tenantID = tenantID
+	r.userID = userID
+	if r.err != nil {
+		return memberships.Membership{}, r.err
+	}
+
+	return memberships.Membership{
+		TenantID: tenantID,
+		UserID:   userID,
+		Role:     memberships.RoleMember,
 	}, nil
 }
 

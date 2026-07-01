@@ -37,6 +37,7 @@ type Membership struct {
 
 type MembershipRepository interface {
 	CreateMembership(ctx context.Context, input CreateMembershipInput) (Membership, error)
+	GetTenantMembershipForUser(ctx context.Context, tenantID utilities.ID, userID utilities.ID) (Membership, error)
 	ListTenantMemberships(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (MembershipList, error)
 	UpdateTenantMembership(ctx context.Context, tenantID utilities.ID, membershipID utilities.ID, input UpdateMembershipInput) (Membership, error)
 }
@@ -77,6 +78,17 @@ func (s Service) CreateMembership(ctx context.Context, input CreateMembershipInp
 	}
 
 	return s.repository.CreateMembership(ctx, input)
+}
+
+func (s Service) GetTenantMembershipForUser(ctx context.Context, tenantID utilities.ID, userID utilities.ID) (Membership, error) {
+	if tenantID.IsZero() {
+		return Membership{}, ErrInvalidTenantID
+	}
+	if userID.IsZero() {
+		return Membership{}, ErrInvalidUserID
+	}
+
+	return s.repository.GetTenantMembershipForUser(ctx, tenantID, userID)
 }
 
 func (s Service) ListTenantMemberships(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (MembershipList, error) {

@@ -18,6 +18,19 @@ returning
     updated_at,
     created_at;
 
+-- name: GetTenantMembershipForUser :one
+select
+    id,
+    tenant_id,
+    user_id,
+    role,
+    updated_at,
+    created_at
+from memberships
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and user_id = sqlc.arg(user_id);
+
 -- name: ListTenantMemberships :many
 select
     id,
