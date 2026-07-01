@@ -16,13 +16,13 @@ startup; migrations are explicit operator/deploy actions.
 
 ## `schema.sql` vs Migrations
 
-`db/schema.sql` and the first migration currently describe the same initial
-schema, but they have different jobs:
+`db/schema.sql` is the current schema snapshot. The migration files are the
+versioned history that gets real databases from an empty state to that snapshot:
 
-| File | Purpose | Should You Edit It? |
-|---|---|---|
-| `db/schema.sql` | Human-readable snapshot/draft of the full schema. Useful for design review. | Not as the operational source of truth. Keep it in sync manually for now, or regenerate it later. |
-| `db/migrations/*.sql` | Versioned history of schema changes that can be applied to real databases. Used by goose and sqlc. | Yes. New schema changes should be new migration files. |
+| File                  | Purpose                                                                                            | Should You Edit It?                                                                               |
+| --------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `db/schema.sql`       | Human-readable snapshot/draft of the full schema. Useful for design review.                        | Not as the operational source of truth. Keep it in sync manually for now, or regenerate it later. |
+| `db/migrations/*.sql` | Versioned history of schema changes that can be applied to real databases. Used by goose and sqlc. | Yes. New schema changes should be new migration files.                                            |
 
 The migration file has two goose sections:
 

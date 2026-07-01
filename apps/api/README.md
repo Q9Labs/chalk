@@ -52,15 +52,36 @@ startup/shutdown budgets.
 
 ## Local Observability And Performance
 
-Observability hooks are opt-in and intended for local diagnostics:
+Logging is vendor-neutral and writes structured logs to stdout by default. The
+logger attaches stable common fields (`service`, `env`, and `version`) to each
+record so deployment infrastructure can ship the same output to CloudWatch,
+Loki, Datadog, Better Stack, or another backend later.
+
+Useful production-safe defaults:
 
 ```bash
-CHALK_API_TRACE_LOGS=1 CHALK_API_PPROF=1 go run ./cmd
+CHALK_API_LOG_FORMAT=json
+CHALK_API_LOG_LEVEL=info
+CHALK_API_REQUEST_LOGS=errors
+CHALK_API_SLOW_REQUEST_MS=250
 ```
 
-`CHALK_API_TRACE_LOGS=1` emits JSON request and Postgres query timing events to
-stdout with shared `X-Request-Id` / `X-Trace-Id` values. `CHALK_API_PPROF=1`
-mounts Go profiling handlers under `/debug/pprof`.
+`CHALK_API_REQUEST_LOGS` accepts `off`, `errors`, `slow`, `sampled`, or `all`.
+Successful request logs are off by default; startup, shutdown, and error logs
+still use the shared logger. `sampled` uses `CHALK_API_REQUEST_SAMPLE_RATE`
+between `0` and `1`.
+
+Local profiling hooks remain opt-in and are intended for short diagnostic runs:
+
+```bash
+CHALK_API_TRACE_LOGS=1 CHALK_API_PPROF=1 CHALK_API_REQUEST_LOGS=all go run ./cmd
+```
+
+`CHALK_API_TRACE_LOGS=1` emits Postgres query timing events to stdout with
+shared `X-Request-Id` / `X-Trace-Id` values. For backwards-compatible local
+profiling, it also defaults request logs to `all` unless
+`CHALK_API_REQUEST_LOGS` is explicitly set. `CHALK_API_PPROF=1` mounts Go
+profiling handlers under `/debug/pprof`; do not expose it publicly.
 
 For an end-to-end local performance pass:
 
@@ -72,6 +93,10 @@ The script verifies local Postgres, applies migrations, builds the API and perf
 runner, measures startup/shutdown, samples process footprint, and runs weighted
 load against the implemented endpoints. Raw logs stay under `.private/`; the
 sanitized Markdown and HTML summaries are written to `scratchpad/`.
+
+OpenTelemetry is intentionally not wired yet. If we add it later, attach trace
+and span IDs inside `internal/observability` while keeping application code
+vendor-neutral.
 
 ## gopls MCP
 

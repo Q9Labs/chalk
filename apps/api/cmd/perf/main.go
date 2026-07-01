@@ -186,6 +186,7 @@ func run(ctx context.Context, cfg config) (result, error) {
 	cmd.Env = append(os.Environ(),
 		"CHALK_API_ADDR="+cfg.addr,
 		"CHALK_API_PPROF=1",
+		"CHALK_API_REQUEST_LOGS=all",
 		"CHALK_API_TRACE_LOGS=1",
 	)
 	cmd.Stdout = logFile

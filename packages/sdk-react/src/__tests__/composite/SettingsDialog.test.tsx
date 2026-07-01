@@ -111,7 +111,7 @@ describe("SettingsDialog", () => {
       clickSection(getAllByRole, "Video");
     });
     expect(getByRole("heading", { name: "Camera" })).toBeDefined();
-  }, 10_000);
+  });
 
   it("keeps a fixed dialog shell height across sections on desktop", () => {
     const { getByRole } = renderDialog();

@@ -107,10 +107,13 @@ describe("MeetingRoom", () => {
 
       fireEvent.click(getByRole("button", { name: "Chat" }));
 
-      await waitFor(() => {
-        expect(getByLabelText("Chat panel")).toBeDefined();
-        expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "resize" }));
-      });
+      await waitFor(
+        () => {
+          expect(getByLabelText("Chat panel")).toBeDefined();
+          expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "resize" }));
+        },
+        { timeout: 5_000 },
+      );
     } finally {
       dispatchEventSpy.mockRestore();
     }

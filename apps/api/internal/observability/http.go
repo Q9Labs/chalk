@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -30,10 +31,17 @@ type responseRecorder struct {
 	bytes  int
 }
 
-func RequestMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
+type RequestLogConfig struct {
+	Mode          RequestLogMode
+	SampleRate    float64
+	SlowThreshold time.Duration
+}
+
+func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	config := requestLogConfig(configs...)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +57,7 @@ func RequestMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			w.Header().Set(TraceIDHeader, traceID)
 
 			next.ServeHTTP(recorder, tracedRequest)
+			duration := time.Since(startedAt)
 
 			route := ""
 			if routeContext := chi.RouteContext(tracedRequest.Context()); routeContext != nil {
@@ -58,7 +67,11 @@ func RequestMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				route = "unmatched"
 			}
 
-			logger.InfoContext(ctx, "http request",
+			if !shouldLogRequest(config, recorder.status, duration, traceID) {
+				return
+			}
+
+			attrs := []any{
 				"event", "http.request",
 				"request_id", requestID,
 				"trace_id", traceID,
@@ -67,8 +80,17 @@ func RequestMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				"route", route,
 				"status", recorder.status,
 				"bytes", recorder.bytes,
-				"duration_ms", durationMilliseconds(startedAt),
-			)
+				"duration_ms", durationMilliseconds(duration),
+				"outcome", requestOutcome(recorder.status),
+			}
+			switch {
+			case recorder.status >= http.StatusInternalServerError:
+				logger.ErrorContext(ctx, "http request", attrs...)
+			case recorder.status >= http.StatusBadRequest:
+				logger.WarnContext(ctx, "http request", attrs...)
+			default:
+				logger.InfoContext(ctx, "http request", attrs...)
+			}
 		})
 	}
 }
@@ -107,7 +129,7 @@ func LogSpan(ctx context.Context, logger *slog.Logger, event string, name string
 	attrs := []any{
 		"event", event,
 		"name", name,
-		"duration_ms", durationMilliseconds(startedAt),
+		"duration_ms", elapsedMilliseconds(startedAt),
 	}
 	if requestID := RequestID(ctx); requestID != "" {
 		attrs = append(attrs, "request_id", requestID)
@@ -162,6 +184,65 @@ func randomHex(bytes int) string {
 	return hex.EncodeToString(buffer)
 }
 
-func durationMilliseconds(startedAt time.Time) float64 {
-	return float64(time.Since(startedAt).Microseconds()) / 1000
+func requestLogConfig(configs ...RequestLogConfig) RequestLogConfig {
+	config := RequestLogConfig{
+		Mode:          RequestLogAll,
+		SampleRate:    0,
+		SlowThreshold: 250 * time.Millisecond,
+	}
+	if len(configs) > 0 {
+		config = configs[0]
+	}
+	if config.SlowThreshold <= 0 {
+		config.SlowThreshold = 250 * time.Millisecond
+	}
+	return config
+}
+
+func shouldLogRequest(config RequestLogConfig, status int, duration time.Duration, traceID string) bool {
+	failed := status >= http.StatusBadRequest || status == 0
+	slow := duration >= config.SlowThreshold
+
+	switch config.Mode {
+	case RequestLogOff:
+		return false
+	case RequestLogErrors:
+		return failed
+	case RequestLogSlow:
+		return failed || slow
+	case RequestLogSampled:
+		return failed || slow || sampled(traceID, config.SampleRate)
+	case RequestLogAll:
+		return true
+	default:
+		return failed
+	}
+}
+
+func sampled(value string, rate float64) bool {
+	if rate <= 0 {
+		return false
+	}
+	if rate >= 1 {
+		return true
+	}
+
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(value))
+	return float64(hash.Sum32())/float64(^uint32(0)) < rate
+}
+
+func requestOutcome(status int) string {
+	if status >= http.StatusBadRequest || status == 0 {
+		return "error"
+	}
+	return "ok"
+}
+
+func elapsedMilliseconds(startedAt time.Time) float64 {
+	return durationMilliseconds(time.Since(startedAt))
+}
+
+func durationMilliseconds(duration time.Duration) float64 {
+	return float64(duration.Microseconds()) / 1000
 }

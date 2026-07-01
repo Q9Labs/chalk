@@ -13,14 +13,16 @@ type ReadinessChecker interface {
 }
 
 type Options struct {
+	CORS       CORSOptions
 	Debug      http.Handler
 	Middleware []func(http.Handler) http.Handler
 	Readiness  ReadinessChecker
-	Tenants    TenantGetter
+	Tenants    TenantService
 }
 
 func NewRouter(options Options) http.Handler {
 	r := chi.NewRouter()
+	r.Use(allowCORS(options.CORS))
 	if len(options.Middleware) > 0 {
 		r.Use(options.Middleware...)
 	}
@@ -33,16 +35,13 @@ func NewRouter(options Options) http.Handler {
 	})
 
 	mountV1Routes(r, options)
-	mountOperationalRoutes(r, options)
-	return r
-}
-
-func mountOperationalRoutes(r chi.Router, options Options) {
 	r.Get("/healthz", handleHealth)
 	r.Get("/readyz", handleReady(options.Readiness))
 	if options.Debug != nil {
 		r.Mount("/debug", options.Debug)
 	}
+
+	return r
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {

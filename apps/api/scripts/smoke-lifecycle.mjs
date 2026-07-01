@@ -61,10 +61,7 @@ try {
     fail(`API exited with code ${exit.code ?? "null"} signal ${exit.signal ?? "null"}`);
   }
 
-  console.log(
-    `API lifecycle smoke test passed: startup ${startupMs}ms, shutdown ${shutdownMs}ms ` +
-      `(budgets: startup ${startupBudgetMs}ms, shutdown ${shutdownBudgetMs}ms)`,
-  );
+  console.log(`API lifecycle smoke test passed: startup ${startupMs}ms, shutdown ${shutdownMs}ms ` + `(budgets: startup ${startupBudgetMs}ms, shutdown ${shutdownBudgetMs}ms)`);
 } finally {
   if (serverProcess && !serverExit) {
     serverProcess.kill("SIGKILL");

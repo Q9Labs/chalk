@@ -10,6 +10,8 @@ create table tenants (
     created_at timestamptz not null default now()
 );
 
+create index tenants_created_at_id_idx on tenants(created_at desc, id desc);
+
 create table users (
     id uuid primary key,
     name text not null,

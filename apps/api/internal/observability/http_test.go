@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
@@ -44,5 +45,75 @@ func TestRequestMiddlewarePropagatesIDsAndLogs(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), `"event":"http.request"`) {
 		t.Fatalf("log = %s, want http.request event", logs.String())
+	}
+}
+
+func TestRequestMiddlewareSkipsWhenOff(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	handler := observability.RequestMiddleware(logger, observability.RequestLogConfig{
+		Mode: observability.RequestLogOff,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if logs.Len() != 0 {
+		t.Fatalf("log = %s, want no request log", logs.String())
+	}
+}
+
+func TestRequestMiddlewareLogsErrors(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	handler := observability.RequestMiddleware(logger, observability.RequestLogConfig{
+		Mode: observability.RequestLogErrors,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/tenants", nil))
+
+	if !strings.Contains(logs.String(), `"level":"WARN"`) {
+		t.Fatalf("log = %s, want warning request log", logs.String())
+	}
+	if !strings.Contains(logs.String(), `"outcome":"error"`) {
+		t.Fatalf("log = %s, want error outcome", logs.String())
+	}
+}
+
+func TestRequestMiddlewareLogsSlowRequests(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	handler := observability.RequestMiddleware(logger, observability.RequestLogConfig{
+		Mode:          observability.RequestLogSlow,
+		SlowThreshold: time.Nanosecond,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	if !strings.Contains(logs.String(), `"event":"http.request"`) {
+		t.Fatalf("log = %s, want slow request log", logs.String())
+	}
+}
+
+func TestRequestMiddlewareSampledModeCanSkipSuccesses(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	handler := observability.RequestMiddleware(logger, observability.RequestLogConfig{
+		Mode:          observability.RequestLogSampled,
+		SampleRate:    0,
+		SlowThreshold: time.Hour,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if logs.Len() != 0 {
+		t.Fatalf("log = %s, want sampled success to be skipped", logs.String())
 	}
 }

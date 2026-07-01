@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "visual-plan": {
+      "source": "builderio/skills",
+      "sourceType": "github",
+      "skillPath": "skills/visual-plan/SKILL.md",
+      "computedHash": "9f9d594c9a387066675a81cba4298771ed4153cd1e763e4d43b13e1315b2cd61"
+    }
+  }
+}

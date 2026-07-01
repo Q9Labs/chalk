@@ -11,6 +11,65 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createTenant = `-- name: CreateTenant :one
+insert into tenants (
+    id,
+    name,
+    default_region,
+    default_media_plane,
+    logo_key,
+    website
+) values (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+returning
+    id,
+    name,
+    default_region,
+    default_media_plane,
+    logo_key,
+    website,
+    updated_at,
+    created_at
+`
+
+type CreateTenantParams struct {
+	ID                pgtype.UUID `json:"id"`
+	Name              string      `json:"name"`
+	DefaultRegion     pgtype.Text `json:"default_region"`
+	DefaultMediaPlane pgtype.Text `json:"default_media_plane"`
+	LogoKey           pgtype.Text `json:"logo_key"`
+	Website           pgtype.Text `json:"website"`
+}
+
+func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error) {
+	row := q.db.QueryRow(ctx, createTenant,
+		arg.ID,
+		arg.Name,
+		arg.DefaultRegion,
+		arg.DefaultMediaPlane,
+		arg.LogoKey,
+		arg.Website,
+	)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DefaultRegion,
+		&i.DefaultMediaPlane,
+		&i.LogoKey,
+		&i.Website,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getTenant = `-- name: GetTenant :one
 select
     id,
@@ -27,6 +86,148 @@ where id = $1
 
 func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error) {
 	row := q.db.QueryRow(ctx, getTenant, id)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DefaultRegion,
+		&i.DefaultMediaPlane,
+		&i.LogoKey,
+		&i.Website,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listTenants = `-- name: ListTenants :many
+select
+    id,
+    name,
+    default_region,
+    default_media_plane,
+    logo_key,
+    website,
+    updated_at,
+    created_at
+from tenants
+where
+    (
+        not $1::boolean
+        or (created_at, id) < (
+            $2::timestamptz,
+            $3::uuid
+        )
+    )
+order by created_at desc, id desc
+limit $4::integer
+`
+
+type ListTenantsParams struct {
+	CursorSet       bool               `json:"cursor_set"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        pgtype.UUID        `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
+
+func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error) {
+	rows, err := q.db.Query(ctx, listTenants,
+		arg.CursorSet,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tenant
+	for rows.Next() {
+		var i Tenant
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DefaultRegion,
+			&i.DefaultMediaPlane,
+			&i.LogoKey,
+			&i.Website,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateTenant = `-- name: UpdateTenant :one
+update tenants
+set
+    name = case
+        when $1::boolean then $2::text
+        else name
+    end,
+    default_region = case
+        when $3::boolean then $4::text
+        else default_region
+    end,
+    default_media_plane = case
+        when $5::boolean then $6::text
+        else default_media_plane
+    end,
+    logo_key = case
+        when $7::boolean then $8::text
+        else logo_key
+    end,
+    website = case
+        when $9::boolean then $10::text
+        else website
+    end,
+    updated_at = now()
+where id = $11
+returning
+    id,
+    name,
+    default_region,
+    default_media_plane,
+    logo_key,
+    website,
+    updated_at,
+    created_at
+`
+
+type UpdateTenantParams struct {
+	NameSet              bool        `json:"name_set"`
+	Name                 string      `json:"name"`
+	DefaultRegionSet     bool        `json:"default_region_set"`
+	DefaultRegion        pgtype.Text `json:"default_region"`
+	DefaultMediaPlaneSet bool        `json:"default_media_plane_set"`
+	DefaultMediaPlane    pgtype.Text `json:"default_media_plane"`
+	LogoKeySet           bool        `json:"logo_key_set"`
+	LogoKey              pgtype.Text `json:"logo_key"`
+	WebsiteSet           bool        `json:"website_set"`
+	Website              pgtype.Text `json:"website"`
+	ID                   pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error) {
+	row := q.db.QueryRow(ctx, updateTenant,
+		arg.NameSet,
+		arg.Name,
+		arg.DefaultRegionSet,
+		arg.DefaultRegion,
+		arg.DefaultMediaPlaneSet,
+		arg.DefaultMediaPlane,
+		arg.LogoKeySet,
+		arg.LogoKey,
+		arg.WebsiteSet,
+		arg.Website,
+		arg.ID,
+	)
 	var i Tenant
 	err := row.Scan(
 		&i.ID,

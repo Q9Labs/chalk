@@ -11,7 +11,10 @@ import (
 )
 
 type Querier interface {
+	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error)
+	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
+	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
 }
 
 var _ Querier = (*Queries)(nil)

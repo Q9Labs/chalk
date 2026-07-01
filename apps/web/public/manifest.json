@@ -41,11 +41,7 @@
   "orientation": "any",
   "background_color": "#030303",
   "theme_color": "#030303",
-  "categories": [
-    "education",
-    "productivity",
-    "communication"
-  ],
+  "categories": ["education", "productivity", "communication"],
   "shortcuts": [
     {
       "name": "New meeting",

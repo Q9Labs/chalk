@@ -108,6 +108,7 @@ apps/api/server
 .codex-tmp/
 .collaborator
 .claude/
+hasan.md
 
 # Stakpak session files
 .stakpak/session*

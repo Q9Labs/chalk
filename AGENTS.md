@@ -45,6 +45,17 @@ pnpm check-types
 - Keep user-facing product language role-neutral unless an integration requires
   a specific domain vocabulary.
 
+## Comments
+
+- Add comments when they explain why a boundary, invariant, workaround, or
+  non-obvious tradeoff exists. Avoid comments that merely restate what the code
+  says.
+- Treat a needed explanatory comment as a design checkpoint: if the comment
+  reveals duplication, hidden coupling, or an awkward abstraction, either improve
+  the shape or leave a concise note about the constraint.
+- For Go API code, follow the local standards in
+  `apps/api/docs/code-standards.md`.
+
 ## Where To Write Code
 
 Packages are the source of truth; demo apps should stay thin.

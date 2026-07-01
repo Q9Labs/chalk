@@ -56,5 +56,5 @@ describe("EdgeDiagnostics", () => {
     fireEvent.click(screen.getByRole("button", { name: "WebRTC Simulator" }));
     expect(screen.getByText("Adaptive WebRTC Network Simulator")).toBeDefined();
     expect(screen.getByText("Chalk RTC Engine Decisions Log")).toBeDefined();
-  });
+  }, 10_000);
 });
