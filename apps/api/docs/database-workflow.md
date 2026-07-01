@@ -10,6 +10,8 @@ The API uses:
 - `sqlc` for generated Go query code over `pgx/v5`.
 - `goose` for versioned SQL migrations.
 - local Postgres in an OrbStack/Docker container named `chalk-postgres`.
+- local Redis in an OrbStack/Docker container named `chalk-redis` for API
+  features that need ephemeral coordination or caching.
 
 The API opens a Postgres pool during startup. It does not apply migrations at
 startup; migrations are explicit operator/deploy actions.
@@ -36,6 +38,22 @@ The migration file has two goose sections:
 
 `Up` applies the change. `Down` rolls it back when rollback is safe.
 
+## Local Services
+
+Start or verify all local backing services:
+
+```bash
+apps/api/scripts/dev-services.sh start
+```
+
+This starts local Postgres and Redis with Docker-compatible commands that work
+with OrbStack, waits for readiness, verifies server versions, and prints the
+local `CHALK_DATABASE_URL` and `CHALK_REDIS_URL` values.
+
+```bash
+apps/api/scripts/dev-services.sh describe
+```
+
 ## Local Postgres
 
 Start or verify the local database:
@@ -49,6 +67,21 @@ server version, and prints the local `CHALK_DATABASE_URL`.
 
 ```bash
 apps/api/scripts/dev-postgres.sh describe
+```
+
+## Local Redis
+
+Start or verify the local Redis instance:
+
+```bash
+apps/api/scripts/dev-redis.sh start
+```
+
+This starts `redis:8.8.0-alpine` if needed, waits for readiness, verifies the
+server version, and prints the local `CHALK_REDIS_URL`.
+
+```bash
+apps/api/scripts/dev-redis.sh describe
 ```
 
 ## Migrations With Goose
@@ -114,8 +147,8 @@ apps/api/scripts/db-generate.sh run
 apps/api/scripts/db-generate.sh describe
 ```
 
-Generated code goes to `apps/api/internal/postgres/db`. Do not edit generated
-files manually.
+Generated code goes to `apps/api/internal/adapters/postgres/sqlc`. Do not edit
+generated files manually.
 
 `sqlc` reads schema from `db/migrations` and queries from `db/queries`.
 The generated package uses `pgx/v5`, including:

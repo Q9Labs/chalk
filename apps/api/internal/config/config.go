@@ -26,6 +26,8 @@ const (
 	DatabaseMaxConns = "CHALK_DATABASE_MAX_CONNS"
 	DatabaseMinConns = "CHALK_DATABASE_MIN_CONNS"
 
+	RedisURL = "CHALK_REDIS_URL"
+
 	DefaultAPIAddress        = ":8080"
 	DefaultDatabaseURL       = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
 	DefaultDBMaxConns        = int32(10)
@@ -35,6 +37,7 @@ const (
 	DefaultLogLevel          = "info"
 	DefaultRequestLogs       = "off"
 	DefaultRequestSampleRate = 0.01
+	DefaultRedisURL          = "redis://127.0.0.1:6379/0"
 	DefaultServiceName       = "chalk-api"
 	DefaultSlowRequestMS     = int64(250)
 	DefaultVersion           = "dev"
@@ -49,6 +52,10 @@ type DatabaseConfig struct {
 	URL      string
 	MaxConns int32
 	MinConns int32
+}
+
+type RedisConfig struct {
+	URL string
 }
 
 type ObservabilityConfig struct {
@@ -68,6 +75,7 @@ type Config struct {
 	API           APIConfig
 	Database      DatabaseConfig
 	Observability ObservabilityConfig
+	Redis         RedisConfig
 }
 
 func Load() (Config, error) {
@@ -140,6 +148,9 @@ func Load() (Config, error) {
 			Service:              envOrDefault(APIService, DefaultServiceName),
 			SlowRequestThreshold: slowRequestThreshold,
 			Version:              envOrDefault(APIVersion, DefaultVersion),
+		},
+		Redis: RedisConfig{
+			URL: envOrDefault(RedisURL, DefaultRedisURL),
 		},
 	}, nil
 }

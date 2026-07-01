@@ -28,6 +28,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Database.MinConns != config.DefaultDBMinConns {
 		t.Fatalf("database min conns = %d, want %d", cfg.Database.MinConns, config.DefaultDBMinConns)
 	}
+	if cfg.Redis.URL != config.DefaultRedisURL {
+		t.Fatalf("redis url = %q, want %q", cfg.Redis.URL, config.DefaultRedisURL)
+	}
 	if cfg.Observability.Profiler {
 		t.Fatal("profiler = true, want false")
 	}
@@ -119,6 +122,19 @@ func TestLoadDatabasePoolSettings(t *testing.T) {
 	}
 	if cfg.Database.MinConns != 5 {
 		t.Fatalf("database min conns = %d, want 5", cfg.Database.MinConns)
+	}
+}
+
+func TestLoadRedisURL(t *testing.T) {
+	t.Setenv(config.RedisURL, "redis://redis.internal:6379/2")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.Redis.URL != "redis://redis.internal:6379/2" {
+		t.Fatalf("redis url = %q, want redis://redis.internal:6379/2", cfg.Redis.URL)
 	}
 }
 

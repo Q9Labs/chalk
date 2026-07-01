@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Local Redis and combined Postgres/Redis service helpers for Go API
+  development.
 - MIT license metadata across the workspace.
 - Generic Go API logging/observability hooks and local performance harness for
   request, database, lifecycle, and footprint profiling.

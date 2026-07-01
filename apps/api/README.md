@@ -41,6 +41,12 @@ The API uses Postgres with `pgx`, `sqlc`, and `goose`. For local Postgres,
 migrations, query generation, and schema workflow, see
 [`docs/database-workflow.md`](docs/database-workflow.md).
 
+For the full local backing-service set, including Redis:
+
+```bash
+apps/api/scripts/dev-services.sh start
+```
+
 ## Runtime Smoke
 
 ```bash
