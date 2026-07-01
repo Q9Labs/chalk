@@ -28,6 +28,9 @@ const (
 
 	RedisURL = "CHALK_REDIS_URL"
 
+	ResendAPIKey    = "CHALK_RESEND_API_KEY"
+	ResendTimeoutMS = "CHALK_RESEND_TIMEOUT_MS"
+
 	DefaultAPIAddress        = ":8080"
 	DefaultDatabaseURL       = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
 	DefaultDBMaxConns        = int32(10)
@@ -38,9 +41,12 @@ const (
 	DefaultRequestLogs       = "off"
 	DefaultRequestSampleRate = 0.01
 	DefaultRedisURL          = "redis://127.0.0.1:6379/0"
+	DefaultResendTimeoutMS   = int64(10000)
 	DefaultServiceName       = "chalk-api"
 	DefaultSlowRequestMS     = int64(250)
 	DefaultVersion           = "dev"
+
+	DefaultResendTimeout = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
 )
 
 type APIConfig struct {
@@ -56,6 +62,11 @@ type DatabaseConfig struct {
 
 type RedisConfig struct {
 	URL string
+}
+
+type ResendConfig struct {
+	APIKey  string
+	Timeout time.Duration
 }
 
 type ObservabilityConfig struct {
@@ -76,6 +87,7 @@ type Config struct {
 	Database      DatabaseConfig
 	Observability ObservabilityConfig
 	Redis         RedisConfig
+	Resend        ResendConfig
 }
 
 func Load() (Config, error) {
@@ -126,6 +138,13 @@ func Load() (Config, error) {
 	if slowRequestThreshold < 0 {
 		return Config{}, fmt.Errorf("%s must be non-negative", APISlowRequestMS)
 	}
+	resendTimeout, err := envMilliseconds(ResendTimeoutMS, DefaultResendTimeoutMS)
+	if err != nil {
+		return Config{}, err
+	}
+	if resendTimeout <= 0 {
+		return Config{}, fmt.Errorf("%s must be greater than zero", ResendTimeoutMS)
+	}
 
 	return Config{
 		API: APIConfig{
@@ -151,6 +170,10 @@ func Load() (Config, error) {
 		},
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),
+		},
+		Resend: ResendConfig{
+			APIKey:  envOrDefault(ResendAPIKey, ""),
+			Timeout: resendTimeout,
 		},
 	}, nil
 }

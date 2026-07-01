@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Resend-backed outbound email adapter foundation for the Go API, including a
+  provider-neutral email port and env-based Resend configuration.
 - Local Redis and combined Postgres/Redis service helpers for Go API
   development.
 - MIT license metadata across the workspace.

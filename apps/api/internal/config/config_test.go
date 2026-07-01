@@ -31,6 +31,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Redis.URL != config.DefaultRedisURL {
 		t.Fatalf("redis url = %q, want %q", cfg.Redis.URL, config.DefaultRedisURL)
 	}
+	if cfg.Resend.APIKey != "" {
+		t.Fatalf("resend api key = %q, want empty", cfg.Resend.APIKey)
+	}
+	if cfg.Resend.Timeout != config.DefaultResendTimeout {
+		t.Fatalf("resend timeout = %s, want %s", cfg.Resend.Timeout, config.DefaultResendTimeout)
+	}
 	if cfg.Observability.Profiler {
 		t.Fatal("profiler = true, want false")
 	}
@@ -135,6 +141,23 @@ func TestLoadRedisURL(t *testing.T) {
 
 	if cfg.Redis.URL != "redis://redis.internal:6379/2" {
 		t.Fatalf("redis url = %q, want redis://redis.internal:6379/2", cfg.Redis.URL)
+	}
+}
+
+func TestLoadResend(t *testing.T) {
+	t.Setenv(config.ResendAPIKey, "re_123")
+	t.Setenv(config.ResendTimeoutMS, "2500")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.Resend.APIKey != "re_123" {
+		t.Fatalf("resend api key = %q, want re_123", cfg.Resend.APIKey)
+	}
+	if cfg.Resend.Timeout != 2500*time.Millisecond {
+		t.Fatalf("resend timeout = %s, want 2500ms", cfg.Resend.Timeout)
 	}
 }
 
@@ -291,6 +314,45 @@ func TestLoadRejectsInvalidObservabilitySettings(t *testing.T) {
 			name: "negative slow request threshold",
 			env: map[string]string{
 				config.APISlowRequestMS: "-1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			_, err := config.Load()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidResendSettings(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{
+			name: "bad timeout",
+			env: map[string]string{
+				config.ResendTimeoutMS: "soon",
+			},
+		},
+		{
+			name: "zero timeout",
+			env: map[string]string{
+				config.ResendTimeoutMS: "0",
+			},
+		},
+		{
+			name: "negative timeout",
+			env: map[string]string{
+				config.ResendTimeoutMS: "-1",
 			},
 		},
 	}

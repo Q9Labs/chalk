@@ -12,6 +12,7 @@ tool (
 require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/resend/resend-go/v3 v3.9.2
 )
 
 require (
