@@ -36,6 +36,15 @@ const (
 
 	RedisURL = "CHALK_REDIS_URL"
 
+	CloudflareAccountID                = "CHALK_CLOUDFLARE_ACCOUNT_ID"
+	CloudflareAPIToken                 = "CHALK_CLOUDFLARE_API_TOKEN"
+	CloudflareRealtimeAppID            = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
+	CloudflareRealtimeAppSecret        = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
+	CloudflareRTKAppID                 = "CHALK_CLOUDFLARE_RTK_APP_ID"
+	CloudflareRTKPresetFacilitator     = "CHALK_CLOUDFLARE_RTK_PRESET_FACILITATOR"
+	CloudflareRTKPresetContributor     = "CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR"
+	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
+
 	R2AccessKeyID      = "CHALK_R2_ACCESS_KEY_ID"
 	R2AccountID        = "CHALK_R2_ACCOUNT_ID"
 	R2Bucket           = "CHALK_R2_BUCKET"
@@ -46,29 +55,33 @@ const (
 	ResendAPIKey    = "CHALK_RESEND_API_KEY"
 	ResendTimeoutMS = "CHALK_RESEND_TIMEOUT_MS"
 
-	DefaultAPIAddress         = ":8080"
-	DefaultDatabaseURL        = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
-	DefaultDBMaxConns         = int32(10)
-	DefaultDBMinConns         = int32(0)
-	DefaultEnvironment        = "local"
-	DefaultGoogleRedirectURL  = "http://127.0.0.1:8080/v1/auth/google/callback"
-	DefaultLogFormat          = "json"
-	DefaultLogLevel           = "info"
-	DefaultOAuthStateTTLMS    = int64(10 * 60 * 1000)
-	DefaultRequestLogs        = "off"
-	DefaultRequestSampleRate  = 0.01
-	DefaultR2RequestTimeoutMS = int64(10000)
-	DefaultRedisURL           = "redis://127.0.0.1:6379/0"
-	DefaultResendTimeoutMS    = int64(10000)
-	DefaultSessionTTLMS       = int64(30 * 24 * 60 * 60 * 1000)
-	DefaultServiceName        = "chalk-api"
-	DefaultSlowRequestMS      = int64(250)
-	DefaultVersion            = "dev"
+	DefaultAPIAddress                         = ":8080"
+	DefaultDatabaseURL                        = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
+	DefaultDBMaxConns                         = int32(10)
+	DefaultDBMinConns                         = int32(0)
+	DefaultEnvironment                        = "local"
+	DefaultGoogleRedirectURL                  = "http://127.0.0.1:8080/v1/auth/google/callback"
+	DefaultLogFormat                          = "json"
+	DefaultLogLevel                           = "info"
+	DefaultOAuthStateTTLMS                    = int64(10 * 60 * 1000)
+	DefaultCloudflareRealtimeRequestTimeoutMS = int64(10000)
+	DefaultCloudflareRTKPresetContributor     = "contributor"
+	DefaultCloudflareRTKPresetFacilitator     = "facilitator"
+	DefaultRequestLogs                        = "off"
+	DefaultRequestSampleRate                  = 0.01
+	DefaultR2RequestTimeoutMS                 = int64(10000)
+	DefaultRedisURL                           = "redis://127.0.0.1:6379/0"
+	DefaultResendTimeoutMS                    = int64(10000)
+	DefaultSessionTTLMS                       = int64(30 * 24 * 60 * 60 * 1000)
+	DefaultServiceName                        = "chalk-api"
+	DefaultSlowRequestMS                      = int64(250)
+	DefaultVersion                            = "dev"
 
-	DefaultOAuthStateTTL = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
-	DefaultR2Timeout     = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
-	DefaultResendTimeout = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
-	DefaultSessionTTL    = time.Duration(DefaultSessionTTLMS) * time.Millisecond
+	DefaultOAuthStateTTL             = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
+	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
+	DefaultR2Timeout                 = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
+	DefaultResendTimeout             = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
+	DefaultSessionTTL                = time.Duration(DefaultSessionTTLMS) * time.Millisecond
 )
 
 type APIConfig struct {
@@ -84,6 +97,17 @@ type DatabaseConfig struct {
 
 type RedisConfig struct {
 	URL string
+}
+
+type CloudflareRealtimeConfig struct {
+	AccountID            string
+	APIToken             string
+	RealtimeAppID        string
+	RealtimeAppSecret    string
+	RTKAppID             string
+	RTKPresetFacilitator string
+	RTKPresetContributor string
+	RequestTimeout       time.Duration
 }
 
 type R2Config struct {
@@ -126,14 +150,15 @@ type ObservabilityConfig struct {
 }
 
 type Config struct {
-	API           APIConfig
-	Auth          AuthConfig
-	Database      DatabaseConfig
-	GoogleOAuth   GoogleOAuthConfig
-	Observability ObservabilityConfig
-	R2            R2Config
-	Redis         RedisConfig
-	Resend        ResendConfig
+	API                APIConfig
+	Auth               AuthConfig
+	CloudflareRealtime CloudflareRealtimeConfig
+	Database           DatabaseConfig
+	GoogleOAuth        GoogleOAuthConfig
+	Observability      ObservabilityConfig
+	R2                 R2Config
+	Redis              RedisConfig
+	Resend             ResendConfig
 }
 
 func Load() (Config, error) {
@@ -213,6 +238,13 @@ func Load() (Config, error) {
 	if r2RequestTimeout <= 0 {
 		return Config{}, fmt.Errorf("%s must be greater than zero", R2RequestTimeoutMS)
 	}
+	cloudflareRealtimeRequestTimeout, err := envMilliseconds(CloudflareRealtimeRequestTimeoutMS, DefaultCloudflareRealtimeRequestTimeoutMS)
+	if err != nil {
+		return Config{}, err
+	}
+	if cloudflareRealtimeRequestTimeout <= 0 {
+		return Config{}, fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
+	}
 
 	return Config{
 		API: APIConfig{
@@ -223,6 +255,16 @@ func Load() (Config, error) {
 			EmailVerificationRequired: envBool(AuthEmailVerificationRequired),
 			OAuthStateTTL:             oauthStateTTL,
 			SessionTTL:                sessionTTL,
+		},
+		CloudflareRealtime: CloudflareRealtimeConfig{
+			AccountID:            envOrDefault(CloudflareAccountID, ""),
+			APIToken:             envOrDefault(CloudflareAPIToken, ""),
+			RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
+			RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
+			RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
+			RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
+			RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
+			RequestTimeout:       cloudflareRealtimeRequestTimeout,
 		},
 		Database: DatabaseConfig{
 			URL:      envOrDefault(DatabaseURL, DefaultDatabaseURL),

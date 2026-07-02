@@ -49,6 +49,30 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Redis.URL != config.DefaultRedisURL {
 		t.Fatalf("redis url = %q, want %q", cfg.Redis.URL, config.DefaultRedisURL)
 	}
+	if cfg.CloudflareRealtime.AccountID != "" {
+		t.Fatalf("cloudflare account id = %q, want empty", cfg.CloudflareRealtime.AccountID)
+	}
+	if cfg.CloudflareRealtime.APIToken != "" {
+		t.Fatalf("cloudflare api token = %q, want empty", cfg.CloudflareRealtime.APIToken)
+	}
+	if cfg.CloudflareRealtime.RealtimeAppID != "" {
+		t.Fatalf("cloudflare realtime app id = %q, want empty", cfg.CloudflareRealtime.RealtimeAppID)
+	}
+	if cfg.CloudflareRealtime.RealtimeAppSecret != "" {
+		t.Fatalf("cloudflare realtime app secret = %q, want empty", cfg.CloudflareRealtime.RealtimeAppSecret)
+	}
+	if cfg.CloudflareRealtime.RTKAppID != "" {
+		t.Fatalf("cloudflare rtk app id = %q, want empty", cfg.CloudflareRealtime.RTKAppID)
+	}
+	if cfg.CloudflareRealtime.RTKPresetFacilitator != config.DefaultCloudflareRTKPresetFacilitator {
+		t.Fatalf("cloudflare rtk facilitator preset = %q, want %q", cfg.CloudflareRealtime.RTKPresetFacilitator, config.DefaultCloudflareRTKPresetFacilitator)
+	}
+	if cfg.CloudflareRealtime.RTKPresetContributor != config.DefaultCloudflareRTKPresetContributor {
+		t.Fatalf("cloudflare rtk contributor preset = %q, want %q", cfg.CloudflareRealtime.RTKPresetContributor, config.DefaultCloudflareRTKPresetContributor)
+	}
+	if cfg.CloudflareRealtime.RequestTimeout != config.DefaultCloudflareRealtimeTimeout {
+		t.Fatalf("cloudflare realtime request timeout = %s, want %s", cfg.CloudflareRealtime.RequestTimeout, config.DefaultCloudflareRealtimeTimeout)
+	}
 	if cfg.R2.AccessKeyID != "" {
 		t.Fatalf("r2 access key id = %q, want empty", cfg.R2.AccessKeyID)
 	}
@@ -219,6 +243,47 @@ func TestLoadRedisURL(t *testing.T) {
 
 	if cfg.Redis.URL != "redis://redis.internal:6379/2" {
 		t.Fatalf("redis url = %q, want redis://redis.internal:6379/2", cfg.Redis.URL)
+	}
+}
+
+func TestLoadCloudflareRealtime(t *testing.T) {
+	t.Setenv(config.CloudflareAccountID, "account-id")
+	t.Setenv(config.CloudflareAPIToken, "api-token")
+	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app-id")
+	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-app-secret")
+	t.Setenv(config.CloudflareRTKAppID, "rtk-app-id")
+	t.Setenv(config.CloudflareRTKPresetFacilitator, "host-preset")
+	t.Setenv(config.CloudflareRTKPresetContributor, "participant-preset")
+	t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "2500")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.CloudflareRealtime.AccountID != "account-id" {
+		t.Fatalf("cloudflare account id = %q, want account-id", cfg.CloudflareRealtime.AccountID)
+	}
+	if cfg.CloudflareRealtime.APIToken != "api-token" {
+		t.Fatalf("cloudflare api token = %q, want api-token", cfg.CloudflareRealtime.APIToken)
+	}
+	if cfg.CloudflareRealtime.RealtimeAppID != "sfu-app-id" {
+		t.Fatalf("cloudflare realtime app id = %q, want sfu-app-id", cfg.CloudflareRealtime.RealtimeAppID)
+	}
+	if cfg.CloudflareRealtime.RealtimeAppSecret != "sfu-app-secret" {
+		t.Fatalf("cloudflare realtime app secret = %q, want sfu-app-secret", cfg.CloudflareRealtime.RealtimeAppSecret)
+	}
+	if cfg.CloudflareRealtime.RTKAppID != "rtk-app-id" {
+		t.Fatalf("cloudflare rtk app id = %q, want rtk-app-id", cfg.CloudflareRealtime.RTKAppID)
+	}
+	if cfg.CloudflareRealtime.RTKPresetFacilitator != "host-preset" {
+		t.Fatalf("cloudflare rtk facilitator preset = %q, want host-preset", cfg.CloudflareRealtime.RTKPresetFacilitator)
+	}
+	if cfg.CloudflareRealtime.RTKPresetContributor != "participant-preset" {
+		t.Fatalf("cloudflare rtk contributor preset = %q, want participant-preset", cfg.CloudflareRealtime.RTKPresetContributor)
+	}
+	if cfg.CloudflareRealtime.RequestTimeout != 2500*time.Millisecond {
+		t.Fatalf("cloudflare realtime request timeout = %s, want 2500ms", cfg.CloudflareRealtime.RequestTimeout)
 	}
 }
 
@@ -509,6 +574,45 @@ func TestLoadRejectsInvalidResendSettings(t *testing.T) {
 			name: "negative timeout",
 			env: map[string]string{
 				config.ResendTimeoutMS: "-1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			_, err := config.Load()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidCloudflareRealtimeSettings(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{
+			name: "bad timeout",
+			env: map[string]string{
+				config.CloudflareRealtimeRequestTimeoutMS: "soon",
+			},
+		},
+		{
+			name: "zero timeout",
+			env: map[string]string{
+				config.CloudflareRealtimeRequestTimeoutMS: "0",
+			},
+		},
+		{
+			name: "negative timeout",
+			env: map[string]string{
+				config.CloudflareRealtimeRequestTimeoutMS: "-1",
 			},
 		},
 	}
