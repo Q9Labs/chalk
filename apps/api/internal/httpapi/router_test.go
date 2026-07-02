@@ -523,6 +523,21 @@ func TestGoogleCallbackCreatesSession(t *testing.T) {
 	}
 }
 
+func TestGoogleCallbackRejectsUnverifiedEmail(t *testing.T) {
+	res := requestWithOptions(t, http.MethodGet, "/v1/auth/google/callback?state=state&code=code", httpapi.Options{
+		Authentication: authenticationService{
+			completeGoogleSignIn: func(ctx context.Context, state string, code string, userAgent *string) (authentication.AuthResult, error) {
+				return authentication.AuthResult{}, authentication.ErrOAuthEmailNotVerified
+			},
+		},
+	})
+
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusUnauthorized)
+	}
+	assertErrorCode(t, res, "oauth_email_not_verified")
+}
+
 func TestMiddleware(t *testing.T) {
 	called := false
 	res := requestWithOptions(t, http.MethodGet, "/healthz", httpapi.Options{

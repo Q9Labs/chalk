@@ -63,8 +63,16 @@ func (p Provider) Authenticate(ctx context.Context, code string, verifier string
 		return authentication.GoogleIdentity{}, fmt.Errorf("validate google id token: %w", err)
 	}
 
+	return googleIdentityFromPayload(payload)
+}
+
+func googleIdentityFromPayload(payload *idtoken.Payload) (authentication.GoogleIdentity, error) {
 	email, _ := payload.Claims["email"].(string)
 	name, _ := payload.Claims["name"].(string)
+	emailVerified, _ := payload.Claims["email_verified"].(bool)
+	if !emailVerified {
+		return authentication.GoogleIdentity{}, authentication.ErrOAuthEmailNotVerified
+	}
 
 	return authentication.GoogleIdentity{
 		Subject: payload.Subject,

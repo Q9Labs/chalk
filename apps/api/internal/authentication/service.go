@@ -41,6 +41,7 @@ var (
 	ErrOAuthNotConfigured        = errors.New("oauth not configured")
 	ErrOAuthStateNotFound        = errors.New("oauth state not found")
 	ErrOAuthEmailConflict        = errors.New("oauth email conflict")
+	ErrOAuthEmailNotVerified     = errors.New("oauth email not verified")
 )
 
 type User struct {

@@ -193,6 +193,8 @@ func writeAuthenticationServiceError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusBadRequest, "invalid_oauth_state", "Invalid OAuth state")
 	case errors.Is(err, authentication.ErrOAuthEmailConflict):
 		writeError(w, http.StatusConflict, "oauth_email_conflict", "Email is already registered with another sign-in method")
+	case errors.Is(err, authentication.ErrOAuthEmailNotVerified):
+		writeError(w, http.StatusUnauthorized, "oauth_email_not_verified", "Google email is not verified")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
 	}
