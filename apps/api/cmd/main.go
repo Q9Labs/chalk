@@ -10,8 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
+	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -65,6 +69,35 @@ func run() error {
 
 	queries := postgressqlc.New(pool)
 	operationQueries := diagnostics.Queries(queries)
+	authenticationRepository := postgres.NewAuthenticationRepository(operationQueries)
+	passwords := passwordadapter.NewBcryptHasher()
+	var googleProvider authentication.GoogleProvider
+	var oauthStates authentication.OAuthStateStore
+	if cfg.GoogleOAuth.ClientID != "" || cfg.GoogleOAuth.ClientSecret != "" {
+		provider, err := googleadapter.NewProvider(googleadapter.Config{
+			ClientID:     cfg.GoogleOAuth.ClientID,
+			ClientSecret: cfg.GoogleOAuth.ClientSecret,
+			RedirectURL:  cfg.GoogleOAuth.RedirectURL,
+		})
+		if err != nil {
+			return fmt.Errorf("configure google oauth: %w", err)
+		}
+
+		redisClient, err := redisadapter.Open(cfg.Redis.URL)
+		if err != nil {
+			return fmt.Errorf("open redis: %w", err)
+		}
+		defer redisClient.Close()
+		logger.Info("redis connected", "event", "redis.connected")
+
+		googleProvider = provider
+		oauthStates = redisadapter.NewOAuthStateStore(redisClient)
+	}
+	authenticationService := authentication.NewService(authenticationRepository, passwords, googleProvider, oauthStates, authentication.Config{
+		RequireEmailVerification: cfg.Auth.EmailVerificationRequired,
+		OAuthStateTTL:            cfg.Auth.OAuthStateTTL,
+		SessionTTL:               cfg.Auth.SessionTTL,
+	})
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	tenantService := tenants.NewService(tenantRepository)
 	userRepository := postgres.NewUserRepository(operationQueries)
@@ -75,10 +108,14 @@ func run() error {
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 		},
-		Readiness:   postgres.Readiness{Pool: pool},
-		Memberships: membershipService,
-		Tenants:     tenantService,
-		Users:       userService,
+		Readiness:      postgres.Readiness{Pool: pool},
+		Authentication: authenticationService,
+		Memberships:    membershipService,
+		SessionCookie: httpapi.SessionCookieOptions{
+			Secure: cfg.Observability.Environment != "local",
+		},
+		Tenants: tenantService,
+		Users:   userService,
 	}
 	diagnostics.ApplyHTTP(&routerOptions)
 

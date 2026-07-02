@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -65,6 +66,65 @@ type membershipService struct {
 	createMembership       func(context.Context, memberships.CreateMembershipInput) (memberships.Membership, error)
 	listTenantMemberships  func(context.Context, utilities.ID, pagination.PageRequest) (memberships.MembershipList, error)
 	updateTenantMembership func(context.Context, utilities.ID, utilities.ID, memberships.UpdateMembershipInput) (memberships.Membership, error)
+}
+
+type authenticationService struct {
+	register             func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error)
+	login                func(context.Context, authentication.LoginInput) (authentication.AuthResult, error)
+	authenticateSession  func(context.Context, string) (authentication.SessionUser, error)
+	logout               func(context.Context, authentication.Principal) error
+	startGoogleSignIn    func(context.Context) (authentication.GoogleStart, error)
+	completeGoogleSignIn func(context.Context, string, string, *string) (authentication.AuthResult, error)
+}
+
+func (s authenticationService) Register(ctx context.Context, input authentication.RegisterInput) (authentication.AuthResult, error) {
+	if s.register == nil {
+		return authentication.AuthResult{}, errors.New("unexpected register call")
+	}
+	return s.register(ctx, input)
+}
+
+func (s authenticationService) Login(ctx context.Context, input authentication.LoginInput) (authentication.AuthResult, error) {
+	if s.login == nil {
+		return authentication.AuthResult{}, errors.New("unexpected login call")
+	}
+	return s.login(ctx, input)
+}
+
+func (s authenticationService) AuthenticateSession(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+	if s.authenticateSession == nil {
+		return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
+	}
+	return s.authenticateSession(ctx, rawToken)
+}
+
+func (s authenticationService) PrincipalForSession(session authentication.Session) authentication.Principal {
+	return authentication.Principal{
+		Kind:      authentication.PrincipalUser,
+		UserID:    session.UserID,
+		SessionID: session.ID,
+	}
+}
+
+func (s authenticationService) Logout(ctx context.Context, principal authentication.Principal) error {
+	if s.logout == nil {
+		return errors.New("unexpected logout call")
+	}
+	return s.logout(ctx, principal)
+}
+
+func (s authenticationService) StartGoogleSignIn(ctx context.Context) (authentication.GoogleStart, error) {
+	if s.startGoogleSignIn == nil {
+		return authentication.GoogleStart{}, errors.New("unexpected google start call")
+	}
+	return s.startGoogleSignIn(ctx)
+}
+
+func (s authenticationService) CompleteGoogleSignIn(ctx context.Context, state string, code string, userAgent *string) (authentication.AuthResult, error) {
+	if s.completeGoogleSignIn == nil {
+		return authentication.AuthResult{}, errors.New("unexpected google callback call")
+	}
+	return s.completeGoogleSignIn(ctx, state, code, userAgent)
 }
 
 func (s membershipService) CreateMembership(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
@@ -224,6 +284,243 @@ func TestMethodNotAllowed(t *testing.T) {
 	}
 
 	assertErrorCode(t, res, "method_not_allowed")
+}
+
+func TestRegister(t *testing.T) {
+	expiresAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"password123"}`, httpapi.Options{
+		Authentication: authenticationService{
+			register: func(ctx context.Context, input authentication.RegisterInput) (authentication.AuthResult, error) {
+				if input.Email != "hasan@example.com" {
+					t.Fatalf("email = %q, want hasan@example.com", input.Email)
+				}
+				if input.Password != "password123" {
+					t.Fatalf("password = %q, want password123", input.Password)
+				}
+
+				return authentication.AuthResult{
+					SessionToken: "raw-session-token",
+					ExpiresAt:    expiresAt,
+					User:         authUser(t),
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	var body struct {
+		SessionToken string `json:"session_token"`
+		User         struct {
+			Email string `json:"email"`
+		} `json:"user"`
+	}
+	decodeJSON(t, res, &body)
+	if body.SessionToken != "raw-session-token" {
+		t.Fatalf("session token = %q, want raw-session-token", body.SessionToken)
+	}
+	if body.User.Email != "hasan@example.com" {
+		t.Fatalf("user email = %q, want hasan@example.com", body.User.Email)
+	}
+
+	cookie := sessionCookie(t, res)
+	if !cookie.HttpOnly {
+		t.Fatal("session cookie is not HttpOnly")
+	}
+	if cookie.Value != "raw-session-token" {
+		t.Fatalf("cookie value = %q, want raw-session-token", cookie.Value)
+	}
+	if cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("cookie samesite = %v, want lax", cookie.SameSite)
+	}
+}
+
+func TestRegisterDuplicateEmail(t *testing.T) {
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"password123"}`, httpapi.Options{
+		Authentication: authenticationService{
+			register: func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error) {
+				return authentication.AuthResult{}, authentication.ErrEmailAlreadyRegistered
+			},
+		},
+	})
+
+	if res.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
+	}
+	assertErrorCode(t, res, "email_already_registered")
+}
+
+func TestLogin(t *testing.T) {
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/auth/login", `{"email":"hasan@example.com","password":"password123"}`, httpapi.Options{
+		Authentication: authenticationService{
+			login: func(ctx context.Context, input authentication.LoginInput) (authentication.AuthResult, error) {
+				return authentication.AuthResult{
+					SessionToken: "raw-login-token",
+					ExpiresAt:    time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+					User:         authUser(t),
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if sessionCookie(t, res).Value != "raw-login-token" {
+		t.Fatal("login did not set session cookie")
+	}
+}
+
+func TestLoginWrongPassword(t *testing.T) {
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/auth/login", `{"email":"hasan@example.com","password":"wrong"}`, httpapi.Options{
+		Authentication: authenticationService{
+			login: func(context.Context, authentication.LoginInput) (authentication.AuthResult, error) {
+				return authentication.AuthResult{}, authentication.ErrInvalidCredentials
+			},
+		},
+	})
+
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusUnauthorized)
+	}
+	assertErrorCode(t, res, "invalid_credentials")
+}
+
+func TestMeAcceptsBearerSession(t *testing.T) {
+	req := bearerRequest(http.MethodGet, "/v1/me", "raw-session-token")
+	res := requestWithOptionsAndRequest(t, req, httpapi.Options{
+		Authentication: authenticationService{
+			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+				if rawToken != "raw-session-token" {
+					t.Fatalf("raw token = %q, want raw-session-token", rawToken)
+				}
+				return authSessionUser(t), nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		Email string `json:"email"`
+	}
+	decodeJSON(t, res, &body)
+	if body.Email != "hasan@example.com" {
+		t.Fatalf("email = %q, want hasan@example.com", body.Email)
+	}
+}
+
+func TestMeAcceptsCookieSession(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	req.AddCookie(&http.Cookie{Name: "chalk_session", Value: "cookie-session-token"})
+	res := requestWithOptionsAndRequest(t, req, httpapi.Options{
+		Authentication: authenticationService{
+			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+				if rawToken != "cookie-session-token" {
+					t.Fatalf("raw token = %q, want cookie-session-token", rawToken)
+				}
+				return authSessionUser(t), nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+}
+
+func TestMeRejectsMissingAndInvalidSession(t *testing.T) {
+	res := requestWithOptions(t, http.MethodGet, "/v1/me", httpapi.Options{
+		Authentication: authenticationService{
+			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+				return authentication.SessionUser{}, errors.New("unexpected auth call")
+			},
+		},
+	})
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("missing session status = %d, want %d", res.Code, http.StatusUnauthorized)
+	}
+
+	res = requestWithOptionsAndRequest(t, bearerRequest(http.MethodGet, "/v1/me", "invalid"), httpapi.Options{
+		Authentication: authenticationService{
+			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+				return authentication.SessionUser{}, authentication.ErrUnauthenticated
+			},
+		},
+	})
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid session status = %d, want %d", res.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestLogoutRevokesCurrentSession(t *testing.T) {
+	sessionUser := authSessionUser(t)
+	res := requestWithOptionsAndRequest(t, bearerRequest(http.MethodPost, "/v1/auth/logout", "raw-session-token"), httpapi.Options{
+		Authentication: authenticationService{
+			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+				return sessionUser, nil
+			},
+			logout: func(ctx context.Context, principal authentication.Principal) error {
+				if principal.SessionID != sessionUser.Session.ID {
+					t.Fatalf("session id = %q, want %q", principal.SessionID.String(), sessionUser.Session.ID.String())
+				}
+				return nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	cookie := sessionCookie(t, res)
+	if cookie.MaxAge >= 0 {
+		t.Fatalf("logout cookie max age = %d, want negative", cookie.MaxAge)
+	}
+}
+
+func TestGoogleStartRedirects(t *testing.T) {
+	res := requestWithOptions(t, http.MethodGet, "/v1/auth/google/start", httpapi.Options{
+		Authentication: authenticationService{
+			startGoogleSignIn: func(context.Context) (authentication.GoogleStart, error) {
+				return authentication.GoogleStart{AuthorizationURL: "https://accounts.google.test/auth"}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusFound)
+	}
+	if location := res.Header().Get("Location"); location != "https://accounts.google.test/auth" {
+		t.Fatalf("location = %q, want google auth url", location)
+	}
+}
+
+func TestGoogleCallbackCreatesSession(t *testing.T) {
+	res := requestWithOptions(t, http.MethodGet, "/v1/auth/google/callback?state=state&code=code", httpapi.Options{
+		Authentication: authenticationService{
+			completeGoogleSignIn: func(ctx context.Context, state string, code string, userAgent *string) (authentication.AuthResult, error) {
+				if state != "state" || code != "code" {
+					t.Fatalf("state/code = %q/%q, want state/code", state, code)
+				}
+				return authentication.AuthResult{
+					SessionToken: "google-session-token",
+					ExpiresAt:    time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+					User:         authUser(t),
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if sessionCookie(t, res).Value != "google-session-token" {
+		t.Fatal("google callback did not set session cookie")
+	}
 }
 
 func TestMiddleware(t *testing.T) {
@@ -1013,6 +1310,17 @@ func requestWithOptionsAndBody(t *testing.T, method string, path string, body st
 	return res
 }
 
+func requestWithOptionsAndRequest(t *testing.T, req *http.Request, options httpapi.Options) *httptest.ResponseRecorder {
+	t.Helper()
+
+	handler := httpapi.NewRouter(options)
+	res := httptest.NewRecorder()
+
+	handler.ServeHTTP(res, req)
+
+	return res
+}
+
 func assertErrorCode(t *testing.T, res *httptest.ResponseRecorder, want string) {
 	t.Helper()
 
@@ -1036,6 +1344,62 @@ func decodeJSON(t *testing.T, res *httptest.ResponseRecorder, target any) {
 
 	if err := json.NewDecoder(res.Body).Decode(target); err != nil {
 		t.Fatalf("decode response: %v", err)
+	}
+}
+
+func bearerRequest(method string, path string, token string) *http.Request {
+	req := httptest.NewRequest(method, path, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	return req
+}
+
+func sessionCookie(t *testing.T, res *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+
+	for _, cookie := range res.Result().Cookies() {
+		if cookie.Name == "chalk_session" {
+			return cookie
+		}
+	}
+
+	t.Fatal("chalk_session cookie not found")
+	return nil
+}
+
+func authUser(t *testing.T) authentication.User {
+	t.Helper()
+
+	id, err := utilities.ParseID("11111111-1111-4111-8111-111111111111")
+	if err != nil {
+		t.Fatalf("parse user id: %v", err)
+	}
+
+	return authentication.User{
+		ID:        id,
+		Name:      "Hasan",
+		Email:     "hasan@example.com",
+		UpdatedAt: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC),
+		CreatedAt: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC),
+	}
+}
+
+func authSessionUser(t *testing.T) authentication.SessionUser {
+	t.Helper()
+
+	sessionID, err := utilities.ParseID("22222222-2222-4222-8222-222222222222")
+	if err != nil {
+		t.Fatalf("parse session id: %v", err)
+	}
+	user := authUser(t)
+
+	return authentication.SessionUser{
+		Session: authentication.Session{
+			ID:        sessionID,
+			UserID:    user.ID,
+			TokenHash: "session-token-hash",
+			ExpiresAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		},
+		User: user,
 	}
 }
 

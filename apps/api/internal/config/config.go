@@ -22,31 +22,53 @@ const (
 	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
 	APIVersion            = "CHALK_API_VERSION"
 
+	AuthEmailVerificationRequired = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
+	AuthOAuthStateTTLMS           = "CHALK_AUTH_OAUTH_STATE_TTL_MS"
+	AuthSessionTTLMS              = "CHALK_AUTH_SESSION_TTL_MS"
+
 	DatabaseURL      = "CHALK_DATABASE_URL"
 	DatabaseMaxConns = "CHALK_DATABASE_MAX_CONNS"
 	DatabaseMinConns = "CHALK_DATABASE_MIN_CONNS"
 
+	GoogleOAuthClientID     = "CHALK_GOOGLE_OAUTH_CLIENT_ID"
+	GoogleOAuthClientSecret = "CHALK_GOOGLE_OAUTH_CLIENT_SECRET"
+	GoogleOAuthRedirectURL  = "CHALK_GOOGLE_OAUTH_REDIRECT_URL"
+
 	RedisURL = "CHALK_REDIS_URL"
+
+	R2AccessKeyID      = "CHALK_R2_ACCESS_KEY_ID"
+	R2AccountID        = "CHALK_R2_ACCOUNT_ID"
+	R2Bucket           = "CHALK_R2_BUCKET"
+	R2Endpoint         = "CHALK_R2_ENDPOINT"
+	R2SecretAccessKey  = "CHALK_R2_SECRET_ACCESS_KEY"
+	R2RequestTimeoutMS = "CHALK_R2_REQUEST_TIMEOUT_MS"
 
 	ResendAPIKey    = "CHALK_RESEND_API_KEY"
 	ResendTimeoutMS = "CHALK_RESEND_TIMEOUT_MS"
 
-	DefaultAPIAddress        = ":8080"
-	DefaultDatabaseURL       = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
-	DefaultDBMaxConns        = int32(10)
-	DefaultDBMinConns        = int32(0)
-	DefaultEnvironment       = "local"
-	DefaultLogFormat         = "json"
-	DefaultLogLevel          = "info"
-	DefaultRequestLogs       = "off"
-	DefaultRequestSampleRate = 0.01
-	DefaultRedisURL          = "redis://127.0.0.1:6379/0"
-	DefaultResendTimeoutMS   = int64(10000)
-	DefaultServiceName       = "chalk-api"
-	DefaultSlowRequestMS     = int64(250)
-	DefaultVersion           = "dev"
+	DefaultAPIAddress         = ":8080"
+	DefaultDatabaseURL        = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
+	DefaultDBMaxConns         = int32(10)
+	DefaultDBMinConns         = int32(0)
+	DefaultEnvironment        = "local"
+	DefaultGoogleRedirectURL  = "http://127.0.0.1:8080/v1/auth/google/callback"
+	DefaultLogFormat          = "json"
+	DefaultLogLevel           = "info"
+	DefaultOAuthStateTTLMS    = int64(10 * 60 * 1000)
+	DefaultRequestLogs        = "off"
+	DefaultRequestSampleRate  = 0.01
+	DefaultR2RequestTimeoutMS = int64(10000)
+	DefaultRedisURL           = "redis://127.0.0.1:6379/0"
+	DefaultResendTimeoutMS    = int64(10000)
+	DefaultSessionTTLMS       = int64(30 * 24 * 60 * 60 * 1000)
+	DefaultServiceName        = "chalk-api"
+	DefaultSlowRequestMS      = int64(250)
+	DefaultVersion            = "dev"
 
+	DefaultOAuthStateTTL = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
+	DefaultR2Timeout     = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
 	DefaultResendTimeout = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
+	DefaultSessionTTL    = time.Duration(DefaultSessionTTLMS) * time.Millisecond
 )
 
 type APIConfig struct {
@@ -62,6 +84,27 @@ type DatabaseConfig struct {
 
 type RedisConfig struct {
 	URL string
+}
+
+type R2Config struct {
+	AccessKeyID     string
+	AccountID       string
+	Bucket          string
+	Endpoint        string
+	SecretAccessKey string
+	RequestTimeout  time.Duration
+}
+
+type AuthConfig struct {
+	EmailVerificationRequired bool
+	OAuthStateTTL             time.Duration
+	SessionTTL                time.Duration
+}
+
+type GoogleOAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
 }
 
 type ResendConfig struct {
@@ -84,8 +127,11 @@ type ObservabilityConfig struct {
 
 type Config struct {
 	API           APIConfig
+	Auth          AuthConfig
 	Database      DatabaseConfig
+	GoogleOAuth   GoogleOAuthConfig
 	Observability ObservabilityConfig
+	R2            R2Config
 	Redis         RedisConfig
 	Resend        ResendConfig
 }
@@ -109,6 +155,21 @@ func Load() (Config, error) {
 	}
 	if minConns > maxConns {
 		return Config{}, fmt.Errorf("%s cannot be greater than %s", DatabaseMinConns, DatabaseMaxConns)
+	}
+
+	sessionTTL, err := envMilliseconds(AuthSessionTTLMS, DefaultSessionTTLMS)
+	if err != nil {
+		return Config{}, err
+	}
+	if sessionTTL <= 0 {
+		return Config{}, fmt.Errorf("%s must be greater than zero", AuthSessionTTLMS)
+	}
+	oauthStateTTL, err := envMilliseconds(AuthOAuthStateTTLMS, DefaultOAuthStateTTLMS)
+	if err != nil {
+		return Config{}, err
+	}
+	if oauthStateTTL <= 0 {
+		return Config{}, fmt.Errorf("%s must be greater than zero", AuthOAuthStateTTLMS)
 	}
 
 	logFormat, err := envEnum(APILogFormat, DefaultLogFormat, "json", "text")
@@ -145,16 +206,33 @@ func Load() (Config, error) {
 	if resendTimeout <= 0 {
 		return Config{}, fmt.Errorf("%s must be greater than zero", ResendTimeoutMS)
 	}
+	r2RequestTimeout, err := envMilliseconds(R2RequestTimeoutMS, DefaultR2RequestTimeoutMS)
+	if err != nil {
+		return Config{}, err
+	}
+	if r2RequestTimeout <= 0 {
+		return Config{}, fmt.Errorf("%s must be greater than zero", R2RequestTimeoutMS)
+	}
 
 	return Config{
 		API: APIConfig{
 			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
 			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
 		},
+		Auth: AuthConfig{
+			EmailVerificationRequired: envBool(AuthEmailVerificationRequired),
+			OAuthStateTTL:             oauthStateTTL,
+			SessionTTL:                sessionTTL,
+		},
 		Database: DatabaseConfig{
 			URL:      envOrDefault(DatabaseURL, DefaultDatabaseURL),
 			MaxConns: maxConns,
 			MinConns: minConns,
+		},
+		GoogleOAuth: GoogleOAuthConfig{
+			ClientID:     envOrDefault(GoogleOAuthClientID, ""),
+			ClientSecret: envOrDefault(GoogleOAuthClientSecret, ""),
+			RedirectURL:  envOrDefault(GoogleOAuthRedirectURL, DefaultGoogleRedirectURL),
 		},
 		Observability: ObservabilityConfig{
 			Environment:          envOrDefault(APIEnvironment, DefaultEnvironment),
@@ -167,6 +245,14 @@ func Load() (Config, error) {
 			Service:              envOrDefault(APIService, DefaultServiceName),
 			SlowRequestThreshold: slowRequestThreshold,
 			Version:              envOrDefault(APIVersion, DefaultVersion),
+		},
+		R2: R2Config{
+			AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
+			AccountID:       envOrDefault(R2AccountID, ""),
+			Bucket:          envOrDefault(R2Bucket, ""),
+			Endpoint:        envOrDefault(R2Endpoint, ""),
+			SecretAccessKey: envOrDefault(R2SecretAccessKey, ""),
+			RequestTimeout:  r2RequestTimeout,
 		},
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),

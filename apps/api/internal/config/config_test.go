@@ -19,6 +19,15 @@ func TestLoadDefaults(t *testing.T) {
 	if len(cfg.API.CORSAllowedOrigins) != 0 {
 		t.Fatalf("cors allowed origins = %#v, want empty", cfg.API.CORSAllowedOrigins)
 	}
+	if cfg.Auth.EmailVerificationRequired {
+		t.Fatal("email verification required = true, want false")
+	}
+	if cfg.Auth.OAuthStateTTL != config.DefaultOAuthStateTTL {
+		t.Fatalf("oauth state ttl = %s, want %s", cfg.Auth.OAuthStateTTL, config.DefaultOAuthStateTTL)
+	}
+	if cfg.Auth.SessionTTL != config.DefaultSessionTTL {
+		t.Fatalf("session ttl = %s, want %s", cfg.Auth.SessionTTL, config.DefaultSessionTTL)
+	}
 	if cfg.Database.URL != config.DefaultDatabaseURL {
 		t.Fatalf("database url = %q, want %q", cfg.Database.URL, config.DefaultDatabaseURL)
 	}
@@ -28,8 +37,35 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Database.MinConns != config.DefaultDBMinConns {
 		t.Fatalf("database min conns = %d, want %d", cfg.Database.MinConns, config.DefaultDBMinConns)
 	}
+	if cfg.GoogleOAuth.ClientID != "" {
+		t.Fatalf("google oauth client id = %q, want empty", cfg.GoogleOAuth.ClientID)
+	}
+	if cfg.GoogleOAuth.ClientSecret != "" {
+		t.Fatalf("google oauth client secret = %q, want empty", cfg.GoogleOAuth.ClientSecret)
+	}
+	if cfg.GoogleOAuth.RedirectURL != config.DefaultGoogleRedirectURL {
+		t.Fatalf("google oauth redirect url = %q, want %q", cfg.GoogleOAuth.RedirectURL, config.DefaultGoogleRedirectURL)
+	}
 	if cfg.Redis.URL != config.DefaultRedisURL {
 		t.Fatalf("redis url = %q, want %q", cfg.Redis.URL, config.DefaultRedisURL)
+	}
+	if cfg.R2.AccessKeyID != "" {
+		t.Fatalf("r2 access key id = %q, want empty", cfg.R2.AccessKeyID)
+	}
+	if cfg.R2.AccountID != "" {
+		t.Fatalf("r2 account id = %q, want empty", cfg.R2.AccountID)
+	}
+	if cfg.R2.Bucket != "" {
+		t.Fatalf("r2 bucket = %q, want empty", cfg.R2.Bucket)
+	}
+	if cfg.R2.Endpoint != "" {
+		t.Fatalf("r2 endpoint = %q, want empty", cfg.R2.Endpoint)
+	}
+	if cfg.R2.SecretAccessKey != "" {
+		t.Fatalf("r2 secret access key = %q, want empty", cfg.R2.SecretAccessKey)
+	}
+	if cfg.R2.RequestTimeout != config.DefaultR2Timeout {
+		t.Fatalf("r2 request timeout = %s, want %s", cfg.R2.RequestTimeout, config.DefaultR2Timeout)
 	}
 	if cfg.Resend.APIKey != "" {
 		t.Fatalf("resend api key = %q, want empty", cfg.Resend.APIKey)
@@ -131,6 +167,48 @@ func TestLoadDatabasePoolSettings(t *testing.T) {
 	}
 }
 
+func TestLoadAuth(t *testing.T) {
+	t.Setenv(config.AuthEmailVerificationRequired, "true")
+	t.Setenv(config.AuthOAuthStateTTLMS, "120000")
+	t.Setenv(config.AuthSessionTTLMS, "3600000")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if !cfg.Auth.EmailVerificationRequired {
+		t.Fatal("email verification required = false, want true")
+	}
+	if cfg.Auth.OAuthStateTTL != 2*time.Minute {
+		t.Fatalf("oauth state ttl = %s, want 2m", cfg.Auth.OAuthStateTTL)
+	}
+	if cfg.Auth.SessionTTL != time.Hour {
+		t.Fatalf("session ttl = %s, want 1h", cfg.Auth.SessionTTL)
+	}
+}
+
+func TestLoadGoogleOAuth(t *testing.T) {
+	t.Setenv(config.GoogleOAuthClientID, "client-id.apps.googleusercontent.com")
+	t.Setenv(config.GoogleOAuthClientSecret, "client-secret")
+	t.Setenv(config.GoogleOAuthRedirectURL, "https://api.chalk.test/v1/auth/google/callback")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.GoogleOAuth.ClientID != "client-id.apps.googleusercontent.com" {
+		t.Fatalf("google oauth client id = %q, want configured client id", cfg.GoogleOAuth.ClientID)
+	}
+	if cfg.GoogleOAuth.ClientSecret != "client-secret" {
+		t.Fatalf("google oauth client secret = %q, want configured secret", cfg.GoogleOAuth.ClientSecret)
+	}
+	if cfg.GoogleOAuth.RedirectURL != "https://api.chalk.test/v1/auth/google/callback" {
+		t.Fatalf("google oauth redirect url = %q, want configured redirect url", cfg.GoogleOAuth.RedirectURL)
+	}
+}
+
 func TestLoadRedisURL(t *testing.T) {
 	t.Setenv(config.RedisURL, "redis://redis.internal:6379/2")
 
@@ -141,6 +219,39 @@ func TestLoadRedisURL(t *testing.T) {
 
 	if cfg.Redis.URL != "redis://redis.internal:6379/2" {
 		t.Fatalf("redis url = %q, want redis://redis.internal:6379/2", cfg.Redis.URL)
+	}
+}
+
+func TestLoadR2(t *testing.T) {
+	t.Setenv(config.R2AccessKeyID, "access-key")
+	t.Setenv(config.R2AccountID, "account-id")
+	t.Setenv(config.R2Bucket, "chalk-media")
+	t.Setenv(config.R2Endpoint, "https://storage.chalk.test")
+	t.Setenv(config.R2SecretAccessKey, "secret-key")
+	t.Setenv(config.R2RequestTimeoutMS, "2500")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.R2.AccessKeyID != "access-key" {
+		t.Fatalf("r2 access key id = %q, want access-key", cfg.R2.AccessKeyID)
+	}
+	if cfg.R2.AccountID != "account-id" {
+		t.Fatalf("r2 account id = %q, want account-id", cfg.R2.AccountID)
+	}
+	if cfg.R2.Bucket != "chalk-media" {
+		t.Fatalf("r2 bucket = %q, want chalk-media", cfg.R2.Bucket)
+	}
+	if cfg.R2.Endpoint != "https://storage.chalk.test" {
+		t.Fatalf("r2 endpoint = %q, want configured endpoint", cfg.R2.Endpoint)
+	}
+	if cfg.R2.SecretAccessKey != "secret-key" {
+		t.Fatalf("r2 secret access key = %q, want secret-key", cfg.R2.SecretAccessKey)
+	}
+	if cfg.R2.RequestTimeout != 2500*time.Millisecond {
+		t.Fatalf("r2 request timeout = %s, want 2500ms", cfg.R2.RequestTimeout)
 	}
 }
 
@@ -269,6 +380,51 @@ func TestLoadRejectsInvalidDatabasePoolSettings(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidAuthSettings(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{
+			name: "bad session ttl",
+			env: map[string]string{
+				config.AuthSessionTTLMS: "soon",
+			},
+		},
+		{
+			name: "zero session ttl",
+			env: map[string]string{
+				config.AuthSessionTTLMS: "0",
+			},
+		},
+		{
+			name: "bad oauth state ttl",
+			env: map[string]string{
+				config.AuthOAuthStateTTLMS: "soon",
+			},
+		},
+		{
+			name: "zero oauth state ttl",
+			env: map[string]string{
+				config.AuthOAuthStateTTLMS: "0",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			_, err := config.Load()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
 func TestLoadRejectsInvalidObservabilitySettings(t *testing.T) {
 	tests := []struct {
 		name string
@@ -353,6 +509,45 @@ func TestLoadRejectsInvalidResendSettings(t *testing.T) {
 			name: "negative timeout",
 			env: map[string]string{
 				config.ResendTimeoutMS: "-1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			_, err := config.Load()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidR2Settings(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{
+			name: "bad timeout",
+			env: map[string]string{
+				config.R2RequestTimeoutMS: "soon",
+			},
+		},
+		{
+			name: "zero timeout",
+			env: map[string]string{
+				config.R2RequestTimeoutMS: "0",
+			},
+		},
+		{
+			name: "negative timeout",
+			env: map[string]string{
+				config.R2RequestTimeoutMS: "-1",
 			},
 		},
 	}

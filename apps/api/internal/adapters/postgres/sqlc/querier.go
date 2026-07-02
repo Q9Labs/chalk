@@ -11,15 +11,23 @@ import (
 )
 
 type Querier interface {
+	CreateGoogleUser(ctx context.Context, arg CreateGoogleUserParams) (CreateGoogleUserRow, error)
+	CreateLoginSession(ctx context.Context, arg CreateLoginSessionParams) (LoginSession, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
+	CreatePasswordUser(ctx context.Context, arg CreatePasswordUserParams) (CreatePasswordUserRow, error)
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	GetLoginSessionByTokenHash(ctx context.Context, tokenHash string) (GetLoginSessionByTokenHashRow, error)
+	GetPasswordIdentityByEmail(ctx context.Context, email string) (GetPasswordIdentityByEmailRow, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (Tenant, error)
 	GetTenantMembershipForUser(ctx context.Context, arg GetTenantMembershipForUserParams) (Membership, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (User, error)
+	GetUserByAuthIdentity(ctx context.Context, arg GetUserByAuthIdentityParams) (User, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
 	ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]Membership, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]Tenant, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	RevokeLoginSession(ctx context.Context, arg RevokeLoginSessionParams) (LoginSession, error)
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Tenant, error)
 	UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (Membership, error)
 }

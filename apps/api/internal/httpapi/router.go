@@ -13,13 +13,15 @@ type ReadinessChecker interface {
 }
 
 type Options struct {
-	CORS        CORSOptions
-	Middleware  []func(http.Handler) http.Handler
-	Profiler    http.Handler
-	Readiness   ReadinessChecker
-	Memberships MembershipService
-	Tenants     TenantService
-	Users       UserService
+	CORS           CORSOptions
+	Middleware     []func(http.Handler) http.Handler
+	Profiler       http.Handler
+	Readiness      ReadinessChecker
+	Authentication AuthenticationService
+	Memberships    MembershipService
+	SessionCookie  SessionCookieOptions
+	Tenants        TenantService
+	Users          UserService
 }
 
 func NewRouter(options Options) http.Handler {
@@ -90,6 +92,8 @@ func writeReadinessError(w http.ResponseWriter) {
 
 func mountV1Routes(r chi.Router, options Options) {
 	r.Route("/v1", func(r chi.Router) {
+		mountAuthRoutes(r, options.Authentication, options.SessionCookie)
+		mountMeRoutes(r, options.Authentication)
 		mountTenantRoutes(r, options.Tenants)
 		mountUserRoutes(r, options.Users)
 		mountMembershipRoutes(r, options.Memberships)
