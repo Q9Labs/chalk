@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -72,9 +73,14 @@ type authenticationService struct {
 	register             func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error)
 	login                func(context.Context, authentication.LoginInput) (authentication.AuthResult, error)
 	authenticateSession  func(context.Context, string) (authentication.SessionUser, error)
+	principalForSession  func(authentication.Session) authentication.Principal
 	logout               func(context.Context, authentication.Principal) error
 	startGoogleSignIn    func(context.Context) (authentication.GoogleStart, error)
 	completeGoogleSignIn func(context.Context, string, string, *string) (authentication.AuthResult, error)
+}
+
+type tenantAuthorizer struct {
+	authorizeTenant func(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error
 }
 
 func (s authenticationService) Register(ctx context.Context, input authentication.RegisterInput) (authentication.AuthResult, error) {
@@ -99,6 +105,9 @@ func (s authenticationService) AuthenticateSession(ctx context.Context, rawToken
 }
 
 func (s authenticationService) PrincipalForSession(session authentication.Session) authentication.Principal {
+	if s.principalForSession != nil {
+		return s.principalForSession(session)
+	}
 	return authentication.Principal{
 		Kind:      authentication.PrincipalUser,
 		UserID:    session.UserID,
@@ -125,6 +134,13 @@ func (s authenticationService) CompleteGoogleSignIn(ctx context.Context, state s
 		return authentication.AuthResult{}, errors.New("unexpected google callback call")
 	}
 	return s.completeGoogleSignIn(ctx, state, code, userAgent)
+}
+
+func (a tenantAuthorizer) AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
+	if a.authorizeTenant == nil {
+		return nil
+	}
+	return a.authorizeTenant(ctx, principal, tenantID, permission)
 }
 
 func (s membershipService) CreateMembership(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
@@ -388,6 +404,67 @@ func TestLoginWrongPassword(t *testing.T) {
 	assertErrorCode(t, res, "invalid_credentials")
 }
 
+func TestAuthRoutesRateLimitPasswordEndpoints(t *testing.T) {
+	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	loginCalls := 0
+	registerCalls := 0
+	handler := httpapi.NewRouter(httpapi.Options{
+		AuthRateLimit: httpapi.AuthRateLimitConfig{
+			Limit:  2,
+			Window: time.Minute,
+			Now: func() time.Time {
+				return now
+			},
+		},
+		Authentication: authenticationService{
+			login: func(context.Context, authentication.LoginInput) (authentication.AuthResult, error) {
+				loginCalls++
+				return authentication.AuthResult{}, authentication.ErrInvalidCredentials
+			},
+			register: func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error) {
+				registerCalls++
+				return authentication.AuthResult{}, authentication.ErrInvalidPassword
+			},
+		},
+	})
+
+	for range 2 {
+		res := requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/login", `{"email":"hasan@example.com","password":"wrong"}`, "203.0.113.10:1234")
+		if res.Code != http.StatusUnauthorized {
+			t.Fatalf("login status = %d, want %d", res.Code, http.StatusUnauthorized)
+		}
+	}
+
+	res := requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/login", `{"email":"hasan@example.com","password":"wrong"}`, "203.0.113.10:1234")
+	if res.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited login status = %d, want %d", res.Code, http.StatusTooManyRequests)
+	}
+	if retryAfter := res.Header().Get("Retry-After"); retryAfter != "60" {
+		t.Fatalf("login retry-after = %q, want 60", retryAfter)
+	}
+	assertErrorCode(t, res, "rate_limited")
+
+	for range 2 {
+		res := requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"short"}`, "203.0.113.10:1234")
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("register status = %d, want %d", res.Code, http.StatusBadRequest)
+		}
+	}
+
+	res = requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"short"}`, "203.0.113.10:1234")
+	if res.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited register status = %d, want %d", res.Code, http.StatusTooManyRequests)
+	}
+	assertErrorCode(t, res, "rate_limited")
+
+	if loginCalls != 2 {
+		t.Fatalf("login calls = %d, want 2", loginCalls)
+	}
+	if registerCalls != 2 {
+		t.Fatalf("register calls = %d, want 2", registerCalls)
+	}
+}
+
 func TestMeAcceptsBearerSession(t *testing.T) {
 	req := bearerRequest(http.MethodGet, "/v1/me", "raw-session-token")
 	res := requestWithOptionsAndRequest(t, req, httpapi.Options{
@@ -618,13 +695,48 @@ func TestCORSPreflightRejectsUnknownOrigin(t *testing.T) {
 	assertErrorCode(t, res, "cors_origin_forbidden")
 }
 
+func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/v1/tenants"},
+		{method: http.MethodPost, path: "/v1/tenants", body: `{"name":"Acme"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111", body: `{"name":"Acme"}`},
+		{method: http.MethodGet, path: "/v1/regions"},
+		{method: http.MethodGet, path: "/v1/users"},
+		{method: http.MethodPost, path: "/v1/users", body: `{"name":"Hasan","email":"hasan@example.com"}`},
+		{method: http.MethodGet, path: "/v1/users/22222222-2222-2222-2222-222222222222"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships"},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", body: `{"user_id":"22222222-2222-2222-2222-222222222222","role":"admin"}`},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships/33333333-3333-3333-3333-333333333333", body: `{"role":"member"}`},
+	}
+
+	for _, route := range routes {
+		res := requestWithOptionsAndBody(t, route.method, route.path, route.body, httpapi.Options{
+			Authentication: authenticationService{
+				authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+					return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
+				},
+			},
+		})
+
+		if res.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusUnauthorized)
+		}
+		assertErrorCode(t, res, "unauthenticated")
+	}
+}
+
 func TestGetTenant(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	defaultRegion := "us"
 	createdAt := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 6, 30, 10, 5, 0, 0, time.UTC)
 
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID, httpapi.Options{
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID, httpapi.Options{
 		Tenants: tenantService{
 			getTenant: func(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
 				if id.String() != tenantID {
@@ -678,7 +790,7 @@ func TestGetTenant(t *testing.T) {
 
 func TestGetTenantRejectsInvalidID(t *testing.T) {
 	called := false
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants/not-a-uuid", httpapi.Options{
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/not-a-uuid", httpapi.Options{
 		Tenants: tenantService{
 			getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
 				called = true
@@ -697,7 +809,7 @@ func TestGetTenantRejectsInvalidID(t *testing.T) {
 }
 
 func TestGetTenantNotFound(t *testing.T) {
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111", httpapi.Options{
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111", httpapi.Options{
 		Tenants: tenantService{
 			getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
 				return tenants.Tenant{}, tenants.ErrTenantNotFound
@@ -709,6 +821,31 @@ func TestGetTenantNotFound(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusNotFound)
 	}
 	assertErrorCode(t, res, "not_found")
+}
+
+func TestGetTenantRejectsForbiddenPrincipal(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111", httpapi.Options{
+		TenantAuthz: tenantAuthorizer{
+			authorizeTenant: func(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error {
+				return authorization.ErrForbidden
+			},
+		},
+		Tenants: tenantService{
+			getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
+				called = true
+				return tenants.Tenant{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+	if called {
+		t.Fatal("tenant service was called")
+	}
+	assertErrorCode(t, res, "forbidden")
 }
 
 func TestGetTenantWithoutService(t *testing.T) {
@@ -725,7 +862,7 @@ func TestListTenants(t *testing.T) {
 	nextCreatedAt := time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC)
 	nextID := mustTenantID(t, "22222222-2222-2222-2222-222222222222")
 
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants", httpapi.Options{
+	res := systemRequestWithOptions(t, http.MethodGet, "/v1/tenants", httpapi.Options{
 		Tenants: tenantService{
 			listTenants: func(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
 				if page.Size() != pagination.DefaultPageSize {
@@ -804,8 +941,28 @@ func TestListTenants(t *testing.T) {
 	}
 }
 
+func TestListTenantsRejectsUserPrincipal(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants", httpapi.Options{
+		Tenants: tenantService{
+			listTenants: func(context.Context, pagination.PageRequest) (tenants.TenantList, error) {
+				called = true
+				return tenants.TenantList{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+	if called {
+		t.Fatal("tenant service was called")
+	}
+	assertErrorCode(t, res, "forbidden")
+}
+
 func TestListTenantsParsesPageSize(t *testing.T) {
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants?page_size=10", httpapi.Options{
+	res := systemRequestWithOptions(t, http.MethodGet, "/v1/tenants?page_size=10", httpapi.Options{
 		Tenants: tenantService{
 			listTenants: func(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
 				if page.Size() != 10 {
@@ -834,7 +991,7 @@ func TestListTenantsParsesCursor(t *testing.T) {
 		t.Fatalf("encode cursor: %v", err)
 	}
 
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants?cursor="+encodedCursor, httpapi.Options{
+	res := systemRequestWithOptions(t, http.MethodGet, "/v1/tenants?cursor="+encodedCursor, httpapi.Options{
 		Tenants: tenantService{
 			listTenants: func(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
 				if page.Cursor() == nil {
@@ -858,7 +1015,7 @@ func TestListTenantsParsesCursor(t *testing.T) {
 
 func TestListTenantsRejectsInvalidPageSize(t *testing.T) {
 	called := false
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants?page_size=0", httpapi.Options{
+	res := systemRequestWithOptions(t, http.MethodGet, "/v1/tenants?page_size=0", httpapi.Options{
 		Tenants: tenantService{
 			listTenants: func(context.Context, pagination.PageRequest) (tenants.TenantList, error) {
 				called = true
@@ -878,7 +1035,7 @@ func TestListTenantsRejectsInvalidPageSize(t *testing.T) {
 
 func TestListTenantsRejectsInvalidCursor(t *testing.T) {
 	called := false
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants?cursor=not-a-cursor", httpapi.Options{
+	res := systemRequestWithOptions(t, http.MethodGet, "/v1/tenants?cursor=not-a-cursor", httpapi.Options{
 		Tenants: tenantService{
 			listTenants: func(context.Context, pagination.PageRequest) (tenants.TenantList, error) {
 				called = true
@@ -899,7 +1056,7 @@ func TestListTenantsRejectsInvalidCursor(t *testing.T) {
 func TestCreateTenant(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 
-	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", `{"name":"Acme","default_region":"us"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", `{"name":"Acme","default_region":"us"}`, httpapi.Options{
 		Tenants: tenantService{
 			createTenant: func(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
 				if input.Name != "Acme" {
@@ -938,7 +1095,7 @@ func TestCreateTenant(t *testing.T) {
 }
 
 func TestCreateTenantRejectsInvalidRegion(t *testing.T) {
-	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", `{"name":"Acme","default_region":"mars"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", `{"name":"Acme","default_region":"mars"}`, httpapi.Options{
 		Tenants: tenantService{
 			createTenant: func(context.Context, tenants.CreateTenantInput) (tenants.Tenant, error) {
 				return tenants.Tenant{}, tenants.ErrInvalidTenantRegion
@@ -952,10 +1109,30 @@ func TestCreateTenantRejectsInvalidRegion(t *testing.T) {
 	assertErrorCode(t, res, "invalid_tenant_region")
 }
 
+func TestCreateTenantRejectsOversizedBody(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", `{"name":"`+strings.Repeat("a", 1<<20)+`"}`, httpapi.Options{
+		Tenants: tenantService{
+			createTenant: func(context.Context, tenants.CreateTenantInput) (tenants.Tenant, error) {
+				called = true
+				return tenants.Tenant{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	if called {
+		t.Fatal("tenant service was called")
+	}
+	assertErrorCode(t, res, "invalid_request")
+}
+
 func TestUpdateTenantClearsNullableField(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 
-	res := requestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID, `{"default_region":null}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID, `{"default_region":null}`, httpapi.Options{
 		Tenants: tenantService{
 			updateTenant: func(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
 				if id.String() != tenantID {
@@ -991,7 +1168,7 @@ func TestUpdateTenantClearsNullableField(t *testing.T) {
 }
 
 func TestListRegions(t *testing.T) {
-	res := requestWithOptions(t, http.MethodGet, "/v1/regions", httpapi.Options{
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/regions", httpapi.Options{
 		Tenants: tenantService{
 			availableRegions: func(context.Context) ([]regions.Region, error) {
 				return []regions.Region{
@@ -1025,7 +1202,7 @@ func TestListRegions(t *testing.T) {
 func TestCreateUser(t *testing.T) {
 	const userID = "22222222-2222-2222-2222-222222222222"
 
-	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/users", `{"name":"Hasan","email":"hasan@example.com"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/users", `{"name":"Hasan","email":"hasan@example.com"}`, httpapi.Options{
 		Users: userService{
 			createUser: func(ctx context.Context, input users.CreateUserInput) (users.User, error) {
 				if input.Name != "Hasan" {
@@ -1064,7 +1241,7 @@ func TestCreateUser(t *testing.T) {
 
 func TestGetUserRejectsInvalidID(t *testing.T) {
 	called := false
-	res := requestWithOptions(t, http.MethodGet, "/v1/users/not-a-uuid", httpapi.Options{
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/users/not-a-uuid", httpapi.Options{
 		Users: userService{
 			getUser: func(context.Context, utilities.ID) (users.User, error) {
 				called = true
@@ -1085,7 +1262,7 @@ func TestGetUserRejectsInvalidID(t *testing.T) {
 func TestListUsers(t *testing.T) {
 	createdAt := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
 
-	res := requestWithOptions(t, http.MethodGet, "/v1/users?page_size=10", httpapi.Options{
+	res := systemRequestWithOptions(t, http.MethodGet, "/v1/users?page_size=10", httpapi.Options{
 		Users: userService{
 			listUsers: func(ctx context.Context, page pagination.PageRequest) (users.UserList, error) {
 				if page.Size() != 10 {
@@ -1134,12 +1311,32 @@ func TestListUsers(t *testing.T) {
 	}
 }
 
+func TestListUsersRejectsUserPrincipal(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/users?page_size=10", httpapi.Options{
+		Users: userService{
+			listUsers: func(context.Context, pagination.PageRequest) (users.UserList, error) {
+				called = true
+				return users.UserList{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+	if called {
+		t.Fatal("user service was called")
+	}
+	assertErrorCode(t, res, "forbidden")
+}
+
 func TestCreateMembership(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const userID = "22222222-2222-2222-2222-222222222222"
 	const membershipID = "33333333-3333-3333-3333-333333333333"
 
-	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/memberships", `{"user_id":"`+userID+`","role":"admin"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/memberships", `{"user_id":"`+userID+`","role":"admin"}`, httpapi.Options{
 		Memberships: membershipService{
 			createMembership: func(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
 				if input.TenantID.String() != tenantID {
@@ -1184,7 +1381,7 @@ func TestCreateMembership(t *testing.T) {
 
 func TestCreateMembershipRejectsInvalidUserID(t *testing.T) {
 	called := false
-	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", `{"user_id":"not-a-uuid","role":"admin"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", `{"user_id":"not-a-uuid","role":"admin"}`, httpapi.Options{
 		Memberships: membershipService{
 			createMembership: func(context.Context, memberships.CreateMembershipInput) (memberships.Membership, error) {
 				called = true
@@ -1207,7 +1404,7 @@ func TestListTenantMemberships(t *testing.T) {
 	const membershipID = "33333333-3333-3333-3333-333333333333"
 	const userID = "22222222-2222-2222-2222-222222222222"
 
-	res := requestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/memberships?page_size=10", httpapi.Options{
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/memberships?page_size=10", httpapi.Options{
 		Memberships: membershipService{
 			listTenantMemberships: func(ctx context.Context, id utilities.ID, page pagination.PageRequest) (memberships.MembershipList, error) {
 				if id.String() != tenantID {
@@ -1265,7 +1462,7 @@ func TestUpdateTenantMembership(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const membershipID = "33333333-3333-3333-3333-333333333333"
 
-	res := requestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID+"/memberships/"+membershipID, `{"role":"member"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID+"/memberships/"+membershipID, `{"role":"member"}`, httpapi.Options{
 		Memberships: membershipService{
 			updateTenantMembership: func(ctx context.Context, tenant utilities.ID, membership utilities.ID, input memberships.UpdateMembershipInput) (memberships.Membership, error) {
 				if tenant.String() != tenantID {
@@ -1325,10 +1522,85 @@ func requestWithOptionsAndBody(t *testing.T, method string, path string, body st
 	return res
 }
 
+func authenticatedRequestWithOptions(t *testing.T, method string, path string, options httpapi.Options) *httptest.ResponseRecorder {
+	t.Helper()
+
+	return authenticatedRequestWithOptionsAndBody(t, method, path, "", options)
+}
+
+func authenticatedRequestWithOptionsAndBody(t *testing.T, method string, path string, body string, options httpapi.Options) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := bearerRequestWithBody(method, path, "raw-session-token", body)
+	return requestWithOptionsAndRequest(t, req, authenticatedOptions(t, options))
+}
+
+func systemRequestWithOptions(t *testing.T, method string, path string, options httpapi.Options) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := bearerRequestWithBody(method, path, "raw-session-token", "")
+	return requestWithOptionsAndRequest(t, req, systemOptions(t, options))
+}
+
+func authenticatedOptions(t *testing.T, options httpapi.Options) httpapi.Options {
+	t.Helper()
+
+	if options.Authentication == nil {
+		options.Authentication = authenticationService{
+			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+				if rawToken != "raw-session-token" {
+					t.Fatalf("raw token = %q, want raw-session-token", rawToken)
+				}
+				return authSessionUser(t), nil
+			},
+		}
+	}
+	if options.TenantAuthz == nil {
+		options.TenantAuthz = tenantAuthorizer{}
+	}
+
+	return options
+}
+
+func systemOptions(t *testing.T, options httpapi.Options) httpapi.Options {
+	t.Helper()
+
+	if options.Authentication == nil {
+		options.Authentication = authenticationService{
+			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+				if rawToken != "raw-session-token" {
+					t.Fatalf("raw token = %q, want raw-session-token", rawToken)
+				}
+				return authSessionUser(t), nil
+			},
+			principalForSession: func(authentication.Session) authentication.Principal {
+				return authentication.Principal{Kind: authentication.PrincipalSystem}
+			},
+		}
+	}
+	if options.TenantAuthz == nil {
+		options.TenantAuthz = tenantAuthorizer{}
+	}
+
+	return options
+}
+
 func requestWithOptionsAndRequest(t *testing.T, req *http.Request, options httpapi.Options) *httptest.ResponseRecorder {
 	t.Helper()
 
 	handler := httpapi.NewRouter(options)
+	res := httptest.NewRecorder()
+
+	handler.ServeHTTP(res, req)
+
+	return res
+}
+
+func requestWithHandlerAndRemoteAddr(t *testing.T, handler http.Handler, method string, path string, body string, remoteAddr string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	req.RemoteAddr = remoteAddr
 	res := httptest.NewRecorder()
 
 	handler.ServeHTTP(res, req)
@@ -1363,7 +1635,11 @@ func decodeJSON(t *testing.T, res *httptest.ResponseRecorder, target any) {
 }
 
 func bearerRequest(method string, path string, token string) *http.Request {
-	req := httptest.NewRequest(method, path, nil)
+	return bearerRequestWithBody(method, path, token, "")
+}
+
+func bearerRequestWithBody(method string, path string, token string, body string) *http.Request {
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	return req
 }

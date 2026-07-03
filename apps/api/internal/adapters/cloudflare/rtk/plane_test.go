@@ -124,6 +124,38 @@ func TestLifecycleRequestsUseRTKPaths(t *testing.T) {
 	}
 }
 
+func TestLifecycleRequestsEscapeProviderRefs(t *testing.T) {
+	client := &roundTripStub{statusCode: http.StatusOK}
+	plane := testPlane(t, client)
+
+	err := plane.RemoveParticipant(context.Background(), mediaplane.RemoveParticipantInput{
+		Provider:       mediaplane.ProviderCloudflareRTK,
+		SessionRef:     "../meeting/123?x=1",
+		ParticipantRef: "participant/456#frag",
+	})
+	if err != nil {
+		t.Fatalf("remove participant: %v", err)
+	}
+
+	want := "/client/v4/accounts/account-id/realtime/kit/rtk-app-id/meetings/..%2Fmeeting%2F123%3Fx=1/participants/participant%2F456%23frag"
+	if client.path != want {
+		t.Fatalf("path = %q, want %q", client.path, want)
+	}
+
+	err = plane.EndSession(context.Background(), mediaplane.EndSessionInput{
+		Provider:   mediaplane.ProviderCloudflareRTK,
+		SessionRef: "../meeting/123?x=1",
+	})
+	if err != nil {
+		t.Fatalf("end session: %v", err)
+	}
+
+	want = "/client/v4/accounts/account-id/realtime/kit/rtk-app-id/meetings/..%2Fmeeting%2F123%3Fx=1/active-session/kick-all"
+	if client.path != want {
+		t.Fatalf("path = %q, want %q", client.path, want)
+	}
+}
+
 func TestProviderErrorsMapToMediaplaneErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -189,7 +221,7 @@ type roundTripStub struct {
 
 func (s *roundTripStub) Do(request *http.Request) (*http.Response, error) {
 	s.method = request.Method
-	s.path = request.URL.Path
+	s.path = request.URL.EscapedPath()
 	if request.Body != nil {
 		body, _ := io.ReadAll(request.Body)
 		s.body = string(body)

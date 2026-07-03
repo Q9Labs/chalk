@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -212,19 +213,19 @@ func (p Plane) providerPreset(preset string) string {
 }
 
 func (p Plane) meetingsPath() string {
-	return fmt.Sprintf("/accounts/%s/realtime/kit/%s/meetings", p.accountID, p.appID)
+	return fmt.Sprintf("/accounts/%s/realtime/kit/%s/meetings", url.PathEscape(p.accountID), url.PathEscape(p.appID))
 }
 
 func (p Plane) participantsPath(meetingID string) string {
-	return fmt.Sprintf("%s/%s/participants", p.meetingsPath(), meetingID)
+	return fmt.Sprintf("%s/%s/participants", p.meetingsPath(), url.PathEscape(meetingID))
 }
 
 func (p Plane) participantPath(meetingID, participantID string) string {
-	return fmt.Sprintf("%s/%s", p.participantsPath(meetingID), participantID)
+	return fmt.Sprintf("%s/%s", p.participantsPath(meetingID), url.PathEscape(participantID))
 }
 
 func (p Plane) kickAllPath(meetingID string) string {
-	return fmt.Sprintf("%s/%s/active-session/kick-all", p.meetingsPath(), meetingID)
+	return fmt.Sprintf("%s/%s/active-session/kick-all", p.meetingsPath(), url.PathEscape(meetingID))
 }
 
 func (p Plane) do(ctx context.Context, method string, path string, body any, output any) error {

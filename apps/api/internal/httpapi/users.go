@@ -70,6 +70,10 @@ func handleListUsers(service UserService) http.HandlerFunc {
 			return
 		}
 
+		if authorizeGlobalReadRequest(w, r) {
+			return
+		}
+
 		page, err := parsePageRequest(r)
 		if writePaginationError(w, err) {
 			return

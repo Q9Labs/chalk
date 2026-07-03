@@ -242,7 +242,10 @@ select
     users.created_at
 from login_sessions
 join users on users.id = login_sessions.user_id
-where login_sessions.token_hash = $1
+where
+    login_sessions.token_hash = $1
+    and login_sessions.expires_at > now()
+    and login_sessions.revoked_at is null
 `
 
 type GetLoginSessionByTokenHashRow struct {

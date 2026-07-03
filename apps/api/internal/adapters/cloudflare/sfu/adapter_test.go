@@ -104,6 +104,21 @@ func TestVerifySessionMetadata(t *testing.T) {
 	}
 }
 
+func TestVerifySessionMetadataEscapesSessionRef(t *testing.T) {
+	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
+	adapter := testAdapter(t, client)
+
+	_, err := adapter.VerifySessionMetadata(context.Background(), "../session/123?x=1#frag")
+	if err != nil {
+		t.Fatalf("verify session metadata: %v", err)
+	}
+
+	want := "/v1/apps/sfu-app-id/sessions/..%2Fsession%2F123%3Fx=1%23frag"
+	if client.path != want {
+		t.Fatalf("path = %q, want %q", client.path, want)
+	}
+}
+
 func TestVerifySessionMetadataMapsProviderErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -154,7 +169,7 @@ type roundTripStub struct {
 
 func (s *roundTripStub) Do(request *http.Request) (*http.Response, error) {
 	s.method = request.Method
-	s.path = request.URL.Path
+	s.path = request.URL.EscapedPath()
 
 	return &http.Response{
 		StatusCode: s.statusCode,

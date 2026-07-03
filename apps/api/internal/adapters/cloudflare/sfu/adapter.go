@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -135,7 +136,7 @@ func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (
 		return SessionMetadata{}, mediaplane.ErrPlaneUnavailable
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/apps/%s/sessions/%s", a.endpoint, a.appID, sessionRef), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/apps/%s/sessions/%s", a.endpoint, url.PathEscape(a.appID), url.PathEscape(sessionRef)), nil)
 	if err != nil {
 		return SessionMetadata{}, fmt.Errorf("build sfu request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
 	}

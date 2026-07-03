@@ -161,7 +161,10 @@ select
     users.created_at
 from login_sessions
 join users on users.id = login_sessions.user_id
-where login_sessions.token_hash = sqlc.arg(token_hash);
+where
+    login_sessions.token_hash = sqlc.arg(token_hash)
+    and login_sessions.expires_at > now()
+    and login_sessions.revoked_at is null;
 
 -- name: RevokeLoginSession :one
 update login_sessions

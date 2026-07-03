@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -181,6 +182,11 @@ func Load() (Config, error) {
 	if minConns > maxConns {
 		return Config{}, fmt.Errorf("%s cannot be greater than %s", DatabaseMinConns, DatabaseMaxConns)
 	}
+	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
+	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
+	if err := validateDatabaseURL(environment, databaseURL); err != nil {
+		return Config{}, err
+	}
 
 	sessionTTL, err := envMilliseconds(AuthSessionTTLMS, DefaultSessionTTLMS)
 	if err != nil {
@@ -267,7 +273,7 @@ func Load() (Config, error) {
 			RequestTimeout:       cloudflareRealtimeRequestTimeout,
 		},
 		Database: DatabaseConfig{
-			URL:      envOrDefault(DatabaseURL, DefaultDatabaseURL),
+			URL:      databaseURL,
 			MaxConns: maxConns,
 			MinConns: minConns,
 		},
@@ -277,7 +283,7 @@ func Load() (Config, error) {
 			RedirectURL:  envOrDefault(GoogleOAuthRedirectURL, DefaultGoogleRedirectURL),
 		},
 		Observability: ObservabilityConfig{
-			Environment:          envOrDefault(APIEnvironment, DefaultEnvironment),
+			Environment:          environment,
 			LogFormat:            logFormat,
 			LogLevel:             logLevel,
 			OperationLogs:        operationLogs,
@@ -304,6 +310,27 @@ func Load() (Config, error) {
 			Timeout: resendTimeout,
 		},
 	}, nil
+}
+
+func validateDatabaseURL(environment string, databaseURL string) error {
+	if environment == DefaultEnvironment {
+		return nil
+	}
+	if strings.TrimSpace(databaseURL) == "" || databaseURL == DefaultDatabaseURL {
+		return fmt.Errorf("%s must be set outside local environments", DatabaseURL)
+	}
+
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid URL: %w", DatabaseURL, err)
+	}
+
+	switch strings.ToLower(parsed.Query().Get("sslmode")) {
+	case "require", "verify-ca", "verify-full":
+		return nil
+	default:
+		return fmt.Errorf("%s must set sslmode=require, verify-ca, or verify-full outside local environments", DatabaseURL)
+	}
 }
 
 func envList(name string) []string {

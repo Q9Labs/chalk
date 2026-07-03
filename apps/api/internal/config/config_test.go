@@ -339,6 +339,7 @@ func TestLoadResend(t *testing.T) {
 
 func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
 	t.Setenv(config.APILogFormat, "text")
 	t.Setenv(config.APILogLevel, "debug")
 	t.Setenv(config.APIProfiler, "true")
@@ -383,6 +384,38 @@ func TestLoadObservability(t *testing.T) {
 	}
 	if cfg.Observability.SlowRequestThreshold != 75*time.Millisecond {
 		t.Fatalf("slow request threshold = %s, want 75ms", cfg.Observability.SlowRequestThreshold)
+	}
+}
+
+func TestLoadRejectsDefaultDatabaseURLOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "production")
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("load config succeeded, want error")
+	}
+}
+
+func TestLoadRejectsInsecureDatabaseURLOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=disable")
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("load config succeeded, want error")
+	}
+}
+
+func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Database.URL != "postgres://db.internal/chalk?sslmode=verify-full" {
+		t.Fatalf("database url = %q, want configured tls url", cfg.Database.URL)
 	}
 }
 

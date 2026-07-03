@@ -6,9 +6,22 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
+
+var (
+	readMembershipsPermission = authorization.TenantPermission{
+		Scope:       authentication.ScopeMembershipsRead,
+		MinimumRole: memberships.RoleViewer,
+	}
+	writeMembershipsPermission = authorization.TenantPermission{
+		Scope:       authentication.ScopeMembershipsWrite,
+		MinimumRole: memberships.RoleOwner,
+	}
 )
 
 type MembershipService interface {
@@ -40,13 +53,13 @@ type updateMembershipRequest struct {
 	Role memberships.Role `json:"role"`
 }
 
-func mountMembershipRoutes(r chi.Router, service MembershipService) {
-	r.Post("/tenants/{tenant_id}/memberships", handleCreateMembership(service))
-	r.Get("/tenants/{tenant_id}/memberships", handleListTenantMemberships(service))
-	r.Patch("/tenants/{tenant_id}/memberships/{membership_id}", handleUpdateTenantMembership(service))
+func mountMembershipRoutes(r chi.Router, service MembershipService, authorizer TenantAuthorizer) {
+	r.Post("/tenants/{tenant_id}/memberships", handleCreateMembership(service, authorizer))
+	r.Get("/tenants/{tenant_id}/memberships", handleListTenantMemberships(service, authorizer))
+	r.Patch("/tenants/{tenant_id}/memberships/{membership_id}", handleUpdateTenantMembership(service, authorizer))
 }
 
-func handleCreateMembership(service MembershipService) http.HandlerFunc {
+func handleCreateMembership(service MembershipService, authorizer TenantAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
@@ -55,6 +68,10 @@ func handleCreateMembership(service MembershipService) http.HandlerFunc {
 
 		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
 		if !ok {
+			return
+		}
+
+		if authorizeTenantRequest(w, r, authorizer, tenantID, writeMembershipsPermission) {
 			return
 		}
 
@@ -79,7 +96,7 @@ func handleCreateMembership(service MembershipService) http.HandlerFunc {
 	}
 }
 
-func handleListTenantMemberships(service MembershipService) http.HandlerFunc {
+func handleListTenantMemberships(service MembershipService, authorizer TenantAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
@@ -88,6 +105,10 @@ func handleListTenantMemberships(service MembershipService) http.HandlerFunc {
 
 		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
 		if !ok {
+			return
+		}
+
+		if authorizeTenantRequest(w, r, authorizer, tenantID, readMembershipsPermission) {
 			return
 		}
 
@@ -111,7 +132,7 @@ func handleListTenantMemberships(service MembershipService) http.HandlerFunc {
 	}
 }
 
-func handleUpdateTenantMembership(service MembershipService) http.HandlerFunc {
+func handleUpdateTenantMembership(service MembershipService, authorizer TenantAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
@@ -124,6 +145,10 @@ func handleUpdateTenantMembership(service MembershipService) http.HandlerFunc {
 		}
 		membershipID, ok := parseRouteID(w, r, "membership_id", "invalid_membership_id", "Invalid membership id")
 		if !ok {
+			return
+		}
+
+		if authorizeTenantRequest(w, r, authorizer, tenantID, writeMembershipsPermission) {
 			return
 		}
 

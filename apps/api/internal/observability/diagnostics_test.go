@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
 
@@ -30,5 +31,27 @@ func TestLoggerAddsStableCommonFields(t *testing.T) {
 		if !strings.Contains(log, want) {
 			t.Fatalf("log = %s, want %s", log, want)
 		}
+	}
+}
+
+func TestApplyHTTPMountsProfilerOnlyInLocal(t *testing.T) {
+	localDiagnostics := observability.New(observability.Config{
+		Environment: "local",
+		Profiler:    true,
+	}, nil)
+	localOptions := httpapi.Options{}
+	localDiagnostics.ApplyHTTP(&localOptions)
+	if localOptions.Profiler == nil {
+		t.Fatal("local profiler was nil")
+	}
+
+	stagingDiagnostics := observability.New(observability.Config{
+		Environment: "staging",
+		Profiler:    true,
+	}, nil)
+	stagingOptions := httpapi.Options{}
+	stagingDiagnostics.ApplyHTTP(&stagingOptions)
+	if stagingOptions.Profiler != nil {
+		t.Fatal("staging profiler was mounted")
 	}
 }

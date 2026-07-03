@@ -97,7 +97,7 @@ func (d Diagnostics) ApplyHTTP(options *httpapi.Options) {
 			SlowThreshold: d.config.SlowRequestThreshold,
 		}))
 	}
-	if d.config.Profiler {
+	if d.config.Profiler && d.config.Environment == "local" {
 		options.Profiler = ProfilerHandler()
 	}
 }

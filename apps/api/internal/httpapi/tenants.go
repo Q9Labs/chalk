@@ -6,10 +6,24 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
+
+var (
+	readTenantPermission = authorization.TenantPermission{
+		Scope:       authentication.ScopeTenantsRead,
+		MinimumRole: memberships.RoleViewer,
+	}
+	writeTenantPermission = authorization.TenantPermission{
+		Scope:       authentication.ScopeTenantsWrite,
+		MinimumRole: memberships.RoleAdmin,
+	}
 )
 
 type TenantService interface {
@@ -57,11 +71,11 @@ type updateTenantRequest struct {
 	Website           utilities.OptionalString `json:"website"`
 }
 
-func mountTenantRoutes(r chi.Router, service TenantService) {
+func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAuthorizer) {
 	r.Post("/tenants", handleCreateTenant(service))
 	r.Get("/tenants", handleListTenants(service))
-	r.Get("/tenants/{tenant_id}", handleGetTenant(service))
-	r.Patch("/tenants/{tenant_id}", handleUpdateTenant(service))
+	r.Get("/tenants/{tenant_id}", handleGetTenant(service, authorizer))
+	r.Patch("/tenants/{tenant_id}", handleUpdateTenant(service, authorizer))
 	r.Get("/regions", handleListRegions(service))
 }
 
@@ -94,6 +108,10 @@ func handleListTenants(service TenantService) http.HandlerFunc {
 			return
 		}
 
+		if authorizeGlobalReadRequest(w, r) {
+			return
+		}
+
 		page, err := parsePageRequest(r)
 		if writePaginationError(w, err) {
 			return
@@ -114,7 +132,7 @@ func handleListTenants(service TenantService) http.HandlerFunc {
 	}
 }
 
-func handleGetTenant(service TenantService) http.HandlerFunc {
+func handleGetTenant(service TenantService, authorizer TenantAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
@@ -124,6 +142,10 @@ func handleGetTenant(service TenantService) http.HandlerFunc {
 		id, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
+			return
+		}
+
+		if authorizeTenantRequest(w, r, authorizer, id, readTenantPermission) {
 			return
 		}
 
@@ -136,7 +158,7 @@ func handleGetTenant(service TenantService) http.HandlerFunc {
 	}
 }
 
-func handleUpdateTenant(service TenantService) http.HandlerFunc {
+func handleUpdateTenant(service TenantService, authorizer TenantAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
@@ -146,6 +168,10 @@ func handleUpdateTenant(service TenantService) http.HandlerFunc {
 		id, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
+			return
+		}
+
+		if authorizeTenantRequest(w, r, authorizer, id, writeTenantPermission) {
 			return
 		}
 

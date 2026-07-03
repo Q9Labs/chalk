@@ -16,6 +16,7 @@ import (
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -104,6 +105,7 @@ func run() error {
 	userService := users.NewService(userRepository)
 	membershipRepository := postgres.NewMembershipRepository(operationQueries)
 	membershipService := memberships.NewService(membershipRepository)
+	tenantAuthz := authorization.NewTenantPolicy(membershipRepository)
 	routerOptions := httpapi.Options{
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
@@ -114,8 +116,9 @@ func run() error {
 		SessionCookie: httpapi.SessionCookieOptions{
 			Secure: cfg.Observability.Environment != "local",
 		},
-		Tenants: tenantService,
-		Users:   userService,
+		TenantAuthz: tenantAuthz,
+		Tenants:     tenantService,
+		Users:       userService,
 	}
 	diagnostics.ApplyHTTP(&routerOptions)
 
@@ -124,7 +127,11 @@ func run() error {
 	server := &http.Server{
 		Addr:              cfg.API.Address,
 		Handler:           handler,
+		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

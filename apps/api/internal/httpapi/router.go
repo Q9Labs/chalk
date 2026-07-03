@@ -6,20 +6,29 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type ReadinessChecker interface {
 	Check(ctx context.Context) error
 }
 
+type TenantAuthorizer interface {
+	AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error
+}
+
 type Options struct {
 	CORS           CORSOptions
+	AuthRateLimit  AuthRateLimitConfig
 	Middleware     []func(http.Handler) http.Handler
 	Profiler       http.Handler
 	Readiness      ReadinessChecker
 	Authentication AuthenticationService
 	Memberships    MembershipService
 	SessionCookie  SessionCookieOptions
+	TenantAuthz    TenantAuthorizer
 	Tenants        TenantService
 	Users          UserService
 }
@@ -91,11 +100,17 @@ func writeReadinessError(w http.ResponseWriter) {
 }
 
 func mountV1Routes(r chi.Router, options Options) {
+	authRateLimiter := newRequestRateLimiter(options.AuthRateLimit)
+
 	r.Route("/v1", func(r chi.Router) {
-		mountAuthRoutes(r, options.Authentication, options.SessionCookie)
+		mountAuthRoutes(r, options.Authentication, options.SessionCookie, authRateLimiter)
 		mountMeRoutes(r, options.Authentication)
-		mountTenantRoutes(r, options.Tenants)
-		mountUserRoutes(r, options.Users)
-		mountMembershipRoutes(r, options.Memberships)
+
+		r.Group(func(r chi.Router) {
+			r.Use(requireAuthentication(options.Authentication))
+			mountTenantRoutes(r, options.Tenants, options.TenantAuthz)
+			mountUserRoutes(r, options.Users)
+			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz)
+		})
 	})
 }
