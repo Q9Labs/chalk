@@ -232,3 +232,4 @@ const styles = StyleSheet.create({
 });
 
 export const NativeMeetingActionsSheetIosPhone = memo(NativeMeetingActionsSheetIosPhoneBase);
+export { NativeMeetingActionsSheetIosPhone as NativeMeetingActionsSheet };

@@ -197,3 +197,5 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
+
+export { NativeMeetingBottomDockIosPad as NativeMeetingBottomDock };

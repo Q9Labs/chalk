@@ -368,3 +368,5 @@ const styles = StyleSheet.create({
     height: 132,
   },
 });
+
+export { NativeMeetingStageIosPhone as NativeMeetingStage };

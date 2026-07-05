@@ -246,3 +246,4 @@ const styles = StyleSheet.create({
 });
 
 export const NativeMeetingActionsSheetIosPad = memo(NativeMeetingActionsSheetIosPadBase);
+export { NativeMeetingActionsSheetIosPad as NativeMeetingActionsSheet };

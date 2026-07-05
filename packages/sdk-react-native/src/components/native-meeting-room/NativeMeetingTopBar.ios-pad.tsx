@@ -60,3 +60,5 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
 });
+
+export { NativeMeetingTopBarIosPad as NativeMeetingTopBar };

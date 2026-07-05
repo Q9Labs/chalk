@@ -305,3 +305,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+
+export { NativeMeetingGridIosPhone as NativeMeetingGrid };

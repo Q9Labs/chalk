@@ -1,14 +1,14 @@
 import { Alert, StyleSheet, View } from "react-native";
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
-import { NativeMeetingActionsSheet } from "./NativeMeetingActionsSheet";
-import { NativeMeetingPanel } from "./NativeMeetingPanel";
+import { NativeMeetingActionsSheet } from "./NativeMeetingActionsSheet.android";
+import { NativeMeetingPanel } from "./NativeMeetingPanel.android";
 import { NativeReactionPicker } from "./NativeReactionPicker";
 import type { NativeMeetingRoomProps } from "./NativeMeetingRoom";
-import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid";
-import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock";
-import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage";
-import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar";
-import { useNativeMeetingMultitasking } from "./native-meeting-room/useNativeMeetingMultitasking";
+import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid.android";
+import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock.android";
+import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage.android";
+import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar.android";
+import { useNativeMeetingMultitasking } from "./native-meeting-room/useNativeMeetingMultitasking.android";
 import { useNativeMeetingRoomController } from "./native-meeting-room/useNativeMeetingRoomController";
 
 export function NativeMeetingRoomAndroid(props: NativeMeetingRoomProps): React.JSX.Element {

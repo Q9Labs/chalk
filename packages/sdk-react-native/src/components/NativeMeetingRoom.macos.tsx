@@ -1,13 +1,13 @@
 import { Alert, StyleSheet, View } from "react-native";
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
-import { NativeMeetingActionsSheet } from "./NativeMeetingActionsSheet";
-import { NativeMeetingPanel } from "./NativeMeetingPanel";
+import { NativeMeetingActionsSheet } from "./NativeMeetingActionsSheet.macos";
+import { NativeMeetingPanel } from "./NativeMeetingPanel.macos";
 import { NativeReactionPicker } from "./NativeReactionPicker";
 import type { NativeMeetingRoomProps } from "./NativeMeetingRoom";
-import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid";
-import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock";
-import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage";
-import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar";
+import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid.macos";
+import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock.macos";
+import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage.macos";
+import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar.macos";
 import { useNativeMeetingRoomController } from "./native-meeting-room/useNativeMeetingRoomController";
 
 export function NativeMeetingRoomMacos(props: NativeMeetingRoomProps): React.JSX.Element {

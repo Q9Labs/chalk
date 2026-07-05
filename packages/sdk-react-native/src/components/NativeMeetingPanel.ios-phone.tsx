@@ -680,3 +680,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+
+export { NativeMeetingPanelIosPhone as NativeMeetingPanel };

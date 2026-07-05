@@ -88,3 +88,5 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
+
+export { NativeMeetingTopBarIosPhone as NativeMeetingTopBar };

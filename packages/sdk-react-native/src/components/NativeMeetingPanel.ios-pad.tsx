@@ -11,6 +11,7 @@ import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import Video01Icon from "@hugeicons/core-free-icons/dist/esm/Video01Icon";
 import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
+import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Modal, TouchableWithoutFeedback } from "react-native";
@@ -33,6 +34,10 @@ export interface NativeMeetingPanelProps {
   selectedMicrophone: string | null;
   selectedSpeaker: string | null;
   isRefreshingDevices: boolean;
+  whiteboardOpen: boolean;
+  whiteboardCanDraw: boolean;
+  whiteboardElementCount: number;
+  whiteboardParticipantCount: number;
   onChatDraftChange: (value: string) => void;
   onSendMessage: () => void;
   onClose: () => void;
@@ -40,8 +45,12 @@ export interface NativeMeetingPanelProps {
   onSelectMicrophone: (deviceId: string) => void;
   onSelectSpeaker: (deviceId: string) => void;
   onRefreshDevices: () => void;
+  onToggleWhiteboard: () => void;
+  onRequestWhiteboardSync: () => void;
+  onClearWhiteboard: () => void;
   onMuteParticipant: (participantId: string) => void;
   onUnmuteParticipant: (participantId: string) => void;
+  onRemoveParticipant: (participantId: string) => void;
 }
 
 export function NativeMeetingPanelIosPad({
@@ -50,6 +59,7 @@ export function NativeMeetingPanelIosPad({
   localParticipantId,
   isHost,
   messages,
+  transcripts,
   chatDraft,
   cameras,
   microphones,
@@ -58,6 +68,10 @@ export function NativeMeetingPanelIosPad({
   selectedMicrophone,
   selectedSpeaker,
   isRefreshingDevices,
+  whiteboardOpen,
+  whiteboardCanDraw,
+  whiteboardElementCount,
+  whiteboardParticipantCount,
   onChatDraftChange,
   onSendMessage,
   onClose,
@@ -65,8 +79,12 @@ export function NativeMeetingPanelIosPad({
   onSelectMicrophone,
   onSelectSpeaker,
   onRefreshDevices,
+  onToggleWhiteboard,
+  onRequestWhiteboardSync,
+  onClearWhiteboard,
   onMuteParticipant,
   onUnmuteParticipant,
+  onRemoveParticipant,
 }: NativeMeetingPanelProps): React.JSX.Element | null {
   if (!panel) return null;
 
@@ -139,12 +157,16 @@ export function NativeMeetingPanelIosPad({
                                 <View style={styles.pStatus}>
                                   <HugeiconsIcon icon={participant.audioEnabled ? Mic01Icon : MicOff01Icon} size={12} color={participant.audioEnabled ? Theme.colors.success : Theme.colors.error} />
                                   <HugeiconsIcon icon={participant.videoEnabled ? Video01Icon : VideoOffIcon} size={12} color={participant.videoEnabled ? Theme.colors.success : "rgba(255,255,255,0.2)"} />
+                                  {participant.handRaised ? <HugeiconsIcon icon={WavingHand01Icon} size={12} color={Theme.colors.warning} /> : null}
                                 </View>
                               </View>
                               {isHost && !isLocal && (
                                 <View style={styles.pActions}>
                                   <Pressable onPress={() => (participant.audioEnabled ? onMuteParticipant(participant.id) : onUnmuteParticipant(participant.id))} style={styles.pActionBtn}>
                                     <HugeiconsIcon icon={participant.audioEnabled ? MicOff01Icon : Mic01Icon} size={16} color="white" />
+                                  </Pressable>
+                                  <Pressable onPress={() => onRemoveParticipant(participant.id)} style={[styles.pActionBtn, styles.dangerActionBtn]}>
+                                    <HugeiconsIcon icon={Cancel01Icon} size={16} color={Theme.colors.error} />
                                   </Pressable>
                                 </View>
                               )}
@@ -164,6 +186,49 @@ export function NativeMeetingPanelIosPad({
                           <HugeiconsIcon icon={Refresh01Icon} size={16} color={Theme.colors.primary} />
                           <Text style={styles.refreshBtnText}>{isRefreshingDevices ? "Refreshing..." : "Refresh Devices"}</Text>
                         </Pressable>
+                      </View>
+                    )}
+
+                    {panel === "transcripts" && (
+                      <View style={styles.transcripts}>
+                        {transcripts.length === 0 ? (
+                          <View style={styles.emptyState}>
+                            <HugeiconsIcon icon={Mic01Icon} size={48} color="rgba(255,255,255,0.05)" />
+                            <Text style={styles.emptyText}>Transcription will appear here</Text>
+                          </View>
+                        ) : null}
+                        {transcripts.map((transcript, index) => (
+                          <View key={`${transcript.id ?? "transcript"}-${index}`} style={styles.transcriptEntry}>
+                            <Text style={styles.transcriptSpeaker}>{transcript.speakerName}</Text>
+                            <Text style={styles.transcriptText}>{transcript.text}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {panel === "whiteboard" && (
+                      <View style={styles.whiteboard}>
+                        <View style={styles.whiteboardCard}>
+                          <View style={styles.whiteboardHeader}>
+                            <HugeiconsIcon icon={Presentation01Icon} size={24} color={Theme.colors.primary} />
+                            <Text style={styles.whiteboardTitle}>Whiteboard</Text>
+                          </View>
+                          <Text style={styles.whiteboardMeta}>Mode: {whiteboardCanDraw ? "Collaborative" : "View Only"}</Text>
+                          <Text style={styles.whiteboardMeta}>
+                            Elements: {whiteboardElementCount} · Active: {whiteboardParticipantCount}
+                          </Text>
+                        </View>
+                        <Pressable onPress={onToggleWhiteboard} style={styles.primaryPanelButton}>
+                          <Text style={styles.primaryPanelButtonText}>{whiteboardOpen ? "Close Board" : "Open Board"}</Text>
+                        </Pressable>
+                        <View style={styles.buttonRow}>
+                          <Pressable onPress={onRequestWhiteboardSync} style={styles.secondaryPanelButton}>
+                            <Text style={styles.secondaryPanelButtonText}>Sync</Text>
+                          </Pressable>
+                          <Pressable onPress={onClearWhiteboard} style={styles.secondaryPanelButton}>
+                            <Text style={styles.secondaryPanelButtonText}>Clear</Text>
+                          </Pressable>
+                        </View>
                       </View>
                     )}
                   </ScrollView>
@@ -409,6 +474,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  dangerActionBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.2)",
+  },
   settings: {
     gap: 32,
   },
@@ -480,7 +549,84 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  transcripts: {
+    gap: 12,
+  },
+  transcriptEntry: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 18,
+    padding: 14,
+    gap: 8,
+  },
+  transcriptSpeaker: {
+    color: Theme.colors.primary,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  transcriptText: {
+    color: "white",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  whiteboard: {
+    gap: 14,
+  },
+  whiteboardCard: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 18,
+    padding: 16,
+    gap: 10,
+  },
+  whiteboardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  whiteboardTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  whiteboardMeta: {
+    color: Theme.colors.mutedForeground,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  primaryPanelButton: {
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryPanelButtonText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  secondaryPanelButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  secondaryPanelButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "700",
+  },
   pressed: {
     opacity: 0.7,
   },
 });
+
+export { NativeMeetingPanelIosPad as NativeMeetingPanel };

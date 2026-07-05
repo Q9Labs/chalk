@@ -1,4 +1,4 @@
-import { NativeModules, Platform } from "react-native";
+import { NativeModules } from "react-native";
 
 interface NativeMeetingMultitaskingConfig {
   roomName: string;
@@ -15,8 +15,6 @@ interface NativeMeetingMultitaskingModule {
   updatePictureInPictureConfig: (config: NativeMeetingMultitaskingConfig) => Promise<void>;
   startPictureInPicture: () => Promise<void>;
   stopPictureInPicture: () => Promise<void>;
-  startBackgroundMode: (config: NativeMeetingMultitaskingConfig) => Promise<void>;
-  stopBackgroundMode: () => Promise<void>;
 }
 
 const noopModule: NativeMeetingMultitaskingModule = {
@@ -26,15 +24,9 @@ const noopModule: NativeMeetingMultitaskingModule = {
   updatePictureInPictureConfig: async () => {},
   startPictureInPicture: async () => {},
   stopPictureInPicture: async () => {},
-  startBackgroundMode: async () => {},
-  stopBackgroundMode: async () => {},
 };
 
 function resolveNativeMeetingMultitaskingModule(): NativeMeetingMultitaskingModule {
-  if (Platform.OS !== "ios" && Platform.OS !== "android") {
-    return noopModule;
-  }
-
   const module = NativeModules.ChalkMeetingMultitasking as Partial<NativeMeetingMultitaskingModule> | undefined;
   if (!module) {
     return noopModule;
@@ -47,8 +39,6 @@ function resolveNativeMeetingMultitaskingModule(): NativeMeetingMultitaskingModu
     updatePictureInPictureConfig: module.updatePictureInPictureConfig ?? noopModule.updatePictureInPictureConfig,
     startPictureInPicture: module.startPictureInPicture ?? noopModule.startPictureInPicture,
     stopPictureInPicture: module.stopPictureInPicture ?? noopModule.stopPictureInPicture,
-    startBackgroundMode: module.startBackgroundMode ?? noopModule.startBackgroundMode,
-    stopBackgroundMode: module.stopBackgroundMode ?? noopModule.stopBackgroundMode,
   };
 }
 

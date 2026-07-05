@@ -386,3 +386,5 @@ const styles = StyleSheet.create({
     height: 160,
   },
 });
+
+export { NativeMeetingStageIosPad as NativeMeetingStage };
