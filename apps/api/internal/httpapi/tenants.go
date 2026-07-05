@@ -71,11 +71,11 @@ type updateTenantRequest struct {
 	Website           utilities.OptionalString `json:"website"`
 }
 
-func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAuthorizer) {
-	r.Post("/tenants", handleCreateTenant(service))
+func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants", handleCreateTenant(service))
 	r.Get("/tenants", handleListTenants(service))
 	r.Get("/tenants/{tenant_id}", handleGetTenant(service, authorizer))
-	r.Patch("/tenants/{tenant_id}", handleUpdateTenant(service, authorizer))
+	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}", handleUpdateTenant(service, authorizer))
 	r.Get("/regions", handleListRegions(service))
 }
 

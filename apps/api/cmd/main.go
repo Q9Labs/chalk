@@ -23,6 +23,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/users"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -74,6 +75,16 @@ func run() error {
 	passwords := passwordadapter.NewBcryptHasher()
 	var googleProvider authentication.GoogleProvider
 	var oauthStates authentication.OAuthStateStore
+	var redisClient *goredis.Client
+	needsRedis := cfg.GoogleOAuth.ClientID != "" || cfg.GoogleOAuth.ClientSecret != "" || cfg.Observability.Environment != config.DefaultEnvironment
+	if needsRedis {
+		redisClient, err = redisadapter.Open(cfg.Redis.URL)
+		if err != nil {
+			return fmt.Errorf("open redis: %w", err)
+		}
+		defer redisClient.Close()
+		logger.Info("redis connected", "event", "redis.connected")
+	}
 	if cfg.GoogleOAuth.ClientID != "" || cfg.GoogleOAuth.ClientSecret != "" {
 		provider, err := googleadapter.NewProvider(googleadapter.Config{
 			ClientID:     cfg.GoogleOAuth.ClientID,
@@ -83,13 +94,6 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure google oauth: %w", err)
 		}
-
-		redisClient, err := redisadapter.Open(cfg.Redis.URL)
-		if err != nil {
-			return fmt.Errorf("open redis: %w", err)
-		}
-		defer redisClient.Close()
-		logger.Info("redis connected", "event", "redis.connected")
 
 		googleProvider = provider
 		oauthStates = redisadapter.NewOAuthStateStore(redisClient)
@@ -106,10 +110,16 @@ func run() error {
 	membershipRepository := postgres.NewMembershipRepository(operationQueries)
 	membershipService := memberships.NewService(membershipRepository)
 	tenantAuthz := authorization.NewTenantPolicy(membershipRepository)
+	rateLimitOptions := httpapi.DefaultRateLimitOptions()
+	rateLimitOptions.ClientIP.TrustedProxyCIDRs = cfg.API.TrustedProxyCIDRs
+	if cfg.Observability.Environment != config.DefaultEnvironment {
+		rateLimitOptions.Limiter = redisadapter.NewRateLimiter(redisClient)
+	}
 	routerOptions := httpapi.Options{
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 		},
+		RateLimit:      rateLimitOptions,
 		Readiness:      postgres.Readiness{Pool: pool},
 		Authentication: authenticationService,
 		Memberships:    membershipService,

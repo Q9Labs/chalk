@@ -21,9 +21,9 @@ type TenantAuthorizer interface {
 
 type Options struct {
 	CORS           CORSOptions
-	AuthRateLimit  AuthRateLimitConfig
 	Middleware     []func(http.Handler) http.Handler
 	Profiler       http.Handler
+	RateLimit      RateLimitOptions
 	Readiness      ReadinessChecker
 	Authentication AuthenticationService
 	Memberships    MembershipService
@@ -100,17 +100,15 @@ func writeReadinessError(w http.ResponseWriter) {
 }
 
 func mountV1Routes(r chi.Router, options Options) {
-	authRateLimiter := newRequestRateLimiter(options.AuthRateLimit)
-
 	r.Route("/v1", func(r chi.Router) {
-		mountAuthRoutes(r, options.Authentication, options.SessionCookie, authRateLimiter)
+		mountAuthRoutes(r, options.Authentication, options.SessionCookie, options.RateLimit)
 		mountMeRoutes(r, options.Authentication)
 
 		r.Group(func(r chi.Router) {
 			r.Use(requireAuthentication(options.Authentication))
-			mountTenantRoutes(r, options.Tenants, options.TenantAuthz)
-			mountUserRoutes(r, options.Users)
-			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz)
+			mountTenantRoutes(r, options.Tenants, options.TenantAuthz, options.RateLimit)
+			mountUserRoutes(r, options.Users, options.RateLimit)
+			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
 		})
 	})
 }

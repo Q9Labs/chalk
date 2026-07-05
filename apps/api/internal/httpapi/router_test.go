@@ -16,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
+	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/users"
@@ -83,6 +84,10 @@ type tenantAuthorizer struct {
 	authorizeTenant func(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error
 }
 
+type singleRequestLimiter struct {
+	seen map[string]int
+}
+
 func (s authenticationService) Register(ctx context.Context, input authentication.RegisterInput) (authentication.AuthResult, error) {
 	if s.register == nil {
 		return authentication.AuthResult{}, errors.New("unexpected register call")
@@ -141,6 +146,22 @@ func (a tenantAuthorizer) AuthorizeTenant(ctx context.Context, principal authent
 		return nil
 	}
 	return a.authorizeTenant(ctx, principal, tenantID, permission)
+}
+
+func (l *singleRequestLimiter) Allow(ctx context.Context, key string, policy ratelimit.Policy, now time.Time) ratelimit.Decision {
+	if l.seen == nil {
+		l.seen = make(map[string]int)
+	}
+
+	l.seen[policy.Name+":"+key]++
+	if l.seen[policy.Name+":"+key] > 1 {
+		return ratelimit.Decision{
+			Allowed:    false,
+			RetryAfter: 2 * time.Second,
+		}
+	}
+
+	return ratelimit.Decision{Allowed: true}
 }
 
 func (s membershipService) CreateMembership(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
@@ -404,67 +425,6 @@ func TestLoginWrongPassword(t *testing.T) {
 	assertErrorCode(t, res, "invalid_credentials")
 }
 
-func TestAuthRoutesRateLimitPasswordEndpoints(t *testing.T) {
-	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	loginCalls := 0
-	registerCalls := 0
-	handler := httpapi.NewRouter(httpapi.Options{
-		AuthRateLimit: httpapi.AuthRateLimitConfig{
-			Limit:  2,
-			Window: time.Minute,
-			Now: func() time.Time {
-				return now
-			},
-		},
-		Authentication: authenticationService{
-			login: func(context.Context, authentication.LoginInput) (authentication.AuthResult, error) {
-				loginCalls++
-				return authentication.AuthResult{}, authentication.ErrInvalidCredentials
-			},
-			register: func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error) {
-				registerCalls++
-				return authentication.AuthResult{}, authentication.ErrInvalidPassword
-			},
-		},
-	})
-
-	for range 2 {
-		res := requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/login", `{"email":"hasan@example.com","password":"wrong"}`, "203.0.113.10:1234")
-		if res.Code != http.StatusUnauthorized {
-			t.Fatalf("login status = %d, want %d", res.Code, http.StatusUnauthorized)
-		}
-	}
-
-	res := requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/login", `{"email":"hasan@example.com","password":"wrong"}`, "203.0.113.10:1234")
-	if res.Code != http.StatusTooManyRequests {
-		t.Fatalf("limited login status = %d, want %d", res.Code, http.StatusTooManyRequests)
-	}
-	if retryAfter := res.Header().Get("Retry-After"); retryAfter != "60" {
-		t.Fatalf("login retry-after = %q, want 60", retryAfter)
-	}
-	assertErrorCode(t, res, "rate_limited")
-
-	for range 2 {
-		res := requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"short"}`, "203.0.113.10:1234")
-		if res.Code != http.StatusBadRequest {
-			t.Fatalf("register status = %d, want %d", res.Code, http.StatusBadRequest)
-		}
-	}
-
-	res = requestWithHandlerAndRemoteAddr(t, handler, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"short"}`, "203.0.113.10:1234")
-	if res.Code != http.StatusTooManyRequests {
-		t.Fatalf("limited register status = %d, want %d", res.Code, http.StatusTooManyRequests)
-	}
-	assertErrorCode(t, res, "rate_limited")
-
-	if loginCalls != 2 {
-		t.Fatalf("login calls = %d, want 2", loginCalls)
-	}
-	if registerCalls != 2 {
-		t.Fatalf("register calls = %d, want 2", registerCalls)
-	}
-}
-
 func TestMeAcceptsBearerSession(t *testing.T) {
 	req := bearerRequest(http.MethodGet, "/v1/me", "raw-session-token")
 	res := requestWithOptionsAndRequest(t, req, httpapi.Options{
@@ -613,6 +573,191 @@ func TestGoogleCallbackRejectsUnverifiedEmail(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusUnauthorized)
 	}
 	assertErrorCode(t, res, "oauth_email_not_verified")
+}
+
+func TestRegisterRateLimitBlocksBeforeService(t *testing.T) {
+	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	calls := 0
+	options := httpapi.Options{
+		RateLimit: httpapi.RateLimitOptions{
+			Limiter: ratelimit.NewLocalLimiter(),
+			Now:     func() time.Time { return now },
+		},
+		Authentication: authenticationService{
+			register: func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error) {
+				calls++
+				return authentication.AuthResult{
+					SessionToken: "raw-session-token",
+					ExpiresAt:    time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+					User:         authUser(t),
+				}, nil
+			},
+		},
+	}
+
+	for i := 0; i < 5; i++ {
+		res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"password123"}`, options)
+		if res.Code != http.StatusCreated {
+			t.Fatalf("request %d status = %d, want %d", i+1, res.Code, http.StatusCreated)
+		}
+	}
+
+	res := requestWithOptionsAndBody(t, http.MethodPost, "/v1/auth/register", `{"name":"Hasan","email":"hasan@example.com","password":"password123"}`, options)
+	if res.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusTooManyRequests)
+	}
+	assertErrorCode(t, res, "rate_limited")
+	if res.Header().Get("Retry-After") == "" {
+		t.Fatal("retry-after header was empty")
+	}
+	if calls != 5 {
+		t.Fatalf("register calls = %d, want 5", calls)
+	}
+}
+
+func TestPublicRateLimitTrustsConfiguredProxyHeaders(t *testing.T) {
+	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	calls := 0
+	options := httpapi.Options{
+		RateLimit: httpapi.RateLimitOptions{
+			ClientIP: httpapi.ClientIPOptions{
+				TrustedProxyCIDRs: []string{"203.0.113.0/24"},
+			},
+			Limiter: &singleRequestLimiter{},
+			Now:     func() time.Time { return now },
+		},
+		Authentication: authenticationService{
+			register: func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error) {
+				calls++
+				return authentication.AuthResult{
+					SessionToken: "raw-session-token",
+					ExpiresAt:    time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+					User:         authUser(t),
+				}, nil
+			},
+		},
+	}
+
+	first := httptest.NewRequest(http.MethodPost, "/v1/auth/register", strings.NewReader(`{"name":"Hasan","email":"hasan@example.com","password":"password123"}`))
+	first.RemoteAddr = "203.0.113.10:44100"
+	first.Header.Set("CF-Connecting-IP", "198.51.100.10")
+	res := requestWithOptionsAndRequest(t, first, options)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	second := httptest.NewRequest(http.MethodPost, "/v1/auth/register", strings.NewReader(`{"name":"Hasan","email":"hasan@example.com","password":"password123"}`))
+	second.RemoteAddr = "203.0.113.10:44101"
+	second.Header.Set("CF-Connecting-IP", "198.51.100.11")
+	res = requestWithOptionsAndRequest(t, second, options)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("second status = %d, want %d", res.Code, http.StatusCreated)
+	}
+	if calls != 2 {
+		t.Fatalf("register calls = %d, want 2", calls)
+	}
+}
+
+func TestPublicRateLimitIgnoresUntrustedProxyHeaders(t *testing.T) {
+	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	calls := 0
+	options := httpapi.Options{
+		RateLimit: httpapi.RateLimitOptions{
+			ClientIP: httpapi.ClientIPOptions{
+				TrustedProxyCIDRs: []string{"203.0.113.0/24"},
+			},
+			Limiter: &singleRequestLimiter{},
+			Now:     func() time.Time { return now },
+		},
+		Authentication: authenticationService{
+			register: func(context.Context, authentication.RegisterInput) (authentication.AuthResult, error) {
+				calls++
+				return authentication.AuthResult{
+					SessionToken: "raw-session-token",
+					ExpiresAt:    time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+					User:         authUser(t),
+				}, nil
+			},
+		},
+	}
+
+	first := httptest.NewRequest(http.MethodPost, "/v1/auth/register", strings.NewReader(`{"name":"Hasan","email":"hasan@example.com","password":"password123"}`))
+	first.RemoteAddr = "192.0.2.10:44100"
+	first.Header.Set("CF-Connecting-IP", "198.51.100.10")
+	res := requestWithOptionsAndRequest(t, first, options)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	second := httptest.NewRequest(http.MethodPost, "/v1/auth/register", strings.NewReader(`{"name":"Hasan","email":"hasan@example.com","password":"password123"}`))
+	second.RemoteAddr = "192.0.2.10:44101"
+	second.Header.Set("CF-Connecting-IP", "198.51.100.11")
+	res = requestWithOptionsAndRequest(t, second, options)
+	if res.Code != http.StatusTooManyRequests {
+		t.Fatalf("second status = %d, want %d", res.Code, http.StatusTooManyRequests)
+	}
+	if calls != 1 {
+		t.Fatalf("register calls = %d, want 1", calls)
+	}
+}
+
+func TestAuthenticatedWriteRateLimitUsesPrincipal(t *testing.T) {
+	limiter := &singleRequestLimiter{}
+	calls := 0
+	options := httpapi.Options{
+		RateLimit: httpapi.RateLimitOptions{
+			Limiter: limiter,
+			Now:     func() time.Time { return time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC) },
+		},
+		Authentication: authenticationService{
+			authenticateSession: func(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+				sessionUser := authSessionUser(t)
+				if rawToken == "second-session-token" {
+					secondUserID, err := utilities.ParseID("33333333-3333-4333-8333-333333333333")
+					if err != nil {
+						t.Fatalf("parse second user id: %v", err)
+					}
+					sessionUser.User.ID = secondUserID
+					sessionUser.Session.UserID = secondUserID
+				}
+				return sessionUser, nil
+			},
+		},
+		Tenants: tenantService{
+			createTenant: func(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
+				calls++
+				return tenants.Tenant{
+					ID:   mustTenantID(t, "11111111-1111-1111-1111-111111111111"),
+					Name: input.Name,
+				}, nil
+			},
+		},
+	}
+
+	first := bearerRequestWithBody(http.MethodPost, "/v1/tenants", "raw-session-token", `{"name":"Acme"}`)
+	first.RemoteAddr = "203.0.113.10:44100"
+	res := requestWithOptionsAndRequest(t, first, options)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	second := bearerRequestWithBody(http.MethodPost, "/v1/tenants", "raw-session-token", `{"name":"Acme"}`)
+	second.RemoteAddr = "203.0.113.10:44101"
+	res = requestWithOptionsAndRequest(t, second, options)
+	if res.Code != http.StatusTooManyRequests {
+		t.Fatalf("second status = %d, want %d", res.Code, http.StatusTooManyRequests)
+	}
+	assertErrorCode(t, res, "rate_limited")
+
+	third := bearerRequestWithBody(http.MethodPost, "/v1/tenants", "second-session-token", `{"name":"Acme"}`)
+	third.RemoteAddr = "203.0.113.10:44102"
+	res = requestWithOptionsAndRequest(t, third, options)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("third status = %d, want %d", res.Code, http.StatusCreated)
+	}
+	if calls != 2 {
+		t.Fatalf("create tenant calls = %d, want 2", calls)
+	}
 }
 
 func TestMiddleware(t *testing.T) {
@@ -1589,18 +1734,6 @@ func requestWithOptionsAndRequest(t *testing.T, req *http.Request, options httpa
 	t.Helper()
 
 	handler := httpapi.NewRouter(options)
-	res := httptest.NewRecorder()
-
-	handler.ServeHTTP(res, req)
-
-	return res
-}
-
-func requestWithHandlerAndRemoteAddr(t *testing.T, handler http.Handler, method string, path string, body string, remoteAddr string) *httptest.ResponseRecorder {
-	t.Helper()
-
-	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
-	req.RemoteAddr = remoteAddr
 	res := httptest.NewRecorder()
 
 	handler.ServeHTTP(res, req)

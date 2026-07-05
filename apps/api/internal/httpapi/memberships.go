@@ -53,10 +53,10 @@ type updateMembershipRequest struct {
 	Role memberships.Role `json:"role"`
 }
 
-func mountMembershipRoutes(r chi.Router, service MembershipService, authorizer TenantAuthorizer) {
-	r.Post("/tenants/{tenant_id}/memberships", handleCreateMembership(service, authorizer))
+func mountMembershipRoutes(r chi.Router, service MembershipService, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/memberships", handleCreateMembership(service, authorizer))
 	r.Get("/tenants/{tenant_id}/memberships", handleListTenantMemberships(service, authorizer))
-	r.Patch("/tenants/{tenant_id}/memberships/{membership_id}", handleUpdateTenantMembership(service, authorizer))
+	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}/memberships/{membership_id}", handleUpdateTenantMembership(service, authorizer))
 }
 
 func handleCreateMembership(service MembershipService, authorizer TenantAuthorizer) http.HandlerFunc {

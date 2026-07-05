@@ -4,118 +4,176 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 )
 
-const (
-	defaultAuthRateLimit       = 10
-	defaultAuthRateLimitWindow = time.Minute
+var (
+	authRegisterRateLimit = ratelimit.Policy{
+		Name:   "auth.register",
+		Limit:  5,
+		Window: time.Minute,
+	}
+	authLoginRateLimit = ratelimit.Policy{
+		Name:   "auth.login",
+		Limit:  10,
+		Window: time.Minute,
+	}
+	authOAuthStartRateLimit = ratelimit.Policy{
+		Name:   "auth.oauth.start",
+		Limit:  20,
+		Window: time.Minute,
+	}
+	authOAuthCallbackRateLimit = ratelimit.Policy{
+		Name:   "auth.oauth.callback",
+		Limit:  30,
+		Window: time.Minute,
+	}
+	authenticatedWriteRateLimit = ratelimit.Policy{
+		Name:   "v1.authenticated.write",
+		Limit:  60,
+		Window: time.Minute,
+	}
 )
 
-type AuthRateLimitConfig struct {
-	Limit  int
-	Window time.Duration
-	Now    func() time.Time
+type RateLimitOptions struct {
+	Limiter  ratelimit.Limiter
+	Now      func() time.Time
+	ClientIP ClientIPOptions
 }
 
-type requestRateLimiter struct {
-	mu      sync.Mutex
-	limit   int
-	window  time.Duration
-	now     func() time.Time
-	buckets map[string]rateLimitBucket
+type ClientIPOptions struct {
+	TrustedProxyCIDRs []string
 }
 
-type rateLimitBucket struct {
-	count   int
-	resetAt time.Time
-}
-
-func newRequestRateLimiter(config AuthRateLimitConfig) *requestRateLimiter {
-	limit := config.Limit
-	if limit <= 0 {
-		limit = defaultAuthRateLimit
-	}
-	window := config.Window
-	if window <= 0 {
-		window = defaultAuthRateLimitWindow
-	}
-	now := config.Now
-	if now == nil {
-		now = time.Now
-	}
-
-	return &requestRateLimiter{
-		limit:   limit,
-		window:  window,
-		now:     now,
-		buckets: make(map[string]rateLimitBucket),
+func DefaultRateLimitOptions() RateLimitOptions {
+	return RateLimitOptions{
+		Limiter: ratelimit.NewLocalLimiter(),
+		Now:     time.Now,
 	}
 }
 
-func (l *requestRateLimiter) Allow(key string) (time.Duration, bool) {
-	if l == nil {
-		return 0, true
-	}
-
-	now := l.now()
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	bucket := l.buckets[key]
-	if bucket.resetAt.IsZero() || !now.Before(bucket.resetAt) {
-		l.buckets[key] = rateLimitBucket{
-			count:   1,
-			resetAt: now.Add(l.window),
-		}
-		l.prune(now)
-		return 0, true
-	}
-	if bucket.count >= l.limit {
-		return bucket.resetAt.Sub(now), false
-	}
-
-	bucket.count++
-	l.buckets[key] = bucket
-	return 0, true
-}
-
-func (l *requestRateLimiter) prune(now time.Time) {
-	for key, bucket := range l.buckets {
-		if !now.Before(bucket.resetAt) {
-			delete(l.buckets, key)
-		}
-	}
-}
-
-func rateLimitRequests(limiter *requestRateLimiter, route string) func(http.Handler) http.Handler {
+func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			wait, ok := limiter.Allow(route + ":" + identifyRequestClient(r))
-			if !ok {
-				if wait > 0 {
-					seconds := int64(math.Ceil(wait.Seconds()))
-					w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
-				}
-				writeError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+			if options.Limiter == nil {
+				next.ServeHTTP(w, r)
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			now := time.Now
+			if options.Now != nil {
+				now = options.Now
+			}
+
+			decision := options.Limiter.Allow(r.Context(), rateLimitKey(r, options.ClientIP), policy, now())
+			if decision.Allowed {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			writeRateLimited(w, decision)
 		})
 	}
 }
 
-func identifyRequestClient(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil && host != "" {
+func rateLimitKey(r *http.Request, options ClientIPOptions) string {
+	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok {
+		return "principal:" + principalRateLimitKey(principal)
+	}
+
+	return "ip:" + clientIP(r, options)
+}
+
+func principalRateLimitKey(principal authentication.Principal) string {
+	switch principal.Kind {
+	case authentication.PrincipalUser:
+		return "user:" + principal.UserID.String()
+	case authentication.PrincipalAPIKey:
+		return "api_key:" + principal.APIKeyID.String()
+	case authentication.PrincipalSystem:
+		return "system"
+	default:
+		return "unknown"
+	}
+}
+
+func clientIP(r *http.Request, options ClientIPOptions) string {
+	remote := remoteIP(r.RemoteAddr)
+	if !trustedProxy(remote, options.TrustedProxyCIDRs) {
+		return remote
+	}
+
+	if ip := headerIP(r.Header.Get("CF-Connecting-IP")); ip != "" {
+		return ip
+	}
+	if ip := firstForwardedForIP(r.Header.Get("X-Forwarded-For")); ip != "" {
+		return ip
+	}
+
+	return remote
+}
+
+func trustedProxy(remote string, cidrs []string) bool {
+	ip, err := netip.ParseAddr(remote)
+	if err != nil {
+		return false
+	}
+
+	for _, cidr := range cidrs {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(cidr))
+		if err == nil && prefix.Contains(ip) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func headerIP(value string) string {
+	ip, err := netip.ParseAddr(strings.TrimSpace(value))
+	if err != nil {
+		return ""
+	}
+
+	return ip.String()
+}
+
+func firstForwardedForIP(header string) string {
+	for _, value := range strings.Split(header, ",") {
+		if ip := headerIP(value); ip != "" {
+			return ip
+		}
+	}
+
+	return ""
+}
+
+func remoteIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err == nil {
 		return host
 	}
-	if r.RemoteAddr != "" {
-		return r.RemoteAddr
+
+	remoteAddr = strings.TrimSpace(remoteAddr)
+	if remoteAddr == "" {
+		return "unknown"
 	}
-	return "unknown"
+
+	return remoteAddr
+}
+
+func writeRateLimited(w http.ResponseWriter, decision ratelimit.Decision) {
+	retryAfter := int(math.Ceil(decision.RetryAfter.Seconds()))
+	if retryAfter < 1 {
+		retryAfter = 1
+	}
+
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	writeError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests")
 }

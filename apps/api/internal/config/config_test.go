@@ -19,6 +19,9 @@ func TestLoadDefaults(t *testing.T) {
 	if len(cfg.API.CORSAllowedOrigins) != 0 {
 		t.Fatalf("cors allowed origins = %#v, want empty", cfg.API.CORSAllowedOrigins)
 	}
+	if len(cfg.API.TrustedProxyCIDRs) != 0 {
+		t.Fatalf("trusted proxy cidrs = %#v, want empty", cfg.API.TrustedProxyCIDRs)
+	}
 	if cfg.Auth.EmailVerificationRequired {
 		t.Fatal("email verification required = true, want false")
 	}
@@ -144,6 +147,25 @@ func TestLoadAPICORSAllowedOrigins(t *testing.T) {
 	for i := range want {
 		if cfg.API.CORSAllowedOrigins[i] != want[i] {
 			t.Fatalf("cors allowed origins = %#v, want %#v", cfg.API.CORSAllowedOrigins, want)
+		}
+	}
+}
+
+func TestLoadAPITrustedProxyCIDRs(t *testing.T) {
+	t.Setenv(config.APITrustedProxyCIDRs, "203.0.113.0/24, 2001:db8::/32 ,,")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	want := []string{"203.0.113.0/24", "2001:db8::/32"}
+	if len(cfg.API.TrustedProxyCIDRs) != len(want) {
+		t.Fatalf("trusted proxy cidrs = %#v, want %#v", cfg.API.TrustedProxyCIDRs, want)
+	}
+	for i := range want {
+		if cfg.API.TrustedProxyCIDRs[i] != want[i] {
+			t.Fatalf("trusted proxy cidrs = %#v, want %#v", cfg.API.TrustedProxyCIDRs, want)
 		}
 	}
 }

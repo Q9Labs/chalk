@@ -35,8 +35,8 @@ type createUserRequest struct {
 	Email string `json:"email"`
 }
 
-func mountUserRoutes(r chi.Router, service UserService) {
-	r.Post("/users", handleCreateUser(service))
+func mountUserRoutes(r chi.Router, service UserService, limits RateLimitOptions) {
+	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/users", handleCreateUser(service))
 	r.Get("/users", handleListUsers(service))
 	r.Get("/users/{user_id}", handleGetUser(service))
 }

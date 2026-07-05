@@ -39,6 +39,11 @@ Outbound provider credentials are also env-only. Resend-backed email sending
 uses `CHALK_RESEND_API_KEY`; `CHALK_RESEND_TIMEOUT_MS` controls the SDK HTTP
 client timeout and defaults to `10000`.
 
+Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
+load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
+`X-Forwarded-For` for public-route rate limiting. Non-local environments use
+Redis-backed rate limiting through `CHALK_REDIS_URL`.
+
 ## Database
 
 The API uses Postgres with `pgx`, `sqlc`, and `goose`. For local Postgres,

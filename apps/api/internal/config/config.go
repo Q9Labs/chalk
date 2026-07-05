@@ -13,6 +13,7 @@ const (
 	APIAddress            = "CHALK_API_ADDR"
 	APICORSAllowedOrigins = "CHALK_API_CORS_ALLOWED_ORIGINS"
 	APIEnvironment        = "CHALK_API_ENV"
+	APITrustedProxyCIDRs  = "CHALK_API_TRUSTED_PROXY_CIDRS"
 	APILogFormat          = "CHALK_API_LOG_FORMAT"
 	APILogLevel           = "CHALK_API_LOG_LEVEL"
 	APIOperationLogs      = "CHALK_API_OPERATION_LOGS"
@@ -88,6 +89,7 @@ const (
 type APIConfig struct {
 	Address            string
 	CORSAllowedOrigins []string
+	TrustedProxyCIDRs  []string
 }
 
 type DatabaseConfig struct {
@@ -256,6 +258,7 @@ func Load() (Config, error) {
 		API: APIConfig{
 			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
 			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
+			TrustedProxyCIDRs:  envList(APITrustedProxyCIDRs),
 		},
 		Auth: AuthConfig{
 			EmailVerificationRequired: envBool(AuthEmailVerificationRequired),

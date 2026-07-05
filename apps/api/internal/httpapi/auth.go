@@ -51,11 +51,11 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-func mountAuthRoutes(r chi.Router, service AuthenticationService, cookies SessionCookieOptions, authRateLimiter *requestRateLimiter) {
-	r.With(rateLimitRequests(authRateLimiter, "auth_register")).Post("/auth/register", handleRegister(service, cookies))
-	r.With(rateLimitRequests(authRateLimiter, "auth_login")).Post("/auth/login", handleLogin(service, cookies))
-	r.Get("/auth/google/start", handleGoogleStart(service))
-	r.Get("/auth/google/callback", handleGoogleCallback(service, cookies))
+func mountAuthRoutes(r chi.Router, service AuthenticationService, cookies SessionCookieOptions, limits RateLimitOptions) {
+	r.With(rateLimit(limits, authRegisterRateLimit)).Post("/auth/register", handleRegister(service, cookies))
+	r.With(rateLimit(limits, authLoginRateLimit)).Post("/auth/login", handleLogin(service, cookies))
+	r.With(rateLimit(limits, authOAuthStartRateLimit)).Get("/auth/google/start", handleGoogleStart(service))
+	r.With(rateLimit(limits, authOAuthCallbackRateLimit)).Get("/auth/google/callback", handleGoogleCallback(service, cookies))
 	r.With(requireAuthentication(service)).Post("/auth/logout", handleLogout(service, cookies))
 }
 

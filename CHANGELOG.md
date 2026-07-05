@@ -30,7 +30,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Changed
 
 - Hardened the Go API HTTP edge with protected resource routes, tenant
-  authorization checks, auth throttling, request body limits, production
+  authorization checks, Redis-backed public auth and authenticated-write rate
+  limiting, trusted proxy client-IP handling, request body limits, production
   database TLS guardrails, safer diagnostics mounting, and escaped Cloudflare
   provider paths.
 - Replaced private historical scratchpad entries with curated public summaries.
