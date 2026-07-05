@@ -1,4 +1,4 @@
-import type { ActiveReaction, InteractionState, ReactionEmoji } from "@q9labs/chalk-core";
+import type { ActiveReaction, InteractionState, ReactionEmoji } from "../internal/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 

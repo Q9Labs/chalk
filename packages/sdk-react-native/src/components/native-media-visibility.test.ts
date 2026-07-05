@@ -1,4 +1,4 @@
-import type { Participant } from "@q9labs/chalk-core";
+import type { Participant } from "../internal/core";
 import { describe, expect, it } from "vitest";
 import { shouldRenderNativeMediaTrack } from "./native-media-visibility";
 

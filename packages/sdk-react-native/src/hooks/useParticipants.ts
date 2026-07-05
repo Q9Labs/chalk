@@ -1,4 +1,4 @@
-import type { ParticipantState } from "@q9labs/chalk-core";
+import type { ParticipantState } from "../internal/core";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 

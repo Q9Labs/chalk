@@ -1,4 +1,4 @@
-import type { WhiteboardCursor, WhiteboardSnapshot, WhiteboardState, WhiteboardUpdate } from "@q9labs/chalk-core";
+import type { WhiteboardCursor, WhiteboardSnapshot, WhiteboardState, WhiteboardUpdate } from "../internal/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 
@@ -30,8 +30,8 @@ export function useWhiteboard(): UseWhiteboardReturn {
   const [latestSnapshot, setLatestSnapshot] = useState<WhiteboardSnapshot | null>(null);
 
   useEffect(() => whiteboard.subscribe(setState), [whiteboard]);
-  useEffect(() => whiteboard.on("update", (update) => setLatestUpdate(update)), [whiteboard]);
-  useEffect(() => whiteboard.on("snapshot", (snapshot) => setLatestSnapshot(snapshot)), [whiteboard]);
+  useEffect(() => whiteboard.on("update", (update: WhiteboardUpdate) => setLatestUpdate(update)), [whiteboard]);
+  useEffect(() => whiteboard.on("snapshot", (snapshot: WhiteboardSnapshot) => setLatestSnapshot(snapshot)), [whiteboard]);
 
   const open = useCallback(() => whiteboard.open(), [whiteboard]);
   const close = useCallback(() => whiteboard.close(), [whiteboard]);

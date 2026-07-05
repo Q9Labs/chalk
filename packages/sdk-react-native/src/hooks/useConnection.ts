@@ -1,4 +1,4 @@
-import type { JoinOptions, LeaveOptions, RoomState } from "@q9labs/chalk-core";
+import type { JoinOptions, LeaveOptions, RoomState } from "../internal/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 

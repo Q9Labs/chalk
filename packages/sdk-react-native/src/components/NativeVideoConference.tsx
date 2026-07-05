@@ -1,4 +1,4 @@
-import { ChalkErrorClass, type ChalkError, type ChalkSessionDiagnosticsSnapshot } from "@q9labs/chalk-core";
+import { ChalkErrorClass, type ChalkError, type ChalkSessionDiagnosticsSnapshot } from "../internal/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { nativeCallKit } from "../callkit/native-callkit";

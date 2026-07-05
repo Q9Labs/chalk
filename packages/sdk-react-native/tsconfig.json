@@ -11,12 +11,11 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "paths": {
-      "@q9labs/chalk-core": ["../sdk-core/src/index.ts"],
       "@q9labs/facehash": ["../facehash/src/index.native.ts"],
       "@q9labs/facehash/react-native": ["../facehash/src/index.native.ts"]
     }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
-  "references": [{ "path": "../sdk-core" }, { "path": "../facehash" }]
+  "references": [{ "path": "../facehash" }]
 }

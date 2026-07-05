@@ -1,4 +1,4 @@
-import type { ParticipantState } from "@q9labs/chalk-core";
+import type { ParticipantState } from "../../internal/core";
 import { useMemo } from "react";
 import { useWindowDimensions } from "react-native";
 import type { UseScreenShareReturn } from "../../hooks/useScreenShare";

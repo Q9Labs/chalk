@@ -1,4 +1,4 @@
-import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "@q9labs/chalk-core";
+import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../internal/core";
 import { FacehashNative } from "@q9labs/facehash/react-native";
 import { memo, useMemo, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";

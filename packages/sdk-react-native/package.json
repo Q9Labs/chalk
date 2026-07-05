@@ -32,16 +32,15 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core && pnpm run build:types",
+    "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc && pnpm run build:types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
-    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --external @q9labs/chalk-core --watch",
+    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --watch",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@q9labs/chalk-core": "workspace:^",
     "@q9labs/facehash": "workspace:^"
   },
   "devDependencies": {

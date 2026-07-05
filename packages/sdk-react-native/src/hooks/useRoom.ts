@@ -1,4 +1,4 @@
-import type { RoomState } from "@q9labs/chalk-core";
+import type { RoomState } from "../internal/core";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 

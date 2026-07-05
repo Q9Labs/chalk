@@ -1,4 +1,4 @@
-import type { ConferenceClientConfig } from "@q9labs/chalk-core";
+import type { ConferenceClientConfig } from "../internal/core";
 
 type WideEventsConfig = NonNullable<ConferenceClientConfig["wideEvents"]>;
 

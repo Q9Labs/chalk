@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ParticipantState } from "@q9labs/chalk-core";
+import type { ParticipantState } from "../internal/core";
 import { buildCompactParticipantPages, normalizeStageParticipants, resolveNativeMeetingLayout } from "./native-meeting-layout";
 
 type RoomParticipant = ParticipantState["participants"][number];

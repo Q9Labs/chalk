@@ -1,4 +1,4 @@
-import { type ChatMessage, type MediaDevice, type Transcript } from "@q9labs/chalk-core";
+import { type ChatMessage, type MediaDevice, type Transcript } from "../internal/core";
 import ArrowUp01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowUp01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/dist/esm/Cancel01Icon";
 import Chat01Icon from "@hugeicons/core-free-icons/dist/esm/Chat01Icon";

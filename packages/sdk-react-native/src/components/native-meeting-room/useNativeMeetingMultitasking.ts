@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { AppState, Platform } from "react-native";
-import type { ParticipantState } from "@q9labs/chalk-core";
+import type { ParticipantState } from "../../internal/core";
 import type { ResolvedNativeMeetingLayout } from "../../utils/native-meeting-layout";
 import { meetingMultitasking } from "../../native/meeting-multitasking";
 import { resolveNativeMeetingMultitaskingSource } from "./meeting-multitasking-source";

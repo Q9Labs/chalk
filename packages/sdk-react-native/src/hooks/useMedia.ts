@@ -1,4 +1,4 @@
-import type { MediaDevice, MediaState, VideoBackgroundEffect } from "@q9labs/chalk-core";
+import type { MediaDevice, MediaState, VideoBackgroundEffect } from "../internal/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 

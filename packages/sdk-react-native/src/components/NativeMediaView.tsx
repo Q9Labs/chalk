@@ -1,5 +1,5 @@
 import { MediaStream, type MediaStreamTrack as NativeMediaStreamTrack } from "@cloudflare/react-native-webrtc";
-import type { Participant } from "@q9labs/chalk-core";
+import type { Participant } from "../internal/core";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Theme } from "../ui/theme";

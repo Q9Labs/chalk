@@ -1,4 +1,4 @@
-import { ChalkSession, type ChalkIncident, type ConferenceClientConfig, type IncidentReporter, type JoinOptions } from "@q9labs/chalk-core";
+import { ChalkSession, type ChalkIncident, type ConferenceClientConfig, type IncidentReporter, type JoinOptions } from "../internal/core";
 import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react-native";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";

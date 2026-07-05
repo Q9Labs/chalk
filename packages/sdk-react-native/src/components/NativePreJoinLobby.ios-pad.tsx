@@ -6,7 +6,7 @@ import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import ArrowRight02Icon from "@hugeicons/core-free-icons/dist/esm/ArrowRight02Icon";
 import CancelCircleIcon from "@hugeicons/core-free-icons/dist/esm/CancelCircleIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { getParticipantAvatarRecipe } from "@q9labs/chalk-core";
+import { getParticipantAvatarRecipe } from "../internal/core";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, Animated, ActivityIndicator } from "react-native";
 import { Theme } from "../ui/theme";
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";

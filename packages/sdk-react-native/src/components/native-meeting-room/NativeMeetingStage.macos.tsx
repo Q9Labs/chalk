@@ -1,4 +1,4 @@
-import type { LayoutMode } from "@q9labs/chalk-core";
+import type { LayoutMode } from "../../internal/core";
 import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
 import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";

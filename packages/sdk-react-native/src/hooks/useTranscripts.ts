@@ -1,4 +1,4 @@
-import type { Transcript } from "@q9labs/chalk-core";
+import type { Transcript } from "../internal/core";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 import { useConnection } from "./useConnection";

@@ -1,4 +1,4 @@
-import type { RecordingState } from "@q9labs/chalk-core";
+import type { RecordingState } from "../internal/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
 
