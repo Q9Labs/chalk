@@ -52,5 +52,4 @@ Use these scene prompts as a starting set:
   `<scene-name>.<sha256-prefix>.avif` and
   `<scene-name>.<sha256-prefix>.webp`.
 - Upload hashed media with one-year immutable caching.
-- Keep the package surface metadata-only; do not bundle background binaries in
-  npm packages.
+- Keep the package surface metadata-only; do not bundle background binaries in npm packages.

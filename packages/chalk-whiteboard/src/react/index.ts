@@ -1,10 +1,7 @@
 /**
  * React bindings for chalk-whiteboard
  *
- * Note: The main whiteboard UI component is now in @q9labs/chalk-react
- * as WhiteboardPanel. This package exposes collab v2 types only.
- *
- * @see @q9labs/chalk-react WhiteboardPanel
+ * This package currently exposes collab v2 types only.
  */
 
 // Re-export collab v2 types for convenience

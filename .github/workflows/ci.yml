@@ -90,4 +90,4 @@ jobs:
           pnpm --filter @q9labs/chalk-react test
           pnpm --filter @q9labs/facehash test
           pnpm --filter web test
-          pnpm --filter @chalk/cloudflare-ops-monitor test
+          pnpm --filter @chalk/uptime-worker test

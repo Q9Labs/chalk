@@ -1,4 +1,4 @@
-import { CaptureUpdateAction, getSceneVersion, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, hashElementsVersion, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
 import { WhiteboardFilesSync } from "./files.js";
 import type { WhiteboardFileSyncState } from "./files.js";
@@ -19,7 +19,7 @@ export class ExcalidrawCollabEngine {
   private canDraw = true;
 
   private localSeq = 0;
-  private lastBroadcastedOrReceivedSceneVersion = 0;
+  private lastBroadcastedOrReceivedElementsHash = 0;
   private broadcastedElementVersions = new Map<string, number>();
 
   private changeDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -139,14 +139,14 @@ export class ExcalidrawCollabEngine {
       this.opts.sendClear();
       this.sceneId = null;
       this.broadcastedElementVersions.clear();
-      this.lastBroadcastedOrReceivedSceneVersion = 0;
+      this.lastBroadcastedOrReceivedElementsHash = 0;
       this.hadAnyElements = false;
       this.opts.requestSync();
       return;
     }
 
-    const sceneVersion = getSceneVersion(elementsAll);
-    if (sceneVersion <= this.lastBroadcastedOrReceivedSceneVersion) return;
+    const elementsHash = hashElementsVersion(elementsAll);
+    if (elementsHash === this.lastBroadcastedOrReceivedElementsHash) return;
 
     const nowMs = Date.now();
     const syncableAll = filterSyncableElements(elementsAll, nowMs);
@@ -171,7 +171,7 @@ export class ExcalidrawCollabEngine {
       this.broadcastedElementVersions.set(el.id, el.version);
     }
 
-    this.lastBroadcastedOrReceivedSceneVersion = sceneVersion;
+    this.lastBroadcastedOrReceivedElementsHash = elementsHash;
     this.scheduleFullSync();
   }
 
@@ -207,7 +207,7 @@ export class ExcalidrawCollabEngine {
       this.broadcastedElementVersions.set(el.id, el.version);
     }
 
-    this.lastBroadcastedOrReceivedSceneVersion = getSceneVersion(elementsAll);
+    this.lastBroadcastedOrReceivedElementsHash = hashElementsVersion(elementsAll);
   }
 
   private applyRemoteElements(args: { sceneId: string; syncAll: boolean; remoteElements: unknown[]; appState?: AppState; isSnapshot: boolean }) {
@@ -219,7 +219,7 @@ export class ExcalidrawCollabEngine {
       if (remoteSceneId !== this.sceneId) {
         this.sceneId = remoteSceneId;
         this.broadcastedElementVersions.clear();
-        this.lastBroadcastedOrReceivedSceneVersion = 0;
+        this.lastBroadcastedOrReceivedElementsHash = 0;
         this.hadAnyElements = false;
       }
     } else if (remoteSceneId !== this.sceneId) {
@@ -227,7 +227,7 @@ export class ExcalidrawCollabEngine {
       if (args.syncAll && asArray(args.remoteElements).length === 0) {
         this.sceneId = remoteSceneId;
         this.broadcastedElementVersions.clear();
-        this.lastBroadcastedOrReceivedSceneVersion = 0;
+        this.lastBroadcastedOrReceivedElementsHash = 0;
         this.hadAnyElements = false;
       } else {
         this.opts.requestSync();
@@ -243,7 +243,7 @@ export class ExcalidrawCollabEngine {
     const reconciled = reconcileElements(local, remoteForReconcile, excalidrawAPI.getAppState());
 
     // Echo prevention: update before applying so onChange sees it and bails.
-    this.lastBroadcastedOrReceivedSceneVersion = getSceneVersion(reconciled);
+    this.lastBroadcastedOrReceivedElementsHash = hashElementsVersion(reconciled);
     this.broadcastedElementVersions.clear();
     for (const el of reconciled) {
       this.broadcastedElementVersions.set(el.id, el.version);
