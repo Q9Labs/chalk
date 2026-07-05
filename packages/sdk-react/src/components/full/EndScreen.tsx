@@ -2,7 +2,6 @@ import { memo } from "react";
 
 import { CheckmarkCircle02Icon, Clock01Icon, UserGroupIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import { EndScreenActions } from "./end-screen/EndScreenActions";
 import { EndScreenDownloadsSection } from "./end-screen/EndScreenDownloadsSection";
 import { EndScreenFeedbackSection } from "./end-screen/EndScreenFeedbackSection";
@@ -32,7 +31,6 @@ export interface EndScreenProps {
 }
 
 function EndScreenBase({ roomName, duration = 0, participantCount = 0, hasRecording = false, recordingUrl, onDownloadRecording, hasTranscription = false, onDownloadTranscription, onSubmitFeedback, showFeedback = true, onRejoin, onNewMeeting, onGoHome, className }: EndScreenProps) {
-  const prefersReducedMotion = usePrefersReducedMotion();
   const { rating, setRating, comment, setComment, feedbackSubmitted, handleFeedbackSubmit } = useEndScreenFeedback({ onSubmitFeedback });
 
   const handleDownloadRecording = () => {
@@ -45,7 +43,7 @@ function EndScreenBase({ roomName, duration = 0, participantCount = 0, hasRecord
 
   return (
     <div data-chalk className={cn("flex flex-col items-center justify-center min-h-screen bg-[var(--background)] p-4 font-sans text-[var(--foreground)]", className)}>
-      <div className={cn("w-full max-w-lg bg-[var(--card)] rounded-[var(--chalk-border-radius-lg)] border border-[var(--border)] shadow-[var(--chalk-shadow-lg)] overflow-hidden", !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-300")}>
+      <div className="w-full max-w-lg bg-[var(--card)] rounded-[var(--chalk-border-radius-lg)] border border-[var(--border)] shadow-[var(--chalk-shadow-lg)] overflow-hidden">
         <div className="p-8 text-center space-y-6">
           <div className="flex flex-col items-center gap-4">
             <div className="h-16 w-16 rounded-full bg-[var(--success)]/10 flex items-center justify-center text-[var(--success)]">
@@ -70,7 +68,7 @@ function EndScreenBase({ roomName, duration = 0, participantCount = 0, hasRecord
           </div>
         </div>
 
-        <EndScreenFeedbackSection show={showFeedback && Boolean(onSubmitFeedback)} feedbackSubmitted={feedbackSubmitted} rating={rating} comment={comment} prefersReducedMotion={prefersReducedMotion} onSetRating={setRating} onSetComment={setComment} onSubmit={handleFeedbackSubmit} />
+        <EndScreenFeedbackSection show={showFeedback && Boolean(onSubmitFeedback)} feedbackSubmitted={feedbackSubmitted} rating={rating} comment={comment} onSetRating={setRating} onSetComment={setComment} onSubmit={handleFeedbackSubmit} />
 
         <EndScreenDownloadsSection hasRecording={hasRecording} hasTranscription={hasTranscription} onDownloadRecording={handleDownloadRecording} onDownloadTranscription={onDownloadTranscription} />
 

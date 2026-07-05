@@ -1,6 +1,6 @@
 import React from "react";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 interface WaveformProps {
   levels: number[];

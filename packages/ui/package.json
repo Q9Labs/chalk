@@ -12,6 +12,9 @@
     "dist"
   ],
   "type": "module",
+  "sideEffects": [
+    "./dist/styles.css"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -45,7 +48,7 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:assets",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:assets",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
     "build:assets": "mkdir -p ./dist/assets && cp -R ./src/assets/backgrounds ./src/assets/logos ./src/assets/sounds ./dist/assets/",

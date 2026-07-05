@@ -9,8 +9,8 @@ import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, Arrow
 import { cn } from "../../utils/cn";
 import { ControlButton } from "../atomic";
 import { Tooltip } from "../atomic/Tooltip";
-import type { ChalkHapticInput } from "../../hooks/ui/useHaptics";
-import { useHaptics } from "../../hooks/ui/useHaptics";
+import type { ChalkHapticInput } from "../../internal/useHaptics";
+import { useHaptics } from "../../internal/useHaptics";
 
 export interface DeviceControlButtonProps {
   type: "mic" | "video";

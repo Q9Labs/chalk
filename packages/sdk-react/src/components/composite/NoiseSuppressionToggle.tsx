@@ -1,7 +1,7 @@
 import React from "react";
 import { Toggle, Select } from "../atomic";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface NoiseSuppressionToggleProps {
   enabled: boolean;

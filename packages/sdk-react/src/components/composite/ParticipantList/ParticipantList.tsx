@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../../utils/icons";
 import { Badge, IconButton, Input } from "../../atomic";
 import { Button } from "../../ui";
-import { usePrefersReducedMotion } from "../../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../../internal/useMediaQuery";
 import { cn } from "../../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { ParticipantRow } from "./ParticipantRow";

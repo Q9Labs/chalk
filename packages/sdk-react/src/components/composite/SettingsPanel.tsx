@@ -5,7 +5,7 @@ import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 import { VolumeSlider } from "../atomic";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 
 export interface SettingsPanelProps {

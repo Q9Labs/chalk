@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { Cancel01Icon, Copy01Icon, UserGroupIcon, Tick01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface InviteToastProps {
   isVisible: boolean;

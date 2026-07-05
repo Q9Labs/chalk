@@ -119,6 +119,27 @@ The product surfaces may feel different on web, phone, tablet, and desktop, but
 they should agree on the meaning of a room, a person, a permission, a recording,
 a message, and a failure.
 
+React, React Native, web, and demo surfaces should not invent meeting behavior
+just to make a screen appear connected. If the shared behavior does not exist
+yet, the surface should stay presentational and receive real data from its
+caller. It should not keep fake hooks, fake managers, fake sessions, fake
+diagnostics, or placeholder meeting flows that look like a future core.
+
+The UI packages should own reusable visual pieces, shared styles, shared
+assets, and small presentation constants such as reaction choices. They should
+not own room truth, joining, permissions, transport, diagnostics, recording,
+chat delivery, transcript state, or meeting recovery.
+
+Every public import should be intentional. Importing a small visual layer should
+not quietly bring in a full meeting experience. Importing an Android surface
+should not bring in iOS surfaces. Importing a React visual package should not
+bring in React Native visuals. The package surface should make those choices
+plain so applications only carry what they actually use.
+
+There should be no placeholder logic kept as a reminder of what core might do
+later. The reminder belongs here, in this spec. The code should either be real
+owned behavior in the right package or no behavior at all.
+
 ## Done Means
 
 The next version of Chalk Core is ready when a person can:

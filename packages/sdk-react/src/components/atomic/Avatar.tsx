@@ -1,9 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Facehash } from "facehash";
+import { Facehash } from "@q9labs/facehash/react";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
-import { useMeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
-import { useMeetingRoomTheme } from "../full/meeting-room/useMeetingRoomTheme";
+
+type FacehashComponentProps = {
+  name: string;
+  size?: number | string;
+  variant?: "gradient" | "flat";
+  intensity3d?: "subtle" | "medium" | "dramatic";
+  interactive?: boolean;
+  colors?: readonly string[];
+  enableBlink?: boolean;
+};
+
+const GeneratedFacehash = Facehash as React.ComponentType<FacehashComponentProps>;
 
 export interface AvatarProps {
   name: string;
@@ -13,6 +23,7 @@ export interface AvatarProps {
   className?: string;
   style?: React.CSSProperties;
   gradientPreference?: ParticipantGradientPreference;
+  generated?: boolean;
 }
 
 const sizeMap = {
@@ -31,20 +42,17 @@ const statusColorMap = {
   offline: "var(--muted-foreground)",
 };
 
-export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference }: AvatarProps) => {
+export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference, generated = true }: AvatarProps) => {
   const [imageError, setImageError] = useState(false);
-  const { settings } = useMeetingRoomSettings();
-  const { isDarkMode } = useMeetingRoomTheme({ theme: settings.appearance.theme });
-  const isDarkerGradient = settings.appearance.gradient === "darker" && isDarkMode;
   const hasUploadedImage = Boolean(src) && !imageError;
-  const shouldShowGeneratedAvatar = settings.appearance.generatedAvatars && Boolean(name) && !hasUploadedImage;
+  const shouldShowGeneratedAvatar = generated && Boolean(name) && !hasUploadedImage;
 
   useEffect(() => {
     setImageError(false);
-  }, [src, name, settings.appearance.generatedAvatars]);
+  }, [src, name, generated]);
 
   const avatarRecipe = useMemo(() => getParticipantAvatarRecipe(name || "unknown", gradientPreference), [gradientPreference, name]);
-  const gradient = useMemo(() => (isDarkerGradient ? avatarRecipe.darkerAvatarGradient : avatarRecipe.avatarGradient), [avatarRecipe, isDarkerGradient]);
+  const gradient = avatarRecipe.avatarGradient;
   const { size: pxSize, fontSize } = sizeMap[size];
 
   return (
@@ -53,7 +61,7 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
         <img src={src || ""} alt={name} className="h-full w-full rounded-full object-cover" onError={() => setImageError(true)} />
       ) : shouldShowGeneratedAvatar ? (
         <div aria-hidden="true" className="h-full w-full overflow-hidden rounded-full">
-          <Facehash name={name || "guest"} size={pxSize} variant="gradient" interactive intensity3d="dramatic" enableBlink colors={[...avatarRecipe.facehashColors]} />
+          <GeneratedFacehash name={name || "guest"} size={pxSize} variant="gradient" interactive intensity3d="dramatic" enableBlink colors={[...avatarRecipe.facehashColors]} />
         </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center rounded-full text-white font-medium" style={{ fontSize, background: gradient }}>

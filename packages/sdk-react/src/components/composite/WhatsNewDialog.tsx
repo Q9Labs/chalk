@@ -2,10 +2,18 @@ import React, { useEffect, useRef } from "react";
 import Markdown from "react-markdown";
 import { cn } from "../../utils/cn";
 import { Clock01Icon, SparklesIcon, TickDouble01Icon } from "../../utils/icons";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
-import type { WhatsNewData } from "../../hooks/ui/useWhatsNew";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { ReleaseBadge } from "../atomic/ReleaseBadge";
+
+export interface WhatsNewData {
+  version: string;
+  title: string;
+  content: string;
+  published_at: string;
+  release_type?: "major" | "minor" | "patch";
+  image_url?: string;
+}
 
 export interface WhatsNewDialogProps {
   /** Whether the dialog is open */
@@ -131,7 +139,7 @@ export const WhatsNewDialog = React.memo<WhatsNewDialogProps>(({ isOpen, onClose
                   v{data.version}
                   {data.title && ` - ${data.title}`}
                 </h2>
-                <ReleaseBadge type={data.release_type} />
+                <ReleaseBadge type={data.release_type ?? "minor"} />
               </div>
               <p className="text-sm text-muted-foreground mt-1">{formattedDate}</p>
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, memo } from "react";
 import { TourOverlay } from "../composite/TourOverlay";
-import type { TourStep } from "../../hooks/useTour";
+import type { TourStep } from "../composite/TourOverlay";
 
 export interface GuidedTourProps {
   isOpen: boolean;

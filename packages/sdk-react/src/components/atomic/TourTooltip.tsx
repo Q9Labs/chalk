@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { ArrowRight01Icon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface TourTooltipProps {
   title: string;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface TourHighlightProps {
   targetSelector: string;

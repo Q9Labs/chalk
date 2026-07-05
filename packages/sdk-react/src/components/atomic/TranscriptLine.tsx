@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { Alert02Icon } from "../../utils/icons";
 
 export interface TranscriptLineProps {

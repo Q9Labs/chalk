@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface ToastProps {
   message: string;

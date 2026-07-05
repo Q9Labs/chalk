@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { ArrowLeft02Icon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 
 export interface MobilePanelProps {

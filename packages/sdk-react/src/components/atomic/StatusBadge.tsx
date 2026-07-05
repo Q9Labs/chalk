@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "../../utils/cn";
 import { CircleIcon, Radio01Icon, TextIcon, Alert02Icon } from "../../utils/icons";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface StatusBadgeProps {
   status: "recording" | "live" | "transcribing" | "connecting" | "reconnecting";

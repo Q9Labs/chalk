@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor } from "../../utils/colorGenerator";
 import { CELEBRATION_EMOJIS } from "@q9labs/chalk-ui/reactions";
 

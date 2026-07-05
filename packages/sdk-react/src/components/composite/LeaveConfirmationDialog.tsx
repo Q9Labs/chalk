@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { CallEnd01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 
 export interface LeaveConfirmationDialogProps {

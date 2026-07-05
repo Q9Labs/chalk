@@ -3,7 +3,7 @@ import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from
 import { cn } from "../../utils/cn";
 import { Input } from "../atomic/Input";
 import { IconButton } from "../atomic/IconButton";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface InviteModalProps {
   isOpen: boolean;

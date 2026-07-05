@@ -1,8 +1,6 @@
 // Overlays & Feedback
 export * from "./NotificationStack";
 export * from "./ConnectionLostOverlay";
-export * from "./DebugDialog";
-export * from "./DiagnosticErrorSheet";
 
 // Headers & Info
 export * from "./MeetingHeader";

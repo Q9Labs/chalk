@@ -1,7 +1,7 @@
 import React from "react";
 import { Loading01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface SpinnerProps {
   size?: "sm" | "md" | "lg" | "xl";

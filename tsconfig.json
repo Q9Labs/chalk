@@ -33,11 +33,26 @@
     // Path aliases for monorepo
     "paths": {
       "@q9labs/facehash": ["./packages/facehash/src/index.ts"],
+      "@q9labs/facehash/react": ["./packages/facehash/src/react.ts"],
       "@q9labs/facehash/react-native": ["./packages/facehash/src/index.native.ts"],
-      "@q9labs/chalk-core": ["./packages/sdk-core/src/index.ts"],
       "@q9labs/chalk-react": ["./packages/sdk-react/src/index.ts"],
+      "@q9labs/chalk-react/atomic": ["./packages/sdk-react/src/components/atomic/index.ts"],
+      "@q9labs/chalk-react/composite": ["./packages/sdk-react/src/components/composite/index.ts"],
+      "@q9labs/chalk-react/full": ["./packages/sdk-react/src/components/full/index.ts"],
+      "@q9labs/chalk-react/ui": ["./packages/sdk-react/src/components/ui/index.ts"],
+      "@q9labs/chalk-react/utils": ["./packages/sdk-react/src/utils/index.ts"],
       "@q9labs/chalk-react-native": ["./packages/sdk-react-native/src/index.ts"],
-      "@q9labs/chalk-ui": ["./packages/ui/src/index.ts"]
+      "@q9labs/chalk-react-native/android": ["./packages/sdk-react-native/src/android.ts"],
+      "@q9labs/chalk-react-native/ios": ["./packages/sdk-react-native/src/ios.ts"],
+      "@q9labs/chalk-react-native/ios-phone": ["./packages/sdk-react-native/src/ios-phone.ts"],
+      "@q9labs/chalk-react-native/ios-pad": ["./packages/sdk-react-native/src/ios-pad.ts"],
+      "@q9labs/chalk-react-native/macos": ["./packages/sdk-react-native/src/macos.ts"],
+      "@q9labs/chalk-react-native/theme": ["./packages/sdk-react-native/src/ui/theme.ts"],
+      "@q9labs/chalk-ui": ["./packages/ui/src/index.ts"],
+      "@q9labs/chalk-ui/assets": ["./packages/ui/src/assets/index.ts"],
+      "@q9labs/chalk-ui/button": ["./packages/ui/src/button.tsx"],
+      "@q9labs/chalk-ui/reactions": ["./packages/ui/src/reactions.ts"],
+      "@q9labs/chalk-ui/utils": ["./packages/ui/src/lib/utils.ts"]
     }
   },
   "exclude": ["node_modules", "dist", "**/dist/**"]

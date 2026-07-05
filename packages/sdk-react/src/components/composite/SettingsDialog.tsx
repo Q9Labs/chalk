@@ -1,8 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { MeetingRoomSettings } from "../../hooks/useMeetingRoomSettings";
-import { usePrefersReducedMotion, useMediaQuery } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
 import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
@@ -14,6 +13,51 @@ import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 
 type SectionId = "audio" | "video" | "appearance" | "experience";
 type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;
+
+export interface SettingsDialogValue {
+  identity: {
+    displayName: string;
+  };
+  join: {
+    videoEnabled: boolean;
+    audioEnabled: boolean;
+  };
+  audio: {
+    selectedInput?: string;
+    selectedOutput?: string;
+    outputVolume: number;
+    noiseSuppression: boolean;
+    echoCancellation: boolean;
+    autoGainControl: boolean;
+  };
+  video: {
+    selectedInput?: string;
+    quality: string;
+  };
+  appearance: {
+    layout: string;
+    theme: "light" | "dark" | "system";
+    gradient: "default" | "darker";
+    showFilmstrip: boolean;
+    reducedMotion: boolean;
+    generatedAvatars: boolean;
+    profileGradient: {
+      mode: "auto" | "custom";
+      from?: string;
+      to?: string;
+    };
+    ambientBackground: boolean;
+  };
+  experience: {
+    captions: boolean;
+    compactMode: boolean;
+    showInviteToast: boolean;
+    defaultOpenChat: boolean;
+    defaultOpenParticipants: boolean;
+    defaultOpenTranscription: boolean;
+    autoOpenPictureInPicture: boolean;
+  };
+}
 
 const EMPTY_DEVICE_GROUPS = {
   audioinput: [] as SelectableDevice[],
@@ -39,13 +83,13 @@ function mergeDevices(...deviceGroups: ReadonlyArray<readonly SelectableDevice[]
 interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  settings: MeetingRoomSettings;
-  onUpdateIdentity: (updates: Partial<MeetingRoomSettings["identity"]>) => void;
-  onUpdateJoin: (updates: Partial<MeetingRoomSettings["join"]>) => void;
-  onUpdateAudio: (updates: Partial<MeetingRoomSettings["audio"]>) => void;
-  onUpdateVideo: (updates: Partial<MeetingRoomSettings["video"]>) => void;
-  onUpdateAppearance: (updates: Partial<MeetingRoomSettings["appearance"]>) => void;
-  onUpdateExperience: (updates: Partial<MeetingRoomSettings["experience"]>) => void;
+  settings: SettingsDialogValue;
+  onUpdateIdentity: (updates: Partial<SettingsDialogValue["identity"]>) => void;
+  onUpdateJoin: (updates: Partial<SettingsDialogValue["join"]>) => void;
+  onUpdateAudio: (updates: Partial<SettingsDialogValue["audio"]>) => void;
+  onUpdateVideo: (updates: Partial<SettingsDialogValue["video"]>) => void;
+  onUpdateAppearance: (updates: Partial<SettingsDialogValue["appearance"]>) => void;
+  onUpdateExperience: (updates: Partial<SettingsDialogValue["experience"]>) => void;
   enablePictureInPicture?: boolean;
   isPictureInPictureSupported?: boolean;
   isPictureInPictureActive?: boolean;

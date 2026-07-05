@@ -11,6 +11,7 @@
     "dist"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -45,7 +46,7 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
     "test": "pnpm exec vitest run",

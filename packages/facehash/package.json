@@ -11,11 +11,15 @@
     "dist"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "typesVersions": {
     "*": {
+      "react": [
+        "./dist/react.d.ts"
+      ],
       "react-native": [
         "./dist/index.native.d.ts"
       ],
@@ -27,10 +31,14 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "react-native": "./dist/index.native.js",
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js",
+      "default": "./dist/react.js"
     },
     "./react-native": {
       "types": "./dist/index.native.d.ts",
@@ -43,9 +51,9 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "tsup ./src/index.ts ./src/index.native.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external react-native --external react-native-svg && pnpm run build:types",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/react.ts ./src/index.native.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external react-native --external react-native-svg && pnpm run build:types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
-    "dev": "tsup ./src/index.ts ./src/index.native.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external react-native --external react-native-svg --watch",
+    "dev": "tsup ./src/index.ts ./src/react.ts ./src/index.native.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external react-native --external react-native-svg --watch",
     "prepack": "pnpm run build",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",

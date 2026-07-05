@@ -1,7 +1,7 @@
 import React from "react";
 import { HandIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 interface HandRaiseIndicatorProps {
   raised: boolean;

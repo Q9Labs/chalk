@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { cn } from "../../utils/cn";
 import { CircleIcon, FileTextIcon, HandIcon, InformationCircleIcon, Message01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, Edit02Icon, CallEnd01Icon, Settings01Icon, SmileIcon, UserGroupIcon, Video01Icon, VideoOffIcon, PictureInPictureIcon } from "../../utils/icons";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 

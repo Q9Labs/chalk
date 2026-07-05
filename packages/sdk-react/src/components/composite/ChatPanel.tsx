@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import { Message01Icon, SentIcon, PlusSignIcon, CancelCircleIcon, FileTextIcon } from "../../utils/icons";
 import { MessageBubble } from "./MessageBubble";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { Button } from "../ui";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt } from "./chat-types";

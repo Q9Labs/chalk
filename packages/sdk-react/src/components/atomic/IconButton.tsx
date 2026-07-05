@@ -1,6 +1,6 @@
 import React from "react";
-import type { ChalkHapticInput } from "../../hooks/ui/useHaptics";
-import { useHaptics } from "../../hooks/ui/useHaptics";
+import type { ChalkHapticInput } from "../../internal/useHaptics";
+import { useHaptics } from "../../internal/useHaptics";
 import { cn } from "../../utils/cn";
 
 interface IconButtonProps {

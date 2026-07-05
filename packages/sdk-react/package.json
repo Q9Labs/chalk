@@ -11,6 +11,7 @@
     "dist"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,16 +21,36 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./atomic": {
+      "types": "./dist/components/atomic/index.d.ts",
+      "import": "./dist/components/atomic/index.js"
+    },
+    "./composite": {
+      "types": "./dist/components/composite/index.d.ts",
+      "import": "./dist/components/composite/index.js"
+    },
+    "./full": {
+      "types": "./dist/components/full/index.d.ts",
+      "import": "./dist/components/full/index.js"
+    },
+    "./ui": {
+      "types": "./dist/components/ui/index.d.ts",
+      "import": "./dist/components/ui/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.js"
     }
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "NODE_ENV=production tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labs/chalk-ui --external @q9labs/chalk-ui/reactions --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw --external @tanstack/react-hotkeys --external class-variance-authority --external clsx --external facehash --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge --external web-haptics && pnpm run build:fix-use-client && pnpm run build:types",
-    "build:fix-use-client": "node -e \"const fs=require('fs');const f='./dist/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);\"",
-    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
-    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labs/chalk-ui --external @q9labs/chalk-ui/reactions --external @q9labs/chalk-whiteboard --external @excalidraw/excalidraw --external @tanstack/react-hotkeys --external class-variance-authority --external clsx --external facehash --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge --external web-haptics --watch",
+    "build": "rm -rf ./dist && NODE_ENV=production tsup ./src/index.ts ./src/components/atomic/index.ts ./src/components/composite/index.ts ./src/components/full/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labs/chalk-ui --external @q9labs/chalk-ui/reactions --external @q9labs/facehash --external @q9labs/facehash/react --external class-variance-authority --external clsx --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge && pnpm run build:fix-use-client && pnpm run build:types",
+    "build:fix-use-client": "node -e \"const fs=require('fs');const files=['./dist/index.js','./dist/components/atomic/index.js','./dist/components/composite/index.js','./dist/components/full/index.js','./dist/components/ui/index.js','./dist/utils/index.js'];for(const f of files){if(!fs.existsSync(f))continue;let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);}\"",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
+    "dev": "tsup ./src/index.ts ./src/components/atomic/index.ts ./src/components/composite/index.ts ./src/components/full/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labs/chalk-ui --external @q9labs/chalk-ui/reactions --external @q9labs/facehash --external @q9labs/facehash/react --external class-variance-authority --external clsx --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge --watch",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
@@ -40,18 +61,15 @@
     "@hugeicons/core-free-icons": "^3.1.0",
     "@hugeicons/react": "^1.0.16",
     "@q9labs/chalk-ui": "workspace:^",
-    "@tanstack/react-hotkeys": "0.10.0",
+    "@q9labs/facehash": "workspace:^",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "facehash": "^0.1.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.6.2",
     "sonner": "^2.0.3",
-    "tailwind-merge": "^3.6.0",
-    "web-haptics": "^0.0.6"
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@excalidraw/excalidraw": "^0.18.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
@@ -70,18 +88,9 @@
     "vitest": "^4.1.8"
   },
   "peerDependencies": {
-    "@excalidraw/excalidraw": "^0.17.0 || ^0.18.0",
-    "@q9labs/chalk-whiteboard": "workspace:^",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "typescript": "^5"
   },
-  "peerDependenciesMeta": {
-    "@q9labs/chalk-whiteboard": {
-      "optional": true
-    },
-    "@excalidraw/excalidraw": {
-      "optional": true
-    }
-  }
+  "peerDependenciesMeta": {}
 }

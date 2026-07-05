@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { VolumeHighIcon } from "../../utils/icons";
 import { Select, AudioIndicator, Thumbnail, IconButton } from "../atomic";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;

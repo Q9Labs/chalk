@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect, useState, useCallback } from "react"
 import { Cancel01Icon, Search01Icon, ArrowDown01Icon, ArrowUp01Icon, Download01Icon, Copy01Icon, FileTextIcon } from "../../utils/icons";
 import { TranscriptLine, IconButton, Input } from "../atomic";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface TranscriptEntry {
