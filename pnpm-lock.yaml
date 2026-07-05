@@ -45,12 +45,6 @@ importers:
       '@excalidraw/excalidraw':
         specifier: ^0.18.1
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@opentui/core':
-        specifier: ^0.2.8
-        version: 0.2.8(typescript@6.0.3)(web-tree-sitter@0.25.10)
-      '@opentui/react':
-        specifier: ^0.2.8
-        version: 0.2.8(react-devtools-core@6.1.5)(react@19.2.4)(typescript@6.0.3)(web-tree-sitter@0.25.10)(ws@8.21.0)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -215,18 +209,9 @@ importers:
       '@hugeicons/react':
         specifier: ^1.1.4
         version: 1.1.6(react@19.2.4)
-      '@q9labs/chalk-core':
-        specifier: workspace:*
-        version: link:../../packages/sdk-core
-      '@q9labs/chalk-react':
-        specifier: workspace:*
-        version: link:../../packages/sdk-react
       '@q9labs/chalk-ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@q9labs/chalk-whiteboard':
-        specifier: workspace:*
-        version: link:../../packages/chalk-whiteboard
       '@tailwindcss/vite':
         specifier: ^4.3.1
         version: 4.3.1(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
@@ -291,12 +276,6 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20260620.1
         version: 4.20260620.1
-      '@stryker-mutator/core':
-        specifier: ^9.6.0
-        version: 9.6.0(@types/node@22.19.15)
-      '@stryker-mutator/vitest-runner':
-        specifier: ^9.6.0
-        version: 9.6.0(@stryker-mutator/core@9.6.0(@types/node@22.19.15))(vitest@4.1.8)
       '@testing-library/dom':
         specifier: ^10.4.0
         version: 10.4.1
@@ -420,21 +399,15 @@ importers:
       '@base-ui/react':
         specifier: ^1.0.0-alpha.11
         version: 1.3.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@cloudflare/realtimekit':
-        specifier: ^1.2.4
-        version: 1.2.5
-      '@cloudflare/realtimekit-react':
-        specifier: ^1.2.4
-        version: 1.2.5(react@19.2.4)
       '@hugeicons/core-free-icons':
         specifier: ^3.1.0
         version: 3.3.0
       '@hugeicons/react':
         specifier: ^1.0.16
         version: 1.1.6(react@19.2.4)
-      '@q9labs/chalk-core':
+      '@q9labs/chalk-ui':
         specifier: workspace:^
-        version: link:../sdk-core
+        version: link:../ui
       '@q9labs/chalk-whiteboard':
         specifier: workspace:^
         version: link:../chalk-whiteboard
@@ -547,9 +520,6 @@ importers:
       '@hugeicons/react-native':
         specifier: ^1.0.13
         version: 1.0.13(react-native-svg@15.15.4(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4))(react-native@0.83.2(@babel/core@7.29.7)(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)
-      '@q9labs/chalk-core':
-        specifier: workspace:^
-        version: link:../sdk-core
       '@q9labs/facehash':
         specifier: workspace:^
         version: link:../facehash
@@ -578,18 +548,12 @@ importers:
       '@base-ui/react':
         specifier: ^1.0.0
         version: 1.3.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@q9labs/chalk-core':
-        specifier: workspace:^
-        version: link:../sdk-core
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      lucide-react:
-        specifier: ^0.468.0
-        version: 0.468.0(react@19.2.4)
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -2643,48 +2607,6 @@ packages:
     resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
     engines: {node: '>=8.0.0'}
 
-  '@opentui/core-darwin-arm64@0.2.8':
-    resolution: {integrity: sha512-Qh6VCMQgW3hWh/7MR51y+XuQezh8NOLwKS8EQSoKzAr4VOc/W5P0/DvgMKgwaqXw2Mz0AIba/BvZ6by20yc4zA==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@opentui/core-darwin-x64@0.2.8':
-    resolution: {integrity: sha512-wQjJ38C3IiVx/gwwBYxnCarzgD75FdS7IyUErt3lhn57XriNiCbb7ScphWnRMwwtL8CI+bBGzClroDRA2lCfvg==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@opentui/core-linux-arm64@0.2.8':
-    resolution: {integrity: sha512-fx4ADeWSSSVU1O/MkMnklCRxtWRy6CLeAvktLlNdPb+BhmQIDg1kpZcdv7m/3cgD1/ksFEXIwO6VTvfKYE0umw==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@opentui/core-linux-x64@0.2.8':
-    resolution: {integrity: sha512-4ekUyzopBj2ClsUbneLnUOrmZtvU67FCVFLgmBfKL4IvVl/P0YobGNg71gN1JNiYpY7hK77qOpidVLHcNMIE7w==}
-    cpu: [x64]
-    os: [linux]
-
-  '@opentui/core-win32-arm64@0.2.8':
-    resolution: {integrity: sha512-63K046wpzTzQOLOG9LTsp3+Ld0TNTxeQczexkg0pKSBxZFhws+/9YIGjTctZmJUfE1g1X4tI31dO+KNRpXRHQw==}
-    cpu: [arm64]
-    os: [win32]
-
-  '@opentui/core-win32-x64@0.2.8':
-    resolution: {integrity: sha512-+WDiTlTyDpgkis8rPAhW1fS7TwXJih+fk+RYXS2bC3tAKsRD+O3PRSkVABRbjkuXbtfJZf2cjOHZFGN4Vf5qDg==}
-    cpu: [x64]
-    os: [win32]
-
-  '@opentui/core@0.2.8':
-    resolution: {integrity: sha512-bRRiCXuwjS8/6mN1oA5iVaf55z9APyalm7FnoxkLkEyIU1VDaQeTpYtElBbfo1rxtcO6Rj53XywH9oW8auNO9A==}
-    peerDependencies:
-      web-tree-sitter: 0.25.10
-
-  '@opentui/react@0.2.8':
-    resolution: {integrity: sha512-jyyZkVM+2reqVwtRkB6fQ2Lsrmfvl0wm1IwgxdDJEsZVGmWSFoG6Yt7RB6sOQskJCtc+AnpaUERewRnSUBoJwQ==}
-    peerDependencies:
-      react: 19.2.4
-      react-devtools-core: ^7.0.1
-      ws: ^8.21.0
-
   '@oxc-project/types@0.137.0':
     resolution: {integrity: sha512-WT+Gb24i8hmvo85AIv2oEYouEXkRlKAlT9WaCa3TfLgNCN+GhrJOGZuIlMouAh38Qe4QOx26eUOVsq70qXrywA==}
 
@@ -3521,29 +3443,6 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
-
-  '@stryker-mutator/api@9.6.0':
-    resolution: {integrity: sha512-kJEEwOVoWDXGEIXuM+9efT6LSJ7nyxnQQvjEoKg8GSZXbDUjfD0tqA0aBD06U1SzQLKCM7ffjgPffr154MHZKw==}
-    engines: {node: '>=20.0.0'}
-
-  '@stryker-mutator/core@9.6.0':
-    resolution: {integrity: sha512-oSbw01l6HXHt0iW9x5fQj7yHGGT8ZjCkXSkI7Bsu0juO7Q6vRMXk7XcvKpCBgRgzKXi1osg8+iIzj7acHuxepQ==}
-    engines: {node: '>=20.0.0'}
-    hasBin: true
-
-  '@stryker-mutator/instrumenter@9.6.0':
-    resolution: {integrity: sha512-tWdRYfm9LF4Go7cNOos0xEIOEnN7ZOSj38rfXvGZS9IINlvYBrBCl2xcz/67v6l5A7xksMWWByZRIq2bgdnnUg==}
-    engines: {node: '>=20.0.0'}
-
-  '@stryker-mutator/util@9.6.0':
-    resolution: {integrity: sha512-gw7fJOFNHEj9inAEOodD9RrrMEMhZmWJ46Ww/kDJAXlSsBBmdwCzeomNLngmLTvgp14z7Tfq85DHYwvmNMdOxA==}
-
-  '@stryker-mutator/vitest-runner@9.6.0':
-    resolution: {integrity: sha512-/zyELz5jTDAiH0Hr23G6KSnBFl9XV+vn0T0qUAk4sPqJoP5NVm9jjpgt9EBACS/VTkVqSvXqBid4jmESPx11Sg==}
-    engines: {node: '>=14.18.0'}
-    peerDependencies:
-      '@stryker-mutator/core': 9.6.0
-      vitest: '>=2.0.0'
 
   '@tailwindcss/cli@4.2.2':
     resolution: {integrity: sha512-iJS+8kAFZ8HPqnh0O5DHCLjo4L6dD97DBQEkrhfSO4V96xeefUus2jqsBs1dUMt3OU9Ks4qIkiY0mpL5UW+4LQ==}
@@ -4688,11 +4587,6 @@ packages:
 
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
-
-  bun-ffi-structs@0.2.2:
-    resolution: {integrity: sha512-N/ZWtyN0piZlrXQT7TO0V+q952orYqkfhXRXM1Hcbb+R3QSiBH4vLnib187Mrs1H7pWIYECAmPeapGYDOMCl+w==}
-    peerDependencies:
-      typescript: ^5
 
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
@@ -11449,54 +11343,6 @@ snapshots:
   '@opentelemetry/api@1.9.1':
     optional: true
 
-  '@opentui/core-darwin-arm64@0.2.8':
-    optional: true
-
-  '@opentui/core-darwin-x64@0.2.8':
-    optional: true
-
-  '@opentui/core-linux-arm64@0.2.8':
-    optional: true
-
-  '@opentui/core-linux-x64@0.2.8':
-    optional: true
-
-  '@opentui/core-win32-arm64@0.2.8':
-    optional: true
-
-  '@opentui/core-win32-x64@0.2.8':
-    optional: true
-
-  '@opentui/core@0.2.8(typescript@6.0.3)(web-tree-sitter@0.25.10)':
-    dependencies:
-      bun-ffi-structs: 0.2.2(typescript@6.0.3)
-      diff: 9.0.0
-      marked: 17.0.1
-      string-width: 7.2.0
-      strip-ansi: 7.1.2
-      web-tree-sitter: 0.25.10
-      yoga-layout: 3.2.1
-    optionalDependencies:
-      '@opentui/core-darwin-arm64': 0.2.8
-      '@opentui/core-darwin-x64': 0.2.8
-      '@opentui/core-linux-arm64': 0.2.8
-      '@opentui/core-linux-x64': 0.2.8
-      '@opentui/core-win32-arm64': 0.2.8
-      '@opentui/core-win32-x64': 0.2.8
-    transitivePeerDependencies:
-      - typescript
-
-  '@opentui/react@0.2.8(react-devtools-core@6.1.5)(react@19.2.4)(typescript@6.0.3)(web-tree-sitter@0.25.10)(ws@8.21.0)':
-    dependencies:
-      '@opentui/core': 0.2.8(typescript@6.0.3)(web-tree-sitter@0.25.10)
-      react: 19.2.4
-      react-devtools-core: 6.1.5
-      react-reconciler: 0.33.0(react@19.2.4)
-      ws: 8.21.0
-    transitivePeerDependencies:
-      - typescript
-      - web-tree-sitter
-
   '@oxc-project/types@0.137.0': {}
 
   '@oxfmt/binding-android-arm-eabi@0.36.0':
@@ -12226,72 +12072,6 @@ snapshots:
   '@speed-highlight/core@1.2.17': {}
 
   '@standard-schema/spec@1.1.0': {}
-
-  '@stryker-mutator/api@9.6.0':
-    dependencies:
-      mutation-testing-metrics: 3.7.2
-      mutation-testing-report-schema: 3.7.2
-      tslib: 2.8.1
-      typed-inject: 5.0.0
-
-  '@stryker-mutator/core@9.6.0(@types/node@22.19.15)':
-    dependencies:
-      '@inquirer/prompts': 8.3.2(@types/node@22.19.15)
-      '@stryker-mutator/api': 9.6.0
-      '@stryker-mutator/instrumenter': 9.6.0
-      '@stryker-mutator/util': 9.6.0
-      ajv: 8.18.0
-      chalk: 5.6.2
-      commander: 14.0.3
-      diff-match-patch: 1.0.5
-      emoji-regex: 10.6.0
-      execa: 9.6.1
-      json-rpc-2.0: 1.7.1
-      lodash.groupby: 4.6.0
-      minimatch: 10.2.4
-      mutation-server-protocol: 0.4.1
-      mutation-testing-elements: 3.7.2
-      mutation-testing-metrics: 3.7.2
-      mutation-testing-report-schema: 3.7.2
-      npm-run-path: 6.0.0
-      progress: 2.0.3
-      rxjs: 7.8.2
-      semver: 7.7.4
-      source-map: 0.7.6
-      tree-kill: 1.2.2
-      tslib: 2.8.1
-      typed-inject: 5.0.0
-      typed-rest-client: 2.2.0
-    transitivePeerDependencies:
-      - '@types/node'
-      - supports-color
-
-  '@stryker-mutator/instrumenter@9.6.0':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/generator': 7.29.1
-      '@babel/parser': 7.29.2
-      '@babel/plugin-proposal-decorators': 7.29.0(@babel/core@7.29.7)
-      '@babel/plugin-transform-explicit-resource-management': 7.28.6(@babel/core@7.29.7)
-      '@babel/preset-typescript': 7.28.5(@babel/core@7.29.7)
-      '@stryker-mutator/api': 9.6.0
-      '@stryker-mutator/util': 9.6.0
-      angular-html-parser: 10.4.0
-      semver: 7.7.4
-      tslib: 2.8.1
-      weapon-regex: 1.3.6
-    transitivePeerDependencies:
-      - supports-color
-
-  '@stryker-mutator/util@9.6.0': {}
-
-  '@stryker-mutator/vitest-runner@9.6.0(@stryker-mutator/core@9.6.0(@types/node@22.19.15))(vitest@4.1.8)':
-    dependencies:
-      '@stryker-mutator/api': 9.6.0
-      '@stryker-mutator/core': 9.6.0(@types/node@22.19.15)
-      '@stryker-mutator/util': 9.6.0
-      tslib: 2.8.1
-      vitest: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/browser-playwright@4.1.8)(@vitest/coverage-v8@4.1.8)(happy-dom@20.8.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(msw@2.12.14(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
 
   '@tailwindcss/cli@4.2.2':
     dependencies:
@@ -13638,10 +13418,6 @@ snapshots:
     dependencies:
       base64-js: 1.5.1
       ieee754: 1.2.1
-
-  bun-ffi-structs@0.2.2(typescript@6.0.3):
-    dependencies:
-      typescript: 6.0.3
 
   bundle-name@4.1.0:
     dependencies:

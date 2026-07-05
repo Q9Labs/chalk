@@ -5,10 +5,10 @@ Demo app for Chalk video conferencing SDK. Built with Vite, React 19, TanStack R
 ## Getting Started
 
 ```bash
-bun install
-bun run dev     # Start dev server
-bun run build   # Build for production
-bun run test    # Run tests
+pnpm install
+pnpm run dev     # Start dev server
+pnpm run build   # Build for production
+pnpm run test    # Run tests
 ```
 
 ## Environment

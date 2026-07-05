@@ -17,7 +17,6 @@
     "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
     "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
     "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL or run pnpm run mobile:connect.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",
-    "incident:tui": "bun scripts/ops-tui.tsx",
     "mobile:sync-local-env": "pnpm exec tsx scripts/sync-local-mobile-env.ts",
     "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run start'",
     "dev:mobile:android": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run android'",
@@ -49,8 +48,6 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
-    "@opentui/core": "^0.2.8",
-    "@opentui/react": "^0.2.8",
     "clsx": "^2.1.1",
     "react": "19.2.4",
     "tailwind-merge": "^3.6.0"

@@ -30,7 +30,6 @@ scratchpad/upload-logs/
 # Caches
 .eslintcache
 .cache
-.bun-cache
 .gocache
 .tmp
 .stryker-tmp
