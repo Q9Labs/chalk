@@ -1,5 +1,4 @@
 /vendor/excalidraw.css https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.0/dist/prod/index.css 302
-/sounds/* /audio/ui/:splat 301
 /hero-1.png /images/marketing/hero-1.png 301
 /hero-2.png /images/marketing/hero-2.png 301
 /devices-with-video.png /images/marketing/devices-with-video.png 301

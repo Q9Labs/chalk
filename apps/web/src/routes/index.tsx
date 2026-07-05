@@ -1,6 +1,6 @@
 import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@q9labs/chalk-ui";
+import { Button } from "@q9labs/chalk-ui/button";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Globe, Lock, MonitorPlay, MousePointerClick } from "lucide-react";
 import { useTheme } from "../context/theme";

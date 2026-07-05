@@ -1,10 +1,15 @@
-import type { PwaBuildMeta, PwaInstallPlatform } from "@q9labs/chalk-react";
-
 const THEME_COLORS = {
   dark: "#030303",
   light: "#ffffff",
 } as const;
-type PwaInstallPromptContent = {
+
+type PwaBuildMeta = {
+  version: string;
+  commitHash: string;
+};
+
+type PwaInstallPlatform = "android" | "ios-safari" | "mac-safari" | "desktop" | "unknown";
+type PwaPromptContent = {
   badge: string | null;
   ctaLabel: string | null;
   description: string;
@@ -36,7 +41,7 @@ export function shouldHidePwaPrompt(pathname: string) {
   return pathname.startsWith("/room/") || pathname.startsWith("/share/") || pathname.startsWith("/j/");
 }
 
-export function getPwaInstallPromptContent({ hasNativePrompt, installPlatform, requiresManualInstall }: { hasNativePrompt: boolean; installPlatform: PwaInstallPlatform; requiresManualInstall: boolean }): PwaInstallPromptContent {
+export function getPwaPromptContent({ hasNativePrompt, installPlatform, requiresManualInstall }: { hasNativePrompt: boolean; installPlatform: PwaInstallPlatform; requiresManualInstall: boolean }): PwaPromptContent {
   if (hasNativePrompt && installPlatform === "android") {
     return {
       badge: "Home screen app",

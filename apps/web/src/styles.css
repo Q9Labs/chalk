@@ -3,10 +3,6 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
-@source "../../../packages/sdk-react/src/**/*.{ts,tsx}";
-
-/* Package CSS (variables, animations, custom classes) */
-@import "@q9labs/chalk-react/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 

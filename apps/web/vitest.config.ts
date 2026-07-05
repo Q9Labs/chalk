@@ -5,7 +5,7 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      exclude: [...configDefaults.exclude, ".stryker-tmp/**", "reports/**"],
+      exclude: configDefaults.exclude,
     },
   }),
 );

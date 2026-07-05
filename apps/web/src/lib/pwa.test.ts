@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatPwaBuildLabel, getPwaInstallPromptContent, getThemeColor, shouldHidePwaPrompt, syncThemeColor } from "./pwa";
+import { formatPwaBuildLabel, getPwaPromptContent, getThemeColor, shouldHidePwaPrompt, syncThemeColor } from "./pwa";
 
 describe("pwa helpers", () => {
   beforeEach(() => {
@@ -35,7 +35,7 @@ describe("pwa helpers", () => {
 
   it("formats install copy for native and manual install surfaces", () => {
     expect(
-      getPwaInstallPromptContent({
+      getPwaPromptContent({
         hasNativePrompt: true,
         installPlatform: "desktop",
         requiresManualInstall: false,
@@ -47,7 +47,7 @@ describe("pwa helpers", () => {
     });
 
     expect(
-      getPwaInstallPromptContent({
+      getPwaPromptContent({
         hasNativePrompt: false,
         installPlatform: "ios-safari",
         requiresManualInstall: true,
@@ -59,7 +59,7 @@ describe("pwa helpers", () => {
     });
 
     expect(
-      getPwaInstallPromptContent({
+      getPwaPromptContent({
         hasNativePrompt: false,
         installPlatform: "mac-safari",
         requiresManualInstall: true,

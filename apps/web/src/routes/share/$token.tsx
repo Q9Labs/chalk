@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import * as v from "valibot";
-import { getApiUrl } from "../../lib/webMeeting";
+import { getApiUrl } from "../../lib/appApi";
 
 const shareParamsSchema = v.object({
   token: v.string(),

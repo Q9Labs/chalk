@@ -1,10 +1,9 @@
-import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { ErrorProvider } from "../context/error";
 import { ThemeProvider } from "../context/theme";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { isLegacyDocsPath, redirectToExternalDocs } from "../lib/docsRedirect";
-import { createWebTokenProvider, getApiUrl, shouldPrimeTokenCache } from "../lib/webMeeting";
 import { getPublicAppUrl } from "../lib/publicUrl";
 
 // SSR check - ChalkProvider requires browser APIs
@@ -156,15 +155,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
-  const location = useLocation();
-  useEffect(() => {
-    if (isServer || !shouldPrimeTokenCache(location.pathname)) return;
-    const apiUrl = getApiUrl();
-    const tokenProvider = createWebTokenProvider(apiUrl);
-    // Prime token cache so first Join click avoids a token round-trip; fail-open by design.
-    void tokenProvider().catch(() => {});
-  }, [location.pathname]);
-
   const content = (
     <ThemeProvider>
       <ErrorProvider>

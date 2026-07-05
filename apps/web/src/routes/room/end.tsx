@@ -1,10 +1,9 @@
 import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { consumeMeetingEndSummary } from "@q9labs/chalk-react";
-import { Button } from "@q9labs/chalk-ui";
+import { Button } from "@q9labs/chalk-ui/button";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { Calendar, Clock, Home, RotateCcw, Star, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Calendar, Home, RotateCcw, Star } from "lucide-react";
+import { useState } from "react";
 import { useTheme } from "../../context/theme";
 import { ChalkLogo } from "../../components/ChalkLogo";
 import { DOCS_BASE_URL } from "../../lib/docsRedirect";
@@ -16,17 +15,6 @@ export const Route = createFileRoute("/room/end")({
   }),
 });
 
-function formatDuration(seconds: number) {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  if (hours > 0) {
-    const remainingMins = minutes % 60;
-    return `${hours}h ${remainingMins}m`;
-  }
-  return `${minutes}m`;
-}
-
 function MeetingEndPage() {
   const navigate = useNavigate();
   const { roomId } = Route.useSearch();
@@ -35,32 +23,10 @@ function MeetingEndPage() {
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-  const [meetingData, setMeetingData] = useState<{
-    duration?: number;
-    participantCount?: number;
-    roomName?: string;
-    roomId?: string;
-  }>({});
-
-  useEffect(() => {
-    const summary = consumeMeetingEndSummary({ roomId });
-    if (!summary) {
-      return;
-    }
-
-    setMeetingData({
-      duration: summary.durationSeconds,
-      participantCount: summary.participantCount,
-      roomName: summary.roomName || undefined,
-      roomId: summary.roomId || roomId,
-    });
-  }, [roomId]);
-
-  const effectiveRoomId = roomId || meetingData.roomId;
 
   const handleRejoin = () => {
-    if (effectiveRoomId) {
-      window.location.assign(`/room/${encodeURIComponent(effectiveRoomId)}`);
+    if (roomId) {
+      window.location.assign(`/room/${encodeURIComponent(roomId)}`);
     }
   };
 
@@ -78,7 +44,6 @@ function MeetingEndPage() {
   };
 
   const displayRating = hoveredRating || rating;
-  const hasMeetingStats = meetingData.duration !== undefined || meetingData.participantCount !== undefined;
 
   return (
     <div className="font-app flex h-screen flex-col bg-background text-foreground selection:bg-primary/20 overflow-hidden">
@@ -111,41 +76,20 @@ function MeetingEndPage() {
             <p className="text-lg text-muted-foreground max-w-xl mx-auto balance-text">Your session has ended successfully. Thank you for using Chalk.</p>
           </div>
 
-          {/* Stats Section */}
-          {hasMeetingStats && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border/40 border border-border/40 rounded-2xl overflow-hidden shadow-sm max-w-2xl mx-auto w-full">
-              {meetingData.duration !== undefined && (
-                <div className="bg-background p-6 space-y-1">
-                  <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1">
-                    <Clock className="h-4 w-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Duration</span>
-                  </div>
-                  <div className="text-2xl font-semibold">{formatDuration(meetingData.duration)}</div>
-                </div>
-              )}
-              {meetingData.participantCount !== undefined && (
-                <div className="bg-background p-6 space-y-1">
-                  <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1">
-                    <Users className="h-4 w-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Attendees</span>
-                  </div>
-                  <div className="text-2xl font-semibold">{meetingData.participantCount}</div>
-                </div>
-              )}
-              <div className="bg-background p-6 space-y-1">
-                <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1">
-                  <Calendar className="h-4 w-4" />
-                  <span className="text-xs font-medium uppercase tracking-wider">Date</span>
-                </div>
-                <div className="text-2xl font-semibold">
-                  {new Date().toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </div>
+          <div className="grid grid-cols-1 sm:grid-cols-1 gap-px bg-border/40 border border-border/40 rounded-2xl overflow-hidden shadow-sm max-w-sm mx-auto w-full">
+            <div className="bg-background p-6 space-y-1">
+              <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1">
+                <Calendar className="h-4 w-4" />
+                <span className="text-xs font-medium uppercase tracking-wider">Date</span>
+              </div>
+              <div className="text-2xl font-semibold">
+                {new Date().toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}
               </div>
             </div>
-          )}
+          </div>
 
           {/* Feedback Section */}
           <div className="bg-secondary/20 border border-border/40 rounded-3xl p-8 max-w-xl mx-auto w-full space-y-6">
@@ -177,7 +121,7 @@ function MeetingEndPage() {
             <Button size="lg" variant="secondary" className="w-full sm:w-auto px-8 h-12 font-medium" onClick={handleNewMeeting}>
               Start New Meeting
             </Button>
-            {effectiveRoomId && (
+            {roomId && (
               <Button size="lg" variant="secondary" className="w-full sm:w-auto px-8 h-12 font-medium" onClick={handleRejoin}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Rejoin Meeting

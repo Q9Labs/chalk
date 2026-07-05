@@ -5,9 +5,8 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { ChalkLogo } from "../components/ChalkLogo";
 import { useTheme } from "../context/theme";
-import { getApiUrl } from "../lib/webMeeting";
+import { getApiUrl } from "../lib/appApi";
 import { getPublicAppUrl } from "../lib/publicUrl";
-import { EdgeDiagnostics } from "../components/EdgeDiagnostics";
 
 const STATUS_META_TITLE = "Chalk Status";
 const STATUS_META_DESCRIPTION = "Live system status, incidents, uptime, and maintenance updates for Chalk.";
@@ -423,9 +422,6 @@ function PublicStatusPage() {
               </div>
             )}
           </section>
-
-          {/* Edge Latency & Network Diagnostics Playground */}
-          <EdgeDiagnostics />
 
           {/* History Log */}
           <section className="space-y-5">

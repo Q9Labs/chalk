@@ -1,6 +1,6 @@
 import { HomeIcon, ArrowLeftIcon, AlertCircleIcon, RefreshCcw } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@q9labs/chalk-ui";
+import { Button } from "@q9labs/chalk-ui/button";
 import { ChalkLogo } from "./ChalkLogo";
 import { useTheme } from "../context/theme";
 import { Moon02Icon, Sun01Icon } from "@hugeicons/core-free-icons";
