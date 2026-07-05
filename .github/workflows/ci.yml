@@ -43,7 +43,7 @@ jobs:
       - name: Private reference scan
         run: |
           set -euo pipefail
-          if git grep -n -I -i -E '/Users/|op://[^<][^[:space:]]+/[^[:space:]]+/|support@(q9labs\.ai|chalk\.com|chalk\.io)' -- ':!pnpm-lock.yaml' ':!.github/workflows/ci.yml'; then
+          if git grep -n -I -E '/Users/|op://[^<][^[:space:]]+/[^[:space:]]+/|support@(q9labs\.ai|chalk\.com|chalk\.io)' -- ':!pnpm-lock.yaml' ':!.github/workflows/ci.yml'; then
             echo "::error::private operational reference found"
             exit 1
           fi

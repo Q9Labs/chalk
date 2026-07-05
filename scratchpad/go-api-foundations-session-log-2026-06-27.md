@@ -19,7 +19,7 @@ intentional.
   tools, and `go_workspace` detected module
   `github.com/q9labs/chalk/apps/api`.
 - Added Codex MCP config entry `gopls_chalk_api` that starts `gopls mcp` from
-  `/Users/macmini/code/chalk/apps/api`.
+  `<repo>/apps/api`.
 
 ## Go Gate
 

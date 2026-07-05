@@ -2,7 +2,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Facehash } from "../index";
+import { Facehash } from "../react";
 
 describe("Facehash", () => {
   it("renders the expected web SVG structure", () => {
