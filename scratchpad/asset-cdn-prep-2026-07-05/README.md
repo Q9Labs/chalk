@@ -2,6 +2,11 @@
 
 Prepared output for `https://assets.chalkmeet.com/ui/` assets.
 
+Note: the first-pass background assets documented here were replaced by the
+generated video-call background set in
+`scratchpad/video-background-cdn-2026-07-05/`. The sound assets in this folder
+remain the current sound CDN source.
+
 The optimized media files were uploaded to Cloudflare R2 bucket `chalk-assets`
 and served through `assets.chalkmeet.com`. `@q9labs/chalk-ui/assets` now exports
 CDN metadata and URLs rather than bundling background or sound binaries in the

@@ -1,0 +1,163 @@
+{
+  "generatedAt": "2026-07-05T17:12:41.702Z",
+  "cdnBaseUrl": "https://assets.chalkmeet.com/ui/",
+  "notes": ["Prepared generated video-call backgrounds for Cloudflare R2 upload.", "Hashes are the first 12 hex characters of each derivative file's SHA-256 digest.", "Sound assets are unchanged from the 2026-07-05 asset CDN prep."],
+  "assets": {
+    "background.bright-creative-studio": {
+      "source": "scratchpad/generated-video-backgrounds-2026-07-05/bright-creative-studio.png",
+      "description": "Airy creative studio with soft plaster, plants, and subtle material swatches.",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.7abcfb577656.avif",
+          "filename": "bright-creative-studio.7abcfb577656.avif",
+          "mimeType": "image/avif",
+          "bytes": 32014,
+          "sha256Prefix": "7abcfb577656",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.7abcfb577656.avif"
+        },
+        "webp": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.fb65d5b296a5.webp",
+          "filename": "bright-creative-studio.fb65d5b296a5.webp",
+          "mimeType": "image/webp",
+          "bytes": 55688,
+          "sha256Prefix": "fb65d5b296a5",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.fb65d5b296a5.webp"
+        }
+      }
+    },
+    "background.cozy-evening-lounge": {
+      "source": "scratchpad/generated-video-backgrounds-2026-07-05/cozy-evening-lounge.png",
+      "description": "Warm evening lounge corner with shelves, ceramics, plants, and soft lamps.",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.3668f9fb3ae6.avif",
+          "filename": "cozy-evening-lounge.3668f9fb3ae6.avif",
+          "mimeType": "image/avif",
+          "bytes": 15912,
+          "sha256Prefix": "3668f9fb3ae6",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.3668f9fb3ae6.avif"
+        },
+        "webp": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.dc7786d5fdd2.webp",
+          "filename": "cozy-evening-lounge.dc7786d5fdd2.webp",
+          "mimeType": "image/webp",
+          "bytes": 25624,
+          "sha256Prefix": "dc7786d5fdd2",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.dc7786d5fdd2.webp"
+        }
+      }
+    },
+    "background.garden-terrace-lounge": {
+      "source": "scratchpad/generated-video-backgrounds-2026-07-05/garden-terrace-lounge.png",
+      "description": "Calm indoor-outdoor terrace lounge with linen curtains and blurred greenery.",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.ec01ea565f77.avif",
+          "filename": "garden-terrace-lounge.ec01ea565f77.avif",
+          "mimeType": "image/avif",
+          "bytes": 35462,
+          "sha256Prefix": "ec01ea565f77",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.ec01ea565f77.avif"
+        },
+        "webp": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.0a6b0d4fdf87.webp",
+          "filename": "garden-terrace-lounge.0a6b0d4fdf87.webp",
+          "mimeType": "image/webp",
+          "bytes": 66532,
+          "sha256Prefix": "0a6b0d4fdf87",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.0a6b0d4fdf87.webp"
+        }
+      }
+    },
+    "background.modern-acoustic-office": {
+      "source": "scratchpad/generated-video-backgrounds-2026-07-05/modern-acoustic-office.png",
+      "description": "Modern professional office with acoustic panels, plants, and warm wood accents.",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.38e4bc5acdec.avif",
+          "filename": "modern-acoustic-office.38e4bc5acdec.avif",
+          "mimeType": "image/avif",
+          "bytes": 21467,
+          "sha256Prefix": "38e4bc5acdec",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.38e4bc5acdec.avif"
+        },
+        "webp": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.7e2e3e0b1f83.webp",
+          "filename": "modern-acoustic-office.7e2e3e0b1f83.webp",
+          "mimeType": "image/webp",
+          "bytes": 38384,
+          "sha256Prefix": "7e2e3e0b1f83",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.7e2e3e0b1f83.webp"
+        }
+      }
+    },
+    "background.soft-abstract-glass": {
+      "source": "scratchpad/generated-video-backgrounds-2026-07-05/soft-abstract-glass.png",
+      "description": "Subtle abstract glass and fabric-like panels with calm layered color.",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.1bd6ec278f69.avif",
+          "filename": "soft-abstract-glass.1bd6ec278f69.avif",
+          "mimeType": "image/avif",
+          "bytes": 7113,
+          "sha256Prefix": "1bd6ec278f69",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.1bd6ec278f69.avif"
+        },
+        "webp": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.2fd3949e2036.webp",
+          "filename": "soft-abstract-glass.2fd3949e2036.webp",
+          "mimeType": "image/webp",
+          "bytes": 10752,
+          "sha256Prefix": "2fd3949e2036",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.2fd3949e2036.webp"
+        }
+      }
+    },
+    "background.warm-executive-home-office": {
+      "source": "scratchpad/generated-video-backgrounds-2026-07-05/warm-executive-home-office.png",
+      "description": "Refined home office with built-in shelves, linen curtains, and warm wood.",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.4845bdfa8d05.avif",
+          "filename": "warm-executive-home-office.4845bdfa8d05.avif",
+          "mimeType": "image/avif",
+          "bytes": 25471,
+          "sha256Prefix": "4845bdfa8d05",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.4845bdfa8d05.avif"
+        },
+        "webp": {
+          "url": "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.53e4fce337d3.webp",
+          "filename": "warm-executive-home-office.53e4fce337d3.webp",
+          "mimeType": "image/webp",
+          "bytes": 41678,
+          "sha256Prefix": "53e4fce337d3",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.53e4fce337d3.webp"
+        }
+      }
+    }
+  }
+}

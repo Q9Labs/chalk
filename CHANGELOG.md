@@ -34,6 +34,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Moved shared UI background and sound asset delivery to the Cloudflare R2 CDN
   surface at `assets.chalkmeet.com`, leaving `@q9labs/chalk-ui/assets` to
   export CDN metadata instead of bundled media binaries.
+- Replaced the first-pass generic shared UI backgrounds with six generated,
+  video-call-oriented backgrounds and documented the reusable generation prompt.
 - Hardened the Go API HTTP edge with protected resource routes, tenant
   authorization checks, Redis-backed public auth and authenticated-write rate
   limiting, trusted proxy client-IP handling, request body limits, production
