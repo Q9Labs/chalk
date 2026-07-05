@@ -53,6 +53,9 @@ describe("chalk ops monitor worker", () => {
   beforeEach(() => {
     __internal.resetForTests();
     vi.restoreAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   it("runs all default checks and ingests their results", async () => {
@@ -110,15 +113,15 @@ describe("chalk ops monitor worker", () => {
       "ops-monitor/failed-ingest/api.health/seed.json",
       JSON.stringify({
         payload: {
-          result_key: "cf-ops-monitor:seed:api.health",
-          run_id: "cf-ops-monitor:seed",
+          result_key: "cf-uptime-worker:seed:api.health",
+          run_id: "cf-uptime-worker:seed",
           monitor_key: "api.health",
           status: "failed",
           checked_at: "2026-04-14T12:00:00Z",
           event_at: "2026-04-14T12:00:00Z",
           latency_ms: 10,
-          reported_source: "cloudflare-ops-monitor",
-          reported_emitter_id: "chalk-ops-monitor",
+          reported_source: "cloudflare-uptime-worker",
+          reported_emitter_id: "chalk-uptime-worker",
           metadata: {},
           details: {},
         },
@@ -183,7 +186,55 @@ describe("chalk ops monitor worker", () => {
     expect(twilioCalls).toBe(1);
   });
 
-  it("supports manual fetch-triggered runs", async () => {
+  it("sends a twilio fallback alert when critical checks are healthy but ingest is impaired", async () => {
+    const { bucket } = createInMemoryBucket();
+    let twilioCalls = 0;
+
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("api.twilio.com/2010-04-01/Accounts")) {
+        twilioCalls += 1;
+        return createResponse(201, JSON.stringify({ sid: "SM123" }));
+      }
+      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
+        return createResponse(503, "ingest unavailable");
+      }
+      return createResponse(200, "ok");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const env = createEnv({
+      OPS_FALLBACK_BUFFER_BUCKET: bucket,
+      INGEST_RETRIES: "0",
+      RETRY_BACKOFF_MS: "0",
+      OPS_TWILIO_ACCOUNT_SID: "AC123",
+      OPS_TWILIO_AUTH_TOKEN: "auth-token",
+      OPS_TWILIO_WHATSAPP_FROM: "+15550001111",
+      OPS_WHATSAPP_TO_CRITICAL: "+15550002222",
+    });
+
+    const firstSummary = await runMonitorCycle(env, new Date("2026-04-14T12:05:00Z"));
+    expect(firstSummary.failed_count).toBe(0);
+    expect(twilioCalls).toBe(0);
+
+    const secondSummary = await runMonitorCycle(env, new Date("2026-04-14T12:06:00Z"));
+    expect(secondSummary.failed_count).toBe(0);
+    expect(secondSummary.twilio_alert_sent).toBe(true);
+    expect(twilioCalls).toBe(1);
+  });
+
+  it("keeps running current checks when replay storage fails", async () => {
+    const bucket: R2Bucket = {
+      async get() {
+        return null;
+      },
+      async put() {},
+      async delete() {},
+      async list() {
+        throw new Error("r2 list unavailable");
+      },
+    };
+
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
@@ -195,7 +246,124 @@ describe("chalk ops monitor worker", () => {
       }),
     );
 
-    const response = await worker.fetch(new Request("https://chalk-ops-monitor.example/run", { method: "POST" }), createEnv());
+    const summary = await runMonitorCycle(
+      createEnv({
+        OPS_FALLBACK_BUFFER_BUCKET: bucket,
+      }),
+      new Date("2026-04-14T12:07:00Z"),
+    );
+
+    expect(summary.replay_failed).toBe(1);
+    expect(summary.checked_count).toBe(__internal.DEFAULT_MONITORS.length);
+    expect(summary.ingest_success_count).toBe(__internal.DEFAULT_MONITORS.length);
+  });
+
+  it("keeps the run alive when buffering failed ingests fails", async () => {
+    const bucket: R2Bucket = {
+      async get() {
+        return null;
+      },
+      async put() {
+        throw new Error("r2 put unavailable");
+      },
+      async delete() {},
+      async list() {
+        return { objects: [], truncated: false };
+      },
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes("/api/v1/ops/ingest/monitor-results")) {
+          return createResponse(503, "ingest unavailable");
+        }
+        return createResponse(200, "ok");
+      }),
+    );
+
+    const summary = await runMonitorCycle(
+      createEnv({
+        OPS_FALLBACK_BUFFER_BUCKET: bucket,
+        INGEST_RETRIES: "0",
+      }),
+      new Date("2026-04-14T12:08:00Z"),
+    );
+
+    expect(summary.ingest_failure_count).toBe(__internal.DEFAULT_MONITORS.length);
+    expect(summary.buffered_count).toBe(0);
+  });
+
+  it("keeps the run alive when critical state storage fails", async () => {
+    const bucket: R2Bucket = {
+      async get() {
+        throw new Error("r2 get unavailable");
+      },
+      async put() {
+        throw new Error("r2 put unavailable");
+      },
+      async delete() {},
+      async list() {
+        return { objects: [], truncated: false };
+      },
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes("/api/v1/ops/ingest/monitor-results")) {
+          return createResponse(202, JSON.stringify({ ok: true }));
+        }
+        return createResponse(200, "ok");
+      }),
+    );
+
+    const summary = await runMonitorCycle(
+      createEnv({
+        OPS_FALLBACK_BUFFER_BUCKET: bucket,
+      }),
+      new Date("2026-04-14T12:09:00Z"),
+    );
+
+    expect(summary.checked_count).toBe(__internal.DEFAULT_MONITORS.length);
+    expect(summary.ingest_failure_count).toBe(0);
+  });
+
+  it("rejects manual fetch-triggered runs without the manual token", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await worker.fetch(new Request("https://chalk-uptime-worker.example/run", { method: "POST" }), createEnv());
+
+    expect(response.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("supports authorized manual fetch-triggered runs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes("/api/v1/ops/ingest/monitor-results")) {
+          return createResponse(202, JSON.stringify({ ok: true }));
+        }
+        return createResponse(200, "ok");
+      }),
+    );
+
+    const response = await worker.fetch(
+      new Request("https://chalk-uptime-worker.example/run", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer manual-run-token",
+        },
+      }),
+      createEnv({
+        OPS_MANUAL_RUN_TOKEN: "manual-run-token",
+      }),
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({

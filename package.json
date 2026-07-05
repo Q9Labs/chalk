@@ -10,7 +10,7 @@
     "packages/ui",
     "apps/mobile",
     "apps/web",
-    "infrastructure/cloudflare-ops-monitor"
+    "infrastructure/uptime-worker"
   ],
   "type": "module",
   "scripts": {

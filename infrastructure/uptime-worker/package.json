@@ -1,12 +1,13 @@
 {
-  "name": "@chalk/cloudflare-ops-monitor",
+  "name": "@chalk/uptime-worker",
   "private": true,
   "license": "MIT",
   "type": "module",
   "scripts": {
     "check-types": "tsc --noEmit",
     "test": "pnpm exec vitest run",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy --keep-vars",
+    "deploy:dry-run": "wrangler deploy --dry-run"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

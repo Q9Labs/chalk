@@ -1,0 +1,25 @@
+name = "chalk-uptime-worker"
+main = "src/index.ts"
+compatibility_date = "2026-07-05"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+API_BASE_URL = "https://chalk-api.q9labs.ai"
+
+# Required secrets:
+# - OPS_INGEST_TOKEN
+# - OPS_MANUAL_RUN_TOKEN
+#
+# Optional fallback bindings/secrets:
+# - OPS_FALLBACK_BUFFER_BUCKET R2 binding
+# - OPS_TWILIO_ACCOUNT_SID
+# - OPS_TWILIO_AUTH_TOKEN
+# - OPS_TWILIO_WHATSAPP_FROM
+# - OPS_WHATSAPP_TO_CRITICAL
+#
+# Example R2 binding, once the bucket exists:
+# [[r2_buckets]]
+# binding = "OPS_FALLBACK_BUFFER_BUCKET"
+# bucket_name = "chalk-uptime-worker-buffer"

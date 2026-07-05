@@ -298,7 +298,7 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/browser-playwright@4.1.8)(@vitest/coverage-v8@4.1.8)(happy-dom@20.8.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(msw@2.12.14(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
 
-  infrastructure/cloudflare-ops-monitor:
+  infrastructure/uptime-worker:
     devDependencies:
       typescript:
         specifier: ^5.7.2

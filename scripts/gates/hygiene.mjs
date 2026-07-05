@@ -8,7 +8,7 @@ const packageJsonPaths = [
   "package.json",
   "apps/mobile/package.json",
   "apps/web/package.json",
-  "infrastructure/cloudflare-ops-monitor/package.json",
+  "infrastructure/uptime-worker/package.json",
   "packages/chalk-whiteboard/package.json",
   "packages/facehash/package.json",
   "packages/sdk-react-native/package.json",

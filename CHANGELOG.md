@@ -36,6 +36,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   export CDN metadata instead of bundled media binaries.
 - Replaced the first-pass generic shared UI backgrounds with six generated,
   video-call-oriented backgrounds and documented the reusable generation prompt.
+- Renamed the Cloudflare uptime monitor package to `@chalk/uptime-worker`,
+  wired it into workspace gates, and hardened its ingest fallback alerting,
+  storage failure handling, and manual run authentication.
 - Hardened the Go API HTTP edge with protected resource routes, tenant
   authorization checks, Redis-backed public auth and authenticated-write rate
   limiting, trusted proxy client-IP handling, request body limits, production

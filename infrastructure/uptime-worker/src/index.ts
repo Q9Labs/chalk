@@ -148,6 +148,7 @@ export interface Env {
   OPS_TWILIO_AUTH_TOKEN?: string;
   OPS_TWILIO_WHATSAPP_FROM?: string;
   OPS_WHATSAPP_TO_CRITICAL?: string;
+  OPS_MANUAL_RUN_TOKEN?: string;
 }
 
 const DEFAULT_MONITORS: readonly MonitorDefinition[] = [
@@ -189,9 +190,9 @@ const DEFAULT_RETRY_BACKOFF_MS = 250;
 const DEFAULT_MAX_PARALLEL_CHECKS = 4;
 const DEFAULT_RUN_DEADLINE_MS = 25_000;
 const DEFAULT_REPLAY_BATCH_SIZE = 25;
-const DEFAULT_CHECK_USER_AGENT = "chalk-ops-monitor/1.0";
-const DEFAULT_REPORTED_SOURCE = "cloudflare-ops-monitor";
-const DEFAULT_REPORTED_EMITTER_ID = "chalk-ops-monitor";
+const DEFAULT_CHECK_USER_AGENT = "chalk-uptime-worker/1.0";
+const DEFAULT_REPORTED_SOURCE = "cloudflare-uptime-worker";
+const DEFAULT_REPORTED_EMITTER_ID = "chalk-uptime-worker";
 const DEFAULT_FALLBACK_BUFFER_PREFIX = "ops-monitor";
 const DEFAULT_TWILIO_ALERT_STREAK_THRESHOLD = 2;
 const DEFAULT_TWILIO_TIMEOUT_MS = 5_000;
@@ -221,7 +222,7 @@ function normalizeBaseURL(raw: string): string {
 }
 
 function buildRunID(scheduledAt: Date): string {
-  return `cf-ops-monitor:${scheduledAt.toISOString()}:${crypto.randomUUID().slice(0, 8)}`;
+  return `cf-uptime-worker:${scheduledAt.toISOString()}:${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function buildResultKey(runID: string, monitorKey: string): string {
@@ -569,6 +570,20 @@ async function bufferFailedIngest(env: Env, config: RuntimeConfig, payload: Inge
   return true;
 }
 
+async function tryBufferFailedIngest(env: Env, config: RuntimeConfig, payload: IngestPayload, ingestFailure: IngestAttempt & { ok: false }, runID: string): Promise<boolean> {
+  try {
+    return await bufferFailedIngest(env, config, payload, ingestFailure);
+  } catch (error) {
+    console.error("ops-monitor.ingest.buffer.error", {
+      run_id: runID,
+      monitor_key: payload.monitor_key,
+      result_key: payload.result_key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 async function replayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt: number): Promise<ReplaySummary> {
   const bucket = env.OPS_FALLBACK_BUFFER_BUCKET;
   if (!bucket) {
@@ -623,6 +638,18 @@ async function replayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt
   return { attempted, replayed, failed };
 }
 
+async function tryReplayBufferedIngests(env: Env, config: RuntimeConfig, deadlineAt: number, runID: string): Promise<ReplaySummary> {
+  try {
+    return await replayBufferedIngests(env, config, deadlineAt);
+  } catch (error) {
+    console.error("ops-monitor.replay.error", {
+      run_id: runID,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { attempted: 0, replayed: 0, failed: 1 };
+  }
+}
+
 function criticalStateObjectKey(config: RuntimeConfig): string {
   return `${config.fallbackBufferPrefix}/${STATE_PATH}`;
 }
@@ -658,6 +685,18 @@ async function loadCriticalIngestState(env: Env, config: RuntimeConfig): Promise
   return inMemoryCriticalIngestState;
 }
 
+async function tryLoadCriticalIngestState(env: Env, config: RuntimeConfig, runID: string): Promise<CriticalIngestState> {
+  try {
+    return await loadCriticalIngestState(env, config);
+  } catch (error) {
+    console.error("ops-monitor.critical_state.load.error", {
+      run_id: runID,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return inMemoryCriticalIngestState;
+  }
+}
+
 async function saveCriticalIngestState(env: Env, config: RuntimeConfig, state: CriticalIngestState): Promise<void> {
   inMemoryCriticalIngestState = state;
   const bucket = env.OPS_FALLBACK_BUFFER_BUCKET;
@@ -665,6 +704,17 @@ async function saveCriticalIngestState(env: Env, config: RuntimeConfig, state: C
     return;
   }
   await bucket.put(criticalStateObjectKey(config), JSON.stringify(state));
+}
+
+async function trySaveCriticalIngestState(env: Env, config: RuntimeConfig, state: CriticalIngestState, runID: string): Promise<void> {
+  try {
+    await saveCriticalIngestState(env, config, state);
+  } catch (error) {
+    console.error("ops-monitor.critical_state.save.error", {
+      run_id: runID,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function hasTwilioConfig(env: Env): boolean {
@@ -691,7 +741,7 @@ async function sendTwilioFallbackAlert(env: Env, config: RuntimeConfig, failedCr
   const to = normalizeWhatsAppTarget(env.OPS_WHATSAPP_TO_CRITICAL as string);
   const failedMonitorKeys = Array.from(new Set(failedCriticalIngests.map((failure) => failure.result.monitor.key))).join(", ");
 
-  const message = `[chalk-ops-monitor] Critical ingest impairment (streak=${impairmentStreak}). run_id=${runID} failed_monitors=${failedMonitorKeys}. Incident truth may be delayed.`;
+  const message = `[chalk-uptime-worker] Critical ingest impairment (streak=${impairmentStreak}). run_id=${runID} failed_monitors=${failedMonitorKeys}. Incident truth may be delayed.`;
   const body = new URLSearchParams({
     To: to,
     From: from,
@@ -715,10 +765,10 @@ async function sendTwilioFallbackAlert(env: Env, config: RuntimeConfig, failedCr
 }
 
 async function maybeSendCriticalIngestAlert(env: Env, config: RuntimeConfig, ingestFailures: IngestFailure[], runID: string, deadlineAt: number): Promise<TwilioAlertSummary> {
-  const failedCriticalIngests = ingestFailures.filter((failure) => failure.result.monitor.severity === "critical" && failure.result.status === "failed");
+  const failedCriticalIngests = ingestFailures.filter((failure) => failure.result.monitor.severity === "critical");
   const criticalImpairment = failedCriticalIngests.length > 0;
 
-  const previousState = await loadCriticalIngestState(env, config);
+  const previousState = await tryLoadCriticalIngestState(env, config, runID);
   const nextStreak = criticalImpairment ? previousState.streak + 1 : 0;
   const shouldAttemptAlert = criticalImpairment && nextStreak >= config.twilioAlertThreshold && previousState.last_alerted_streak < config.twilioAlertThreshold;
 
@@ -741,7 +791,7 @@ async function maybeSendCriticalIngestAlert(env: Env, config: RuntimeConfig, ing
     updated_at: new Date().toISOString(),
   };
 
-  await saveCriticalIngestState(env, config, nextState);
+  await trySaveCriticalIngestState(env, config, nextState, runID);
   return {
     attempted: shouldAttemptAlert,
     sent: alertSent,
@@ -760,7 +810,7 @@ export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promi
     ingest_url: config.ingestURL,
   });
 
-  const replaySummary = await replayBufferedIngests(env, config, deadlineAt);
+  const replaySummary = await tryReplayBufferedIngests(env, config, deadlineAt, runID);
   if (replaySummary.attempted > 0) {
     console.log("ops-monitor.replay.completed", {
       run_id: runID,
@@ -813,7 +863,7 @@ export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promi
       error_message: ingest.errorMessage,
     });
 
-    const buffered = await bufferFailedIngest(env, config, payload, ingest);
+    const buffered = await tryBufferFailedIngest(env, config, payload, ingest, runID);
     if (buffered) {
       bufferedCount += 1;
       console.warn("ops-monitor.ingest.buffered", {
@@ -854,6 +904,26 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+function readBearerToken(request: Request): string | null {
+  const authorization = request.headers.get("authorization");
+  if (!authorization) {
+    return null;
+  }
+
+  const [scheme, token] = authorization.split(" ");
+  return scheme?.toLowerCase() === "bearer" && token ? token : null;
+}
+
+function hasAuthorizedManualRun(request: Request, env: Env): boolean {
+  const expectedToken = env.OPS_MANUAL_RUN_TOKEN;
+  if (!expectedToken) {
+    return false;
+  }
+
+  const providedToken = readBearerToken(request) || request.headers.get("x-ops-run-token");
+  return providedToken === expectedToken;
+}
+
 export const __internal = {
   DEFAULT_MONITORS,
   resetForTests() {
@@ -869,6 +939,10 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/run") {
+      if (!hasAuthorizedManualRun(request, env)) {
+        return json({ error: "unauthorized" }, 401);
+      }
+
       try {
         const summary = await runMonitorCycle(env);
         return json(summary, 200);
@@ -882,7 +956,7 @@ export default {
       }
     }
 
-    return json({ ok: true, worker: "chalk-ops-monitor" }, 200);
+    return json({ ok: true, worker: "chalk-uptime-worker" }, 200);
   },
 
   async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
