@@ -56,40 +56,40 @@ func (s Service) SendEmail(ctx context.Context, input SendEmailInput) (SendEmail
 	if s.sender == nil {
 		return SendEmailResult{}, ErrSenderUnavailable
 	}
-	if err := PrepareSendEmailInput(&input); err != nil {
+	if err := prepareSendEmailInput(&input); err != nil {
 		return SendEmailResult{}, err
 	}
 
 	return s.sender.SendEmail(ctx, input)
 }
 
-func PrepareSendEmailInput(input *SendEmailInput) error {
-	from, err := prepareAddress(input.From)
+func prepareSendEmailInput(input *SendEmailInput) error {
+	from, err := parseEmailAddress(input.From)
 	if err != nil {
 		return ErrInvalidSender
 	}
 	input.From = from
 
-	recipients, err := prepareAddressList(input.To)
+	recipients, err := requiredRecipientAddresses(input.To)
 	if err != nil {
 		return ErrInvalidRecipient
 	}
 	input.To = recipients
 
-	cc, err := prepareOptionalAddressList(input.CC)
+	cc, err := optionalRecipientAddresses(input.CC)
 	if err != nil {
 		return ErrInvalidRecipient
 	}
 	input.CC = cc
 
-	bcc, err := prepareOptionalAddressList(input.BCC)
+	bcc, err := optionalRecipientAddresses(input.BCC)
 	if err != nil {
 		return ErrInvalidRecipient
 	}
 	input.BCC = bcc
 
 	if input.ReplyTo != "" {
-		replyTo, err := prepareAddress(input.ReplyTo)
+		replyTo, err := parseEmailAddress(input.ReplyTo)
 		if err != nil {
 			return ErrInvalidRecipient
 		}
@@ -109,22 +109,22 @@ func PrepareSendEmailInput(input *SendEmailInput) error {
 	return nil
 }
 
-func prepareAddressList(values []string) ([]string, error) {
+func requiredRecipientAddresses(values []string) ([]string, error) {
 	if len(values) == 0 {
 		return nil, ErrInvalidRecipient
 	}
 
-	return prepareOptionalAddressList(values)
+	return optionalRecipientAddresses(values)
 }
 
-func prepareOptionalAddressList(values []string) ([]string, error) {
+func optionalRecipientAddresses(values []string) ([]string, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
 
 	prepared := make([]string, 0, len(values))
 	for _, value := range values {
-		address, err := prepareAddress(value)
+		address, err := parseEmailAddress(value)
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +134,7 @@ func prepareOptionalAddressList(values []string) ([]string, error) {
 	return prepared, nil
 }
 
-func prepareAddress(value string) (string, error) {
+func parseEmailAddress(value string) (string, error) {
 	address, err := mail.ParseAddress(strings.TrimSpace(value))
 	if err != nil {
 		return "", err

@@ -16,6 +16,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Resend-backed outbound email adapter foundation for the Go API, including a
   provider-neutral email port and env-based Resend configuration.
+- Cloudflare R2-backed object storage adapter foundation for Go API media,
+  image, and file objects.
 - Local Redis and combined Postgres/Redis service helpers for Go API
   development.
 - MIT license metadata across the workspace.

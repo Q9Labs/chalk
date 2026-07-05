@@ -35,9 +35,7 @@ disposable processes with graceful shutdown, and no runtime mutation of source
 or generated files. The config package is the source of truth for supported
 environment variables and defaults.
 
-Outbound provider credentials are also env-only. Resend-backed email sending
-uses `CHALK_RESEND_API_KEY`; `CHALK_RESEND_TIMEOUT_MS` controls the SDK HTTP
-client timeout and defaults to `10000`.
+Read the code for more details. Starting at `apps/api/internal/config/config.go`.
 
 Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
 load balancers or edge proxies allowed to supply `CF-Connecting-IP` or

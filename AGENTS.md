@@ -27,6 +27,10 @@ pnpm check-types
   `apps/api/scripts/gate.sh`. Run it after touching Go API code. It uses an
   explicit patched Go toolchain, checks formatting without mutating, and runs
   tests, `go vet`, Staticcheck, and `govulncheck`.
+- Elixir sync-server work under `apps/sync` has its own focused gate:
+  `apps/sync/scripts/gate.sh`. Run it after touching sync code. It checks
+  formatting without mutating and runs compile with warnings-as-errors, Credo
+  (strict), and tests.
 
 ## Database Migrations
 
@@ -45,16 +49,7 @@ pnpm check-types
 - Keep user-facing product language role-neutral unless an integration requires
   a specific domain vocabulary.
 
-## Comments
-
-- Add comments when they explain why a boundary, invariant, workaround, or
-  non-obvious tradeoff exists. Avoid comments that merely restate what the code
-  says.
-- Treat a needed explanatory comment as a design checkpoint: if the comment
-  reveals duplication, hidden coupling, or an awkward abstraction, either improve
-  the shape or leave a concise note about the constraint.
-- For Go API code, follow the local standards in
-  `apps/api/docs/code-standards.md`.
+For Go API code, follow the local standards in `apps/api/docs/code-standards.md`.
 
 ## Where To Write Code
 
@@ -77,6 +72,12 @@ Packages are the source of truth; demo apps should stay thin.
   REST routes under one `/v1` boundary while operational routes like `/healthz`
   stay unversioned. First API patterns are being designed manually before
   broader endpoint fill-in.
+- `apps/sync`: Elixir/OTP WebSocket sync server (the primary `SyncEngine`
+  adapter). One authoritative writer per room (`Rooms.RoomServer`), pure
+  event-sourced room core, `Stateholder` and `Auth.TokenVerifier` ports with
+  vendor/dev specifics in adapters, language-neutral JSON protocol in
+  `ChalkSync.Protocol`. Real-time state never touches Postgres. See
+  `apps/sync/README.md` for invariants.
 - `infrastructure`: deployable support tooling that remains after the API and
   Terraform teardown.
 

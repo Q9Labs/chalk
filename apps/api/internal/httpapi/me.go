@@ -6,8 +6,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func mountMeRoutes(r chi.Router, service AuthenticationService) {
-	r.With(requireAuthentication(service)).Get("/me", handleMe)
+func mountMeRoutes(r chi.Router, service AuthenticationService, limits RateLimitOptions) {
+	r.With(requireAuthentication(service), rateLimit(limits, authMeRateLimit)).Get("/me", handleMe)
 }
 
 func handleMe(w http.ResponseWriter, r *http.Request) {

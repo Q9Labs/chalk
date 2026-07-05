@@ -13,7 +13,7 @@ Rules:
 - treat `apps/mobile/.env.local` as dev-only
 - local prod builds must run through `apps/mobile/scripts/run-with-production-mobile-env.ts`
 - `apps/mobile/scripts/verify-production-mobile-host-key.ts` must pass before bundling
-- if local mobile host auth drifts, run `bun run mobile:sync-local-env`
+- if local mobile host auth drifts, run `pnpm run mobile:sync-local-env`
 - never trust a local host key for Play/TestFlight builds
 - Android closed/prod releases: CI artifact only
 - sideloadable production Android APKs: CI artifact only

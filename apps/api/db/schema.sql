@@ -4,6 +4,51 @@ create table tenants (
     default_region text,
     -- cf_sfu, cf_rtk, mediasoup
     default_media_plane text,
+    -- {
+    --   "enabled": true,
+    --   "provider": "cf_sfu" | "cf_rtk",
+    --   "mode": "chalk_managed" | "tenant_managed",
+    --   "cloudflare": {
+    --     "account_id": "cloudflare-account-id",
+    --     "api_token": string,
+    --     "rtk": {
+    --       "enabled": true,
+    --       "app_id": "realtimekit-app-id",
+    --       "host_preset": "facilitator",
+    --       "participant_preset": "contributor"
+    --     },
+    --     "sfu": {
+    --       "enabled": true,
+    --       "app_id": "realtime-app-id",
+    --       "app_secret": string
+    --     }
+    --   }
+    -- }
+    media_plane_provider_config jsonb,
+    -- {
+    --   "enabled": true,
+    --   "provider": "openrouter",
+    --   "mode": "chalk_managed" | "tenant_managed",
+    --   "api_key": string,
+    --   "base_url": "https://openrouter.ai/api/v1",
+    --   "default_model": "openai/gpt-5.4-mini",
+    --   "fallback_model": "anthropic/claude-fable-5",
+    --   "allowed_models": [
+    --     "openai/gpt-5.4-mini",
+    --     "anthropic/claude-fable-5"
+    --   ]
+    -- }
+    ai_provider_config jsonb,
+    -- {
+    --   "enabled": true,
+    --   "provider": "cloudflare_r2" | "aws_s3",
+    --   "mode": "chalk_managed" | "tenant_managed",
+    --   "bucket": "chalk-recordings",
+    --   "prefix": "recordings/",
+    --   "access_key_id": string,
+    --   "secret_access_key": string
+    -- }
+    storage_provider_config jsonb,
     logo_key text,
     website text,
     updated_at timestamptz not null default now(),
@@ -176,6 +221,22 @@ create table transcriptions (
     text text,
     metadata jsonb,
     completed_at timestamptz,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now()
+);
+
+create table audit_logs (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    actor_user_id uuid references users(id),
+    actor_type text not null, -- user, api_key, system
+    action text not null,
+    details jsonb,
+    outcome text not null, -- success, failure, pending
+    error_code text,
+    error_message text,
+    before jsonb,
+    after jsonb,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );

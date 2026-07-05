@@ -19,13 +19,13 @@ What follows is minimal orientation only. Source of truth lives in the code and 
 ## Common commands
 
 ```bash
-bun install
-bun run build
-bun run dev
-bun run test
-bun run lint
-bun run check-types
-bun run generate
+pnpm install
+pnpm run build
+pnpm run dev
+pnpm run test
+pnpm run lint
+pnpm run check-types
+pnpm run generate
 ```
 
 ## Cost Model

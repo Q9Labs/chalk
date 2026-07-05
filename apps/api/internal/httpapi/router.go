@@ -102,7 +102,7 @@ func writeReadinessError(w http.ResponseWriter) {
 func mountV1Routes(r chi.Router, options Options) {
 	r.Route("/v1", func(r chi.Router) {
 		mountAuthRoutes(r, options.Authentication, options.SessionCookie, options.RateLimit)
-		mountMeRoutes(r, options.Authentication)
+		mountMeRoutes(r, options.Authentication, options.RateLimit)
 
 		r.Group(func(r chi.Router) {
 			r.Use(requireAuthentication(options.Authentication))
