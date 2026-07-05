@@ -6,12 +6,6 @@ declare module "*.css?url" {
   export default url;
 }
 
-// Excalidraw CSS specifically
-declare module "@excalidraw/excalidraw/dist/prod/index.css?url" {
-  const url: string;
-  export default url;
-}
-
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{

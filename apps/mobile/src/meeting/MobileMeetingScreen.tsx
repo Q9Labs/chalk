@@ -1,9 +1,10 @@
-import { type ChalkSession } from "@q9labs/chalk-core";
 import { ChalkNativeProvider, NativeVideoConference, useSession, type NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
 import { useEffect, useMemo } from "react";
 import { Platform } from "react-native";
 import type { LobbyRoute } from "../lib/chalk";
 import { recordWideEvent } from "../lib/dev-diagnostics";
+
+type ChalkSession = ReturnType<typeof useSession>;
 
 export interface MeetingScreenProps {
   route: LobbyRoute;

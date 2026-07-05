@@ -1,5 +1,18 @@
 import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
-import type { WideEvent, WideEventOutcome } from "@q9labs/chalk-core";
+
+export type WideEventOutcome = "success" | "error" | "timeout";
+
+export interface WideEvent {
+  eventId: string;
+  eventType: string;
+  timestamp: string;
+  outcome: WideEventOutcome;
+  durationMs: number;
+  data: Record<string, unknown>;
+  error?: {
+    message: string;
+  };
+}
 
 const isVitestRuntime = typeof process !== "undefined" && process.env.VITEST === "true";
 const isDevelopmentRuntime = typeof __DEV__ !== "undefined" ? __DEV__ : isVitestRuntime || process.env.NODE_ENV !== "production";
@@ -642,7 +655,8 @@ export const recordManualRequest = (entry: Omit<DevDiagnosticsRequestLog, "id" |
   });
 };
 
-export const recordWideEvent = (event: WideEvent) => {
+export const recordWideEvent = (rawEvent: unknown) => {
+  const event = rawEvent as WideEvent;
   const request = (event.data.request ?? {}) as { method?: string; path?: string };
   const response = (event.data.response ?? {}) as { statusCode?: number | null; requestId?: string | null; traceId?: string | null; cfRay?: string | null };
 

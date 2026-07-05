@@ -1,5 +1,5 @@
-import type { TokenStorage } from "@q9labs/chalk-core";
 import * as SecureStore from "expo-secure-store";
+import type { TokenStorage } from "./mobile-auth";
 import { createStorageScopeId } from "./mobile-runtime";
 
 export const LEGACY_HOST_TOKEN_PREFIXES = ["chalk_mobile_host_token_", "chalk_mobile_host_token_v2_"];

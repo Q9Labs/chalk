@@ -1,4 +1,4 @@
-import { humanizeRoomName } from "@q9labs/chalk-core";
+import { humanizeRoomName } from "./room-names";
 
 type JoinExchangePayload = {
   roomId?: string | null;

@@ -1,5 +1,4 @@
-import { wideEvents, type ChalkSession } from "@q9labs/chalk-core";
-import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
+import type { NativeVideoConferenceDiagnosticsSnapshot, useSession } from "@q9labs/chalk-react-native";
 import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
@@ -25,6 +24,12 @@ import {
 import { Theme } from "./src/lib/theme";
 import { MobileMeetingScreen } from "./src/meeting/MobileMeetingScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
+
+type ChalkSession = ReturnType<typeof useSession> & {
+  chalkClient?: {
+    disconnect: () => void;
+  };
+};
 
 export default function App(): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
@@ -169,20 +174,6 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     if (!diagnosticsEnabled) {
-      wideEvents.configure({ enabled: false, includeDebugInfo: false, handler: undefined });
-      setDevDiagnosticsSession(null);
-      return;
-    }
-
-    wideEvents.configure({
-      enabled: true,
-      includeDebugInfo: true,
-      handler: recordWideEvent,
-    });
-  }, [diagnosticsEnabled]);
-
-  useEffect(() => {
-    if (!diagnosticsEnabled) {
       return;
     }
 
@@ -274,7 +265,7 @@ export default function App(): React.JSX.Element {
     try {
       await session.leave();
     } catch {
-      session.chalkClient.disconnect();
+      session.chalkClient?.disconnect();
     }
   }, []);
 

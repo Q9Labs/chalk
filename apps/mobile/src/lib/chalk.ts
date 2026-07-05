@@ -1,8 +1,8 @@
-import { APIClient, createTokenProvider } from "@q9labs/chalk-core";
 import mobilePackageJson from "../../package.json";
 import * as SecureStore from "expo-secure-store";
 import { NativeModules, Platform } from "react-native";
 import { decodeTokenClaimsPreview, maskSecret, recordManualRequest, type DevDiagnosticsDeviceInfo, type DevDiagnosticsTokenClaimsPreview } from "./dev-diagnostics";
+import { createTokenProvider } from "./mobile-auth";
 import { canUseLocalHostBootstrap, createStorageScopeId, resolveAppRuntimeUrl } from "./mobile-runtime";
 import { createHostTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY } from "./host-token-storage";
 import { extractJoinTokenFromInviteLink } from "./inviteLink";
@@ -46,6 +46,13 @@ export type LobbyRoute = BaseMeetingRoute & {
 };
 
 export type MobileRoute = { kind: "home" } | LobbyRoute;
+
+type JoinTokenExchangeResponse = {
+  accessToken: string;
+  expiresIn: number;
+  roomId?: string | null;
+  roomName?: string | null;
+};
 
 let cachedHostTokenProvider: (() => Promise<string>) | null = null;
 let cachedHostTokenProviderKey: string | null = null;
@@ -401,20 +408,62 @@ export async function getMobileDebugContext(apiUrl: string): Promise<MobileDebug
 }
 
 export async function resolveJoinToken(joinToken: string, apiUrl: string): Promise<LobbyRoute> {
-  const client = new APIClient({ apiUrl });
-  const response = await client.exchangeJoinToken(joinToken);
-  if (!response.success || !response.data) {
-    throw new Error(response.error?.message ?? "Invalid join link");
+  const response = await fetch(`${apiUrl}/api/v1/public/join-token/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ join_token: joinToken }),
+  });
+  const responseMeta = {
+    statusCode: response.status,
+    requestId: response.headers?.get?.("x-request-id") ?? null,
+    traceId: response.headers?.get?.("x-chalk-trace-id") ?? null,
+    cfRay: response.headers?.get?.("cf-ray") ?? null,
+  };
+  const data = (await response.json().catch(() => null)) as { access_token?: string; expires_in?: number; room_id?: string | null; room_name?: string | null; error?: string; message?: string } | null;
+
+  if (!response.ok || !data?.access_token || typeof data.expires_in !== "number") {
+    recordManualRequest({
+      eventType: "api.request",
+      method: "POST",
+      path: "/api/v1/public/join-token/exchange",
+      url: `${apiUrl}/api/v1/public/join-token/exchange`,
+      outcome: "error",
+      statusCode: responseMeta.statusCode,
+      requestId: responseMeta.requestId,
+      traceId: responseMeta.traceId,
+      cfRay: responseMeta.cfRay,
+      errorMessage: data?.message ?? data?.error ?? "Invalid join link",
+    });
+    throw new Error(data?.message ?? data?.error ?? "Invalid join link");
   }
 
-  const roomId = getCanonicalJoinRoomId(response.data);
-  const roomName = getJoinRoomName(response.data);
+  recordManualRequest({
+    eventType: "api.request",
+    method: "POST",
+    path: "/api/v1/public/join-token/exchange",
+    url: `${apiUrl}/api/v1/public/join-token/exchange`,
+    outcome: "success",
+    statusCode: responseMeta.statusCode,
+    requestId: responseMeta.requestId,
+    traceId: responseMeta.traceId,
+    cfRay: responseMeta.cfRay,
+  });
+
+  const exchanged: JoinTokenExchangeResponse = {
+    accessToken: data.access_token,
+    expiresIn: data.expires_in,
+    roomId: data.room_id,
+    roomName: data.room_name,
+  };
+
+  const roomId = getCanonicalJoinRoomId(exchanged);
+  const roomName = getJoinRoomName(exchanged);
 
   const context: JoinContext = {
     joinToken,
     roomName,
-    accessToken: response.data.accessToken,
-    expiresAtMs: Date.now() + response.data.expiresIn * 1000,
+    accessToken: exchanged.accessToken,
+    expiresAtMs: Date.now() + exchanged.expiresIn * 1000,
   };
   await setJoinContext(context);
 

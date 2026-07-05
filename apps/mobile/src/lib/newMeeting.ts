@@ -1,5 +1,5 @@
-import { createFriendlyRoomName } from "@q9labs/chalk-core";
 import { recordManualRequest } from "./dev-diagnostics";
+import { createFriendlyRoomName } from "./room-names";
 
 export async function createHostedMeeting(apiUrl: string, getAccessToken: () => Promise<string>, roomNameOverride?: string, random: () => number = Math.random, fetchImpl: typeof fetch = fetch) {
   const roomName = roomNameOverride || createFriendlyRoomName(random).label;
