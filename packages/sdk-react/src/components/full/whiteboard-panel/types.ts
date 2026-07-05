@@ -1,4 +1,17 @@
-import type { WhiteboardCursor, WhiteboardSnapshot, WhiteboardUpdate } from "@q9labs/chalk-core";
+export interface WhiteboardCursor {
+  participantId: string;
+  x: number;
+  y: number;
+  [key: string]: unknown;
+}
+export interface WhiteboardSnapshot {
+  elements?: readonly unknown[];
+  [key: string]: unknown;
+}
+export interface WhiteboardUpdate {
+  elements?: readonly unknown[];
+  [key: string]: unknown;
+}
 export type { BinaryFiles } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawCollabEngine } from "@q9labs/chalk-whiteboard/collab";
 import type { MutableRefObject } from "react";

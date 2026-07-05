@@ -1,11 +1,6 @@
-export const formatDuration = (seconds: number): string => {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-
-  if (hours > 0) {
-    const remainingMins = minutes % 60;
-    return `${hours}h ${remainingMins}m`;
-  }
-  return `${minutes} min`;
-};
+export function formatDuration(seconds = 0): string {
+  const safe = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(safe / 60);
+  const remainder = safe % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}

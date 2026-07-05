@@ -1,9 +1,5 @@
-/**
- * Features hooks namespace
- */
-
-export { useChat, type UseChatReturn } from "./useChat";
-export { useRecording, type UseRecordingReturn } from "./useRecording";
-export { useTranscripts, type UseTranscriptsReturn } from "./useTranscripts";
-export { useWhiteboard, type UseWhiteboardReturn } from "./useWhiteboard";
-export { useInteractions, type UseInteractionsReturn } from "./useInteractions";
+export * from "./useChat";
+export * from "./useInteractions";
+export * from "./useRecording";
+export * from "./useTranscripts";
+export * from "./useWhiteboard";

@@ -1,5 +1,34 @@
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import type { ChalkError, Participant, Transcript } from "@q9labs/chalk-core";
+export interface ChalkError {
+  code?: string;
+  message?: string;
+  details?: Record<string, unknown>;
+}
+export interface Participant {
+  id: string;
+  userId?: string;
+  displayName: string;
+  isLocal?: boolean;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
+  isScreenSharing?: boolean;
+  handRaised?: boolean;
+  connectionQuality?: number;
+  videoTrack?: MediaStreamTrack | null;
+  audioTrack?: MediaStreamTrack | null;
+  screenShareTrack?: MediaStreamTrack | null;
+  screenShareAudioTrack?: MediaStreamTrack | null;
+  role?: string;
+}
+export interface Transcript {
+  id: string;
+  speaker?: string;
+  speakerId?: string;
+  text: string;
+  timestamp?: Date;
+  isInterim?: boolean;
+  confidence?: number;
+}
 import type { ComponentType, ReactNode } from "react";
 
 export type Phase = "lobby" | "joining" | "meeting" | "end";

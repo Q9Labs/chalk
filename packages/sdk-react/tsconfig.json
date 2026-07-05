@@ -9,9 +9,12 @@
     "noEmit": false,
     "composite": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "paths": {
+      "@q9labs/chalk-ui/button": ["../ui/dist/button.d.ts"],
+      "@q9labs/chalk-ui/reactions": ["../ui/dist/reactions.d.ts"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
-  "references": [{ "path": "../sdk-core" }]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

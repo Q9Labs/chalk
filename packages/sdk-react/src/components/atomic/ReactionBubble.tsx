@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import { getParticipantColor } from "../../utils/colorGenerator";
+import { CELEBRATION_EMOJIS } from "@q9labs/chalk-ui/reactions";
 
 interface ReactionBubbleProps {
   emoji: string;
@@ -11,7 +12,6 @@ interface ReactionBubbleProps {
   className?: string;
 }
 
-const CELEBRATION_EMOJIS = ["🎉", "🎊", "🥳", "🎈", "🏆", "🥇", "⭐", "🌟", "✨", "💫", "🔥", "💥", "💯", "🎆", "🎇"];
 const BASE_PARTICLE_COLORS = ["#14b8a6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4", "#22c55e"];
 
 // Generate random animation properties for natural movement

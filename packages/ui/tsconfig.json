@@ -3,8 +3,6 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
-      "@q9labs/chalk-core": ["../sdk-core/src/index.ts"],
-      "@q9labs/chalk-react": ["../sdk-react/src/index.ts"],
       "@q9labs/chalk-ui": ["./src/index.ts"]
     },
     "noEmit": false,

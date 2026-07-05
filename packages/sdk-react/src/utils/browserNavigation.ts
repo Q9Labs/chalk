@@ -1,3 +1,1 @@
-export function replaceWindowLocation(url: string) {
-  window.location.replace(url);
-}
+export function navigateTo(_url: string) {}

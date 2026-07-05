@@ -1,4 +1,13 @@
-import type { MediaDevice, VideoBackgroundEffect } from "@q9labs/chalk-core";
+export interface MediaDevice {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  groupId?: string;
+}
+export interface VideoBackgroundEffect {
+  mode: "none" | "blur" | "image" | string;
+  [key: string]: unknown;
+}
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 export type MeetingPanel = "chat" | "participants" | "transcription";

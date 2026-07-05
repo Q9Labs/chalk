@@ -1,4 +1,8 @@
-const EMOJI_CATEGORIES = {
+export const DEFAULT_QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
+
+export const CELEBRATION_EMOJIS: readonly string[] = ["🎉", "🎊", "🥳", "🎈", "🏆", "🥇", "⭐", "🌟", "✨", "💫", "🔥", "💥", "💯", "🎆", "🎇"];
+
+export const EMOJI_CATEGORIES = {
   smileys: {
     label: "😀",
     name: "Smileys",
@@ -24,9 +28,13 @@ const EMOJI_CATEGORIES = {
     name: "Objects",
     emojis: ["💡", "📌", "📍", "🔔", "🔕", "📢", "📣", "💬", "💭", "🗯️", "✅", "❌", "❓", "❗", "💤", "💢", "💦", "💨", "🕐", "⏰", "📅", "📆", "🔒", "🔓", "🔑"],
   },
-};
+} as const;
 
-const keywords = {
+export type ReactionCategoryKey = keyof typeof EMOJI_CATEGORIES;
+
+export type ReactionCategory = (typeof EMOJI_CATEGORIES)[ReactionCategoryKey];
+
+export const EMOJI_KEYWORDS: Record<string, string> = {
   "😀": "grinning smile happy face",
   "😃": "smiley happy face big eyes",
   "😄": "smile happy face",
@@ -136,6 +144,7 @@ const keywords = {
   "🔥": "fire hot lit flame",
   "💥": "collision explosion boom",
   "💯": "hundred percent perfect",
+  "🤩": "star struck eyes",
   "🥂": "clinking glasses cheers",
   "🍾": "champagne bottle pop",
   "🎆": "fireworks celebrate night",
@@ -168,17 +177,3 @@ const keywords = {
   "🔓": "unlocked lock open",
   "🔑": "key lock secure",
 };
-
-let output = "export const EMOJI_KEYWORDS: Record<string, string> = {\n";
-for (const [cat, data] of Object.entries(EMOJI_CATEGORIES)) {
-  for (const emoji of data.emojis) {
-    if (keywords[emoji]) {
-      output += `  "${emoji}": "${keywords[emoji]}",\n`;
-    } else {
-      output += `  "${emoji}": "",\n`;
-    }
-  }
-}
-output += "};\n";
-
-console.log(output);

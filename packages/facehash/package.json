@@ -8,8 +8,7 @@
     "directory": "packages/facehash"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "main": "./dist/index.js",

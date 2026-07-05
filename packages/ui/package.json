@@ -20,16 +20,36 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./assets": {
+      "types": "./dist/assets/index.d.ts",
+      "import": "./dist/assets/index.js"
+    },
+    "./backgrounds/*": "./dist/assets/backgrounds/*",
+    "./button": {
+      "types": "./dist/button.d.ts",
+      "import": "./dist/button.js"
+    },
+    "./logos/*": "./dist/assets/logos/*",
+    "./reactions": {
+      "types": "./dist/reactions.d.ts",
+      "import": "./dist/reactions.js"
+    },
+    "./sounds/*": "./dist/assets/sounds/*",
+    "./utils": {
+      "types": "./dist/lib/utils.d.ts",
+      "import": "./dist/lib/utils.js"
+    },
     "./styles.css": "./dist/styles.css"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
   },
   "scripts": {
-    "build": "tsup ./src/index.ts --format esm --out-dir ./dist --platform node --external react --external @chalk/core && pnpm run build:types && pnpm run build:css",
+    "build": "tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:assets",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
-    "dev": "pnpm run build:css && tsup ./src/index.ts --format esm --out-dir ./dist --platform node --external react --external @chalk/core --watch",
+    "build:assets": "mkdir -p ./dist/assets && cp -R ./src/assets/backgrounds ./src/assets/logos ./src/assets/sounds ./dist/assets/",
+    "dev": "pnpm run build:css && pnpm run build:assets && tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge --watch",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
@@ -37,10 +57,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
-    "@q9labs/chalk-core": "workspace:^",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.468.0",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
@@ -48,6 +66,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "tailwindcss": "^4.1.18",
+    "tw-animate-css": "^1.3.0",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {

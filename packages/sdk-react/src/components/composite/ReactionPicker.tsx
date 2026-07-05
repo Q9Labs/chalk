@@ -4,6 +4,7 @@ import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../hooks/useMediaQuery";
 import { Search01Icon } from "../../utils/icons";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { DEFAULT_QUICK_REACTIONS, EMOJI_CATEGORIES, EMOJI_KEYWORDS, type ReactionCategoryKey } from "@q9labs/chalk-ui/reactions";
 
 export interface ReactionPickerProps {
   isOpen: boolean;
@@ -17,186 +18,10 @@ export interface ReactionPickerProps {
   size?: "default" | "compact" | "mini";
 }
 
-const DEFAULT_QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
-
-const EMOJI_CATEGORIES = {
-  smileys: {
-    label: "😀",
-    name: "Smileys",
-    emojis: ["😀", "😃", "😄", "😁", "😅", "😂", "🤣", "😊", "😇", "🙂", "😉", "😌", "😍", "🥰", "😘", "😋", "😛", "🤪", "🤨", "🧐", "🤓", "😎", "🥳", "😏", "😒", "🙄", "😬", "😮", "😯", "😲", "😳", "🥺", "😢", "😭", "😤", "😠", "🤯", "😱", "🥶", "🥵"],
-  },
-  gestures: {
-    label: "👋",
-    name: "Gestures",
-    emojis: ["👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "👇", "☝️", "👍", "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝", "🙏", "💪", "🦾"],
-  },
-  hearts: {
-    label: "❤️",
-    name: "Hearts",
-    emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❤️‍🔥", "❤️‍🩹", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "♥️", "😍", "🥰", "😘", "😻"],
-  },
-  celebration: {
-    label: "🎉",
-    name: "Celebration",
-    emojis: ["🎉", "🎊", "🥳", "🎈", "🎁", "🎀", "🏆", "🥇", "🏅", "⭐", "🌟", "✨", "💫", "🔥", "💥", "💯", "🙌", "👏", "🤩", "🥂", "🍾", "🎆", "🎇", "🪅", "🎯"],
-  },
-  objects: {
-    label: "💡",
-    name: "Objects",
-    emojis: ["💡", "📌", "📍", "🔔", "🔕", "📢", "📣", "💬", "💭", "🗯️", "✅", "❌", "❓", "❗", "💤", "💢", "💦", "💨", "🕐", "⏰", "📅", "📆", "🔒", "🔓", "🔑"],
-  },
-} as const;
-
-const EMOJI_KEYWORDS: Record<string, string> = {
-  "😀": "grinning smile happy face",
-  "😃": "smiley happy face big eyes",
-  "😄": "smile happy face",
-  "😁": "grin teeth face",
-  "😅": "sweat smile face",
-  "😂": "cry tears joy laugh face",
-  "🤣": "rofl laughing face",
-  "😊": "blush happy face",
-  "😇": "innocent angel face",
-  "🙂": "slightly smiling happy face",
-  "😉": "wink face",
-  "😌": "relieved face",
-  "😍": "heart eyes love face",
-  "🥰": "hearts love face",
-  "😘": "kissing heart face",
-  "😋": "yum tongue face",
-  "😛": "stuck out tongue face",
-  "🤪": "zany crazy face",
-  "🤨": "raised eyebrow face",
-  "🧐": "monocle inspecting face",
-  "🤓": "nerd glasses face",
-  "😎": "sunglasses cool face",
-  "🥳": "partying face",
-  "😏": "smirk sly face",
-  "😒": "unamused face",
-  "🙄": "roll eyes face",
-  "😬": "grimacing teeth face",
-  "😮": "open mouth surprise face",
-  "😯": "hushed surprise face",
-  "😲": "astonished surprise face",
-  "😳": "flushed embarrassed face",
-  "🥺": "pleading puppy eyes face",
-  "😢": "cry sad face",
-  "😭": "sob crying face",
-  "😤": "triumph steam face",
-  "😠": "angry mad face",
-  "🤯": "exploding head mind blown",
-  "😱": "scream scared face",
-  "🥶": "cold freezing face",
-  "🥵": "hot sweating face",
-  "👋": "wave hello hand",
-  "🤚": "raised back hand",
-  "🖐️": "raised hand fingers splayed",
-  "✋": "raised hand stop",
-  "🖖": "vulcan salute star trek",
-  "👌": "ok perfect hand",
-  "🤌": "pinched fingers italian",
-  "🤏": "pinching small hand",
-  "✌️": "peace victory hand",
-  "🤞": "crossed fingers luck",
-  "🤟": "love you hand",
-  "🤘": "horns rock on hand",
-  "🤙": "call me shaka hand",
-  "👈": "point left hand",
-  "👉": "point right hand",
-  "👆": "point up hand",
-  "👇": "point down hand",
-  "☝️": "point up index",
-  "👍": "thumbs up yes cool",
-  "👎": "thumbs down no",
-  "✊": "fist power",
-  "👊": "fist bump punch",
-  "🤛": "left-facing fist",
-  "🤜": "right-facing fist",
-  "👏": "clap applause hand",
-  "🙌": "raise hands celebrate",
-  "👐": "open hands",
-  "🤲": "palms up together",
-  "🤝": "handshake agree",
-  "🙏": "pray please thank you",
-  "💪": "muscle flex strong",
-  "🦾": "mechanical arm robot",
-  "❤️": "red heart love",
-  "🧡": "orange heart love",
-  "💛": "yellow heart love",
-  "💚": "green heart love",
-  "💙": "blue heart love",
-  "💜": "purple heart love",
-  "🖤": "black heart love",
-  "🤍": "white heart love",
-  "🤎": "brown heart love",
-  "💔": "broken heart sad",
-  "❤️‍🔥": "heart on fire",
-  "❤️‍🩹": "mending heart heal",
-  "💕": "two hearts love",
-  "💞": "revolving hearts love",
-  "💓": "beating heart love",
-  "💗": "growing heart love",
-  "💖": "sparkling heart love",
-  "💘": "heart with arrow love",
-  "💝": "heart with ribbon gift",
-  "💟": "heart decoration love",
-  "♥️": "heart suit card",
-  "😻": "heart eyes cat love",
-  "🎉": "party popper celebrate",
-  "🎊": "confetti ball celebrate",
-  "🎈": "balloon party celebrate",
-  "🎁": "gift present box",
-  "🎀": "ribbon bow pink",
-  "🏆": "trophy win first",
-  "🥇": "1st place medal gold",
-  "🏅": "sports medal win",
-  "⭐": "star yellow shine",
-  "🌟": "glowing star shine",
-  "✨": "sparkles magic shine",
-  "💫": "dizzy shooting star",
-  "🔥": "fire hot lit flame",
-  "💥": "collision explosion boom",
-  "💯": "hundred percent perfect",
-  "🤩": "star struck eyes",
-  "🥂": "clinking glasses cheers",
-  "🍾": "champagne bottle pop",
-  "🎆": "fireworks celebrate night",
-  "🎇": "sparkler firework celebrate",
-  "🪅": "pinata party celebrate",
-  "🎯": "bullseye target hit",
-  "💡": "light bulb idea smart",
-  "📌": "pushpin location pin",
-  "📍": "round pushpin location",
-  "🔔": "bell notification alarm",
-  "🔕": "bell with slash silent",
-  "📢": "loudspeaker announce",
-  "📣": "megaphone cheer announce",
-  "💬": "speech balloon chat",
-  "💭": "thought balloon think",
-  "🗯️": "anger right balloon mad",
-  "✅": "check mark button yes",
-  "❌": "cross mark no wrong",
-  "❓": "question mark ask",
-  "❗": "exclamation mark alert",
-  "💤": "zzz sleep tired",
-  "💢": "anger symbol mad",
-  "💦": "sweat drops water",
-  "💨": "dashing away wind speed",
-  "🕐": "one oclock time clock",
-  "⏰": "alarm clock time",
-  "📅": "calendar date",
-  "📆": "tear-off calendar date",
-  "🔒": "locked lock secure",
-  "🔓": "unlocked lock open",
-  "🔑": "key lock secure",
-};
-
-type CategoryKey = keyof typeof EMOJI_CATEGORIES;
-
 export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReactions = [], position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger } = useHaptics();
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>("smileys");
+  const [activeCategory, setActiveCategory] = useState<ReactionCategoryKey>("smileys");
   const [searchQuery, setSearchQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -231,7 +56,7 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
   }, [isOpen, onClose]);
 
   const quickReactions = recentReactions.length >= 6 ? recentReactions.slice(0, 6) : DEFAULT_QUICK_REACTIONS;
-  const categories = Object.entries(EMOJI_CATEGORIES) as [CategoryKey, (typeof EMOJI_CATEGORIES)[CategoryKey]][];
+  const categories = Object.entries(EMOJI_CATEGORIES) as [ReactionCategoryKey, (typeof EMOJI_CATEGORIES)[ReactionCategoryKey]][];
 
   // Search for specific emojis when query exists
   const isSearching = searchQuery.trim() !== "";

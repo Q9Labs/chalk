@@ -1,4 +1,9 @@
-import type { MediaDevice } from "@q9labs/chalk-core";
+interface MediaDevice {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  groupId?: string;
+}
 import { cn } from "../../../utils/cn";
 import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { ControlBar, MobileControlSheet, ReactionPicker } from "../../composite";

@@ -1,5 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
-import type { MediaDevice } from "@q9labs/chalk-core";
+interface MediaDevice {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  groupId?: string;
+}
 import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, ArrowDown01Icon, Tick01Icon, VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { ControlButton } from "../atomic";

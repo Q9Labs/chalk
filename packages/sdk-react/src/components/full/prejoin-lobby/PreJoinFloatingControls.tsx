@@ -6,7 +6,12 @@ import { useHaptics } from "../../../hooks/ui/useHaptics";
 import { cn } from "../../../utils/cn";
 import { ControlButton } from "../../atomic/ControlButton";
 import { DeviceControlButton } from "../../composite/DeviceControlButton";
-import type { MediaDevice } from "@q9labs/chalk-core";
+interface MediaDevice {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  groupId?: string;
+}
 
 interface PreJoinFloatingControlsProps {
   isAudioEnabled: boolean;

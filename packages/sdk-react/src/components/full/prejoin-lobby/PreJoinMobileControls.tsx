@@ -4,7 +4,12 @@ import { Settings01Icon } from "../../../utils/icons";
 import { useHaptics } from "../../../hooks/ui/useHaptics";
 import { ControlButton } from "../../atomic/ControlButton";
 import { DeviceControlButton } from "../../composite/DeviceControlButton";
-import type { MediaDevice } from "@q9labs/chalk-core";
+interface MediaDevice {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  groupId?: string;
+}
 
 interface PreJoinMobileControlsProps {
   isAudioEnabled: boolean;

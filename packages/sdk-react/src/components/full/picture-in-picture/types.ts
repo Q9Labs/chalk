@@ -1,4 +1,9 @@
-import type { MediaDevice } from "@q9labs/chalk-core";
+interface MediaDevice {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  groupId?: string;
+}
 import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
 
 export type PictureInPicturePhase = "prejoin" | "joining" | "meeting";

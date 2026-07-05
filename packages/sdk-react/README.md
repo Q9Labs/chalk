@@ -5,7 +5,7 @@ React SDK for Chalk video conferencing.
 ## Installation
 
 ```bash
-npm install @q9labs/chalk-react @q9labs/chalk-core
+pnpm add @q9labs/chalk-react @q9labs/chalk-ui
 # For whiteboard support:
 npm install @excalidraw/excalidraw
 ```
@@ -16,7 +16,7 @@ npm install @excalidraw/excalidraw
 
 ```tsx
 // app/layout.tsx
-import "@q9labs/chalk-react/styles.css";
+import "@q9labs/chalk-ui/styles.css";
 import { ChalkProvider } from "@q9labs/chalk-react";
 
 export default function RootLayout({ children }) {
@@ -35,7 +35,7 @@ export default function RootLayout({ children }) {
 ```js
 // next.config.mjs
 const nextConfig = {
-  transpilePackages: ["@q9labs/chalk-ui", "@q9labs/chalk-react", "@q9labs/chalk-core", "@q9labs/chalk-whiteboard"],
+  transpilePackages: ["@q9labs/chalk-ui", "@q9labs/chalk-react", "@q9labs/chalk-whiteboard"],
 };
 export default nextConfig;
 ```
@@ -44,7 +44,7 @@ export default nextConfig;
 
 ```tsx
 // pages/_app.tsx
-import "@q9labs/chalk-react/styles.css";
+import "@q9labs/chalk-ui/styles.css";
 import { ChalkProvider } from "@q9labs/chalk-react";
 
 export default function App({ Component, pageProps }) {
@@ -60,7 +60,7 @@ export default function App({ Component, pageProps }) {
 
 ```tsx
 // main.tsx or App.tsx
-import "@q9labs/chalk-react/styles.css";
+import "@q9labs/chalk-ui/styles.css";
 import { ChalkProvider } from "@q9labs/chalk-react";
 ```
 
