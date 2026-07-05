@@ -18,6 +18,25 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "assets": [
+        "./dist/assets/index.d.ts"
+      ],
+      "button": [
+        "./dist/button.d.ts"
+      ],
+      "reactions": [
+        "./dist/reactions.d.ts"
+      ],
+      "utils": [
+        "./dist/lib/utils.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -27,7 +46,6 @@
       "types": "./dist/assets/index.d.ts",
       "import": "./dist/assets/index.js"
     },
-    "./backgrounds/*": "./dist/assets/backgrounds/*",
     "./button": {
       "types": "./dist/button.d.ts",
       "import": "./dist/button.js"
@@ -37,7 +55,6 @@
       "types": "./dist/reactions.d.ts",
       "import": "./dist/reactions.js"
     },
-    "./sounds/*": "./dist/assets/sounds/*",
     "./utils": {
       "types": "./dist/lib/utils.d.ts",
       "import": "./dist/lib/utils.js"
@@ -51,7 +68,7 @@
     "build": "rm -rf ./dist && tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:assets",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
-    "build:assets": "mkdir -p ./dist/assets && cp -R ./src/assets/backgrounds ./src/assets/logos ./src/assets/sounds ./dist/assets/",
+    "build:assets": "mkdir -p ./dist/assets && cp -R ./src/assets/logos ./dist/assets/",
     "dev": "pnpm run build:css && pnpm run build:assets && tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge --watch",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",

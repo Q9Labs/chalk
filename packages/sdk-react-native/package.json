@@ -19,6 +19,31 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "android": [
+        "./dist/android.d.ts"
+      ],
+      "ios": [
+        "./dist/ios.d.ts"
+      ],
+      "ios-phone": [
+        "./dist/ios-phone.d.ts"
+      ],
+      "ios-pad": [
+        "./dist/ios-pad.d.ts"
+      ],
+      "macos": [
+        "./dist/macos.d.ts"
+      ],
+      "theme": [
+        "./dist/ui/theme.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
   "react-native": "./dist/index.js",
   "exports": {
     ".": {

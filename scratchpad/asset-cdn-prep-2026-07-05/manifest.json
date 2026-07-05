@@ -1,0 +1,381 @@
+{
+  "generatedAt": "2026-07-05T15:47:29.979Z",
+  "cdnBaseUrl": "https://assets.chalkmeet.com/ui/",
+  "notes": ["Prepared for staging only. No Cloudflare buckets were created and no assets were uploaded.", "Hashes are the first 12 hex characters of each derivative file's SHA-256 digest."],
+  "assets": {
+    "background.beach-palm-promenade": {
+      "source": "packages/ui/src/assets/backgrounds/bg_1.jpg",
+      "sourceBytes": 256825,
+      "description": "Sunny beach promenade with palm trees.",
+      "namingConfidence": "high",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "filename": "beach-palm-promenade.d58ce740db89.avif",
+          "mimeType": "image/avif",
+          "bytes": 62747,
+          "sha256Prefix": "d58ce740db89",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/beach-palm-promenade.d58ce740db89.avif"
+        },
+        "webp": {
+          "filename": "beach-palm-promenade.02e06aa98c31.webp",
+          "mimeType": "image/webp",
+          "bytes": 119778,
+          "sha256Prefix": "02e06aa98c31",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/beach-palm-promenade.02e06aa98c31.webp"
+        }
+      }
+    },
+    "background.blue-ribbon-loop": {
+      "source": "packages/ui/src/assets/backgrounds/bg_2.jpg",
+      "sourceBytes": 155961,
+      "description": "Abstract blue ribbon loop on a dark background.",
+      "namingConfidence": "high",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "filename": "blue-ribbon-loop.c4eb4ed68d9e.avif",
+          "mimeType": "image/avif",
+          "bytes": 19043,
+          "sha256Prefix": "c4eb4ed68d9e",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/blue-ribbon-loop.c4eb4ed68d9e.avif"
+        },
+        "webp": {
+          "filename": "blue-ribbon-loop.fbafdb557f4b.webp",
+          "mimeType": "image/webp",
+          "bytes": 49578,
+          "sha256Prefix": "fbafdb557f4b",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/blue-ribbon-loop.fbafdb557f4b.webp"
+        }
+      }
+    },
+    "background.bright-office-workspace": {
+      "source": "packages/ui/src/assets/backgrounds/bg_3.jpg",
+      "sourceBytes": 145253,
+      "description": "Bright modern office workspace with desks and plants.",
+      "namingConfidence": "high",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "filename": "bright-office-workspace.97771e0df560.avif",
+          "mimeType": "image/avif",
+          "bytes": 39103,
+          "sha256Prefix": "97771e0df560",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/bright-office-workspace.97771e0df560.avif"
+        },
+        "webp": {
+          "filename": "bright-office-workspace.53c60e7dccc0.webp",
+          "mimeType": "image/webp",
+          "bytes": 63944,
+          "sha256Prefix": "53c60e7dccc0",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/bright-office-workspace.53c60e7dccc0.webp"
+        }
+      }
+    },
+    "background.sunset-lake-boat": {
+      "source": "packages/ui/src/assets/backgrounds/bg_4.jpg",
+      "sourceBytes": 83642,
+      "description": "Boat on a lake at sunset with hills in the background.",
+      "namingConfidence": "high",
+      "dimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "variants": {
+        "avif": {
+          "filename": "sunset-lake-boat.d70e09da7e1e.avif",
+          "mimeType": "image/avif",
+          "bytes": 18249,
+          "sha256Prefix": "d70e09da7e1e",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/sunset-lake-boat.d70e09da7e1e.avif"
+        },
+        "webp": {
+          "filename": "sunset-lake-boat.671d6959cd3f.webp",
+          "mimeType": "image/webp",
+          "bytes": 32060,
+          "sha256Prefix": "671d6959cd3f",
+          "cdnPath": "https://assets.chalkmeet.com/ui/backgrounds/sunset-lake-boat.671d6959cd3f.webp"
+        }
+      }
+    },
+    "sound.click": {
+      "source": "packages/ui/src/assets/sounds/click.mp3",
+      "sourceBytes": 73197,
+      "original": {
+        "durationSeconds": 3,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 192000
+      },
+      "variants": {
+        "opus": {
+          "filename": "click.a9f7aa4d4b04.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 10116,
+          "sha256Prefix": "a9f7aa4d4b04",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/click.a9f7aa4d4b04.opus"
+        },
+        "mp3": {
+          "filename": "click.b6e7623500a8.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 18408,
+          "sha256Prefix": "b6e7623500a8",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/click.b6e7623500a8.mp3"
+        }
+      }
+    },
+    "sound.error": {
+      "source": "packages/ui/src/assets/sounds/error.mp3",
+      "sourceBytes": 49581,
+      "original": {
+        "durationSeconds": 2,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 192000
+      },
+      "variants": {
+        "opus": {
+          "filename": "error.a7079dfbc9af.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 8544,
+          "sha256Prefix": "a7079dfbc9af",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/error.a7079dfbc9af.opus"
+        },
+        "mp3": {
+          "filename": "error.2cfe8b225499.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 12452,
+          "sha256Prefix": "2cfe8b225499",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/error.2cfe8b225499.mp3"
+        }
+      }
+    },
+    "sound.hand-raise": {
+      "source": "packages/ui/src/assets/sounds/hand-raise.mp3",
+      "sourceBytes": 16316,
+      "original": {
+        "durationSeconds": 1.092417,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 115404
+      },
+      "variants": {
+        "opus": {
+          "filename": "hand-raise.6483a6979a1f.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 5028,
+          "sha256Prefix": "6483a6979a1f",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/hand-raise.6483a6979a1f.opus"
+        },
+        "mp3": {
+          "filename": "hand-raise.e8bbf2a0f91d.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 6966,
+          "sha256Prefix": "e8bbf2a0f91d",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/hand-raise.e8bbf2a0f91d.mp3"
+        }
+      }
+    },
+    "sound.join": {
+      "source": "packages/ui/src/assets/sounds/join.mp3",
+      "sourceBytes": 27356,
+      "original": {
+        "durationSeconds": 1.475375,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 144508
+      },
+      "variants": {
+        "opus": {
+          "filename": "join.dbf745b208f0.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 5971,
+          "sha256Prefix": "dbf745b208f0",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/join.dbf745b208f0.opus"
+        },
+        "mp3": {
+          "filename": "join.dd5dd946a7a9.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 9317,
+          "sha256Prefix": "dd5dd946a7a9",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/join.dd5dd946a7a9.mp3"
+        }
+      }
+    },
+    "sound.leave": {
+      "source": "packages/ui/src/assets/sounds/leave.mp3",
+      "sourceBytes": 17612,
+      "original": {
+        "durationSeconds": 0.875354,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 154105
+      },
+      "variants": {
+        "opus": {
+          "filename": "leave.4ed50303ad96.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 4117,
+          "sha256Prefix": "4ed50303ad96",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/leave.4ed50303ad96.opus"
+        },
+        "mp3": {
+          "filename": "leave.33a9e1f6e7bc.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 5712,
+          "sha256Prefix": "33a9e1f6e7bc",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/leave.33a9e1f6e7bc.mp3"
+        }
+      }
+    },
+    "sound.message": {
+      "source": "packages/ui/src/assets/sounds/message.mp3",
+      "sourceBytes": 12380,
+      "original": {
+        "durationSeconds": 0.703396,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 132645
+      },
+      "variants": {
+        "opus": {
+          "filename": "message.f873d7cbc5c9.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 2745,
+          "sha256Prefix": "f873d7cbc5c9",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/message.f873d7cbc5c9.opus"
+        },
+        "mp3": {
+          "filename": "message.6e0e07daf817.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 4615,
+          "sha256Prefix": "6e0e07daf817",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/message.6e0e07daf817.mp3"
+        }
+      }
+    },
+    "sound.nudge": {
+      "source": "packages/ui/src/assets/sounds/nudge.mp3",
+      "sourceBytes": 17420,
+      "original": {
+        "durationSeconds": 1.100854,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 123234
+      },
+      "variants": {
+        "opus": {
+          "filename": "nudge.25bb7ebd3bfb.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 5538,
+          "sha256Prefix": "25bb7ebd3bfb",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/nudge.25bb7ebd3bfb.opus"
+        },
+        "mp3": {
+          "filename": "nudge.b3b0ad97e1b5.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 7123,
+          "sha256Prefix": "b3b0ad97e1b5",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/nudge.b3b0ad97e1b5.mp3"
+        }
+      }
+    },
+    "sound.reaction": {
+      "source": "packages/ui/src/assets/sounds/reaction.mp3",
+      "sourceBytes": 13580,
+      "original": {
+        "durationSeconds": 0.767396,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 136727
+      },
+      "variants": {
+        "opus": {
+          "filename": "reaction.cd7dae2a78ff.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 2913,
+          "sha256Prefix": "cd7dae2a78ff",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/reaction.cd7dae2a78ff.opus"
+        },
+        "mp3": {
+          "filename": "reaction.a7dd46b3203e.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 5086,
+          "sha256Prefix": "a7dd46b3203e",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/reaction.a7dd46b3203e.mp3"
+        }
+      }
+    },
+    "sound.recording-start": {
+      "source": "packages/ui/src/assets/sounds/recording-start.mp3",
+      "sourceBytes": 49581,
+      "original": {
+        "durationSeconds": 2,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 192000
+      },
+      "variants": {
+        "opus": {
+          "filename": "recording-start.25fb011fb392.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 7293,
+          "sha256Prefix": "25fb011fb392",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/recording-start.25fb011fb392.opus"
+        },
+        "mp3": {
+          "filename": "recording-start.5345b5de7c4a.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 12452,
+          "sha256Prefix": "5345b5de7c4a",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/recording-start.5345b5de7c4a.mp3"
+        }
+      }
+    },
+    "sound.recording-stop": {
+      "source": "packages/ui/src/assets/sounds/recording-stop.mp3",
+      "sourceBytes": 49581,
+      "original": {
+        "durationSeconds": 2,
+        "sampleRate": 48000,
+        "channels": 2,
+        "channelLayout": "stereo",
+        "bitRate": 192000
+      },
+      "variants": {
+        "opus": {
+          "filename": "recording-stop.9dd31b4946cd.opus",
+          "mimeType": "audio/ogg; codecs=opus",
+          "bytes": 7880,
+          "sha256Prefix": "9dd31b4946cd",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/recording-stop.9dd31b4946cd.opus"
+        },
+        "mp3": {
+          "filename": "recording-stop.a53ec340bdb5.mp3",
+          "mimeType": "audio/mpeg",
+          "bytes": 12452,
+          "sha256Prefix": "a53ec340bdb5",
+          "cdnPath": "https://assets.chalkmeet.com/ui/sounds/recording-stop.a53ec340bdb5.mp3"
+        }
+      }
+    }
+  }
+}

@@ -14,4 +14,3 @@
   the new product direction is wired back into those surfaces.
 - Replaced the package directory with `packages/sdk-core/README.md`, a
   plain-English product spec for the desired shared meeting experience.
-

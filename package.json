@@ -3,7 +3,11 @@
   "private": true,
   "license": "MIT",
   "workspaces": [
-    "packages/*",
+    "packages/chalk-whiteboard",
+    "packages/facehash",
+    "packages/sdk-react",
+    "packages/sdk-react-native",
+    "packages/ui",
     "apps/mobile",
     "apps/web",
     "infrastructure/cloudflare-ops-monitor"

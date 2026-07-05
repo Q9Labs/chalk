@@ -15,6 +15,28 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "atomic": [
+        "./dist/components/atomic/index.d.ts"
+      ],
+      "composite": [
+        "./dist/components/composite/index.d.ts"
+      ],
+      "full": [
+        "./dist/components/full/index.d.ts"
+      ],
+      "ui": [
+        "./dist/components/ui/index.d.ts"
+      ],
+      "utils": [
+        "./dist/utils/index.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

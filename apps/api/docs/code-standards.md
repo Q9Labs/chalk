@@ -98,8 +98,8 @@ we want future work to preserve.
   readiness, the auth/login/register/OAuth handlers). Mount protected routes
   under a group that applies `requireAuthentication`; do not attach a protected
   handler directly. New route groups default to protected.
-- Authenticating the caller is not authorizing the request. After you know *who*
-  is calling, check *what* they may touch. For any tenant-scoped resource, call
+- Authenticating the caller is not authorizing the request. After you know _who_
+  is calling, check _what_ they may touch. For any tenant-scoped resource, call
   `authorization.TenantPolicy.AuthorizeTenant` with the principal, the tenant ID
   from the request, and the required permission before doing any read or write.
 - Never trust an ID from the URL or body as proof of access. A handler that

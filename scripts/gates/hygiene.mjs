@@ -11,7 +11,6 @@ const packageJsonPaths = [
   "infrastructure/cloudflare-ops-monitor/package.json",
   "packages/chalk-whiteboard/package.json",
   "packages/facehash/package.json",
-  "packages/sdk-core/package.json",
   "packages/sdk-react-native/package.json",
   "packages/sdk-react/package.json",
   "packages/ui/package.json",

@@ -8,4 +8,4 @@
 - Split React Native SDK platform entries and native multitasking helpers so Android, iPhone, iPad, iOS aggregate, and macOS imports have separate emitted surfaces.
 - Removed web/root Excalidraw references; Excalidraw remains owned by `packages/chalk-whiteboard`.
 - Synced `pnpm-lock.yaml` after dependency changes.
-- Verification run: React SDK build, React Native SDK build, facehash build, UI build, whiteboard build, web build, mobile typecheck/tests, formatter check, and stale-reference scans for `bun`, `chalk-core`, React stubs, and package boundary markers.
+- Verification run: React SDK build, React Native SDK build, facehash build, UI build, whiteboard build, web build, mobile typecheck/tests, formatter check, and stale-reference scans for the former runtime, `chalk-core`, React stubs, and package boundary markers.

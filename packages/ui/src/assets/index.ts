@@ -1,23 +1,285 @@
-export const CHALK_SOUND_FILES = {
-  join: "join.mp3",
-  leave: "leave.mp3",
-  message: "message.mp3",
-  handRaise: "hand-raise.mp3",
-  reaction: "reaction.mp3",
-  recordingStart: "recording-start.mp3",
-  recordingStop: "recording-stop.mp3",
-  click: "click.mp3",
-  error: "error.mp3",
+export const CHALK_ASSET_CDN_BASE_URL = "https://assets.chalkmeet.com/ui/" as const;
+
+export const CHALK_ASSET_MANIFEST_URL = "https://assets.chalkmeet.com/ui/manifest.json" as const;
+
+export const CHALK_ASSET_CACHE_POLICY = {
+  media: "public, max-age=31536000, immutable",
+  manifest: "public, max-age=300, stale-while-revalidate=86400",
 } as const;
+
+type ChalkAssetVariant = {
+  readonly url: string;
+  readonly filename: string;
+  readonly mimeType: string;
+  readonly bytes: number;
+  readonly sha256Prefix: string;
+};
+
+type ChalkBackgroundAsset = {
+  readonly description: string;
+  readonly width: number;
+  readonly height: number;
+  readonly avif: ChalkAssetVariant;
+  readonly webp: ChalkAssetVariant;
+};
+
+type ChalkSoundAsset = {
+  readonly opus: ChalkAssetVariant;
+  readonly mp3: ChalkAssetVariant;
+};
+
+export const CHALK_BACKGROUND_ASSETS = {
+  "beach-palm-promenade": {
+    description: "Sunny beach promenade with palm trees.",
+    width: 1280,
+    height: 720,
+    avif: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/beach-palm-promenade.d58ce740db89.avif",
+      filename: "beach-palm-promenade.d58ce740db89.avif",
+      mimeType: "image/avif",
+      bytes: 62747,
+      sha256Prefix: "d58ce740db89",
+    },
+    webp: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/beach-palm-promenade.02e06aa98c31.webp",
+      filename: "beach-palm-promenade.02e06aa98c31.webp",
+      mimeType: "image/webp",
+      bytes: 119778,
+      sha256Prefix: "02e06aa98c31",
+    },
+  },
+  "blue-ribbon-loop": {
+    description: "Abstract blue ribbon loop on a dark background.",
+    width: 1280,
+    height: 720,
+    avif: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/blue-ribbon-loop.c4eb4ed68d9e.avif",
+      filename: "blue-ribbon-loop.c4eb4ed68d9e.avif",
+      mimeType: "image/avif",
+      bytes: 19043,
+      sha256Prefix: "c4eb4ed68d9e",
+    },
+    webp: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/blue-ribbon-loop.fbafdb557f4b.webp",
+      filename: "blue-ribbon-loop.fbafdb557f4b.webp",
+      mimeType: "image/webp",
+      bytes: 49578,
+      sha256Prefix: "fbafdb557f4b",
+    },
+  },
+  "bright-office-workspace": {
+    description: "Bright modern office workspace with desks and plants.",
+    width: 1280,
+    height: 720,
+    avif: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/bright-office-workspace.97771e0df560.avif",
+      filename: "bright-office-workspace.97771e0df560.avif",
+      mimeType: "image/avif",
+      bytes: 39103,
+      sha256Prefix: "97771e0df560",
+    },
+    webp: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/bright-office-workspace.53c60e7dccc0.webp",
+      filename: "bright-office-workspace.53c60e7dccc0.webp",
+      mimeType: "image/webp",
+      bytes: 63944,
+      sha256Prefix: "53c60e7dccc0",
+    },
+  },
+  "sunset-lake-boat": {
+    description: "Boat on a lake at sunset with hills in the background.",
+    width: 1280,
+    height: 720,
+    avif: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/sunset-lake-boat.d70e09da7e1e.avif",
+      filename: "sunset-lake-boat.d70e09da7e1e.avif",
+      mimeType: "image/avif",
+      bytes: 18249,
+      sha256Prefix: "d70e09da7e1e",
+    },
+    webp: {
+      url: "https://assets.chalkmeet.com/ui/backgrounds/sunset-lake-boat.671d6959cd3f.webp",
+      filename: "sunset-lake-boat.671d6959cd3f.webp",
+      mimeType: "image/webp",
+      bytes: 32060,
+      sha256Prefix: "671d6959cd3f",
+    },
+  },
+} as const satisfies Record<string, ChalkBackgroundAsset>;
+
+export const CHALK_SOUND_ASSETS = {
+  click: {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/click.a9f7aa4d4b04.opus",
+      filename: "click.a9f7aa4d4b04.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 10116,
+      sha256Prefix: "a9f7aa4d4b04",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/click.b6e7623500a8.mp3",
+      filename: "click.b6e7623500a8.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 18408,
+      sha256Prefix: "b6e7623500a8",
+    },
+  },
+  error: {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/error.a7079dfbc9af.opus",
+      filename: "error.a7079dfbc9af.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 8544,
+      sha256Prefix: "a7079dfbc9af",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/error.2cfe8b225499.mp3",
+      filename: "error.2cfe8b225499.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 12452,
+      sha256Prefix: "2cfe8b225499",
+    },
+  },
+  "hand-raise": {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/hand-raise.6483a6979a1f.opus",
+      filename: "hand-raise.6483a6979a1f.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 5028,
+      sha256Prefix: "6483a6979a1f",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/hand-raise.e8bbf2a0f91d.mp3",
+      filename: "hand-raise.e8bbf2a0f91d.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 6966,
+      sha256Prefix: "e8bbf2a0f91d",
+    },
+  },
+  join: {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/join.dbf745b208f0.opus",
+      filename: "join.dbf745b208f0.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 5971,
+      sha256Prefix: "dbf745b208f0",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/join.dd5dd946a7a9.mp3",
+      filename: "join.dd5dd946a7a9.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 9317,
+      sha256Prefix: "dd5dd946a7a9",
+    },
+  },
+  leave: {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/leave.4ed50303ad96.opus",
+      filename: "leave.4ed50303ad96.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 4117,
+      sha256Prefix: "4ed50303ad96",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/leave.33a9e1f6e7bc.mp3",
+      filename: "leave.33a9e1f6e7bc.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 5712,
+      sha256Prefix: "33a9e1f6e7bc",
+    },
+  },
+  message: {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/message.f873d7cbc5c9.opus",
+      filename: "message.f873d7cbc5c9.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 2745,
+      sha256Prefix: "f873d7cbc5c9",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/message.6e0e07daf817.mp3",
+      filename: "message.6e0e07daf817.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 4615,
+      sha256Prefix: "6e0e07daf817",
+    },
+  },
+  nudge: {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/nudge.25bb7ebd3bfb.opus",
+      filename: "nudge.25bb7ebd3bfb.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 5538,
+      sha256Prefix: "25bb7ebd3bfb",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/nudge.b3b0ad97e1b5.mp3",
+      filename: "nudge.b3b0ad97e1b5.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 7123,
+      sha256Prefix: "b3b0ad97e1b5",
+    },
+  },
+  reaction: {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/reaction.cd7dae2a78ff.opus",
+      filename: "reaction.cd7dae2a78ff.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 2913,
+      sha256Prefix: "cd7dae2a78ff",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/reaction.a7dd46b3203e.mp3",
+      filename: "reaction.a7dd46b3203e.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 5086,
+      sha256Prefix: "a7dd46b3203e",
+    },
+  },
+  "recording-start": {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/recording-start.25fb011fb392.opus",
+      filename: "recording-start.25fb011fb392.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 7293,
+      sha256Prefix: "25fb011fb392",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/recording-start.5345b5de7c4a.mp3",
+      filename: "recording-start.5345b5de7c4a.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 12452,
+      sha256Prefix: "5345b5de7c4a",
+    },
+  },
+  "recording-stop": {
+    opus: {
+      url: "https://assets.chalkmeet.com/ui/sounds/recording-stop.9dd31b4946cd.opus",
+      filename: "recording-stop.9dd31b4946cd.opus",
+      mimeType: "audio/ogg; codecs=opus",
+      bytes: 7880,
+      sha256Prefix: "9dd31b4946cd",
+    },
+    mp3: {
+      url: "https://assets.chalkmeet.com/ui/sounds/recording-stop.a53ec340bdb5.mp3",
+      filename: "recording-stop.a53ec340bdb5.mp3",
+      mimeType: "audio/mpeg",
+      bytes: 12452,
+      sha256Prefix: "a53ec340bdb5",
+    },
+  },
+} as const satisfies Record<string, ChalkSoundAsset>;
 
 export const CHALK_LOGO_FILES = {
   logo: "chalk-logo.svg",
   icon: "chalk-icon.svg",
 } as const;
 
-export const CHALK_BACKGROUND_FILES = {
-  one: "bg_1.jpg",
-  two: "bg_2.jpg",
-  three: "bg_3.jpg",
-  four: "bg_4.jpg",
+export const chalkAssets = {
+  baseUrl: CHALK_ASSET_CDN_BASE_URL,
+  manifestUrl: CHALK_ASSET_MANIFEST_URL,
+  cachePolicy: CHALK_ASSET_CACHE_POLICY,
+  backgrounds: CHALK_BACKGROUND_ASSETS,
+  sounds: CHALK_SOUND_ASSETS,
+  logos: CHALK_LOGO_FILES,
 } as const;

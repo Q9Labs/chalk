@@ -17,12 +17,12 @@ scripts/gate.sh     # canonical pre-commit gate (format, compile, credo, test)
 
 The north-star sync invariants, mapped onto OTP:
 
-| Invariant                          | Implementation                                                                 |
-| ---------------------------------- | ------------------------------------------------------------------------------ |
-| One authoritative writer per room  | `Rooms.RoomServer` — one GenServer per room, started on demand via `Registry`  |
-| Stateholder = single source of truth | `Stateholder` port; `Stateholder.Memory` (ETS) now, Redis adapter next       |
-| WS nodes are stateless fanout      | `Transport.Socket` owns no authoritative state; room-server loss ⇒ close 1012 ⇒ client reconnects + re-snapshots |
-| Reconnect = snapshot or exact replay | declarative `hello` cursor; writer decides replay vs snapshot                 |
+| Invariant                            | Implementation                                                                                                   |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| One authoritative writer per room    | `Rooms.RoomServer` — one GenServer per room, started on demand via `Registry`                                    |
+| Stateholder = single source of truth | `Stateholder` port; `Stateholder.Memory` (ETS) now, Redis adapter next                                           |
+| WS nodes are stateless fanout        | `Transport.Socket` owns no authoritative state; room-server loss ⇒ close 1012 ⇒ client reconnects + re-snapshots |
+| Reconnect = snapshot or exact replay | declarative `hello` cursor; writer decides replay vs snapshot                                                    |
 
 Command flow: socket → room server → validate against the pure `Rooms.Room`
 state machine → compare-and-set commit to the stateholder → fan out → ack. A

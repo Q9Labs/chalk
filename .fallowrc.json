@@ -1,6 +1,6 @@
 {
   "entry": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx", "apps/api/docs/app.js", "apps/api/scripts/smoke-lifecycle.mjs"],
-  "publicPackages": ["@q9labs/chalk-core", "@q9labs/chalk-react", "@q9labs/chalk-react-native", "@q9labs/chalk-ui", "@q9labs/chalk-whiteboard", "@q9labs/facehash"],
+  "publicPackages": ["@q9labs/chalk-react", "@q9labs/chalk-react-native", "@q9labs/chalk-ui", "@q9labs/chalk-whiteboard", "@q9labs/facehash"],
   "ignoreDependencies": [
     "@arethetypeswrong/cli",
     "publint",
@@ -25,7 +25,6 @@
     "unenv",
     "framer-motion",
     "scheduler",
-    "@q9labs/chalk-core",
     "@tanstack/devtools-vite",
     "typescript-7"
   ],
@@ -61,9 +60,6 @@
       "apps/web/**",
       "apps/api/scripts/**",
       "infrastructure/**",
-      "packages/sdk-core/openapi-generated/**",
-      "packages/sdk-core/src/generated/**",
-      "packages/sdk-core/**",
       "packages/sdk-react/**",
       "packages/sdk-react-native/**",
       "apps/web/src/routes/status.tsx",
