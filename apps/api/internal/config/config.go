@@ -47,6 +47,11 @@ const (
 	CloudflareRTKPresetContributor     = "CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR"
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 
+	ComposioAPIKey        = "CHALK_COMPOSIO_API_KEY"
+	ComposioBaseURL       = "CHALK_COMPOSIO_BASE_URL"
+	ComposioTimeoutMS     = "CHALK_COMPOSIO_TIMEOUT_MS"
+	ComposioWebhookSecret = "CHALK_COMPOSIO_WEBHOOK_SECRET"
+
 	R2AccessKeyID      = "CHALK_R2_ACCESS_KEY_ID"
 	R2AccountID        = "CHALK_R2_ACCOUNT_ID"
 	R2Bucket           = "CHALK_R2_BUCKET"
@@ -67,6 +72,8 @@ const (
 	DefaultLogLevel                           = "info"
 	DefaultOAuthStateTTLMS                    = int64(10 * 60 * 1000)
 	DefaultCloudflareRealtimeRequestTimeoutMS = int64(10000)
+	DefaultComposioBaseURL                    = "https://backend.composio.dev/api/v3.1"
+	DefaultComposioTimeoutMS                  = int64(10000)
 	DefaultCloudflareRTKPresetContributor     = "contributor"
 	DefaultCloudflareRTKPresetFacilitator     = "facilitator"
 	DefaultRequestLogs                        = "off"
@@ -81,6 +88,7 @@ const (
 
 	DefaultOAuthStateTTL             = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
 	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
+	DefaultComposioTimeout           = time.Duration(DefaultComposioTimeoutMS) * time.Millisecond
 	DefaultR2Timeout                 = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
 	DefaultResendTimeout             = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
 	DefaultSessionTTL                = time.Duration(DefaultSessionTTLMS) * time.Millisecond
@@ -111,6 +119,13 @@ type CloudflareRealtimeConfig struct {
 	RTKPresetFacilitator string
 	RTKPresetContributor string
 	RequestTimeout       time.Duration
+}
+
+type ComposioConfig struct {
+	APIKey         string
+	BaseURL        string
+	RequestTimeout time.Duration
+	WebhookSecret  string
 }
 
 type R2Config struct {
@@ -156,6 +171,7 @@ type Config struct {
 	API                APIConfig
 	Auth               AuthConfig
 	CloudflareRealtime CloudflareRealtimeConfig
+	Composio           ComposioConfig
 	Database           DatabaseConfig
 	GoogleOAuth        GoogleOAuthConfig
 	Observability      ObservabilityConfig
@@ -253,6 +269,17 @@ func Load() (Config, error) {
 	if cloudflareRealtimeRequestTimeout <= 0 {
 		return Config{}, fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
 	}
+	composioTimeout, err := envMilliseconds(ComposioTimeoutMS, DefaultComposioTimeoutMS)
+	if err != nil {
+		return Config{}, err
+	}
+	if composioTimeout <= 0 {
+		return Config{}, fmt.Errorf("%s must be greater than zero", ComposioTimeoutMS)
+	}
+	composioAPIKey := envOrDefault(ComposioAPIKey, "")
+	if environment != DefaultEnvironment && strings.TrimSpace(composioAPIKey) == "" {
+		return Config{}, fmt.Errorf("%s must be set outside local environments", ComposioAPIKey)
+	}
 
 	return Config{
 		API: APIConfig{
@@ -274,6 +301,12 @@ func Load() (Config, error) {
 			RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
 			RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
 			RequestTimeout:       cloudflareRealtimeRequestTimeout,
+		},
+		Composio: ComposioConfig{
+			APIKey:         composioAPIKey,
+			BaseURL:        envOrDefault(ComposioBaseURL, DefaultComposioBaseURL),
+			RequestTimeout: composioTimeout,
+			WebhookSecret:  envOrDefault(ComposioWebhookSecret, ""),
 		},
 		Database: DatabaseConfig{
 			URL:      databaseURL,

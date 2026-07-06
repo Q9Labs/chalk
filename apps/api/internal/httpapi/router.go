@@ -26,6 +26,7 @@ type Options struct {
 	RateLimit          RateLimitOptions
 	Readiness          ReadinessChecker
 	Authentication     AuthenticationService
+	Integrations       IntegrationService
 	Memberships        MembershipService
 	AuditLogs          AuditLogService
 	RecordingDownloads RecordingDownloadService
@@ -111,6 +112,9 @@ func mountV1Routes(r chi.Router, options Options) {
 
 		r.Group(func(r chi.Router) {
 			r.Use(requireAuthentication(options.Authentication))
+			mountIntegrationRoutes(r, options.Integrations, options.TenantAuthz, options.RateLimit, integrationRouteOptions{
+				CallbackAllowedOrigins: options.CORS.AllowedOrigins,
+			})
 			mountTenantRoutes(r, options.Tenants, options.TenantAuthz, options.RateLimit)
 			mountUserRoutes(r, options.Users, options.RateLimit)
 			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)

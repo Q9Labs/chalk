@@ -11,6 +11,7 @@ import (
 	"time"
 
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
+	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
@@ -21,6 +22,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
@@ -131,6 +133,25 @@ func run() error {
 		}
 		recordingDownloads = objectstorage.NewService(store)
 	}
+	integrationCatalog, err := integrations.DefaultCatalog()
+	if err != nil {
+		return fmt.Errorf("configure integration catalog: %w", err)
+	}
+	integrationRepository := postgres.NewIntegrationRepository(operationQueries)
+	var integrationProvider integrations.Provider
+	if cfg.Composio.APIKey != "" {
+		provider, err := composioadapter.NewAdapter(composioadapter.Config{
+			APIKey:         cfg.Composio.APIKey,
+			BaseURL:        cfg.Composio.BaseURL,
+			RequestTimeout: cfg.Composio.RequestTimeout,
+			WebhookSecret:  cfg.Composio.WebhookSecret,
+		})
+		if err != nil {
+			return fmt.Errorf("configure composio: %w", err)
+		}
+		integrationProvider = provider
+	}
+	integrationService := integrations.NewService(integrationRepository, integrationProvider, integrationCatalog)
 	tenantAuthz := authorization.NewTenantPolicy(membershipRepository)
 	rateLimitOptions := httpapi.DefaultRateLimitOptions()
 	rateLimitOptions.ClientIP.TrustedProxyCIDRs = cfg.API.TrustedProxyCIDRs
@@ -144,6 +165,7 @@ func run() error {
 		RateLimit:          rateLimitOptions,
 		Readiness:          postgres.Readiness{Pool: pool},
 		Authentication:     authenticationService,
+		Integrations:       integrationService,
 		Memberships:        membershipService,
 		AuditLogs:          auditLogService,
 		RecordingDownloads: recordingDownloads,

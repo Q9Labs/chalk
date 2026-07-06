@@ -42,6 +42,10 @@ const (
 	ScopeAPIKeysRead   Scope = "api_keys:read"
 	ScopeAPIKeysWrite  Scope = "api_keys:write"
 	ScopeAPIKeysDelete Scope = "api_keys:delete"
+
+	ScopeIntegrationsRead   Scope = "integrations:read"
+	ScopeIntegrationsWrite  Scope = "integrations:write"
+	ScopeIntegrationsDelete Scope = "integrations:delete"
 )
 
 // AllScopes is explicit by design: API keys must be granted concrete scopes,
@@ -75,6 +79,9 @@ var AllScopes = []Scope{
 	ScopeAPIKeysRead,
 	ScopeAPIKeysWrite,
 	ScopeAPIKeysDelete,
+	ScopeIntegrationsRead,
+	ScopeIntegrationsWrite,
+	ScopeIntegrationsDelete,
 }
 
 func ValidScope(scope Scope) bool {

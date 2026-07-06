@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -67,6 +68,15 @@ func (s userService) ListUsers(ctx context.Context, page pagination.PageRequest)
 		return users.UserList{}, errors.New("unexpected list users call")
 	}
 	return s.listUsers(ctx, page)
+}
+
+type integrationService struct {
+	listServices      func(context.Context) ([]integrations.ServiceEntry, error)
+	startConnection   func(context.Context, integrations.StartConnectionInput) (integrations.StartConnectionResult, error)
+	listConnections   func(context.Context, integrations.ListConnectionsInput) (integrations.ConnectionList, error)
+	getConnection     func(context.Context, utilities.ID, utilities.ID, utilities.ID) (integrations.Connection, error)
+	refreshConnection func(context.Context, utilities.ID, utilities.ID, utilities.ID, utilities.ID) (integrations.RefreshConnectionResult, error)
+	disableConnection func(context.Context, utilities.ID, utilities.ID, utilities.ID, utilities.ID, bool) (integrations.Connection, error)
 }
 
 type membershipService struct {
@@ -356,6 +366,48 @@ func (s tenantService) UpdateTenant(ctx context.Context, id utilities.ID, input 
 		return tenants.Tenant{}, errors.New("unexpected update tenant call")
 	}
 	return s.updateTenant(ctx, id, input)
+}
+
+func (s integrationService) ListServices(ctx context.Context) ([]integrations.ServiceEntry, error) {
+	if s.listServices == nil {
+		return nil, errors.New("unexpected list integration services call")
+	}
+	return s.listServices(ctx)
+}
+
+func (s integrationService) StartConnection(ctx context.Context, input integrations.StartConnectionInput) (integrations.StartConnectionResult, error) {
+	if s.startConnection == nil {
+		return integrations.StartConnectionResult{}, errors.New("unexpected start integration connection call")
+	}
+	return s.startConnection(ctx, input)
+}
+
+func (s integrationService) ListConnections(ctx context.Context, input integrations.ListConnectionsInput) (integrations.ConnectionList, error) {
+	if s.listConnections == nil {
+		return integrations.ConnectionList{}, errors.New("unexpected list integration connections call")
+	}
+	return s.listConnections(ctx, input)
+}
+
+func (s integrationService) GetConnection(ctx context.Context, tenantID utilities.ID, actorUserID utilities.ID, id utilities.ID) (integrations.Connection, error) {
+	if s.getConnection == nil {
+		return integrations.Connection{}, errors.New("unexpected get integration connection call")
+	}
+	return s.getConnection(ctx, tenantID, actorUserID, id)
+}
+
+func (s integrationService) RefreshConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, id utilities.ID) (integrations.RefreshConnectionResult, error) {
+	if s.refreshConnection == nil {
+		return integrations.RefreshConnectionResult{}, errors.New("unexpected refresh integration connection call")
+	}
+	return s.refreshConnection(ctx, tenantID, ownerScopeUserID, actorUserID, id)
+}
+
+func (s integrationService) DisableConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, id utilities.ID, revoke bool) (integrations.Connection, error) {
+	if s.disableConnection == nil {
+		return integrations.Connection{}, errors.New("unexpected disable integration connection call")
+	}
+	return s.disableConnection(ctx, tenantID, ownerScopeUserID, actorUserID, id, revoke)
 }
 
 func TestHealth(t *testing.T) {
@@ -958,6 +1010,9 @@ func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	if res.Header().Get("Access-Control-Allow-Methods") == "" {
 		t.Fatal("allow methods header was empty")
 	}
+	if !strings.Contains(res.Header().Get("Access-Control-Allow-Methods"), http.MethodDelete) {
+		t.Fatalf("allow methods = %q, want DELETE", res.Header().Get("Access-Control-Allow-Methods"))
+	}
 }
 
 func TestCORSPreflightRejectsUnknownOrigin(t *testing.T) {
@@ -992,6 +1047,12 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodGet, path: "/v1/users"},
 		{method: http.MethodPost, path: "/v1/users", body: `{"name":"Hasan","email":"hasan@example.com"}`},
 		{method: http.MethodGet, path: "/v1/users/22222222-2222-2222-2222-222222222222"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/services"},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections", body: `{"provider":"composio","service":"slack"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/33333333-3333-3333-3333-333333333333"},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/33333333-3333-3333-3333-333333333333/refresh"},
+		{method: http.MethodDelete, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/33333333-3333-3333-3333-333333333333"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships"},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", body: `{"user_id":"22222222-2222-2222-2222-222222222222","role":"admin"}`},
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships/33333333-3333-3333-3333-333333333333", body: `{"role":"member"}`},
@@ -1258,6 +1319,434 @@ func TestCreateRecordingDownloadURLRejectsIncompleteRecording(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
 	assertErrorCode(t, res, "recording_not_ready")
+}
+
+func TestListIntegrationServices(t *testing.T) {
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/services", httpapi.Options{
+		Integrations: integrationService{
+			listServices: func(ctx context.Context) ([]integrations.ServiceEntry, error) {
+				return []integrations.ServiceEntry{
+					{
+						ID:             "slack",
+						Provider:       integrations.ProviderComposio,
+						Family:         "Work",
+						DisplayName:    "Slack",
+						CapabilityTags: []string{"chat", "write"},
+					},
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		Families []struct {
+			Name     string `json:"name"`
+			Services []struct {
+				ID          string   `json:"id"`
+				Provider    string   `json:"provider"`
+				DisplayName string   `json:"display_name"`
+				Tags        []string `json:"capability_tags"`
+			} `json:"services"`
+		} `json:"families"`
+	}
+	decodeJSON(t, res, &body)
+	if len(body.Families) != 1 || body.Families[0].Name != "Work" {
+		t.Fatalf("families = %#v", body.Families)
+	}
+	if len(body.Families[0].Services) != 1 || body.Families[0].Services[0].ID != "slack" {
+		t.Fatalf("services = %#v", body.Families[0].Services)
+	}
+}
+
+func TestStartIntegrationConnection(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+	expiresAt := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/integrations/connections", `{"provider":"composio","service":"slack","callback_url":"https://app.chalk.test/integrations/callback","account_alias":"Product"}`, httpapi.Options{
+		CORS: httpapi.CORSOptions{
+			AllowedOrigins: []string{"https://app.chalk.test"},
+		},
+		Integrations: integrationService{
+			startConnection: func(ctx context.Context, input integrations.StartConnectionInput) (integrations.StartConnectionResult, error) {
+				if input.TenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", input.TenantID.String(), tenantID)
+				}
+				if input.UserID.String() != authUser(t).ID.String() {
+					t.Fatalf("user id = %q, want auth user", input.UserID.String())
+				}
+				if input.Provider != integrations.ProviderComposio || input.Service != "slack" {
+					t.Fatalf("provider/service = %s/%s", input.Provider, input.Service)
+				}
+				if input.CallbackURL == nil || *input.CallbackURL != "https://app.chalk.test/integrations/callback" {
+					t.Fatalf("callback url = %v", input.CallbackURL)
+				}
+				return integrations.StartConnectionResult{
+					Connection: integrationConnection(t, connectionID, integrations.StatusPending),
+					ConnectURL: "https://composio.test/connect",
+					ExpiresAt:  &expiresAt,
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	var body struct {
+		ConnectURL string `json:"connect_url"`
+		Connection struct {
+			ID      string `json:"id"`
+			Status  string `json:"status"`
+			Service string `json:"service"`
+		} `json:"connection"`
+	}
+	decodeJSON(t, res, &body)
+	if body.ConnectURL != "https://composio.test/connect" {
+		t.Fatalf("connect url = %q, want provider URL", body.ConnectURL)
+	}
+	if body.Connection.ID != connectionID.String() || body.Connection.Status != "pending" || body.Connection.Service != "slack" {
+		t.Fatalf("connection = %#v", body.Connection)
+	}
+}
+
+func TestStartIntegrationConnectionRejectsUntrustedCallbackURL(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections", `{"provider":"composio","service":"slack","callback_url":"https://evil.test/callback"}`, httpapi.Options{
+		CORS: httpapi.CORSOptions{
+			AllowedOrigins: []string{"https://app.chalk.test"},
+		},
+		Integrations: integrationService{
+			startConnection: func(ctx context.Context, input integrations.StartConnectionInput) (integrations.StartConnectionResult, error) {
+				called = true
+				return integrations.StartConnectionResult{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	if called {
+		t.Fatal("integration service was called")
+	}
+	assertErrorCode(t, res, "invalid_callback_url")
+}
+
+func TestListIntegrationConnectionsFiltersToUserPrincipal(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/integrations/connections?provider=composio&service=slack&status=active&page_size=10", httpapi.Options{
+		TenantAuthz: integrationMemberAuthorizer(),
+		Integrations: integrationService{
+			listConnections: func(ctx context.Context, input integrations.ListConnectionsInput) (integrations.ConnectionList, error) {
+				if input.TenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", input.TenantID.String(), tenantID)
+				}
+				if input.UserID.String() != authUser(t).ID.String() {
+					t.Fatalf("user id = %q, want authenticated user", input.UserID.String())
+				}
+				if input.Provider != integrations.ProviderComposio || input.Service != "slack" || input.Status != integrations.StatusActive {
+					t.Fatalf("filters = %s/%s/%s", input.Provider, input.Service, input.Status)
+				}
+				if input.Page.Size() != 10 {
+					t.Fatalf("page size = %d, want 10", input.Page.Size())
+				}
+				return integrations.ConnectionList{
+					Connections: []integrations.Connection{
+						integrationConnection(t, mustTenantID(t, "33333333-3333-4333-8333-333333333333"), integrations.StatusActive),
+					},
+					Page: pagination.Page{PageSize: 10},
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		Connections []struct {
+			Status string `json:"status"`
+		} `json:"connections"`
+	}
+	decodeJSON(t, res, &body)
+	if len(body.Connections) != 1 || body.Connections[0].Status != "active" {
+		t.Fatalf("connections = %#v", body.Connections)
+	}
+}
+
+func TestListIntegrationConnectionsLeavesAdminTenantScoped(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	accountLabel := "Product Workspace"
+	accountEmail := "teammate@example.com"
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/integrations/connections", httpapi.Options{
+		TenantAuthz: tenantAuthorizer{},
+		Integrations: integrationService{
+			listConnections: func(ctx context.Context, input integrations.ListConnectionsInput) (integrations.ConnectionList, error) {
+				if input.TenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", input.TenantID.String(), tenantID)
+				}
+				if !input.UserID.IsZero() {
+					t.Fatalf("user id = %q, want tenant-scoped admin request", input.UserID.String())
+				}
+				connection := integrationConnection(t, mustTenantID(t, "33333333-3333-4333-8333-333333333333"), integrations.StatusActive)
+				connection.UserID = mustTenantID(t, "44444444-4444-4444-8444-444444444444")
+				connection.AccountLabel = &accountLabel
+				connection.AccountEmail = &accountEmail
+				return integrations.ConnectionList{
+					Connections: []integrations.Connection{connection},
+					Page:        pagination.Page{},
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	var body struct {
+		Connections []struct {
+			AccountLabel *string `json:"account_label"`
+			AccountEmail *string `json:"account_email"`
+		} `json:"connections"`
+	}
+	decodeJSON(t, res, &body)
+	if len(body.Connections) != 1 {
+		t.Fatalf("connections = %#v, want one", body.Connections)
+	}
+	if body.Connections[0].AccountLabel != nil || body.Connections[0].AccountEmail != nil {
+		t.Fatalf("personal account details were not redacted: %#v", body.Connections[0])
+	}
+}
+
+func TestGetIntegrationConnectionPassesActorUserID(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String(), httpapi.Options{
+		TenantAuthz: integrationMemberAuthorizer(),
+		Integrations: integrationService{
+			getConnection: func(ctx context.Context, gotTenantID utilities.ID, actorUserID utilities.ID, gotConnectionID utilities.ID) (integrations.Connection, error) {
+				if gotTenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+				}
+				if actorUserID.String() != authUser(t).ID.String() {
+					t.Fatalf("actor user id = %q, want authenticated user", actorUserID.String())
+				}
+				if gotConnectionID != connectionID {
+					t.Fatalf("connection id = %q, want %q", gotConnectionID.String(), connectionID.String())
+				}
+				return integrationConnection(t, connectionID, integrations.StatusActive), nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+}
+
+func TestRefreshIntegrationConnectionReturnsConnectURL(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+	res := authenticatedRequestWithOptions(t, http.MethodPost, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String()+"/refresh", httpapi.Options{
+		TenantAuthz: integrationMemberAuthorizer(),
+		Integrations: integrationService{
+			refreshConnection: func(ctx context.Context, gotTenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, gotConnectionID utilities.ID) (integrations.RefreshConnectionResult, error) {
+				if gotTenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+				}
+				if ownerScopeUserID.String() != authUser(t).ID.String() {
+					t.Fatalf("owner-scope user id = %q, want authenticated user", ownerScopeUserID.String())
+				}
+				if actorUserID.String() != authUser(t).ID.String() {
+					t.Fatalf("actor user id = %q, want authenticated user", actorUserID.String())
+				}
+				if gotConnectionID != connectionID {
+					t.Fatalf("connection id = %q, want %q", gotConnectionID.String(), connectionID.String())
+				}
+				return integrations.RefreshConnectionResult{
+					Connection: integrationConnection(t, connectionID, integrations.StatusExpired),
+					ConnectURL: "https://composio.test/reauth",
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		ConnectURL string `json:"connect_url"`
+		Connection struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"connection"`
+	}
+	decodeJSON(t, res, &body)
+	if body.ConnectURL != "https://composio.test/reauth" {
+		t.Fatalf("connect url = %q, want refresh URL", body.ConnectURL)
+	}
+	if body.Connection.ID != connectionID.String() || body.Connection.Status != "expired" {
+		t.Fatalf("connection = %#v", body.Connection)
+	}
+}
+
+func TestRefreshIntegrationConnectionLeavesAdminTenantScopedButAudited(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+
+	res := authenticatedRequestWithOptions(t, http.MethodPost, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String()+"/refresh", httpapi.Options{
+		TenantAuthz: tenantAuthorizer{},
+		Integrations: integrationService{
+			refreshConnection: func(ctx context.Context, gotTenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, gotConnectionID utilities.ID) (integrations.RefreshConnectionResult, error) {
+				if gotTenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+				}
+				if !ownerScopeUserID.IsZero() {
+					t.Fatalf("owner-scope user id = %q, want tenant-scoped admin request", ownerScopeUserID.String())
+				}
+				if actorUserID.String() != authUser(t).ID.String() {
+					t.Fatalf("actor user id = %q, want authenticated admin", actorUserID.String())
+				}
+				if gotConnectionID != connectionID {
+					t.Fatalf("connection id = %q, want %q", gotConnectionID.String(), connectionID.String())
+				}
+				return integrations.RefreshConnectionResult{
+					Connection: integrationConnection(t, connectionID, integrations.StatusActive),
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+}
+
+func TestDisableIntegrationConnectionUsesDeletePermission(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+	serviceCalled := false
+	authorizationCalls := 0
+
+	res := authenticatedRequestWithOptions(t, http.MethodDelete, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String(), httpapi.Options{
+		TenantAuthz: tenantAuthorizer{
+			authorizeTenant: func(ctx context.Context, principal authentication.Principal, gotTenantID utilities.ID, permission authorization.TenantPermission) error {
+				authorizationCalls++
+				if gotTenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+				}
+				switch authorizationCalls {
+				case 1:
+					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleMember {
+						t.Fatalf("permission = %s/%s, want integrations:delete/member", permission.Scope, permission.MinimumRole)
+					}
+					return nil
+				case 2:
+					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleAdmin {
+						t.Fatalf("permission = %s/%s, want integrations:delete/admin", permission.Scope, permission.MinimumRole)
+					}
+					return authorization.ErrForbidden
+				default:
+					t.Fatalf("unexpected authorization call %d with permission %s/%s", authorizationCalls, permission.Scope, permission.MinimumRole)
+				}
+				return nil
+			},
+		},
+		Integrations: integrationService{
+			disableConnection: func(ctx context.Context, gotTenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, gotConnectionID utilities.ID, revoke bool) (integrations.Connection, error) {
+				serviceCalled = true
+				if gotTenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+				}
+				if ownerScopeUserID.String() != authUser(t).ID.String() {
+					t.Fatalf("owner-scope user id = %q, want authenticated user", ownerScopeUserID.String())
+				}
+				if actorUserID.String() != authUser(t).ID.String() {
+					t.Fatalf("actor user id = %q, want authenticated user", actorUserID.String())
+				}
+				if gotConnectionID != connectionID {
+					t.Fatalf("connection id = %q, want %q", gotConnectionID.String(), connectionID.String())
+				}
+				if revoke {
+					t.Fatal("revoke = true, want false")
+				}
+				return integrationConnection(t, connectionID, integrations.StatusDisabled), nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if !serviceCalled {
+		t.Fatal("integration service was not called")
+	}
+	if authorizationCalls != 2 {
+		t.Fatalf("authorization calls = %d, want 2", authorizationCalls)
+	}
+}
+
+func TestDisableIntegrationConnectionLeavesAdminTenantScoped(t *testing.T) {
+	tenantID := "11111111-1111-1111-1111-111111111111"
+	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+
+	res := authenticatedRequestWithOptions(t, http.MethodDelete, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String(), httpapi.Options{
+		TenantAuthz: tenantAuthorizer{},
+		Integrations: integrationService{
+			disableConnection: func(ctx context.Context, gotTenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, gotConnectionID utilities.ID, revoke bool) (integrations.Connection, error) {
+				if gotTenantID.String() != tenantID {
+					t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+				}
+				if !ownerScopeUserID.IsZero() {
+					t.Fatalf("owner-scope user id = %q, want tenant-scoped admin request", ownerScopeUserID.String())
+				}
+				if actorUserID.String() != authUser(t).ID.String() {
+					t.Fatalf("actor user id = %q, want authenticated admin", actorUserID.String())
+				}
+				if gotConnectionID != connectionID {
+					t.Fatalf("connection id = %q, want %q", gotConnectionID.String(), connectionID.String())
+				}
+				return integrationConnection(t, connectionID, integrations.StatusDisabled), nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+}
+
+func TestIntegrationRouteRejectsForbiddenTenant(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/services", httpapi.Options{
+		TenantAuthz: tenantAuthorizer{
+			authorizeTenant: func(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error {
+				return authorization.ErrForbidden
+			},
+		},
+		Integrations: integrationService{
+			listServices: func(context.Context) ([]integrations.ServiceEntry, error) {
+				called = true
+				return nil, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+	if called {
+		t.Fatal("integration service was called")
+	}
+	assertErrorCode(t, res, "forbidden")
 }
 
 func TestGetTenant(t *testing.T) {
@@ -2251,6 +2740,17 @@ func assertErrorCode(t *testing.T, res *httptest.ResponseRecorder, want string) 
 	}
 }
 
+func integrationMemberAuthorizer() tenantAuthorizer {
+	return tenantAuthorizer{
+		authorizeTenant: func(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
+			if permission.MinimumRole == memberships.RoleAdmin {
+				return authorization.ErrForbidden
+			}
+			return nil
+		},
+	}
+}
+
 func decodeErrorResponse(t *testing.T, res *httptest.ResponseRecorder) errorResponseBody {
 	t.Helper()
 
@@ -2343,6 +2843,26 @@ func mustTenantID(t *testing.T, value string) utilities.ID {
 	}
 
 	return id
+}
+
+func integrationConnection(t *testing.T, id utilities.ID, status integrations.ConnectionStatus) integrations.Connection {
+	t.Helper()
+
+	tenantID := mustTenantID(t, "11111111-1111-1111-1111-111111111111")
+	userID := authUser(t).ID
+	createdAt := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	return integrations.Connection{
+		ID:                 id,
+		TenantID:           tenantID,
+		UserID:             userID,
+		Provider:           integrations.ProviderComposio,
+		Service:            "slack",
+		ExternalAccountRef: "ca_test",
+		Status:             status,
+		Scopes:             []string{"chat:write"},
+		UpdatedAt:          createdAt,
+		CreatedAt:          createdAt,
+	}
 }
 
 func writeProfilerTestResponse(w http.ResponseWriter) {

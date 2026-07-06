@@ -76,6 +76,18 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.CloudflareRealtime.RequestTimeout != config.DefaultCloudflareRealtimeTimeout {
 		t.Fatalf("cloudflare realtime request timeout = %s, want %s", cfg.CloudflareRealtime.RequestTimeout, config.DefaultCloudflareRealtimeTimeout)
 	}
+	if cfg.Composio.APIKey != "" {
+		t.Fatalf("composio api key = %q, want empty", cfg.Composio.APIKey)
+	}
+	if cfg.Composio.BaseURL != config.DefaultComposioBaseURL {
+		t.Fatalf("composio base url = %q, want %q", cfg.Composio.BaseURL, config.DefaultComposioBaseURL)
+	}
+	if cfg.Composio.RequestTimeout != config.DefaultComposioTimeout {
+		t.Fatalf("composio timeout = %s, want %s", cfg.Composio.RequestTimeout, config.DefaultComposioTimeout)
+	}
+	if cfg.Composio.WebhookSecret != "" {
+		t.Fatalf("composio webhook secret = %q, want empty", cfg.Composio.WebhookSecret)
+	}
 	if cfg.R2.AccessKeyID != "" {
 		t.Fatalf("r2 access key id = %q, want empty", cfg.R2.AccessKeyID)
 	}
@@ -359,9 +371,35 @@ func TestLoadResend(t *testing.T) {
 	}
 }
 
+func TestLoadComposio(t *testing.T) {
+	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.ComposioBaseURL, "https://composio.test/api/v3.1")
+	t.Setenv(config.ComposioTimeoutMS, "2500")
+	t.Setenv(config.ComposioWebhookSecret, "webhook-secret")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.Composio.APIKey != "composio-key" {
+		t.Fatalf("composio api key = %q, want configured key", cfg.Composio.APIKey)
+	}
+	if cfg.Composio.BaseURL != "https://composio.test/api/v3.1" {
+		t.Fatalf("composio base url = %q, want configured url", cfg.Composio.BaseURL)
+	}
+	if cfg.Composio.RequestTimeout != 2500*time.Millisecond {
+		t.Fatalf("composio timeout = %s, want 2500ms", cfg.Composio.RequestTimeout)
+	}
+	if cfg.Composio.WebhookSecret != "webhook-secret" {
+		t.Fatalf("composio webhook secret = %q, want configured secret", cfg.Composio.WebhookSecret)
+	}
+}
+
 func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.APILogFormat, "text")
 	t.Setenv(config.APILogLevel, "debug")
 	t.Setenv(config.APIProfiler, "true")
@@ -411,6 +449,7 @@ func TestLoadObservability(t *testing.T) {
 
 func TestLoadRejectsDefaultDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "production")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
 
 	_, err := config.Load()
 	if err == nil {
@@ -421,6 +460,7 @@ func TestLoadRejectsDefaultDatabaseURLOutsideLocal(t *testing.T) {
 func TestLoadRejectsInsecureDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=disable")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
 
 	_, err := config.Load()
 	if err == nil {
@@ -431,6 +471,7 @@ func TestLoadRejectsInsecureDatabaseURLOutsideLocal(t *testing.T) {
 func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -438,6 +479,16 @@ func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	}
 	if cfg.Database.URL != "postgres://db.internal/chalk?sslmode=verify-full" {
 		t.Fatalf("database url = %q, want configured tls url", cfg.Database.URL)
+	}
+}
+
+func TestLoadRejectsMissingComposioAPIKeyOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("load config succeeded, want error")
 	}
 }
 
@@ -707,6 +758,45 @@ func TestLoadRejectsInvalidR2Settings(t *testing.T) {
 			name: "negative timeout",
 			env: map[string]string{
 				config.R2RequestTimeoutMS: "-1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			_, err := config.Load()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidComposioSettings(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{
+			name: "bad timeout",
+			env: map[string]string{
+				config.ComposioTimeoutMS: "soon",
+			},
+		},
+		{
+			name: "zero timeout",
+			env: map[string]string{
+				config.ComposioTimeoutMS: "0",
+			},
+		},
+		{
+			name: "negative timeout",
+			env: map[string]string{
+				config.ComposioTimeoutMS: "-1",
 			},
 		},
 	}

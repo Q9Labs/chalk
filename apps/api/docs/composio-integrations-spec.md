@@ -344,7 +344,7 @@ Initial routes:
   - Lists enabled catalog entries, grouped by family in the response.
 - `POST /v1/tenants/{tenant_id}/integrations/connections`
   - Starts a connection for `{ "provider": "composio", "service": "slack" }`.
-  - Optional fields: `callback_url`, `account_alias`, `idempotency_key`.
+  - Optional fields: `callback_url`, `account_alias`.
   - Returns the local connection record and a provider connect URL.
 - `GET /v1/tenants/{tenant_id}/integrations/connections`
   - Lists tenant/user connections with optional `provider`, `service`, and
@@ -602,6 +602,7 @@ Recommended service-bundle workers:
 
 Each service-bundle worker must:
 
+- Read and follow `code-standards.md`.
 - Use the Composio API key from the operator-provided `op` item at runtime for
   live tests; do not print, commit, or log the key.
 - Verify each service toolkit live against Composio.
