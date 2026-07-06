@@ -447,9 +447,34 @@ func TestLoadObservability(t *testing.T) {
 	}
 }
 
+func TestLoadLocalSystemToken(t *testing.T) {
+	t.Setenv(config.APILocalSystemToken, "local-token")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.API.LocalSystemToken != "local-token" {
+		t.Fatalf("local system token = %q, want configured token", cfg.API.LocalSystemToken)
+	}
+}
+
 func TestLoadRejectsDefaultDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "production")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("load config succeeded, want error")
+	}
+}
+
+func TestLoadRejectsLocalSystemTokenOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.APILocalSystemToken, "local-token")
 
 	_, err := config.Load()
 	if err == nil {

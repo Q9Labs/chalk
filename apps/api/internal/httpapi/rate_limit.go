@@ -70,6 +70,10 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 				next.ServeHTTP(w, r)
 				return
 			}
+			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalSystem {
+				next.ServeHTTP(w, r)
+				return
+			}
 
 			now := time.Now
 			if options.Now != nil {

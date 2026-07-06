@@ -950,6 +950,37 @@ func TestAuthenticatedWriteRateLimitUsesPrincipal(t *testing.T) {
 	}
 }
 
+func TestSystemWriteRequestsBypassRateLimit(t *testing.T) {
+	limiter := &singleRequestLimiter{}
+	calls := 0
+	options := httpapi.Options{
+		RateLimit: httpapi.RateLimitOptions{
+			Limiter: limiter,
+			Now:     func() time.Time { return time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC) },
+		},
+		Tenants: tenantService{
+			createTenant: func(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
+				calls++
+				return tenants.Tenant{
+					ID:   mustTenantID(t, "11111111-1111-1111-1111-111111111111"),
+					Name: input.Name,
+				}, nil
+			},
+		},
+	}
+
+	for i := 0; i < 2; i++ {
+		res := systemRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", `{"name":"Acme"}`, options)
+		if res.Code != http.StatusCreated {
+			t.Fatalf("request %d status = %d, want %d", i+1, res.Code, http.StatusCreated)
+		}
+	}
+
+	if calls != 2 {
+		t.Fatalf("create tenant calls = %d, want 2", calls)
+	}
+}
+
 func TestMiddleware(t *testing.T) {
 	called := false
 	res := requestWithOptions(t, http.MethodGet, "/healthz", httpapi.Options{
@@ -1319,6 +1350,60 @@ func TestCreateRecordingDownloadURLRejectsIncompleteRecording(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
 	assertErrorCode(t, res, "recording_not_ready")
+}
+
+func TestLocalSystemTokenAuthenticatesProtectedTenantRoutes(t *testing.T) {
+	res := requestWithOptionsAndRequest(t, bearerRequestWithBody(http.MethodPost, "/v1/tenants", "local-system-token", `{"name":"Acme","default_region":"us"}`), httpapi.Options{
+		LocalSystemToken: "local-system-token",
+		Authentication: authenticationService{
+			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+				return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
+			},
+		},
+		Tenants: tenantService{
+			createTenant: func(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
+				if input.Name != "Acme" {
+					t.Fatalf("tenant name = %q, want Acme", input.Name)
+				}
+				return tenants.Tenant{
+					ID:            mustTenantID(t, "11111111-1111-1111-1111-111111111111"),
+					Name:          input.Name,
+					DefaultRegion: input.DefaultRegion,
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	}
+}
+
+func TestLocalSystemTokenAllowsSystemTenantList(t *testing.T) {
+	res := requestWithOptionsAndRequest(t, bearerRequest(http.MethodGet, "/v1/tenants", "local-system-token"), httpapi.Options{
+		LocalSystemToken: "local-system-token",
+		Authentication: authenticationService{
+			authenticateSession: func(context.Context, string) (authentication.SessionUser, error) {
+				return authentication.SessionUser{}, errors.New("unexpected authenticate session call")
+			},
+		},
+		Tenants: tenantService{
+			listTenants: func(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
+				return tenants.TenantList{
+					Tenants: []tenants.Tenant{
+						{
+							ID:   mustTenantID(t, "11111111-1111-1111-1111-111111111111"),
+							Name: "Acme",
+						},
+					},
+				}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
 }
 
 func TestListIntegrationServices(t *testing.T) {
@@ -2673,6 +2758,13 @@ func systemRequestWithOptions(t *testing.T, method string, path string, options 
 	t.Helper()
 
 	req := bearerRequestWithBody(method, path, "raw-session-token", "")
+	return requestWithOptionsAndRequest(t, req, systemOptions(t, options))
+}
+
+func systemRequestWithOptionsAndBody(t *testing.T, method string, path string, body string, options httpapi.Options) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := bearerRequestWithBody(method, path, "raw-session-token", body)
 	return requestWithOptionsAndRequest(t, req, systemOptions(t, options))
 }
 

@@ -162,6 +162,7 @@ func run() error {
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 		},
+		LocalSystemToken:   cfg.API.LocalSystemToken,
 		RateLimit:          rateLimitOptions,
 		Readiness:          postgres.Readiness{Pool: pool},
 		Authentication:     authenticationService,

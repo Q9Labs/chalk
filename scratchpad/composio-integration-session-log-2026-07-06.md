@@ -217,3 +217,18 @@
   1Password key, `git diff --check`, and `apps/api/scripts/gate.sh`.
 - `apps/api/scripts/perf-local.sh` still blocks at the known tenant seed issue:
   `seed tenants: HTTP 401`.
+
+## 2026-07-06 22:20 PKT
+
+- Delegated the local perf seed auth failure to a `gpt-5.5` high worker.
+- Root cause: protected tenant routes now require authentication, while
+  `cmd/perf` still sent unauthenticated seed/load requests. After adding auth,
+  the normal authenticated write limiter was also too low for the local harness.
+- Added a local-only `CHALK_API_LOCAL_SYSTEM_TOKEN` config path. `cmd/perf`
+  generates a random token for the server it launches, sends it as a bearer
+  token on harness requests, and the router accepts it as an internal system
+  principal only in local environments.
+- Tightened the worker patch so system-principal requests bypass rate limiting
+  directly instead of disabling the limiter for all local-server requests.
+- Fresh checks passed: `go test ./internal/config ./internal/httpapi ./cmd
+  ./cmd/perf`, `apps/api/scripts/gate.sh`, and `apps/api/scripts/perf-local.sh`.

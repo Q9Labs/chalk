@@ -22,6 +22,7 @@ const (
 	APIRequestSampleRate  = "CHALK_API_REQUEST_SAMPLE_RATE"
 	APIService            = "CHALK_API_SERVICE"
 	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
+	APILocalSystemToken   = "CHALK_API_LOCAL_SYSTEM_TOKEN"
 	APIVersion            = "CHALK_API_VERSION"
 
 	AuthEmailVerificationRequired = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
@@ -97,6 +98,7 @@ const (
 type APIConfig struct {
 	Address            string
 	CORSAllowedOrigins []string
+	LocalSystemToken   string
 	TrustedProxyCIDRs  []string
 }
 
@@ -280,11 +282,16 @@ func Load() (Config, error) {
 	if environment != DefaultEnvironment && strings.TrimSpace(composioAPIKey) == "" {
 		return Config{}, fmt.Errorf("%s must be set outside local environments", ComposioAPIKey)
 	}
+	localSystemToken := strings.TrimSpace(envOrDefault(APILocalSystemToken, ""))
+	if environment != DefaultEnvironment && localSystemToken != "" {
+		return Config{}, fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
+	}
 
 	return Config{
 		API: APIConfig{
 			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
 			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
+			LocalSystemToken:   localSystemToken,
 			TrustedProxyCIDRs:  envList(APITrustedProxyCIDRs),
 		},
 		Auth: AuthConfig{

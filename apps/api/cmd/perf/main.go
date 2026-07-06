@@ -112,6 +112,7 @@ type processSample struct {
 }
 
 type runner struct {
+	authToken    string
 	baseURL      string
 	client       *http.Client
 	sessionToken string
@@ -212,8 +213,14 @@ func run(ctx context.Context, cfg config) (result, error) {
 	defer logFile.Close()
 
 	cmd := exec.CommandContext(ctx, cfg.server)
+	authToken, err := randomBearerToken()
+	if err != nil {
+		return result{}, fmt.Errorf("create local system token: %w", err)
+	}
 	cmd.Env = append(os.Environ(),
 		"CHALK_API_ADDR="+cfg.addr,
+		"CHALK_API_ENV=local",
+		"CHALK_API_LOCAL_SYSTEM_TOKEN="+authToken,
 		"CHALK_API_OPERATION_LOGS=1",
 		"CHALK_API_PROFILER=1",
 		"CHALK_API_REQUEST_LOGS=all",
@@ -234,7 +241,8 @@ func run(ctx context.Context, cfg config) (result, error) {
 	}
 
 	r := runner{
-		baseURL: baseURL,
+		authToken: authToken,
+		baseURL:   baseURL,
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 			Transport: &http.Transport{
@@ -679,8 +687,8 @@ func (r *runner) do(ctx context.Context, _ string, endpoint endpoint) (sample, e
 	if request.Body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if !endpoint.Public && r.sessionToken != "" {
-		req.Header.Set("Authorization", "Bearer "+r.sessionToken)
+	if !endpoint.Public && r.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+r.authToken)
 	}
 	var t clientTraceState
 	trace := &httptrace.ClientTrace{
@@ -1470,6 +1478,15 @@ func randomToken(byteCount int) (string, error) {
 		return "", fmt.Errorf("generate session token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func randomBearerToken() (string, error) {
+	var data [32]byte
+	if _, err := rand.Read(data[:]); err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(data[:]), nil
 }
 
 func elapsed(start time.Time, end time.Time) time.Duration {

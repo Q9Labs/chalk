@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"strings"
 
@@ -10,9 +11,36 @@ import (
 
 type sessionUserContextKey struct{}
 
+func acceptLocalSystemToken(rawToken string) func(http.Handler) http.Handler {
+	token := strings.TrimSpace(rawToken)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if token == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			requestToken, ok := bearerToken(r.Header.Get("Authorization"))
+			if ok && subtle.ConstantTimeCompare([]byte(requestToken), []byte(token)) == 1 {
+				principal := authentication.Principal{Kind: authentication.PrincipalSystem}
+				ctx := authentication.ContextWithPrincipal(r.Context(), principal)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func requireAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.IsAuthenticated() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if service == nil {
 				writeServiceUnavailable(w)
 				return

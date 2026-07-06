@@ -21,6 +21,7 @@ type TenantAuthorizer interface {
 
 type Options struct {
 	CORS               CORSOptions
+	LocalSystemToken   string
 	Middleware         []func(http.Handler) http.Handler
 	Profiler           http.Handler
 	RateLimit          RateLimitOptions
@@ -42,6 +43,9 @@ type Options struct {
 func NewRouter(options Options) http.Handler {
 	r := chi.NewRouter()
 	r.Use(allowCORS(options.CORS))
+	if options.LocalSystemToken != "" {
+		r.Use(acceptLocalSystemToken(options.LocalSystemToken))
+	}
 	if len(options.Middleware) > 0 {
 		r.Use(options.Middleware...)
 	}
