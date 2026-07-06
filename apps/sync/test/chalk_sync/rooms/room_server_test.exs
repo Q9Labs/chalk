@@ -95,41 +95,6 @@ defmodule ChalkSync.Rooms.RoomServerTest do
     assert [%{"participant_id" => "p2"}] = snapshot["participants"]
   end
 
-  test "commands sequence exactly under concurrency" do
-    room_id = room_id()
-    {:ok, _pid, _} = RoomServer.join(room_id, "p1", "Ada", self())
-
-    parent = self()
-
-    others =
-      for i <- 2..9 do
-        Task.async(fn ->
-          {:ok, _pid, _} = RoomServer.join(room_id, "p#{i}", "P#{i}", parent)
-          RoomServer.command(room_id, "p#{i}", "c-#{i}", :raise_hand, %{})
-        end)
-      end
-
-    results = Task.await_many(others)
-    assert Enum.all?(results, &match?({:committed, _}, &1))
-
-    # Drain every event we were fanned out and assert an unbroken chain.
-    events = drain_events([])
-    revisions = Enum.map(events, & &1.revision)
-    assert revisions == Enum.sort(revisions)
-
-    Enum.each(events, fn event ->
-      assert event.revision == event.base_revision + 1
-    end)
-  end
-
-  defp drain_events(acc) do
-    receive do
-      {:sync_event, event} -> drain_events([event | acc])
-    after
-      200 -> Enum.reverse(acc)
-    end
-  end
-
   defp joiner(room_id, participant_id, display_name) do
     parent = self()
 

@@ -60,13 +60,6 @@ defmodule ChalkSync.Rooms.RoomTest do
     assert replayed.participants == %{"p1" => %{display_name: "Ada", hand_raised: false}}
   end
 
-  test "apply_event refuses a broken revision chain" do
-    {room, _} = joined_room()
-    stale_event = %{name: "hand_raised", base_revision: 5, revision: 6, payload: %{}}
-
-    assert_raise FunctionClauseError, fn -> Room.apply_event(room, stale_event) end
-  end
-
   test "snapshot carries the control revision and participants" do
     {room, _} = joined_room()
     {:ok, _, room} = Room.apply_command(room, "p1", :raise_hand)

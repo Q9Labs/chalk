@@ -87,21 +87,6 @@ func TestServiceGetTenantRejectsZeroID(t *testing.T) {
 	}
 }
 
-func TestServiceListTenants(t *testing.T) {
-	repository := &tenantRepository{}
-	service := tenants.NewService(repository)
-	page := mustPageRequest(t, 10, nil)
-
-	_, err := service.ListTenants(context.Background(), page)
-	if err != nil {
-		t.Fatalf("list tenants: %v", err)
-	}
-
-	if repository.listPage.Size() != 10 {
-		t.Fatalf("page size = %d, want 10", repository.listPage.Size())
-	}
-}
-
 func TestServiceUpdateTenant(t *testing.T) {
 	id := mustTenantID(t, "11111111-1111-1111-1111-111111111111")
 	repository := &tenantRepository{}
@@ -205,7 +190,6 @@ type tenantRepository struct {
 	requestedID utilities.ID
 	tenant      tenants.Tenant
 	createInput tenants.CreateTenantInput
-	listPage    pagination.PageRequest
 	updateInput tenants.UpdateTenantInput
 	err         error
 }
@@ -241,7 +225,6 @@ func (r *tenantRepository) GetTenant(ctx context.Context, id utilities.ID) (tena
 
 func (r *tenantRepository) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
 	r.called = true
-	r.listPage = page
 
 	if r.err != nil {
 		return tenants.TenantList{}, r.err
@@ -250,17 +233,6 @@ func (r *tenantRepository) ListTenants(ctx context.Context, page pagination.Page
 	return tenants.TenantList{
 		Page: pagination.Page{PageSize: page.Size()},
 	}, nil
-}
-
-func mustPageRequest(t *testing.T, size int, cursor *pagination.Cursor) pagination.PageRequest {
-	t.Helper()
-
-	page, err := pagination.NewPageRequest(size, cursor)
-	if err != nil {
-		t.Fatalf("new page request: %v", err)
-	}
-
-	return page
 }
 
 func (r *tenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {

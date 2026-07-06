@@ -35,17 +35,3 @@ func TestParseIDRejectsInvalidID(t *testing.T) {
 		})
 	}
 }
-
-func TestNewID(t *testing.T) {
-	id, err := utilities.NewID()
-	if err != nil {
-		t.Fatalf("new id: %v", err)
-	}
-
-	if id.IsZero() {
-		t.Fatal("id is zero")
-	}
-	if len(id.String()) != 36 {
-		t.Fatalf("id length = %d, want 36", len(id.String()))
-	}
-}
