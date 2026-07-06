@@ -1,13 +1,13 @@
 import type { SVGProps } from "react";
 
-/** Thin monochrome line icons for the minimal landing (inherit currentColor). */
+/** Thin monochrome line icons for the landing (inherit currentColor). */
 const base: SVGProps<SVGSVGElement> = {
   width: 20,
   height: 20,
   viewBox: "0 0 24 24",
   fill: "none",
   stroke: "currentColor",
-  strokeWidth: 1.5,
+  strokeWidth: 1.6,
   strokeLinecap: "round",
   strokeLinejoin: "round",
 };
@@ -63,6 +63,22 @@ export function ShieldIcon(props: IconProps) {
     <svg {...base} {...props}>
       <path d="M12 3 5 6v5.5c0 4.3 3 7.4 7 9 4-1.6 7-4.7 7-9V6l-7-3Z" />
       <path d="m9 12 2 2 4-4.5" />
+    </svg>
+  );
+}
+
+export function ArrowIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20 6 9 17l-5-5" />
     </svg>
   );
 }
