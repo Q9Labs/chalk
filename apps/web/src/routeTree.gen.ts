@@ -10,9 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WhiteboardRouteImport } from './routes/whiteboard'
-import { Route as V3RouteImport } from './routes/v3'
-import { Route as V2RouteImport } from './routes/v2'
-import { Route as V1RouteImport } from './routes/v1'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as PrivacyRouteImport } from './routes/privacy'
@@ -22,21 +19,6 @@ import { Route as IndexRouteImport } from './routes/index'
 const WhiteboardRoute = WhiteboardRouteImport.update({
   id: '/whiteboard',
   path: '/whiteboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const V3Route = V3RouteImport.update({
-  id: '/v3',
-  path: '/v3',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const V2Route = V2RouteImport.update({
-  id: '/v2',
-  path: '/v2',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const V1Route = V1RouteImport.update({
-  id: '/v1',
-  path: '/v1',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -71,9 +53,6 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/v1': typeof V1Route
-  '/v2': typeof V2Route
-  '/v3': typeof V3Route
   '/whiteboard': typeof WhiteboardRoute
 }
 export interface FileRoutesByTo {
@@ -82,9 +61,6 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/v1': typeof V1Route
-  '/v2': typeof V2Route
-  '/v3': typeof V3Route
   '/whiteboard': typeof WhiteboardRoute
 }
 export interface FileRoutesById {
@@ -94,34 +70,13 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/v1': typeof V1Route
-  '/v2': typeof V2Route
-  '/v3': typeof V3Route
   '/whiteboard': typeof WhiteboardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/new'
-    | '/privacy'
-    | '/status'
-    | '/terms'
-    | '/v1'
-    | '/v2'
-    | '/v3'
-    | '/whiteboard'
+  fullPaths: '/' | '/new' | '/privacy' | '/status' | '/terms' | '/whiteboard'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/new'
-    | '/privacy'
-    | '/status'
-    | '/terms'
-    | '/v1'
-    | '/v2'
-    | '/v3'
-    | '/whiteboard'
+  to: '/' | '/new' | '/privacy' | '/status' | '/terms' | '/whiteboard'
   id:
     | '__root__'
     | '/'
@@ -129,9 +84,6 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/status'
     | '/terms'
-    | '/v1'
-    | '/v2'
-    | '/v3'
     | '/whiteboard'
   fileRoutesById: FileRoutesById
 }
@@ -141,9 +93,6 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
-  V1Route: typeof V1Route
-  V2Route: typeof V2Route
-  V3Route: typeof V3Route
   WhiteboardRoute: typeof WhiteboardRoute
 }
 
@@ -154,27 +103,6 @@ declare module '@tanstack/react-router' {
       path: '/whiteboard'
       fullPath: '/whiteboard'
       preLoaderRoute: typeof WhiteboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/v3': {
-      id: '/v3'
-      path: '/v3'
-      fullPath: '/v3'
-      preLoaderRoute: typeof V3RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/v2': {
-      id: '/v2'
-      path: '/v2'
-      fullPath: '/v2'
-      preLoaderRoute: typeof V2RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/v1': {
-      id: '/v1'
-      path: '/v1'
-      fullPath: '/v1'
-      preLoaderRoute: typeof V1RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -221,9 +149,6 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
-  V1Route: V1Route,
-  V2Route: V2Route,
-  V3Route: V3Route,
   WhiteboardRoute: WhiteboardRoute,
 }
 export const routeTree = rootRouteImport
