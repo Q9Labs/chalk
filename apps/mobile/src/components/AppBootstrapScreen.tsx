@@ -1,4 +1,5 @@
-import { ChalkLogoElements, Theme } from "@q9labs/chalk-react-native";
+import { ChalkLogoElements } from "@q9labs/chalk-react-native";
+import { Theme } from "@q9labs/chalk-react-native/theme";
 import { StyleSheet, Text, View } from "react-native";
 
 export function AppBootstrapScreen({ label }: { label: string }): React.JSX.Element {

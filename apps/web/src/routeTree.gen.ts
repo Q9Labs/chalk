@@ -9,16 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WhiteboardRouteImport } from './routes/whiteboard'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ShareTokenRouteImport } from './routes/share/$token'
-import { Route as RoomEndRouteImport } from './routes/room/end'
-import { Route as RoomRoomIdRouteImport } from './routes/room/$roomId'
-import { Route as JJoinTokenRouteImport } from './routes/j/$joinToken'
 
+const WhiteboardRoute = WhiteboardRouteImport.update({
+  id: '/whiteboard',
+  path: '/whiteboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -44,26 +46,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ShareTokenRoute = ShareTokenRouteImport.update({
-  id: '/share/$token',
-  path: '/share/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RoomEndRoute = RoomEndRouteImport.update({
-  id: '/room/end',
-  path: '/room/end',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RoomRoomIdRoute = RoomRoomIdRouteImport.update({
-  id: '/room/$roomId',
-  path: '/room/$roomId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const JJoinTokenRoute = JJoinTokenRouteImport.update({
-  id: '/j/$joinToken',
-  path: '/j/$joinToken',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -71,10 +53,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/j/$joinToken': typeof JJoinTokenRoute
-  '/room/$roomId': typeof RoomRoomIdRoute
-  '/room/end': typeof RoomEndRoute
-  '/share/$token': typeof ShareTokenRoute
+  '/whiteboard': typeof WhiteboardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -82,10 +61,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/j/$joinToken': typeof JJoinTokenRoute
-  '/room/$roomId': typeof RoomRoomIdRoute
-  '/room/end': typeof RoomEndRoute
-  '/share/$token': typeof ShareTokenRoute
+  '/whiteboard': typeof WhiteboardRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -94,34 +70,13 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/j/$joinToken': typeof JJoinTokenRoute
-  '/room/$roomId': typeof RoomRoomIdRoute
-  '/room/end': typeof RoomEndRoute
-  '/share/$token': typeof ShareTokenRoute
+  '/whiteboard': typeof WhiteboardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/new'
-    | '/privacy'
-    | '/status'
-    | '/terms'
-    | '/j/$joinToken'
-    | '/room/$roomId'
-    | '/room/end'
-    | '/share/$token'
+  fullPaths: '/' | '/new' | '/privacy' | '/status' | '/terms' | '/whiteboard'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/new'
-    | '/privacy'
-    | '/status'
-    | '/terms'
-    | '/j/$joinToken'
-    | '/room/$roomId'
-    | '/room/end'
-    | '/share/$token'
+  to: '/' | '/new' | '/privacy' | '/status' | '/terms' | '/whiteboard'
   id:
     | '__root__'
     | '/'
@@ -129,10 +84,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/status'
     | '/terms'
-    | '/j/$joinToken'
-    | '/room/$roomId'
-    | '/room/end'
-    | '/share/$token'
+    | '/whiteboard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -141,14 +93,18 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
-  JJoinTokenRoute: typeof JJoinTokenRoute
-  RoomRoomIdRoute: typeof RoomRoomIdRoute
-  RoomEndRoute: typeof RoomEndRoute
-  ShareTokenRoute: typeof ShareTokenRoute
+  WhiteboardRoute: typeof WhiteboardRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/whiteboard': {
+      id: '/whiteboard'
+      path: '/whiteboard'
+      fullPath: '/whiteboard'
+      preLoaderRoute: typeof WhiteboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -184,34 +140,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/share/$token': {
-      id: '/share/$token'
-      path: '/share/$token'
-      fullPath: '/share/$token'
-      preLoaderRoute: typeof ShareTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/room/end': {
-      id: '/room/end'
-      path: '/room/end'
-      fullPath: '/room/end'
-      preLoaderRoute: typeof RoomEndRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/room/$roomId': {
-      id: '/room/$roomId'
-      path: '/room/$roomId'
-      fullPath: '/room/$roomId'
-      preLoaderRoute: typeof RoomRoomIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/j/$joinToken': {
-      id: '/j/$joinToken'
-      path: '/j/$joinToken'
-      fullPath: '/j/$joinToken'
-      preLoaderRoute: typeof JJoinTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -221,10 +149,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
-  JJoinTokenRoute: JJoinTokenRoute,
-  RoomRoomIdRoute: RoomRoomIdRoute,
-  RoomEndRoute: RoomEndRoute,
-  ShareTokenRoute: ShareTokenRoute,
+  WhiteboardRoute: WhiteboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

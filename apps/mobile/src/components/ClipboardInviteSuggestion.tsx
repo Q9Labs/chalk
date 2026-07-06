@@ -1,4 +1,4 @@
-import { Theme } from "@q9labs/chalk-react-native";
+import { Theme } from "@q9labs/chalk-react-native/theme";
 import { Pressable, StyleSheet, Text, View, ActivityIndicator } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import Copy01Icon from "@hugeicons/core-free-icons/dist/esm/Copy01Icon";

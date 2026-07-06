@@ -1,11 +1,10 @@
 import mobilePackageJson from "../../package.json";
 import * as SecureStore from "expo-secure-store";
-import { NativeModules, Platform } from "react-native";
-import { decodeTokenClaimsPreview, maskSecret, recordManualRequest, type DevDiagnosticsDeviceInfo, type DevDiagnosticsTokenClaimsPreview } from "./dev-diagnostics";
+import { decodeTokenClaimsPreview, maskSecret, recordManualRequest, type DevDiagnosticsTokenClaimsPreview } from "@q9labs/chalk-react-native/diagnostics";
+import { extractJoinTokenFromInviteLink } from "@q9labs/chalk-react-native/invites";
+import { canUseLocalHostBootstrap, createStorageScopeId, getNativeDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labs/chalk-react-native/runtime";
+import { createSecureStoreTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY, type NativeTokenStorage } from "@q9labs/chalk-react-native/storage";
 import { createTokenProvider } from "./mobile-auth";
-import { canUseLocalHostBootstrap, createStorageScopeId, resolveAppRuntimeUrl } from "./mobile-runtime";
-import { createHostTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY } from "./host-token-storage";
-import { extractJoinTokenFromInviteLink } from "./inviteLink";
 import { getCanonicalJoinRoomId, getJoinRoomName } from "./join-exchange";
 import { createHostedMeeting } from "./newMeeting";
 
@@ -15,7 +14,7 @@ const INTERNAL_CLIENT_ID_KEY = "chalk_mobile_internal_client_id_v1";
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 const PROD_WS_URL = "wss://chalk-ws.q9labs.ai/ws";
 
-export type JoinContext = {
+type JoinContext = {
   joinToken: string;
   roomName?: string;
   accessToken?: string;
@@ -30,7 +29,7 @@ export interface MobileDebugContext {
   joinAccessTokenPreview: string | null;
   joinTokenClaims: DevDiagnosticsTokenClaimsPreview | null;
   joinAccessTokenClaims: DevDiagnosticsTokenClaimsPreview | null;
-  device: DevDiagnosticsDeviceInfo;
+  device: ReturnType<typeof getNativeDeviceInfo>;
 }
 
 type BaseMeetingRoute = {
@@ -59,52 +58,11 @@ let cachedHostTokenProviderKey: string | null = null;
 let cachedLocalDevHostApiKey: string | null | undefined;
 let cachedInternalClientID: string | null | undefined;
 
-const getScriptUrl = (): string | null => NativeModules.SourceCode?.scriptURL ?? NativeModules.SourceCode?.getConstants?.().scriptURL ?? null;
-
-const getReactNativeVersionString = (): string | null => {
-  const version = Platform.constants?.reactNativeVersion;
-  if (!version) {
-    return null;
-  }
-
-  const major = typeof version.major === "number" ? version.major : null;
-  const minor = typeof version.minor === "number" ? version.minor : null;
-  const patch = typeof version.patch === "number" ? version.patch : null;
-  if (major === null || minor === null || patch === null) {
-    return null;
-  }
-
-  return `${major}.${minor}.${patch}`;
-};
-
-const isHermesEnabled = (): boolean => "HermesInternal" in globalThis;
-
-const readPlatformString = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
-
-const getDeviceInfo = (): DevDiagnosticsDeviceInfo => {
-  const constants = (Platform.constants ?? {}) as Record<string, unknown>;
-  const packageMeta = mobilePackageJson as { version?: string };
-
-  return {
-    appVersion: typeof packageMeta.version === "string" ? packageMeta.version : null,
-    platform: Platform.OS,
-    osVersion: String(Platform.Version),
-    reactNativeVersion: getReactNativeVersionString(),
-    brand: readPlatformString(constants.Brand),
-    manufacturer: readPlatformString(constants.Manufacturer),
-    model: readPlatformString(constants.Model),
-    systemName: readPlatformString(constants.systemName),
-    interfaceIdiom: readPlatformString(constants.interfaceIdiom),
-    hermesEnabled: isHermesEnabled(),
-    scriptUrl: getScriptUrl(),
-  };
-};
-
 export function getApiUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
   return resolveAppRuntimeUrl({
     configuredUrl: configured,
-    scriptUrl: getScriptUrl(),
+    scriptUrl: getReactNativeScriptUrl(),
     fallbackUrl: PROD_API_URL,
     allowDeviceLocal: __DEV__,
   });
@@ -115,7 +73,7 @@ export function getWsUrl(apiUrl = getApiUrl()): string | undefined {
   if (configured) {
     return resolveAppRuntimeUrl({
       configuredUrl: configured,
-      scriptUrl: getScriptUrl(),
+      scriptUrl: getReactNativeScriptUrl(),
       fallbackUrl: PROD_WS_URL,
       allowDeviceLocal: __DEV__,
     });
@@ -134,12 +92,12 @@ export function getWsUrl(apiUrl = getApiUrl()): string | undefined {
   }
 }
 
-export function getHostApiKey(): string | null {
+function getHostApiKey(): string | null {
   const configured = process.env.EXPO_PUBLIC_CHALK_API_KEY?.trim();
   return configured || null;
 }
 
-export function canBootstrapLocalHostKey(apiUrl: string, allowDeviceLocal = __DEV__): boolean {
+function canBootstrapLocalHostKey(apiUrl: string, allowDeviceLocal = __DEV__): boolean {
   return canUseLocalHostBootstrap(apiUrl, allowDeviceLocal);
 }
 
@@ -222,7 +180,7 @@ function getTokenProviderForKey(apiUrl: string, apiKey: string): () => Promise<s
   cachedHostTokenProvider = createTokenProvider({
     apiKey,
     apiUrl,
-    storage: createHostTokenStorage(apiUrl, apiKey),
+    storage: createSecureStoreTokenStorage(apiUrl, apiKey, SecureStore),
   });
   cachedHostTokenProviderKey = cacheKey;
   return cachedHostTokenProvider;
@@ -340,7 +298,7 @@ export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | 
   };
 }
 
-export async function getJoinContext(): Promise<JoinContext | null> {
+async function getJoinContext(): Promise<JoinContext | null> {
   const raw = await SecureStore.getItemAsync(JOIN_CONTEXT_KEY);
   if (!raw) {
     return null;
@@ -359,7 +317,7 @@ export async function getJoinContext(): Promise<JoinContext | null> {
   }
 }
 
-export async function setJoinContext(context: JoinContext): Promise<void> {
+async function setJoinContext(context: JoinContext): Promise<void> {
   await SecureStore.setItemAsync(JOIN_CONTEXT_KEY, JSON.stringify(context));
 }
 
@@ -368,7 +326,7 @@ export async function clearJoinContext(): Promise<void> {
 }
 
 async function clearHostTokenStorage(apiUrl: string, apiKey: string): Promise<void> {
-  const storage = createHostTokenStorage(apiUrl, apiKey);
+  const storage: NativeTokenStorage = createSecureStoreTokenStorage(apiUrl, apiKey, SecureStore);
   await Promise.all([storage.remove(HOST_ACCESS_TOKEN_KEY), storage.remove(HOST_REFRESH_TOKEN_KEY), storage.remove(HOST_EXPIRES_KEY)]);
 }
 
@@ -403,7 +361,9 @@ export async function getMobileDebugContext(apiUrl: string): Promise<MobileDebug
     joinAccessTokenPreview: maskSecret(joinContext?.accessToken ?? null),
     joinTokenClaims: decodeTokenClaimsPreview(joinContext?.joinToken ?? null),
     joinAccessTokenClaims: decodeTokenClaimsPreview(joinContext?.accessToken ?? null),
-    device: getDeviceInfo(),
+    device: getNativeDeviceInfo({
+      appVersion: typeof (mobilePackageJson as { version?: string }).version === "string" ? (mobilePackageJson as { version?: string }).version : null,
+    }),
   };
 }
 

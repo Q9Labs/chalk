@@ -14,10 +14,7 @@
 
     /* Path aliases - must redeclare since paths don't merge */
     "paths": {
-      "@/*": ["./src/*"],
-      "@q9labs/chalk-ui": ["../../packages/ui/src/index.ts"],
-      "@q9labs/chalk-ui/button": ["../../packages/ui/src/button.tsx"],
-      "@q9labs/chalk-ui/utils": ["../../packages/ui/src/lib/utils.ts"]
+      "@/*": ["./src/*"]
     }
   }
 }

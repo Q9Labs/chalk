@@ -140,6 +140,42 @@ There should be no placeholder logic kept as a reminder of what core might do
 later. The reminder belongs here, in this spec. The code should either be real
 owned behavior in the right package or no behavior at all.
 
+## Core-Owned Behaviors
+
+Chalk Core should own the behaviors that make every surface agree on how a
+meeting begins, who may enter, and what happens when access changes.
+
+Core should own invitation understanding. A Chalk invite should mean the same
+thing on web, React, React Native, plain JavaScript, or an embedded surface. A
+surface may decide how to display an invite, but Core should decide whether the
+invite is recognizable, usable, expired, invalid, or points to a room that can
+actually be joined.
+
+Core should own access and token lifecycles. Hosts, guests, refreshed access,
+expired access, and failed access should behave consistently across platforms.
+An app should not have to invent its own idea of when access is fresh enough to
+reuse, when it must be refreshed, or when a person needs to start over.
+
+Core should own room creation. Starting a meeting should produce the same kind
+of room identity, room name, host access, and shareable invitation no matter
+which surface started it. Apps may choose the button, flow, and wording, but
+not the meeting truth.
+
+Core should own join resolution. A person who follows an invite should arrive at
+the same room, with the same role and same understandable failure reasons, on
+every surface. The surface can decide whether that appears as a lobby, sheet,
+modal, or full screen.
+
+Core should own diagnostics meaning. Support information should describe the
+safe shape of a failure, the broad timeline of what happened, and the current
+meeting state without leaking private content or secrets. Platform packages may
+add device context, but Core should define the shared support story.
+
+Core should own friendly room identity. Human-readable room names, canonical
+room identity, and invite identity should not drift between apps. If two
+surfaces refer to the same room, people should see a consistent meeting
+identity.
+
 ## Done Means
 
 The next version of Chalk Core is ready when a person can:

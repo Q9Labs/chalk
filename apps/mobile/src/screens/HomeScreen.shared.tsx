@@ -1,4 +1,8 @@
-import { ChalkLogoElements, Theme } from "@q9labs/chalk-react-native";
+import { ChalkLogoElements } from "@q9labs/chalk-react-native";
+import { useClipboardInviteSuggestion } from "@q9labs/chalk-react-native/clipboard";
+import { getClipboardInviteSuggestion } from "@q9labs/chalk-react-native/invites";
+import { Theme } from "@q9labs/chalk-react-native/theme";
+import * as Clipboard from "expo-clipboard";
 import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
 import ArrowRight02Icon from "@hugeicons/core-free-icons/dist/esm/ArrowRight02Icon";
@@ -10,7 +14,6 @@ import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSh
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
 import { canCreateMeeting, createMeetingLobbyRoute, getApiUrl, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
-import { useClipboardInviteSuggestion } from "./useClipboardInviteSuggestion";
 
 const PUBLIC_SITE_URL = "https://chalkmeet.com";
 const PUBLIC_PRIVACY_URL = "https://chalkmeet.com/privacy";
@@ -35,7 +38,10 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
 
   const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
   const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
-  const clipboardInviteLink = useClipboardInviteSuggestion(input);
+  const clipboardInviteLink = useClipboardInviteSuggestion(input, {
+    clipboard: Clipboard,
+    getSuggestion: getClipboardInviteSuggestion,
+  });
 
   const entryHeroAnim = useRef(new Animated.Value(0)).current;
   const entryActionsAnim = useRef(new Animated.Value(0)).current;

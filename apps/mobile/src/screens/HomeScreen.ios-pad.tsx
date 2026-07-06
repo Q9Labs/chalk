@@ -1,4 +1,7 @@
-import { ChalkLogoElements, Theme } from "@q9labs/chalk-react-native";
+import { ChalkLogoElements } from "@q9labs/chalk-react-native";
+import { useClipboardInviteSuggestion } from "@q9labs/chalk-react-native/clipboard";
+import { getClipboardInviteSuggestion } from "@q9labs/chalk-react-native/invites";
+import { Theme } from "@q9labs/chalk-react-native/theme";
 import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowLeft01Icon";
@@ -7,15 +10,15 @@ import CancelCircleIcon from "@hugeicons/core-free-icons/dist/esm/CancelCircleIc
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useMemo, useState, useRef, useEffect } from "react";
 import { KeyboardAvoidingView, Linking, Pressable, StyleSheet, Text, TextInput, View, Animated, ActivityIndicator, LayoutAnimation } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { canCreateMeeting, createMeetingLobbyRoute, getApiUrl, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
-import { useClipboardInviteSuggestion } from "./useClipboardInviteSuggestion";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
 
 const PUBLIC_SITE_URL = "https://chalkmeet.com";
 
-export interface HomeScreenProps {
+interface HomeScreenProps {
   onNavigate: (route: LobbyRoute) => void;
   onDiagnosticsFailure?: (source: "resolve-join-link" | "create-meeting", message: string) => void;
 }
@@ -35,7 +38,10 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
 
   const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
   const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
-  const clipboardInviteLink = useClipboardInviteSuggestion(input);
+  const clipboardInviteLink = useClipboardInviteSuggestion(input, {
+    clipboard: Clipboard,
+    getSuggestion: getClipboardInviteSuggestion,
+  });
 
   const entryHeroAnim = useRef(new Animated.Value(0)).current;
   const entryActionsAnim = useRef(new Animated.Value(0)).current;

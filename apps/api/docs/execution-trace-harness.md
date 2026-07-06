@@ -1,7 +1,6 @@
 # Execution Trace Harness
 
-Use this when Hasan wants to review a finished Go API change by watching it run
-as a readable story, not by reading code and tests alone.
+Use this when Hasan wants to review a finished Go API change by watching it run as a readable story, not by reading code and tests alone.
 
 ## What It Is
 
@@ -14,13 +13,9 @@ go run ./cmd/trace
 
 It runs scripted scenarios and prints an execution timeline. The first scenario,
 `tenant-create`, goes through the real HTTP router and tenant service, then uses
-traced local doubles at external boundaries so it can run without Postgres,
-Redis, email, or storage services.
+traced local doubles at external boundaries so it can run without Postgres, Redis, email, or storage services.
 
-The goal is confidence and familiarity: show request input, authentication,
-authorization or policy decisions, service transformations, repository or
-adapter calls, database/provider-shaped operations, returned data, and final
-output.
+The goal is confidence and familiarity: show request input, authentication, authorization or policy decisions, service transformations, repository or adapter calls, database/provider-shaped operations, returned data, and final output.
 
 ## How To Run
 

@@ -1,13 +1,4 @@
 import type { NativeVideoConferenceDiagnosticsSnapshot, useSession } from "@q9labs/chalk-react-native";
-import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
-import { HugeiconsIcon } from "@hugeicons/react-native";
-import { StatusBar } from "expo-status-bar";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
-import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
-import { clearJoinContext, clearStoredHostAuth, getApiUrl, getHostTokenProvider, getJoinAccessToken, getMobileDebugContext, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
 import {
   fetchDevDiagnosticsAuth,
   recordDevDiagnosticsLifecycleEvent,
@@ -20,8 +11,17 @@ import {
   setDevDiagnosticsSession,
   setDevDiagnosticsStaticAuth,
   setDevDiagnosticsToken,
-} from "./src/lib/dev-diagnostics";
-import { Theme } from "./src/lib/theme";
+} from "@q9labs/chalk-react-native/diagnostics";
+import { Theme } from "@q9labs/chalk-react-native/theme";
+import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { StatusBar } from "expo-status-bar";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
+import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
+import { clearJoinContext, clearStoredHostAuth, getApiUrl, getHostTokenProvider, getJoinAccessToken, getMobileDebugContext, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
 import { MobileMeetingScreen } from "./src/meeting/MobileMeetingScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 
