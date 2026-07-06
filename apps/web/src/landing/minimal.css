@@ -1,17 +1,19 @@
 /* ============================================================
    Chalk — minimal landing
-   System fonts, monochrome, hairlines. No decoration, no motion.
+   System fonts, monochrome, hairlines. Calm, not barebones.
+   One quiet accent: the green "live" dot.
    ============================================================ */
 
 .mn {
   --fg: #17181c;
-  --muted: #6b6f76;
+  --muted: #64686f;
   --faint: #9a9ea5;
-  --line: #ececec;
+  --line: #e7e7e3;
+  --surface: #f6f6f3;
+  --tile: #ececea;
+  --accent: #3f9c5c;
   --bg: #ffffff;
 
-  display: flex;
-  flex-direction: column;
   min-height: 100dvh;
   background: var(--bg);
   color: var(--fg);
@@ -32,12 +34,47 @@
   color: inherit;
   text-decoration: none;
 }
+.mn ul {
+  list-style: none;
+}
 
 .mn__wrap {
   width: 100%;
-  max-width: 680px;
+  max-width: 1040px;
   margin-inline: auto;
   padding-inline: 24px;
+}
+
+/* --- buttons / links --------------------------------------- */
+.mn__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 20px;
+  border-radius: 9px;
+  background: var(--fg);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  transition: opacity 0.15s ease;
+}
+.mn__cta:hover {
+  opacity: 0.85;
+}
+.mn__cta--sm {
+  padding: 8px 15px;
+  font-size: 14px;
+}
+.mn__textlink {
+  font-size: 15px;
+  color: var(--muted);
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.mn__textlink:hover {
+  color: var(--fg);
+  border-color: var(--line);
 }
 
 /* --- header ------------------------------------------------ */
@@ -45,7 +82,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-block: 22px;
+  padding-block: 20px;
+  border-bottom: 1px solid var(--line);
 }
 .mn__brand {
   font-size: 16px;
@@ -55,90 +93,207 @@
 .mn__nav {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 26px;
   font-size: 14px;
   color: var(--muted);
 }
-.mn__nav a {
+.mn__nav a:not(.mn__cta) {
   transition: color 0.15s ease;
 }
-.mn__nav a:hover {
+.mn__nav a:not(.mn__cta):hover {
   color: var(--fg);
 }
 
 /* --- hero -------------------------------------------------- */
-.mn__main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding-block: clamp(48px, 12vh, 120px);
+.mn__hero {
+  padding-block: clamp(48px, 9vw, 96px);
 }
 .mn__h1 {
-  font-size: clamp(1.9rem, 1rem + 3vw, 2.7rem);
+  font-size: clamp(2.1rem, 1rem + 3.4vw, 3rem);
   font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-  max-width: 16ch;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+  max-width: 18ch;
 }
 .mn__sub {
-  margin-top: 18px;
-  max-width: 46ch;
-  font-size: 1.075rem;
+  margin-top: 20px;
+  max-width: 50ch;
+  font-size: 1.15rem;
   color: var(--muted);
 }
 .mn__actions {
   margin-top: 30px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 22px;
   flex-wrap: wrap;
 }
-.mn__cta {
+
+/* --- product mock ------------------------------------------ */
+.mn__frame {
+  margin-top: clamp(44px, 7vw, 72px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 24px 60px -32px rgba(20, 20, 22, 0.22);
+}
+.mn__frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.mn__dots {
+  display: flex;
+  gap: 6px;
+}
+.mn__dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #dededa;
+}
+.mn__frame-title {
+  font-size: 13px;
+  color: var(--faint);
+}
+.mn__pill {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
-  padding: 10px 18px;
-  border-radius: 8px;
-  background: var(--fg);
-  color: #fff;
-  font-size: 15px;
+  gap: 7px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12.5px;
   font-weight: 500;
-  transition: opacity 0.15s ease;
-}
-.mn__cta:hover {
-  opacity: 0.86;
-}
-.mn__link {
-  font-size: 15px;
   color: var(--muted);
-  border-bottom: 1px solid transparent;
-  padding-bottom: 1px;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  font-variant-numeric: tabular-nums;
 }
-.mn__link:hover {
-  color: var(--fg);
-  border-color: var(--line);
+.mn__live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.mn__tiles {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-auto-rows: 92px;
+  gap: 10px;
+  padding: 14px;
+}
+.mn__tile {
+  position: relative;
+  border-radius: 9px;
+  background: var(--tile);
+  display: flex;
+  align-items: flex-end;
+  padding: 10px;
+}
+.mn__tile span {
+  font-size: 12.5px;
+  color: #7c8087;
+}
+.mn__tile--main {
+  grid-row: span 2;
+  background: linear-gradient(180deg, #eeeeeb, #e4e4e1);
+}
+.mn__tile--more {
+  align-items: center;
+  justify-content: center;
+}
+.mn__tile--more span {
+  font-weight: 600;
+  color: var(--muted);
 }
 
-/* --- quiet points ------------------------------------------ */
-.mn__points {
-  margin-top: clamp(48px, 9vh, 88px);
-  border-top: 1px solid var(--line);
+/* --- sections ---------------------------------------------- */
+.mn__section {
+  padding-block: clamp(56px, 8vw, 104px);
+}
+.mn__sechead {
+  max-width: 46ch;
+  margin-bottom: 40px;
+}
+.mn__h2 {
+  font-size: clamp(1.6rem, 1rem + 1.8vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.mn__lead {
+  margin-top: 12px;
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+
+/* --- features ---------------------------------------------- */
+.mn__features {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 28px;
-  padding-top: 28px;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
 }
-.mn__point strong {
+.mn__feature {
+  background: var(--bg);
+  padding: 28px 26px;
+}
+.mn__ficon {
+  color: var(--fg);
+}
+.mn__feature strong {
   display: block;
-  font-size: 14.5px;
+  margin-top: 16px;
+  font-size: 1rem;
   font-weight: 550;
 }
-.mn__point span {
+.mn__feature span {
   display: block;
-  margin-top: 5px;
-  font-size: 14px;
+  margin-top: 7px;
+  font-size: 0.94rem;
   color: var(--muted);
+  line-height: 1.55;
+}
+
+/* --- use cases --------------------------------------------- */
+.mn__cases {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  padding-block: 22px;
+  border-block: 1px solid var(--line);
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+.mn__cases i {
+  margin-left: 18px;
+  color: var(--faint);
+  font-style: normal;
+}
+
+/* --- cta band ---------------------------------------------- */
+.mn__cband {
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: clamp(44px, 6vw, 76px) 28px;
+}
+.mn__cband .mn__lead {
+  margin-inline: auto;
+  margin-bottom: 26px;
+}
+.mn__note {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--faint);
 }
 
 /* --- footer ------------------------------------------------ */
@@ -147,26 +302,41 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  padding-block: 24px;
+  gap: 14px;
+  padding-block: 30px 40px;
   border-top: 1px solid var(--line);
-  font-size: 13.5px;
-  color: var(--faint);
 }
 .mn__foot nav {
   display: flex;
-  gap: 20px;
+  gap: 22px;
+  font-size: 14px;
+  color: var(--muted);
 }
-.mn__foot a {
+.mn__foot nav a {
   transition: color 0.15s ease;
 }
-.mn__foot a:hover {
+.mn__foot nav a:hover {
   color: var(--fg);
 }
+.mn__copy {
+  font-size: 13px;
+  color: var(--faint);
+}
 
-@media (max-width: 560px) {
-  .mn__points {
+@media (max-width: 760px) {
+  .mn__nav a:not(.mn__cta) {
+    display: none;
+  }
+  .mn__features {
     grid-template-columns: 1fr;
-    gap: 18px;
+  }
+}
+@media (max-width: 520px) {
+  .mn__tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mn__tile--main {
+    grid-row: auto;
+    grid-column: span 2;
   }
 }
