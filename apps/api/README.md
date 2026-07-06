@@ -76,13 +76,16 @@ boundaries.
 ```bash
 go run ./cmd/trace
 go run ./cmd/trace -scenario tenant-create -format json
+go run ./cmd/trace -color always
 ```
 
 The first scenario, `tenant-create`, shows request entry, authentication,
 principal attachment, service input normalization, repository work, simulated
 database transaction/query/result mapping, and the final HTTP response. Trace
-output is local developer tooling; do not commit raw traces that contain
-customer data, production identifiers, secrets, or private operational detail.
+text output uses color automatically when stdout is a terminal, and accepts
+`-color auto`, `-color always`, or `-color never`. Trace output is local
+developer tooling; do not commit raw traces that contain customer data,
+production identifiers, secrets, or private operational detail.
 
 ## Local Observability And Performance
 

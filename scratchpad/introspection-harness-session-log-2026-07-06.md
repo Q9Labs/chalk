@@ -44,3 +44,14 @@ Current limitation: the database operation is simulated at the repository
 boundary so the harness is useful without local Postgres. A future scenario can
 add a real Postgres-backed mode once the desired local-data/reset workflow is
 clear.
+
+## 2026-07-06 07:03 +0500
+
+Improved the CLI text output after Hasan said the first trace was hard to read:
+
+- Added `-color auto|always|never` to `apps/api/cmd/trace`.
+- Added a proper summary header and a readable timeline layout.
+- Replaced JSON-shaped field blocks with an indented field tree.
+- Preserved whitespace-sensitive raw inputs by quoting strings with leading or
+  trailing spaces.
+- Kept `-format json` unchanged for machine-readable output.
