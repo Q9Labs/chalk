@@ -50,6 +50,8 @@ pnpm check-types
   a specific domain vocabulary.
 
 For Go API code, follow the local standards in `apps/api/docs/code-standards.md`.
+When Hasan asks to make finished API work visible in the Execution Trace
+Harness, follow `apps/api/docs/execution-trace-harness.md`.
 
 ## Where To Write Code
 

@@ -87,6 +87,9 @@ text output uses color automatically when stdout is a terminal, and accepts
 developer tooling; do not commit raw traces that contain customer data,
 production identifiers, secrets, or private operational detail.
 
+For agent guidance on adding scenarios after API work, see
+[`docs/execution-trace-harness.md`](docs/execution-trace-harness.md).
+
 ## Local Observability And Performance
 
 Logging is vendor-neutral and writes structured logs to stdout by default. The

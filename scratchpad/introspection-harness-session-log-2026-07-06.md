@@ -55,3 +55,30 @@ Improved the CLI text output after Hasan said the first trace was hard to read:
 - Preserved whitespace-sensitive raw inputs by quoting strings with leading or
   trailing spaces.
 - Kept `-format json` unchanged for machine-readable output.
+
+## 2026-07-06 07:46 +0500
+
+Hasan asked whether the harness should cover more than HTTP routes: direct
+services, authorization, rate limiting, edge cases, email, storage, and clearer
+tree/path views.
+
+Direction to consider next:
+
+- Grow the harness as scenario families: `route:*`, `service:*`, `policy:*`,
+  `adapter:*`, and `edge:*`.
+- Route scenarios answer "does a request flow end to end?"
+- Service scenarios answer "does this domain behavior transform inputs and
+  dependencies correctly without HTTP noise?"
+- Policy scenarios answer "why was access allowed or denied?"
+- Rate-limit scenarios answer "which key/policy/window/decision applied?"
+- Adapter scenarios for email/storage answer "what provider request would be
+  sent, what is redacted, and how errors map back?"
+- Edge-case scenarios should be first-class, not hidden in tests only: invalid
+  IDs, missing auth, forbidden access, duplicate records, provider failures,
+  timeout/cancellation, and rollback paths.
+- The CLI should eventually support filtering and path views, for example
+  focusing on `http -> auth -> service -> repository -> database` or printing a
+  compact tree of nested spans before the detailed event list.
+
+Added durable agent guidance in `apps/api/docs/execution-trace-harness.md` and
+linked it from `AGENTS.md` and the API README.
