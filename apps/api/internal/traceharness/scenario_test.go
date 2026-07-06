@@ -46,6 +46,26 @@ func TestRunCreateTenantScenario(t *testing.T) {
 	assertEvent(t, result.Events, "database", "INSERT tenants RETURNING *")
 }
 
+func TestRunAllRegisteredScenarios(t *testing.T) {
+	for _, scenario := range ScenarioNames() {
+		t.Run(scenario, func(t *testing.T) {
+			result, err := Run(context.Background(), scenario)
+			if err != nil {
+				t.Fatalf("run scenario: %v", err)
+			}
+			if result.Name == "" {
+				t.Fatal("scenario name is empty")
+			}
+			if result.StatusCode < 200 || result.StatusCode >= 500 {
+				t.Fatalf("status = %d, want reviewable 2xx-4xx status", result.StatusCode)
+			}
+			if len(result.Events) == 0 {
+				t.Fatal("expected trace events")
+			}
+		})
+	}
+}
+
 func TestRunRejectsUnknownScenario(t *testing.T) {
 	_, err := Run(context.Background(), "missing")
 	if err == nil {

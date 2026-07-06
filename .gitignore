@@ -12,6 +12,7 @@ coverage
 .scratchpad/
 # Logs
 logs
+.logs/
 *.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
@@ -111,3 +112,5 @@ hasan.md
 
 # Stakpak session files
 .stakpak/session*
+
+.worktrees/

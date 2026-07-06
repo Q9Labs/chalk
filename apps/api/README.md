@@ -69,17 +69,19 @@ startup/shutdown budgets.
 ## Execution Trace Harness
 
 The API includes a local Execution Trace Harness for reviewing one full
-application flow as a readable timeline. It runs a scripted scenario through the
-real HTTP router and service layer with traced local test doubles at external
-boundaries.
+application flow, or the full scenario catalog, as a readable timeline. It runs
+scripted scenarios through the real HTTP router and service layer with traced
+local test doubles at external boundaries.
 
 ```bash
 go run ./cmd/trace
+go run ./cmd/trace -scenario all -style tree -color always
 go run ./cmd/trace -scenario tenant-create -format json
 go run ./cmd/trace -color always
 ```
 
-The first scenario, `tenant-create`, shows request entry, authentication,
+By default, `go run ./cmd/trace` runs every registered scenario. The
+`tenant-create` scenario shows request entry, authentication,
 principal attachment, service input normalization, repository work, simulated
 database transaction/query/result mapping, and the final HTTP response. Trace
 text output uses color automatically when stdout is a terminal, and accepts

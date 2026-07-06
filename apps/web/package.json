@@ -5,7 +5,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vite dev --port 3070",
+    "dev": "node ../../scripts/dev-log.mjs dev:raw",
+    "dev:raw": "vite dev --port 3070",
     "build": "pnpm run sync:public && vite build && node scripts/prepare-pages-spa.mjs",
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
     "preview": "vite preview"

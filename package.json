@@ -15,7 +15,8 @@
   "type": "module",
   "scripts": {
     "build": "turbo build",
-    "dev": "bash -lc 'trap \"kill 0\" EXIT; pnpm run dev:mobile & turbo dev'",
+    "dev": "node scripts/dev-log.mjs dev:raw",
+    "dev:raw": "bash -lc 'trap \"kill 0\" EXIT; pnpm run dev:mobile & turbo dev'",
     "mobile:connect": "bash .agents/skills/chalk-mobile-wireless-debug/scripts/connect-wireless-adb.sh",
     "mobile:launch": "bash .agents/skills/chalk-mobile-wireless-debug/scripts/launch-chalk-mobile-dev.sh",
     "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",

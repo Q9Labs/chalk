@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(scriptDir, "../public");
-const blankHtml = "<!doctype html><html><head><meta charset=\"utf-8\" /></head><body></body></html>\n";
+const blankHtml = '<!doctype html><html><head><meta charset="utf-8" /></head><body></body></html>\n';
 
 function writePublicFile(relativePath: string, contents: string) {
   const outputPath = resolve(publicDir, relativePath);

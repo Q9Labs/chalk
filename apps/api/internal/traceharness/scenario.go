@@ -14,7 +14,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
-	"github.com/q9labs/chalk/apps/api/internal/regions"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -33,13 +32,75 @@ type ScenarioResult struct {
 func Run(ctx context.Context, name string) (ScenarioResult, error) {
 	switch name {
 	case "", CreateTenantScenario:
-		return runCreateTenant(ctx)
+		return runCreateTenant(ctx, CreateTenantScenario)
+	case RouteAuthRegisterScenario:
+		return runRouteAuthRegister(ctx)
+	case RouteAuthLoginScenario:
+		return runRouteAuthLogin(ctx)
+	case RouteAuthLogoutScenario:
+		return runRouteAuthLogout(ctx)
+	case RouteAuthGoogleStartScenario:
+		return runRouteAuthGoogleStart(ctx)
+	case RouteAuthGoogleCallbackScenario:
+		return runRouteAuthGoogleCallback(ctx)
+	case RouteMeScenario:
+		return runRouteMe(ctx)
+	case RouteTenantCreateScenario:
+		return runCreateTenant(ctx, RouteTenantCreateScenario)
+	case RouteTenantListSystemScenario:
+		return runRouteTenantListSystem(ctx)
+	case RouteTenantGetAuthorizedScenario:
+		return runRouteTenantGetAuthorized(ctx)
+	case RouteTenantUpdateAuthorizedScenario:
+		return runRouteTenantUpdateAuthorized(ctx)
+	case RouteRegionsListScenario:
+		return runRouteRegionsList(ctx)
+	case RouteUserCreateScenario:
+		return runRouteUserCreate(ctx)
+	case RouteUserListSystemScenario:
+		return runRouteUserListSystem(ctx)
+	case RouteUserGetScenario:
+		return runRouteUserGet(ctx)
+	case RouteMembershipCreateOwnerScenario:
+		return runRouteMembershipCreateOwner(ctx)
+	case RouteMembershipListViewerScenario:
+		return runRouteMembershipListViewer(ctx)
+	case RouteMembershipUpdateOwnerScenario:
+		return runRouteMembershipUpdateOwner(ctx)
+	case PolicyTenantSystemAllowScenario:
+		return runPolicyTenantSystemAllow(ctx)
+	case PolicyTenantAPIKeyScopeScenario:
+		return runPolicyTenantAPIKeyScope(ctx)
+	case PolicyTenantUserRoleScenario:
+		return runPolicyTenantUserRole(ctx)
+	case RateLimitIPDenyScenario:
+		return runRateLimitIPDeny(ctx)
+	case RateLimitPrincipalDenyScenario:
+		return runRateLimitPrincipalDeny(ctx)
+	case AdapterPostgresTenantCreateScenario:
+		return runAdapterPostgresTenantCreate(ctx)
+	case AdapterRedisRateLimitScenario:
+		return runAdapterRedisRateLimit(ctx)
+	case AdapterCloudflareR2SignedURLScenario:
+		return runAdapterCloudflareR2SignedURL(ctx)
+	case AdapterCloudflareSFUBootstrapScenario:
+		return runAdapterCloudflareSFUBootstrap(ctx)
+	case AdapterCloudflareRTKJoinScenario:
+		return runAdapterCloudflareRTKJoin(ctx)
+	case AdapterResendSendEmailScenario:
+		return runAdapterResendSendEmail(ctx)
+	case EdgeUnauthenticatedRouteScenario:
+		return runEdgeUnauthenticatedRoute(ctx)
+	case EdgeForbiddenTenantRouteScenario:
+		return runEdgeForbiddenTenantRoute(ctx)
+	case EdgeInvalidRouteIDScenario:
+		return runEdgeInvalidRouteID(ctx)
 	default:
 		return ScenarioResult{}, fmt.Errorf("unknown trace scenario %q", name)
 	}
 }
 
-func runCreateTenant(ctx context.Context) (ScenarioResult, error) {
+func runCreateTenant(ctx context.Context, name string) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
 	userID := mustID("11111111-1111-4111-8111-111111111111")
@@ -65,7 +126,7 @@ func runCreateTenant(ctx context.Context) (ScenarioResult, error) {
 		Tenants:        service,
 	})
 	body := json.RawMessage(`{"name":"  Chalk Demo Workspace  ","default_region":"us","website":" https://chalkmeet.com "}`)
-	recorder.Add("scenario", CreateTenantScenario, "boot router and issue request", map[string]any{
+	recorder.Add("scenario", name, "boot router and issue request", map[string]any{
 		"request": map[string]any{
 			"method": "POST",
 			"path":   "/v1/tenants",
@@ -93,7 +154,7 @@ func runCreateTenant(ctx context.Context) (ScenarioResult, error) {
 	}, nil)
 
 	result := ScenarioResult{
-		Name:       CreateTenantScenario,
+		Name:       name,
 		StatusCode: response.Code,
 		Body:       json.RawMessage(response.Body.Bytes()),
 		Events:     recorder.Events(),
@@ -203,22 +264,6 @@ func (s tracedTenantService) CreateTenant(ctx context.Context, input tenants.Cre
 	return tenant, err
 }
 
-func (s tracedTenantService) AvailableRegions(ctx context.Context) ([]regions.Region, error) {
-	return s.next.AvailableRegions(ctx)
-}
-
-func (s tracedTenantService) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
-	return s.next.GetTenant(ctx, id)
-}
-
-func (s tracedTenantService) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
-	return s.next.ListTenants(ctx, page)
-}
-
-func (s tracedTenantService) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
-	return s.next.UpdateTenant(ctx, id, input)
-}
-
 type tracedTenantRepository struct {
 	recorder *Recorder
 	now      func() time.Time
@@ -261,15 +306,80 @@ func (r tracedTenantRepository) CreateTenant(ctx context.Context, input tenants.
 }
 
 func (r tracedTenantRepository) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
-	return tenants.Tenant{}, errors.New("get tenant is not used by trace scenario")
+	_ = ctx
+	span := r.recorder.Start("repository", "TenantRepository.GetTenant", "select tenant by id", map[string]any{
+		"tenant_id": id.String(),
+	})
+	r.recorder.Add("database", "SELECT tenants WHERE id = $1", "execute query", map[string]any{
+		"params": map[string]any{"id": id.String()},
+	})
+	tenant := tenantFixture(r.now)
+	span.End("map database row to domain tenant", map[string]any{
+		"tenant": tenantFields(tenant),
+	}, nil)
+	return tenant, nil
 }
 
 func (r tracedTenantRepository) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
-	return tenants.TenantList{}, errors.New("list tenants is not used by trace scenario")
+	_ = ctx
+	span := r.recorder.Start("repository", "TenantRepository.ListTenants", "select paginated tenants", map[string]any{
+		"page": pageRequestFields(page),
+	})
+	r.recorder.Add("database", "SELECT tenants ORDER BY created_at DESC, id DESC LIMIT $1", "execute query", map[string]any{
+		"params": pageRequestFields(page),
+	})
+	list := tenants.TenantList{
+		Tenants: []tenants.Tenant{
+			tenantFixture(r.now),
+			{
+				ID:            mustID("77777777-7777-4777-8777-777777777777"),
+				Name:          "Trace Sandbox",
+				DefaultRegion: stringPtr("eu"),
+				CreatedAt:     r.now(),
+				UpdatedAt:     r.now(),
+			},
+		},
+		Page: pagination.Page{PageSize: page.Size(), HasMore: false},
+	}
+	span.End("map database rows to domain tenant list", map[string]any{
+		"list": tenantListFields(list),
+	}, nil)
+	return list, nil
 }
 
 func (r tracedTenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
-	return tenants.Tenant{}, errors.New("update tenant is not used by trace scenario")
+	_ = ctx
+	span := r.recorder.Start("repository", "TenantRepository.UpdateTenant", "update tenant row", map[string]any{
+		"tenant_id":    id.String(),
+		"domain_input": tenantUpdateInputFields(input),
+	})
+	r.recorder.Add("database", "UPDATE tenants SET ... RETURNING *", "execute query", map[string]any{
+		"params": map[string]any{
+			"id":    id.String(),
+			"patch": tenantUpdateInputFields(input),
+		},
+	})
+	tenant := tenantFixture(r.now)
+	if input.Name.Set && input.Name.Value != nil {
+		tenant.Name = *input.Name.Value
+	}
+	if input.DefaultRegion.Set {
+		tenant.DefaultRegion = input.DefaultRegion.Value
+	}
+	if input.DefaultMediaPlane.Set {
+		tenant.DefaultMediaPlane = input.DefaultMediaPlane.Value
+	}
+	if input.LogoKey.Set {
+		tenant.LogoKey = input.LogoKey.Value
+	}
+	if input.Website.Set {
+		tenant.Website = input.Website.Value
+	}
+	tenant.UpdatedAt = r.now()
+	span.End("map database row to updated domain tenant", map[string]any{
+		"tenant": tenantFields(tenant),
+	}, nil)
+	return tenant, nil
 }
 
 type allowAllLimiter struct{}

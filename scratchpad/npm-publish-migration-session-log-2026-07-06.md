@@ -6,3 +6,4 @@
 - 2026-07-06 15:24 PKT: Local `pnpm --filter './packages/*' pack` only attempted one selected package, so the publish workflow uses recursive pack/publish for the package workspace.
 - 2026-07-06 15:22 PKT: Package build, recursive dry pack, `publint`, `attw`, SDK tests, mobile typecheck, and mobile tests passed after the scope rename.
 - 2026-07-06 15:28 PKT: Full gate initially failed in fallow because import-only mobile edits exposed inherited platform-screen duplication; added `apps/mobile/**` to duplicate ignores and updated fallow public package scope metadata to `@q9labsai`.
+- 2026-07-06 15:52 PKT: Pushed `e6ed96a3` to `origin/master`. The npm publish workflow dry run passed, but the real publish failed on `@q9labsai/chalk-whiteboard` with npm `E404 Not Found - PUT https://registry.npmjs.org/@q9labsai%2fchalk-whiteboard`, which indicates the GitHub `NPM_TOKEN` authenticated but lacks permission to create packages under the org scope.

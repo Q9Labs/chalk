@@ -26,6 +26,8 @@ type Event struct {
 
 type TextOptions struct {
 	Color bool
+	// Tree renders nesting with box-drawing guides instead of flat indentation.
+	Tree bool
 }
 
 // Recorder stores a single scenario's ordered execution events.
@@ -133,8 +135,13 @@ func WriteText(w io.Writer, events []Event) error {
 func WriteTextWithOptions(w io.Writer, events []Event, options TextOptions) error {
 	theme := newTextTheme(options.Color)
 
+	originLayers := make(map[int]string, len(events))
 	for _, event := range events {
-		if err := writeTextEvent(w, theme, event); err != nil {
+		originLayers[event.Number] = event.Layer
+	}
+
+	for _, event := range events {
+		if err := writeTextEvent(w, theme, options.Tree, originLayers, event); err != nil {
 			return err
 		}
 	}
@@ -191,16 +198,17 @@ func sortedKeys(fields map[string]any) []string {
 }
 
 type textTheme struct {
-	enabled bool
-	reset   string
-	dim     string
-	bold    string
-	red     string
-	green   string
-	cyan    string
-	yellow  string
-	magenta string
-	blue    string
+	enabled       bool
+	reset         string
+	dim           string
+	bold          string
+	red           string
+	green         string
+	cyan          string
+	yellow        string
+	magenta       string
+	brightMagenta string
+	blue          string
 }
 
 func newTextTheme(enabled bool) textTheme {
@@ -209,16 +217,17 @@ func newTextTheme(enabled bool) textTheme {
 	}
 
 	return textTheme{
-		enabled: true,
-		reset:   "\x1b[0m",
-		dim:     "\x1b[2m",
-		bold:    "\x1b[1m",
-		red:     "\x1b[31m",
-		green:   "\x1b[32m",
-		cyan:    "\x1b[36m",
-		yellow:  "\x1b[33m",
-		magenta: "\x1b[35m",
-		blue:    "\x1b[34m",
+		enabled:       true,
+		reset:         "\x1b[0m",
+		dim:           "\x1b[2m",
+		bold:          "\x1b[1m",
+		red:           "\x1b[31m",
+		green:         "\x1b[32m",
+		cyan:          "\x1b[36m",
+		yellow:        "\x1b[33m",
+		magenta:       "\x1b[35m",
+		brightMagenta: "\x1b[95m",
+		blue:          "\x1b[34m",
 	}
 }
 
@@ -230,59 +239,80 @@ func (t textTheme) paint(style string, value string) string {
 	return style + value + t.reset
 }
 
-func writeTextEvent(w io.Writer, theme textTheme, event Event) error {
-	status := "CALL"
-	statusColor := theme.cyan
-	if event.ParentEvent > 0 {
-		status = "RET"
-		statusColor = theme.green
-	}
-	if event.Failed {
-		status = "ERR"
-		statusColor = theme.red
-	}
+func writeTextEvent(w io.Writer, theme textTheme, tree bool, originLayers map[int]string, event Event) error {
+	status, statusStyle := eventStatus(theme, event)
 
-	meta := ""
+	// A return event belongs to the layer that opened it; show that origin
+	// rather than the internal "return" marker so the badge stays meaningful.
+	layer := event.Layer
 	if event.ParentEvent > 0 {
-		meta = fmt.Sprintf(" from #%02d", event.ParentEvent)
-	}
-	if event.DurationMS > 0 {
-		meta += fmt.Sprintf(" %.3fms", event.DurationMS)
-	}
-	if meta != "" {
-		meta = "  " + theme.paint(theme.dim, strings.TrimSpace(meta))
-	}
-	if event.Error != "" {
-		meta += "  " + theme.paint(theme.red, event.Error)
+		if origin, ok := originLayers[event.ParentEvent]; ok {
+			layer = origin
+		}
 	}
 
 	if _, err := fmt.Fprintf(
 		w,
-		"%s %s %s %s%s\n",
+		"%s  %s  %s %s%s\n",
 		theme.paint(theme.dim, fmt.Sprintf("%02d", event.Number)),
-		theme.paint(statusColor, fmt.Sprintf("%-4s", status)),
-		theme.paint(layerColor(theme, event.Layer), fmt.Sprintf("%-10s", event.Layer)),
+		theme.paint(statusStyle, fmt.Sprintf("%-4s", status)),
+		theme.paint(layerColor(theme, layer), fmt.Sprintf("%-10s", layer)),
 		theme.paint(theme.bold, event.Operation),
-		meta,
+		eventMeta(theme, event),
 	); err != nil {
 		return err
 	}
 
-	if _, err := fmt.Fprintf(w, "     %s\n", event.Message); err != nil {
-		return err
-	}
-	if len(event.Fields) == 0 {
-		_, err := fmt.Fprintln(w)
-		return err
-	}
-
-	for _, key := range sortedKeys(event.Fields) {
-		if err := writeField(w, theme, "     ", key, event.Fields[key]); err != nil {
+	// Skip the description when it only repeats the bold summary (return events
+	// reuse their message as the operation).
+	if event.Message != "" && event.Message != event.Operation {
+		gutter := "    "
+		if tree && len(event.Fields) > 0 {
+			gutter = " " + theme.paint(theme.dim, "│") + "  "
+		}
+		if _, err := fmt.Fprintf(w, "%s%s\n", gutter, event.Message); err != nil {
 			return err
 		}
 	}
+
+	if len(event.Fields) > 0 {
+		if err := writeFieldGroup(w, theme, tree, fieldRoot(tree), event.Fields); err != nil {
+			return err
+		}
+	}
+
 	_, err := fmt.Fprintln(w)
 	return err
+}
+
+func eventStatus(theme textTheme, event Event) (string, string) {
+	switch {
+	case event.Failed:
+		return "ERR", theme.bold + theme.red
+	case event.ParentEvent > 0:
+		return "RET", theme.green
+	default:
+		return "CALL", theme.dim
+	}
+}
+
+func eventMeta(theme textTheme, event Event) string {
+	parts := make([]string, 0, 2)
+	if event.DurationMS > 0 {
+		parts = append(parts, fmt.Sprintf("%.3fms", event.DurationMS))
+	}
+	if event.ParentEvent > 0 {
+		parts = append(parts, fmt.Sprintf("#%02d", event.ParentEvent))
+	}
+
+	meta := ""
+	if len(parts) > 0 {
+		meta = "  " + theme.paint(theme.dim, strings.Join(parts, " · "))
+	}
+	if event.Error != "" {
+		meta += "  " + theme.paint(theme.red, event.Error)
+	}
+	return meta
 }
 
 func layerColor(theme textTheme, layer string) string {
@@ -296,33 +326,48 @@ func layerColor(theme textTheme, layer string) string {
 	case "service":
 		return theme.cyan
 	case "repository":
-		return theme.magenta
+		return theme.brightMagenta
 	case "database":
-		return theme.green
-	case "return":
 		return theme.green
 	default:
 		return ""
 	}
 }
 
-func writeField(w io.Writer, theme textTheme, indent string, key string, value any) error {
+// fieldRoot is the left gutter that field lines start from: a single leading
+// space for tree guides, or a four-space indent for flat nesting.
+func fieldRoot(tree bool) string {
+	if tree {
+		return " "
+	}
+	return "    "
+}
+
+func writeFieldGroup(w io.Writer, theme textTheme, tree bool, bars string, fields map[string]any) error {
+	keys := sortedKeys(fields)
+	pad := scalarKeyWidth(fields, keys)
+	for index, key := range keys {
+		last := index == len(keys)-1
+		if err := writeFieldNode(w, theme, tree, bars, last, key, fields[key], pad); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFieldNode(w io.Writer, theme textTheme, tree bool, bars string, last bool, key string, value any, pad int) error {
 	value = dereference(value)
+	connector := nodeConnector(theme, tree, last)
+	childBars := bars + childBars(theme, tree, last)
 
 	switch typed := value.(type) {
 	case nil:
-		_, err := fmt.Fprintf(w, "%s%s: %s\n", indent, theme.paint(theme.dim, key), theme.paint(theme.dim, "null"))
-		return err
+		return writeScalarLine(w, theme, bars, connector, key, pad, theme.paint(theme.dim, "null"))
 	case map[string]any:
-		if _, err := fmt.Fprintf(w, "%s%s\n", indent, theme.paint(theme.dim, key)); err != nil {
+		if _, err := fmt.Fprintf(w, "%s%s%s\n", bars, connector, theme.paint(theme.dim, key)); err != nil {
 			return err
 		}
-		for _, childKey := range sortedKeys(typed) {
-			if err := writeField(w, theme, indent+"  ", childKey, typed[childKey]); err != nil {
-				return err
-			}
-		}
-		return nil
+		return writeFieldGroup(w, theme, tree, childBars, typed)
 	}
 
 	reflected := reflect.ValueOf(value)
@@ -332,31 +377,103 @@ func writeField(w io.Writer, theme textTheme, indent string, key string, value a
 		if err != nil {
 			return err
 		}
-		return writeField(w, theme, indent, key, normalized)
+		return writeFieldNode(w, theme, tree, bars, last, key, normalized, pad)
 	case reflect.Slice, reflect.Array:
-		if _, err := fmt.Fprintf(w, "%s%s\n", indent, theme.paint(theme.dim, key)); err != nil {
+		if _, err := fmt.Fprintf(w, "%s%s%s\n", bars, connector, theme.paint(theme.dim, key)); err != nil {
 			return err
 		}
-		for index := range reflected.Len() {
-			item := dereference(reflected.Index(index).Interface())
-			if isScalar(item) {
-				if _, err := fmt.Fprintf(w, "%s  - %s\n", indent, scalarString(theme, item)); err != nil {
+		return writeSliceItems(w, theme, tree, childBars, reflected)
+	}
+
+	return writeScalarLine(w, theme, bars, connector, key, pad, scalarString(theme, value))
+}
+
+func writeSliceItems(w io.Writer, theme textTheme, tree bool, bars string, reflected reflect.Value) error {
+	length := reflected.Len()
+	for index := range length {
+		last := index == length-1
+		item := dereference(reflected.Index(index).Interface())
+		connector := itemConnector(theme, tree, last)
+		if isScalar(item) {
+			if _, err := fmt.Fprintf(w, "%s%s%s\n", bars, connector, scalarString(theme, item)); err != nil {
+				return err
+			}
+			continue
+		}
+
+		normalized, ok := item.(map[string]any)
+		if !ok {
+			mapped, err := stringMap(item)
+			if err != nil {
+				if _, err := fmt.Fprintf(w, "%s%s%s\n", bars, connector, scalarString(theme, item)); err != nil {
 					return err
 				}
 				continue
 			}
-			if _, err := fmt.Fprintf(w, "%s  -\n", indent); err != nil {
-				return err
-			}
-			if err := writeField(w, theme, indent+"    ", "value", item); err != nil {
-				return err
-			}
+			normalized = mapped
 		}
-		return nil
+		if _, err := fmt.Fprintf(w, "%s%s\n", bars, connector); err != nil {
+			return err
+		}
+		if err := writeFieldGroup(w, theme, tree, bars+childBars(theme, tree, last), normalized); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
-	_, err := fmt.Fprintf(w, "%s%s: %s\n", indent, theme.paint(theme.dim, key), scalarString(theme, value))
+// writeScalarLine renders "key   value", padding the key so sibling values line
+// up. Padding is applied to the plain key before any color codes so the visible
+// columns stay aligned.
+func writeScalarLine(w io.Writer, theme textTheme, bars string, connector string, key string, pad int, value string) error {
+	label := key
+	if width := len([]rune(key)); width < pad {
+		label += strings.Repeat(" ", pad-width)
+	}
+	_, err := fmt.Fprintf(w, "%s%s%s  %s\n", bars, connector, theme.paint(theme.dim, label), value)
 	return err
+}
+
+// scalarKeyWidth is the longest key among a group's scalar-valued entries, used
+// to align their values into a column.
+func scalarKeyWidth(fields map[string]any, keys []string) int {
+	width := 0
+	for _, key := range keys {
+		if !isScalar(fields[key]) {
+			continue
+		}
+		if runes := len([]rune(key)); runes > width {
+			width = runes
+		}
+	}
+	return width
+}
+
+func nodeConnector(theme textTheme, tree bool, last bool) string {
+	if !tree {
+		return ""
+	}
+	if last {
+		return theme.paint(theme.dim, "└─ ")
+	}
+	return theme.paint(theme.dim, "├─ ")
+}
+
+func itemConnector(theme textTheme, tree bool, last bool) string {
+	if !tree {
+		return theme.paint(theme.dim, "- ")
+	}
+	return nodeConnector(theme, tree, last)
+}
+
+func childBars(theme textTheme, tree bool, last bool) string {
+	if !tree {
+		return "  "
+	}
+	if last {
+		return "   "
+	}
+	return theme.paint(theme.dim, "│") + "  "
 }
 
 func dereference(value any) any {

@@ -14,28 +14,9 @@ Six months in and on our second iteration.
 
 ---
 
-What follows is minimal orientation only. Source of truth lives in the code and Terraform files.
-
-## Common commands
-
-```bash
-pnpm install
-pnpm run build
-pnpm run dev
-pnpm run test
-pnpm run lint
-pnpm run check-types
-pnpm run generate
-```
-
 ## Cost Model
 
 See [`scratchpad/chalk-media-cost-model-2026-06-15.md`](./scratchpad/chalk-media-cost-model-2026-06-15.md) for the parametric media cost model, or open [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html) in a browser for the live calculator.
-
-## Notes
-
-- keep this README small to reduce drift
-- avoid treating docs as the contract when code already defines it
 
 ## License
 

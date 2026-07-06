@@ -23,12 +23,20 @@ From `apps/api`:
 
 ```bash
 go run ./cmd/trace
+go run ./cmd/trace -scenario all
 go run ./cmd/trace -scenario tenant-create
 go run ./cmd/trace -color always
+go run ./cmd/trace -style tree
 go run ./cmd/trace -format json
 ```
 
-Text output is for humans. JSON output is for tools.
+By default, the command runs every registered scenario in catalog order. Use
+`-scenario <name>` to focus on one trace. Text output is for humans. JSON output
+is for tools; `-scenario all -format json` prints a JSON array.
+
+`-style` picks the timeline layout: `minimal` (default) uses flat indentation;
+`tree` draws box-drawing guides so nesting depth is explicit. Both share the
+same palette, aligned key/value columns, and per-event summary.
 
 ## When To Add A Scenario
 
@@ -57,8 +65,59 @@ Use scenario names that make the review target obvious:
 - `adapter:*` for provider request/response/error mapping
 - `edge:*` for failure and boundary behavior
 
-The current CLI accepts a single scenario name. If you add families before the
-CLI supports prefixes, keep names simple and documented in `Run`.
+The CLI accepts `-scenario all` or any registered scenario name. Keep new names
+simple, documented in `Run`, and included in `ScenarioNames` so the full-catalog
+trace remains complete.
+
+## Current Scenarios
+
+Run the full catalog in text mode with:
+
+```bash
+go run ./cmd/trace -color always
+go run ./cmd/trace -scenario all -style tree -color always
+```
+
+Run one scenario in text mode with:
+
+```bash
+go run ./cmd/trace -scenario <name> -color always
+```
+
+Registered scenarios:
+
+- `tenant-create`
+- `route:auth-register`
+- `route:auth-login`
+- `route:auth-logout`
+- `route:auth-google-start`
+- `route:auth-google-callback`
+- `route:me`
+- `route:tenant-create`
+- `route:tenant-list-system`
+- `route:tenant-get-authorized`
+- `route:tenant-update-authorized`
+- `route:regions-list`
+- `route:user-create`
+- `route:user-list-system`
+- `route:user-get`
+- `route:membership-create-owner`
+- `route:membership-list-viewer`
+- `route:membership-update-owner`
+- `policy:tenant-system-allow`
+- `policy:tenant-api-key-scope`
+- `policy:tenant-user-role`
+- `ratelimit:ip-deny`
+- `ratelimit:principal-deny`
+- `adapter:postgres-tenant-create`
+- `adapter:redis-rate-limit`
+- `adapter:cloudflare-r2-signed-url`
+- `adapter:cloudflare-sfu-bootstrap`
+- `adapter:cloudflare-rtk-join`
+- `adapter:resend-send-email`
+- `edge:unauthenticated-route`
+- `edge:forbidden-tenant-route`
+- `edge:invalid-route-id`
 
 ## What A Good Trace Shows
 

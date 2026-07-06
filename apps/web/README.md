@@ -1,32 +1,6 @@
 # Chalk Web App
 
-Demo app for Chalk video conferencing SDK. Built with Vite, React 19, TanStack Router.
-
-## Getting Started
-
-```bash
-pnpm install
-pnpm run dev     # Start dev server
-pnpm run build   # Build for production
-pnpm run test    # Run tests
-```
-
-## Environment
-
-```bash
-VITE_API_URL=https://chalk-api.q9labs.ai
-VITE_PUBLIC_APP_URL=https://chalkmeet.com
-VITE_CHALK_API_KEY=ck_...
-```
-
-## Stack
-
-- **Vite** - Build tool
-- **React 19** - UI framework
-- **TanStack Router** - File-based routing
-- **TanStack Query** - Data fetching
-- **Tailwind CSS** - Styling
-- **Vitest** - Testing
+Marketing site and official web app for Chalk video conferencing SDK. Built with Vite, React 19, TanStack Router.
 
 ## Routing
 
@@ -80,8 +54,4 @@ function App() {
 }
 ```
 
-## Notes
-
-- Demo files prefixed with `demo` can be deleted
-- Design: Light, airy, modern
-- See [TanStack docs](https://tanstack.com) for more
+See [TanStack docs](https://tanstack.com) for more

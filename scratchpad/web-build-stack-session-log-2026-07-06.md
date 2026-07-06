@@ -37,7 +37,7 @@
   entrypoints with Vite `optimizeDeps.include`.
 - `pod install` in `apps/mobile/ios` resolved the new React 19.2.7 pnpm paths
   but failed during React Native codegen with `TypeError: expand is not a
-  function` while processing `react-native-safe-area-context`; it left no
+function` while processing `react-native-safe-area-context`; it left no
   tracked iOS changes.
 - Full `pnpm run gate` is currently blocked by unrelated landing UI work:
   `apps/web/src/landing/icons.tsx` exports `ScreenIcon` and `SparkIcon` without

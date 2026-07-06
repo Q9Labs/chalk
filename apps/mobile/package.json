@@ -4,7 +4,8 @@
   "license": "MIT",
   "main": "./index.ts",
   "scripts": {
-    "start": "expo start --clear",
+    "start": "node ../../scripts/dev-log.mjs start:raw",
+    "start:raw": "expo start --clear",
     "start:ios-sim": "node ./scripts/start-ios-sim-dev-client.mjs",
     "android": "expo run:android",
     "ios": "expo run:ios",
