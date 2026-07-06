@@ -19,7 +19,7 @@ export function VariationSwitcher() {
           key={to}
           to={to}
           className="vswitch__link"
-          activeProps={{ "data-active": "true" } as never}
+          activeProps={{ className: "is-active" }}
           aria-label={`Design ${label}`}
         >
           {label}
