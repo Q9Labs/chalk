@@ -28,6 +28,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Go API Execution Trace Harness with a colorized local `tenant-create`
   scenario for reviewing a full HTTP-to-service-to-repository flow as a
   timeline.
+- Go API tenant-scoped routes for rooms, room sessions, recordings,
+  transcripts, and audit logs, plus tenant provider configuration fields for
+  media plane, AI, and storage integrations.
 - Public-safe scratchpad structure for architecture decisions, debugging
   lessons, deployment lessons, and summarized session memory.
 - Public repository hygiene guidance for keeping raw logs, generated debug

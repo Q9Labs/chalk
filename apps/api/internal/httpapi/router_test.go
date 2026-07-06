@@ -11,14 +11,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
+	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/users"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -68,6 +73,28 @@ type membershipService struct {
 	createMembership       func(context.Context, memberships.CreateMembershipInput) (memberships.Membership, error)
 	listTenantMemberships  func(context.Context, utilities.ID, pagination.PageRequest) (memberships.MembershipList, error)
 	updateTenantMembership func(context.Context, utilities.ID, utilities.ID, memberships.UpdateMembershipInput) (memberships.Membership, error)
+}
+
+type guardedRoomService struct{}
+
+type roomService struct {
+	guardedRoomService
+	createRoom func(context.Context, rooms.CreateRoomInput) (rooms.Room, error)
+}
+
+type guardedRecordingService struct{}
+
+type guardedRecordingDownloadService struct{}
+
+type guardedTranscriptService struct{}
+
+type guardedAuditLogService struct{}
+
+type recordingService struct {
+	create func(context.Context, recordings.CreateInput) (recordings.Recording, error)
+	get    func(context.Context, utilities.ID, utilities.ID) (recordings.Recording, error)
+	list   func(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (recordings.RecordingList, error)
+	update func(context.Context, utilities.ID, utilities.ID, recordings.UpdateInput) (recordings.Recording, error)
 }
 
 type authenticationService struct {
@@ -183,6 +210,117 @@ func (s membershipService) UpdateTenantMembership(ctx context.Context, tenantID 
 		return memberships.Membership{}, errors.New("unexpected update tenant membership call")
 	}
 	return s.updateTenantMembership(ctx, tenantID, membershipID, input)
+}
+
+func (guardedRoomService) CreateRoom(context.Context, rooms.CreateRoomInput) (rooms.Room, error) {
+	return rooms.Room{}, errors.New("unexpected create room call")
+}
+
+func (s roomService) CreateRoom(ctx context.Context, input rooms.CreateRoomInput) (rooms.Room, error) {
+	if s.createRoom == nil {
+		return rooms.Room{}, errors.New("unexpected create room call")
+	}
+	return s.createRoom(ctx, input)
+}
+
+func (guardedRoomService) GetRoom(context.Context, utilities.ID, utilities.ID) (rooms.Room, error) {
+	return rooms.Room{}, errors.New("unexpected get room call")
+}
+
+func (guardedRoomService) ListRooms(context.Context, utilities.ID, pagination.PageRequest) (rooms.RoomList, error) {
+	return rooms.RoomList{}, errors.New("unexpected list rooms call")
+}
+
+func (guardedRoomService) UpdateRoom(context.Context, utilities.ID, utilities.ID, rooms.UpdateRoomInput) (rooms.Room, error) {
+	return rooms.Room{}, errors.New("unexpected update room call")
+}
+
+func (guardedRoomService) CreateSession(context.Context, rooms.CreateSessionInput) (rooms.Session, error) {
+	return rooms.Session{}, errors.New("unexpected create room session call")
+}
+
+func (guardedRoomService) GetSession(context.Context, utilities.ID, utilities.ID, utilities.ID) (rooms.Session, error) {
+	return rooms.Session{}, errors.New("unexpected get room session call")
+}
+
+func (guardedRoomService) ListSessions(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (rooms.SessionList, error) {
+	return rooms.SessionList{}, errors.New("unexpected list room sessions call")
+}
+
+func (guardedRoomService) UpdateSession(context.Context, utilities.ID, utilities.ID, utilities.ID, rooms.UpdateSessionInput) (rooms.Session, error) {
+	return rooms.Session{}, errors.New("unexpected update room session call")
+}
+
+func (guardedRecordingService) Create(context.Context, recordings.CreateInput) (recordings.Recording, error) {
+	return recordings.Recording{}, errors.New("unexpected create recording call")
+}
+
+func (guardedRecordingService) Get(context.Context, utilities.ID, utilities.ID) (recordings.Recording, error) {
+	return recordings.Recording{}, errors.New("unexpected get recording call")
+}
+
+func (guardedRecordingService) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (recordings.RecordingList, error) {
+	return recordings.RecordingList{}, errors.New("unexpected list recordings call")
+}
+
+func (guardedRecordingService) Update(context.Context, utilities.ID, utilities.ID, recordings.UpdateInput) (recordings.Recording, error) {
+	return recordings.Recording{}, errors.New("unexpected update recording call")
+}
+
+func (guardedRecordingDownloadService) CreateDownloadURL(context.Context, objectstorage.CreateDownloadURLInput) (objectstorage.SignedURL, error) {
+	return objectstorage.SignedURL{}, errors.New("unexpected create download url call")
+}
+
+func (s recordingService) Create(ctx context.Context, input recordings.CreateInput) (recordings.Recording, error) {
+	if s.create == nil {
+		return recordings.Recording{}, errors.New("unexpected create recording call")
+	}
+	return s.create(ctx, input)
+}
+
+func (s recordingService) Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (recordings.Recording, error) {
+	if s.get == nil {
+		return recordings.Recording{}, errors.New("unexpected get recording call")
+	}
+	return s.get(ctx, tenantID, recordingID)
+}
+
+func (s recordingService) List(ctx context.Context, tenantID utilities.ID, sessionID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error) {
+	if s.list == nil {
+		return recordings.RecordingList{}, errors.New("unexpected list recordings call")
+	}
+	return s.list(ctx, tenantID, sessionID, page)
+}
+
+func (s recordingService) Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input recordings.UpdateInput) (recordings.Recording, error) {
+	if s.update == nil {
+		return recordings.Recording{}, errors.New("unexpected update recording call")
+	}
+	return s.update(ctx, tenantID, recordingID, input)
+}
+
+func (guardedTranscriptService) Create(context.Context, transcripts.CreateInput) (transcripts.Transcript, error) {
+	return transcripts.Transcript{}, errors.New("unexpected create transcript call")
+}
+
+func (guardedTranscriptService) Get(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
+	return transcripts.Transcript{}, errors.New("unexpected get transcript call")
+}
+
+func (guardedTranscriptService) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (transcripts.TranscriptList, error) {
+	return transcripts.TranscriptList{}, errors.New("unexpected list transcripts call")
+}
+
+func (guardedTranscriptService) Update(context.Context, utilities.ID, utilities.ID, transcripts.UpdateInput) (transcripts.Transcript, error) {
+	return transcripts.Transcript{}, errors.New("unexpected update transcript call")
+}
+
+func (guardedAuditLogService) Get(context.Context, utilities.ID, utilities.ID) (auditlogs.AuditLog, error) {
+	return auditlogs.AuditLog{}, errors.New("unexpected get audit log call")
+}
+
+func (guardedAuditLogService) List(context.Context, utilities.ID, pagination.PageRequest) (auditlogs.AuditLogList, error) {
+	return auditlogs.AuditLogList{}, errors.New("unexpected list audit logs call")
 }
 
 func (s tenantService) AvailableRegions(ctx context.Context) ([]regions.Region, error) {
@@ -857,6 +995,25 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships"},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", body: `{"user_id":"22222222-2222-2222-2222-222222222222","role":"admin"}`},
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships/33333333-3333-3333-3333-333333333333", body: `{"role":"member"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms", body: `{"name":"Daily","status":"active","slug":"daily","media_plane":"cf_rtk"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222", body: `{"status":"ended"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions", body: `{"status":"active"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333", body: `{"status":"ended"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/recordings", body: `{"status":"ready","storage_provider":"r2"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444", body: `{"status":"failed"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts/55555555-5555-5555-5555-555555555555"},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts/55555555-5555-5555-5555-555555555555", body: `{"status":"failed"}`},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/audit-logs"},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/audit-logs/66666666-6666-6666-6666-666666666666"},
 	}
 
 	for _, route := range routes {
@@ -873,6 +1030,234 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		}
 		assertErrorCode(t, res, "unauthenticated")
 	}
+}
+
+func TestTenantScopedMediaRoutesRejectForbiddenPrincipal(t *testing.T) {
+	routes := []struct {
+		method  string
+		path    string
+		body    string
+		options httpapi.Options
+	}{
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms", options: httpapi.Options{Rooms: guardedRoomService{}}},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms", body: `{"name":"Daily","status":"active","slug":"daily","media_plane":"cf_rtk"}`, options: httpapi.Options{Rooms: guardedRoomService{}}},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings", options: httpapi.Options{Recordings: guardedRecordingService{}}},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`, options: httpapi.Options{Recordings: guardedRecordingService{}}},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts", options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
+		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/audit-logs", options: httpapi.Options{AuditLogs: guardedAuditLogService{}}},
+	}
+
+	for _, route := range routes {
+		route.options.TenantAuthz = tenantAuthorizer{
+			authorizeTenant: func(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error {
+				return authorization.ErrForbidden
+			},
+		}
+		res := authenticatedRequestWithOptionsAndBody(t, route.method, route.path, route.body, route.options)
+
+		if res.Code != http.StatusForbidden {
+			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusForbidden)
+		}
+		assertErrorCode(t, res, "forbidden")
+	}
+}
+
+func TestRoomSessionRoutesUseSessionPermissions(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+		body   string
+		scope  authentication.Scope
+	}{
+		{
+			method: http.MethodPost,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions",
+			body:   `{"status":"active"}`,
+			scope:  authentication.ScopeSessionsWrite,
+		},
+		{
+			method: http.MethodGet,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions",
+			scope:  authentication.ScopeSessionsRead,
+		},
+		{
+			method: http.MethodGet,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333",
+			scope:  authentication.ScopeSessionsRead,
+		},
+		{
+			method: http.MethodPatch,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333",
+			body:   `{"status":"ended"}`,
+			scope:  authentication.ScopeSessionsWrite,
+		},
+	}
+
+	for _, route := range routes {
+		called := false
+		res := authenticatedRequestWithOptionsAndBody(t, route.method, route.path, route.body, httpapi.Options{
+			Rooms: guardedRoomService{},
+			TenantAuthz: tenantAuthorizer{
+				authorizeTenant: func(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
+					called = true
+					if permission.Scope != route.scope {
+						t.Fatalf("%s %s scope = %q, want %q", route.method, route.path, permission.Scope, route.scope)
+					}
+					return authorization.ErrForbidden
+				},
+			},
+		})
+
+		if !called {
+			t.Fatalf("%s %s did not authorize tenant", route.method, route.path)
+		}
+		if res.Code != http.StatusForbidden {
+			t.Fatalf("%s %s status = %d, want %d", route.method, route.path, res.Code, http.StatusForbidden)
+		}
+		assertErrorCode(t, res, "forbidden")
+	}
+}
+
+func TestCreateRoomMapsDuplicateSlugToConflict(t *testing.T) {
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/11111111-1111-1111-1111-111111111111/rooms",
+		`{"name":"Daily","status":"active","slug":"daily","media_plane":"cf_rtk"}`,
+		httpapi.Options{
+			Rooms: roomService{
+				createRoom: func(context.Context, rooms.CreateRoomInput) (rooms.Room, error) {
+					return rooms.Room{}, rooms.ErrRoomSlugAlreadyUsed
+				},
+			},
+		},
+	)
+
+	if res.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
+	}
+	assertErrorCode(t, res, "room_slug_already_used")
+}
+
+func TestCreateRecordingDownloadURLRejectsUnsupportedProvider(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const recordingID = "44444444-4444-4444-4444-444444444444"
+	storageKey := "recordings/unsupported.webm"
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/download-url",
+		`{"expires_in_seconds":300}`,
+		httpapi.Options{
+			Recordings: recordingService{
+				get: func(ctx context.Context, gotTenantID utilities.ID, gotRecordingID utilities.ID) (recordings.Recording, error) {
+					if gotTenantID.String() != tenantID {
+						t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+					}
+					if gotRecordingID.String() != recordingID {
+						t.Fatalf("recording id = %q, want %q", gotRecordingID.String(), recordingID)
+					}
+					return recordings.Recording{
+						ID:              mustTenantID(t, recordingID),
+						TenantID:        mustTenantID(t, tenantID),
+						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						Status:          recordings.StatusCompleted,
+						StorageProvider: "s3",
+						StorageKey:      &storageKey,
+					}, nil
+				},
+			},
+			RecordingDownloads: guardedRecordingDownloadService{},
+		},
+	)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	assertErrorCode(t, res, "invalid_storage_provider")
+}
+
+func TestCreateRecordingDownloadURLRejectsForeignStorageKey(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const recordingID = "44444444-4444-4444-4444-444444444444"
+	storageKey := "tenants/99999999-9999-4999-8999-999999999999/recordings/shared.webm"
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/download-url",
+		`{"expires_in_seconds":300}`,
+		httpapi.Options{
+			Recordings: recordingService{
+				get: func(ctx context.Context, gotTenantID utilities.ID, gotRecordingID utilities.ID) (recordings.Recording, error) {
+					if gotTenantID.String() != tenantID {
+						t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+					}
+					if gotRecordingID.String() != recordingID {
+						t.Fatalf("recording id = %q, want %q", gotRecordingID.String(), recordingID)
+					}
+					return recordings.Recording{
+						ID:              mustTenantID(t, recordingID),
+						TenantID:        mustTenantID(t, tenantID),
+						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						Status:          recordings.StatusCompleted,
+						StorageProvider: recordings.StorageProviderR2,
+						StorageKey:      &storageKey,
+					}, nil
+				},
+			},
+			RecordingDownloads: guardedRecordingDownloadService{},
+		},
+	)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	assertErrorCode(t, res, "invalid_storage_key")
+}
+
+func TestCreateRecordingDownloadURLRejectsIncompleteRecording(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const recordingID = "44444444-4444-4444-4444-444444444444"
+	storageKey := recordings.TenantStorageKeyPrefix(mustTenantID(t, tenantID)) + "processing.webm"
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/download-url",
+		`{"expires_in_seconds":300}`,
+		httpapi.Options{
+			Recordings: recordingService{
+				get: func(ctx context.Context, gotTenantID utilities.ID, gotRecordingID utilities.ID) (recordings.Recording, error) {
+					if gotTenantID.String() != tenantID {
+						t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+					}
+					if gotRecordingID.String() != recordingID {
+						t.Fatalf("recording id = %q, want %q", gotRecordingID.String(), recordingID)
+					}
+					return recordings.Recording{
+						ID:              mustTenantID(t, recordingID),
+						TenantID:        mustTenantID(t, tenantID),
+						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						Status:          recordings.StatusProcessing,
+						StorageProvider: recordings.StorageProviderR2,
+						StorageKey:      &storageKey,
+					}, nil
+				},
+			},
+			RecordingDownloads: guardedRecordingDownloadService{},
+		},
+	)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	assertErrorCode(t, res, "recording_not_ready")
 }
 
 func TestGetTenant(t *testing.T) {
@@ -1200,8 +1585,9 @@ func TestListTenantsRejectsInvalidCursor(t *testing.T) {
 
 func TestCreateTenant(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
+	requestBody := `{"name":"Acme","default_region":"us","media_plane_provider_config":{"api_key":"secret","apiKey":"secret","APIKey":"secret","openai_api_key":"secret","x-api-key":"secret","r2_api_key":"secret","credentials":"secret","credential":"secret","secret_key":"secret","secretKey":"secret","secret-key":"secret","aws_secret_key":"secret","awsSecretKey":"secret","authorization":"secret","auth_header":"secret","accessToken":"secret","token":"secret","private_key":"secret","private_key_pem":"secret","privateKeyPem":"secret","secretAccessKey":"secret","aws_secret_access_key":"secret","r2_secret_access_key":"secret","awsSecretAccessKey":"secret","db_password":"secret","redisPassword":"secret","region":"auto"},"ai_provider_config":{"model":"whisper-large-v3"},"storage_provider_config":{"bucket":"chalk-recordings","client_secret":"secret","clientSecret":"secret","webhookSecret":"secret"}}`
 
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", `{"name":"Acme","default_region":"us"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", requestBody, httpapi.Options{
 		Tenants: tenantService{
 			createTenant: func(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
 				if input.Name != "Acme" {
@@ -1210,11 +1596,23 @@ func TestCreateTenant(t *testing.T) {
 				if input.DefaultRegion == nil || *input.DefaultRegion != "us" {
 					t.Fatalf("default region = %v, want us", input.DefaultRegion)
 				}
+				if string(input.MediaPlaneProviderConfig) != `{"api_key":"secret","apiKey":"secret","APIKey":"secret","openai_api_key":"secret","x-api-key":"secret","r2_api_key":"secret","credentials":"secret","credential":"secret","secret_key":"secret","secretKey":"secret","secret-key":"secret","aws_secret_key":"secret","awsSecretKey":"secret","authorization":"secret","auth_header":"secret","accessToken":"secret","token":"secret","private_key":"secret","private_key_pem":"secret","privateKeyPem":"secret","secretAccessKey":"secret","aws_secret_access_key":"secret","r2_secret_access_key":"secret","awsSecretAccessKey":"secret","db_password":"secret","redisPassword":"secret","region":"auto"}` {
+					t.Fatalf("media plane provider config = %s", input.MediaPlaneProviderConfig)
+				}
+				if string(input.AIProviderConfig) != `{"model":"whisper-large-v3"}` {
+					t.Fatalf("ai provider config = %s", input.AIProviderConfig)
+				}
+				if string(input.StorageProviderConfig) != `{"bucket":"chalk-recordings","client_secret":"secret","clientSecret":"secret","webhookSecret":"secret"}` {
+					t.Fatalf("storage provider config = %s", input.StorageProviderConfig)
+				}
 
 				return tenants.Tenant{
-					ID:            mustTenantID(t, tenantID),
-					Name:          input.Name,
-					DefaultRegion: input.DefaultRegion,
+					ID:                       mustTenantID(t, tenantID),
+					Name:                     input.Name,
+					DefaultRegion:            input.DefaultRegion,
+					MediaPlaneProviderConfig: input.MediaPlaneProviderConfig,
+					AIProviderConfig:         input.AIProviderConfig,
+					StorageProviderConfig:    input.StorageProviderConfig,
 				}, nil
 			},
 		},
@@ -1224,18 +1622,114 @@ func TestCreateTenant(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
 	}
 
-	var body struct {
-		ID            string  `json:"id"`
-		Name          string  `json:"name"`
-		DefaultRegion *string `json:"default_region"`
+	var response struct {
+		ID                       string         `json:"id"`
+		Name                     string         `json:"name"`
+		DefaultRegion            *string        `json:"default_region"`
+		MediaPlaneProviderConfig map[string]any `json:"media_plane_provider_config"`
+		AIProviderConfig         map[string]any `json:"ai_provider_config"`
+		StorageProviderConfig    map[string]any `json:"storage_provider_config"`
 	}
-	decodeJSON(t, res, &body)
+	decodeJSON(t, res, &response)
 
-	if body.ID != tenantID {
-		t.Fatalf("tenant id = %q, want %q", body.ID, tenantID)
+	if response.ID != tenantID {
+		t.Fatalf("tenant id = %q, want %q", response.ID, tenantID)
 	}
-	if body.DefaultRegion == nil || *body.DefaultRegion != "us" {
-		t.Fatalf("default region = %v, want us", body.DefaultRegion)
+	if response.DefaultRegion == nil || *response.DefaultRegion != "us" {
+		t.Fatalf("default region = %v, want us", response.DefaultRegion)
+	}
+	if response.MediaPlaneProviderConfig["api_key"] != "[redacted]" {
+		t.Fatalf("media plane api key = %v, want redacted", response.MediaPlaneProviderConfig["api_key"])
+	}
+	if response.MediaPlaneProviderConfig["apiKey"] != "[redacted]" {
+		t.Fatalf("media plane apiKey = %v, want redacted", response.MediaPlaneProviderConfig["apiKey"])
+	}
+	if response.MediaPlaneProviderConfig["APIKey"] != "[redacted]" {
+		t.Fatalf("media plane APIKey = %v, want redacted", response.MediaPlaneProviderConfig["APIKey"])
+	}
+	if response.MediaPlaneProviderConfig["openai_api_key"] != "[redacted]" {
+		t.Fatalf("media plane openai api key = %v, want redacted", response.MediaPlaneProviderConfig["openai_api_key"])
+	}
+	if response.MediaPlaneProviderConfig["x-api-key"] != "[redacted]" {
+		t.Fatalf("media plane x api key = %v, want redacted", response.MediaPlaneProviderConfig["x-api-key"])
+	}
+	if response.MediaPlaneProviderConfig["r2_api_key"] != "[redacted]" {
+		t.Fatalf("media plane r2 api key = %v, want redacted", response.MediaPlaneProviderConfig["r2_api_key"])
+	}
+	if response.MediaPlaneProviderConfig["credentials"] != "[redacted]" {
+		t.Fatalf("media plane credentials = %v, want redacted", response.MediaPlaneProviderConfig["credentials"])
+	}
+	if response.MediaPlaneProviderConfig["credential"] != "[redacted]" {
+		t.Fatalf("media plane credential = %v, want redacted", response.MediaPlaneProviderConfig["credential"])
+	}
+	if response.MediaPlaneProviderConfig["secret_key"] != "[redacted]" {
+		t.Fatalf("media plane secret key = %v, want redacted", response.MediaPlaneProviderConfig["secret_key"])
+	}
+	if response.MediaPlaneProviderConfig["secretKey"] != "[redacted]" {
+		t.Fatalf("media plane secretKey = %v, want redacted", response.MediaPlaneProviderConfig["secretKey"])
+	}
+	if response.MediaPlaneProviderConfig["secret-key"] != "[redacted]" {
+		t.Fatalf("media plane secret-key = %v, want redacted", response.MediaPlaneProviderConfig["secret-key"])
+	}
+	if response.MediaPlaneProviderConfig["aws_secret_key"] != "[redacted]" {
+		t.Fatalf("media plane aws secret key = %v, want redacted", response.MediaPlaneProviderConfig["aws_secret_key"])
+	}
+	if response.MediaPlaneProviderConfig["awsSecretKey"] != "[redacted]" {
+		t.Fatalf("media plane awsSecretKey = %v, want redacted", response.MediaPlaneProviderConfig["awsSecretKey"])
+	}
+	if response.MediaPlaneProviderConfig["authorization"] != "[redacted]" {
+		t.Fatalf("media plane authorization = %v, want redacted", response.MediaPlaneProviderConfig["authorization"])
+	}
+	if response.MediaPlaneProviderConfig["auth_header"] != "[redacted]" {
+		t.Fatalf("media plane auth header = %v, want redacted", response.MediaPlaneProviderConfig["auth_header"])
+	}
+	if response.MediaPlaneProviderConfig["accessToken"] != "[redacted]" {
+		t.Fatalf("media plane access token = %v, want redacted", response.MediaPlaneProviderConfig["accessToken"])
+	}
+	if response.MediaPlaneProviderConfig["token"] != "[redacted]" {
+		t.Fatalf("media plane token = %v, want redacted", response.MediaPlaneProviderConfig["token"])
+	}
+	if response.MediaPlaneProviderConfig["private_key"] != "[redacted]" {
+		t.Fatalf("media plane private key = %v, want redacted", response.MediaPlaneProviderConfig["private_key"])
+	}
+	if response.MediaPlaneProviderConfig["private_key_pem"] != "[redacted]" {
+		t.Fatalf("media plane private key pem = %v, want redacted", response.MediaPlaneProviderConfig["private_key_pem"])
+	}
+	if response.MediaPlaneProviderConfig["privateKeyPem"] != "[redacted]" {
+		t.Fatalf("media plane privateKeyPem = %v, want redacted", response.MediaPlaneProviderConfig["privateKeyPem"])
+	}
+	if response.MediaPlaneProviderConfig["secretAccessKey"] != "[redacted]" {
+		t.Fatalf("media plane secret access key = %v, want redacted", response.MediaPlaneProviderConfig["secretAccessKey"])
+	}
+	if response.MediaPlaneProviderConfig["aws_secret_access_key"] != "[redacted]" {
+		t.Fatalf("media plane aws secret access key = %v, want redacted", response.MediaPlaneProviderConfig["aws_secret_access_key"])
+	}
+	if response.MediaPlaneProviderConfig["r2_secret_access_key"] != "[redacted]" {
+		t.Fatalf("media plane r2 secret access key = %v, want redacted", response.MediaPlaneProviderConfig["r2_secret_access_key"])
+	}
+	if response.MediaPlaneProviderConfig["awsSecretAccessKey"] != "[redacted]" {
+		t.Fatalf("media plane awsSecretAccessKey = %v, want redacted", response.MediaPlaneProviderConfig["awsSecretAccessKey"])
+	}
+	if response.MediaPlaneProviderConfig["db_password"] != "[redacted]" {
+		t.Fatalf("media plane db password = %v, want redacted", response.MediaPlaneProviderConfig["db_password"])
+	}
+	if response.MediaPlaneProviderConfig["redisPassword"] != "[redacted]" {
+		t.Fatalf("media plane redisPassword = %v, want redacted", response.MediaPlaneProviderConfig["redisPassword"])
+	}
+	if response.MediaPlaneProviderConfig["region"] != "auto" {
+		t.Fatalf("media plane region = %v, want auto", response.MediaPlaneProviderConfig["region"])
+	}
+	if response.AIProviderConfig["model"] != "whisper-large-v3" {
+		t.Fatalf("ai model = %v, want whisper-large-v3", response.AIProviderConfig["model"])
+	}
+	if response.StorageProviderConfig["client_secret"] != "[redacted]" {
+		t.Fatalf("storage client secret = %v, want redacted", response.StorageProviderConfig["client_secret"])
+	}
+	if response.StorageProviderConfig["clientSecret"] != "[redacted]" {
+		t.Fatalf("storage clientSecret = %v, want redacted", response.StorageProviderConfig["clientSecret"])
+	}
+	if response.StorageProviderConfig["webhookSecret"] != "[redacted]" {
+		t.Fatalf("storage webhookSecret = %v, want redacted", response.StorageProviderConfig["webhookSecret"])
 	}
 }
 
@@ -1277,7 +1771,7 @@ func TestCreateTenantRejectsOversizedBody(t *testing.T) {
 func TestUpdateTenantClearsNullableField(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID, `{"default_region":null}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID, `{"default_region":null,"ai_provider_config":null}`, httpapi.Options{
 		Tenants: tenantService{
 			updateTenant: func(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
 				if id.String() != tenantID {
@@ -1288,6 +1782,12 @@ func TestUpdateTenantClearsNullableField(t *testing.T) {
 				}
 				if input.DefaultRegion.Value != nil {
 					t.Fatalf("default region = %v, want nil", input.DefaultRegion.Value)
+				}
+				if !input.AIProviderConfig.Set {
+					t.Fatal("ai provider config was not marked as set")
+				}
+				if input.AIProviderConfig.Value != nil {
+					t.Fatalf("ai provider config = %s, want nil", input.AIProviderConfig.Value)
 				}
 
 				return tenants.Tenant{

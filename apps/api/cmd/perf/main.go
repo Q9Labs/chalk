@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,18 +25,35 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	apiconfig "github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+const databaseURLEnv = "CHALK_DATABASE_URL"
+
 type endpoint struct {
-	Name   string
-	Method string
-	Path   func() string
-	Body   func() string
+	Name             string
+	Method           string
+	Path             func() string
+	Body             func() string
+	Request          func(*runner) endpointRequest
+	Public           bool
+	ExpectedStatuses []int
+}
+
+type endpointRequest struct {
+	Path string
+	Body string
 }
 
 type sample struct {
 	Endpoint  string
 	Status    int
+	Expected  bool
 	Bytes     int64
 	Total     time.Duration
 	DNS       time.Duration
@@ -93,10 +112,21 @@ type processSample struct {
 }
 
 type runner struct {
-	baseURL   string
-	client    *http.Client
-	tenantIDs []string
-	counter   atomic.Uint64
+	baseURL      string
+	client       *http.Client
+	sessionToken string
+	tenants      []perfTenant
+	counter      atomic.Uint64
+	mutations    atomic.Uint64
+}
+
+type perfTenant struct {
+	ID           string
+	RoomID       string
+	SessionID    string
+	RecordingID  string
+	TranscriptID string
+	AuditLogID   string
 }
 
 func main() {
@@ -283,26 +313,183 @@ func run(ctx context.Context, cfg config) (result, error) {
 }
 
 func (r *runner) seed(ctx context.Context, count int) error {
-	for i := range count {
-		body := fmt.Sprintf(`{"name":"Perf Seed %d %d","default_region":"us"}`, time.Now().UnixNano(), i)
-		res, err := r.do(ctx, "seed", endpoint{Name: "seed", Method: http.MethodPost, Path: literal("/v1/tenants"), Body: literal(body)})
-		if err != nil {
-			return err
-		}
-		if res.Status != http.StatusCreated {
-			return fmt.Errorf("seed status = %d", res.Status)
-		}
-
-		var response struct {
-			ID string `json:"id"`
-		}
-		if err := json.Unmarshal([]byte(res.Body), &response); err != nil {
-			return fmt.Errorf("decode seed tenant: %w", err)
-		}
-		r.tenantIDs = append(r.tenantIDs, response.ID)
+	if count < 1 {
+		count = 1
 	}
 
+	databaseURL := strings.TrimSpace(os.Getenv(databaseURLEnv))
+	if databaseURL == "" {
+		databaseURL = apiconfig.DefaultDatabaseURL
+	}
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		return fmt.Errorf("connect postgres: %w", err)
+	}
+	defer pool.Close()
+
+	seed, err := createPerfSeed(ctx, pool, count)
+	if err != nil {
+		return err
+	}
+
+	r.sessionToken = seed.SessionToken
+	r.tenants = seed.Tenants
 	return nil
+}
+
+type perfSeed struct {
+	SessionToken string
+	Tenants      []perfTenant
+}
+
+func createPerfSeed(ctx context.Context, pool *pgxpool.Pool, count int) (perfSeed, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return perfSeed{}, fmt.Errorf("begin perf seed transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	runID := strconv.FormatInt(time.Now().UnixNano(), 10)
+	userID, err := newIDString()
+	if err != nil {
+		return perfSeed{}, err
+	}
+	sessionID, err := newIDString()
+	if err != nil {
+		return perfSeed{}, err
+	}
+	sessionToken, err := randomToken(32)
+	if err != nil {
+		return perfSeed{}, err
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into users (id, name, email)
+values ($1::uuid, $2, $3)
+`, userID, "Perf Local User", "perf+"+runID+"@chalk.test")
+	if err != nil {
+		return perfSeed{}, fmt.Errorf("insert perf user: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into login_sessions (id, user_id, token_hash, user_agent, expires_at)
+values ($1::uuid, $2::uuid, $3, $4, $5)
+`, sessionID, userID, authentication.SessionTokenHash(sessionToken), "chalk-api-perf", time.Now().Add(time.Hour))
+	if err != nil {
+		return perfSeed{}, fmt.Errorf("insert perf session: %w", err)
+	}
+
+	tenants := make([]perfTenant, 0, count)
+	for i := range count {
+		tenant, err := createPerfTenantSeed(ctx, tx, runID, i, userID)
+		if err != nil {
+			return perfSeed{}, err
+		}
+		tenants = append(tenants, tenant)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return perfSeed{}, fmt.Errorf("commit perf seed transaction: %w", err)
+	}
+
+	return perfSeed{SessionToken: sessionToken, Tenants: tenants}, nil
+}
+
+func createPerfTenantSeed(ctx context.Context, tx pgx.Tx, runID string, index int, userID string) (perfTenant, error) {
+	tenantID, err := newIDString()
+	if err != nil {
+		return perfTenant{}, err
+	}
+	membershipID, err := newIDString()
+	if err != nil {
+		return perfTenant{}, err
+	}
+	roomID, err := newIDString()
+	if err != nil {
+		return perfTenant{}, err
+	}
+	sessionID, err := newIDString()
+	if err != nil {
+		return perfTenant{}, err
+	}
+	recordingID, err := newIDString()
+	if err != nil {
+		return perfTenant{}, err
+	}
+	transcriptID, err := newIDString()
+	if err != nil {
+		return perfTenant{}, err
+	}
+	auditLogID, err := newIDString()
+	if err != nil {
+		return perfTenant{}, err
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into tenants (id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config)
+values ($1::uuid, $2, 'us', 'cf_sfu', '{"source":"perf"}'::jsonb, '{"source":"perf"}'::jsonb, '{"source":"perf"}'::jsonb)
+`, tenantID, fmt.Sprintf("Perf Tenant %s %d", runID, index))
+	if err != nil {
+		return perfTenant{}, fmt.Errorf("insert perf tenant: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into memberships (id, tenant_id, user_id, role)
+values ($1::uuid, $2::uuid, $3::uuid, 'owner')
+`, membershipID, tenantID, userID)
+	if err != nil {
+		return perfTenant{}, fmt.Errorf("insert perf membership: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into rooms (id, name, tenant_id, status, slug, media_plane, metadata, created_by_user_id)
+values ($1::uuid, $2, $3::uuid, 'active', $4, 'cf_sfu', '{"source":"perf"}'::jsonb, $5::uuid)
+`, roomID, fmt.Sprintf("Perf Room %d", index), tenantID, fmt.Sprintf("perf-%s-%d", runID, index), userID)
+	if err != nil {
+		return perfTenant{}, fmt.Errorf("insert perf room: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into room_sessions (id, status, metadata, room_id, tenant_id, created_by_user_id, started_at)
+values ($1::uuid, 'active', '{"source":"perf"}'::jsonb, $2::uuid, $3::uuid, $4::uuid, $5)
+`, sessionID, roomID, tenantID, userID, time.Now())
+	if err != nil {
+		return perfTenant{}, fmt.Errorf("insert perf room session: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into recordings (id, tenant_id, room_id, session_id, status, storage_provider, storage_key, metadata)
+values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'completed', 'r2', null, '{"source":"perf"}'::jsonb)
+`, recordingID, tenantID, roomID, sessionID)
+	if err != nil {
+		return perfTenant{}, fmt.Errorf("insert perf recording: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into transcriptions (id, tenant_id, recording_id, room_id, session_id, status, provider, model, languages, text, metadata, completed_at)
+values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'completed', 'deepgram', 'nova-3', array['en'], 'perf transcript', '{"source":"perf"}'::jsonb, $6)
+`, transcriptID, tenantID, recordingID, roomID, sessionID, time.Now())
+	if err != nil {
+		return perfTenant{}, fmt.Errorf("insert perf transcript: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+insert into audit_logs (id, tenant_id, actor_user_id, actor_type, action, details, outcome, before, after)
+values ($1::uuid, $2::uuid, $3::uuid, 'user', 'perf.seed', '{"source":"perf"}'::jsonb, 'success', '{}'::jsonb, '{}'::jsonb)
+`, auditLogID, tenantID, userID)
+	if err != nil {
+		return perfTenant{}, fmt.Errorf("insert perf audit log: %w", err)
+	}
+
+	return perfTenant{
+		ID:           tenantID,
+		RoomID:       roomID,
+		SessionID:    sessionID,
+		RecordingID:  recordingID,
+		TranscriptID: transcriptID,
+		AuditLogID:   auditLogID,
+	}, nil
 }
 
 func (r *runner) runPhase(ctx context.Context, name string, duration time.Duration, concurrency int, pid int) phaseSummary {
@@ -389,7 +576,7 @@ func summarizeSamples(samples <-chan sample) phaseSummary {
 
 	for s := range samples {
 		summary.Total++
-		if s.Error != "" || s.Status >= 500 || s.Status == 0 {
+		if sampleErrored(s) {
 			summary.Errors++
 		}
 
@@ -405,7 +592,7 @@ func summarizeSamples(samples <-chan sample) phaseSummary {
 		endpoint.Count++
 		endpoint.Bytes += s.Bytes
 		endpoint.Statuses[s.Status]++
-		if s.Error != "" || s.Status >= 500 || s.Status == 0 {
+		if sampleErrored(s) {
 			endpoint.Errors++
 		}
 		if s.Total < endpoint.Min {
@@ -427,20 +614,46 @@ func summarizeSamples(samples <-chan sample) phaseSummary {
 	return summary
 }
 
+func sampleErrored(s sample) bool {
+	if s.Error != "" || s.Status == 0 {
+		return true
+	}
+	return s.Status >= 500 && !s.Expected
+}
+
 func (r *runner) workload() []endpoint {
+	writeStatuses := []int{http.StatusOK, http.StatusCreated, http.StatusTooManyRequests}
 	return []endpoint{
-		{Name: "GET /healthz", Method: http.MethodGet, Path: literal("/healthz")},
-		{Name: "GET /healthz", Method: http.MethodGet, Path: literal("/healthz")},
-		{Name: "GET /readyz", Method: http.MethodGet, Path: literal("/readyz")},
-		{Name: "GET /readyz", Method: http.MethodGet, Path: literal("/readyz")},
+		{Name: "GET /healthz", Method: http.MethodGet, Path: literal("/healthz"), Public: true},
+		{Name: "GET /healthz", Method: http.MethodGet, Path: literal("/healthz"), Public: true},
+		{Name: "GET /readyz", Method: http.MethodGet, Path: literal("/readyz"), Public: true},
+		{Name: "GET /readyz", Method: http.MethodGet, Path: literal("/readyz"), Public: true},
+		{Name: "GET /v1/me", Method: http.MethodGet, Path: literal("/v1/me"), ExpectedStatuses: []int{http.StatusOK, http.StatusTooManyRequests}},
 		{Name: "GET /v1/regions", Method: http.MethodGet, Path: literal("/v1/regions")},
 		{Name: "GET /v1/regions", Method: http.MethodGet, Path: literal("/v1/regions")},
-		{Name: "GET /v1/tenants", Method: http.MethodGet, Path: literal("/v1/tenants?page_size=20")},
-		{Name: "GET /v1/tenants", Method: http.MethodGet, Path: literal("/v1/tenants?page_size=20")},
 		{Name: "GET /v1/tenants/{id}", Method: http.MethodGet, Path: r.tenantPath},
 		{Name: "GET /v1/tenants/{id}", Method: http.MethodGet, Path: r.tenantPath},
-		{Name: "PATCH /v1/tenants/{id}", Method: http.MethodPatch, Path: r.tenantPath, Body: r.patchBody},
-		{Name: "POST /v1/tenants", Method: http.MethodPost, Path: literal("/v1/tenants"), Body: r.createBody},
+		{Name: "PATCH /v1/tenants/{id}", Method: http.MethodPatch, Path: r.tenantPath, Body: r.patchTenantBody, ExpectedStatuses: writeStatuses},
+		{Name: "POST /v1/tenants", Method: http.MethodPost, Path: literal("/v1/tenants"), Body: r.createTenantBody, ExpectedStatuses: writeStatuses},
+		{Name: "GET /v1/tenants/{id}/rooms", Method: http.MethodGet, Path: r.roomListPath},
+		{Name: "GET /v1/tenants/{id}/rooms/{room_id}", Method: http.MethodGet, Path: r.roomPath},
+		{Name: "POST /v1/tenants/{id}/rooms", Method: http.MethodPost, Request: (*runner).createRoomRequest, ExpectedStatuses: writeStatuses},
+		{Name: "PATCH /v1/tenants/{id}/rooms/{room_id}", Method: http.MethodPatch, Path: r.roomPath, Body: r.patchRoomBody, ExpectedStatuses: writeStatuses},
+		{Name: "GET /v1/tenants/{id}/rooms/{room_id}/sessions", Method: http.MethodGet, Path: r.roomSessionListPath},
+		{Name: "GET /v1/tenants/{id}/rooms/{room_id}/sessions/{session_id}", Method: http.MethodGet, Path: r.roomSessionPath},
+		{Name: "POST /v1/tenants/{id}/rooms/{room_id}/sessions", Method: http.MethodPost, Request: (*runner).createRoomSessionRequest, ExpectedStatuses: writeStatuses},
+		{Name: "PATCH /v1/tenants/{id}/rooms/{room_id}/sessions/{session_id}", Method: http.MethodPatch, Path: r.roomSessionPath, Body: r.patchRoomSessionBody, ExpectedStatuses: writeStatuses},
+		{Name: "GET /v1/tenants/{id}/recordings", Method: http.MethodGet, Path: r.recordingListPath},
+		{Name: "GET /v1/tenants/{id}/recordings/{recording_id}", Method: http.MethodGet, Path: r.recordingPath},
+		{Name: "POST /v1/tenants/{id}/rooms/{room_id}/sessions/{session_id}/recordings", Method: http.MethodPost, Request: (*runner).createRecordingRequest, ExpectedStatuses: writeStatuses},
+		{Name: "PATCH /v1/tenants/{id}/recordings/{recording_id}", Method: http.MethodPatch, Path: r.recordingPath, Body: r.patchRecordingBody, ExpectedStatuses: writeStatuses},
+		{Name: "POST /v1/tenants/{id}/recordings/{recording_id}/download-url", Method: http.MethodPost, Path: r.recordingDownloadPath, Body: literal(`{"expires_in_seconds":300}`), ExpectedStatuses: []int{http.StatusOK, http.StatusBadRequest, http.StatusTooManyRequests, http.StatusServiceUnavailable}},
+		{Name: "GET /v1/tenants/{id}/transcripts", Method: http.MethodGet, Path: r.transcriptListPath},
+		{Name: "GET /v1/tenants/{id}/transcripts/{transcript_id}", Method: http.MethodGet, Path: r.transcriptPath},
+		{Name: "POST /v1/tenants/{id}/recordings/{recording_id}/transcripts", Method: http.MethodPost, Request: (*runner).createTranscriptRequest, ExpectedStatuses: writeStatuses},
+		{Name: "PATCH /v1/tenants/{id}/transcripts/{transcript_id}", Method: http.MethodPatch, Path: r.transcriptPath, Body: r.patchTranscriptBody, ExpectedStatuses: writeStatuses},
+		{Name: "GET /v1/tenants/{id}/audit-logs", Method: http.MethodGet, Path: r.auditLogListPath},
+		{Name: "GET /v1/tenants/{id}/audit-logs/{audit_log_id}", Method: http.MethodGet, Path: r.auditLogPath},
 	}
 }
 
@@ -453,18 +666,21 @@ func (r *runner) doSample(ctx context.Context, phase string, endpoint endpoint) 
 }
 
 func (r *runner) do(ctx context.Context, _ string, endpoint endpoint) (sample, error) {
+	request := endpoint.request(r)
 	var body io.Reader
-	if endpoint.Body != nil {
-		body = strings.NewReader(endpoint.Body())
+	if request.Body != "" {
+		body = strings.NewReader(request.Body)
 	}
 
-	path := endpoint.Path()
-	req, err := http.NewRequestWithContext(ctx, endpoint.Method, r.baseURL+path, body)
+	req, err := http.NewRequestWithContext(ctx, endpoint.Method, r.baseURL+request.Path, body)
 	if err != nil {
 		return sample{Endpoint: endpoint.Name}, err
 	}
-	if endpoint.Body != nil {
+	if request.Body != "" {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if !endpoint.Public && r.sessionToken != "" {
+		req.Header.Set("Authorization", "Bearer "+r.sessionToken)
 	}
 	var t clientTraceState
 	trace := &httptrace.ClientTrace{
@@ -509,6 +725,7 @@ func (r *runner) do(ctx context.Context, _ string, endpoint endpoint) (sample, e
 	res := sample{
 		Endpoint:  endpoint.Name,
 		Status:    response.StatusCode,
+		Expected:  endpoint.acceptsStatus(response.StatusCode),
 		Bytes:     int64(len(data)),
 		Total:     total,
 		DNS:       elapsed(t.dnsStart, t.dnsDone),
@@ -524,11 +741,39 @@ func (r *runner) do(ctx context.Context, _ string, endpoint endpoint) (sample, e
 		return res, readErr
 	}
 
-	if response.StatusCode >= 400 {
+	if !endpoint.acceptsStatus(response.StatusCode) {
 		return res, fmt.Errorf("HTTP %d", response.StatusCode)
 	}
 
 	return res, nil
+}
+
+func (e endpoint) request(r *runner) endpointRequest {
+	if e.Request != nil {
+		return e.Request(r)
+	}
+
+	request := endpointRequest{}
+	if e.Path != nil {
+		request.Path = e.Path()
+	}
+	if e.Body != nil {
+		request.Body = e.Body()
+	}
+	return request
+}
+
+func (e endpoint) acceptsStatus(status int) bool {
+	if len(e.ExpectedStatuses) == 0 {
+		return status >= 200 && status < 400
+	}
+
+	for _, expected := range e.ExpectedStatuses {
+		if status == expected {
+			return true
+		}
+	}
+	return false
 }
 
 type clientTraceState struct {
@@ -773,7 +1018,8 @@ func writeReport(path string, input reportInput) error {
 	b.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().UTC().Format(time.RFC3339)))
 	b.WriteString("## Scope\n\n")
 	b.WriteString(fmt.Sprintf("- Seed tenants: %d\n", input.SeedTenants))
-	b.WriteString("- Endpoints exercised: `/healthz`, `/readyz`, `GET /v1/regions`, `GET /v1/tenants`, `POST /v1/tenants`, `GET /v1/tenants/{id}`, `PATCH /v1/tenants/{id}`\n")
+	b.WriteString("- Endpoints exercised: `/healthz`, `/readyz`, `/v1/me`, tenants, regions, rooms, room sessions, recordings, recording download URL edge, transcripts, and audit logs.\n")
+	b.WriteString("- Protected `/v1` requests use a perf-only bearer session seeded directly into the configured local Postgres database.\n")
 	b.WriteString("- Server log: local raw JSONL under `.private/`, not intended for commit.\n\n")
 	b.WriteString("## Lifecycle\n\n")
 	b.WriteString("| Measurement | Duration |\n")
@@ -1064,22 +1310,166 @@ func percentile(values []time.Duration, percentile float64) time.Duration {
 	return values[index]
 }
 
-func (r *runner) tenantPath() string {
-	return "/v1/tenants/" + r.tenantIDs[int(r.counter.Load())%len(r.tenantIDs)]
-}
-
-func (r *runner) patchBody() string {
-	return fmt.Sprintf(`{"website":"https://perf-%d.chalk.test"}`, time.Now().UnixNano())
-}
-
-func (r *runner) createBody() string {
-	return fmt.Sprintf(`{"name":"Perf Create %d","default_region":"us"}`, time.Now().UnixNano())
-}
-
 func literal(value string) func() string {
 	return func() string {
 		return value
 	}
+}
+
+func (r *runner) tenant() perfTenant {
+	if len(r.tenants) == 0 {
+		return perfTenant{}
+	}
+	return r.tenants[int(r.counter.Load())%len(r.tenants)]
+}
+
+func (r *runner) tenantPath() string {
+	return "/v1/tenants/" + r.tenant().ID
+}
+
+func (r *runner) roomListPath() string {
+	return fmt.Sprintf("/v1/tenants/%s/rooms?page_size=20", r.tenant().ID)
+}
+
+func (r *runner) roomPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/rooms/%s", tenant.ID, tenant.RoomID)
+}
+
+func (r *runner) roomSessionListPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions?page_size=20", tenant.ID, tenant.RoomID)
+}
+
+func (r *runner) roomSessionPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions/%s", tenant.ID, tenant.RoomID, tenant.SessionID)
+}
+
+func (r *runner) recordingListPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/recordings?session_id=%s&page_size=20", tenant.ID, tenant.SessionID)
+}
+
+func (r *runner) recordingPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/recordings/%s", tenant.ID, tenant.RecordingID)
+}
+
+func (r *runner) recordingDownloadPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/recordings/%s/download-url", tenant.ID, tenant.RecordingID)
+}
+
+func (r *runner) transcriptListPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/transcripts?recording_id=%s&page_size=20", tenant.ID, tenant.RecordingID)
+}
+
+func (r *runner) transcriptPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/transcripts/%s", tenant.ID, tenant.TranscriptID)
+}
+
+func (r *runner) auditLogListPath() string {
+	return fmt.Sprintf("/v1/tenants/%s/audit-logs?page_size=20", r.tenant().ID)
+}
+
+func (r *runner) auditLogPath() string {
+	tenant := r.tenant()
+	return fmt.Sprintf("/v1/tenants/%s/audit-logs/%s", tenant.ID, tenant.AuditLogID)
+}
+
+func (r *runner) createRoomRequest() endpointRequest {
+	tenant := r.tenant()
+	iteration := r.iteration()
+	return endpointRequest{
+		Path: fmt.Sprintf("/v1/tenants/%s/rooms", tenant.ID),
+		Body: fmt.Sprintf(
+			`{"name":"Perf Created Room %d","status":"active","slug":"perf-created-%d","media_plane":"cf_sfu","metadata":{"source":"perf","iteration":%d}}`,
+			iteration,
+			iteration,
+			iteration,
+		),
+	}
+}
+
+func (r *runner) createRoomSessionRequest() endpointRequest {
+	tenant := r.tenant()
+	iteration := r.iteration()
+	return endpointRequest{
+		Path: fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions", tenant.ID, tenant.RoomID),
+		Body: fmt.Sprintf(`{"status":"active","metadata":{"source":"perf","iteration":%d}}`, iteration),
+	}
+}
+
+func (r *runner) createRecordingRequest() endpointRequest {
+	tenant := r.tenant()
+	iteration := r.iteration()
+	return endpointRequest{
+		Path: fmt.Sprintf("/v1/tenants/%s/rooms/%s/sessions/%s/recordings", tenant.ID, tenant.RoomID, tenant.SessionID),
+		Body: fmt.Sprintf(`{"status":"completed","storage_provider":"r2","metadata":{"source":"perf","iteration":%d}}`, iteration),
+	}
+}
+
+func (r *runner) createTranscriptRequest() endpointRequest {
+	tenant := r.tenant()
+	iteration := r.iteration()
+	return endpointRequest{
+		Path: fmt.Sprintf("/v1/tenants/%s/recordings/%s/transcripts", tenant.ID, tenant.RecordingID),
+		Body: fmt.Sprintf(
+			`{"room_id":"%s","session_id":"%s","status":"completed","provider":"deepgram","model":"nova-3","languages":["en"],"text":"perf transcript %d","metadata":{"source":"perf","iteration":%d}}`,
+			tenant.RoomID,
+			tenant.SessionID,
+			iteration,
+			iteration,
+		),
+	}
+}
+
+func (r *runner) patchTenantBody() string {
+	return fmt.Sprintf(`{"website":"https://perf-%d.chalk.test"}`, r.iteration())
+}
+
+func (r *runner) createTenantBody() string {
+	return fmt.Sprintf(`{"name":"Perf Create %d","default_region":"us"}`, r.iteration())
+}
+
+func (r *runner) patchRoomBody() string {
+	return fmt.Sprintf(`{"status":"active","metadata":{"source":"perf","iteration":%d}}`, r.iteration())
+}
+
+func (r *runner) patchRoomSessionBody() string {
+	return fmt.Sprintf(`{"status":"active","metadata":{"source":"perf","iteration":%d}}`, r.iteration())
+}
+
+func (r *runner) patchRecordingBody() string {
+	return fmt.Sprintf(`{"status":"completed","metadata":{"source":"perf","iteration":%d}}`, r.iteration())
+}
+
+func (r *runner) patchTranscriptBody() string {
+	iteration := r.iteration()
+	return fmt.Sprintf(`{"status":"completed","text":"perf update %d","metadata":{"source":"perf","iteration":%d}}`, iteration, iteration)
+}
+
+func (r *runner) iteration() uint64 {
+	return r.mutations.Add(1)
+}
+
+func newIDString() (string, error) {
+	id, err := utilities.NewID()
+	if err != nil {
+		return "", err
+	}
+	return id.String(), nil
+}
+
+func randomToken(byteCount int) (string, error) {
+	data := make([]byte, byteCount)
+	if _, err := rand.Read(data); err != nil {
+		return "", fmt.Errorf("generate session token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
 }
 
 func elapsed(start time.Time, end time.Time) time.Duration {

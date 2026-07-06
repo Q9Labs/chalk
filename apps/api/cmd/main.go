@@ -10,18 +10,24 @@ import (
 	"syscall"
 	"time"
 
+	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
+	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/recordings"
+	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/users"
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -109,6 +115,22 @@ func run() error {
 	userService := users.NewService(userRepository)
 	membershipRepository := postgres.NewMembershipRepository(operationQueries)
 	membershipService := memberships.NewService(membershipRepository)
+	roomRepository := postgres.NewRoomRepository(operationQueries)
+	roomService := rooms.NewService(roomRepository)
+	recordingRepository := postgres.NewRecordingRepository(operationQueries)
+	recordingService := recordings.NewService(recordingRepository)
+	transcriptRepository := postgres.NewTranscriptRepository(operationQueries)
+	transcriptService := transcripts.NewService(transcriptRepository)
+	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
+	auditLogService := auditlogs.NewService(auditLogRepository)
+	var recordingDownloads httpapi.RecordingDownloadService
+	if r2Configured(cfg.R2) {
+		store, err := r2adapter.NewStore(cfg.R2)
+		if err != nil {
+			return fmt.Errorf("configure r2 object storage: %w", err)
+		}
+		recordingDownloads = objectstorage.NewService(store)
+	}
 	tenantAuthz := authorization.NewTenantPolicy(membershipRepository)
 	rateLimitOptions := httpapi.DefaultRateLimitOptions()
 	rateLimitOptions.ClientIP.TrustedProxyCIDRs = cfg.API.TrustedProxyCIDRs
@@ -119,15 +141,20 @@ func run() error {
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 		},
-		RateLimit:      rateLimitOptions,
-		Readiness:      postgres.Readiness{Pool: pool},
-		Authentication: authenticationService,
-		Memberships:    membershipService,
+		RateLimit:          rateLimitOptions,
+		Readiness:          postgres.Readiness{Pool: pool},
+		Authentication:     authenticationService,
+		Memberships:        membershipService,
+		AuditLogs:          auditLogService,
+		RecordingDownloads: recordingDownloads,
+		Recordings:         recordingService,
+		Rooms:              roomService,
 		SessionCookie: httpapi.SessionCookieOptions{
 			Secure: cfg.Observability.Environment != "local",
 		},
 		TenantAuthz: tenantAuthz,
 		Tenants:     tenantService,
+		Transcripts: transcriptService,
 		Users:       userService,
 	}
 	diagnostics.ApplyHTTP(&routerOptions)
@@ -183,4 +210,8 @@ func run() error {
 		"duration_ms", float64(time.Since(shutdownStartedAt).Microseconds())/1000,
 	)
 	return <-serverErr
+}
+
+func r2Configured(cfg config.R2Config) bool {
+	return cfg.Bucket != "" || cfg.AccountID != "" || cfg.Endpoint != "" || cfg.AccessKeyID != "" || cfg.SecretAccessKey != ""
 }

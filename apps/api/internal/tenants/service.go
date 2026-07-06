@@ -2,6 +2,7 @@ package tenants
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -19,14 +20,17 @@ var (
 )
 
 type Tenant struct {
-	ID                utilities.ID
-	Name              string
-	DefaultRegion     *string
-	DefaultMediaPlane *string
-	LogoKey           *string
-	Website           *string
-	UpdatedAt         time.Time
-	CreatedAt         time.Time
+	ID                       utilities.ID
+	Name                     string
+	DefaultRegion            *string
+	DefaultMediaPlane        *string
+	MediaPlaneProviderConfig json.RawMessage
+	AIProviderConfig         json.RawMessage
+	StorageProviderConfig    json.RawMessage
+	LogoKey                  *string
+	Website                  *string
+	UpdatedAt                time.Time
+	CreatedAt                time.Time
 }
 
 type TenantRepository interface {
@@ -41,20 +45,26 @@ type Service struct {
 }
 
 type CreateTenantInput struct {
-	ID                utilities.ID
-	Name              string
-	DefaultRegion     *string
-	DefaultMediaPlane *string
-	LogoKey           *string
-	Website           *string
+	ID                       utilities.ID
+	Name                     string
+	DefaultRegion            *string
+	DefaultMediaPlane        *string
+	MediaPlaneProviderConfig json.RawMessage
+	AIProviderConfig         json.RawMessage
+	StorageProviderConfig    json.RawMessage
+	LogoKey                  *string
+	Website                  *string
 }
 
 type UpdateTenantInput struct {
-	Name              utilities.OptionalString
-	DefaultRegion     utilities.OptionalString
-	DefaultMediaPlane utilities.OptionalString
-	LogoKey           utilities.OptionalString
-	Website           utilities.OptionalString
+	Name                     utilities.OptionalString
+	DefaultRegion            utilities.OptionalString
+	DefaultMediaPlane        utilities.OptionalString
+	MediaPlaneProviderConfig utilities.OptionalJSON
+	AIProviderConfig         utilities.OptionalJSON
+	StorageProviderConfig    utilities.OptionalJSON
+	LogoKey                  utilities.OptionalString
+	Website                  utilities.OptionalString
 }
 
 type TenantList struct {
@@ -138,6 +148,21 @@ func prepareCreateNullableFields(input *CreateTenantInput) error {
 		return ErrInvalidTenantField
 	}
 
+	input.MediaPlaneProviderConfig, err = utilities.JSON(input.MediaPlaneProviderConfig)
+	if err != nil {
+		return ErrInvalidTenantField
+	}
+
+	input.AIProviderConfig, err = utilities.JSON(input.AIProviderConfig)
+	if err != nil {
+		return ErrInvalidTenantField
+	}
+
+	input.StorageProviderConfig, err = utilities.JSON(input.StorageProviderConfig)
+	if err != nil {
+		return ErrInvalidTenantField
+	}
+
 	input.LogoKey, err = utilities.NullableString(input.LogoKey)
 	if err != nil {
 		return ErrInvalidTenantField
@@ -184,6 +209,21 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 	var err error
 
 	input.DefaultMediaPlane, err = utilities.OptionalNullableString(input.DefaultMediaPlane)
+	if err != nil {
+		return ErrInvalidTenantField
+	}
+
+	input.MediaPlaneProviderConfig, err = utilities.OptionalNullableJSON(input.MediaPlaneProviderConfig)
+	if err != nil {
+		return ErrInvalidTenantField
+	}
+
+	input.AIProviderConfig, err = utilities.OptionalNullableJSON(input.AIProviderConfig)
+	if err != nil {
+		return ErrInvalidTenantField
+	}
+
+	input.StorageProviderConfig, err = utilities.OptionalNullableJSON(input.StorageProviderConfig)
 	if err != nil {
 		return ErrInvalidTenantField
 	}

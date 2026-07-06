@@ -33,6 +33,8 @@ const (
 	ScopeTranscriptionsWrite  Scope = "transcriptions:write"
 	ScopeTranscriptionsDelete Scope = "transcriptions:delete"
 
+	ScopeAuditLogsRead Scope = "audit_logs:read"
+
 	ScopeSigningKeysRead   Scope = "signing_keys:read"
 	ScopeSigningKeysWrite  Scope = "signing_keys:write"
 	ScopeSigningKeysDelete Scope = "signing_keys:delete"
@@ -66,6 +68,7 @@ var AllScopes = []Scope{
 	ScopeTranscriptionsRead,
 	ScopeTranscriptionsWrite,
 	ScopeTranscriptionsDelete,
+	ScopeAuditLogsRead,
 	ScopeSigningKeysRead,
 	ScopeSigningKeysWrite,
 	ScopeSigningKeysDelete,

@@ -67,6 +67,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteMembershipListViewer(ctx)
 	case RouteMembershipUpdateOwnerScenario:
 		return runRouteMembershipUpdateOwner(ctx)
+	case RouteRoomCreateMemberScenario:
+		return runRouteRoomCreateMember(ctx)
 	case PolicyTenantSystemAllowScenario:
 		return runPolicyTenantSystemAllow(ctx)
 	case PolicyTenantAPIKeyScopeScenario:

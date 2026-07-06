@@ -104,6 +104,7 @@ Registered scenarios:
 - `route:membership-create-owner`
 - `route:membership-list-viewer`
 - `route:membership-update-owner`
+- `route:room-create-member`
 - `policy:tenant-system-allow`
 - `policy:tenant-api-key-scope`
 - `policy:tenant-user-role`

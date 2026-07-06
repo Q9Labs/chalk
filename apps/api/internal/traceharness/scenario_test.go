@@ -46,6 +46,42 @@ func TestRunCreateTenantScenario(t *testing.T) {
 	assertEvent(t, result.Events, "database", "INSERT tenants RETURNING *")
 }
 
+func TestRunRouteRoomCreateMemberScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteRoomCreateMemberScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
+	}
+
+	var body struct {
+		Name       string `json:"name"`
+		Status     string `json:"status"`
+		MediaPlane string `json:"media_plane"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Name != "Daily Review" {
+		t.Fatalf("name = %q, want Daily Review", body.Name)
+	}
+	if body.Status != "active" {
+		t.Fatalf("status = %q, want active", body.Status)
+	}
+	if body.MediaPlane != "cf_rtk" {
+		t.Fatalf("media_plane = %q, want cf_rtk", body.MediaPlane)
+	}
+
+	assertEvent(t, result.Events, "http", "POST /v1/tenants/"+tenantID().String()+"/rooms")
+	assertEvent(t, result.Events, "auth", "AuthenticateSession")
+	assertEvent(t, result.Events, "repository", "MembershipRepository.GetTenantMembershipForUser")
+	assertEvent(t, result.Events, "service", "rooms.Service.CreateRoom")
+	assertEvent(t, result.Events, "repository", "RoomRepository.CreateRoom")
+	assertEvent(t, result.Events, "database", "INSERT rooms RETURNING *")
+}
+
 func TestRunAllRegisteredScenarios(t *testing.T) {
 	for _, scenario := range ScenarioNames() {
 		t.Run(scenario, func(t *testing.T) {

@@ -188,21 +188,14 @@ func mapAuthenticationUser(id pgtype.UUID, name string, email string, updatedAt 
 	}
 }
 
-func nullableTimestamp(value pgtype.Timestamptz) *time.Time {
-	if !value.Valid {
-		return nil
-	}
-
-	return &value.Time
-}
-
-func uuid(id utilities.ID) pgtype.UUID {
-	return pgtype.UUID{Bytes: id.Bytes(), Valid: true}
-}
-
 func uniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func uniqueConstraintViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == constraint
 }
 
 var _ authentication.Repository = AuthenticationRepository{}
