@@ -18,12 +18,15 @@ insert into audit_logs (
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
-    after
+    after,
+    external_request_id
 ) values (
     $1,
     $2,
@@ -35,7 +38,10 @@ insert into audit_logs (
     $8,
     $9,
     $10,
-    $11
+    $11,
+    $12,
+    $13,
+    $14
 )
 returning
     id,
@@ -50,21 +56,27 @@ returning
     before,
     after,
     updated_at,
-    created_at
+    created_at,
+    resource_type,
+    resource_id,
+    external_request_id
 `
 
 type CreateAuditLogParams struct {
-	ID           pgtype.UUID `json:"id"`
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	ActorUserID  pgtype.UUID `json:"actor_user_id"`
-	ActorType    string      `json:"actor_type"`
-	Action       string      `json:"action"`
-	Details      []byte      `json:"details"`
-	Outcome      string      `json:"outcome"`
-	ErrorCode    pgtype.Text `json:"error_code"`
-	ErrorMessage pgtype.Text `json:"error_message"`
-	Before       []byte      `json:"before"`
-	After        []byte      `json:"after"`
+	ID                pgtype.UUID `json:"id"`
+	TenantID          pgtype.UUID `json:"tenant_id"`
+	ActorUserID       pgtype.UUID `json:"actor_user_id"`
+	ActorType         string      `json:"actor_type"`
+	Action            string      `json:"action"`
+	ResourceType      pgtype.Text `json:"resource_type"`
+	ResourceID        pgtype.UUID `json:"resource_id"`
+	Details           []byte      `json:"details"`
+	Outcome           string      `json:"outcome"`
+	ErrorCode         pgtype.Text `json:"error_code"`
+	ErrorMessage      pgtype.Text `json:"error_message"`
+	Before            []byte      `json:"before"`
+	After             []byte      `json:"after"`
+	ExternalRequestID pgtype.Text `json:"external_request_id"`
 }
 
 func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error) {
@@ -74,12 +86,15 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		arg.ActorUserID,
 		arg.ActorType,
 		arg.Action,
+		arg.ResourceType,
+		arg.ResourceID,
 		arg.Details,
 		arg.Outcome,
 		arg.ErrorCode,
 		arg.ErrorMessage,
 		arg.Before,
 		arg.After,
+		arg.ExternalRequestID,
 	)
 	var i AuditLog
 	err := row.Scan(
@@ -96,6 +111,9 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		&i.After,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResourceType,
+		&i.ResourceID,
+		&i.ExternalRequestID,
 	)
 	return i, err
 }
@@ -114,7 +132,10 @@ select
     before,
     after,
     updated_at,
-    created_at
+    created_at,
+    resource_type,
+    resource_id,
+    external_request_id
 from audit_logs
 where
     tenant_id = $1
@@ -143,6 +164,9 @@ func (q *Queries) GetTenantAuditLog(ctx context.Context, arg GetTenantAuditLogPa
 		&i.After,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResourceType,
+		&i.ResourceID,
+		&i.ExternalRequestID,
 	)
 	return i, err
 }
@@ -161,7 +185,10 @@ select
     before,
     after,
     updated_at,
-    created_at
+    created_at,
+    resource_type,
+    resource_id,
+    external_request_id
 from audit_logs
 where
     tenant_id = $1
@@ -213,6 +240,9 @@ func (q *Queries) ListTenantAuditLogs(ctx context.Context, arg ListTenantAuditLo
 			&i.After,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.ResourceType,
+			&i.ResourceID,
+			&i.ExternalRequestID,
 		); err != nil {
 			return nil, err
 		}

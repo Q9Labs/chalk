@@ -37,6 +37,8 @@ type AuditLog struct {
 	ActorUserID  utilities.ID
 	ActorType    string
 	Action       string
+	ResourceType *string
+	ResourceID   utilities.ID
 	Details      json.RawMessage
 	Outcome      string
 	ErrorCode    *string
@@ -63,6 +65,8 @@ type CreateInput struct {
 	ActorUserID  utilities.ID
 	ActorType    string
 	Action       string
+	ResourceType *string
+	ResourceID   utilities.ID
 	Details      json.RawMessage
 	Outcome      string
 	ErrorCode    *string
@@ -141,6 +145,10 @@ func prepareCreateInput(input *CreateInput) error {
 		return ErrInvalidAction
 	}
 	input.Action = action
+	input.ResourceType, err = utilities.NullableString(input.ResourceType)
+	if err != nil {
+		return ErrInvalidField
+	}
 
 	outcome, err := outcome(input.Outcome)
 	if err != nil {

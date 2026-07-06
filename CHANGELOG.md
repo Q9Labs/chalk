@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Go API database foundation for external integrations, including provider/service
+  connection records for Composio-backed integrations.
 - npm publish workflow and package metadata for publishing the public SDK
   packages under the `@q9labsai` scope.
 - Resend-backed outbound email adapter foundation for the Go API, including a

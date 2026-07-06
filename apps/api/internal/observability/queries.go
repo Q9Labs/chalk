@@ -46,6 +46,13 @@ func (q operationQuerier) CreateGoogleUser(ctx context.Context, arg sqlc.CreateG
 	return user, err
 }
 
+func (q operationQuerier) CreateIntegrationConnection(ctx context.Context, arg sqlc.CreateIntegrationConnectionParams) (sqlc.IntegrationConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.CreateIntegrationConnection(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateIntegrationConnection", startedAt, err)
+	return connection, err
+}
+
 func (q operationQuerier) CreateLoginSession(ctx context.Context, arg sqlc.CreateLoginSessionParams) (sqlc.LoginSession, error) {
 	startedAt := time.Now()
 	session, err := q.next.CreateLoginSession(ctx, arg)
@@ -114,6 +121,20 @@ func (q operationQuerier) GetTenantAuditLog(ctx context.Context, arg sqlc.GetTen
 	log, err := q.next.GetTenantAuditLog(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "GetTenantAuditLog", startedAt, err)
 	return log, err
+}
+
+func (q operationQuerier) GetIntegrationConnection(ctx context.Context, arg sqlc.GetIntegrationConnectionParams) (sqlc.IntegrationConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.GetIntegrationConnection(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetIntegrationConnection", startedAt, err)
+	return connection, err
+}
+
+func (q operationQuerier) GetIntegrationConnectionByExternalRef(ctx context.Context, arg sqlc.GetIntegrationConnectionByExternalRefParams) (sqlc.IntegrationConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.GetIntegrationConnectionByExternalRef(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetIntegrationConnectionByExternalRef", startedAt, err)
+	return connection, err
 }
 
 func (q operationQuerier) GetUser(ctx context.Context, id pgtype.UUID) (sqlc.User, error) {
@@ -200,6 +221,13 @@ func (q operationQuerier) ListTenantAuditLogs(ctx context.Context, arg sqlc.List
 	return logs, err
 }
 
+func (q operationQuerier) ListIntegrationConnections(ctx context.Context, arg sqlc.ListIntegrationConnectionsParams) ([]sqlc.IntegrationConnection, error) {
+	startedAt := time.Now()
+	connections, err := q.next.ListIntegrationConnections(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListIntegrationConnections", startedAt, err)
+	return connections, err
+}
+
 func (q operationQuerier) ListTenantRecordings(ctx context.Context, arg sqlc.ListTenantRecordingsParams) ([]sqlc.Recording, error) {
 	startedAt := time.Now()
 	recordings, err := q.next.ListTenantRecordings(ctx, arg)
@@ -254,6 +282,20 @@ func (q operationQuerier) RevokeLoginSession(ctx context.Context, arg sqlc.Revok
 	session, err := q.next.RevokeLoginSession(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "RevokeLoginSession", startedAt, err)
 	return session, err
+}
+
+func (q operationQuerier) MarkIntegrationConnectionUsed(ctx context.Context, arg sqlc.MarkIntegrationConnectionUsedParams) (sqlc.IntegrationConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.MarkIntegrationConnectionUsed(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "MarkIntegrationConnectionUsed", startedAt, err)
+	return connection, err
+}
+
+func (q operationQuerier) UpdateIntegrationConnection(ctx context.Context, arg sqlc.UpdateIntegrationConnectionParams) (sqlc.IntegrationConnection, error) {
+	startedAt := time.Now()
+	connection, err := q.next.UpdateIntegrationConnection(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "UpdateIntegrationConnection", startedAt, err)
+	return connection, err
 }
 
 func (q operationQuerier) UpdateTenantMembership(ctx context.Context, arg sqlc.UpdateTenantMembershipParams) (sqlc.Membership, error) {

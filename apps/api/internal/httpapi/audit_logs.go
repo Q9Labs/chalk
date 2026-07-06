@@ -30,6 +30,8 @@ type auditLogResponse struct {
 	ActorUserID  *string `json:"actor_user_id"`
 	ActorType    string  `json:"actor_type"`
 	Action       string  `json:"action"`
+	ResourceType *string `json:"resource_type"`
+	ResourceID   *string `json:"resource_id"`
 	Details      any     `json:"details"`
 	Outcome      string  `json:"outcome"`
 	ErrorCode    *string `json:"error_code"`
@@ -194,6 +196,8 @@ func newAuditLogResponse(log auditlogs.AuditLog) auditLogResponse {
 		ActorUserID:  optionalIDString(log.ActorUserID),
 		ActorType:    log.ActorType,
 		Action:       log.Action,
+		ResourceType: log.ResourceType,
+		ResourceID:   optionalIDString(log.ResourceID),
 		Details:      rawJSONValue(log.Details),
 		Outcome:      log.Outcome,
 		ErrorCode:    log.ErrorCode,

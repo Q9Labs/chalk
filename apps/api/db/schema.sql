@@ -238,13 +238,53 @@ create table audit_logs (
     actor_user_id uuid references users(id),
     actor_type text not null, -- user, api_key, system
     action text not null,
+    resource_type text,
+    resource_id uuid,
     details jsonb,
     outcome text not null, -- success, failure, pending
     error_code text,
     error_message text,
     before jsonb,
     after jsonb,
+    external_request_id text,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );
 create index audit_logs_tenant_created_at_id_idx on audit_logs(tenant_id, created_at desc, id desc);
+create index audit_logs_tenant_action_created_at_id_idx on audit_logs(tenant_id, action, created_at desc, id desc);
+create index audit_logs_tenant_resource_created_at_id_idx
+    on audit_logs(tenant_id, resource_type, resource_id, created_at desc, id desc)
+    where resource_type is not null and resource_id is not null;
+
+create table integration_connections (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    user_id uuid not null references users(id),
+    -- composio, direct, arcade, nango
+    provider text not null,
+    -- slack, github, linear, notion, google_calendar, gmail
+    service text not null,
+    external_account_ref text not null,
+    external_auth_config_ref text,
+    -- pending, active, expired, revoked, disabled, failed
+    status text not null,
+    account_label text,
+    account_email text,
+    scopes text[] not null default '{}',
+    metadata jsonb,
+    connected_at timestamptz,
+    expires_at timestamptz,
+    last_used_at timestamptz,
+    revoked_at timestamptz,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    unique (tenant_id, provider, service, external_account_ref)
+);
+create index integration_connections_tenant_user_service_idx
+    on integration_connections(tenant_id, user_id, service, created_at desc, id desc);
+create index integration_connections_tenant_provider_service_idx
+    on integration_connections(tenant_id, provider, service, created_at desc, id desc);
+create index integration_connections_tenant_status_idx
+    on integration_connections(tenant_id, status, created_at desc, id desc);
+create index integration_connections_tenant_created_at_id_idx
+    on integration_connections(tenant_id, created_at desc, id desc);

@@ -27,19 +27,22 @@ type ApiKey struct {
 }
 
 type AuditLog struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	ActorUserID  pgtype.UUID        `json:"actor_user_id"`
-	ActorType    string             `json:"actor_type"`
-	Action       string             `json:"action"`
-	Details      []byte             `json:"details"`
-	Outcome      string             `json:"outcome"`
-	ErrorCode    pgtype.Text        `json:"error_code"`
-	ErrorMessage pgtype.Text        `json:"error_message"`
-	Before       []byte             `json:"before"`
-	After        []byte             `json:"after"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	ActorUserID       pgtype.UUID        `json:"actor_user_id"`
+	ActorType         string             `json:"actor_type"`
+	Action            string             `json:"action"`
+	Details           []byte             `json:"details"`
+	Outcome           string             `json:"outcome"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	ErrorMessage      pgtype.Text        `json:"error_message"`
+	Before            []byte             `json:"before"`
+	After             []byte             `json:"after"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ResourceType      pgtype.Text        `json:"resource_type"`
+	ResourceID        pgtype.UUID        `json:"resource_id"`
+	ExternalRequestID pgtype.Text        `json:"external_request_id"`
 }
 
 type AuthIdentity struct {
@@ -50,6 +53,27 @@ type AuthIdentity struct {
 	PasswordHash    pgtype.Text        `json:"password_hash"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type IntegrationConnection struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	Provider              string             `json:"provider"`
+	Service               string             `json:"service"`
+	ExternalAccountRef    string             `json:"external_account_ref"`
+	ExternalAuthConfigRef pgtype.Text        `json:"external_auth_config_ref"`
+	Status                string             `json:"status"`
+	AccountLabel          pgtype.Text        `json:"account_label"`
+	AccountEmail          pgtype.Text        `json:"account_email"`
+	Scopes                []string           `json:"scopes"`
+	Metadata              []byte             `json:"metadata"`
+	ConnectedAt           pgtype.Timestamptz `json:"connected_at"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt            pgtype.Timestamptz `json:"last_used_at"`
+	RevokedAt             pgtype.Timestamptz `json:"revoked_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
 type LoginSession struct {

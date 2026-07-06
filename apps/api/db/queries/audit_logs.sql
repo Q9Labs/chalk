@@ -5,24 +5,30 @@ insert into audit_logs (
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
-    after
+    after,
+    external_request_id
 ) values (
     sqlc.arg(id),
     sqlc.arg(tenant_id),
     sqlc.narg(actor_user_id),
     sqlc.arg(actor_type),
     sqlc.arg(action),
+    sqlc.narg(resource_type),
+    sqlc.narg(resource_id),
     sqlc.narg(details),
     sqlc.arg(outcome),
     sqlc.narg(error_code),
     sqlc.narg(error_message),
     sqlc.narg(before),
-    sqlc.narg(after)
+    sqlc.narg(after),
+    sqlc.narg(external_request_id)
 )
 returning
     id,
@@ -37,7 +43,10 @@ returning
     before,
     after,
     updated_at,
-    created_at;
+    created_at,
+    resource_type,
+    resource_id,
+    external_request_id;
 
 -- name: GetTenantAuditLog :one
 select
@@ -53,7 +62,10 @@ select
     before,
     after,
     updated_at,
-    created_at
+    created_at,
+    resource_type,
+    resource_id,
+    external_request_id
 from audit_logs
 where
     tenant_id = sqlc.arg(tenant_id)
@@ -73,7 +85,10 @@ select
     before,
     after,
     updated_at,
-    created_at
+    created_at,
+    resource_type,
+    resource_id,
+    external_request_id
 from audit_logs
 where
     tenant_id = sqlc.arg(tenant_id)
