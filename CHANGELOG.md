@@ -34,8 +34,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Upgraded the web app build stack to Vite 8.1, including compatible React and
-  Cloudflare Vite plugins and native Vite tsconfig path resolution.
+- Upgraded the web app build stack to Vite 8.1, including compatible React,
+  TanStack Start, Nitro, and Cloudflare Vite plugins plus native Vite tsconfig
+  path resolution.
 - Moved shared UI background and sound asset delivery to the Cloudflare R2 CDN
   surface at `assets.chalkmeet.com`, leaving `@q9labs/chalk-ui/assets` to
   export CDN metadata instead of bundled media binaries.

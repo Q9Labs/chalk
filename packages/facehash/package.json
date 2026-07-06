@@ -62,7 +62,7 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
-    "react-dom": "19.2.4",
+    "react-dom": "19.2.7",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {

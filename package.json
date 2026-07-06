@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
-    "react": "19.2.4",
+    "react": "19.2.7",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
@@ -80,7 +80,7 @@
   "pnpm": {
     "overrides": {
       "@babel/core": "^7.29.7",
-      "@tanstack/start-server-core": "1.169.15",
+      "@tanstack/start-server-core": "1.169.16",
       "@vitest/browser": "^4.1.6",
       "@xmldom/xmldom": "^0.8.13",
       "brace-expansion": "^5.0.6",
@@ -96,8 +96,8 @@
       "nanoid@<3.3.8": "^3.3.11",
       "nanoid@>=4.0.0 <5.0.9": "^5.1.6",
       "postcss": "^8.5.10",
-      "react": "19.2.4",
-      "react-dom": "19.2.4",
+      "react": "19.2.7",
+      "react-dom": "19.2.7",
       "shell-quote": "^1.8.4",
       "turbo": "^2.9.14",
       "uuid": "^14.0.0",
