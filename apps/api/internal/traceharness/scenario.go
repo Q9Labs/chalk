@@ -1,0 +1,342 @@
+package traceharness
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
+	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/regions"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
+
+const CreateTenantScenario = "tenant-create"
+
+// ScenarioResult is the captured output from one execution trace scenario.
+type ScenarioResult struct {
+	Name       string          `json:"name"`
+	StatusCode int             `json:"status_code"`
+	Body       json.RawMessage `json:"body"`
+	Events     []Event         `json:"events"`
+}
+
+// Run executes a named trace scenario.
+func Run(ctx context.Context, name string) (ScenarioResult, error) {
+	switch name {
+	case "", CreateTenantScenario:
+		return runCreateTenant(ctx)
+	default:
+		return ScenarioResult{}, fmt.Errorf("unknown trace scenario %q", name)
+	}
+}
+
+func runCreateTenant(ctx context.Context) (ScenarioResult, error) {
+	now := deterministicClock()
+	recorder := NewRecorder(now)
+	userID := mustID("11111111-1111-4111-8111-111111111111")
+	sessionID := mustID("22222222-2222-4222-8222-222222222222")
+	auth := tracedAuthentication{
+		recorder:  recorder,
+		userID:    userID,
+		sessionID: sessionID,
+		now:       now,
+	}
+	repository := tracedTenantRepository{
+		recorder: recorder,
+		now:      now,
+	}
+	service := tracedTenantService{
+		recorder: recorder,
+		next:     tenants.NewService(repository),
+	}
+
+	handler := httpapi.NewRouter(httpapi.Options{
+		RateLimit:      noRateLimits(now),
+		Authentication: auth,
+		Tenants:        service,
+	})
+	body := json.RawMessage(`{"name":"  Chalk Demo Workspace  ","default_region":"us","website":" https://chalkmeet.com "}`)
+	recorder.Add("scenario", CreateTenantScenario, "boot router and issue request", map[string]any{
+		"request": map[string]any{
+			"method": "POST",
+			"path":   "/v1/tenants",
+			"body":   mustDecode(body),
+		},
+	})
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "/v1/tenants", bytes.NewReader(body))
+	if err != nil {
+		return ScenarioResult{}, fmt.Errorf("create request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer trace-session-token")
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	span := recorder.Start("http", "POST /v1/tenants", "router received request", map[string]any{
+		"headers": map[string]string{
+			"authorization": "Bearer [redacted]",
+			"content-type":  request.Header.Get("Content-Type"),
+		},
+	})
+	handler.ServeHTTP(response, request)
+	span.End("router returned response", map[string]any{
+		"status": response.Code,
+		"body":   mustDecode(response.Body.Bytes()),
+	}, nil)
+
+	result := ScenarioResult{
+		Name:       CreateTenantScenario,
+		StatusCode: response.Code,
+		Body:       json.RawMessage(response.Body.Bytes()),
+		Events:     recorder.Events(),
+	}
+	if response.Code != http.StatusCreated {
+		return result, fmt.Errorf("scenario returned HTTP %d", response.Code)
+	}
+
+	return result, nil
+}
+
+type tracedAuthentication struct {
+	recorder  *Recorder
+	userID    utilities.ID
+	sessionID utilities.ID
+	now       func() time.Time
+}
+
+func (a tracedAuthentication) AuthenticateSession(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
+	span := a.recorder.Start("auth", "AuthenticateSession", "validate bearer token", map[string]any{
+		"token": "[redacted]",
+	})
+	sessionUser := authentication.SessionUser{
+		Session: authentication.Session{
+			ID:        a.sessionID,
+			UserID:    a.userID,
+			TokenHash: "trace-token-hash",
+			ExpiresAt: a.now().Add(time.Hour),
+			CreatedAt: a.now(),
+			UpdatedAt: a.now(),
+		},
+		User: authentication.User{
+			ID:        a.userID,
+			Name:      "Trace Reviewer",
+			Email:     "trace-reviewer@example.test",
+			CreatedAt: a.now(),
+			UpdatedAt: a.now(),
+		},
+	}
+	span.End("session accepted", map[string]any{
+		"user": map[string]string{
+			"id":    sessionUser.User.ID.String(),
+			"name":  sessionUser.User.Name,
+			"email": sessionUser.User.Email,
+		},
+		"session_id": sessionUser.Session.ID.String(),
+	}, nil)
+
+	return sessionUser, nil
+}
+
+func (a tracedAuthentication) PrincipalForSession(session authentication.Session) authentication.Principal {
+	principal := authentication.Principal{
+		Kind:      authentication.PrincipalUser,
+		UserID:    session.UserID,
+		SessionID: session.ID,
+		Scopes: []authentication.Scope{
+			authentication.ScopeTenantsRead,
+			authentication.ScopeTenantsWrite,
+		},
+	}
+	a.recorder.Add("auth", "PrincipalForSession", "attach principal to request context", map[string]any{
+		"principal": map[string]any{
+			"kind":       principal.Kind,
+			"user_id":    principal.UserID.String(),
+			"session_id": principal.SessionID.String(),
+			"scopes":     principal.Scopes,
+		},
+	})
+
+	return principal
+}
+
+func (tracedAuthentication) Register(context.Context, authentication.RegisterInput) (authentication.AuthResult, error) {
+	return authentication.AuthResult{}, errors.New("register is not used by trace scenario")
+}
+
+func (tracedAuthentication) Login(context.Context, authentication.LoginInput) (authentication.AuthResult, error) {
+	return authentication.AuthResult{}, errors.New("login is not used by trace scenario")
+}
+
+func (tracedAuthentication) Logout(context.Context, authentication.Principal) error {
+	return errors.New("logout is not used by trace scenario")
+}
+
+func (tracedAuthentication) StartGoogleSignIn(context.Context) (authentication.GoogleStart, error) {
+	return authentication.GoogleStart{}, errors.New("google start is not used by trace scenario")
+}
+
+func (tracedAuthentication) CompleteGoogleSignIn(context.Context, string, string, *string) (authentication.AuthResult, error) {
+	return authentication.AuthResult{}, errors.New("google callback is not used by trace scenario")
+}
+
+type tracedTenantService struct {
+	recorder *Recorder
+	next     tenants.Service
+}
+
+func (s tracedTenantService) CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
+	span := s.recorder.Start("service", "tenants.Service.CreateTenant", "normalize and validate tenant input", map[string]any{
+		"input": tenantCreateInputFields(input),
+	})
+	tenant, err := s.next.CreateTenant(ctx, input)
+	span.End("tenant service returned domain tenant", map[string]any{
+		"tenant": tenantFields(tenant),
+	}, err)
+	return tenant, err
+}
+
+func (s tracedTenantService) AvailableRegions(ctx context.Context) ([]regions.Region, error) {
+	return s.next.AvailableRegions(ctx)
+}
+
+func (s tracedTenantService) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
+	return s.next.GetTenant(ctx, id)
+}
+
+func (s tracedTenantService) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
+	return s.next.ListTenants(ctx, page)
+}
+
+func (s tracedTenantService) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
+	return s.next.UpdateTenant(ctx, id, input)
+}
+
+type tracedTenantRepository struct {
+	recorder *Recorder
+	now      func() time.Time
+}
+
+func (r tracedTenantRepository) CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
+	span := r.recorder.Start("repository", "TenantRepository.CreateTenant", "begin tenant insert transaction", map[string]any{
+		"domain_input": tenantCreateInputFields(input),
+	})
+	r.recorder.Add("database", "BEGIN", "open transaction", nil)
+	r.recorder.Add("database", "INSERT tenants RETURNING *", "execute query", map[string]any{
+		"params": map[string]any{
+			"id":                  input.ID.String(),
+			"name":                input.Name,
+			"default_region":      input.DefaultRegion,
+			"default_media_plane": input.DefaultMediaPlane,
+			"logo_key":            input.LogoKey,
+			"website":             input.Website,
+		},
+	})
+
+	tenant := tenants.Tenant{
+		ID:                input.ID,
+		Name:              input.Name,
+		DefaultRegion:     input.DefaultRegion,
+		DefaultMediaPlane: input.DefaultMediaPlane,
+		LogoKey:           input.LogoKey,
+		Website:           input.Website,
+		CreatedAt:         r.now(),
+		UpdatedAt:         r.now(),
+	}
+	r.recorder.Add("database", "row result", "database returned inserted tenant", map[string]any{
+		"row": tenantFields(tenant),
+	})
+	r.recorder.Add("database", "COMMIT", "commit transaction", nil)
+	span.End("map database row to domain tenant", map[string]any{
+		"tenant": tenantFields(tenant),
+	}, nil)
+	return tenant, nil
+}
+
+func (r tracedTenantRepository) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
+	return tenants.Tenant{}, errors.New("get tenant is not used by trace scenario")
+}
+
+func (r tracedTenantRepository) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
+	return tenants.TenantList{}, errors.New("list tenants is not used by trace scenario")
+}
+
+func (r tracedTenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
+	return tenants.Tenant{}, errors.New("update tenant is not used by trace scenario")
+}
+
+type allowAllLimiter struct{}
+
+func (allowAllLimiter) Allow(ctx context.Context, key string, policy ratelimit.Policy, now time.Time) ratelimit.Decision {
+	return ratelimit.Decision{
+		Allowed:   true,
+		Remaining: policy.Limit,
+	}
+}
+
+func noRateLimits(now func() time.Time) httpapi.RateLimitOptions {
+	options := httpapi.DefaultRateLimitOptions()
+	options.Limiter = allowAllLimiter{}
+	options.Now = now
+	return options
+}
+
+func tenantCreateInputFields(input tenants.CreateTenantInput) map[string]any {
+	return map[string]any{
+		"id":                  input.ID.String(),
+		"name":                input.Name,
+		"default_region":      input.DefaultRegion,
+		"default_media_plane": input.DefaultMediaPlane,
+		"logo_key":            input.LogoKey,
+		"website":             input.Website,
+	}
+}
+
+func tenantFields(tenant tenants.Tenant) map[string]any {
+	return map[string]any{
+		"id":                  tenant.ID.String(),
+		"name":                tenant.Name,
+		"default_region":      tenant.DefaultRegion,
+		"default_media_plane": tenant.DefaultMediaPlane,
+		"logo_key":            tenant.LogoKey,
+		"website":             tenant.Website,
+		"created_at":          tenant.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":          tenant.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+}
+
+func deterministicClock() func() time.Time {
+	start := time.Date(2026, time.July, 6, 1, 0, 0, 0, time.UTC)
+	var tick int64
+	return func() time.Time {
+		tick++
+		return start.Add(time.Duration(tick) * time.Millisecond)
+	}
+}
+
+func mustID(value string) utilities.ID {
+	id, err := utilities.ParseID(value)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func mustDecode(data []byte) any {
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return string(data)
+	}
+	return value
+}
+
+var _ httpapi.AuthenticationService = tracedAuthentication{}
+var _ httpapi.TenantService = tracedTenantService{}
+var _ tenants.TenantRepository = tracedTenantRepository{}

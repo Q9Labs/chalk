@@ -23,6 +23,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - MIT license metadata across the workspace.
 - Generic Go API logging/observability hooks and local performance harness for
   request, database, lifecycle, and footprint profiling.
+- Go API Execution Trace Harness with a local `tenant-create` scenario for
+  reviewing a full HTTP-to-service-to-repository flow as a timeline.
 - Public-safe scratchpad structure for architecture decisions, debugging
   lessons, deployment lessons, and summarized session memory.
 - Public repository hygiene guidance for keeping raw logs, generated debug
