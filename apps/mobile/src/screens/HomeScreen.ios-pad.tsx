@@ -1,7 +1,7 @@
-import { ChalkLogoElements } from "@q9labs/chalk-react-native";
-import { useClipboardInviteSuggestion } from "@q9labs/chalk-react-native/clipboard";
-import { getClipboardInviteSuggestion } from "@q9labs/chalk-react-native/invites";
-import { Theme } from "@q9labs/chalk-react-native/theme";
+import { ChalkLogoElements } from "@q9labsai/chalk-react-native";
+import { useClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/clipboard";
+import { getClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/invites";
+import { Theme } from "@q9labsai/chalk-react-native/theme";
 import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowLeft01Icon";

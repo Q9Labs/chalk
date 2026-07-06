@@ -315,8 +315,8 @@ Current facts:
 - uses `StyleSheet.create`
 - no shared token package
 - no theme provider
-- no import from `@q9labs/chalk-react`
-- depends on `@q9labs/chalk-react-native` runtime only
+- no import from `@q9labsai/chalk-react`
+- depends on `@q9labsai/chalk-react-native` runtime only
 
 Repeated native values today:
 

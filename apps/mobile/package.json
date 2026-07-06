@@ -1,5 +1,5 @@
 {
-  "name": "@q9labs/chalk-mobile",
+  "name": "@q9labsai/chalk-mobile",
   "private": true,
   "license": "MIT",
   "main": "./index.ts",
@@ -30,7 +30,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@hugeicons/core-free-icons": "^4.0.0",
     "@hugeicons/react-native": "^1.0.13",
-    "@q9labs/chalk-react-native": "workspace:^",
+    "@q9labsai/chalk-react-native": "workspace:^",
     "expo": "^55.0.6",
     "expo-audio": "~55.0.9",
     "expo-clipboard": "~55.0.9",

@@ -5,13 +5,13 @@
     "types": ["node", "expo/types"],
     "paths": {
       "@/*": ["./src/*"],
-      "@q9labs/chalk-react-native": ["../../packages/sdk-react-native/src/index.ts"],
-      "@q9labs/chalk-react-native/clipboard": ["../../packages/sdk-react-native/src/clipboard.ts"],
-      "@q9labs/chalk-react-native/diagnostics": ["../../packages/sdk-react-native/src/diagnostics.ts"],
-      "@q9labs/chalk-react-native/invites": ["../../packages/sdk-react-native/src/invites.ts"],
-      "@q9labs/chalk-react-native/runtime": ["../../packages/sdk-react-native/src/runtime.ts"],
-      "@q9labs/chalk-react-native/storage": ["../../packages/sdk-react-native/src/storage.ts"],
-      "@q9labs/chalk-react-native/theme": ["../../packages/sdk-react-native/src/ui/theme.ts"]
+      "@q9labsai/chalk-react-native": ["../../packages/sdk-react-native/src/index.ts"],
+      "@q9labsai/chalk-react-native/clipboard": ["../../packages/sdk-react-native/src/clipboard.ts"],
+      "@q9labsai/chalk-react-native/diagnostics": ["../../packages/sdk-react-native/src/diagnostics.ts"],
+      "@q9labsai/chalk-react-native/invites": ["../../packages/sdk-react-native/src/invites.ts"],
+      "@q9labsai/chalk-react-native/runtime": ["../../packages/sdk-react-native/src/runtime.ts"],
+      "@q9labsai/chalk-react-native/storage": ["../../packages/sdk-react-native/src/storage.ts"],
+      "@q9labsai/chalk-react-native/theme": ["../../packages/sdk-react-native/src/ui/theme.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"]

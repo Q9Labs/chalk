@@ -1,5 +1,5 @@
 {
-  "name": "@q9labs/chalk-react-native",
+  "name": "@q9labsai/chalk-react-native",
   "version": "0.0.85",
   "license": "MIT",
   "repository": {
@@ -136,7 +136,8 @@
     }
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "rm -rf ./dist && tsup ./src/index.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/storage.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc && pnpm run build:types",
@@ -148,7 +149,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@q9labs/facehash": "workspace:^"
+    "@q9labsai/facehash": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

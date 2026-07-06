@@ -1,0 +1,61 @@
+name: Publish npm Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and pack packages without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish packages
+    runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NPM_CONFIG_PROVENANCE: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm --filter './packages/*' build
+
+      - name: Check packages
+        run: |
+          pnpm run package:publint
+          pnpm run package:attw
+
+      - name: Pack packages
+        if: inputs.dry_run
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-packages"
+          pnpm --filter './packages/*' --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
+
+      - name: Publish packages
+        if: ${{ !inputs.dry_run }}
+        run: pnpm --filter './packages/*' --recursive publish --access public --no-git-checks

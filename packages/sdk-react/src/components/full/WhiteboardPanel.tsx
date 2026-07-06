@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import type { ExcalidrawCollabEngine, AppState, BinaryFiles, WhiteboardFileSyncState } from "@q9labs/chalk-whiteboard/collab";
+import type { ExcalidrawCollabEngine, AppState, BinaryFiles, WhiteboardFileSyncState } from "@q9labsai/chalk-whiteboard/collab";
 
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, CheckmarkCircle02Icon, Loading01Icon } from "../../utils/icons";
@@ -12,7 +12,7 @@ const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalid
 const DEFAULT_LATEX = String.raw`E = mc^2`;
 
 type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
-type CollabEngineCtor = typeof import("@q9labs/chalk-whiteboard/collab").ExcalidrawCollabEngine;
+type CollabEngineCtor = typeof import("@q9labsai/chalk-whiteboard/collab").ExcalidrawCollabEngine;
 
 export interface WhiteboardCollabOptions {
   canDraw?: boolean;
@@ -148,7 +148,7 @@ function WhiteboardPanelBase({ className, isVisible = true, canDraw: canDrawProp
       });
 
     if (collab) {
-      import("@q9labs/chalk-whiteboard/collab")
+      import("@q9labsai/chalk-whiteboard/collab")
         .then((module) => {
           if (mounted) setCollabEngineCtor(() => module.ExcalidrawCollabEngine);
         })

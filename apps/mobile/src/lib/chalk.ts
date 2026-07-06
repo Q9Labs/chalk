@@ -1,9 +1,9 @@
 import mobilePackageJson from "../../package.json";
 import * as SecureStore from "expo-secure-store";
-import { decodeTokenClaimsPreview, maskSecret, recordManualRequest, type DevDiagnosticsTokenClaimsPreview } from "@q9labs/chalk-react-native/diagnostics";
-import { extractJoinTokenFromInviteLink } from "@q9labs/chalk-react-native/invites";
-import { canUseLocalHostBootstrap, createStorageScopeId, getNativeDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labs/chalk-react-native/runtime";
-import { createSecureStoreTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY, type NativeTokenStorage } from "@q9labs/chalk-react-native/storage";
+import { decodeTokenClaimsPreview, maskSecret, recordManualRequest, type DevDiagnosticsTokenClaimsPreview } from "@q9labsai/chalk-react-native/diagnostics";
+import { extractJoinTokenFromInviteLink } from "@q9labsai/chalk-react-native/invites";
+import { canUseLocalHostBootstrap, createStorageScopeId, getNativeDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
+import { createSecureStoreTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY, type NativeTokenStorage } from "@q9labsai/chalk-react-native/storage";
 import { createTokenProvider } from "./mobile-auth";
 import { getCanonicalJoinRoomId, getJoinRoomName } from "./join-exchange";
 import { createHostedMeeting } from "./newMeeting";

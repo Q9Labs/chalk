@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Facehash } from "@q9labs/facehash/react";
+import { Facehash } from "@q9labsai/facehash/react";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 

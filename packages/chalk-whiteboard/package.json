@@ -1,5 +1,5 @@
 {
-  "name": "@q9labs/chalk-whiteboard",
+  "name": "@q9labsai/chalk-whiteboard",
   "version": "0.0.85",
   "license": "MIT",
   "repository": {
@@ -43,7 +43,8 @@
     }
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "rm -rf ./dist && tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types",

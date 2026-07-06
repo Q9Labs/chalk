@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -59,8 +58,6 @@ jobs:
   js:
     name: JavaScript and TypeScript
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,13 +78,12 @@ jobs:
 
       - name: Build package entries
         run: |
-          pnpm --filter @q9labs/chalk-whiteboard build
-          pnpm --filter @q9labs/chalk-core build
+          pnpm --filter @q9labsai/chalk-whiteboard build
+          pnpm --filter @q9labsai/chalk-ui build
 
       - name: Package tests
         run: |
-          pnpm --filter @q9labs/chalk-core test
-          pnpm --filter @q9labs/chalk-react test
-          pnpm --filter @q9labs/facehash test
+          pnpm --filter @q9labsai/chalk-react test
+          pnpm --filter @q9labsai/facehash test
           pnpm --filter web test
           pnpm --filter @chalk/uptime-worker test

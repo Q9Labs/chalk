@@ -3,10 +3,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: [
-      { find: "@q9labs/chalk-ui/button", replacement: "../ui/src/button.tsx" },
-      { find: "@q9labs/chalk-ui/reactions", replacement: "../ui/src/reactions.ts" },
-      { find: "@q9labs/facehash/react", replacement: "../facehash/src/react.ts" },
-      { find: "@q9labs/facehash", replacement: "../facehash/src/index.ts" },
+      { find: "@q9labsai/chalk-ui/button", replacement: "../ui/src/button.tsx" },
+      { find: "@q9labsai/chalk-ui/reactions", replacement: "../ui/src/reactions.ts" },
+      { find: "@q9labsai/facehash/react", replacement: "../facehash/src/react.ts" },
+      { find: "@q9labsai/facehash", replacement: "../facehash/src/index.ts" },
     ],
   },
   test: {

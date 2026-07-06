@@ -1,4 +1,4 @@
-import { resolveNativePlatformVariant } from "@q9labs/chalk-react-native";
+import { resolveNativePlatformVariant } from "@q9labsai/chalk-react-native";
 import { HomeScreenIosPad } from "./HomeScreen.ios-pad";
 import { HomeScreenMacos } from "./HomeScreen.macos";
 import { HomeScreenShared, type HomeScreenProps } from "./HomeScreen.shared";

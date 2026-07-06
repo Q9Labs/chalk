@@ -1,4 +1,4 @@
-import type { NativeVideoConferenceDiagnosticsSnapshot, useSession } from "@q9labs/chalk-react-native";
+import type { NativeVideoConferenceDiagnosticsSnapshot, useSession } from "@q9labsai/chalk-react-native";
 import {
   fetchDevDiagnosticsAuth,
   recordDevDiagnosticsLifecycleEvent,
@@ -11,8 +11,8 @@ import {
   setDevDiagnosticsSession,
   setDevDiagnosticsStaticAuth,
   setDevDiagnosticsToken,
-} from "@q9labs/chalk-react-native/diagnostics";
-import { Theme } from "@q9labs/chalk-react-native/theme";
+} from "@q9labsai/chalk-react-native/diagnostics";
+import { Theme } from "@q9labsai/chalk-react-native/theme";
 import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";

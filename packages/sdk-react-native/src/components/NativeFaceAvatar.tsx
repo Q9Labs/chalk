@@ -1,5 +1,5 @@
 import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../internal/core";
-import { FacehashNative } from "@q9labs/facehash/react-native";
+import { FacehashNative } from "@q9labsai/facehash/react-native";
 import { memo, useMemo, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { NativeGradientSurface } from "./NativeGradientSurface";
@@ -23,7 +23,7 @@ const statusColorMap: Record<AvatarStatus, string> = {
   offline: "#6b7280",
 };
 
-export interface NativeFaceAvatarProps {
+interface NativeFaceAvatarProps {
   name?: string;
   src?: string;
   size?: AvatarSize | number;

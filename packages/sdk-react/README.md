@@ -1,4 +1,4 @@
-# @q9labs/chalk-react
+# @q9labsai/chalk-react
 
 React UI components for Chalk meeting surfaces.
 
@@ -11,13 +11,13 @@ core spec.
 ## Installation
 
 ```bash
-pnpm add @q9labs/chalk-react @q9labs/chalk-ui
+pnpm add @q9labsai/chalk-react @q9labsai/chalk-ui
 ```
 
 ## Setup
 
 ```tsx
-import "@q9labs/chalk-ui/styles.css";
+import "@q9labsai/chalk-ui/styles.css";
 ```
 
 ## Import Surface
@@ -25,9 +25,9 @@ import "@q9labs/chalk-ui/styles.css";
 Use the narrowest import that matches the UI layer you need:
 
 ```tsx
-import { Avatar, VideoTile } from "@q9labs/chalk-react/atomic";
-import { ChatPanel, ControlBar } from "@q9labs/chalk-react/composite";
-import { EndScreen, LoadingScreen } from "@q9labs/chalk-react/full";
+import { Avatar, VideoTile } from "@q9labsai/chalk-react/atomic";
+import { ChatPanel, ControlBar } from "@q9labsai/chalk-react/composite";
+import { EndScreen, LoadingScreen } from "@q9labsai/chalk-react/full";
 ```
 
 The root import is kept for convenience, but bundle-sensitive apps should prefer

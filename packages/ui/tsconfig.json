@@ -3,7 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
-      "@q9labs/chalk-ui": ["./src/index.ts"]
+      "@q9labsai/chalk-ui": ["./src/index.ts"]
     },
     "noEmit": false,
     "declaration": true,

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor } from "../../utils/colorGenerator";
-import { CELEBRATION_EMOJIS } from "@q9labs/chalk-ui/reactions";
+import { CELEBRATION_EMOJIS } from "@q9labsai/chalk-ui/reactions";
 
 interface ReactionBubbleProps {
   emoji: string;

@@ -1,6 +1,6 @@
 {
   "entry": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx", "apps/api/docs/app.js", "apps/api/scripts/smoke-lifecycle.mjs"],
-  "publicPackages": ["@q9labs/chalk-react", "@q9labs/chalk-react-native", "@q9labs/chalk-ui", "@q9labs/chalk-whiteboard", "@q9labs/facehash"],
+  "publicPackages": ["@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignoreDependencies": [
     "@arethetypeswrong/cli",
     "publint",
@@ -11,7 +11,7 @@
     "expo-splash-screen",
     "@base-ui/react",
     "@excalidraw/excalidraw",
-    "@q9labs/chalk-whiteboard",
+    "@q9labsai/chalk-whiteboard",
     "@tanstack/react-devtools",
     "@tanstack/react-query",
     "@cloudflare/vite-plugin",
@@ -36,6 +36,7 @@
       "apps/web/src/components/VideoPlayer.tsx",
       "apps/web/src/routes/room/$roomId.tsx",
       "apps/web/src/features/dashboard/utils.ts",
+      "apps/mobile/**",
       "packages/sdk-react/src/components/composite/ChatPanel.tsx",
       "packages/sdk-react/src/components/composite/MessageBubble.tsx",
       "packages/sdk-react/src/hooks/features/useTranscripts.ts",

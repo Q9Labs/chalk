@@ -11,10 +11,10 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "paths": {
-      "@q9labs/facehash": ["../facehash/src/index.ts"],
-      "@q9labs/facehash/react": ["../facehash/src/react.ts"],
-      "@q9labs/chalk-ui/button": ["../ui/dist/button.d.ts"],
-      "@q9labs/chalk-ui/reactions": ["../ui/dist/reactions.d.ts"]
+      "@q9labsai/facehash": ["../facehash/src/index.ts"],
+      "@q9labsai/facehash/react": ["../facehash/src/react.ts"],
+      "@q9labsai/chalk-ui/button": ["../ui/dist/button.d.ts"],
+      "@q9labsai/chalk-ui/reactions": ["../ui/dist/reactions.d.ts"]
     }
   },
   "include": ["src/**/*"],

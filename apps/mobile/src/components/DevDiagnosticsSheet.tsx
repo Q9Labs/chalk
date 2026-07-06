@@ -11,8 +11,8 @@ import Navigation03Icon from "@hugeicons/core-free-icons/dist/esm/Navigation03Ic
 import Settings01Icon from "@hugeicons/core-free-icons/dist/esm/Settings01Icon";
 import SmartPhone01Icon from "@hugeicons/core-free-icons/dist/esm/SmartPhone01Icon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { buildDevDiagnosticsCopyText, clearDevDiagnosticsLogs, getDevDiagnosticsState, recordDiagnosticsFailure, subscribeDevDiagnostics } from "@q9labs/chalk-react-native/diagnostics";
-import { Theme } from "@q9labs/chalk-react-native/theme";
+import { buildDevDiagnosticsCopyText, clearDevDiagnosticsLogs, getDevDiagnosticsState, recordDiagnosticsFailure, subscribeDevDiagnostics } from "@q9labsai/chalk-react-native/diagnostics";
+import { Theme } from "@q9labsai/chalk-react-native/theme";
 
 interface DevDiagnosticsSheetProps {
   visible: boolean;

@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- npm publish workflow and package metadata for publishing the public SDK
+  packages under the `@q9labsai` scope.
 - Resend-backed outbound email adapter foundation for the Go API, including a
   provider-neutral email port and env-based Resend configuration.
 - Cloudflare R2-backed object storage adapter foundation for Go API media,
@@ -38,7 +40,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   TanStack Start, Nitro, and Cloudflare Vite plugins plus native Vite tsconfig
   path resolution.
 - Moved shared UI background and sound asset delivery to the Cloudflare R2 CDN
-  surface at `assets.chalkmeet.com`, leaving `@q9labs/chalk-ui/assets` to
+  surface at `assets.chalkmeet.com`, leaving `@q9labsai/chalk-ui/assets` to
   export CDN metadata instead of bundled media binaries.
 - Replaced the first-pass generic shared UI backgrounds with six generated,
   video-call-oriented backgrounds and documented the reusable generation prompt.
@@ -52,6 +54,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   provider paths.
 - Replaced private historical scratchpad entries with curated public summaries.
 - Replaced internal agent/runbook guidance with public contributor guidance.
+- Renamed public package scopes from `@q9labs/*` to `@q9labsai/*` for npm.
 
 ### Removed
 

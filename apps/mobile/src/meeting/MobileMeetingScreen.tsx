@@ -1,5 +1,5 @@
-import { ChalkNativeProvider, NativeVideoConference, useSession, type NativeVideoConferenceDiagnosticsSnapshot } from "@q9labs/chalk-react-native";
-import { recordWideEvent } from "@q9labs/chalk-react-native/diagnostics";
+import { ChalkNativeProvider, NativeVideoConference, useSession, type NativeVideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
+import { recordWideEvent } from "@q9labsai/chalk-react-native/diagnostics";
 import { useEffect, useMemo } from "react";
 import type { LobbyRoute } from "../lib/chalk";
 

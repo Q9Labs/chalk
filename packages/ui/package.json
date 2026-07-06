@@ -1,5 +1,5 @@
 {
-  "name": "@q9labs/chalk-ui",
+  "name": "@q9labsai/chalk-ui",
   "version": "0.0.85",
   "license": "MIT",
   "repository": {
@@ -62,7 +62,8 @@
     "./styles.css": "./dist/styles.css"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "rm -rf ./dist && tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:assets",

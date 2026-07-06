@@ -23,7 +23,7 @@ Public asset paths use this prefix:
 ui/
 ```
 
-The package surface should stay metadata-only. `@q9labs/chalk-ui/assets`
+The package surface should stay metadata-only. `@q9labsai/chalk-ui/assets`
 exports CDN URLs, filenames, MIME types, byte sizes, and hash prefixes; it should
 not bundle background or sound binaries into npm packages.
 
