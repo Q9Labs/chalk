@@ -50,7 +50,7 @@ export const TourTooltip = React.memo<TourTooltipProps>(({ title, description, s
       <div className="flex justify-between items-start mb-4">
         <h3 className="font-semibold text-lg leading-tight">{title}</h3>
         {showSkip && (
-          <button onClick={onSkip} className="text-muted-foreground hover:text-foreground transition-colors p-1 -mt-1 -mr-1" aria-label="Skip tour">
+          <button type="button" onClick={onSkip} className="text-muted-foreground hover:text-foreground transition-colors p-1 -mt-1 -mr-1" aria-label="Skip tour">
             <Cancel01Icon size={18} />
           </button>
         )}
@@ -71,12 +71,17 @@ export const TourTooltip = React.memo<TourTooltipProps>(({ title, description, s
 
         <div className="flex gap-2 shrink-0">
           {step > 1 && (
-            <button onClick={onPrev} className={cn("flex items-center justify-center py-2 px-3 rounded-xl", "text-muted-foreground hover:bg-muted hover:text-foreground", "transition-colors text-sm font-medium")} aria-label="Previous step">
+            <button type="button" onClick={onPrev} className={cn("flex items-center justify-center py-2 px-3 rounded-xl", "text-muted-foreground hover:bg-muted hover:text-foreground", "transition-colors text-sm font-medium")} aria-label="Previous step">
               Back
             </button>
           )}
 
-          <button onClick={onNext} className={cn("flex items-center justify-center py-2 px-4 rounded-xl", "bg-primary text-primary-foreground hover:opacity-90 transition-all shadow-md shadow-primary/20", "text-sm font-bold")} aria-label={step === totalSteps ? "Finish tour" : "Next step"}>
+          <button
+            type="button"
+            onClick={onNext}
+            className={cn("flex items-center justify-center py-2 px-4 rounded-xl", "bg-primary text-primary-foreground hover:opacity-90 transition-all shadow-md shadow-primary/20", "text-sm font-bold")}
+            aria-label={step === totalSteps ? "Finish tour" : "Next step"}
+          >
             {step === totalSteps ? (
               "Got it"
             ) : (

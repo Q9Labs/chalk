@@ -94,13 +94,13 @@ export const InviteModal = React.memo<InviteModalProps>(({ isOpen, onClose, meet
 
           <div className="grid grid-cols-2 gap-3">
             {onShareEmail && (
-              <button onClick={onShareEmail} className={cn("flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors", "bg-secondary text-secondary-foreground", "hover:bg-accent", "border border-border")}>
+              <button type="button" onClick={onShareEmail} className={cn("flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors", "bg-secondary text-secondary-foreground", "hover:bg-accent", "border border-border")}>
                 <Mail01Icon size={16} />
                 Email
               </button>
             )}
             {onShareCalendar && (
-              <button onClick={onShareCalendar} className={cn("flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors", "bg-secondary text-secondary-foreground", "hover:bg-accent", "border border-border")}>
+              <button type="button" onClick={onShareCalendar} className={cn("flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors", "bg-secondary text-secondary-foreground", "hover:bg-accent", "border border-border")}>
                 <Calendar01Icon size={16} />
                 Calendar
               </button>

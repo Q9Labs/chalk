@@ -112,7 +112,7 @@ function ExportDropdown({ onExport, onCopyAll }: { onExport?: (format: "txt" | "
 
   return (
     <div ref={dropdownRef} className="relative">
-      <button onClick={() => setIsOpen(!isOpen)} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors", "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground")} aria-expanded={isOpen} aria-haspopup="menu">
+      <button type="button" onClick={() => setIsOpen(!isOpen)} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors", "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground")} aria-expanded={isOpen} aria-haspopup="menu">
         <Download01Icon className="w-3.5 h-3.5" />
         Export
       </button>
@@ -121,25 +121,25 @@ function ExportDropdown({ onExport, onCopyAll }: { onExport?: (format: "txt" | "
         <div className={cn("absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-lg shadow-lg border", "bg-popover border-border", "animate-in fade-in-0 zoom-in-95 duration-150")} role="menu">
           <div className="p-1">
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Download</div>
-            <button onClick={() => handleExport("txt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={() => handleExport("txt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
               <FileTextIcon className="w-4 h-4" />
               TXT
             </button>
-            <button onClick={() => handleExport("srt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={() => handleExport("srt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
               <FileTextIcon className="w-4 h-4" />
               SRT
             </button>
-            <button onClick={() => handleExport("vtt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={() => handleExport("vtt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
               <FileTextIcon className="w-4 h-4" />
               VTT
             </button>
-            <button onClick={() => handleExport("json")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={() => handleExport("json")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
               <span className="w-4 h-4 text-xs font-mono">{"{}"}</span>
               JSON
             </button>
           </div>
           <div className="border-t border-border p-1">
-            <button onClick={handleCopy} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={handleCopy} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
               <Copy01Icon className="w-4 h-4" />
               Copy All
             </button>
@@ -384,7 +384,7 @@ export const TranscriptionPanel = React.memo(
             className={cn("w-full h-8 pl-8 pr-8 text-sm rounded-lg border bg-background/50", "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary", "placeholder:text-muted-foreground")}
           />
           {searchQuery && (
-            <button onClick={handleClearSearch} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
+            <button type="button" onClick={handleClearSearch} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
               <Cancel01Icon className="w-3.5 h-3.5" />
             </button>
           )}
@@ -401,10 +401,10 @@ export const TranscriptionPanel = React.memo(
           <span className="whitespace-nowrap">
             {currentMatchIndex + 1}/{searchMatches.length}
           </span>
-          <button onClick={() => navigateMatch("prev")} className="p-1 rounded hover:bg-muted hover:text-foreground" aria-label="Previous match">
+          <button type="button" onClick={() => navigateMatch("prev")} className="p-1 rounded hover:bg-muted hover:text-foreground" aria-label="Previous match">
             <ArrowUp01Icon className="w-3 h-3" />
           </button>
-          <button onClick={() => navigateMatch("next")} className="p-1 rounded hover:bg-muted hover:text-foreground" aria-label="Next match">
+          <button type="button" onClick={() => navigateMatch("next")} className="p-1 rounded hover:bg-muted hover:text-foreground" aria-label="Next match">
             <ArrowDown01Icon className="w-3 h-3" />
           </button>
         </div>
@@ -418,6 +418,7 @@ export const TranscriptionPanel = React.memo(
       return (
         <div className="sticky bottom-0 flex justify-center pb-2 pointer-events-none">
           <button
+            type="button"
             onClick={() => {
               setAutoScroll(true);
               endRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth" });
@@ -439,7 +440,7 @@ export const TranscriptionPanel = React.memo(
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
               {onClose && (
-                <button onClick={onClose} className="p-1 -ml-1 text-muted-foreground hover:text-foreground" aria-label="Back">
+                <button type="button" onClick={onClose} className="p-1 -ml-1 text-muted-foreground hover:text-foreground" aria-label="Back">
                   <Cancel01Icon className="w-5 h-5" />
                 </button>
               )}
@@ -491,7 +492,7 @@ export const TranscriptionPanel = React.memo(
               )}
             </div>
             {onClose && (
-              <button onClick={onClose} className="p-1 transition-colors text-muted-foreground hover:text-foreground" aria-label="Close">
+              <button type="button" onClick={onClose} className="p-1 transition-colors text-muted-foreground hover:text-foreground" aria-label="Close">
                 <Cancel01Icon className="w-5 h-5" />
               </button>
             )}

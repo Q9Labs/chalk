@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { Message01Icon, SentIcon, PlusSignIcon, CancelCircleIcon, FileTextIcon } from "../../utils/icons";
+import { Message01Icon, SentIcon, PlusSignIcon, CancelCircleIcon, Cancel01Icon, FileTextIcon } from "../../utils/icons";
 import { MessageBubble } from "./MessageBubble";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -70,6 +70,7 @@ export const ChatPanel = React.memo(
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const [isAtBottom, setIsAtBottom] = useState(true);
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
@@ -87,6 +88,14 @@ export const ChatPanel = React.memo(
         scrollToBottom();
       }
     }, [messages, isAtBottom]);
+
+    // Grow the composer with its content, up to its max height
+    useEffect(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }, [inputValue]);
 
     const handleScroll = () => {
       if (!messagesContainerRef.current) return;
@@ -143,7 +152,7 @@ export const ChatPanel = React.memo(
 
       if (oversizedFiles.length > 0) {
         const fileLabel = oversizedFiles.map((name) => `"${name}"`).join(", ");
-        setAttachmentError(`${fileLabel} exceed the max 25 MB per file limit.`);
+        setAttachmentError(`${fileLabel} ${oversizedFiles.length === 1 ? "exceeds" : "exceed"} the max 25 MB per file limit.`);
       } else {
         setAttachmentError(null);
       }
@@ -173,10 +182,7 @@ export const ChatPanel = React.memo(
             <div className="flex items-center gap-2">
               {onClose && (
                 <button type="button" onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-muted text-muted-foreground hover:text-foreground" aria-label="Close chat">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <Cancel01Icon size={20} />
                 </button>
               )}
             </div>
@@ -225,8 +231,8 @@ export const ChatPanel = React.memo(
         </div>
 
         {!isAtBottom && messages.length > 0 && (
-          <Button onClick={() => scrollToBottom()} size="sm" className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground">
-            New messages
+          <Button onClick={() => scrollToBottom()} size="sm" className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
+            Jump to latest
           </Button>
         )}
 
@@ -253,7 +259,7 @@ export const ChatPanel = React.memo(
                         <p className="text-[10px] text-muted-foreground">{formatFileSize(file.size)}</p>
                       </div>
                     </div>
-                    <button onClick={() => removeFile(index)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-transform">
+                    <button type="button" onClick={() => removeFile(index)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-transform">
                       <CancelCircleIcon className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -262,7 +268,11 @@ export const ChatPanel = React.memo(
             </div>
           )}
 
-          {attachmentError && <div className="mb-3 p-2 px-3 rounded-lg bg-destructive/10 text-destructive text-[11px] font-medium animate-in fade-in duration-200">{attachmentError}</div>}
+          {attachmentError && (
+            <div className="mb-3 p-2 px-3 rounded-lg bg-destructive/10 text-destructive text-[11px] font-medium animate-in fade-in duration-200" role="alert">
+              {attachmentError}
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple />
@@ -272,11 +282,13 @@ export const ChatPanel = React.memo(
 
             <div className="flex-1">
               <textarea
+                ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder || "Write message..."}
                 disabled={disabled || uploading}
+                aria-label="Message"
                 className={cn("w-full py-3 px-5 resize-none outline-none rounded-2xl text-sm", "bg-muted/50", "text-foreground", "placeholder:text-muted-foreground", "focus:ring-2 focus:ring-primary/50 focus:bg-muted/70", "transition-all")}
                 style={{ minHeight: "44px", maxHeight: "120px" }}
                 rows={1}

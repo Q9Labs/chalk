@@ -37,7 +37,7 @@ function EndScreenBase({ roomName, duration = 0, participantCount = 0, hasRecord
     if (onDownloadRecording) {
       onDownloadRecording();
     } else if (recordingUrl) {
-      window.open(recordingUrl, "_blank");
+      window.open(recordingUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -62,7 +62,7 @@ function EndScreenBase({ roomName, duration = 0, participantCount = 0, hasRecord
               <div className="w-1 h-1 rounded-full bg-[var(--muted-foreground)]" />
               <div className="flex items-center gap-1.5">
                 <UserGroupIcon size={14} />
-                <span>{participantCount} participants</span>
+                <span>{participantCount === 1 ? "1 participant" : `${participantCount} participants`}</span>
               </div>
             </div>
           </div>

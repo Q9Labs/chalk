@@ -174,15 +174,23 @@ export const WhatsNewDialog = React.memo<WhatsNewDialogProps>(({ isOpen, onClose
 
                 {/* Action buttons */}
                 <div className="flex items-center gap-2">
-                  <button onClick={onLater} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors", "text-muted-foreground hover:text-foreground hover:bg-muted", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", "inline-flex items-center gap-1.5")}>
+                  <button
+                    type="button"
+                    onClick={onLater}
+                    className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors", "text-muted-foreground hover:text-foreground hover:bg-muted", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", "inline-flex items-center gap-1.5")}
+                  >
                     <Clock01Icon size={16} />
                     Later
                   </button>
-                  <button onClick={onSkipAll} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors", "text-muted-foreground hover:text-foreground hover:bg-muted", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", "inline-flex items-center gap-1.5")}>
+                  <button
+                    type="button"
+                    onClick={onSkipAll}
+                    className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors", "text-muted-foreground hover:text-foreground hover:bg-muted", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", "inline-flex items-center gap-1.5")}
+                  >
                     <TickDouble01Icon size={16} />
                     Skip All
                   </button>
-                  <button onClick={isLast ? onSkipAll : onNext} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors", "bg-primary text-primary-foreground", "hover:opacity-90", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
+                  <button type="button" onClick={isLast ? onSkipAll : onNext} className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors", "bg-primary text-primary-foreground", "hover:opacity-90", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
                     {isLast ? "Got It" : "Next"}
                   </button>
                 </div>

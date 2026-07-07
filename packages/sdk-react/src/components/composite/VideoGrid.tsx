@@ -84,6 +84,9 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant = 
     return "col-span-1";
   };
 
+  // Stagger tile entrances, capped so large grids settle quickly
+  const getTileDelay = (index: number) => `${Math.min(index * 60, 480)}ms`;
+
   const mapToVideoTileParticipant = (p: Participant | undefined) => {
     if (!p) {
       return {
@@ -338,11 +341,11 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant = 
           pinned={p.id === pinnedParticipantId}
           aspectRatio="fill"
           className={cn("w-full h-full max-h-full chalk-animate-tile-pop", getGridItemClass(totalGridItems, index))}
-          style={{ animationDelay: `${index * 100}ms` }}
+          style={{ animationDelay: getTileDelay(index) }}
         />
       ))}
       {overflowCount > 0 && (
-        <div className={cn("rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center w-full h-full chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: `${visibleParticipants.length * 100}ms` }}>
+        <div className={cn("rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center w-full h-full chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: getTileDelay(visibleParticipants.length) }}>
           <span className="text-xl font-medium text-muted-foreground">+{overflowCount} more</span>
         </div>
       )}

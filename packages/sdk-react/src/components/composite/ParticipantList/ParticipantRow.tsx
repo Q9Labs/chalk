@@ -105,7 +105,7 @@ export function ParticipantRow({
               <span className={cn("text-xs flex items-center gap-1 shrink-0", variant === "sidebar" ? "text-muted-foreground" : "text-chalk-text-muted")}>
                 (you)
                 {onUpdateDisplayName && (
-                  <button onClick={() => setIsEditing(true)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-primary">
+                  <button type="button" onClick={() => setIsEditing(true)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-primary">
                     <Edit02Icon className="w-3 h-3" />
                   </button>
                 )}

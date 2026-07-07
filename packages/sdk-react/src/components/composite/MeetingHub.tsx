@@ -104,7 +104,7 @@ export const MeetingHub = React.memo<MeetingHubProps>(
               </div>
               <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest tabular-nums">Session Live • {formatDuration(meetingDuration)}</p>
             </div>
-            <button onClick={onClose} className="rounded-full p-2.5 text-white/20 hover:bg-white/5 hover:text-white transition-all duration-300">
+            <button type="button" onClick={onClose} className="rounded-full p-2.5 text-white/20 hover:bg-white/5 hover:text-white transition-all duration-300" aria-label="Close meeting hub">
               <Cancel01Icon size={20} />
             </button>
           </div>
@@ -112,8 +112,11 @@ export const MeetingHub = React.memo<MeetingHubProps>(
 
         {/* Segmented Control Tabs */}
         <div className="p-2">
-          <div className="flex p-1 rounded-2xl bg-white/[0.03] border border-white/5">
+          <div className="flex p-1 rounded-2xl bg-white/[0.03] border border-white/5" role="tablist" aria-label="Meeting hub sections">
             <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "details"}
               onClick={() => setActiveTab("details")}
               className={cn("flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold rounded-xl transition-all duration-300", activeTab === "details" ? "bg-white/10 text-white shadow-[0_4px_12px_rgba(0,0,0,0.2)]" : "text-white/40 hover:text-white/60 hover:bg-white/5")}
             >
@@ -121,6 +124,9 @@ export const MeetingHub = React.memo<MeetingHubProps>(
               Details
             </button>
             <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "health"}
               onClick={() => setActiveTab("health")}
               className={cn("flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold rounded-xl transition-all duration-300", activeTab === "health" ? "bg-white/10 text-white shadow-[0_4px_12px_rgba(0,0,0,0.2)]" : "text-white/40 hover:text-white/60 hover:bg-white/5")}
             >
@@ -154,7 +160,13 @@ export const MeetingHub = React.memo<MeetingHubProps>(
                   <div className="flex-1 overflow-hidden">
                     <p className="truncate text-xs font-bold text-white/60 group-hover:text-white/90 transition-colors">{meetingUrl}</p>
                   </div>
-                  <button onClick={handleCopy} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl transition-all duration-500", copied ? "bg-green-500/20 text-green-400 scale-110" : "bg-white/5 text-white/30 hover:bg-white/10 hover:text-white")}>
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className={cn("flex h-10 w-10 items-center justify-center rounded-2xl transition-all duration-500", copied ? "bg-green-500/20 text-green-400 scale-110" : "bg-white/5 text-white/30 hover:bg-white/10 hover:text-white")}
+                    aria-label={copied ? "Meeting link copied" : "Copy meeting link"}
+                    aria-live="polite"
+                  >
                     {copied ? <Tick01Icon size={18} /> : <Copy01Icon size={18} />}
                   </button>
                 </div>

@@ -34,8 +34,8 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({ roomName, duratio
       </div>
 
       <div className="flex flex-1 justify-center">
-        <div className={cn("px-3 py-1.5 rounded-full text-sm font-medium tabular-nums flex items-center gap-2", "bg-secondary/50 text-foreground")}>
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+        <div className={cn("px-3 py-1.5 rounded-full text-sm font-medium tabular-nums flex items-center gap-2", "bg-secondary/50 text-foreground")} aria-label={`Meeting duration ${formatDuration(duration)}`}>
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse motion-reduce:animate-none" aria-hidden="true" />
           {formatDuration(duration)}
         </div>
       </div>
@@ -45,17 +45,18 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({ roomName, duratio
         {isTranscribing && <StatusBadge status="transcribing" />}
 
         {onInvite && (
-          <button onClick={onInvite} className={cn("p-2 rounded-full transition-colors", "text-muted-foreground", "hover:text-foreground hover:bg-accent/50")} aria-label="Invite participants">
+          <button type="button" onClick={onInvite} className={cn("p-2 rounded-full transition-colors", "text-muted-foreground", "hover:text-foreground hover:bg-accent/50")} aria-label="Invite participants">
             <UserGroupIcon size={18} />
           </button>
         )}
 
         {onLayoutChange && (
-          <div className="hidden sm:flex rounded-full p-1 gap-1 bg-secondary/50">
-            <button onClick={() => onLayoutChange("grid")} className={cn("p-2 rounded-full transition-colors", layout === "grid" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")} aria-label="Grid layout" aria-pressed={layout === "grid"}>
+          <div className="hidden sm:flex rounded-full p-1 gap-1 bg-secondary/50" role="group" aria-label="Video layout">
+            <button type="button" onClick={() => onLayoutChange("grid")} className={cn("p-2 rounded-full transition-colors", layout === "grid" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")} aria-label="Grid layout" aria-pressed={layout === "grid"}>
               <LayoutGridIcon size={16} />
             </button>
             <button
+              type="button"
               onClick={() => onLayoutChange("spotlight")}
               className={cn("p-2 rounded-full transition-colors", layout === "spotlight" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")}
               aria-label="Spotlight layout"
@@ -63,14 +64,20 @@ export const MeetingHeader = React.memo<MeetingHeaderProps>(({ roomName, duratio
             >
               <Maximize01Icon size={16} />
             </button>
-            <button onClick={() => onLayoutChange("sidebar")} className={cn("p-2 rounded-full transition-colors", layout === "sidebar" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")} aria-label="Sidebar layout" aria-pressed={layout === "sidebar"}>
+            <button
+              type="button"
+              onClick={() => onLayoutChange("sidebar")}
+              className={cn("p-2 rounded-full transition-colors", layout === "sidebar" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50")}
+              aria-label="Sidebar layout"
+              aria-pressed={layout === "sidebar"}
+            >
               <ColumnIcon size={16} />
             </button>
           </div>
         )}
 
         {onSettings && (
-          <button onClick={onSettings} className={cn("p-2 rounded-full transition-colors", "text-muted-foreground", "hover:text-foreground hover:bg-accent/50")} aria-label="Settings">
+          <button type="button" onClick={onSettings} className={cn("p-2 rounded-full transition-colors", "text-muted-foreground", "hover:text-foreground hover:bg-accent/50")} aria-label="Settings">
             <Settings01Icon size={18} />
           </button>
         )}

@@ -253,19 +253,19 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
         {/* Zoom controls */}
         {enableZoom && (
           <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={toggleRotation} className={cn("p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-all mr-1", rotation !== 0 && "text-primary border-primary/50")} aria-label="Rotate view">
+            <button type="button" onClick={toggleRotation} className={cn("p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-all mr-1", rotation !== 0 && "text-primary border-primary/50")} aria-label="Rotate view">
               <RefreshIcon size={14} style={{ transform: `rotate(${-rotation}deg)` }} className="transition-transform duration-500 ease-in-out" />
             </button>
             <div className="w-px h-4 bg-white/20 mx-1" />
-            <button onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Zoom out">
+            <button type="button" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Zoom out">
               <ZoomOutIcon size={14} />
             </button>
             <span className="px-1.5 py-0.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 text-xs font-medium min-w-[2.5rem] text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Zoom in">
+            <button type="button" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Zoom in">
               <ZoomInIcon size={14} />
             </button>
             {(zoom > 1 || rotation !== 0) && (
-              <button onClick={handleResetZoom} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors ml-0.5" aria-label="Reset zoom">
+              <button type="button" onClick={handleResetZoom} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors ml-0.5" aria-label="Reset zoom">
                 <Maximize01Icon size={14} />
               </button>
             )}
@@ -277,7 +277,7 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
 
         {onStopShare && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={onStopShare} className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-md font-medium shadow-lg transition-colors">
+            <button type="button" onClick={onStopShare} className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-md font-medium shadow-lg transition-colors">
               Stop Sharing
             </button>
           </div>
@@ -286,6 +286,7 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
         {/* Collapse/Expand Toggle Button */}
         {showThumbnails && participants.length > 0 && (
           <button
+            type="button"
             onClick={toggleThumbnails}
             className={cn(
               "absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",

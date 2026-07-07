@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { cn } from "../../utils/cn";
-import { MicrophoneOff01Icon, Monitor01Icon, HandIcon } from "../../utils/icons";
+import { MicrophoneOff01Icon, Monitor01Icon, HandIcon, WifiOffIcon } from "../../utils/icons";
 import { Avatar } from "./Avatar";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantGradient, getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
@@ -133,6 +133,19 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
   const participantColors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const participantGradient = useMemo(() => getParticipantGradient(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
 
+  const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality <= 2;
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (!onClick) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onClick();
+      }
+    },
+    [onClick],
+  );
+
   return (
     <div
       className={cn(
@@ -141,7 +154,7 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
         pinned && "ring-2",
         participant.isSpeaking && !prefersReducedMotion && "chalk-animate-harmonic-pulse",
         participant.isSpeaking && prefersReducedMotion && "border-solid",
-        onClick && "cursor-pointer",
+        onClick && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
         className,
       )}
       style={
@@ -155,8 +168,10 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
       }
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onKeyDown={handleKeyDown}
       data-tour={participant.isLocal ? "local-video" : "video-grid"}
-      role="region"
+      role={onClick ? "button" : "region"}
+      tabIndex={onClick ? 0 : undefined}
       aria-label={`Video tile for ${participant.displayName}`}
     >
       {/* Video element (always rendered, visibility controlled by CSS) */}
@@ -171,6 +186,13 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
 
       {children}
 
+      {/* Poor connection warning, top-right */}
+      {showStatus && hasPoorConnection && (
+        <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-zinc-950/80 border border-white/5 pointer-events-none" role="status" aria-label={`${participant.displayName} has a poor connection`}>
+          <WifiOffIcon size={12} className="text-amber-400" />
+        </div>
+      )}
+
       {/* Compact bottom-left info chip */}
       {(showName || showStatus) && (
         <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
@@ -179,7 +201,12 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
             {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" gradientPreference={gradientPreference} />}
 
             {/* Name */}
-            {showName && <span className="text-xs font-medium text-white truncate max-w-[100px]">{participant.displayName}</span>}
+            {showName && (
+              <span className="text-xs font-medium text-white truncate max-w-[100px]" title={participant.displayName}>
+                {participant.displayName}
+                {participant.isLocal && participant.displayName !== "You" && <span className="text-white/60"> (You)</span>}
+              </span>
+            )}
 
             {/* Status icons inline */}
             {showStatus && (

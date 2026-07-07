@@ -94,7 +94,7 @@ function DocketControl({ isLeftCollapsed, isRightCollapsed, onMaximizeLeft, onMa
           <Tooltip>
             <TooltipTrigger
               render={
-                <button onClick={onMaximizeLeft} className="p-1.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors">
+                <button type="button" onClick={onMaximizeLeft} className="p-1.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors">
                   <ArrowLeft01Icon className="w-3.5 h-3.5" />
                 </button>
               }
@@ -109,7 +109,7 @@ function DocketControl({ isLeftCollapsed, isRightCollapsed, onMaximizeLeft, onMa
           <Tooltip>
             <TooltipTrigger
               render={
-                <button onClick={onMaximizeRight} className="p-1.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors">
+                <button type="button" onClick={onMaximizeRight} className="p-1.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors">
                   <ArrowRight01Icon className="w-3.5 h-3.5" />
                 </button>
               }
@@ -123,7 +123,7 @@ function DocketControl({ isLeftCollapsed, isRightCollapsed, onMaximizeLeft, onMa
         <Tooltip>
           <TooltipTrigger
             render={
-              <button onClick={onReset} className="p-2 bg-primary hover:bg-primary/90 rounded-full text-primary-foreground shadow-lg transition-all active:scale-95">
+              <button type="button" onClick={onReset} className="p-2 bg-primary hover:bg-primary/90 rounded-full text-primary-foreground shadow-lg transition-all active:scale-95">
                 <ArrowLeft01Icon className="w-4 h-4" />
               </button>
             }
@@ -138,7 +138,7 @@ function DocketControl({ isLeftCollapsed, isRightCollapsed, onMaximizeLeft, onMa
         <Tooltip>
           <TooltipTrigger
             render={
-              <button onClick={onReset} className="p-2 bg-primary hover:bg-primary/90 rounded-full text-primary-foreground shadow-lg transition-all active:scale-95">
+              <button type="button" onClick={onReset} className="p-2 bg-primary hover:bg-primary/90 rounded-full text-primary-foreground shadow-lg transition-all active:scale-95">
                 <ArrowRight01Icon className="w-4 h-4" />
               </button>
             }

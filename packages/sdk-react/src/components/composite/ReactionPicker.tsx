@@ -104,6 +104,7 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
           <div className="flex items-center justify-between w-full">
             {quickReactions.map((emoji, index) => (
               <button
+                type="button"
                 key={`quick-${emoji}-${index}`}
                 onClick={() => handleSelect(emoji)}
                 className={cn(
@@ -143,6 +144,7 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
             <div className={cn("flex flex-col items-center py-2 gap-1 border-r border-border/50 bg-accent/30 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]", size === "mini" ? "w-8" : size === "compact" ? "w-10" : "w-12")}>
               {categories.map(([key, category]) => (
                 <button
+                  type="button"
                   key={key}
                   onClick={() => {
                     void trigger("selection");
@@ -170,6 +172,7 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
               <div className={cn("grid gap-1", isSearching ? (size === "mini" ? "grid-cols-5" : size === "compact" ? "grid-cols-6" : "grid-cols-7") : size === "mini" ? "grid-cols-5" : size === "compact" ? "grid-cols-5" : "grid-cols-6")}>
                 {currentEmojis.map((emoji, index) => (
                   <button
+                    type="button"
                     key={`${emoji}-${index}`}
                     onClick={() => handleSelect(emoji)}
                     className={cn(

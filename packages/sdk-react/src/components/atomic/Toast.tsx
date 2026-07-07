@@ -54,13 +54,13 @@ export const Toast = React.memo<ToastProps>(({ message, type = "info", duration 
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-foreground leading-none">{message}</p>
         {action && (
-          <button onClick={action.onClick} className="mt-2 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity">
+          <button type="button" onClick={action.onClick} className="mt-2 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity">
             {action.label}
           </button>
         )}
       </div>
       {onDismiss && (
-        <button onClick={onDismiss} className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors" aria-label="Close">
+        <button type="button" onClick={onDismiss} className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors" aria-label="Close">
           <Cancel01Icon size={16} />
         </button>
       )}

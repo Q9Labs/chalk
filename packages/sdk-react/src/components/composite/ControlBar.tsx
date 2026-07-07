@@ -1,9 +1,3 @@
-interface MediaDevice {
-  deviceId: string;
-  label: string;
-  kind: MediaDeviceKind;
-  groupId?: string;
-}
 import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import {
@@ -30,6 +24,13 @@ import {
 import { ControlButton } from "../atomic";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { DeviceControlButton } from "./DeviceControlButton";
+
+interface MediaDevice {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  groupId?: string;
+}
 
 export type ControlBarButton = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "more" | "info" | "thumbsup" | "leave";
 
@@ -126,6 +127,8 @@ function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined,
   ];
 }
 
+const DEFAULT_BUTTONS: ControlBarButton[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "transcription", "thumbsup", "pip", "settings"];
+
 const formatDuration = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -187,9 +190,8 @@ export const ControlBar = React.memo(
   }: ControlBarProps) => {
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
     const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
-    const defaultButtons: ControlBarButton[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "transcription", "thumbsup", "pip", "settings"];
 
-    const buttonsToRender = buttons ?? defaultButtons;
+    const buttonsToRender = buttons ?? DEFAULT_BUTTONS;
     useEffect(() => {
       if (variant !== "dock") {
         return;
@@ -356,7 +358,13 @@ export const ControlBar = React.memo(
             {/* Group 2: Interactions */}
             <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
               {onToggleHandRaise && (
-                <button type="button" onClick={onToggleHandRaise} className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isHandRaised ? "bg-primary text-primary-foreground" : "")} aria-label="Raise Hand">
+                <button
+                  type="button"
+                  onClick={onToggleHandRaise}
+                  className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isHandRaised ? "bg-primary text-primary-foreground" : "")}
+                  aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
+                  aria-pressed={isHandRaised}
+                >
                   <HandIcon className="w-5 h-5" />
                 </button>
               )}
@@ -387,7 +395,7 @@ export const ControlBar = React.memo(
           {/* Left: Timer section - Absolute positioned */}
           <div className="absolute left-6 bottom-3 flex items-center rounded-full px-3 py-1.5 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-lg pointer-events-auto">
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse motion-reduce:animate-none" aria-hidden="true" />
               <span className="text-xs font-medium tracking-wide tabular-nums text-zinc-900 dark:text-white/90">{formatDuration(meetingDuration)}</span>
             </div>
           </div>

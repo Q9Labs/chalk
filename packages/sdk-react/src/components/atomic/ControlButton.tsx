@@ -46,6 +46,7 @@ export const ControlButton = React.memo(({ icon, label, active = false, danger =
       className={cn(
         "chalk-button-tactile group relative flex items-center justify-center transition-all duration-300 ease-out",
         "text-[var(--foreground)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
         size === "sm" && "h-9 w-9 rounded-full",
         size === "md" && "h-11 w-11 rounded-full",
         size === "lg" && "h-14 w-14 rounded-full",

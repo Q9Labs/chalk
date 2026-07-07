@@ -78,19 +78,19 @@ export const SettingsPanel = React.memo(
         </div>
 
         <div className="flex border-b border-border/50">
-          <button onClick={() => setActiveTab("audio")} className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "audio" ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}>
+          <button type="button" onClick={() => setActiveTab("audio")} className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "audio" ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}>
             <div className="flex items-center justify-center gap-2">
               <Microphone01Icon className="w-4 h-4" />
               Audio
             </div>
           </button>
-          <button onClick={() => setActiveTab("video")} className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "video" ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}>
+          <button type="button" onClick={() => setActiveTab("video")} className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "video" ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}>
             <div className="flex items-center justify-center gap-2">
               <Video01Icon className="w-4 h-4" />
               Video
             </div>
           </button>
-          <button onClick={() => setActiveTab("general")} className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "general" ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}>
+          <button type="button" onClick={() => setActiveTab("general")} className={cn("flex-1 py-3 text-sm font-medium transition-colors border-b-2", activeTab === "general" ? "text-primary border-primary" : "text-muted-foreground border-transparent hover:text-foreground")}>
             <div className="flex items-center justify-center gap-2">
               <Settings01Icon className="w-4 h-4" />
               General

@@ -172,7 +172,7 @@ export const ParticipantList = React.memo(
                 </Button>
               )}
               {onClose && (
-                <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted/50" aria-label="Close">
+                <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted/50" aria-label="Close">
                   <Cancel01Icon className="w-5 h-5" />
                 </button>
               )}

@@ -115,7 +115,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
 
                 {/* Timestamp - click to copy */}
                 {showTimestamp && (
-                  <button onClick={handleCopyTimestamp} className={cn("ml-auto text-xs transition-colors", copied ? "text-primary" : "text-muted-foreground hover:text-foreground")} title={copied ? "Copied!" : "Click to copy timestamp"}>
+                  <button type="button" onClick={handleCopyTimestamp} className={cn("ml-auto text-xs transition-colors", copied ? "text-primary" : "text-muted-foreground hover:text-foreground")} title={copied ? "Copied!" : "Click to copy timestamp"}>
                     {copied ? "Copied!" : timeString}
                   </button>
                 )}

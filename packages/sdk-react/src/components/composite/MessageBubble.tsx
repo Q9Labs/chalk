@@ -136,7 +136,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
 
             if (isImage && imageUrl) {
               return (
-                <button key={file.id} onClick={() => handleAttachmentClick(file)} className="relative group overflow-hidden rounded-lg border border-border/50 max-w-full sm:max-w-xs aspect-auto">
+                <button type="button" key={file.id} onClick={() => handleAttachmentClick(file)} className="relative group overflow-hidden rounded-lg border border-border/50 max-w-full sm:max-w-xs aspect-auto">
                   <img src={imageUrl} alt={file.fileName} className="w-full h-auto object-cover transition-transform group-hover:scale-105" style={{ maxHeight: "240px" }} />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <Download01Icon className="w-8 h-8 text-white" />
@@ -147,6 +147,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
 
             return (
               <button
+                type="button"
                 key={file.id}
                 onClick={() => handleAttachmentClick(file)}
                 className={cn(

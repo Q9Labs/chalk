@@ -67,10 +67,15 @@ export const LeaveConfirmationDialog = React.memo<LeaveConfirmationDialogProps>(
           </div>
 
           <div className="flex gap-3 mt-8">
-            <button onClick={onClose} className={cn("flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none", "bg-secondary/50 text-secondary-foreground hover:bg-secondary border border-transparent", "focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-border")}>
+            <button
+              type="button"
+              onClick={onClose}
+              className={cn("flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none", "bg-secondary/50 text-secondary-foreground hover:bg-secondary border border-transparent", "focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-border")}
+            >
               Cancel
             </button>
             <button
+              type="button"
               onClick={onConfirm}
               className={cn(
                 "flex-1 h-11 rounded-xl font-medium text-sm transition-all outline-none text-white",
