@@ -1,0 +1,50 @@
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --paper: #faf9f5;
+  --surface: #ffffff;
+  --board: #26382f;
+  --board-deep: #1e2d26;
+
+  /* ink */
+  --ink: #20281f;
+  --ink-2: #5a6355;
+  --ink-3: #8b9184;
+
+  /* lines */
+  --line: #e7e4d9;
+  --line-strong: #d8d4c5;
+
+  /* brand accent (chalk green, deepened for contrast) */
+  --accent: #3e7647;
+  --accent-strong: #335f3b;
+  --accent-wash: #ecf3e7;
+
+  /* the four chalk sticks */
+  --chalk-green: #8fbf87;
+  --chalk-yellow: #e2c25f;
+  --chalk-blue: #7fc0d8;
+  --chalk-pink: #dc9a9a;
+
+  --danger: #c05151;
+
+  /* type */
+  --font-display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, sans-serif;
+  --font-mono: "Spline Sans Mono", ui-monospace, "SF Mono", monospace;
+
+  /* shape */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+
+  /* depth (warm-tinted) */
+  --shadow-sm: 0 1px 2px rgba(46, 52, 38, 0.06), 0 2px 8px rgba(46, 52, 38, 0.05);
+  --shadow-md: 0 2px 6px rgba(46, 52, 38, 0.06), 0 12px 28px rgba(46, 52, 38, 0.09);
+  --shadow-lg: 0 4px 10px rgba(46, 52, 38, 0.07), 0 28px 60px rgba(46, 52, 38, 0.14);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
