@@ -186,6 +186,10 @@ func handleStartIntegrationConnection(service IntegrationService, authorizer Ten
 		}
 
 		principal, _ := authentication.PrincipalFromContext(r.Context())
+		if principal.Kind != authentication.PrincipalUser || principal.UserID.IsZero() {
+			writeError(w, http.StatusForbidden, "forbidden", "Access denied")
+			return
+		}
 		var request startIntegrationConnectionRequest
 		if err := decodeRequest(r, &request); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
@@ -223,7 +227,7 @@ func validIntegrationCallbackURL(callbackURL *string, allowedOrigins []string) b
 	}
 	for _, allowedOrigin := range allowedOrigins {
 		if strings.TrimSpace(allowedOrigin) == "*" {
-			continue
+			return true
 		}
 		origin, ok := integrationCallbackOrigin(allowedOrigin)
 		if ok && origin == callbackOrigin {
