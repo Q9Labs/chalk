@@ -32,9 +32,11 @@ we want future work to preserve.
 - Types and interfaces are nouns; functions and methods are verbs. A method named
   for its return type (`input()`, `config()`) is a smell — name the action
   (`toCreateUserInput`, `serviceInput`).
-- Keep verb families consistent so a reader learns them once: `handle*` for HTTP
-  handlers, `mount*Routes` for routing, `new*Response` for response DTO builders,
-  `write*` for response writers, `Start*`/`Complete*` for multi-step flows.
+- Keep verb families consistent so a reader learns them once: `*Endpoint` for
+  HTTP endpoint factories, `decode*Request` for transport decoders,
+  `mount*Routes` for routing, `new*Response` for response DTO builders,
+  `write*` for specialized response writers, and `Start*`/`Complete*` for
+  multi-step flows.
 - Cross-cutting initialisms stay fully cased: `API`, `URL`, `ID`, `OAuth`,
   `HTTP` — `APIKeyID`, `AuthorizationURL`, not `ApiKeyId` or `AuthorizationUrl`.
 
@@ -81,8 +83,8 @@ we want future work to preserve.
 - Keep `cmd/main.go` as the composition root. It should wire config, adapters,
   services, router, and lifecycle, not own domain behavior.
 - Keep each API slice's chain explicit:
-  `HTTP route -> service interface -> service -> repository interface -> Postgres adapter -> sqlc query`.
-- HTTP handlers translate transport concerns into service inputs. Business
+  `HTTP endpoint -> service interface -> service -> repository interface -> Postgres adapter -> sqlc query`.
+- HTTP endpoints translate transport concerns into service inputs. Business
   decisions belong in services; database-driver details belong in adapters.
 - Parse and validate request-shaped data as close to the HTTP edge as practical.
   Fail early before doing service or database work.
@@ -95,14 +97,14 @@ we want future work to preserve.
 ## Authentication And Authorization
 
 - Every `/v1` route is authenticated unless it is deliberately public (health,
-  readiness, the auth/login/register/OAuth handlers). Mount protected routes
-  under a group that applies `requireAuthentication`; do not attach a protected
-  handler directly. New route groups default to protected.
+  readiness, auth/login/register, and OAuth start/callback). Mount protected
+  routes under a group that applies `requireAuthentication`; new route groups
+  default to protected.
 - Authenticating the caller is not authorizing the request. After you know _who_
   is calling, check _what_ they may touch. For any tenant-scoped resource, call
   `authorization.TenantPolicy.AuthorizeTenant` with the principal, the tenant ID
   from the request, and the required permission before doing any read or write.
-- Never trust an ID from the URL or body as proof of access. A handler that
+- Never trust an ID from the URL or body as proof of access. An endpoint that
   reads `tenant_id` from the path must verify the principal's membership in that
   tenant, or the endpoint is an IDOR.
 - Global, cross-tenant reads (platform-admin listings such as `ListUsers`,
@@ -150,7 +152,8 @@ we want future work to preserve.
   defect, not a convenience.
 - Route repeated edge concerns through a shared helper rather than re-spelling
   them. Nil-service guards, error-to-HTTP mapping, and route-ID parsing should
-  look identical across sibling handler files, or be dropped where they are dead.
+  look identical across sibling endpoint files, or be dropped where they are
+  dead.
 
 ## Shipping Foundations
 
