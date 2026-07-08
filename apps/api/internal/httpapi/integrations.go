@@ -580,9 +580,13 @@ func newStartIntegrationConnectionResponse(result integrations.StartConnectionRe
 }
 
 func newRefreshIntegrationConnectionResponse(result integrations.RefreshConnectionResult, principal authentication.Principal, ownerScopeUserID utilities.ID) refreshIntegrationConnectionResponse {
+	connectURL := result.ConnectURL
+	if shouldRedactIntegrationConnectionDetails(result.Connection, principal, ownerScopeUserID) {
+		connectURL = ""
+	}
 	return refreshIntegrationConnectionResponse{
 		Connection: newIntegrationConnectionResponseForPrincipal(result.Connection, principal, ownerScopeUserID),
-		ConnectURL: result.ConnectURL,
+		ConnectURL: connectURL,
 	}
 }
 
@@ -612,11 +616,14 @@ func newIntegrationConnectionListResponse(list integrations.ConnectionList, prin
 }
 
 func newIntegrationConnectionResponseForPrincipal(connection integrations.Connection, principal authentication.Principal, ownerScopeUserID utilities.ID) integrationConnectionResponse {
-	redactPersonalDetails := ownerScopeUserID.IsZero()
+	return newIntegrationConnectionResponse(connection, shouldRedactIntegrationConnectionDetails(connection, principal, ownerScopeUserID))
+}
+
+func shouldRedactIntegrationConnectionDetails(connection integrations.Connection, principal authentication.Principal, ownerScopeUserID utilities.ID) bool {
 	if principal.Kind == authentication.PrincipalUser && principal.UserID == connection.UserID {
-		redactPersonalDetails = false
+		return false
 	}
-	return newIntegrationConnectionResponse(connection, redactPersonalDetails)
+	return ownerScopeUserID.IsZero()
 }
 
 func newIntegrationConnectionResponse(connection integrations.Connection, redactPersonalDetails bool) integrationConnectionResponse {

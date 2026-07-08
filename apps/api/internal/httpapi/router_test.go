@@ -1775,8 +1775,11 @@ func TestRefreshIntegrationConnectionLeavesAdminTenantScopedButAudited(t *testin
 				if gotConnectionID != connectionID {
 					t.Fatalf("connection id = %q, want %q", gotConnectionID.String(), connectionID.String())
 				}
+				connection := integrationConnection(t, connectionID, integrations.StatusActive)
+				connection.UserID = mustTenantID(t, "44444444-4444-4444-8444-444444444444")
 				return integrations.RefreshConnectionResult{
-					Connection: integrationConnection(t, connectionID, integrations.StatusActive),
+					Connection: connection,
+					ConnectURL: "https://composio.test/reauth",
 				}, nil
 			},
 		},
@@ -1784,6 +1787,18 @@ func TestRefreshIntegrationConnectionLeavesAdminTenantScopedButAudited(t *testin
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		ConnectURL string `json:"connect_url"`
+		Connection struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"connection"`
+	}
+	decodeJSON(t, res, &body)
+	if body.ConnectURL != "" {
+		t.Fatalf("connect url = %q, want redacted for tenant-scoped refresh", body.ConnectURL)
 	}
 }
 

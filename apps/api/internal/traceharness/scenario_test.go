@@ -102,6 +102,15 @@ func TestRunAllRegisteredScenarios(t *testing.T) {
 	}
 }
 
+func TestScenarioNamesIncludesIntegrationActionScenario(t *testing.T) {
+	for _, scenario := range ScenarioNames() {
+		if scenario == ExecuteIntegrationActionScenario {
+			return
+		}
+	}
+	t.Fatalf("ScenarioNames missing %q", ExecuteIntegrationActionScenario)
+}
+
 func TestRunExecuteIntegrationActionScenario(t *testing.T) {
 	result, err := Run(context.Background(), ExecuteIntegrationActionScenario)
 	if err != nil {
