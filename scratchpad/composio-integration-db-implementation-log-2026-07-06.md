@@ -8,7 +8,7 @@
   `apps/api/docs/route-workflow.md`, and
   `apps/api/docs/database-workflow.md` before editing.
 - Implemented DB foundation only:
-  - migration `20260706151000_add_integration_connections.sql`
+  - migration `20260708104000_add_integration_connections.sql`
   - `audit_logs` table promoted into migrations
   - `integration_connections` table
   - sqlc queries for audit log creation/listing
