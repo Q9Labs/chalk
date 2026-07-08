@@ -126,7 +126,7 @@ func (a Adapter) CreateConnectLink(ctx context.Context, input integrations.Creat
 		AllowMultiple: true,
 	}
 	var response createConnectLinkResponse
-	if err := a.doWithStatuses(ctx, http.MethodPost, "/connected_accounts/link", nil, request, []int{http.StatusOK, http.StatusCreated}, &response); err != nil {
+	if err := a.doWithStatuses(ctx, http.MethodPost, "/connected_accounts/link", nil, request, []int{http.StatusOK, http.StatusCreated}, nil, &response); err != nil {
 		return integrations.ConnectLink{}, err
 	}
 
@@ -141,7 +141,7 @@ func (a Adapter) CreateConnectLink(ctx context.Context, input integrations.Creat
 
 func (a Adapter) GetConnection(ctx context.Context, input integrations.GetProviderConnectionInput) (integrations.ProviderConnection, error) {
 	var response connectedAccountResponse
-	if err := a.do(ctx, http.MethodGet, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef), nil, nil, http.StatusOK, &response); err != nil {
+	if err := a.doConnectedAccount(ctx, http.MethodGet, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef), nil, nil, http.StatusOK, &response); err != nil {
 		return integrations.ProviderConnection{}, err
 	}
 	return mapConnectedAccount(response), nil
@@ -150,7 +150,7 @@ func (a Adapter) GetConnection(ctx context.Context, input integrations.GetProvid
 func (a Adapter) RefreshConnection(ctx context.Context, input integrations.RefreshConnectionInput) (integrations.ProviderConnection, error) {
 	path := "/connected_accounts/" + url.PathEscape(input.ExternalAccountRef) + "/refresh"
 	var response refreshConnectionResponse
-	if err := a.do(ctx, http.MethodPost, path, nil, map[string]any{}, http.StatusOK, &response); err != nil {
+	if err := a.doConnectedAccount(ctx, http.MethodPost, path, nil, map[string]any{}, http.StatusOK, &response); err != nil {
 		return integrations.ProviderConnection{}, err
 	}
 	connection, err := a.GetConnection(ctx, integrations.GetProviderConnectionInput(input))
@@ -166,7 +166,7 @@ func (a Adapter) DisableConnection(ctx context.Context, input integrations.Disab
 	if input.Revoke {
 		query.Set("revoke_on_delete", "true")
 	}
-	return a.do(ctx, http.MethodDelete, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef), query, nil, http.StatusOK, nil)
+	return a.doConnectedAccount(ctx, http.MethodDelete, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef), query, nil, http.StatusOK, nil)
 }
 
 func (a Adapter) ExecuteAction(ctx context.Context, input integrations.ExecuteProviderActionInput) (integrations.ProviderActionResult, error) {
@@ -311,7 +311,7 @@ func (a Adapter) managedAuthConfig(ctx context.Context, toolkitSlug string) (aut
 	query.Set("limit", "10")
 
 	var response listAuthConfigsResponse
-	if err := a.do(ctx, http.MethodGet, "/auth_configs", query, nil, http.StatusOK, &response); err != nil {
+	if err := a.doWithStatuses(ctx, http.MethodGet, "/auth_configs", query, nil, []int{http.StatusOK}, integrations.ErrConnectionAuthUnconfigured, &response); err != nil {
 		return authConfig{}, err
 	}
 
@@ -325,10 +325,14 @@ func (a Adapter) managedAuthConfig(ctx context.Context, toolkitSlug string) (aut
 }
 
 func (a Adapter) do(ctx context.Context, method string, path string, query url.Values, body any, wantStatus int, target any) error {
-	return a.doWithStatuses(ctx, method, path, query, body, []int{wantStatus}, target)
+	return a.doWithStatuses(ctx, method, path, query, body, []int{wantStatus}, nil, target)
 }
 
-func (a Adapter) doWithStatuses(ctx context.Context, method string, path string, query url.Values, body any, wantStatuses []int, target any) error {
+func (a Adapter) doConnectedAccount(ctx context.Context, method string, path string, query url.Values, body any, wantStatus int, target any) error {
+	return a.doWithStatuses(ctx, method, path, query, body, []int{wantStatus}, integrations.ErrConnectionNotFound, target)
+}
+
+func (a Adapter) doWithStatuses(ctx context.Context, method string, path string, query url.Values, body any, wantStatuses []int, notFoundErr error, target any) error {
 	if a.client == nil || a.baseURL == nil || a.apiKey == "" {
 		return integrations.ErrProviderUnavailable
 	}
@@ -365,7 +369,7 @@ func (a Adapter) doWithStatuses(ctx context.Context, method string, path string,
 
 	if !containsStatus(wantStatuses, res.StatusCode) {
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
-		return mapStatusError(res.StatusCode)
+		return mapStatusError(res.StatusCode, notFoundErr)
 	}
 	if target == nil {
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
@@ -387,7 +391,7 @@ func containsStatus(statuses []int, status int) bool {
 	return false
 }
 
-func mapStatusError(status int) error {
+func mapStatusError(status int, notFoundErr error) error {
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return integrations.ErrProviderUnauthorized
@@ -396,7 +400,10 @@ func mapStatusError(status int) error {
 	case http.StatusRequestTimeout, http.StatusRequestEntityTooLarge, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return integrations.ErrProviderUnavailable
 	case http.StatusNotFound:
-		return integrations.ErrConnectionNotFound
+		if notFoundErr != nil {
+			return notFoundErr
+		}
+		return integrations.ErrProviderUnavailable
 	default:
 		if status >= 500 {
 			return integrations.ErrProviderUnavailable

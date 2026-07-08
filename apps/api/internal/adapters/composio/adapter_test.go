@@ -112,6 +112,23 @@ func TestGetConnectionMapsStatusAndScopes(t *testing.T) {
 	}
 }
 
+func TestGetConnectionMapsNotFoundToConnectionNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3.1/connected_accounts/ca_missing" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		writeJSON(t, w, http.StatusNotFound, map[string]any{"error": "missing"})
+	}))
+	defer server.Close()
+
+	_, err := adapterForServer(t, server).GetConnection(context.Background(), integrations.GetProviderConnectionInput{
+		ExternalAccountRef: "ca_missing",
+	})
+	if !errors.Is(err, integrations.ErrConnectionNotFound) {
+		t.Fatalf("error = %v, want connection not found", err)
+	}
+}
+
 func TestRefreshConnectionReturnsRedirectURL(t *testing.T) {
 	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +278,28 @@ func TestExecuteActionSendsEmptyArgumentsForStructuredRequestWithoutArgs(t *test
 	}
 }
 
+func TestExecuteActionDoesNotMapToolNotFoundToConnectionNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3.1/tools/execute/SLACK_SEND_MESSAGE" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		writeJSON(t, w, http.StatusNotFound, map[string]any{"error": "missing tool"})
+	}))
+	defer server.Close()
+
+	_, err := adapterForServer(t, server).ExecuteAction(context.Background(), integrations.ExecuteProviderActionInput{
+		UserID:             mustID(t, "22222222-2222-4222-8222-222222222222"),
+		ExternalAccountRef: "ca_slack",
+		ActionSlug:         "SLACK_SEND_MESSAGE",
+	})
+	if !errors.Is(err, integrations.ErrProviderUnavailable) {
+		t.Fatalf("error = %v, want provider unavailable", err)
+	}
+	if errors.Is(err, integrations.ErrConnectionNotFound) {
+		t.Fatalf("error = %v, did not want connection not found", err)
+	}
+}
+
 func TestListToolsPinsToolkitAndToolSlugFilters(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v3.1/tools" {
@@ -392,6 +431,25 @@ func TestRequiredScopesPostsToolList(t *testing.T) {
 	}
 	if len(scopes.Scopes) != 1 || scopes.Scopes[0] != "chat:write" {
 		t.Fatalf("scopes = %#v", scopes.Scopes)
+	}
+}
+
+func TestManagedAuthConfigMapsNotFoundToAuthUnconfigured(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3.1/auth_configs" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		writeJSON(t, w, http.StatusNotFound, map[string]any{"error": "missing config"})
+	}))
+	defer server.Close()
+
+	_, err := adapterForServer(t, server).CreateConnectLink(context.Background(), integrations.CreateConnectLinkInput{
+		UserID:      mustID(t, "22222222-2222-4222-8222-222222222222"),
+		Service:     "slack",
+		ToolkitSlug: "slack",
+	})
+	if !errors.Is(err, integrations.ErrConnectionAuthUnconfigured) {
+		t.Fatalf("error = %v, want auth unconfigured", err)
 	}
 }
 
