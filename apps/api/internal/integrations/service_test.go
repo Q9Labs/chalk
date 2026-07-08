@@ -476,6 +476,63 @@ func TestRefreshConnectionReturnsProviderConnectURL(t *testing.T) {
 	}
 }
 
+func TestRefreshConnectionAuditsNonActiveProviderStatusAsFailure(t *testing.T) {
+	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
+	userID := mustID(t, "22222222-2222-4222-8222-222222222222")
+	connectionID := mustID(t, "33333333-3333-4333-8333-333333333333")
+	service := NewService(repository{
+		getConnection: func(ctx context.Context, gotTenantID utilities.ID, gotID utilities.ID) (Connection, error) {
+			return Connection{
+				ID:                 gotID,
+				TenantID:           gotTenantID,
+				UserID:             userID,
+				ExternalAccountRef: "ca_test",
+				Status:             StatusExpired,
+			}, nil
+		},
+		updateConnection: func(ctx context.Context, input UpdateConnectionInput) (Connection, error) {
+			if input.Status != StatusExpired {
+				t.Fatalf("status = %s, want expired", input.Status)
+			}
+			return Connection{
+				ID:                 input.ID,
+				TenantID:           input.TenantID,
+				UserID:             userID,
+				ExternalAccountRef: "ca_test",
+				Status:             input.Status,
+			}, nil
+		},
+		createAuditLog: func(ctx context.Context, input AuditLogInput) error {
+			if input.Action != auditConnectionFailed || input.Outcome != "failure" {
+				t.Fatalf("audit = %s/%s", input.Action, input.Outcome)
+			}
+			if input.ErrorCode == nil || *input.ErrorCode != "integration_connection_not_active" {
+				t.Fatalf("error code = %v, want non-active code", input.ErrorCode)
+			}
+			return nil
+		},
+	}, provider{
+		refreshConnection: func(ctx context.Context, input RefreshConnectionInput) (ProviderConnection, error) {
+			return ProviderConnection{
+				ExternalAccountRef: "ca_test",
+				Status:             StatusExpired,
+				RefreshURL:         "https://composio.test/reauth",
+			}, nil
+		},
+	}, catalogForTest(t))
+
+	result, err := service.RefreshConnection(context.Background(), tenantID, userID, userID, auditActorUser, connectionID)
+	if err != nil {
+		t.Fatalf("refresh connection: %v", err)
+	}
+	if result.ConnectURL != "https://composio.test/reauth" {
+		t.Fatalf("connect url = %q, want provider refresh URL", result.ConnectURL)
+	}
+	if result.Connection.Status != StatusExpired {
+		t.Fatalf("status = %s, want expired", result.Connection.Status)
+	}
+}
+
 func TestDisableConnectionDoesNotSetRevokedAtForSoftDisable(t *testing.T) {
 	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
 	userID := mustID(t, "22222222-2222-4222-8222-222222222222")

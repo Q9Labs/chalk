@@ -1543,7 +1543,7 @@ func TestStartIntegrationConnectionRejectsUntrustedCallbackURL(t *testing.T) {
 	assertErrorCode(t, res, "invalid_callback_url")
 }
 
-func TestStartIntegrationConnectionAllowsWildcardCallbackOrigin(t *testing.T) {
+func TestStartIntegrationConnectionRejectsWildcardCallbackOrigin(t *testing.T) {
 	called := false
 	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections", `{"provider":"composio","service":"slack","callback_url":"https://app.chalk.test/integrations/callback"}`, httpapi.Options{
 		CORS: httpapi.CORSOptions{
@@ -1560,12 +1560,13 @@ func TestStartIntegrationConnectionAllowsWildcardCallbackOrigin(t *testing.T) {
 		},
 	})
 
-	if res.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
-	if !called {
-		t.Fatal("integration service was not called")
+	if called {
+		t.Fatal("integration service was called")
 	}
+	assertErrorCode(t, res, "invalid_callback_url")
 }
 
 func TestStartIntegrationConnectionRejectsSystemPrincipal(t *testing.T) {

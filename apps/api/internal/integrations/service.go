@@ -232,7 +232,16 @@ func (s Service) RefreshConnection(ctx context.Context, tenantID utilities.ID, o
 		return RefreshConnectionResult{}, err
 	}
 
-	if err := s.audit(ctx, tenantID, actorUserID, actorType, auditConnectionConnected, connection.ID, "success", nil); err != nil {
+	action := auditConnectionConnected
+	outcome := "success"
+	var errorCode *string
+	if updated.Status != StatusActive {
+		action = auditConnectionFailed
+		outcome = "failure"
+		code := "integration_connection_not_active"
+		errorCode = &code
+	}
+	if err := s.audit(ctx, tenantID, actorUserID, actorType, action, connection.ID, outcome, errorCode); err != nil {
 		return RefreshConnectionResult{}, err
 	}
 	return RefreshConnectionResult{

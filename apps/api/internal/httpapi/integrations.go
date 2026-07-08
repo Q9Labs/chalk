@@ -226,9 +226,6 @@ func validIntegrationCallbackURL(callbackURL *string, allowedOrigins []string) b
 		return false
 	}
 	for _, allowedOrigin := range allowedOrigins {
-		if strings.TrimSpace(allowedOrigin) == "*" {
-			return true
-		}
 		origin, ok := integrationCallbackOrigin(allowedOrigin)
 		if ok && origin == callbackOrigin {
 			return true
