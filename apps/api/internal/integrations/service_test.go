@@ -11,6 +11,7 @@ import (
 )
 
 type repository struct {
+	runInTransaction           func(context.Context, func(Repository) error) error
 	createConnection           func(context.Context, CreateConnectionInput) (Connection, error)
 	getConnection              func(context.Context, utilities.ID, utilities.ID) (Connection, error)
 	getConnectionByExternalRef func(context.Context, utilities.ID, ProviderName, ServiceID, string) (Connection, error)
@@ -25,6 +26,13 @@ type provider struct {
 	refreshConnection func(context.Context, RefreshConnectionInput) (ProviderConnection, error)
 	disableConnection func(context.Context, DisableConnectionInput) error
 	executeAction     func(context.Context, ExecuteProviderActionInput) (ProviderActionResult, error)
+}
+
+func (r repository) RunInTransaction(ctx context.Context, fn func(Repository) error) error {
+	if r.runInTransaction != nil {
+		return r.runInTransaction(ctx, fn)
+	}
+	return fn(r)
 }
 
 func (r repository) CreateConnection(ctx context.Context, input CreateConnectionInput) (Connection, error) {
@@ -179,6 +187,58 @@ func TestStartConnectionCreatesPendingConnectionAndAudit(t *testing.T) {
 	}
 	if !auditCalled {
 		t.Fatal("audit was not written")
+	}
+}
+
+func TestStartConnectionCreatesConnectionAndAuditInTransaction(t *testing.T) {
+	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
+	userID := mustID(t, "22222222-2222-4222-8222-222222222222")
+	transactionCalled := false
+	auditErr := errors.New("audit failed")
+
+	service := NewService(repository{
+		getConnectionByExternalRef: func(context.Context, utilities.ID, ProviderName, ServiceID, string) (Connection, error) {
+			return Connection{}, ErrConnectionNotFound
+		},
+		runInTransaction: func(ctx context.Context, fn func(Repository) error) error {
+			transactionCalled = true
+			return fn(repository{
+				createConnection: func(ctx context.Context, input CreateConnectionInput) (Connection, error) {
+					return Connection{
+						ID:                 input.ID,
+						TenantID:           input.TenantID,
+						UserID:             input.UserID,
+						Provider:           input.Provider,
+						Service:            input.Service,
+						ExternalAccountRef: input.ExternalAccountRef,
+						Status:             input.Status,
+					}, nil
+				},
+				createAuditLog: func(context.Context, AuditLogInput) error {
+					return auditErr
+				},
+			})
+		},
+	}, provider{
+		createConnectLink: func(context.Context, CreateConnectLinkInput) (ConnectLink, error) {
+			return ConnectLink{
+				URL:                "https://composio.test/connect",
+				ExternalAccountRef: "ca_test",
+			}, nil
+		},
+	}, catalogForTest(t))
+
+	_, err := service.StartConnection(context.Background(), StartConnectionInput{
+		TenantID: tenantID,
+		UserID:   userID,
+		Provider: ProviderComposio,
+		Service:  "slack",
+	})
+	if !errors.Is(err, auditErr) {
+		t.Fatalf("error = %v, want audit error", err)
+	}
+	if !transactionCalled {
+		t.Fatal("transaction was not used")
 	}
 }
 

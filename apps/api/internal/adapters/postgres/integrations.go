@@ -16,7 +16,8 @@ import (
 )
 
 type IntegrationRepository struct {
-	queries integrationQuerier
+	queries    integrationQuerier
+	transactor integrationTransactor
 }
 
 type integrationQuerier interface {
@@ -29,8 +30,37 @@ type integrationQuerier interface {
 	CreateAuditLog(ctx context.Context, arg sqlc.CreateAuditLogParams) (sqlc.AuditLog, error)
 }
 
-func NewIntegrationRepository(queries integrationQuerier) IntegrationRepository {
-	return IntegrationRepository{queries: queries}
+type integrationTransactor interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+func NewIntegrationRepository(queries integrationQuerier, transactors ...integrationTransactor) IntegrationRepository {
+	repository := IntegrationRepository{queries: queries}
+	if len(transactors) > 0 {
+		repository.transactor = transactors[0]
+	}
+	return repository
+}
+
+func (r IntegrationRepository) RunInTransaction(ctx context.Context, fn func(integrations.Repository) error) error {
+	if r.transactor == nil {
+		return fn(r)
+	}
+
+	tx, err := r.transactor.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin integration transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	repository := IntegrationRepository{queries: sqlc.New(tx)}
+	if err := fn(repository); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit integration transaction: %w", err)
+	}
+	return nil
 }
 
 func (r IntegrationRepository) CreateConnection(ctx context.Context, input integrations.CreateConnectionInput) (integrations.Connection, error) {

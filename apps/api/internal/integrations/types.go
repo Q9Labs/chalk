@@ -174,6 +174,7 @@ type AuditLogInput struct {
 }
 
 type Repository interface {
+	RunInTransaction(ctx context.Context, fn func(Repository) error) error
 	CreateConnection(ctx context.Context, input CreateConnectionInput) (Connection, error)
 	GetConnection(ctx context.Context, tenantID utilities.ID, id utilities.ID) (Connection, error)
 	GetConnectionByExternalRef(ctx context.Context, tenantID utilities.ID, provider ProviderName, service ServiceID, externalAccountRef string) (Connection, error)

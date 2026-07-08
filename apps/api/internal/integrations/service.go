@@ -85,15 +85,23 @@ func (s Service) StartConnection(ctx context.Context, input StartConnectionInput
 		return StartConnectionResult{}, fmt.Errorf("generate integration connection id: %w", err)
 	}
 
-	connection, err := s.repository.CreateConnection(ctx, CreateConnectionInput{
-		ID:                    id,
-		TenantID:              input.TenantID,
-		UserID:                input.UserID,
-		Provider:              ProviderComposio,
-		Service:               entry.ID,
-		ExternalAccountRef:    link.ExternalAccountRef,
-		ExternalAuthConfigRef: link.ExternalAuthConfigRef,
-		Status:                StatusPending,
+	var connection Connection
+	err = s.repository.RunInTransaction(ctx, func(repository Repository) error {
+		var createErr error
+		connection, createErr = repository.CreateConnection(ctx, CreateConnectionInput{
+			ID:                    id,
+			TenantID:              input.TenantID,
+			UserID:                input.UserID,
+			Provider:              ProviderComposio,
+			Service:               entry.ID,
+			ExternalAccountRef:    link.ExternalAccountRef,
+			ExternalAuthConfigRef: link.ExternalAuthConfigRef,
+			Status:                StatusPending,
+		})
+		if createErr != nil {
+			return createErr
+		}
+		return s.auditWithRepository(ctx, repository, input.TenantID, input.UserID, auditActorUser, auditConnectionStarted, connection.ID, "success", nil)
 	})
 	if errors.Is(err, ErrConnectionAlreadyExists) {
 		existing, found, reuseErr := s.connectionByExternalRef(ctx, input.TenantID, entry.ID, link.ExternalAccountRef)
@@ -109,10 +117,6 @@ func (s Service) StartConnection(ctx context.Context, input StartConnectionInput
 		}
 	}
 	if err != nil {
-		return StartConnectionResult{}, err
-	}
-
-	if err := s.audit(ctx, input.TenantID, input.UserID, auditActorUser, auditConnectionStarted, connection.ID, "success", nil); err != nil {
 		return StartConnectionResult{}, err
 	}
 
@@ -146,15 +150,20 @@ func (s Service) startExistingConnection(ctx context.Context, tenantID utilities
 			ExpiresAt:  link.ExpiresAt,
 		}, nil
 	default:
-		updated, err := s.repository.UpdateConnection(ctx, UpdateConnectionInput{
-			ID:       connection.ID,
-			TenantID: connection.TenantID,
-			Status:   StatusPending,
+		var updated Connection
+		err := s.repository.RunInTransaction(ctx, func(repository Repository) error {
+			var updateErr error
+			updated, updateErr = repository.UpdateConnection(ctx, UpdateConnectionInput{
+				ID:       connection.ID,
+				TenantID: connection.TenantID,
+				Status:   StatusPending,
+			})
+			if updateErr != nil {
+				return updateErr
+			}
+			return s.auditWithRepository(ctx, repository, tenantID, userID, auditActorUser, auditConnectionStarted, updated.ID, "success", nil)
 		})
 		if err != nil {
-			return StartConnectionResult{}, err
-		}
-		if err := s.audit(ctx, tenantID, userID, auditActorUser, auditConnectionStarted, updated.ID, "success", nil); err != nil {
 			return StartConnectionResult{}, err
 		}
 		return StartConnectionResult{
@@ -227,21 +236,29 @@ func (s Service) RefreshConnection(ctx context.Context, tenantID utilities.ID, o
 		return RefreshConnectionResult{}, err
 	}
 
-	updated, err := s.repository.UpdateConnection(ctx, updateInputFromProvider(connection, providerConnection))
-	if err != nil {
-		return RefreshConnectionResult{}, err
-	}
-
 	action := auditConnectionConnected
 	outcome := "success"
 	var errorCode *string
-	if updated.Status != StatusActive {
+	status := providerConnection.Status
+	if status == "" {
+		status = connection.Status
+	}
+	if status != StatusActive {
 		action = auditConnectionFailed
 		outcome = "failure"
 		code := "integration_connection_not_active"
 		errorCode = &code
 	}
-	if err := s.audit(ctx, tenantID, actorUserID, actorType, action, connection.ID, outcome, errorCode); err != nil {
+	var updated Connection
+	err = s.repository.RunInTransaction(ctx, func(repository Repository) error {
+		var updateErr error
+		updated, updateErr = repository.UpdateConnection(ctx, updateInputFromProvider(connection, providerConnection))
+		if updateErr != nil {
+			return updateErr
+		}
+		return s.auditWithRepository(ctx, repository, tenantID, actorUserID, actorType, action, connection.ID, outcome, errorCode)
+	})
+	if err != nil {
 		return RefreshConnectionResult{}, err
 	}
 	return RefreshConnectionResult{
@@ -275,22 +292,26 @@ func (s Service) DisableConnection(ctx context.Context, tenantID utilities.ID, o
 		status = StatusRevoked
 		revokedAt = &now
 	}
-	updated, err := s.repository.UpdateConnection(ctx, UpdateConnectionInput{
-		ID:           connection.ID,
-		TenantID:     connection.TenantID,
-		Status:       status,
-		AccountLabel: connection.AccountLabel,
-		AccountEmail: connection.AccountEmail,
-		Scopes:       connection.Scopes,
-		ConnectedAt:  connection.ConnectedAt,
-		ExpiresAt:    connection.ExpiresAt,
-		RevokedAt:    revokedAt,
+	var updated Connection
+	err = s.repository.RunInTransaction(ctx, func(repository Repository) error {
+		var updateErr error
+		updated, updateErr = repository.UpdateConnection(ctx, UpdateConnectionInput{
+			ID:           connection.ID,
+			TenantID:     connection.TenantID,
+			Status:       status,
+			AccountLabel: connection.AccountLabel,
+			AccountEmail: connection.AccountEmail,
+			Scopes:       connection.Scopes,
+			ConnectedAt:  connection.ConnectedAt,
+			ExpiresAt:    connection.ExpiresAt,
+			RevokedAt:    revokedAt,
+		})
+		if updateErr != nil {
+			return updateErr
+		}
+		return s.auditWithRepository(ctx, repository, tenantID, actorUserID, actorType, auditConnectionDisabled, connection.ID, "success", nil)
 	})
 	if err != nil {
-		return Connection{}, err
-	}
-
-	if err := s.audit(ctx, tenantID, actorUserID, actorType, auditConnectionDisabled, connection.ID, "success", nil); err != nil {
 		return Connection{}, err
 	}
 	return updated, nil
@@ -386,6 +407,10 @@ func allowedAction(entry ServiceEntry, id ActionID) (ActionPolicy, bool) {
 }
 
 func (s Service) audit(ctx context.Context, tenantID utilities.ID, actorUserID utilities.ID, actorType string, action string, resourceID utilities.ID, outcome string, errorCode *string) error {
+	return s.auditWithRepository(ctx, s.repository, tenantID, actorUserID, actorType, action, resourceID, outcome, errorCode)
+}
+
+func (s Service) auditWithRepository(ctx context.Context, repository Repository, tenantID utilities.ID, actorUserID utilities.ID, actorType string, action string, resourceID utilities.ID, outcome string, errorCode *string) error {
 	id, err := utilities.NewID()
 	if err != nil {
 		return fmt.Errorf("generate integration audit id: %w", err)
@@ -394,7 +419,7 @@ func (s Service) audit(ctx context.Context, tenantID utilities.ID, actorUserID u
 		actorType = auditActorUser
 	}
 
-	return s.repository.CreateAuditLog(ctx, AuditLogInput{
+	return repository.CreateAuditLog(ctx, AuditLogInput{
 		ID:          id,
 		TenantID:    tenantID,
 		ActorUserID: actorUserID,

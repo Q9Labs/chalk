@@ -137,7 +137,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure integration catalog: %w", err)
 	}
-	integrationRepository := postgres.NewIntegrationRepository(operationQueries)
+	integrationRepository := postgres.NewIntegrationRepository(operationQueries, pool)
 	var integrationProvider integrations.Provider
 	if cfg.Composio.APIKey != "" {
 		provider, err := composioadapter.NewAdapter(composioadapter.Config{

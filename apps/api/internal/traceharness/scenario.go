@@ -437,6 +437,10 @@ func (r tracedIntegrationRepository) CreateConnection(ctx context.Context, input
 	return integrations.Connection{}, errors.New("create connection is not used by trace scenario")
 }
 
+func (r tracedIntegrationRepository) RunInTransaction(ctx context.Context, fn func(integrations.Repository) error) error {
+	return fn(r)
+}
+
 func (r tracedIntegrationRepository) GetConnection(ctx context.Context, tenantID utilities.ID, id utilities.ID) (integrations.Connection, error) {
 	span := r.recorder.Start("repository", "IntegrationRepository.GetConnection", "load local integration connection", map[string]any{
 		"tenant_id":     tenantID.String(),
