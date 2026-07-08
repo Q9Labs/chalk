@@ -181,8 +181,8 @@ func TestExecuteActionPostsConnectedAccountAndArguments(t *testing.T) {
 		if body.ConnectedAccountID != "ca_slack" || body.UserID != "22222222-2222-4222-8222-222222222222" {
 			t.Fatalf("body target = %#v", body)
 		}
-		if body.Version != "latest" {
-			t.Fatalf("version = %q, want latest", body.Version)
+		if body.Version != "20260701_00" {
+			t.Fatalf("version = %q, want concrete version", body.Version)
 		}
 		if body.Arguments == nil || (*body.Arguments)["channel"] != "C123" {
 			t.Fatalf("arguments = %#v", body.Arguments)
@@ -199,7 +199,7 @@ func TestExecuteActionPostsConnectedAccountAndArguments(t *testing.T) {
 		UserID:             mustID(t, "22222222-2222-4222-8222-222222222222"),
 		ExternalAccountRef: "ca_slack",
 		ActionSlug:         "SLACK_SEND_MESSAGE",
-		Version:            "latest",
+		Version:            "20260701_00",
 		Arguments:          map[string]any{"channel": "C123"},
 	})
 	if err != nil {
@@ -207,6 +207,33 @@ func TestExecuteActionPostsConnectedAccountAndArguments(t *testing.T) {
 	}
 	if result.LogID != "log_123" || result.Data["ok"] != true {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestExecuteActionOmitsLatestPseudoVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if _, ok := body["version"]; ok {
+			t.Fatalf("version field present for latest pseudo-version: %s", body["version"])
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"successful": true,
+			"data":       map[string]any{"ok": true},
+		})
+	}))
+	defer server.Close()
+
+	_, err := adapterForServer(t, server).ExecuteAction(context.Background(), integrations.ExecuteProviderActionInput{
+		UserID:             mustID(t, "22222222-2222-4222-8222-222222222222"),
+		ExternalAccountRef: "ca_slack",
+		ActionSlug:         "SLACK_SEND_MESSAGE",
+		Version:            "latest",
+	})
+	if err != nil {
+		t.Fatalf("execute action: %v", err)
 	}
 }
 

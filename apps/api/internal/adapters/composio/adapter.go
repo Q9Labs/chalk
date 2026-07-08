@@ -184,8 +184,8 @@ func (a Adapter) ExecuteAction(ctx context.Context, input integrations.ExecutePr
 		UserID:             input.UserID.String(),
 		Arguments:          requestArguments,
 	}
-	if input.Version != "" {
-		request.Version = input.Version
+	if version := strings.TrimSpace(input.Version); version != "" && version != "latest" {
+		request.Version = version
 	}
 	if input.Text != nil {
 		request.Text = strings.TrimSpace(*input.Text)
