@@ -21,10 +21,6 @@ type refreshConnectionResponse struct {
 	RedirectURL string `json:"redirect_url"`
 }
 
-type connectedAccountStatusRequest struct {
-	Enabled bool `json:"enabled"`
-}
-
 type executeToolRequest struct {
 	ConnectedAccountID string          `json:"connected_account_id"`
 	UserID             string          `json:"user_id"`

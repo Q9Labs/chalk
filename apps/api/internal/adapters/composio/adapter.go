@@ -166,9 +166,7 @@ func (a Adapter) DisableConnection(ctx context.Context, input integrations.Disab
 		return a.doConnectedAccount(ctx, http.MethodPost, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef)+"/revoke", nil, nil, http.StatusOK, nil)
 	}
 
-	return a.doConnectedAccount(ctx, http.MethodPatch, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef)+"/status", nil, connectedAccountStatusRequest{
-		Enabled: false,
-	}, http.StatusOK, nil)
+	return a.doConnectedAccount(ctx, http.MethodDelete, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef), nil, nil, http.StatusOK, nil)
 }
 
 func (a Adapter) ExecuteAction(ctx context.Context, input integrations.ExecuteProviderActionInput) (integrations.ProviderActionResult, error) {

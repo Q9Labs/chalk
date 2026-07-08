@@ -171,15 +171,11 @@ func TestRefreshConnectionReturnsRedirectURL(t *testing.T) {
 
 func TestDisableConnectionSoftDisablesProviderAccount(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPatch || r.URL.Path != "/api/v3.1/connected_accounts/ca_slack/status" {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v3.1/connected_accounts/ca_slack" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
-		var body connectedAccountStatusRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if body.Enabled {
-			t.Fatal("enabled = true, want false")
+		if r.URL.Query().Get("revoke_on_delete") != "" {
+			t.Fatalf("revoke_on_delete = %q, want omitted", r.URL.Query().Get("revoke_on_delete"))
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"success": true})
 	}))
