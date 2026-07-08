@@ -53,149 +53,203 @@ type updateMembershipRequest struct {
 	Role memberships.Role `json:"role"`
 }
 
+type createMembershipEndpointRequest struct {
+	TenantID utilities.ID
+	Body     createMembershipRequest
+}
+
+type listMembershipsRequest struct {
+	TenantID utilities.ID
+	Page     pagination.PageRequest
+}
+
+type updateMembershipEndpointRequest struct {
+	TenantID     utilities.ID
+	MembershipID utilities.ID
+	Body         updateMembershipRequest
+}
+
 func mountMembershipRoutes(r chi.Router, service MembershipService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/memberships", handleCreateMembership(service, authorizer))
-	r.Get("/tenants/{tenant_id}/memberships", handleListTenantMemberships(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}/memberships/{membership_id}", handleUpdateTenantMembership(service, authorizer))
+	for _, endpoint := range membershipEndpoints(service, authorizer) {
+		endpoint.Mount(r, limits)
+	}
 }
 
-func handleCreateMembership(service MembershipService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func membershipEndpoints(service MembershipService, authorizer TenantAuthorizer) []RouteEndpoint {
+	return []RouteEndpoint{
+		createMembershipEndpoint(service, authorizer),
+		listMembershipsEndpoint(service, authorizer),
+		updateMembershipEndpoint(service, authorizer),
+	}
+}
+
+func createMembershipEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[createMembershipEndpointRequest, membershipResponse] {
+	return Post("/v1/tenants/{tenant_id}/memberships", "/tenants/{tenant_id}/memberships", "createMembership", decodeCreateMembershipRequest, func(ctx context.Context, request createMembershipEndpointRequest) (membershipResponse, error) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return membershipResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeMembershipsPermission); err != nil {
+			return membershipResponse{}, err
 		}
 
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok {
-			return
-		}
-
-		if authorizeTenantRequest(w, r, authorizer, tenantID, writeMembershipsPermission) {
-			return
-		}
-
-		var request createMembershipRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		input, err := request.input(tenantID)
+		input, err := request.Body.input(request.TenantID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_user_id", "Invalid user id")
-			return
+			return membershipResponse{}, apiErrorInvalidUserID
 		}
-
-		membership, err := service.CreateMembership(r.Context(), input)
-		if writeMembershipServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, newMembershipResponse(membership))
-	}
-}
-
-func handleListTenantMemberships(service MembershipService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
-		}
-
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok {
-			return
-		}
-
-		if authorizeTenantRequest(w, r, authorizer, tenantID, readMembershipsPermission) {
-			return
-		}
-
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
-		}
-
-		memberships, err := service.ListTenantMemberships(r.Context(), tenantID, page)
-		if writeMembershipServiceError(w, err) {
-			return
-		}
-
-		response, err := newMembershipListResponse(memberships)
+		membership, err := service.CreateMembership(ctx, input)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return membershipResponse{}, err
 		}
-
-		writeJSON(w, http.StatusOK, response)
-	}
+		return newMembershipResponse(membership), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter()).
+		RequestBody("CreateMembershipRequest", createMembershipRequest{}).
+		Responds(http.StatusCreated, "Membership", membershipResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidRequest,
+			apiErrorInvalidTenantID,
+			apiErrorInvalidUserID,
+			apiErrorInvalidMembershipRole,
+			apiErrorRateLimited,
+			apiErrorInternal,
+		).
+		MapErrors(membershipEndpointAPIError)
 }
 
-func handleUpdateTenantMembership(service MembershipService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[listMembershipsRequest, membershipListResponse] {
+	return Get("/v1/tenants/{tenant_id}/memberships", "/tenants/{tenant_id}/memberships", "listMemberships", decodeListMembershipsRequest, func(ctx context.Context, request listMembershipsRequest) (membershipListResponse, error) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return membershipListResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readMembershipsPermission); err != nil {
+			return membershipListResponse{}, err
 		}
 
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok {
-			return
+		list, err := service.ListTenantMemberships(ctx, request.TenantID, request.Page)
+		if err != nil {
+			return membershipListResponse{}, err
 		}
-		membershipID, ok := parseRouteID(w, r, "membership_id", "invalid_membership_id", "Invalid membership id")
-		if !ok {
-			return
-		}
-
-		if authorizeTenantRequest(w, r, authorizer, tenantID, writeMembershipsPermission) {
-			return
-		}
-
-		var request updateMembershipRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		membership, err := service.UpdateTenantMembership(r.Context(), tenantID, membershipID, request.input())
-		if writeMembershipServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newMembershipResponse(membership))
-	}
+		return newMembershipListResponse(list)
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
+		Responds(http.StatusOK, "MembershipList", membershipListResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidTenantID,
+			apiErrorInvalidPageSize,
+			apiErrorInvalidCursor,
+			apiErrorInternal,
+		).
+		MapErrors(membershipEndpointAPIError)
 }
 
-func parseRouteID(w http.ResponseWriter, r *http.Request, parameter string, code string, message string) (utilities.ID, bool) {
-	id, err := utilities.ParseID(chi.URLParam(r, parameter))
+func updateMembershipEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[updateMembershipEndpointRequest, membershipResponse] {
+	return Patch("/v1/tenants/{tenant_id}/memberships/{membership_id}", "/tenants/{tenant_id}/memberships/{membership_id}", "updateMembership", decodeUpdateMembershipRequest, func(ctx context.Context, request updateMembershipEndpointRequest) (membershipResponse, error) {
+		if service == nil {
+			return membershipResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeMembershipsPermission); err != nil {
+			return membershipResponse{}, err
+		}
+
+		membership, err := service.UpdateTenantMembership(ctx, request.TenantID, request.MembershipID, request.Body.input())
+		if err != nil {
+			return membershipResponse{}, err
+		}
+		return newMembershipResponse(membership), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), membershipIDParameter()).
+		RequestBody("UpdateMembershipRequest", updateMembershipRequest{}).
+		Responds(http.StatusOK, "Membership", membershipResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidRequest,
+			apiErrorInvalidTenantID,
+			apiErrorInvalidMembershipID,
+			apiErrorInvalidMembershipRole,
+			apiErrorMembershipNotFound,
+			apiErrorRateLimited,
+			apiErrorInternal,
+		).
+		MapErrors(membershipEndpointAPIError)
+}
+
+func decodeCreateMembershipRequest(r *http.Request) (createMembershipEndpointRequest, error) {
+	tenantID, err := tenantIDRequest(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, code, message)
-		return utilities.ID{}, false
+		return createMembershipEndpointRequest{}, err
 	}
-
-	return id, true
+	body, err := decodeJSONBody[createMembershipRequest](r)
+	if err != nil {
+		return createMembershipEndpointRequest{}, err
+	}
+	return createMembershipEndpointRequest{TenantID: tenantID, Body: body}, nil
 }
 
-func writeMembershipServiceError(w http.ResponseWriter, err error) bool {
+func decodeListMembershipsRequest(r *http.Request) (listMembershipsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listMembershipsRequest{}, err
+	}
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listMembershipsRequest{}, paginationAPIError(err)
+	}
+	return listMembershipsRequest{TenantID: tenantID, Page: page}, nil
+}
+
+func decodeUpdateMembershipRequest(r *http.Request) (updateMembershipEndpointRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return updateMembershipEndpointRequest{}, err
+	}
+	membershipID, err := membershipIDRequest(r)
+	if err != nil {
+		return updateMembershipEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[updateMembershipRequest](r)
+	if err != nil {
+		return updateMembershipEndpointRequest{}, err
+	}
+	return updateMembershipEndpointRequest{TenantID: tenantID, MembershipID: membershipID, Body: body}, nil
+}
+
+func membershipEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := membershipServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func membershipServiceAPIError(err error) (APIError, bool) {
 	switch {
 	case err == nil:
-		return false
+		return APIError{}, false
 	case errors.Is(err, memberships.ErrInvalidMembershipID):
-		writeError(w, http.StatusBadRequest, "invalid_membership_id", "Invalid membership id")
+		return apiErrorInvalidMembershipID, true
 	case errors.Is(err, memberships.ErrInvalidMembershipRole):
-		writeError(w, http.StatusBadRequest, "invalid_membership_role", "Invalid membership role")
+		return apiErrorInvalidMembershipRole, true
 	case errors.Is(err, memberships.ErrInvalidTenantID):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
+		return apiErrorInvalidTenantID, true
 	case errors.Is(err, memberships.ErrInvalidUserID):
-		writeError(w, http.StatusBadRequest, "invalid_user_id", "Invalid user id")
+		return apiErrorInvalidUserID, true
 	case errors.Is(err, memberships.ErrMembershipNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Membership not found")
+		return apiErrorMembershipNotFound, true
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return APIError{}, false
 	}
-
-	return true
 }
 
 func newMembershipListResponse(list memberships.MembershipList) (membershipListResponse, error) {

@@ -8,8 +8,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -121,14 +123,20 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 	responses := make(map[string]any)
 	for _, response := range route.Responses {
-		responses[strconv.Itoa(response.Status)] = map[string]any{
+		body := map[string]any{
 			"description": http.StatusText(response.Status),
-			"content": map[string]any{
-				"application/json": map[string]any{
-					"schema": g.schemaRef(response.Schema, false),
-				},
-			},
 		}
+		if len(response.Headers) > 0 {
+			body["headers"] = headers(response.Headers)
+		}
+		if response.Schema != nil {
+			body["content"] = map[string]any{
+				"application/json": map[string]any{
+					"schema": g.schemaRef(*response.Schema, false),
+				},
+			}
+		}
+		responses[strconv.Itoa(response.Status)] = body
 	}
 
 	for status, errors := range groupErrors(route.Errors) {
@@ -144,6 +152,19 @@ func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 	}
 
 	return responses
+}
+
+func headers(headers []httpapi.APIHeaderContract) map[string]any {
+	result := make(map[string]any, len(headers))
+	for _, header := range headers {
+		result[header.Name] = map[string]any{
+			"required": header.Required,
+			"schema": map[string]any{
+				"type": header.Type,
+			},
+		}
+	}
+	return result
 }
 
 func parameters(parameters []httpapi.APIParameterContract) []map[string]any {
@@ -190,8 +211,23 @@ func (g *generator) schemaFromType(t reflect.Type, request bool) map[string]any 
 		t = t.Elem()
 	}
 
+	if isTime(t) {
+		return timestampSchema()
+	}
+	if isRawJSON(t) || isOptionalJSON(t) {
+		return jsonValueSchema()
+	}
 	if isOptionalString(t) {
 		return map[string]any{"type": []string{"string", "null"}}
+	}
+	if isOptionalStrings(t) {
+		return map[string]any{
+			"type":  []string{"array", "null"},
+			"items": map[string]any{"type": "string"},
+		}
+	}
+	if isOptionalTimeRequest(t) {
+		return nullableSchema(timestampSchema())
 	}
 
 	switch t.Kind() {
@@ -211,6 +247,11 @@ func (g *generator) schemaFromType(t reflect.Type, request bool) map[string]any 
 		return map[string]any{
 			"type":  "array",
 			"items": g.schemaFromType(t.Elem(), request),
+		}
+	case reflect.Map:
+		return map[string]any{
+			"type":                 "object",
+			"additionalProperties": g.schemaFromType(t.Elem(), request),
 		}
 	default:
 		return map[string]any{"type": "object", "x-go-type": t.String()}
@@ -234,7 +275,7 @@ func (g *generator) objectSchema(t reflect.Type, request bool) map[string]any {
 
 		fieldType := field.Type
 		optional := request && isOptionalRequestField(fieldType)
-		nullable := fieldType.Kind() == reflect.Pointer || isOptionalString(fieldType)
+		nullable := fieldType.Kind() == reflect.Pointer || isNullableHelper(fieldType)
 		property := g.schemaFromType(fieldType, request)
 		if nullable {
 			property = nullableSchema(property)
@@ -297,14 +338,67 @@ func nullableSchema(schema map[string]any) map[string]any {
 }
 
 func isOptionalRequestField(t reflect.Type) bool {
-	return t.Kind() == reflect.Pointer || isOptionalString(t)
+	return t.Kind() == reflect.Pointer ||
+		isOptionalString(t) ||
+		isOptionalJSON(t) ||
+		isOptionalStrings(t) ||
+		isOptionalTimeRequest(t)
+}
+
+func isNullableHelper(t reflect.Type) bool {
+	return isOptionalString(t) ||
+		isOptionalJSON(t) ||
+		isOptionalStrings(t) ||
+		isOptionalTimeRequest(t)
 }
 
 func isOptionalString(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(utilities.OptionalString{})
+}
+
+func isOptionalJSON(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(utilities.OptionalJSON{})
+}
+
+func isOptionalStrings(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(transcripts.OptionalStrings{})
+}
+
+func isRawJSON(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(json.RawMessage{})
+}
+
+func isTime(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(time.Time{})
+}
+
+func isOptionalTimeRequest(t reflect.Type) bool {
+	t = dereference(t)
+	return t.Kind() == reflect.Struct &&
+		t.Name() == "optionalTimeRequest" &&
+		strings.HasSuffix(t.PkgPath(), "/internal/httpapi")
+}
+
+func dereference(t reflect.Type) reflect.Type {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-	return t == reflect.TypeOf(utilities.OptionalString{})
+	return t
+}
+
+func timestampSchema() map[string]any {
+	return map[string]any{
+		"type":   "string",
+		"format": "date-time",
+	}
+}
+
+func jsonValueSchema() map[string]any {
+	return map[string]any{
+		"type":                 []string{"object", "array", "string", "number", "boolean", "null"},
+		"items":                map[string]any{},
+		"additionalProperties": true,
+	}
 }
 
 func includes(values []string, needle string) bool {

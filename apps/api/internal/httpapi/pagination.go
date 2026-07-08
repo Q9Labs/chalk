@@ -56,21 +56,6 @@ func newPaginationResponse(page pagination.Page) (paginationResponse, error) {
 	}, nil
 }
 
-func writePaginationError(w http.ResponseWriter, err error) bool {
-	switch {
-	case err == nil:
-		return false
-	case errors.Is(err, pagination.ErrInvalidPageSize):
-		writeAPIError(w, apiErrorInvalidPageSize)
-	case errors.Is(err, pagination.ErrInvalidCursor):
-		writeAPIError(w, apiErrorInvalidCursor)
-	default:
-		writeAPIError(w, apiErrorInternal)
-	}
-
-	return true
-}
-
 func paginationAPIError(err error) APIError {
 	switch {
 	case errors.Is(err, pagination.ErrInvalidPageSize):

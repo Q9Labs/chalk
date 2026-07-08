@@ -26,6 +26,57 @@ var (
 	apiErrorTenantNotFound      = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Tenant not found"}
 	apiErrorRateLimited         = APIError{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: "Too many requests"}
 	apiErrorInternal            = APIError{Status: http.StatusInternalServerError, Code: "internal_error", Message: "Internal server error"}
+
+	apiErrorInvalidEmail              = APIError{Status: http.StatusBadRequest, Code: "invalid_email", Message: "Invalid email"}
+	apiErrorInvalidPassword           = APIError{Status: http.StatusBadRequest, Code: "invalid_password", Message: "Invalid password"}
+	apiErrorInvalidUserID             = APIError{Status: http.StatusBadRequest, Code: "invalid_user_id", Message: "Invalid user id"}
+	apiErrorInvalidUserName           = APIError{Status: http.StatusBadRequest, Code: "invalid_user_name", Message: "Invalid user name"}
+	apiErrorInvalidUserEmail          = APIError{Status: http.StatusBadRequest, Code: "invalid_user_email", Message: "Invalid user email"}
+	apiErrorEmailAlreadyRegistered    = APIError{Status: http.StatusConflict, Code: "email_already_registered", Message: "Email already registered"}
+	apiErrorEmailVerificationRequired = APIError{Status: http.StatusForbidden, Code: "email_verification_required", Message: "Email verification is required"}
+	apiErrorInvalidCredentials        = APIError{Status: http.StatusUnauthorized, Code: "invalid_credentials", Message: "Invalid email or password"}
+	apiErrorOAuthNotConfigured        = APIError{Status: http.StatusServiceUnavailable, Code: "oauth_not_configured", Message: "OAuth is not configured"}
+	apiErrorInvalidOAuthState         = APIError{Status: http.StatusBadRequest, Code: "invalid_oauth_state", Message: "Invalid OAuth state"}
+	apiErrorOAuthEmailConflict        = APIError{Status: http.StatusConflict, Code: "oauth_email_conflict", Message: "Email is already registered with another sign-in method"}
+	apiErrorOAuthEmailNotVerified     = APIError{Status: http.StatusUnauthorized, Code: "oauth_email_not_verified", Message: "Google email is not verified"}
+	apiErrorUserNotFound              = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "User not found"}
+
+	apiErrorInvalidMembershipID   = APIError{Status: http.StatusBadRequest, Code: "invalid_membership_id", Message: "Invalid membership id"}
+	apiErrorInvalidMembershipRole = APIError{Status: http.StatusBadRequest, Code: "invalid_membership_role", Message: "Invalid membership role"}
+	apiErrorMembershipNotFound    = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Membership not found"}
+
+	apiErrorInvalidRoomID        = APIError{Status: http.StatusBadRequest, Code: "invalid_room_id", Message: "Invalid room id"}
+	apiErrorInvalidSessionID     = APIError{Status: http.StatusBadRequest, Code: "invalid_session_id", Message: "Invalid session id"}
+	apiErrorInvalidRoomName      = APIError{Status: http.StatusBadRequest, Code: "invalid_room_name", Message: "Invalid room name"}
+	apiErrorInvalidRoomSlug      = APIError{Status: http.StatusBadRequest, Code: "invalid_room_slug", Message: "Invalid room slug"}
+	apiErrorInvalidRoomStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_room_status", Message: "Invalid room status"}
+	apiErrorInvalidMediaPlane    = APIError{Status: http.StatusBadRequest, Code: "invalid_media_plane", Message: "Invalid media plane"}
+	apiErrorInvalidSessionStatus = APIError{Status: http.StatusBadRequest, Code: "invalid_session_status", Message: "Invalid session status"}
+	apiErrorInvalidRoomField     = APIError{Status: http.StatusBadRequest, Code: "invalid_room_field", Message: "Invalid room field"}
+	apiErrorRoomSlugAlreadyUsed  = APIError{Status: http.StatusConflict, Code: "room_slug_already_used", Message: "Room slug already used"}
+	apiErrorRoomNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Room not found"}
+	apiErrorSessionNotFound      = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Room session not found"}
+
+	apiErrorInvalidRecordingID        = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_id", Message: "Invalid recording id"}
+	apiErrorInvalidRecordingStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_status", Message: "Invalid recording status"}
+	apiErrorInvalidStorageProvider    = APIError{Status: http.StatusBadRequest, Code: "invalid_storage_provider", Message: "Invalid storage provider"}
+	apiErrorInvalidStorageKey         = APIError{Status: http.StatusBadRequest, Code: "invalid_storage_key", Message: "Invalid storage key"}
+	apiErrorInvalidRecordingField     = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_field", Message: "Invalid recording field"}
+	apiErrorInvalidURLExpiration      = APIError{Status: http.StatusBadRequest, Code: "invalid_url_expiration", Message: "Invalid url expiration"}
+	apiErrorRecordingNotReady         = APIError{Status: http.StatusBadRequest, Code: "recording_not_ready", Message: "Recording is not ready for download"}
+	apiErrorRecordingNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording not found"}
+	apiErrorRecordingArtifactNotFound = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording artifact not found"}
+
+	apiErrorInvalidTranscriptID        = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_id", Message: "Invalid transcript id"}
+	apiErrorInvalidTranscriptStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_status", Message: "Invalid transcript status"}
+	apiErrorInvalidTranscriptProvider  = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_provider", Message: "Invalid transcript provider"}
+	apiErrorInvalidTranscriptModel     = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_model", Message: "Invalid transcript model"}
+	apiErrorInvalidTranscriptLanguages = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_languages", Message: "Invalid transcript languages"}
+	apiErrorInvalidTranscriptField     = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_field", Message: "Invalid transcript field"}
+	apiErrorTranscriptNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Transcript not found"}
+
+	apiErrorInvalidAuditLogID = APIError{Status: http.StatusBadRequest, Code: "invalid_audit_log_id", Message: "Invalid audit log id"}
+	apiErrorAuditLogNotFound  = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Audit log not found"}
 )
 
 func writeAPIError(w http.ResponseWriter, err APIError) {

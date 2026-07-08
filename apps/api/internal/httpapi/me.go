@@ -1,21 +1,43 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func mountMeRoutes(r chi.Router, service AuthenticationService, limits RateLimitOptions) {
-	r.With(requireAuthentication(service), rateLimit(limits, authMeRateLimit)).Get("/me", handleMe)
+	for _, endpoint := range meEndpoints(service) {
+		endpoint.Mount(r, limits)
+	}
 }
 
-func handleMe(w http.ResponseWriter, r *http.Request) {
-	sessionUser, ok := sessionUserFromContext(r.Context())
-	if !ok {
-		writeUnauthenticated(w)
-		return
+func meEndpoints(service AuthenticationService) []RouteEndpoint {
+	return []RouteEndpoint{
+		meEndpoint(service),
 	}
+}
 
-	writeJSON(w, http.StatusOK, newAuthUserResponse(sessionUser.User))
+func meEndpoint(service AuthenticationService) Endpoint[noRequest, authUserResponse] {
+	return Get("/v1/me", "/me", "getMe", decodeNoRequest, func(ctx context.Context, request noRequest) (authUserResponse, error) {
+		_ = request
+		sessionUser, ok := sessionUserFromContext(ctx)
+		if !ok {
+			return authUserResponse{}, apiErrorUnauthenticated
+		}
+
+		return newAuthUserResponse(sessionUser.User), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Middleware(requireAuthentication(service)).
+		RateLimit(authMeRateLimit).
+		Responds(http.StatusOK, "AuthUser", authUserResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorServiceUnavailable,
+			apiErrorRateLimited,
+			apiErrorInternal,
+		).
+		MapErrors(authenticationAPIError)
 }

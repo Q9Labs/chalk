@@ -17,12 +17,15 @@ type RouteEndpoint interface {
 type EndpointDecoder[Request any] func(r *http.Request) (Request, error)
 type EndpointHandler[Request any, Response any] func(ctx context.Context, request Request) (Response, error)
 type EndpointErrorMapper func(err error) (APIError, bool)
+type EndpointWriter[Response any] func(w http.ResponseWriter, r *http.Request, status int, response Response)
 
 type Endpoint[Request any, Response any] struct {
-	contract APIRouteContract
-	decode   EndpointDecoder[Request]
-	handle   EndpointHandler[Request, Response]
-	mapError EndpointErrorMapper
+	contract    APIRouteContract
+	decode      EndpointDecoder[Request]
+	handle      EndpointHandler[Request, Response]
+	mapError    EndpointErrorMapper
+	middlewares []func(http.Handler) http.Handler
+	write       EndpointWriter[Response]
 }
 
 func Get[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
@@ -69,9 +72,22 @@ func (e Endpoint[Request, Response]) Responds(status int, name string, sample an
 	e.contract.Responses = []APIResponseContract{
 		{
 			Status: status,
-			Schema: APISchemaRef{Name: name, Type: sample},
+			Schema: &APISchemaRef{Name: name, Type: sample},
 		},
 	}
+	return e
+}
+
+func (e Endpoint[Request, Response]) RespondsNoBody(status int) Endpoint[Request, Response] {
+	e.contract.Responses = []APIResponseContract{{Status: status}}
+	return e
+}
+
+func (e Endpoint[Request, Response]) ResponseHeaders(headers ...APIHeaderContract) Endpoint[Request, Response] {
+	if len(e.contract.Responses) == 0 {
+		return e
+	}
+	e.contract.Responses[0].Headers = append(e.contract.Responses[0].Headers, headers...)
 	return e
 }
 
@@ -90,10 +106,23 @@ func (e Endpoint[Request, Response]) MapErrors(mapper EndpointErrorMapper) Endpo
 	return e
 }
 
+func (e Endpoint[Request, Response]) Middleware(middlewares ...func(http.Handler) http.Handler) Endpoint[Request, Response] {
+	e.middlewares = append(e.middlewares, middlewares...)
+	return e
+}
+
+func (e Endpoint[Request, Response]) WriteWith(writer EndpointWriter[Response]) Endpoint[Request, Response] {
+	e.write = writer
+	return e
+}
+
 func (e Endpoint[Request, Response]) Mount(r chi.Router, limits RateLimitOptions) {
 	var handler http.Handler = e
 	if e.contract.RateLimit.Name != "" {
 		handler = rateLimit(limits, e.contract.RateLimit)(handler)
+	}
+	for i := len(e.middlewares) - 1; i >= 0; i-- {
+		handler = e.middlewares[i](handler)
 	}
 	r.Method(e.contract.Method, e.contract.MountPath, handler)
 }
@@ -115,7 +144,7 @@ func (e Endpoint[Request, Response]) ServeHTTP(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	writeJSON(w, e.successStatus(), response)
+	e.writeResponse(w, r, response)
 }
 
 func (e Endpoint[Request, Response]) apiError(err error) APIError {
@@ -135,6 +164,15 @@ func (e Endpoint[Request, Response]) successStatus() int {
 		return e.contract.Responses[0].Status
 	}
 	return http.StatusOK
+}
+
+func (e Endpoint[Request, Response]) writeResponse(w http.ResponseWriter, r *http.Request, response Response) {
+	if e.write != nil {
+		e.write(w, r, e.successStatus(), response)
+		return
+	}
+
+	writeJSON(w, e.successStatus(), response)
 }
 
 func errorAsAPIError(err error) (APIError, bool) {

@@ -13,9 +13,16 @@ type APISchemaRef struct {
 	Type any
 }
 
+type APIHeaderContract struct {
+	Name     string
+	Type     string
+	Required bool
+}
+
 type APIResponseContract struct {
-	Status int
-	Schema APISchemaRef
+	Status  int
+	Schema  *APISchemaRef
+	Headers []APIHeaderContract
 }
 
 type APIParameterContract struct {
@@ -39,7 +46,17 @@ type APIRouteContract struct {
 }
 
 func PreviewRouteContracts() []APIRouteContract {
-	return routeContracts(tenantEndpoints(nil, nil))
+	endpoints := make([]RouteEndpoint, 0)
+	endpoints = append(endpoints, authEndpoints(nil, SessionCookieOptions{})...)
+	endpoints = append(endpoints, meEndpoints(nil)...)
+	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
+	endpoints = append(endpoints, userEndpoints(nil)...)
+	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
+	endpoints = append(endpoints, roomEndpoints(nil, nil)...)
+	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil)...)
+	endpoints = append(endpoints, transcriptEndpoints(nil, nil)...)
+	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
+	return routeContracts(endpoints)
 }
 
 func routeContracts(endpoints []RouteEndpoint) []APIRouteContract {

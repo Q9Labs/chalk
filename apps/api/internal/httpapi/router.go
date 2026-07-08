@@ -117,7 +117,7 @@ func mountV1Routes(r chi.Router, options Options) {
 			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
 			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
 			mountTranscriptRoutes(r, options.Transcripts, options.TenantAuthz, options.RateLimit)
-			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz)
+			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)
 		})
 	})
 }

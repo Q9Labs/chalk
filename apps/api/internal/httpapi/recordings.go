@@ -82,220 +82,343 @@ type createRecordingDownloadURLRequest struct {
 	ExpiresInSeconds int `json:"expires_in_seconds"`
 }
 
+type createRecordingEndpointRequest struct {
+	TenantID  utilities.ID
+	RoomID    utilities.ID
+	SessionID utilities.ID
+	Body      createRecordingRequest
+}
+
+type listRecordingsRequest struct {
+	TenantID  utilities.ID
+	SessionID utilities.ID
+	Page      pagination.PageRequest
+}
+
+type getRecordingRequest struct {
+	TenantID    utilities.ID
+	RecordingID utilities.ID
+}
+
+type updateRecordingEndpointRequest struct {
+	TenantID    utilities.ID
+	RecordingID utilities.ID
+	Body        updateRecordingRequest
+}
+
+type createRecordingDownloadURLEndpointRequest struct {
+	TenantID    utilities.ID
+	RecordingID utilities.ID
+	Body        createRecordingDownloadURLRequest
+}
+
 func mountRecordingRoutes(r chi.Router, service RecordingService, downloads RecordingDownloadService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings", handleCreateRecording(service, authorizer))
-	r.Get("/tenants/{tenant_id}/recordings", handleListRecordings(service, authorizer))
-	r.Get("/tenants/{tenant_id}/recordings/{recording_id}", handleGetRecording(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}/recordings/{recording_id}", handleUpdateRecording(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/recordings/{recording_id}/download-url", handleCreateRecordingDownloadURL(service, downloads, authorizer))
-}
-
-func handleCreateRecording(service RecordingService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		tenantID, roomID, sessionID, ok := tenantRoomSessionIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeRecordingsPermission) {
-			return
-		}
-
-		var request createRecordingRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		recording, err := service.Create(r.Context(), request.toCreateInput(tenantID, roomID, sessionID))
-		if writeRecordingServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, newRecordingResponse(recording))
+	for _, endpoint := range recordingEndpoints(service, downloads, authorizer) {
+		endpoint.Mount(r, limits)
 	}
 }
 
-func handleListRecordings(service RecordingService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func recordingEndpoints(service RecordingService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {
+	return []RouteEndpoint{
+		createRecordingEndpoint(service, authorizer),
+		listRecordingsEndpoint(service, authorizer),
+		getRecordingEndpoint(service, authorizer),
+		updateRecordingEndpoint(service, authorizer),
+		createRecordingDownloadURLEndpoint(service, downloads, authorizer),
+	}
+}
+
+func createRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[createRecordingEndpointRequest, recordingResponse] {
+	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings", "createRecording", decodeCreateRecordingRequest, func(ctx context.Context, request createRecordingEndpointRequest) (recordingResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return recordingResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeRecordingsPermission); err != nil {
+			return recordingResponse{}, err
 		}
 
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readRecordingsPermission) {
-			return
-		}
-
-		sessionID, ok := optionalQueryID(w, r, "session_id", "invalid_session_id", "Invalid session id")
-		if !ok {
-			return
-		}
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
-		}
-
-		list, err := service.List(r.Context(), tenantID, sessionID, page)
-		if writeRecordingServiceError(w, err) {
-			return
-		}
-
-		response, err := newRecordingListResponse(list)
+		recording, err := service.Create(ctx, request.Body.toCreateInput(request.TenantID, request.RoomID, request.SessionID))
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return recordingResponse{}, err
 		}
-		writeJSON(w, http.StatusOK, response)
-	}
+		return newRecordingResponse(recording), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter()).
+		RequestBody("CreateRecordingRequest", createRecordingRequest{}).
+		Responds(http.StatusCreated, "Recording", recordingResponse{}).
+		Errors(recordingWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidRecordingStatus, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidRecordingField, apiErrorSessionNotFound, apiErrorRateLimited)...).
+		MapErrors(recordingEndpointAPIError)
 }
 
-func handleGetRecording(service RecordingService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func listRecordingsEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[listRecordingsRequest, recordingListResponse] {
+	return Get("/v1/tenants/{tenant_id}/recordings", "/tenants/{tenant_id}/recordings", "listRecordings", decodeListRecordingsRequest, func(ctx context.Context, request listRecordingsRequest) (recordingListResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return recordingListResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
+			return recordingListResponse{}, err
 		}
 
-		tenantID, recordingID, ok := tenantRecordingIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readRecordingsPermission) {
-			return
+		list, err := service.List(ctx, request.TenantID, request.SessionID, request.Page)
+		if err != nil {
+			return recordingListResponse{}, err
 		}
-
-		recording, err := service.Get(r.Context(), tenantID, recordingID)
-		if writeRecordingServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newRecordingResponse(recording))
-	}
+		return newRecordingListResponse(list)
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), sessionIDQueryParameter()}, paginationParameters()...)...).
+		Responds(http.StatusOK, "RecordingList", recordingListResponse{}).
+		Errors(recordingReadErrors(apiErrorInvalidSessionID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
+		MapErrors(recordingEndpointAPIError)
 }
 
-func handleUpdateRecording(service RecordingService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func getRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[getRecordingRequest, recordingResponse] {
+	return Get("/v1/tenants/{tenant_id}/recordings/{recording_id}", "/tenants/{tenant_id}/recordings/{recording_id}", "getRecording", decodeGetRecordingRequest, func(ctx context.Context, request getRecordingRequest) (recordingResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return recordingResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
+			return recordingResponse{}, err
 		}
 
-		tenantID, recordingID, ok := tenantRecordingIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeRecordingsPermission) {
-			return
+		recording, err := service.Get(ctx, request.TenantID, request.RecordingID)
+		if err != nil {
+			return recordingResponse{}, err
 		}
-
-		var request updateRecordingRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		recording, err := service.Update(r.Context(), tenantID, recordingID, request.toUpdateInput())
-		if writeRecordingServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newRecordingResponse(recording))
-	}
+		return newRecordingResponse(recording), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(tenantIDParameter(), recordingIDParameter()).
+		Responds(http.StatusOK, "Recording", recordingResponse{}).
+		Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound)...).
+		MapErrors(recordingEndpointAPIError)
 }
 
-func handleCreateRecordingDownloadURL(service RecordingService, downloads RecordingDownloadService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, recordingID, ok := tenantRecordingIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readRecordingsPermission) {
-			return
+func updateRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[updateRecordingEndpointRequest, recordingResponse] {
+	return Patch("/v1/tenants/{tenant_id}/recordings/{recording_id}", "/tenants/{tenant_id}/recordings/{recording_id}", "updateRecording", decodeUpdateRecordingRequest, func(ctx context.Context, request updateRecordingEndpointRequest) (recordingResponse, error) {
+		if service == nil {
+			return recordingResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeRecordingsPermission); err != nil {
+			return recordingResponse{}, err
+		}
+
+		recording, err := service.Update(ctx, request.TenantID, request.RecordingID, request.Body.toUpdateInput())
+		if err != nil {
+			return recordingResponse{}, err
+		}
+		return newRecordingResponse(recording), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), recordingIDParameter()).
+		RequestBody("UpdateRecordingRequest", updateRecordingRequest{}).
+		Responds(http.StatusOK, "Recording", recordingResponse{}).
+		Errors(recordingWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorInvalidRecordingStatus, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidRecordingField, apiErrorRecordingNotFound, apiErrorRateLimited)...).
+		MapErrors(recordingEndpointAPIError)
+}
+
+func createRecordingDownloadURLEndpoint(service RecordingService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createRecordingDownloadURLEndpointRequest, recordingDownloadURLResponse] {
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url", "/tenants/{tenant_id}/recordings/{recording_id}/download-url", "createRecordingDownloadURL", decodeCreateRecordingDownloadURLRequest, func(ctx context.Context, request createRecordingDownloadURLEndpointRequest) (recordingDownloadURLResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
+			return recordingDownloadURLResponse{}, err
 		}
 		if service == nil || downloads == nil {
-			writeServiceUnavailable(w)
-			return
+			return recordingDownloadURLResponse{}, apiErrorServiceUnavailable
 		}
 
-		var request createRecordingDownloadURLRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		recording, err := service.Get(r.Context(), tenantID, recordingID)
-		if writeRecordingServiceError(w, err) {
-			return
+		recording, err := service.Get(ctx, request.TenantID, request.RecordingID)
+		if err != nil {
+			return recordingDownloadURLResponse{}, err
 		}
 		if recording.Status != recordings.StatusCompleted || recording.StorageKey == nil {
-			writeError(w, http.StatusBadRequest, "recording_not_ready", "Recording is not ready for download")
-			return
+			return recordingDownloadURLResponse{}, apiErrorRecordingNotReady
 		}
 		if recording.StorageProvider != recordings.StorageProviderR2 {
-			writeError(w, http.StatusBadRequest, "invalid_storage_provider", "Invalid storage provider")
-			return
+			return recordingDownloadURLResponse{}, apiErrorInvalidStorageProvider
 		}
-		if !recordings.TenantStorageKey(tenantID, recording.StorageKey) {
-			writeError(w, http.StatusBadRequest, "invalid_storage_key", "Invalid storage key")
-			return
+		if !recordings.TenantStorageKey(request.TenantID, recording.StorageKey) {
+			return recordingDownloadURLResponse{}, apiErrorInvalidStorageKey
 		}
 
-		expiresIn := time.Duration(request.ExpiresInSeconds) * time.Second
-		url, err := downloads.CreateDownloadURL(r.Context(), objectstorage.CreateDownloadURLInput{Key: *recording.StorageKey, ExpiresIn: expiresIn})
-		if writeObjectStorageError(w, err) {
-			return
+		expiresIn := time.Duration(request.Body.ExpiresInSeconds) * time.Second
+		url, err := downloads.CreateDownloadURL(ctx, objectstorage.CreateDownloadURLInput{Key: *recording.StorageKey, ExpiresIn: expiresIn})
+		if err != nil {
+			return recordingDownloadURLResponse{}, err
 		}
 
-		writeJSON(w, http.StatusOK, recordingDownloadURLResponse{
+		return recordingDownloadURLResponse{
 			Method:       url.Method,
 			URL:          url.URL,
 			SignedAt:     utilities.FormatTimestamp(url.SignedAt),
 			ExpiresAt:    utilities.FormatTimestamp(url.ExpiresAt),
 			SignedHeader: url.SignedHeader,
-		})
-	}
+		}, nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), recordingIDParameter()).
+		RequestBody("CreateRecordingDownloadURLRequest", createRecordingDownloadURLRequest{}).
+		Responds(http.StatusOK, "RecordingDownloadURL", recordingDownloadURLResponse{}).
+		Errors(recordingReadErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidURLExpiration, apiErrorRecordingArtifactNotFound, apiErrorRateLimited)...).
+		MapErrors(recordingDownloadEndpointAPIError)
 }
 
-func writeRecordingServiceError(w http.ResponseWriter, err error) bool {
+func decodeCreateRecordingRequest(r *http.Request) (createRecordingEndpointRequest, error) {
+	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(r)
+	if err != nil {
+		return createRecordingEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[createRecordingRequest](r)
+	if err != nil {
+		return createRecordingEndpointRequest{}, err
+	}
+	return createRecordingEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, Body: body}, nil
+}
+
+func decodeListRecordingsRequest(r *http.Request) (listRecordingsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listRecordingsRequest{}, err
+	}
+	sessionID, err := optionalSessionIDQuery(r)
+	if err != nil {
+		return listRecordingsRequest{}, err
+	}
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listRecordingsRequest{}, paginationAPIError(err)
+	}
+	return listRecordingsRequest{TenantID: tenantID, SessionID: sessionID, Page: page}, nil
+}
+
+func decodeGetRecordingRequest(r *http.Request) (getRecordingRequest, error) {
+	tenantID, recordingID, err := tenantRecordingIDsRequest(r)
+	if err != nil {
+		return getRecordingRequest{}, err
+	}
+	return getRecordingRequest{TenantID: tenantID, RecordingID: recordingID}, nil
+}
+
+func decodeUpdateRecordingRequest(r *http.Request) (updateRecordingEndpointRequest, error) {
+	tenantID, recordingID, err := tenantRecordingIDsRequest(r)
+	if err != nil {
+		return updateRecordingEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[updateRecordingRequest](r)
+	if err != nil {
+		return updateRecordingEndpointRequest{}, err
+	}
+	return updateRecordingEndpointRequest{TenantID: tenantID, RecordingID: recordingID, Body: body}, nil
+}
+
+func decodeCreateRecordingDownloadURLRequest(r *http.Request) (createRecordingDownloadURLEndpointRequest, error) {
+	tenantID, recordingID, err := tenantRecordingIDsRequest(r)
+	if err != nil {
+		return createRecordingDownloadURLEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[createRecordingDownloadURLRequest](r)
+	if err != nil {
+		return createRecordingDownloadURLEndpointRequest{}, err
+	}
+	return createRecordingDownloadURLEndpointRequest{TenantID: tenantID, RecordingID: recordingID, Body: body}, nil
+}
+
+func tenantRecordingIDsRequest(r *http.Request) (utilities.ID, utilities.ID, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	recordingID, err := recordingIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	return tenantID, recordingID, nil
+}
+
+func recordingReadErrors(extra ...APIError) []APIError {
+	return append([]APIError{
+		apiErrorUnauthenticated,
+		apiErrorForbidden,
+		apiErrorServiceUnavailable,
+		apiErrorInvalidTenantID,
+		apiErrorInternal,
+	}, extra...)
+}
+
+func recordingWriteErrors(extra ...APIError) []APIError {
+	return append([]APIError{
+		apiErrorUnauthenticated,
+		apiErrorForbidden,
+		apiErrorServiceUnavailable,
+		apiErrorInvalidTenantID,
+		apiErrorInternal,
+	}, extra...)
+}
+
+func recordingEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := recordingServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func recordingDownloadEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := recordingServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	if apiErr, ok := objectStorageAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func recordingServiceAPIError(err error) (APIError, bool) {
 	switch {
 	case err == nil:
-		return false
+		return APIError{}, false
 	case errors.Is(err, recordings.ErrInvalidTenantID):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
+		return apiErrorInvalidTenantID, true
 	case errors.Is(err, recordings.ErrInvalidRecordingID):
-		writeError(w, http.StatusBadRequest, "invalid_recording_id", "Invalid recording id")
+		return apiErrorInvalidRecordingID, true
 	case errors.Is(err, recordings.ErrInvalidRoomID):
-		writeError(w, http.StatusBadRequest, "invalid_room_id", "Invalid room id")
+		return apiErrorInvalidRoomID, true
 	case errors.Is(err, recordings.ErrInvalidSessionID):
-		writeError(w, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
+		return apiErrorInvalidSessionID, true
 	case errors.Is(err, recordings.ErrInvalidRecordingStatus):
-		writeError(w, http.StatusBadRequest, "invalid_recording_status", "Invalid recording status")
+		return apiErrorInvalidRecordingStatus, true
 	case errors.Is(err, recordings.ErrInvalidStorageProvider):
-		writeError(w, http.StatusBadRequest, "invalid_storage_provider", "Invalid storage provider")
+		return apiErrorInvalidStorageProvider, true
 	case errors.Is(err, recordings.ErrInvalidStorageKey):
-		writeError(w, http.StatusBadRequest, "invalid_storage_key", "Invalid storage key")
+		return apiErrorInvalidStorageKey, true
 	case errors.Is(err, recordings.ErrInvalidRecordingField):
-		writeError(w, http.StatusBadRequest, "invalid_recording_field", "Invalid recording field")
+		return apiErrorInvalidRecordingField, true
 	case errors.Is(err, recordings.ErrSessionNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Room session not found")
+		return apiErrorSessionNotFound, true
 	case errors.Is(err, recordings.ErrRecordingNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Recording not found")
+		return apiErrorRecordingNotFound, true
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return APIError{}, false
 	}
-	return true
 }
 
-func writeObjectStorageError(w http.ResponseWriter, err error) bool {
+func objectStorageAPIError(err error) (APIError, bool) {
 	switch {
 	case err == nil:
-		return false
+		return APIError{}, false
 	case errors.Is(err, objectstorage.ErrInvalidObjectKey):
-		writeError(w, http.StatusBadRequest, "invalid_storage_key", "Invalid storage key")
+		return apiErrorInvalidStorageKey, true
 	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):
-		writeError(w, http.StatusBadRequest, "invalid_url_expiration", "Invalid url expiration")
+		return apiErrorInvalidURLExpiration, true
 	case errors.Is(err, objectstorage.ErrStoreUnavailable):
-		writeServiceUnavailable(w)
+		return apiErrorServiceUnavailable, true
 	case errors.Is(err, objectstorage.ErrObjectNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Recording artifact not found")
+		return apiErrorRecordingArtifactNotFound, true
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return APIError{}, false
 	}
-	return true
 }
 
 func newRecordingListResponse(list recordings.RecordingList) (recordingListResponse, error) {
@@ -345,16 +468,4 @@ func (r updateRecordingRequest) toUpdateInput() recordings.UpdateInput {
 		StorageKey:      r.StorageKey,
 		Metadata:        r.Metadata,
 	}
-}
-
-func tenantRecordingIDs(w http.ResponseWriter, r *http.Request) (utilities.ID, utilities.ID, bool) {
-	tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	recordingID, ok := parseRouteID(w, r, "recording_id", "invalid_recording_id", "Invalid recording id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	return tenantID, recordingID, true
 }

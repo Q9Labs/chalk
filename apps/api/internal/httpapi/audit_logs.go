@@ -45,77 +45,133 @@ type auditLogListResponse struct {
 	Pagination paginationResponse `json:"pagination"`
 }
 
-func mountAuditLogRoutes(r chi.Router, service AuditLogService, authorizer TenantAuthorizer) {
-	r.Get("/tenants/{tenant_id}/audit-logs", handleListAuditLogs(service, authorizer))
-	r.Get("/tenants/{tenant_id}/audit-logs/{audit_log_id}", handleGetAuditLog(service, authorizer))
+type listAuditLogsRequest struct {
+	TenantID utilities.ID
+	Page     pagination.PageRequest
 }
 
-func handleListAuditLogs(service AuditLogService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+type getAuditLogRequest struct {
+	TenantID   utilities.ID
+	AuditLogID utilities.ID
+}
+
+func mountAuditLogRoutes(r chi.Router, service AuditLogService, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range auditLogEndpoints(service, authorizer) {
+		endpoint.Mount(r, limits)
+	}
+}
+
+func auditLogEndpoints(service AuditLogService, authorizer TenantAuthorizer) []RouteEndpoint {
+	return []RouteEndpoint{
+		listAuditLogsEndpoint(service, authorizer),
+		getAuditLogEndpoint(service, authorizer),
+	}
+}
+
+func listAuditLogsEndpoint(service AuditLogService, authorizer TenantAuthorizer) Endpoint[listAuditLogsRequest, auditLogListResponse] {
+	return Get("/v1/tenants/{tenant_id}/audit-logs", "/tenants/{tenant_id}/audit-logs", "listAuditLogs", decodeListAuditLogsRequest, func(ctx context.Context, request listAuditLogsRequest) (auditLogListResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return auditLogListResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readAuditLogsPermission); err != nil {
+			return auditLogListResponse{}, err
 		}
 
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readAuditLogsPermission) {
-			return
-		}
-
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
-		}
-
-		list, err := service.List(r.Context(), tenantID, page)
-		if writeAuditLogServiceError(w, err) {
-			return
-		}
-
-		response, err := newAuditLogListResponse(list)
+		list, err := service.List(ctx, request.TenantID, request.Page)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return auditLogListResponse{}, err
 		}
-		writeJSON(w, http.StatusOK, response)
-	}
+		return newAuditLogListResponse(list)
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
+		Responds(http.StatusOK, "AuditLogList", auditLogListResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidTenantID,
+			apiErrorInvalidPageSize,
+			apiErrorInvalidCursor,
+			apiErrorInternal,
+		).
+		MapErrors(auditLogEndpointAPIError)
 }
 
-func handleGetAuditLog(service AuditLogService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func getAuditLogEndpoint(service AuditLogService, authorizer TenantAuthorizer) Endpoint[getAuditLogRequest, auditLogResponse] {
+	return Get("/v1/tenants/{tenant_id}/audit-logs/{audit_log_id}", "/tenants/{tenant_id}/audit-logs/{audit_log_id}", "getAuditLog", decodeGetAuditLogRequest, func(ctx context.Context, request getAuditLogRequest) (auditLogResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return auditLogResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readAuditLogsPermission); err != nil {
+			return auditLogResponse{}, err
 		}
 
-		tenantID, auditLogID, ok := tenantAuditLogIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readAuditLogsPermission) {
-			return
+		log, err := service.Get(ctx, request.TenantID, request.AuditLogID)
+		if err != nil {
+			return auditLogResponse{}, err
 		}
-
-		log, err := service.Get(r.Context(), tenantID, auditLogID)
-		if writeAuditLogServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newAuditLogResponse(log))
-	}
+		return newAuditLogResponse(log), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(tenantIDParameter(), auditLogIDParameter()).
+		Responds(http.StatusOK, "AuditLog", auditLogResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidTenantID,
+			apiErrorInvalidAuditLogID,
+			apiErrorAuditLogNotFound,
+			apiErrorInternal,
+		).
+		MapErrors(auditLogEndpointAPIError)
 }
 
-func writeAuditLogServiceError(w http.ResponseWriter, err error) bool {
+func decodeListAuditLogsRequest(r *http.Request) (listAuditLogsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listAuditLogsRequest{}, err
+	}
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listAuditLogsRequest{}, paginationAPIError(err)
+	}
+	return listAuditLogsRequest{TenantID: tenantID, Page: page}, nil
+}
+
+func decodeGetAuditLogRequest(r *http.Request) (getAuditLogRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return getAuditLogRequest{}, err
+	}
+	auditLogID, err := auditLogIDRequest(r)
+	if err != nil {
+		return getAuditLogRequest{}, err
+	}
+	return getAuditLogRequest{TenantID: tenantID, AuditLogID: auditLogID}, nil
+}
+
+func auditLogEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := auditLogServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func auditLogServiceAPIError(err error) (APIError, bool) {
 	switch {
 	case err == nil:
-		return false
+		return APIError{}, false
 	case errors.Is(err, auditlogs.ErrInvalidTenantID):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
+		return apiErrorInvalidTenantID, true
 	case errors.Is(err, auditlogs.ErrInvalidAuditLogID):
-		writeError(w, http.StatusBadRequest, "invalid_audit_log_id", "Invalid audit log id")
+		return apiErrorInvalidAuditLogID, true
 	case errors.Is(err, auditlogs.ErrAuditLogNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Audit log not found")
+		return apiErrorAuditLogNotFound, true
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return APIError{}, false
 	}
-	return true
 }
 
 func newAuditLogListResponse(list auditlogs.AuditLogList) (auditLogListResponse, error) {
@@ -147,16 +203,4 @@ func newAuditLogResponse(log auditlogs.AuditLog) auditLogResponse {
 		UpdatedAt:    utilities.FormatTimestamp(log.UpdatedAt),
 		CreatedAt:    utilities.FormatTimestamp(log.CreatedAt),
 	}
-}
-
-func tenantAuditLogIDs(w http.ResponseWriter, r *http.Request) (utilities.ID, utilities.ID, bool) {
-	tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	auditLogID, ok := parseRouteID(w, r, "audit_log_id", "invalid_audit_log_id", "Invalid audit log id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	return tenantID, auditLogID, true
 }

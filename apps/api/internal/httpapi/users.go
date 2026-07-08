@@ -35,104 +35,148 @@ type createUserRequest struct {
 	Email string `json:"email"`
 }
 
+type listUsersRequest struct {
+	Page pagination.PageRequest
+}
+
+type getUserRequest struct {
+	UserID utilities.ID
+}
+
 func mountUserRoutes(r chi.Router, service UserService, limits RateLimitOptions) {
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/users", handleCreateUser(service))
-	r.Get("/users", handleListUsers(service))
-	r.Get("/users/{user_id}", handleGetUser(service))
-}
-
-func handleCreateUser(service UserService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
-		}
-
-		var request createUserRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		user, err := service.CreateUser(r.Context(), request.input())
-		if writeUserServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, newUserResponse(user))
+	for _, endpoint := range userEndpoints(service) {
+		endpoint.Mount(r, limits)
 	}
 }
 
-func handleListUsers(service UserService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func userEndpoints(service UserService) []RouteEndpoint {
+	return []RouteEndpoint{
+		createUserEndpoint(service),
+		listUsersEndpoint(service),
+		getUserEndpoint(service),
+	}
+}
+
+func createUserEndpoint(service UserService) Endpoint[createUserRequest, userResponse] {
+	return Post("/v1/users", "/users", "createUser", decodeJSONBody[createUserRequest], func(ctx context.Context, request createUserRequest) (userResponse, error) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return userResponse{}, apiErrorServiceUnavailable
 		}
 
-		if authorizeGlobalReadRequest(w, r) {
-			return
-		}
-
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
-		}
-
-		users, err := service.ListUsers(r.Context(), page)
-		if writeUserServiceError(w, err) {
-			return
-		}
-
-		response, err := newUserListResponse(users)
+		user, err := service.CreateUser(ctx, request.input())
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return userResponse{}, err
 		}
-
-		writeJSON(w, http.StatusOK, response)
-	}
+		return newUserResponse(user), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		RequestBody("CreateUserRequest", createUserRequest{}).
+		Responds(http.StatusCreated, "User", userResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidRequest,
+			apiErrorInvalidUserName,
+			apiErrorInvalidUserEmail,
+			apiErrorRateLimited,
+			apiErrorInternal,
+		).
+		MapErrors(userServiceAPIError)
 }
 
-func handleGetUser(service UserService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func listUsersEndpoint(service UserService) Endpoint[listUsersRequest, userListResponse] {
+	return Get("/v1/users", "/users", "listUsers", decodeListUsersRequest, func(ctx context.Context, request listUsersRequest) (userListResponse, error) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return userListResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeGlobalRead(ctx); err != nil {
+			return userListResponse{}, err
 		}
 
-		id, err := utilities.ParseID(chi.URLParam(r, "user_id"))
+		users, err := service.ListUsers(ctx, request.Page)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_user_id", "Invalid user id")
-			return
+			return userListResponse{}, err
 		}
-
-		user, err := service.GetUser(r.Context(), id)
-		if writeUserServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newUserResponse(user))
-	}
+		return newUserListResponse(users)
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(paginationParameters()...).
+		Responds(http.StatusOK, "UserList", userListResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidPageSize,
+			apiErrorInvalidCursor,
+			apiErrorInternal,
+		).
+		MapErrors(userEndpointAPIError)
 }
 
-func writeUserServiceError(w http.ResponseWriter, err error) bool {
+func getUserEndpoint(service UserService) Endpoint[getUserRequest, userResponse] {
+	return Get("/v1/users/{user_id}", "/users/{user_id}", "getUser", decodeGetUserRequest, func(ctx context.Context, request getUserRequest) (userResponse, error) {
+		if service == nil {
+			return userResponse{}, apiErrorServiceUnavailable
+		}
+
+		user, err := service.GetUser(ctx, request.UserID)
+		if err != nil {
+			return userResponse{}, err
+		}
+		return newUserResponse(user), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(userIDParameter()).
+		Responds(http.StatusOK, "User", userResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidUserID,
+			apiErrorUserNotFound,
+			apiErrorInternal,
+		).
+		MapErrors(userServiceAPIError)
+}
+
+func decodeListUsersRequest(r *http.Request) (listUsersRequest, error) {
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listUsersRequest{}, paginationAPIError(err)
+	}
+	return listUsersRequest{Page: page}, nil
+}
+
+func decodeGetUserRequest(r *http.Request) (getUserRequest, error) {
+	userID, err := userIDRequest(r)
+	if err != nil {
+		return getUserRequest{}, err
+	}
+	return getUserRequest{UserID: userID}, nil
+}
+
+func userEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := userServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func userServiceAPIError(err error) (APIError, bool) {
 	switch {
 	case err == nil:
-		return false
+		return APIError{}, false
 	case errors.Is(err, users.ErrInvalidUserID):
-		writeError(w, http.StatusBadRequest, "invalid_user_id", "Invalid user id")
+		return apiErrorInvalidUserID, true
 	case errors.Is(err, users.ErrInvalidUserName):
-		writeError(w, http.StatusBadRequest, "invalid_user_name", "Invalid user name")
+		return apiErrorInvalidUserName, true
 	case errors.Is(err, users.ErrInvalidUserEmail):
-		writeError(w, http.StatusBadRequest, "invalid_user_email", "Invalid user email")
+		return apiErrorInvalidUserEmail, true
 	case errors.Is(err, users.ErrUserNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "User not found")
+		return apiErrorUserNotFound, true
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return APIError{}, false
 	}
-
-	return true
 }
 
 func newUserListResponse(list users.UserList) (userListResponse, error) {

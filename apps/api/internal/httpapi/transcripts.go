@@ -77,159 +77,258 @@ type updateTranscriptRequest struct {
 	CompletedAt optionalTimeRequest         `json:"completed_at"`
 }
 
+type createTranscriptEndpointRequest struct {
+	TenantID    utilities.ID
+	RecordingID utilities.ID
+	Body        createTranscriptRequest
+}
+
+type listTranscriptsRequest struct {
+	TenantID    utilities.ID
+	RecordingID utilities.ID
+	Page        pagination.PageRequest
+}
+
+type getTranscriptRequest struct {
+	TenantID     utilities.ID
+	TranscriptID utilities.ID
+}
+
+type updateTranscriptEndpointRequest struct {
+	TenantID     utilities.ID
+	TranscriptID utilities.ID
+	Body         updateTranscriptRequest
+}
+
 func mountTranscriptRoutes(r chi.Router, service TranscriptService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/recordings/{recording_id}/transcripts", handleCreateTranscript(service, authorizer))
-	r.Get("/tenants/{tenant_id}/transcripts", handleListTranscripts(service, authorizer))
-	r.Get("/tenants/{tenant_id}/transcripts/{transcript_id}", handleGetTranscript(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}/transcripts/{transcript_id}", handleUpdateTranscript(service, authorizer))
-}
-
-func handleCreateTranscript(service TranscriptService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		tenantID, recordingID, ok := tenantRecordingIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeTranscriptsPermission) {
-			return
-		}
-
-		var request createTranscriptRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		input, ok := request.toCreateInput(w, tenantID, recordingID)
-		if !ok {
-			return
-		}
-		transcript, err := service.Create(r.Context(), input)
-		if writeTranscriptServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, newTranscriptResponse(transcript))
+	for _, endpoint := range transcriptEndpoints(service, authorizer) {
+		endpoint.Mount(r, limits)
 	}
 }
 
-func handleListTranscripts(service TranscriptService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func transcriptEndpoints(service TranscriptService, authorizer TenantAuthorizer) []RouteEndpoint {
+	return []RouteEndpoint{
+		createTranscriptEndpoint(service, authorizer),
+		listTranscriptsEndpoint(service, authorizer),
+		getTranscriptEndpoint(service, authorizer),
+		updateTranscriptEndpoint(service, authorizer),
+	}
+}
+
+func createTranscriptEndpoint(service TranscriptService, authorizer TenantAuthorizer) Endpoint[createTranscriptEndpointRequest, transcriptResponse] {
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "createTranscript", decodeCreateTranscriptRequest, func(ctx context.Context, request createTranscriptEndpointRequest) (transcriptResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return transcriptResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTranscriptsPermission); err != nil {
+			return transcriptResponse{}, err
 		}
 
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readTranscriptsPermission) {
-			return
-		}
-
-		recordingID, ok := optionalQueryID(w, r, "recording_id", "invalid_recording_id", "Invalid recording id")
-		if !ok {
-			return
-		}
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
-		}
-
-		list, err := service.List(r.Context(), tenantID, recordingID, page)
-		if writeTranscriptServiceError(w, err) {
-			return
-		}
-
-		response, err := newTranscriptListResponse(list)
+		input, err := request.Body.toCreateInputValue(request.TenantID, request.RecordingID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return transcriptResponse{}, err
 		}
-		writeJSON(w, http.StatusOK, response)
-	}
+		transcript, err := service.Create(ctx, input)
+		if err != nil {
+			return transcriptResponse{}, err
+		}
+		return newTranscriptResponse(transcript), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), recordingIDParameter()).
+		RequestBody("CreateTranscriptRequest", createTranscriptRequest{}).
+		Responds(http.StatusCreated, "Transcript", transcriptResponse{}).
+		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidTranscriptStatus, apiErrorInvalidTranscriptProvider, apiErrorInvalidTranscriptModel, apiErrorInvalidTranscriptLanguages, apiErrorInvalidTranscriptField, apiErrorRecordingNotFound, apiErrorRateLimited)...).
+		MapErrors(transcriptEndpointAPIError)
 }
 
-func handleGetTranscript(service TranscriptService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func listTranscriptsEndpoint(service TranscriptService, authorizer TenantAuthorizer) Endpoint[listTranscriptsRequest, transcriptListResponse] {
+	return Get("/v1/tenants/{tenant_id}/transcripts", "/tenants/{tenant_id}/transcripts", "listTranscripts", decodeListTranscriptsRequest, func(ctx context.Context, request listTranscriptsRequest) (transcriptListResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return transcriptListResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTranscriptsPermission); err != nil {
+			return transcriptListResponse{}, err
 		}
 
-		tenantID, transcriptID, ok := tenantTranscriptIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readTranscriptsPermission) {
-			return
+		list, err := service.List(ctx, request.TenantID, request.RecordingID, request.Page)
+		if err != nil {
+			return transcriptListResponse{}, err
 		}
-
-		transcript, err := service.Get(r.Context(), tenantID, transcriptID)
-		if writeTranscriptServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newTranscriptResponse(transcript))
-	}
+		return newTranscriptListResponse(list)
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), recordingIDQueryParameter()}, paginationParameters()...)...).
+		Responds(http.StatusOK, "TranscriptList", transcriptListResponse{}).
+		Errors(transcriptReadErrors(apiErrorInvalidRecordingID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
+		MapErrors(transcriptEndpointAPIError)
 }
 
-func handleUpdateTranscript(service TranscriptService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func getTranscriptEndpoint(service TranscriptService, authorizer TenantAuthorizer) Endpoint[getTranscriptRequest, transcriptResponse] {
+	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "/tenants/{tenant_id}/transcripts/{transcript_id}", "getTranscript", decodeGetTranscriptRequest, func(ctx context.Context, request getTranscriptRequest) (transcriptResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return transcriptResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTranscriptsPermission); err != nil {
+			return transcriptResponse{}, err
 		}
 
-		tenantID, transcriptID, ok := tenantTranscriptIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeTranscriptsPermission) {
-			return
+		transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
+		if err != nil {
+			return transcriptResponse{}, err
 		}
-
-		var request updateTranscriptRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		transcript, err := service.Update(r.Context(), tenantID, transcriptID, request.toUpdateInput())
-		if writeTranscriptServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newTranscriptResponse(transcript))
-	}
+		return newTranscriptResponse(transcript), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(tenantIDParameter(), transcriptIDParameter()).
+		Responds(http.StatusOK, "Transcript", transcriptResponse{}).
+		Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound)...).
+		MapErrors(transcriptEndpointAPIError)
 }
 
-func writeTranscriptServiceError(w http.ResponseWriter, err error) bool {
+func updateTranscriptEndpoint(service TranscriptService, authorizer TenantAuthorizer) Endpoint[updateTranscriptEndpointRequest, transcriptResponse] {
+	return Patch("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "/tenants/{tenant_id}/transcripts/{transcript_id}", "updateTranscript", decodeUpdateTranscriptRequest, func(ctx context.Context, request updateTranscriptEndpointRequest) (transcriptResponse, error) {
+		if service == nil {
+			return transcriptResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTranscriptsPermission); err != nil {
+			return transcriptResponse{}, err
+		}
+
+		transcript, err := service.Update(ctx, request.TenantID, request.TranscriptID, request.Body.toUpdateInput())
+		if err != nil {
+			return transcriptResponse{}, err
+		}
+		return newTranscriptResponse(transcript), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), transcriptIDParameter()).
+		RequestBody("UpdateTranscriptRequest", updateTranscriptRequest{}).
+		Responds(http.StatusOK, "Transcript", transcriptResponse{}).
+		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidTranscriptID, apiErrorInvalidTranscriptStatus, apiErrorInvalidTranscriptProvider, apiErrorInvalidTranscriptModel, apiErrorInvalidTranscriptLanguages, apiErrorInvalidTranscriptField, apiErrorTranscriptNotFound, apiErrorRateLimited)...).
+		MapErrors(transcriptEndpointAPIError)
+}
+
+func decodeCreateTranscriptRequest(r *http.Request) (createTranscriptEndpointRequest, error) {
+	tenantID, recordingID, err := tenantRecordingIDsRequest(r)
+	if err != nil {
+		return createTranscriptEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[createTranscriptRequest](r)
+	if err != nil {
+		return createTranscriptEndpointRequest{}, err
+	}
+	return createTranscriptEndpointRequest{TenantID: tenantID, RecordingID: recordingID, Body: body}, nil
+}
+
+func decodeListTranscriptsRequest(r *http.Request) (listTranscriptsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listTranscriptsRequest{}, err
+	}
+	recordingID, err := optionalRecordingIDQuery(r)
+	if err != nil {
+		return listTranscriptsRequest{}, err
+	}
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listTranscriptsRequest{}, paginationAPIError(err)
+	}
+	return listTranscriptsRequest{TenantID: tenantID, RecordingID: recordingID, Page: page}, nil
+}
+
+func decodeGetTranscriptRequest(r *http.Request) (getTranscriptRequest, error) {
+	tenantID, transcriptID, err := tenantTranscriptIDsRequest(r)
+	if err != nil {
+		return getTranscriptRequest{}, err
+	}
+	return getTranscriptRequest{TenantID: tenantID, TranscriptID: transcriptID}, nil
+}
+
+func decodeUpdateTranscriptRequest(r *http.Request) (updateTranscriptEndpointRequest, error) {
+	tenantID, transcriptID, err := tenantTranscriptIDsRequest(r)
+	if err != nil {
+		return updateTranscriptEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[updateTranscriptRequest](r)
+	if err != nil {
+		return updateTranscriptEndpointRequest{}, err
+	}
+	return updateTranscriptEndpointRequest{TenantID: tenantID, TranscriptID: transcriptID, Body: body}, nil
+}
+
+func tenantTranscriptIDsRequest(r *http.Request) (utilities.ID, utilities.ID, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	transcriptID, err := transcriptIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	return tenantID, transcriptID, nil
+}
+
+func transcriptReadErrors(extra ...APIError) []APIError {
+	return append([]APIError{
+		apiErrorUnauthenticated,
+		apiErrorForbidden,
+		apiErrorServiceUnavailable,
+		apiErrorInvalidTenantID,
+		apiErrorInternal,
+	}, extra...)
+}
+
+func transcriptWriteErrors(extra ...APIError) []APIError {
+	return append([]APIError{
+		apiErrorUnauthenticated,
+		apiErrorForbidden,
+		apiErrorServiceUnavailable,
+		apiErrorInvalidTenantID,
+		apiErrorInternal,
+	}, extra...)
+}
+
+func transcriptEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := transcriptServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func transcriptServiceAPIError(err error) (APIError, bool) {
 	switch {
 	case err == nil:
-		return false
+		return APIError{}, false
 	case errors.Is(err, transcripts.ErrInvalidTenantID):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
+		return apiErrorInvalidTenantID, true
 	case errors.Is(err, transcripts.ErrInvalidTranscriptID):
-		writeError(w, http.StatusBadRequest, "invalid_transcript_id", "Invalid transcript id")
+		return apiErrorInvalidTranscriptID, true
 	case errors.Is(err, transcripts.ErrInvalidRecordingID):
-		writeError(w, http.StatusBadRequest, "invalid_recording_id", "Invalid recording id")
+		return apiErrorInvalidRecordingID, true
 	case errors.Is(err, transcripts.ErrInvalidRoomID):
-		writeError(w, http.StatusBadRequest, "invalid_room_id", "Invalid room id")
+		return apiErrorInvalidRoomID, true
 	case errors.Is(err, transcripts.ErrInvalidSessionID):
-		writeError(w, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
+		return apiErrorInvalidSessionID, true
 	case errors.Is(err, transcripts.ErrInvalidTranscriptStatus):
-		writeError(w, http.StatusBadRequest, "invalid_transcript_status", "Invalid transcript status")
+		return apiErrorInvalidTranscriptStatus, true
 	case errors.Is(err, transcripts.ErrInvalidProvider):
-		writeError(w, http.StatusBadRequest, "invalid_transcript_provider", "Invalid transcript provider")
+		return apiErrorInvalidTranscriptProvider, true
 	case errors.Is(err, transcripts.ErrInvalidModel):
-		writeError(w, http.StatusBadRequest, "invalid_transcript_model", "Invalid transcript model")
+		return apiErrorInvalidTranscriptModel, true
 	case errors.Is(err, transcripts.ErrInvalidLanguages):
-		writeError(w, http.StatusBadRequest, "invalid_transcript_languages", "Invalid transcript languages")
+		return apiErrorInvalidTranscriptLanguages, true
 	case errors.Is(err, transcripts.ErrInvalidTranscriptField):
-		writeError(w, http.StatusBadRequest, "invalid_transcript_field", "Invalid transcript field")
+		return apiErrorInvalidTranscriptField, true
 	case errors.Is(err, transcripts.ErrRecordingNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Recording not found")
+		return apiErrorRecordingNotFound, true
 	case errors.Is(err, transcripts.ErrTranscriptNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Transcript not found")
+		return apiErrorTranscriptNotFound, true
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return APIError{}, false
 	}
-	return true
 }
 
 func newTranscriptListResponse(list transcripts.TranscriptList) (transcriptListResponse, error) {
@@ -264,16 +363,14 @@ func newTranscriptResponse(transcript transcripts.Transcript) transcriptResponse
 	}
 }
 
-func (r createTranscriptRequest) toCreateInput(w http.ResponseWriter, tenantID utilities.ID, recordingID utilities.ID) (transcripts.CreateInput, bool) {
+func (r createTranscriptRequest) toCreateInputValue(tenantID utilities.ID, recordingID utilities.ID) (transcripts.CreateInput, error) {
 	roomID, err := utilities.ParseID(r.RoomID)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_room_id", "Invalid room id")
-		return transcripts.CreateInput{}, false
+		return transcripts.CreateInput{}, apiErrorInvalidRoomID
 	}
 	sessionID, err := utilities.ParseID(r.SessionID)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
-		return transcripts.CreateInput{}, false
+		return transcripts.CreateInput{}, apiErrorInvalidSessionID
 	}
 
 	return transcripts.CreateInput{
@@ -288,7 +385,7 @@ func (r createTranscriptRequest) toCreateInput(w http.ResponseWriter, tenantID u
 		Text:        r.Text,
 		Metadata:    r.Metadata.Value,
 		CompletedAt: r.CompletedAt,
-	}, true
+	}, nil
 }
 
 func (r updateTranscriptRequest) toUpdateInput() transcripts.UpdateInput {
@@ -304,16 +401,4 @@ func (r updateTranscriptRequest) toUpdateInput() transcripts.UpdateInput {
 			Value: r.CompletedAt.Value,
 		},
 	}
-}
-
-func tenantTranscriptIDs(w http.ResponseWriter, r *http.Request) (utilities.ID, utilities.ID, bool) {
-	tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	transcriptID, ok := parseRouteID(w, r, "transcript_id", "invalid_transcript_id", "Invalid transcript id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	return tenantID, transcriptID, true
 }

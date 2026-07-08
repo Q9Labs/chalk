@@ -114,6 +114,52 @@ type updateRoomSessionRequest struct {
 	EndedAt   optionalTimeRequest      `json:"ended_at"`
 }
 
+type createRoomEndpointRequest struct {
+	TenantID utilities.ID
+	Body     createRoomRequest
+}
+
+type listRoomsRequest struct {
+	TenantID utilities.ID
+	Page     pagination.PageRequest
+}
+
+type getRoomRequest struct {
+	TenantID utilities.ID
+	RoomID   utilities.ID
+}
+
+type updateRoomEndpointRequest struct {
+	TenantID utilities.ID
+	RoomID   utilities.ID
+	Body     updateRoomRequest
+}
+
+type createRoomSessionEndpointRequest struct {
+	TenantID utilities.ID
+	RoomID   utilities.ID
+	Body     createRoomSessionRequest
+}
+
+type listRoomSessionsRequest struct {
+	TenantID utilities.ID
+	RoomID   utilities.ID
+	Page     pagination.PageRequest
+}
+
+type getRoomSessionRequest struct {
+	TenantID  utilities.ID
+	RoomID    utilities.ID
+	SessionID utilities.ID
+}
+
+type updateRoomSessionEndpointRequest struct {
+	TenantID  utilities.ID
+	RoomID    utilities.ID
+	SessionID utilities.ID
+	Body      updateRoomSessionRequest
+}
+
 type optionalTimeRequest struct {
 	Set   bool
 	Value *time.Time
@@ -135,260 +181,378 @@ func (t *optionalTimeRequest) UnmarshalJSON(data []byte) error {
 }
 
 func mountRoomRoutes(r chi.Router, service RoomService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/rooms", handleCreateRoom(service, authorizer))
-	r.Get("/tenants/{tenant_id}/rooms", handleListRooms(service, authorizer))
-	r.Get("/tenants/{tenant_id}/rooms/{room_id}", handleGetRoom(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}/rooms/{room_id}", handleUpdateRoom(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/rooms/{room_id}/sessions", handleCreateRoomSession(service, authorizer))
-	r.Get("/tenants/{tenant_id}/rooms/{room_id}/sessions", handleListRoomSessions(service, authorizer))
-	r.Get("/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}", handleGetRoomSession(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}", handleUpdateRoomSession(service, authorizer))
-}
-
-func handleCreateRoom(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeRoomsPermission) {
-			return
-		}
-
-		var request createRoomRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		room, err := service.CreateRoom(r.Context(), request.toCreateInput(tenantID, createdByUserID(r.Context())))
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, newRoomResponse(room))
+	for _, endpoint := range roomEndpoints(service, authorizer) {
+		endpoint.Mount(r, limits)
 	}
 }
 
-func handleListRooms(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func roomEndpoints(service RoomService, authorizer TenantAuthorizer) []RouteEndpoint {
+	return []RouteEndpoint{
+		createRoomEndpoint(service, authorizer),
+		listRoomsEndpoint(service, authorizer),
+		getRoomEndpoint(service, authorizer),
+		updateRoomEndpoint(service, authorizer),
+		createRoomSessionEndpoint(service, authorizer),
+		listRoomSessionsEndpoint(service, authorizer),
+		getRoomSessionEndpoint(service, authorizer),
+		updateRoomSessionEndpoint(service, authorizer),
+	}
+}
+
+func createRoomEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[createRoomEndpointRequest, roomResponse] {
+	return Post("/v1/tenants/{tenant_id}/rooms", "/tenants/{tenant_id}/rooms", "createRoom", decodeCreateRoomRequest, func(ctx context.Context, request createRoomEndpointRequest) (roomResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return roomResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeRoomsPermission); err != nil {
+			return roomResponse{}, err
 		}
 
-		tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readRoomsPermission) {
-			return
-		}
-
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
-		}
-
-		list, err := service.ListRooms(r.Context(), tenantID, page)
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		response, err := newRoomListResponse(list)
+		room, err := service.CreateRoom(ctx, request.Body.toCreateInput(request.TenantID, createdByUserID(ctx)))
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return roomResponse{}, err
 		}
-		writeJSON(w, http.StatusOK, response)
-	}
+		return newRoomResponse(room), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter()).
+		RequestBody("CreateRoomRequest", createRoomRequest{}).
+		Responds(http.StatusCreated, "Room", roomResponse{}).
+		Errors(roomWriteErrors(apiErrorInvalidRequest, apiErrorRoomSlugAlreadyUsed, apiErrorRateLimited)...).
+		MapErrors(roomEndpointAPIError)
 }
 
-func handleGetRoom(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func listRoomsEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[listRoomsRequest, roomListResponse] {
+	return Get("/v1/tenants/{tenant_id}/rooms", "/tenants/{tenant_id}/rooms", "listRooms", decodeListRoomsRequest, func(ctx context.Context, request listRoomsRequest) (roomListResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return roomListResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRoomsPermission); err != nil {
+			return roomListResponse{}, err
 		}
 
-		tenantID, roomID, ok := tenantRoomIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readRoomsPermission) {
-			return
-		}
-
-		room, err := service.GetRoom(r.Context(), tenantID, roomID)
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newRoomResponse(room))
-	}
-}
-
-func handleUpdateRoom(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		tenantID, roomID, ok := tenantRoomIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeRoomsPermission) {
-			return
-		}
-
-		var request updateRoomRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		room, err := service.UpdateRoom(r.Context(), tenantID, roomID, request.toUpdateInput())
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newRoomResponse(room))
-	}
-}
-
-func handleCreateRoomSession(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		tenantID, roomID, ok := tenantRoomIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeSessionsPermission) {
-			return
-		}
-
-		var request createRoomSessionRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		session, err := service.CreateSession(r.Context(), request.toCreateInput(tenantID, roomID, createdByUserID(r.Context())))
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, newRoomSessionResponse(session))
-	}
-}
-
-func handleListRoomSessions(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		tenantID, roomID, ok := tenantRoomIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readSessionsPermission) {
-			return
-		}
-
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
-		}
-
-		list, err := service.ListSessions(r.Context(), tenantID, roomID, page)
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		response, err := newRoomSessionListResponse(list)
+		list, err := service.ListRooms(ctx, request.TenantID, request.Page)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return roomListResponse{}, err
 		}
-		writeJSON(w, http.StatusOK, response)
-	}
+		return newRoomListResponse(list)
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
+		Responds(http.StatusOK, "RoomList", roomListResponse{}).
+		Errors(roomReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
+		MapErrors(roomEndpointAPIError)
 }
 
-func handleGetRoomSession(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func getRoomEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[getRoomRequest, roomResponse] {
+	return Get("/v1/tenants/{tenant_id}/rooms/{room_id}", "/tenants/{tenant_id}/rooms/{room_id}", "getRoom", decodeGetRoomRequest, func(ctx context.Context, request getRoomRequest) (roomResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return roomResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRoomsPermission); err != nil {
+			return roomResponse{}, err
 		}
 
-		tenantID, roomID, sessionID, ok := tenantRoomSessionIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, readSessionsPermission) {
-			return
+		room, err := service.GetRoom(ctx, request.TenantID, request.RoomID)
+		if err != nil {
+			return roomResponse{}, err
 		}
-
-		session, err := service.GetSession(r.Context(), tenantID, roomID, sessionID)
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newRoomSessionResponse(session))
-	}
+		return newRoomResponse(room), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(tenantIDParameter(), roomIDParameter()).
+		Responds(http.StatusOK, "Room", roomResponse{}).
+		Errors(roomReadErrors(apiErrorInvalidRoomID, apiErrorRoomNotFound)...).
+		MapErrors(roomEndpointAPIError)
 }
 
-func handleUpdateRoomSession(service RoomService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func updateRoomEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[updateRoomEndpointRequest, roomResponse] {
+	return Patch("/v1/tenants/{tenant_id}/rooms/{room_id}", "/tenants/{tenant_id}/rooms/{room_id}", "updateRoom", decodeUpdateRoomRequest, func(ctx context.Context, request updateRoomEndpointRequest) (roomResponse, error) {
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return roomResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeRoomsPermission); err != nil {
+			return roomResponse{}, err
 		}
 
-		tenantID, roomID, sessionID, ok := tenantRoomSessionIDs(w, r)
-		if !ok || authorizeTenantRequest(w, r, authorizer, tenantID, writeSessionsPermission) {
-			return
+		room, err := service.UpdateRoom(ctx, request.TenantID, request.RoomID, request.Body.toUpdateInput())
+		if err != nil {
+			return roomResponse{}, err
 		}
-
-		var request updateRoomSessionRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		session, err := service.UpdateSession(r.Context(), tenantID, roomID, sessionID, request.toUpdateInput())
-		if writeRoomServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newRoomSessionResponse(session))
-	}
+		return newRoomResponse(room), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), roomIDParameter()).
+		RequestBody("UpdateRoomRequest", updateRoomRequest{}).
+		Responds(http.StatusOK, "Room", roomResponse{}).
+		Errors(roomWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorRoomSlugAlreadyUsed, apiErrorRoomNotFound, apiErrorRateLimited)...).
+		MapErrors(roomEndpointAPIError)
 }
 
-func writeRoomServiceError(w http.ResponseWriter, err error) bool {
+func createRoomSessionEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[createRoomSessionEndpointRequest, roomSessionResponse] {
+	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions", "/tenants/{tenant_id}/rooms/{room_id}/sessions", "createRoomSession", decodeCreateRoomSessionRequest, func(ctx context.Context, request createRoomSessionEndpointRequest) (roomSessionResponse, error) {
+		if service == nil {
+			return roomSessionResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
+			return roomSessionResponse{}, err
+		}
+
+		session, err := service.CreateSession(ctx, request.Body.toCreateInput(request.TenantID, request.RoomID, createdByUserID(ctx)))
+		if err != nil {
+			return roomSessionResponse{}, err
+		}
+		return newRoomSessionResponse(session), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), roomIDParameter()).
+		RequestBody("CreateRoomSessionRequest", createRoomSessionRequest{}).
+		Responds(http.StatusCreated, "RoomSession", roomSessionResponse{}).
+		Errors(roomWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionStatus, apiErrorInvalidRoomField, apiErrorRoomNotFound, apiErrorRateLimited)...).
+		MapErrors(roomEndpointAPIError)
+}
+
+func listRoomSessionsEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[listRoomSessionsRequest, roomSessionListResponse] {
+	return Get("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions", "/tenants/{tenant_id}/rooms/{room_id}/sessions", "listRoomSessions", decodeListRoomSessionsRequest, func(ctx context.Context, request listRoomSessionsRequest) (roomSessionListResponse, error) {
+		if service == nil {
+			return roomSessionListResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSessionsPermission); err != nil {
+			return roomSessionListResponse{}, err
+		}
+
+		list, err := service.ListSessions(ctx, request.TenantID, request.RoomID, request.Page)
+		if err != nil {
+			return roomSessionListResponse{}, err
+		}
+		return newRoomSessionListResponse(list)
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), roomIDParameter()}, paginationParameters()...)...).
+		Responds(http.StatusOK, "RoomSessionList", roomSessionListResponse{}).
+		Errors(roomReadErrors(apiErrorInvalidRoomID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
+		MapErrors(roomEndpointAPIError)
+}
+
+func getRoomSessionEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[getRoomSessionRequest, roomSessionResponse] {
+	return Get("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}", "getRoomSession", decodeGetRoomSessionRequest, func(ctx context.Context, request getRoomSessionRequest) (roomSessionResponse, error) {
+		if service == nil {
+			return roomSessionResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSessionsPermission); err != nil {
+			return roomSessionResponse{}, err
+		}
+
+		session, err := service.GetSession(ctx, request.TenantID, request.RoomID, request.SessionID)
+		if err != nil {
+			return roomSessionResponse{}, err
+		}
+		return newRoomSessionResponse(session), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter()).
+		Responds(http.StatusOK, "RoomSession", roomSessionResponse{}).
+		Errors(roomReadErrors(apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorSessionNotFound)...).
+		MapErrors(roomEndpointAPIError)
+}
+
+func updateRoomSessionEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[updateRoomSessionEndpointRequest, roomSessionResponse] {
+	return Patch("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}", "updateRoomSession", decodeUpdateRoomSessionRequest, func(ctx context.Context, request updateRoomSessionEndpointRequest) (roomSessionResponse, error) {
+		if service == nil {
+			return roomSessionResponse{}, apiErrorServiceUnavailable
+		}
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
+			return roomSessionResponse{}, err
+		}
+
+		session, err := service.UpdateSession(ctx, request.TenantID, request.RoomID, request.SessionID, request.Body.toUpdateInput())
+		if err != nil {
+			return roomSessionResponse{}, err
+		}
+		return newRoomSessionResponse(session), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter()).
+		RequestBody("UpdateRoomSessionRequest", updateRoomSessionRequest{}).
+		Responds(http.StatusOK, "RoomSession", roomSessionResponse{}).
+		Errors(roomWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidSessionStatus, apiErrorInvalidRoomField, apiErrorSessionNotFound, apiErrorRateLimited)...).
+		MapErrors(roomEndpointAPIError)
+}
+
+func decodeCreateRoomRequest(r *http.Request) (createRoomEndpointRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return createRoomEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[createRoomRequest](r)
+	if err != nil {
+		return createRoomEndpointRequest{}, err
+	}
+	return createRoomEndpointRequest{TenantID: tenantID, Body: body}, nil
+}
+
+func decodeListRoomsRequest(r *http.Request) (listRoomsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listRoomsRequest{}, err
+	}
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listRoomsRequest{}, paginationAPIError(err)
+	}
+	return listRoomsRequest{TenantID: tenantID, Page: page}, nil
+}
+
+func decodeGetRoomRequest(r *http.Request) (getRoomRequest, error) {
+	tenantID, roomID, err := tenantRoomIDsRequest(r)
+	if err != nil {
+		return getRoomRequest{}, err
+	}
+	return getRoomRequest{TenantID: tenantID, RoomID: roomID}, nil
+}
+
+func decodeUpdateRoomRequest(r *http.Request) (updateRoomEndpointRequest, error) {
+	tenantID, roomID, err := tenantRoomIDsRequest(r)
+	if err != nil {
+		return updateRoomEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[updateRoomRequest](r)
+	if err != nil {
+		return updateRoomEndpointRequest{}, err
+	}
+	return updateRoomEndpointRequest{TenantID: tenantID, RoomID: roomID, Body: body}, nil
+}
+
+func decodeCreateRoomSessionRequest(r *http.Request) (createRoomSessionEndpointRequest, error) {
+	tenantID, roomID, err := tenantRoomIDsRequest(r)
+	if err != nil {
+		return createRoomSessionEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[createRoomSessionRequest](r)
+	if err != nil {
+		return createRoomSessionEndpointRequest{}, err
+	}
+	return createRoomSessionEndpointRequest{TenantID: tenantID, RoomID: roomID, Body: body}, nil
+}
+
+func decodeListRoomSessionsRequest(r *http.Request) (listRoomSessionsRequest, error) {
+	tenantID, roomID, err := tenantRoomIDsRequest(r)
+	if err != nil {
+		return listRoomSessionsRequest{}, err
+	}
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listRoomSessionsRequest{}, paginationAPIError(err)
+	}
+	return listRoomSessionsRequest{TenantID: tenantID, RoomID: roomID, Page: page}, nil
+}
+
+func decodeGetRoomSessionRequest(r *http.Request) (getRoomSessionRequest, error) {
+	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(r)
+	if err != nil {
+		return getRoomSessionRequest{}, err
+	}
+	return getRoomSessionRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID}, nil
+}
+
+func decodeUpdateRoomSessionRequest(r *http.Request) (updateRoomSessionEndpointRequest, error) {
+	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(r)
+	if err != nil {
+		return updateRoomSessionEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[updateRoomSessionRequest](r)
+	if err != nil {
+		return updateRoomSessionEndpointRequest{}, err
+	}
+	return updateRoomSessionEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, Body: body}, nil
+}
+
+func tenantRoomIDsRequest(r *http.Request) (utilities.ID, utilities.ID, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	roomID, err := roomIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	return tenantID, roomID, nil
+}
+
+func tenantRoomSessionIDsRequest(r *http.Request) (utilities.ID, utilities.ID, utilities.ID, error) {
+	tenantID, roomID, err := tenantRoomIDsRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, utilities.ID{}, err
+	}
+	sessionID, err := sessionIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, utilities.ID{}, err
+	}
+	return tenantID, roomID, sessionID, nil
+}
+
+func roomReadErrors(extra ...APIError) []APIError {
+	return append([]APIError{
+		apiErrorUnauthenticated,
+		apiErrorForbidden,
+		apiErrorServiceUnavailable,
+		apiErrorInvalidTenantID,
+		apiErrorInternal,
+	}, extra...)
+}
+
+func roomWriteErrors(extra ...APIError) []APIError {
+	return append([]APIError{
+		apiErrorUnauthenticated,
+		apiErrorForbidden,
+		apiErrorServiceUnavailable,
+		apiErrorInvalidTenantID,
+		apiErrorInternal,
+	}, extra...)
+}
+
+func roomEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := roomServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func roomServiceAPIError(err error) (APIError, bool) {
 	switch {
 	case err == nil:
-		return false
+		return APIError{}, false
 	case errors.Is(err, rooms.ErrInvalidTenantID):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
+		return apiErrorInvalidTenantID, true
 	case errors.Is(err, rooms.ErrInvalidRoomID):
-		writeError(w, http.StatusBadRequest, "invalid_room_id", "Invalid room id")
+		return apiErrorInvalidRoomID, true
 	case errors.Is(err, rooms.ErrInvalidSessionID):
-		writeError(w, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
+		return apiErrorInvalidSessionID, true
 	case errors.Is(err, rooms.ErrInvalidRoomName):
-		writeError(w, http.StatusBadRequest, "invalid_room_name", "Invalid room name")
+		return apiErrorInvalidRoomName, true
 	case errors.Is(err, rooms.ErrInvalidRoomSlug):
-		writeError(w, http.StatusBadRequest, "invalid_room_slug", "Invalid room slug")
+		return apiErrorInvalidRoomSlug, true
 	case errors.Is(err, rooms.ErrInvalidRoomStatus):
-		writeError(w, http.StatusBadRequest, "invalid_room_status", "Invalid room status")
+		return apiErrorInvalidRoomStatus, true
 	case errors.Is(err, rooms.ErrInvalidMediaPlane):
-		writeError(w, http.StatusBadRequest, "invalid_media_plane", "Invalid media plane")
+		return apiErrorInvalidMediaPlane, true
 	case errors.Is(err, rooms.ErrInvalidSessionStatus):
-		writeError(w, http.StatusBadRequest, "invalid_session_status", "Invalid session status")
+		return apiErrorInvalidSessionStatus, true
 	case errors.Is(err, rooms.ErrInvalidRoomField):
-		writeError(w, http.StatusBadRequest, "invalid_room_field", "Invalid room field")
+		return apiErrorInvalidRoomField, true
 	case errors.Is(err, rooms.ErrRoomNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Room not found")
+		return apiErrorRoomNotFound, true
 	case errors.Is(err, rooms.ErrRoomSlugAlreadyUsed):
-		writeError(w, http.StatusConflict, "room_slug_already_used", "Room slug already used")
+		return apiErrorRoomSlugAlreadyUsed, true
 	case errors.Is(err, rooms.ErrSessionNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Room session not found")
+		return apiErrorSessionNotFound, true
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return APIError{}, false
 	}
-	return true
 }
 
 func newRoomListResponse(list rooms.RoomList) (roomListResponse, error) {
@@ -497,30 +661,6 @@ func (r updateRoomSessionRequest) toUpdateInput() rooms.UpdateSessionInput {
 			Value: r.EndedAt.Value,
 		},
 	}
-}
-
-func tenantRoomIDs(w http.ResponseWriter, r *http.Request) (utilities.ID, utilities.ID, bool) {
-	tenantID, ok := parseRouteID(w, r, "tenant_id", "invalid_tenant_id", "Invalid tenant id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	roomID, ok := parseRouteID(w, r, "room_id", "invalid_room_id", "Invalid room id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	return tenantID, roomID, true
-}
-
-func tenantRoomSessionIDs(w http.ResponseWriter, r *http.Request) (utilities.ID, utilities.ID, utilities.ID, bool) {
-	tenantID, roomID, ok := tenantRoomIDs(w, r)
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, utilities.ID{}, false
-	}
-	sessionID, ok := parseRouteID(w, r, "session_id", "invalid_session_id", "Invalid session id")
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, utilities.ID{}, false
-	}
-	return tenantID, roomID, sessionID, true
 }
 
 func createdByUserID(ctx context.Context) utilities.ID {

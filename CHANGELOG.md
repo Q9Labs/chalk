@@ -55,6 +55,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   limiting, trusted proxy client-IP handling, request body limits, production
   database TLS guardrails, safer diagnostics mounting, and escaped Cloudflare
   provider paths.
+- Migrated Go API v1 route registration to declarative endpoint contracts for
+  auth, users, memberships, rooms, recordings, transcripts, audit logs, and
+  contract generator previews.
 - Replaced private historical scratchpad entries with curated public summaries.
 - Replaced internal agent/runbook guidance with public contributor guidance.
 - Renamed public package scopes from `@q9labs/*` to `@q9labsai/*` for npm.
