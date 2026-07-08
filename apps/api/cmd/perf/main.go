@@ -687,8 +687,8 @@ func (r *runner) do(ctx context.Context, _ string, endpoint endpoint) (sample, e
 	if request.Body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if !endpoint.Public && r.authToken != "" {
-		req.Header.Set("Authorization", "Bearer "+r.authToken)
+	if token := r.bearerToken(endpoint); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	var t clientTraceState
 	trace := &httptrace.ClientTrace{
@@ -754,6 +754,16 @@ func (r *runner) do(ctx context.Context, _ string, endpoint endpoint) (sample, e
 	}
 
 	return res, nil
+}
+
+func (r *runner) bearerToken(endpoint endpoint) string {
+	if endpoint.Public {
+		return ""
+	}
+	if r.sessionToken != "" {
+		return r.sessionToken
+	}
+	return r.authToken
 }
 
 func (e endpoint) request(r *runner) endpointRequest {
