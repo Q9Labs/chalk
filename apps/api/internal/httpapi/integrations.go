@@ -53,8 +53,9 @@ type IntegrationService interface {
 	StartConnection(ctx context.Context, input integrations.StartConnectionInput) (integrations.StartConnectionResult, error)
 	ListConnections(ctx context.Context, input integrations.ListConnectionsInput) (integrations.ConnectionList, error)
 	GetConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, id utilities.ID) (integrations.Connection, error)
-	RefreshConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, id utilities.ID) (integrations.RefreshConnectionResult, error)
-	DisableConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, id utilities.ID, revoke bool) (integrations.Connection, error)
+	RefreshConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, actorType string, id utilities.ID) (integrations.RefreshConnectionResult, error)
+	DisableConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, actorType string, id utilities.ID, revoke bool) (integrations.Connection, error)
+	ExecuteAction(ctx context.Context, input integrations.ExecuteActionInput) (integrations.ExecuteActionResult, error)
 }
 
 type integrationServicesResponse struct {
@@ -67,9 +68,17 @@ type integrationServiceFamilyResponse struct {
 }
 
 type integrationServiceResponse struct {
+	ID             string                      `json:"id"`
+	Provider       string                      `json:"provider"`
+	Family         string                      `json:"family"`
+	DisplayName    string                      `json:"display_name"`
+	CapabilityTags []string                    `json:"capability_tags"`
+	RiskTags       []string                    `json:"risk_tags"`
+	Actions        []integrationActionResponse `json:"actions"`
+}
+
+type integrationActionResponse struct {
 	ID             string   `json:"id"`
-	Provider       string   `json:"provider"`
-	Family         string   `json:"family"`
 	DisplayName    string   `json:"display_name"`
 	CapabilityTags []string `json:"capability_tags"`
 	RiskTags       []string `json:"risk_tags"`
@@ -91,6 +100,19 @@ type startIntegrationConnectionResponse struct {
 type refreshIntegrationConnectionResponse struct {
 	Connection integrationConnectionResponse `json:"connection"`
 	ConnectURL string                        `json:"connect_url,omitempty"`
+}
+
+type executeIntegrationActionRequest struct {
+	Action    string         `json:"action"`
+	Arguments map[string]any `json:"arguments"`
+	Text      *string        `json:"text"`
+}
+
+type executeIntegrationActionResponse struct {
+	Connection integrationConnectionResponse `json:"connection"`
+	Action     integrationActionResponse     `json:"action"`
+	Data       map[string]any                `json:"data"`
+	LogID      string                        `json:"log_id,omitempty"`
 }
 
 type integrationConnectionResponse struct {
@@ -122,6 +144,7 @@ func mountIntegrationRoutes(r chi.Router, service IntegrationService, authorizer
 	r.Get("/tenants/{tenant_id}/integrations/connections", handleListIntegrationConnections(service, authorizer))
 	r.Get("/tenants/{tenant_id}/integrations/connections/{connection_id}", handleGetIntegrationConnection(service, authorizer))
 	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/integrations/connections/{connection_id}/refresh", handleRefreshIntegrationConnection(service, authorizer))
+	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/integrations/connections/{connection_id}/actions", handleExecuteIntegrationAction(service, authorizer))
 	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Delete("/tenants/{tenant_id}/integrations/connections/{connection_id}", handleDisableIntegrationConnection(service, authorizer))
 }
 
@@ -326,11 +349,65 @@ func handleRefreshIntegrationConnection(service IntegrationService, authorizer T
 			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
 			return
 		}
-		result, err := service.RefreshConnection(r.Context(), tenantID, ownerScopeUserID, integrationAuditActorUserID(principal), connectionID)
+		result, err := service.RefreshConnection(r.Context(), tenantID, ownerScopeUserID, integrationAuditActorUserID(principal), integrationAuditActorType(principal), connectionID)
 		if writeIntegrationServiceError(w, err) {
 			return
 		}
 		writeJSON(w, http.StatusOK, newRefreshIntegrationConnectionResponse(result, principal, ownerScopeUserID))
+	}
+}
+
+func handleExecuteIntegrationAction(service IntegrationService, authorizer TenantAuthorizer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenantID, connectionID, ok := parseTenantAndConnectionID(w, r)
+		if !ok {
+			return
+		}
+		if authorizeTenantRequest(w, r, authorizer, tenantID, writeIntegrationPermission) {
+			return
+		}
+		if service == nil {
+			writeServiceUnavailable(w)
+			return
+		}
+
+		var request executeIntegrationActionRequest
+		if err := decodeRequest(r, &request); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+			return
+		}
+		if strings.TrimSpace(request.Action) == "" {
+			writeError(w, http.StatusBadRequest, "invalid_integration_action", "Invalid integration action")
+			return
+		}
+		if request.Text != nil && request.Arguments != nil {
+			writeError(w, http.StatusBadRequest, "invalid_integration_action_input", "Use either action arguments or text")
+			return
+		}
+		if request.Text != nil && strings.TrimSpace(*request.Text) == "" {
+			writeError(w, http.StatusBadRequest, "invalid_integration_action_text", "Invalid integration action text")
+			return
+		}
+
+		principal, _ := authentication.PrincipalFromContext(r.Context())
+		if principal.Kind != authentication.PrincipalUser || principal.UserID.IsZero() {
+			writeError(w, http.StatusForbidden, "forbidden", "Access denied")
+			return
+		}
+		result, err := service.ExecuteAction(r.Context(), integrations.ExecuteActionInput{
+			TenantID:         tenantID,
+			OwnerScopeUserID: principal.UserID,
+			ActorUserID:      integrationAuditActorUserID(principal),
+			ActorType:        integrationAuditActorType(principal),
+			ConnectionID:     connectionID,
+			Action:           integrations.ActionID(strings.TrimSpace(request.Action)),
+			Arguments:        request.Arguments,
+			Text:             request.Text,
+		})
+		if writeIntegrationServiceError(w, err) {
+			return
+		}
+		writeJSON(w, http.StatusOK, newExecuteIntegrationActionResponse(result, principal, principal.UserID))
 	}
 }
 
@@ -355,7 +432,7 @@ func handleDisableIntegrationConnection(service IntegrationService, authorizer T
 			return
 		}
 		revoke := strings.EqualFold(r.URL.Query().Get("revoke"), "true")
-		connection, err := service.DisableConnection(r.Context(), tenantID, ownerScopeUserID, integrationAuditActorUserID(principal), connectionID, revoke)
+		connection, err := service.DisableConnection(r.Context(), tenantID, ownerScopeUserID, integrationAuditActorUserID(principal), integrationAuditActorType(principal), connectionID, revoke)
 		if writeIntegrationServiceError(w, err) {
 			return
 		}
@@ -386,6 +463,13 @@ func integrationAuditActorUserID(principal authentication.Principal) utilities.I
 		return utilities.ID{}
 	}
 	return principal.UserID
+}
+
+func integrationAuditActorType(principal authentication.Principal) string {
+	if principal.Kind == "" {
+		return "unknown"
+	}
+	return string(principal.Kind)
 }
 
 func parseTenantID(w http.ResponseWriter, r *http.Request) (utilities.ID, bool) {
@@ -465,6 +549,24 @@ func newIntegrationServiceResponse(service integrations.ServiceEntry) integratio
 		DisplayName:    service.DisplayName,
 		CapabilityTags: slices.Clone(service.CapabilityTags),
 		RiskTags:       slices.Clone(service.RiskTags),
+		Actions:        newIntegrationActionResponses(service.AllowedActions),
+	}
+}
+
+func newIntegrationActionResponses(actions []integrations.ActionPolicy) []integrationActionResponse {
+	response := make([]integrationActionResponse, 0, len(actions))
+	for _, action := range actions {
+		response = append(response, newIntegrationActionResponse(action))
+	}
+	return response
+}
+
+func newIntegrationActionResponse(action integrations.ActionPolicy) integrationActionResponse {
+	return integrationActionResponse{
+		ID:             string(action.ID),
+		DisplayName:    action.DisplayName,
+		CapabilityTags: slices.Clone(action.CapabilityTags),
+		RiskTags:       slices.Clone(action.RiskTags),
 	}
 }
 
@@ -480,6 +582,15 @@ func newRefreshIntegrationConnectionResponse(result integrations.RefreshConnecti
 	return refreshIntegrationConnectionResponse{
 		Connection: newIntegrationConnectionResponseForPrincipal(result.Connection, principal, ownerScopeUserID),
 		ConnectURL: result.ConnectURL,
+	}
+}
+
+func newExecuteIntegrationActionResponse(result integrations.ExecuteActionResult, principal authentication.Principal, ownerScopeUserID utilities.ID) executeIntegrationActionResponse {
+	return executeIntegrationActionResponse{
+		Connection: newIntegrationConnectionResponseForPrincipal(result.Connection, principal, ownerScopeUserID),
+		Action:     newIntegrationActionResponse(result.Action),
+		Data:       result.Data,
+		LogID:      result.LogID,
 	}
 }
 

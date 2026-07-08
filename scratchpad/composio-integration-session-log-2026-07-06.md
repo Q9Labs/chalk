@@ -218,6 +218,31 @@
 - `apps/api/scripts/perf-local.sh` still blocks at the known tenant seed issue:
   `seed tenants: HTTP 401`.
 
+## 2026-07-08 15:10 PKT
+
+- Addressed the debrief findings before merging:
+  - Added stable Chalk action IDs to integration action policies so HTTP clients
+    do not depend on raw Composio tool slugs.
+  - Added allowlisted action execution through
+    `POST /v1/tenants/{tenant_id}/integrations/connections/{connection_id}/actions`.
+  - Added Composio direct tool execution mapping for
+    `POST /tools/execute/{tool_slug}` using connected account ID, user ID, and
+    arguments/text.
+  - Carried audit actor type through integration audits instead of hardcoding
+    every row as `user`.
+  - Exposed action metadata in the service catalog and documented connect-only
+    services.
+  - Added `integration-execute-action` to the Execution Trace Harness.
+- Fresh focused checks passed:
+  `go test ./internal/integrations ./internal/adapters/composio ./internal/adapters/postgres ./internal/httpapi ./internal/traceharness ./cmd/trace`.
+- Trace check passed:
+  `go run ./cmd/trace -scenario integration-execute-action`.
+- Fresh live read-only Composio metadata check passed with the runtime secret:
+  `CHALK_COMPOSIO_LIVE_TESTS=1 go test ./internal/adapters/composio -run Live -count=1`.
+- Full API checks passed after starting local dev services:
+  `go test ./...`, `apps/api/scripts/gate.sh`, and
+  `apps/api/scripts/perf-local.sh`.
+
 ## 2026-07-06 22:20 PKT
 
 - Delegated the local perf seed auth failure to a `gpt-5.5` high worker.

@@ -23,18 +23,22 @@ Last source check: 2026-07-06.
    Gmail, Linear, etc. are services.
 4. For Google/Microsoft suites, prefer separate Chalk services so users grant
    access granularly.
-5. Add or update catalog tests when the new service changes granularity,
+5. Services may be catalog/connect-only while action choices are unresolved, but
+   they must expose an empty `actions` list until exact tools are verified.
+6. Add or update catalog tests when the new service changes granularity,
    duplicate-ID behavior, or large-toolkit allowlist rules.
 
 ## Add An Action
 
 1. Verify the exact Composio tool slug and required scopes against the current
    tools/scopes APIs.
-2. Add the slug to the service's `AllowedActions`; broad toolkits must not ship
-   without explicit action allowlists.
-3. Tag risky writes with `RiskTags` such as `external_send`, `issue_write`, or
+2. Add a stable Chalk action ID plus the provider slug to the service's
+   `AllowedActions`; clients send the Chalk action ID, while the Composio slug
+   stays behind the API boundary.
+3. Broad toolkits must not ship executable actions without explicit allowlists.
+4. Tag risky writes with `RiskTags` such as `external_send`, `issue_write`, or
    `document_write`.
-4. Run the live Composio catalog test before merging:
+5. Run the live Composio catalog test before merging:
 
 ```bash
 CHALK_COMPOSIO_API_KEY="$COMPOSIO_API_KEY" CHALK_COMPOSIO_LIVE_TESTS=1 \
@@ -42,3 +46,23 @@ go test ./internal/adapters/composio -run Live -count=1
 ```
 
 Never commit the API key, raw provider payloads, or provider request IDs.
+
+## Execute An Action
+
+Clients execute allowed actions with:
+
+```text
+POST /v1/tenants/{tenant_id}/integrations/connections/{connection_id}/actions
+```
+
+Request bodies use Chalk-owned action IDs:
+
+```json
+{"action":"send_message","arguments":{"channel":"C123","text":"Recap is ready"}}
+```
+
+The domain service verifies that the local connection is active, the action ID
+is allowlisted for that service, and only then maps to the current Composio tool
+slug. Live end-to-end execution still requires a disposable connected account;
+metadata/scopes checks alone do not prove that an action succeeds against a real
+Slack, Gmail, Linear, or Google account.

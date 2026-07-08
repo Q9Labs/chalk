@@ -26,6 +26,7 @@ var (
 
 type ProviderName string
 type ServiceID string
+type ActionID string
 type ConnectionStatus string
 
 const (
@@ -54,6 +55,7 @@ type ServiceEntry struct {
 }
 
 type ActionPolicy struct {
+	ID             ActionID
 	Slug           string
 	DisplayName    string
 	CapabilityTags []string
@@ -105,6 +107,24 @@ type RefreshConnectionResult struct {
 	ConnectURL string
 }
 
+type ExecuteActionInput struct {
+	TenantID         utilities.ID
+	OwnerScopeUserID utilities.ID
+	ActorUserID      utilities.ID
+	ActorType        string
+	ConnectionID     utilities.ID
+	Action           ActionID
+	Arguments        map[string]any
+	Text             *string
+}
+
+type ExecuteActionResult struct {
+	Connection Connection
+	Action     ActionPolicy
+	Data       map[string]any
+	LogID      string
+}
+
 type ListConnectionsInput struct {
 	TenantID utilities.ID
 	UserID   utilities.ID
@@ -146,6 +166,7 @@ type AuditLogInput struct {
 	ID          utilities.ID
 	TenantID    utilities.ID
 	ActorUserID utilities.ID
+	ActorType   string
 	Action      string
 	ResourceID  utilities.ID
 	Outcome     string
@@ -167,6 +188,7 @@ type Provider interface {
 	GetConnection(ctx context.Context, input GetProviderConnectionInput) (ProviderConnection, error)
 	RefreshConnection(ctx context.Context, input RefreshConnectionInput) (ProviderConnection, error)
 	DisableConnection(ctx context.Context, input DisableConnectionInput) error
+	ExecuteAction(ctx context.Context, input ExecuteProviderActionInput) (ProviderActionResult, error)
 }
 
 type CreateConnectLinkInput struct {
@@ -196,6 +218,21 @@ type RefreshConnectionInput struct {
 type DisableConnectionInput struct {
 	ExternalAccountRef string
 	Revoke             bool
+}
+
+type ExecuteProviderActionInput struct {
+	UserID             utilities.ID
+	ExternalAccountRef string
+	ToolkitSlug        string
+	ActionSlug         string
+	Version            string
+	Arguments          map[string]any
+	Text               *string
+}
+
+type ProviderActionResult struct {
+	Data  map[string]any
+	LogID string
 }
 
 type ProviderConnection struct {

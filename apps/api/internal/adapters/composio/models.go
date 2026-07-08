@@ -21,6 +21,21 @@ type refreshConnectionResponse struct {
 	RedirectURL string `json:"redirect_url"`
 }
 
+type executeToolRequest struct {
+	ConnectedAccountID string          `json:"connected_account_id"`
+	UserID             string          `json:"user_id"`
+	Version            string          `json:"version,omitempty"`
+	Arguments          *map[string]any `json:"arguments,omitempty"`
+	Text               string          `json:"text,omitempty"`
+}
+
+type executeToolResponse struct {
+	Data       map[string]any `json:"data"`
+	Error      any            `json:"error"`
+	Successful bool           `json:"successful"`
+	LogID      string         `json:"log_id"`
+}
+
 type connectedAccountResponse struct {
 	ID              string   `json:"id"`
 	Alias           string   `json:"alias"`

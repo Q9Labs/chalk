@@ -15,6 +15,9 @@ const (
 	auditConnectionConnected = "integration.connection.connected"
 	auditConnectionFailed    = "integration.connection.failed"
 	auditConnectionDisabled  = "integration.connection.disabled"
+	auditActionExecuted      = "integration.action.executed"
+
+	auditActorUser = "user"
 )
 
 type Service struct {
@@ -109,7 +112,7 @@ func (s Service) StartConnection(ctx context.Context, input StartConnectionInput
 		return StartConnectionResult{}, err
 	}
 
-	if err := s.audit(ctx, input.TenantID, input.UserID, auditConnectionStarted, connection.ID, "success", nil); err != nil {
+	if err := s.audit(ctx, input.TenantID, input.UserID, auditActorUser, auditConnectionStarted, connection.ID, "success", nil); err != nil {
 		return StartConnectionResult{}, err
 	}
 
@@ -151,7 +154,7 @@ func (s Service) startExistingConnection(ctx context.Context, tenantID utilities
 		if err != nil {
 			return StartConnectionResult{}, err
 		}
-		if err := s.audit(ctx, tenantID, userID, auditConnectionStarted, updated.ID, "success", nil); err != nil {
+		if err := s.audit(ctx, tenantID, userID, auditActorUser, auditConnectionStarted, updated.ID, "success", nil); err != nil {
 			return StartConnectionResult{}, err
 		}
 		return StartConnectionResult{
@@ -203,7 +206,7 @@ func (s Service) GetConnection(ctx context.Context, tenantID utilities.ID, actor
 	return connection, nil
 }
 
-func (s Service) RefreshConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, id utilities.ID) (RefreshConnectionResult, error) {
+func (s Service) RefreshConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, actorType string, id utilities.ID) (RefreshConnectionResult, error) {
 	connection, err := s.GetConnection(ctx, tenantID, ownerScopeUserID, id)
 	if err != nil {
 		return RefreshConnectionResult{}, err
@@ -217,7 +220,7 @@ func (s Service) RefreshConnection(ctx context.Context, tenantID utilities.ID, o
 	})
 	if err != nil {
 		code := providerErrorCode(err)
-		auditErr := s.audit(ctx, tenantID, actorUserID, auditConnectionFailed, connection.ID, "failure", &code)
+		auditErr := s.audit(ctx, tenantID, actorUserID, actorType, auditConnectionFailed, connection.ID, "failure", &code)
 		if auditErr != nil {
 			return RefreshConnectionResult{}, auditErr
 		}
@@ -229,7 +232,7 @@ func (s Service) RefreshConnection(ctx context.Context, tenantID utilities.ID, o
 		return RefreshConnectionResult{}, err
 	}
 
-	if err := s.audit(ctx, tenantID, actorUserID, auditConnectionConnected, connection.ID, "success", nil); err != nil {
+	if err := s.audit(ctx, tenantID, actorUserID, actorType, auditConnectionConnected, connection.ID, "success", nil); err != nil {
 		return RefreshConnectionResult{}, err
 	}
 	return RefreshConnectionResult{
@@ -238,7 +241,7 @@ func (s Service) RefreshConnection(ctx context.Context, tenantID utilities.ID, o
 	}, nil
 }
 
-func (s Service) DisableConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, id utilities.ID, revoke bool) (Connection, error) {
+func (s Service) DisableConnection(ctx context.Context, tenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, actorType string, id utilities.ID, revoke bool) (Connection, error) {
 	connection, err := s.GetConnection(ctx, tenantID, ownerScopeUserID, id)
 	if err != nil {
 		return Connection{}, err
@@ -278,10 +281,65 @@ func (s Service) DisableConnection(ctx context.Context, tenantID utilities.ID, o
 		return Connection{}, err
 	}
 
-	if err := s.audit(ctx, tenantID, actorUserID, auditConnectionDisabled, connection.ID, "success", nil); err != nil {
+	if err := s.audit(ctx, tenantID, actorUserID, actorType, auditConnectionDisabled, connection.ID, "success", nil); err != nil {
 		return Connection{}, err
 	}
 	return updated, nil
+}
+
+func (s Service) ExecuteAction(ctx context.Context, input ExecuteActionInput) (ExecuteActionResult, error) {
+	connection, err := s.GetConnection(ctx, input.TenantID, input.OwnerScopeUserID, input.ConnectionID)
+	if err != nil {
+		return ExecuteActionResult{}, err
+	}
+	if connection.Status != StatusActive {
+		return ExecuteActionResult{}, ErrConnectionNotActive
+	}
+	if s.provider == nil {
+		return ExecuteActionResult{}, ErrProviderUnavailable
+	}
+
+	entry, ok := s.catalog.Get(connection.Service)
+	if !ok {
+		return ExecuteActionResult{}, ErrInvalidService
+	}
+	action, ok := allowedAction(entry, input.Action)
+	if !ok {
+		return ExecuteActionResult{}, ErrActionNotAllowed
+	}
+
+	result, err := s.provider.ExecuteAction(ctx, ExecuteProviderActionInput{
+		UserID:             connection.UserID,
+		ExternalAccountRef: connection.ExternalAccountRef,
+		ToolkitSlug:        entry.ToolkitSlug,
+		ActionSlug:         action.Slug,
+		Version:            entry.ToolkitVersion,
+		Arguments:          input.Arguments,
+		Text:               input.Text,
+	})
+	if err != nil {
+		code := providerErrorCode(err)
+		auditErr := s.audit(ctx, input.TenantID, input.ActorUserID, input.ActorType, auditActionExecuted, connection.ID, "failure", &code)
+		if auditErr != nil {
+			return ExecuteActionResult{}, auditErr
+		}
+		return ExecuteActionResult{}, err
+	}
+
+	used := connection
+	if marked, err := s.repository.MarkConnectionUsed(ctx, connection.TenantID, connection.ID); err == nil {
+		used = marked
+	}
+	// The provider action may already have external side effects. Do not turn
+	// best-effort local bookkeeping failures into retryable execution errors.
+	_ = s.audit(ctx, input.TenantID, input.ActorUserID, input.ActorType, auditActionExecuted, connection.ID, "success", nil)
+
+	return ExecuteActionResult{
+		Connection: used,
+		Action:     action,
+		Data:       result.Data,
+		LogID:      result.LogID,
+	}, nil
 }
 
 func validateConnectionOwner(tenantID utilities.ID, userID utilities.ID) error {
@@ -309,16 +367,29 @@ func updateInputFromProvider(connection Connection, provider ProviderConnection)
 	}
 }
 
-func (s Service) audit(ctx context.Context, tenantID utilities.ID, actorUserID utilities.ID, action string, resourceID utilities.ID, outcome string, errorCode *string) error {
+func allowedAction(entry ServiceEntry, id ActionID) (ActionPolicy, bool) {
+	for _, action := range entry.AllowedActions {
+		if action.ID == id {
+			return action, true
+		}
+	}
+	return ActionPolicy{}, false
+}
+
+func (s Service) audit(ctx context.Context, tenantID utilities.ID, actorUserID utilities.ID, actorType string, action string, resourceID utilities.ID, outcome string, errorCode *string) error {
 	id, err := utilities.NewID()
 	if err != nil {
 		return fmt.Errorf("generate integration audit id: %w", err)
+	}
+	if actorType == "" {
+		actorType = auditActorUser
 	}
 
 	return s.repository.CreateAuditLog(ctx, AuditLogInput{
 		ID:          id,
 		TenantID:    tenantID,
 		ActorUserID: actorUserID,
+		ActorType:   actorType,
 		Action:      action,
 		ResourceID:  resourceID,
 		Outcome:     outcome,

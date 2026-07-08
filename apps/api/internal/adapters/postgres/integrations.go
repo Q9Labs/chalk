@@ -175,7 +175,7 @@ func (r IntegrationRepository) CreateAuditLog(ctx context.Context, input integra
 		ID:          uuid(input.ID),
 		TenantID:    uuid(input.TenantID),
 		ActorUserID: nullableUUID(input.ActorUserID),
-		ActorType:   "user",
+		ActorType:   input.ActorType,
 		Action:      input.Action,
 		ResourceType: pgtype.Text{
 			String: "integration_connection",

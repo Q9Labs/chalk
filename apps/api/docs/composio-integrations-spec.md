@@ -354,6 +354,11 @@ Initial routes:
   - Reads one connection.
 - `POST /v1/tenants/{tenant_id}/integrations/connections/{connection_id}/refresh`
   - Reconciles local state from the provider.
+- `POST /v1/tenants/{tenant_id}/integrations/connections/{connection_id}/actions`
+  - Executes one allowlisted Chalk action ID against an active connection.
+  - Request uses either `arguments` or `text`, never both.
+  - The service maps the Chalk action ID to the current Composio tool slug after
+    validating the service catalog and connection state.
 - `DELETE /v1/tenants/{tenant_id}/integrations/connections/{connection_id}`
   - Disables or revokes a connection through provider and local state.
 
@@ -364,14 +369,14 @@ Webhook route:
   - Does not require Chalk user auth.
   - Must verify signature before parsing expensive payloads or touching storage.
 
-Execution routes should wait for the first product workflow. Prefer product-level
-commands like "send recap to Slack" over exposing arbitrary Composio tool
-execution to clients.
+Execution routes must stay allowlist-first. Prefer product-level commands like
+"send recap to Slack" over exposing arbitrary Composio tool execution to clients.
 
 Stable error codes:
 
 - `invalid_integration_provider`
 - `invalid_integration_service`
+- `invalid_integration_action`
 - `integration_provider_unavailable`
 - `integration_provider_unauthorized`
 - `integration_provider_rate_limited`

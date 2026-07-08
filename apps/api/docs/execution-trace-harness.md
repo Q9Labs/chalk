@@ -25,6 +25,7 @@ From `apps/api`:
 go run ./cmd/trace
 go run ./cmd/trace -scenario all
 go run ./cmd/trace -scenario tenant-create
+go run ./cmd/trace -scenario integration-execute-action
 go run ./cmd/trace -color always
 go run ./cmd/trace -style tree
 go run ./cmd/trace -format json

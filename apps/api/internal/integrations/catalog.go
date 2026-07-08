@@ -36,6 +36,11 @@ func NewCatalog(entries []ServiceEntry) (Catalog, error) {
 		if largeToolkit(entry.ToolkitSlug) && len(entry.AllowedActions) == 0 {
 			return Catalog{}, fmt.Errorf("%w: missing action policy for %s", ErrInvalidCatalog, entry.ID)
 		}
+		for _, action := range entry.AllowedActions {
+			if action.ID == "" || action.Slug == "" || action.DisplayName == "" {
+				return Catalog{}, fmt.Errorf("%w: invalid action policy for %s", ErrInvalidCatalog, entry.ID)
+			}
+		}
 
 		entry.Enabled = true
 		entry.AllowedActions = slices.Clone(entry.AllowedActions)
@@ -102,38 +107,38 @@ func largeToolkit(slug string) bool {
 func defaultServiceEntries() []ServiceEntry {
 	return []ServiceEntry{
 		service("Google", "gmail", "Gmail", "gmail", []ActionPolicy{
-			action("GMAIL_SEND_EMAIL", "Send email", []string{"write"}, []string{"external_send"}),
-			action("GMAIL_CREATE_EMAIL_DRAFT", "Create draft", []string{"write"}, []string{"draft"}),
+			action("send_email", "GMAIL_SEND_EMAIL", "Send email", []string{"write"}, []string{"external_send"}),
+			action("create_draft", "GMAIL_CREATE_EMAIL_DRAFT", "Create draft", []string{"write"}, []string{"draft"}),
 		}, []string{"email", "read", "write"}),
 		service("Google", "google_calendar", "Google Calendar", "googlecalendar", []ActionPolicy{
-			action("GOOGLECALENDAR_CREATE_EVENT", "Create event", []string{"write"}, []string{"calendar_write"}),
-			action("GOOGLECALENDAR_FIND_EVENT", "Find event", []string{"read"}, nil),
+			action("create_event", "GOOGLECALENDAR_CREATE_EVENT", "Create event", []string{"write"}, []string{"calendar_write"}),
+			action("find_event", "GOOGLECALENDAR_FIND_EVENT", "Find event", []string{"read"}, nil),
 		}, []string{"calendar", "read", "write"}),
 		service("Google", "google_drive", "Google Drive", "googledrive", []ActionPolicy{
-			action("GOOGLEDRIVE_FIND_FILE", "Find file", []string{"read"}, nil),
-			action("GOOGLEDRIVE_UPLOAD_FILE", "Upload file", []string{"write"}, []string{"file_write"}),
+			action("find_file", "GOOGLEDRIVE_FIND_FILE", "Find file", []string{"read"}, nil),
+			action("upload_file", "GOOGLEDRIVE_UPLOAD_FILE", "Upload file", []string{"write"}, []string{"file_write"}),
 		}, []string{"files", "read", "write"}),
 		service("Google", "google_docs", "Google Docs", "googledocs", []ActionPolicy{
-			action("GOOGLEDOCS_CREATE_DOCUMENT", "Create document", []string{"write"}, []string{"document_write"}),
+			action("create_document", "GOOGLEDOCS_CREATE_DOCUMENT", "Create document", []string{"write"}, []string{"document_write"}),
 		}, []string{"docs", "write"}),
 		service("Google", "google_sheets", "Google Sheets", "googlesheets", []ActionPolicy{
-			action("GOOGLESHEETS_VALUES_UPDATE", "Update values", []string{"write"}, []string{"spreadsheet_write"}),
+			action("update_values", "GOOGLESHEETS_VALUES_UPDATE", "Update values", []string{"write"}, []string{"spreadsheet_write"}),
 		}, []string{"sheets", "write"}),
 		service("Google", "google_slides", "Google Slides", "googleslides", nil, []string{"slides", "write"}),
 		service("Google", "google_forms", "Google Forms", "googleforms", nil, []string{"forms", "write"}),
 		service("Google", "google_tasks", "Google Tasks", "googletasks", nil, []string{"tasks", "write"}),
 		service("Google", "google_meet", "Google Meet", "googlemeet", nil, []string{"meetings", "read"}),
 		service("Work", "slack", "Slack", "slack", []ActionPolicy{
-			action("SLACK_SEND_MESSAGE", "Send channel message", []string{"write"}, []string{"external_send"}),
+			action("send_message", "SLACK_SEND_MESSAGE", "Send channel message", []string{"write"}, []string{"external_send"}),
 		}, []string{"chat", "write"}),
 		service("Work", "linear", "Linear", "linear", []ActionPolicy{
-			action("LINEAR_CREATE_LINEAR_ISSUE", "Create issue", []string{"write"}, []string{"issue_write"}),
+			action("create_issue", "LINEAR_CREATE_LINEAR_ISSUE", "Create issue", []string{"write"}, []string{"issue_write"}),
 		}, []string{"issues", "write"}),
 		service("Work", "github", "GitHub", "github", []ActionPolicy{
-			action("GITHUB_CREATE_AN_ISSUE", "Create issue", []string{"write"}, []string{"issue_write"}),
+			action("create_issue", "GITHUB_CREATE_AN_ISSUE", "Create issue", []string{"write"}, []string{"issue_write"}),
 		}, []string{"developer", "write"}),
 		service("Work", "notion", "Notion", "notion", []ActionPolicy{
-			action("NOTION_CREATE_NOTION_PAGE", "Create page", []string{"write"}, []string{"document_write"}),
+			action("create_page", "NOTION_CREATE_NOTION_PAGE", "Create page", []string{"write"}, []string{"document_write"}),
 		}, []string{"notes", "write"}),
 	}
 }
@@ -151,8 +156,9 @@ func service(family string, id ServiceID, name string, toolkit string, actions [
 	}
 }
 
-func action(slug string, name string, tags []string, risks []string) ActionPolicy {
+func action(id ActionID, slug string, name string, tags []string, risks []string) ActionPolicy {
 	return ActionPolicy{
+		ID:             id,
 		Slug:           slug,
 		DisplayName:    name,
 		CapabilityTags: tags,

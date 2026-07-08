@@ -102,6 +102,37 @@ func TestRunAllRegisteredScenarios(t *testing.T) {
 	}
 }
 
+func TestRunExecuteIntegrationActionScenario(t *testing.T) {
+	result, err := Run(context.Background(), ExecuteIntegrationActionScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		Action struct {
+			ID string `json:"id"`
+		} `json:"action"`
+		Data  map[string]any `json:"data"`
+		LogID string         `json:"log_id"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Action.ID != "send_message" || body.Data["ok"] != true || body.LogID != "log_trace_123" {
+		t.Fatalf("body = %#v", body)
+	}
+
+	assertEvent(t, result.Events, "http", "POST integration action")
+	assertEvent(t, result.Events, "authorization", "AuthorizeTenant")
+	assertEvent(t, result.Events, "repository", "IntegrationRepository.GetConnection")
+	assertEvent(t, result.Events, "provider", "composio.ExecuteAction")
+	assertEvent(t, result.Events, "repository", "IntegrationRepository.MarkConnectionUsed")
+	assertEvent(t, result.Events, "audit", "CreateAuditLog")
+}
+
 func TestRunRejectsUnknownScenario(t *testing.T) {
 	_, err := Run(context.Background(), "missing")
 	if err == nil {

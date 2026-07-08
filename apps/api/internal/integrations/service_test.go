@@ -16,6 +16,7 @@ type repository struct {
 	getConnectionByExternalRef func(context.Context, utilities.ID, ProviderName, ServiceID, string) (Connection, error)
 	listConnections            func(context.Context, ListConnectionsInput) (ConnectionList, error)
 	updateConnection           func(context.Context, UpdateConnectionInput) (Connection, error)
+	markConnectionUsed         func(context.Context, utilities.ID, utilities.ID) (Connection, error)
 	createAuditLog             func(context.Context, AuditLogInput) error
 }
 
@@ -23,6 +24,7 @@ type provider struct {
 	createConnectLink func(context.Context, CreateConnectLinkInput) (ConnectLink, error)
 	refreshConnection func(context.Context, RefreshConnectionInput) (ProviderConnection, error)
 	disableConnection func(context.Context, DisableConnectionInput) error
+	executeAction     func(context.Context, ExecuteProviderActionInput) (ProviderActionResult, error)
 }
 
 func (r repository) CreateConnection(ctx context.Context, input CreateConnectionInput) (Connection, error) {
@@ -60,7 +62,10 @@ func (r repository) UpdateConnection(ctx context.Context, input UpdateConnection
 	return r.updateConnection(ctx, input)
 }
 
-func (r repository) MarkConnectionUsed(context.Context, utilities.ID, utilities.ID) (Connection, error) {
+func (r repository) MarkConnectionUsed(ctx context.Context, tenantID utilities.ID, id utilities.ID) (Connection, error) {
+	if r.markConnectionUsed != nil {
+		return r.markConnectionUsed(ctx, tenantID, id)
+	}
 	return Connection{}, errors.New("unexpected mark used")
 }
 
@@ -94,6 +99,13 @@ func (p provider) DisableConnection(ctx context.Context, input DisableConnection
 		return errors.New("unexpected disable connection")
 	}
 	return p.disableConnection(ctx, input)
+}
+
+func (p provider) ExecuteAction(ctx context.Context, input ExecuteProviderActionInput) (ProviderActionResult, error) {
+	if p.executeAction == nil {
+		return ProviderActionResult{}, errors.New("unexpected execute action")
+	}
+	return p.executeAction(ctx, input)
 }
 
 func TestStartConnectionCreatesPendingConnectionAndAudit(t *testing.T) {
@@ -398,7 +410,7 @@ func TestRefreshConnectionAuditsProviderFailure(t *testing.T) {
 		},
 	}, catalogForTest(t))
 
-	_, err := service.RefreshConnection(context.Background(), tenantID, utilities.ID{}, userID, connectionID)
+	_, err := service.RefreshConnection(context.Background(), tenantID, utilities.ID{}, userID, auditActorUser, connectionID)
 	if !errors.Is(err, ErrProviderRateLimited) {
 		t.Fatalf("error = %v, want provider rate limited", err)
 	}
@@ -452,7 +464,7 @@ func TestRefreshConnectionReturnsProviderConnectURL(t *testing.T) {
 		},
 	}, catalogForTest(t))
 
-	result, err := service.RefreshConnection(context.Background(), tenantID, userID, userID, connectionID)
+	result, err := service.RefreshConnection(context.Background(), tenantID, userID, userID, auditActorUser, connectionID)
 	if err != nil {
 		t.Fatalf("refresh connection: %v", err)
 	}
@@ -507,7 +519,7 @@ func TestDisableConnectionDoesNotSetRevokedAtForSoftDisable(t *testing.T) {
 		},
 	}, catalogForTest(t))
 
-	connection, err := service.DisableConnection(context.Background(), tenantID, userID, userID, connectionID, false)
+	connection, err := service.DisableConnection(context.Background(), tenantID, userID, userID, auditActorUser, connectionID, false)
 	if err != nil {
 		t.Fatalf("disable connection: %v", err)
 	}
@@ -563,7 +575,7 @@ func TestDisableConnectionClearsLocalRowWhenProviderConnectionIsGone(t *testing.
 		},
 	}, catalogForTest(t))
 
-	connection, err := service.DisableConnection(context.Background(), tenantID, userID, userID, connectionID, true)
+	connection, err := service.DisableConnection(context.Background(), tenantID, userID, userID, auditActorUser, connectionID, true)
 	if err != nil {
 		t.Fatalf("disable connection: %v", err)
 	}
@@ -575,11 +587,201 @@ func TestDisableConnectionClearsLocalRowWhenProviderConnectionIsGone(t *testing.
 	}
 }
 
+func TestExecuteActionCallsProviderAndMarksConnectionUsed(t *testing.T) {
+	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
+	userID := mustID(t, "22222222-2222-4222-8222-222222222222")
+	connectionID := mustID(t, "33333333-3333-4333-8333-333333333333")
+	auditCalled := false
+	service := NewService(repository{
+		getConnection: func(ctx context.Context, gotTenantID utilities.ID, gotID utilities.ID) (Connection, error) {
+			if gotTenantID != tenantID || gotID != connectionID {
+				t.Fatalf("lookup = %s/%s", gotTenantID.String(), gotID.String())
+			}
+			return Connection{
+				ID:                 connectionID,
+				TenantID:           tenantID,
+				UserID:             userID,
+				Provider:           ProviderComposio,
+				Service:            "slack",
+				ExternalAccountRef: "ca_slack",
+				Status:             StatusActive,
+			}, nil
+		},
+		markConnectionUsed: func(ctx context.Context, gotTenantID utilities.ID, gotID utilities.ID) (Connection, error) {
+			if gotTenantID != tenantID || gotID != connectionID {
+				t.Fatalf("mark used = %s/%s", gotTenantID.String(), gotID.String())
+			}
+			return Connection{
+				ID:       connectionID,
+				TenantID: tenantID,
+				UserID:   userID,
+				Provider: ProviderComposio,
+				Service:  "slack",
+				Status:   StatusActive,
+			}, nil
+		},
+		createAuditLog: func(ctx context.Context, input AuditLogInput) error {
+			auditCalled = true
+			if input.ActorUserID != userID || input.ActorType != auditActorUser {
+				t.Fatalf("audit actor = %s/%s", input.ActorUserID.String(), input.ActorType)
+			}
+			if input.Action != auditActionExecuted || input.Outcome != "success" {
+				t.Fatalf("audit = %s/%s", input.Action, input.Outcome)
+			}
+			return nil
+		},
+	}, provider{
+		executeAction: func(ctx context.Context, input ExecuteProviderActionInput) (ProviderActionResult, error) {
+			if input.UserID != userID || input.ExternalAccountRef != "ca_slack" || input.ToolkitSlug != "slack" {
+				t.Fatalf("provider target = %#v", input)
+			}
+			if input.ActionSlug != "SLACK_SEND_MESSAGE" {
+				t.Fatalf("action slug = %q, want Slack slug", input.ActionSlug)
+			}
+			if input.Arguments["channel"] != "C123" {
+				t.Fatalf("arguments = %#v", input.Arguments)
+			}
+			return ProviderActionResult{
+				Data:  map[string]any{"ok": true},
+				LogID: "log_123",
+			}, nil
+		},
+	}, catalogForTest(t))
+
+	result, err := service.ExecuteAction(context.Background(), ExecuteActionInput{
+		TenantID:         tenantID,
+		OwnerScopeUserID: userID,
+		ActorUserID:      userID,
+		ActorType:        auditActorUser,
+		ConnectionID:     connectionID,
+		Action:           "send_message",
+		Arguments:        map[string]any{"channel": "C123"},
+	})
+	if err != nil {
+		t.Fatalf("execute action: %v", err)
+	}
+	if result.Action.ID != "send_message" || result.LogID != "log_123" {
+		t.Fatalf("result = %#v", result)
+	}
+	if !auditCalled {
+		t.Fatal("audit was not written")
+	}
+}
+
+func TestExecuteActionDoesNotFailAfterProviderSuccessBookkeepingErrors(t *testing.T) {
+	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
+	userID := mustID(t, "22222222-2222-4222-8222-222222222222")
+	connectionID := mustID(t, "33333333-3333-4333-8333-333333333333")
+	markCalled := false
+	auditCalled := false
+	service := NewService(repository{
+		getConnection: func(ctx context.Context, gotTenantID utilities.ID, gotID utilities.ID) (Connection, error) {
+			return Connection{
+				ID:                 gotID,
+				TenantID:           gotTenantID,
+				UserID:             userID,
+				Provider:           ProviderComposio,
+				Service:            "slack",
+				ExternalAccountRef: "ca_slack",
+				Status:             StatusActive,
+			}, nil
+		},
+		markConnectionUsed: func(ctx context.Context, gotTenantID utilities.ID, gotID utilities.ID) (Connection, error) {
+			markCalled = true
+			return Connection{}, errors.New("mark used failed")
+		},
+		createAuditLog: func(ctx context.Context, input AuditLogInput) error {
+			auditCalled = true
+			return errors.New("audit failed")
+		},
+	}, provider{
+		executeAction: func(ctx context.Context, input ExecuteProviderActionInput) (ProviderActionResult, error) {
+			return ProviderActionResult{
+				Data:  map[string]any{"ok": true},
+				LogID: "log_123",
+			}, nil
+		},
+	}, catalogForTest(t))
+
+	result, err := service.ExecuteAction(context.Background(), ExecuteActionInput{
+		TenantID:         tenantID,
+		OwnerScopeUserID: userID,
+		ActorUserID:      userID,
+		ActorType:        auditActorUser,
+		ConnectionID:     connectionID,
+		Action:           "send_message",
+		Arguments:        map[string]any{"channel": "C123"},
+	})
+	if err != nil {
+		t.Fatalf("execute action: %v", err)
+	}
+	if result.Connection.ID != connectionID || result.LogID != "log_123" {
+		t.Fatalf("result = %#v", result)
+	}
+	if !markCalled || !auditCalled {
+		t.Fatalf("mark called = %t, audit called = %t", markCalled, auditCalled)
+	}
+}
+
+func TestExecuteActionRejectsInactiveConnection(t *testing.T) {
+	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
+	userID := mustID(t, "22222222-2222-4222-8222-222222222222")
+	connectionID := mustID(t, "33333333-3333-4333-8333-333333333333")
+	service := NewService(repository{
+		getConnection: func(ctx context.Context, gotTenantID utilities.ID, gotID utilities.ID) (Connection, error) {
+			return Connection{
+				ID:       gotID,
+				TenantID: gotTenantID,
+				UserID:   userID,
+				Service:  "slack",
+				Status:   StatusPending,
+			}, nil
+		},
+	}, provider{}, catalogForTest(t))
+
+	_, err := service.ExecuteAction(context.Background(), ExecuteActionInput{
+		TenantID:         tenantID,
+		OwnerScopeUserID: userID,
+		ConnectionID:     connectionID,
+		Action:           "send_message",
+	})
+	if !errors.Is(err, ErrConnectionNotActive) {
+		t.Fatalf("error = %v, want inactive connection", err)
+	}
+}
+
+func TestExecuteActionRejectsUnallowlistedAction(t *testing.T) {
+	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
+	userID := mustID(t, "22222222-2222-4222-8222-222222222222")
+	connectionID := mustID(t, "33333333-3333-4333-8333-333333333333")
+	service := NewService(repository{
+		getConnection: func(ctx context.Context, gotTenantID utilities.ID, gotID utilities.ID) (Connection, error) {
+			return Connection{
+				ID:       gotID,
+				TenantID: gotTenantID,
+				UserID:   userID,
+				Service:  "slack",
+				Status:   StatusActive,
+			}, nil
+		},
+	}, provider{}, catalogForTest(t))
+
+	_, err := service.ExecuteAction(context.Background(), ExecuteActionInput{
+		TenantID:         tenantID,
+		OwnerScopeUserID: userID,
+		ConnectionID:     connectionID,
+		Action:           "delete_channel",
+	})
+	if !errors.Is(err, ErrActionNotAllowed) {
+		t.Fatalf("error = %v, want action not allowed", err)
+	}
+}
+
 func catalogForTest(t *testing.T) Catalog {
 	t.Helper()
 
 	catalog, err := NewCatalog([]ServiceEntry{
-		{ID: "slack", Family: "Work", DisplayName: "Slack", Provider: ProviderComposio, ToolkitSlug: "slack", AllowedActions: []ActionPolicy{{Slug: "SLACK_SEND_MESSAGE"}}},
+		{ID: "slack", Family: "Work", DisplayName: "Slack", Provider: ProviderComposio, ToolkitSlug: "slack", AllowedActions: []ActionPolicy{{ID: "send_message", Slug: "SLACK_SEND_MESSAGE", DisplayName: "Send message"}}},
 	})
 	if err != nil {
 		t.Fatalf("catalog: %v", err)

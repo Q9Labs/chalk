@@ -11,14 +11,20 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/integrations"
+	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-const CreateTenantScenario = "tenant-create"
+const (
+	CreateTenantScenario             = "tenant-create"
+	ExecuteIntegrationActionScenario = "integration-execute-action"
+)
 
 // ScenarioResult is the captured output from one execution trace scenario.
 type ScenarioResult struct {
@@ -97,6 +103,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runEdgeForbiddenTenantRoute(ctx)
 	case EdgeInvalidRouteIDScenario:
 		return runEdgeInvalidRouteID(ctx)
+	case ExecuteIntegrationActionScenario:
+		return runExecuteIntegrationAction(ctx)
 	default:
 		return ScenarioResult{}, fmt.Errorf("unknown trace scenario %q", name)
 	}
@@ -168,11 +176,91 @@ func runCreateTenant(ctx context.Context, name string) (ScenarioResult, error) {
 	return result, nil
 }
 
+func runExecuteIntegrationAction(ctx context.Context) (ScenarioResult, error) {
+	now := deterministicClock()
+	recorder := NewRecorder(now)
+	tenantID := mustID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	userID := mustID("11111111-1111-4111-8111-111111111111")
+	sessionID := mustID("22222222-2222-4222-8222-222222222222")
+	connectionID := mustID("33333333-3333-4333-8333-333333333333")
+	auth := tracedAuthentication{
+		recorder:  recorder,
+		userID:    userID,
+		sessionID: sessionID,
+		now:       now,
+		scopes: []authentication.Scope{
+			authentication.ScopeIntegrationsRead,
+			authentication.ScopeIntegrationsWrite,
+		},
+	}
+	catalog, err := integrations.DefaultCatalog()
+	if err != nil {
+		return ScenarioResult{}, fmt.Errorf("load integration catalog: %w", err)
+	}
+	repository := tracedIntegrationRepository{
+		recorder:     recorder,
+		now:          now,
+		tenantID:     tenantID,
+		userID:       userID,
+		connectionID: connectionID,
+	}
+	provider := tracedIntegrationProvider{recorder: recorder}
+	service := integrations.NewService(repository, provider, catalog)
+	handler := httpapi.NewRouter(httpapi.Options{
+		RateLimit:      noRateLimits(now),
+		Authentication: auth,
+		TenantAuthz:    tracedTenantAuthorizer{recorder: recorder},
+		Integrations:   service,
+	})
+
+	body := json.RawMessage(`{"action":"send_message","arguments":{"channel":"C123","text":"Trace recap is ready"}}`)
+	path := "/v1/tenants/" + tenantID.String() + "/integrations/connections/" + connectionID.String() + "/actions"
+	recorder.Add("scenario", ExecuteIntegrationActionScenario, "boot router and issue action request", map[string]any{
+		"request": map[string]any{
+			"method": "POST",
+			"path":   path,
+			"body":   mustDecode(body),
+		},
+	})
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, path, bytes.NewReader(body))
+	if err != nil {
+		return ScenarioResult{}, fmt.Errorf("create request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer trace-session-token")
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	span := recorder.Start("http", "POST integration action", "router received request", map[string]any{
+		"headers": map[string]string{
+			"authorization": "Bearer [redacted]",
+			"content-type":  request.Header.Get("Content-Type"),
+		},
+	})
+	handler.ServeHTTP(response, request)
+	span.End("router returned response", map[string]any{
+		"status": response.Code,
+		"body":   mustDecode(response.Body.Bytes()),
+	}, nil)
+
+	result := ScenarioResult{
+		Name:       ExecuteIntegrationActionScenario,
+		StatusCode: response.Code,
+		Body:       json.RawMessage(response.Body.Bytes()),
+		Events:     recorder.Events(),
+	}
+	if response.Code != http.StatusOK {
+		return result, fmt.Errorf("scenario returned HTTP %d", response.Code)
+	}
+
+	return result, nil
+}
+
 type tracedAuthentication struct {
 	recorder  *Recorder
 	userID    utilities.ID
 	sessionID utilities.ID
 	now       func() time.Time
+	scopes    []authentication.Scope
 }
 
 func (a tracedAuthentication) AuthenticateSession(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
@@ -217,6 +305,9 @@ func (a tracedAuthentication) PrincipalForSession(session authentication.Session
 			authentication.ScopeTenantsRead,
 			authentication.ScopeTenantsWrite,
 		},
+	}
+	if len(a.scopes) > 0 {
+		principal.Scopes = a.scopes
 	}
 	a.recorder.Add("auth", "PrincipalForSession", "attach principal to request context", map[string]any{
 		"principal": map[string]any{
@@ -305,6 +396,155 @@ func (r tracedTenantRepository) CreateTenant(ctx context.Context, input tenants.
 		"tenant": tenantFields(tenant),
 	}, nil)
 	return tenant, nil
+}
+
+type tracedTenantAuthorizer struct {
+	recorder *Recorder
+}
+
+func (a tracedTenantAuthorizer) AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
+	decision := "allow"
+	var err error
+	if permission.MinimumRole == memberships.RoleAdmin {
+		decision = "deny_admin_check"
+		err = authorization.ErrForbidden
+	}
+	a.recorder.Add("authorization", "AuthorizeTenant", "evaluate tenant permission", map[string]any{
+		"tenant_id": tenantID.String(),
+		"principal": map[string]any{
+			"kind":    principal.Kind,
+			"user_id": principal.UserID.String(),
+			"scopes":  principal.Scopes,
+		},
+		"required": map[string]any{
+			"scope":        permission.Scope,
+			"minimum_role": permission.MinimumRole,
+		},
+		"decision": decision,
+	})
+	return err
+}
+
+type tracedIntegrationRepository struct {
+	recorder     *Recorder
+	now          func() time.Time
+	tenantID     utilities.ID
+	userID       utilities.ID
+	connectionID utilities.ID
+}
+
+func (r tracedIntegrationRepository) CreateConnection(ctx context.Context, input integrations.CreateConnectionInput) (integrations.Connection, error) {
+	return integrations.Connection{}, errors.New("create connection is not used by trace scenario")
+}
+
+func (r tracedIntegrationRepository) GetConnection(ctx context.Context, tenantID utilities.ID, id utilities.ID) (integrations.Connection, error) {
+	span := r.recorder.Start("repository", "IntegrationRepository.GetConnection", "load local integration connection", map[string]any{
+		"tenant_id":     tenantID.String(),
+		"connection_id": id.String(),
+	})
+	connection := r.connection()
+	span.End("return active Slack connection", map[string]any{
+		"connection": integrationConnectionFields(connection),
+	}, nil)
+	return connection, nil
+}
+
+func (r tracedIntegrationRepository) GetConnectionByExternalRef(ctx context.Context, tenantID utilities.ID, provider integrations.ProviderName, service integrations.ServiceID, externalAccountRef string) (integrations.Connection, error) {
+	return integrations.Connection{}, errors.New("get connection by external ref is not used by trace scenario")
+}
+
+func (r tracedIntegrationRepository) ListConnections(ctx context.Context, input integrations.ListConnectionsInput) (integrations.ConnectionList, error) {
+	return integrations.ConnectionList{}, errors.New("list connections is not used by trace scenario")
+}
+
+func (r tracedIntegrationRepository) UpdateConnection(ctx context.Context, input integrations.UpdateConnectionInput) (integrations.Connection, error) {
+	return integrations.Connection{}, errors.New("update connection is not used by trace scenario")
+}
+
+func (r tracedIntegrationRepository) MarkConnectionUsed(ctx context.Context, tenantID utilities.ID, id utilities.ID) (integrations.Connection, error) {
+	span := r.recorder.Start("repository", "IntegrationRepository.MarkConnectionUsed", "update last_used_at after provider success", map[string]any{
+		"tenant_id":     tenantID.String(),
+		"connection_id": id.String(),
+	})
+	connection := r.connection()
+	now := r.now()
+	connection.LastUsedAt = &now
+	connection.UpdatedAt = now
+	span.End("return updated connection", map[string]any{
+		"connection": integrationConnectionFields(connection),
+	}, nil)
+	return connection, nil
+}
+
+func (r tracedIntegrationRepository) CreateAuditLog(ctx context.Context, input integrations.AuditLogInput) error {
+	r.recorder.Add("audit", "CreateAuditLog", "record integration action outcome", map[string]any{
+		"tenant_id":     input.TenantID.String(),
+		"actor_user_id": input.ActorUserID.String(),
+		"actor_type":    input.ActorType,
+		"action":        input.Action,
+		"resource_id":   input.ResourceID.String(),
+		"outcome":       input.Outcome,
+		"error_code":    input.ErrorCode,
+	})
+	return nil
+}
+
+func (r tracedIntegrationRepository) connection() integrations.Connection {
+	return integrations.Connection{
+		ID:                 r.connectionID,
+		TenantID:           r.tenantID,
+		UserID:             r.userID,
+		Provider:           integrations.ProviderComposio,
+		Service:            "slack",
+		ExternalAccountRef: "ca_trace_slack",
+		Status:             integrations.StatusActive,
+		Scopes:             []string{"chat:write"},
+		ConnectedAt:        timePtr(r.now()),
+		UpdatedAt:          r.now(),
+		CreatedAt:          r.now(),
+	}
+}
+
+type tracedIntegrationProvider struct {
+	recorder *Recorder
+}
+
+func (p tracedIntegrationProvider) CreateConnectLink(ctx context.Context, input integrations.CreateConnectLinkInput) (integrations.ConnectLink, error) {
+	return integrations.ConnectLink{}, errors.New("create connect link is not used by trace scenario")
+}
+
+func (p tracedIntegrationProvider) GetConnection(ctx context.Context, input integrations.GetProviderConnectionInput) (integrations.ProviderConnection, error) {
+	return integrations.ProviderConnection{}, errors.New("get provider connection is not used by trace scenario")
+}
+
+func (p tracedIntegrationProvider) RefreshConnection(ctx context.Context, input integrations.RefreshConnectionInput) (integrations.ProviderConnection, error) {
+	return integrations.ProviderConnection{}, errors.New("refresh connection is not used by trace scenario")
+}
+
+func (p tracedIntegrationProvider) DisableConnection(ctx context.Context, input integrations.DisableConnectionInput) error {
+	return errors.New("disable connection is not used by trace scenario")
+}
+
+func (p tracedIntegrationProvider) ExecuteAction(ctx context.Context, input integrations.ExecuteProviderActionInput) (integrations.ProviderActionResult, error) {
+	span := p.recorder.Start("provider", "composio.ExecuteAction", "execute allowlisted Composio tool", map[string]any{
+		"user_id":              input.UserID.String(),
+		"connected_account_id": input.ExternalAccountRef,
+		"toolkit":              input.ToolkitSlug,
+		"action_slug":          input.ActionSlug,
+		"arguments":            input.Arguments,
+	})
+	result := integrations.ProviderActionResult{
+		Data: map[string]any{
+			"ok":      true,
+			"channel": input.Arguments["channel"],
+		},
+		LogID: "log_trace_123",
+	}
+	span.End("provider returned action result", map[string]any{
+		"log_id": result.LogID,
+		"data":   result.Data,
+	}, nil)
+	return result, nil
 }
 
 func (r tracedTenantRepository) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
@@ -422,6 +662,31 @@ func tenantFields(tenant tenants.Tenant) map[string]any {
 		"created_at":          tenant.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updated_at":          tenant.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
+}
+
+func integrationConnectionFields(connection integrations.Connection) map[string]any {
+	return map[string]any{
+		"id":                   connection.ID.String(),
+		"tenant_id":            connection.TenantID.String(),
+		"user_id":              connection.UserID.String(),
+		"provider":             connection.Provider,
+		"service":              connection.Service,
+		"external_account_ref": connection.ExternalAccountRef,
+		"status":               connection.Status,
+		"scopes":               connection.Scopes,
+		"last_used_at":         optionalTraceTime(connection.LastUsedAt),
+	}
+}
+
+func optionalTraceTime(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func timePtr(value time.Time) *time.Time {
+	return &value
 }
 
 func deterministicClock() func() time.Time {

@@ -152,6 +152,115 @@ func TestRefreshConnectionReturnsRedirectURL(t *testing.T) {
 	}
 }
 
+func TestExecuteActionPostsConnectedAccountAndArguments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3.1/tools/execute/SLACK_SEND_MESSAGE" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		var body executeToolRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body.ConnectedAccountID != "ca_slack" || body.UserID != "22222222-2222-4222-8222-222222222222" {
+			t.Fatalf("body target = %#v", body)
+		}
+		if body.Version != "latest" {
+			t.Fatalf("version = %q, want latest", body.Version)
+		}
+		if body.Arguments == nil || (*body.Arguments)["channel"] != "C123" {
+			t.Fatalf("arguments = %#v", body.Arguments)
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"successful": true,
+			"log_id":     "log_123",
+			"data":       map[string]any{"ok": true},
+		})
+	}))
+	defer server.Close()
+
+	result, err := adapterForServer(t, server).ExecuteAction(context.Background(), integrations.ExecuteProviderActionInput{
+		UserID:             mustID(t, "22222222-2222-4222-8222-222222222222"),
+		ExternalAccountRef: "ca_slack",
+		ActionSlug:         "SLACK_SEND_MESSAGE",
+		Version:            "latest",
+		Arguments:          map[string]any{"channel": "C123"},
+	})
+	if err != nil {
+		t.Fatalf("execute action: %v", err)
+	}
+	if result.LogID != "log_123" || result.Data["ok"] != true {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestExecuteActionOmitsArgumentsForTextRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if _, ok := body["arguments"]; ok {
+			t.Fatalf("arguments field present for text request: %s", body["arguments"])
+		}
+		if string(body["text"]) != `"write a recap"` {
+			t.Fatalf("text = %s", body["text"])
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"successful": true,
+			"data":       map[string]any{"ok": true},
+		})
+	}))
+	defer server.Close()
+
+	text := "write a recap"
+	_, err := adapterForServer(t, server).ExecuteAction(context.Background(), integrations.ExecuteProviderActionInput{
+		UserID:             mustID(t, "22222222-2222-4222-8222-222222222222"),
+		ExternalAccountRef: "ca_slack",
+		ActionSlug:         "SLACK_SEND_MESSAGE",
+		Text:               &text,
+	})
+	if err != nil {
+		t.Fatalf("execute action: %v", err)
+	}
+}
+
+func TestExecuteActionSendsEmptyArgumentsForStructuredRequestWithoutArgs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		rawArguments, ok := body["arguments"]
+		if !ok {
+			t.Fatal("missing arguments field")
+		}
+		var arguments map[string]any
+		if err := json.Unmarshal(rawArguments, &arguments); err != nil {
+			t.Fatalf("decode arguments: %v", err)
+		}
+		if len(arguments) != 0 {
+			t.Fatalf("arguments = %#v, want empty object", arguments)
+		}
+		if _, ok := body["text"]; ok {
+			t.Fatalf("text field present: %s", body["text"])
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"successful": true,
+			"data":       map[string]any{"ok": true},
+		})
+	}))
+	defer server.Close()
+
+	_, err := adapterForServer(t, server).ExecuteAction(context.Background(), integrations.ExecuteProviderActionInput{
+		UserID:             mustID(t, "22222222-2222-4222-8222-222222222222"),
+		ExternalAccountRef: "ca_slack",
+		ActionSlug:         "SLACK_SEND_MESSAGE",
+	})
+	if err != nil {
+		t.Fatalf("execute action: %v", err)
+	}
+}
+
 func TestListToolsPinsToolkitAndToolSlugFilters(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v3.1/tools" {

@@ -169,6 +169,42 @@ func (a Adapter) DisableConnection(ctx context.Context, input integrations.Disab
 	return a.do(ctx, http.MethodDelete, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef), query, nil, http.StatusOK, nil)
 }
 
+func (a Adapter) ExecuteAction(ctx context.Context, input integrations.ExecuteProviderActionInput) (integrations.ProviderActionResult, error) {
+	arguments := input.Arguments
+	var requestArguments *map[string]any
+	if input.Text == nil {
+		if arguments == nil {
+			arguments = map[string]any{}
+		}
+		requestArguments = &arguments
+	}
+
+	request := executeToolRequest{
+		ConnectedAccountID: strings.TrimSpace(input.ExternalAccountRef),
+		UserID:             input.UserID.String(),
+		Arguments:          requestArguments,
+	}
+	if input.Version != "" {
+		request.Version = input.Version
+	}
+	if input.Text != nil {
+		request.Text = strings.TrimSpace(*input.Text)
+	}
+
+	var response executeToolResponse
+	path := "/tools/execute/" + url.PathEscape(input.ActionSlug)
+	if err := a.do(ctx, http.MethodPost, path, nil, request, http.StatusOK, &response); err != nil {
+		return integrations.ProviderActionResult{}, err
+	}
+	if !response.Successful {
+		return integrations.ProviderActionResult{}, integrations.ErrProviderUnavailable
+	}
+	return integrations.ProviderActionResult{
+		Data:  response.Data,
+		LogID: strings.TrimSpace(response.LogID),
+	}, nil
+}
+
 func (a Adapter) ListToolkits(ctx context.Context, slugs []string) ([]Toolkit, error) {
 	if len(slugs) <= 1 {
 		return a.listToolkits(ctx, slugs)

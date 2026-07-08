@@ -83,6 +83,7 @@ func TestIntegrationRepositoryCreateAuditLogSendsNullActorForTenantScopedAction(
 	err := repository.CreateAuditLog(context.Background(), integrations.AuditLogInput{
 		ID:         mustTenantID(t, "33333333-3333-4333-8333-333333333333"),
 		TenantID:   mustTenantID(t, tenantID),
+		ActorType:  "api_key",
 		Action:     "integration.connection.disabled",
 		ResourceID: mustTenantID(t, "44444444-4444-4444-8444-444444444444"),
 		Outcome:    "success",
@@ -92,6 +93,9 @@ func TestIntegrationRepositoryCreateAuditLogSendsNullActorForTenantScopedAction(
 	}
 	if querier.auditArg.ActorUserID.Valid {
 		t.Fatalf("actor user id valid = true, want SQL NULL")
+	}
+	if querier.auditArg.ActorType != "api_key" {
+		t.Fatalf("actor type = %q, want api_key", querier.auditArg.ActorType)
 	}
 }
 
