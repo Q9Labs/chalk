@@ -82,6 +82,8 @@ we want future work to preserve.
 
 - Keep `cmd/main.go` as the composition root. It should wire config, adapters,
   services, router, and lifecycle, not own domain behavior.
+- For route-specific implementation flow and endpoint contract requirements,
+  follow `docs/route-workflow.md`.
 - Keep each API slice's chain explicit:
   `HTTP endpoint -> service interface -> service -> repository interface -> Postgres adapter -> sqlc query`.
 - HTTP endpoints translate transport concerns into service inputs. Business
