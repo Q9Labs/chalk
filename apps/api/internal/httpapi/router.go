@@ -20,17 +20,22 @@ type TenantAuthorizer interface {
 }
 
 type Options struct {
-	CORS           CORSOptions
-	Middleware     []func(http.Handler) http.Handler
-	Profiler       http.Handler
-	RateLimit      RateLimitOptions
-	Readiness      ReadinessChecker
-	Authentication AuthenticationService
-	Memberships    MembershipService
-	SessionCookie  SessionCookieOptions
-	TenantAuthz    TenantAuthorizer
-	Tenants        TenantService
-	Users          UserService
+	CORS               CORSOptions
+	Middleware         []func(http.Handler) http.Handler
+	Profiler           http.Handler
+	RateLimit          RateLimitOptions
+	Readiness          ReadinessChecker
+	Authentication     AuthenticationService
+	Memberships        MembershipService
+	AuditLogs          AuditLogService
+	RecordingDownloads RecordingDownloadService
+	Recordings         RecordingService
+	Rooms              RoomService
+	SessionCookie      SessionCookieOptions
+	TenantAuthz        TenantAuthorizer
+	Tenants            TenantService
+	Transcripts        TranscriptService
+	Users              UserService
 }
 
 func NewRouter(options Options) http.Handler {
@@ -109,6 +114,10 @@ func mountV1Routes(r chi.Router, options Options) {
 			mountTenantRoutes(r, options.Tenants, options.TenantAuthz, options.RateLimit)
 			mountUserRoutes(r, options.Users, options.RateLimit)
 			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
+			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
+			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
+			mountTranscriptRoutes(r, options.Transcripts, options.TenantAuthz, options.RateLimit)
+			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz)
 		})
 	})
 }

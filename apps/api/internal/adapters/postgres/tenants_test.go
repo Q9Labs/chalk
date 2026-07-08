@@ -19,12 +19,18 @@ const tenantID = "11111111-1111-1111-1111-111111111111"
 
 func TestTenantRepositoryCreateTenant(t *testing.T) {
 	defaultRegion := "us"
+	mediaPlaneProviderConfig := []byte(`{"api_key":"secret","region":"auto"}`)
+	aiProviderConfig := []byte(`{"model":"whisper-large-v3"}`)
+	storageProviderConfig := []byte(`{"bucket":"chalk-recordings"}`)
 	repository := postgres.NewTenantRepository(&tenantQuerier{})
 
 	tenant, err := repository.CreateTenant(context.Background(), tenants.CreateTenantInput{
-		ID:            mustTenantID(t, tenantID),
-		Name:          "Acme",
-		DefaultRegion: &defaultRegion,
+		ID:                       mustTenantID(t, tenantID),
+		Name:                     "Acme",
+		DefaultRegion:            &defaultRegion,
+		MediaPlaneProviderConfig: mediaPlaneProviderConfig,
+		AIProviderConfig:         aiProviderConfig,
+		StorageProviderConfig:    storageProviderConfig,
 	})
 	if err != nil {
 		t.Fatalf("create tenant: %v", err)
@@ -39,6 +45,15 @@ func TestTenantRepositoryCreateTenant(t *testing.T) {
 	if tenant.DefaultRegion == nil || *tenant.DefaultRegion != "us" {
 		t.Fatalf("default region = %v, want us", tenant.DefaultRegion)
 	}
+	if string(tenant.MediaPlaneProviderConfig) != string(mediaPlaneProviderConfig) {
+		t.Fatalf("media plane provider config = %s, want %s", tenant.MediaPlaneProviderConfig, mediaPlaneProviderConfig)
+	}
+	if string(tenant.AIProviderConfig) != string(aiProviderConfig) {
+		t.Fatalf("ai provider config = %s, want %s", tenant.AIProviderConfig, aiProviderConfig)
+	}
+	if string(tenant.StorageProviderConfig) != string(storageProviderConfig) {
+		t.Fatalf("storage provider config = %s, want %s", tenant.StorageProviderConfig, storageProviderConfig)
+	}
 }
 
 func TestTenantRepositoryGetTenant(t *testing.T) {
@@ -46,7 +61,7 @@ func TestTenantRepositoryGetTenant(t *testing.T) {
 	createdAt := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 6, 30, 10, 5, 0, 0, time.UTC)
 	repository := postgres.NewTenantRepository(&tenantQuerier{
-		tenant: sqlc.Tenant{
+		tenant: sqlc.GetTenantRow{
 			ID:                mustUUID(t, tenantID),
 			Name:              "Acme",
 			DefaultRegion:     text("us"),
@@ -91,7 +106,7 @@ func TestTenantRepositoryGetTenant(t *testing.T) {
 
 func TestTenantRepositoryGetTenantKeepsNullableFieldsNil(t *testing.T) {
 	repository := postgres.NewTenantRepository(&tenantQuerier{
-		tenant: sqlc.Tenant{
+		tenant: sqlc.GetTenantRow{
 			ID:   mustUUID(t, tenantID),
 			Name: "Acme",
 		},
@@ -148,7 +163,7 @@ func TestTenantRepositoryListTenants(t *testing.T) {
 	createdAt := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
 	nextCreatedAt := time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC)
 	querier := &tenantQuerier{
-		tenants: []sqlc.Tenant{
+		tenants: []sqlc.ListTenantsRow{
 			{
 				ID:        mustUUID(t, "11111111-1111-1111-1111-111111111111"),
 				Name:      "Acme",
@@ -231,6 +246,7 @@ func TestTenantRepositoryListTenantsReturnsQueryError(t *testing.T) {
 func TestTenantRepositoryUpdateTenant(t *testing.T) {
 	name := "Acme Labs"
 	defaultRegion := "sg"
+	mediaPlaneProviderConfig := []byte(`{"provider":"cloudflare"}`)
 	querier := &tenantQuerier{}
 	repository := postgres.NewTenantRepository(querier)
 
@@ -242,6 +258,10 @@ func TestTenantRepositoryUpdateTenant(t *testing.T) {
 		DefaultRegion: utilities.OptionalString{
 			Set:   true,
 			Value: &defaultRegion,
+		},
+		MediaPlaneProviderConfig: utilities.OptionalJSON{
+			Set:   true,
+			Value: mediaPlaneProviderConfig,
 		},
 		Website: utilities.OptionalString{Set: true},
 	})
@@ -257,6 +277,9 @@ func TestTenantRepositoryUpdateTenant(t *testing.T) {
 	}
 	if !querier.updateParams.DefaultRegionSet || !querier.updateParams.DefaultRegion.Valid || querier.updateParams.DefaultRegion.String != "sg" {
 		t.Fatalf("default region params = %#v, want sg", querier.updateParams.DefaultRegion)
+	}
+	if !querier.updateParams.MediaPlaneProviderConfigSet || string(querier.updateParams.MediaPlaneProviderConfig) != string(mediaPlaneProviderConfig) {
+		t.Fatalf("media plane provider config params = %s, want %s", querier.updateParams.MediaPlaneProviderConfig, mediaPlaneProviderConfig)
 	}
 	if !querier.updateParams.WebsiteSet || querier.updateParams.Website.Valid {
 		t.Fatalf("website params = %#v, want set null", querier.updateParams.Website)
@@ -278,41 +301,44 @@ type tenantQuerier struct {
 	createParams sqlc.CreateTenantParams
 	listParams   sqlc.ListTenantsParams
 	updateParams sqlc.UpdateTenantParams
-	tenant       sqlc.Tenant
-	tenants      []sqlc.Tenant
+	tenant       sqlc.GetTenantRow
+	tenants      []sqlc.ListTenantsRow
 	err          error
 }
 
-func (q *tenantQuerier) CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.Tenant, error) {
+func (q *tenantQuerier) CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.CreateTenantRow, error) {
 	q.called = true
 	q.createParams = arg
 
 	if q.err != nil {
-		return sqlc.Tenant{}, q.err
+		return sqlc.CreateTenantRow{}, q.err
 	}
 
-	return sqlc.Tenant{
-		ID:                arg.ID,
-		Name:              arg.Name,
-		DefaultRegion:     arg.DefaultRegion,
-		DefaultMediaPlane: arg.DefaultMediaPlane,
-		LogoKey:           arg.LogoKey,
-		Website:           arg.Website,
+	return sqlc.CreateTenantRow{
+		ID:                       arg.ID,
+		Name:                     arg.Name,
+		DefaultRegion:            arg.DefaultRegion,
+		DefaultMediaPlane:        arg.DefaultMediaPlane,
+		MediaPlaneProviderConfig: arg.MediaPlaneProviderConfig,
+		AiProviderConfig:         arg.AiProviderConfig,
+		StorageProviderConfig:    arg.StorageProviderConfig,
+		LogoKey:                  arg.LogoKey,
+		Website:                  arg.Website,
 	}, nil
 }
 
-func (q *tenantQuerier) GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.Tenant, error) {
+func (q *tenantQuerier) GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.GetTenantRow, error) {
 	q.called = true
 	q.requestedID = id
 
 	if q.err != nil {
-		return sqlc.Tenant{}, q.err
+		return sqlc.GetTenantRow{}, q.err
 	}
 
 	return q.tenant, nil
 }
 
-func (q *tenantQuerier) ListTenants(ctx context.Context, arg sqlc.ListTenantsParams) ([]sqlc.Tenant, error) {
+func (q *tenantQuerier) ListTenants(ctx context.Context, arg sqlc.ListTenantsParams) ([]sqlc.ListTenantsRow, error) {
 	q.called = true
 	q.listParams = arg
 
@@ -323,21 +349,24 @@ func (q *tenantQuerier) ListTenants(ctx context.Context, arg sqlc.ListTenantsPar
 	return q.tenants, nil
 }
 
-func (q *tenantQuerier) UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.Tenant, error) {
+func (q *tenantQuerier) UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.UpdateTenantRow, error) {
 	q.called = true
 	q.updateParams = arg
 
 	if q.err != nil {
-		return sqlc.Tenant{}, q.err
+		return sqlc.UpdateTenantRow{}, q.err
 	}
 
-	return sqlc.Tenant{
-		ID:                arg.ID,
-		Name:              arg.Name,
-		DefaultRegion:     arg.DefaultRegion,
-		DefaultMediaPlane: arg.DefaultMediaPlane,
-		LogoKey:           arg.LogoKey,
-		Website:           arg.Website,
+	return sqlc.UpdateTenantRow{
+		ID:                       arg.ID,
+		Name:                     arg.Name,
+		DefaultRegion:            arg.DefaultRegion,
+		DefaultMediaPlane:        arg.DefaultMediaPlane,
+		MediaPlaneProviderConfig: arg.MediaPlaneProviderConfig,
+		AiProviderConfig:         arg.AiProviderConfig,
+		StorageProviderConfig:    arg.StorageProviderConfig,
+		LogoKey:                  arg.LogoKey,
+		Website:                  arg.Website,
 	}, nil
 }
 

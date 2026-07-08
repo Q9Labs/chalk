@@ -193,6 +193,11 @@ func normalizeCreateDownloadURLInput(input *CreateDownloadURLInput) error {
 	return nil
 }
 
+func ValidateKey(value string) error {
+	_, err := objectKey(value)
+	return err
+}
+
 func objectKey(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" || len(value) > maxObjectKeyBytes || strings.HasPrefix(value, "/") {

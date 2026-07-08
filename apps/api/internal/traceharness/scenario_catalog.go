@@ -21,6 +21,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
+	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/users"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -44,6 +45,7 @@ const (
 	RouteMembershipCreateOwnerScenario  = "route:membership-create-owner"
 	RouteMembershipListViewerScenario   = "route:membership-list-viewer"
 	RouteMembershipUpdateOwnerScenario  = "route:membership-update-owner"
+	RouteRoomCreateMemberScenario       = "route:room-create-member"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
 	PolicyTenantAPIKeyScopeScenario = "policy:tenant-api-key-scope"
@@ -85,6 +87,7 @@ func ScenarioNames() []string {
 		RouteMembershipCreateOwnerScenario,
 		RouteMembershipListViewerScenario,
 		RouteMembershipUpdateOwnerScenario,
+		RouteRoomCreateMemberScenario,
 		PolicyTenantSystemAllowScenario,
 		PolicyTenantAPIKeyScopeScenario,
 		PolicyTenantUserRoleScenario,
@@ -412,6 +415,26 @@ func runRouteMembershipUpdateOwner(ctx context.Context) (ScenarioResult, error) 
 		Body:           body,
 		Authorization:  "Bearer trace-session-token",
 		ExpectedStatus: http.StatusOK,
+	})
+}
+
+func runRouteRoomCreateMember(ctx context.Context) (ScenarioResult, error) {
+	now := deterministicClock()
+	recorder := NewRecorder(now)
+	body := json.RawMessage(`{"name":"  Daily Review  ","status":"active","slug":"daily-review","media_plane":"cf_rtk","metadata":{"purpose":"review"}}`)
+
+	return runRouteTrace(ctx, routeTraceConfig{
+		Name:     RouteRoomCreateMemberScenario,
+		Recorder: recorder,
+		Handler: routerWithCoreServices(recorder, now, coreOptions{
+			Principal:  userPrincipal(),
+			PolicyRole: memberships.RoleMember,
+		}),
+		Method:         http.MethodPost,
+		Path:           "/v1/tenants/" + tenantID().String() + "/rooms",
+		Body:           body,
+		Authorization:  "Bearer trace-session-token",
+		ExpectedStatus: http.StatusCreated,
 	})
 }
 
@@ -797,6 +820,10 @@ func routerWithCoreServices(recorder *Recorder, now func() time.Time, options co
 		Memberships: tracedMembershipService{
 			recorder: recorder,
 			next:     memberships.NewService(membershipRepository),
+		},
+		Rooms: tracedRoomService{
+			recorder: recorder,
+			next:     rooms.NewService(tracedRoomRepository{recorder: recorder, now: now}),
 		},
 	})
 }
@@ -1308,6 +1335,168 @@ func (r tracedMembershipRepository) UpdateTenantMembership(ctx context.Context, 
 	return membership, nil
 }
 
+type tracedRoomService struct {
+	recorder *Recorder
+	next     rooms.Service
+}
+
+func (s tracedRoomService) CreateRoom(ctx context.Context, input rooms.CreateRoomInput) (rooms.Room, error) {
+	span := s.recorder.Start("service", "rooms.Service.CreateRoom", "validate room create input", map[string]any{"input": roomCreateInputFields(input)})
+	room, err := s.next.CreateRoom(ctx, input)
+	span.End("room service returned domain room", map[string]any{"room": roomFields(room)}, err)
+	return room, err
+}
+
+func (s tracedRoomService) GetRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID) (rooms.Room, error) {
+	span := s.recorder.Start("service", "rooms.Service.GetRoom", "validate room ids and load room", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String()})
+	room, err := s.next.GetRoom(ctx, tenantID, roomID)
+	span.End("room service returned domain room", map[string]any{"room": roomFields(room)}, err)
+	return room, err
+}
+
+func (s tracedRoomService) ListRooms(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (rooms.RoomList, error) {
+	span := s.recorder.Start("service", "rooms.Service.ListRooms", "validate tenant id and load rooms", map[string]any{"tenant_id": tenantID.String(), "page": pageRequestFields(page)})
+	list, err := s.next.ListRooms(ctx, tenantID, page)
+	span.End("room service returned paginated rooms", map[string]any{"list": roomListFields(list)}, err)
+	return list, err
+}
+
+func (s tracedRoomService) UpdateRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, input rooms.UpdateRoomInput) (rooms.Room, error) {
+	span := s.recorder.Start("service", "rooms.Service.UpdateRoom", "validate room patch", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "input": roomUpdateInputFields(input)})
+	room, err := s.next.UpdateRoom(ctx, tenantID, roomID, input)
+	span.End("room service returned updated room", map[string]any{"room": roomFields(room)}, err)
+	return room, err
+}
+
+func (s tracedRoomService) CreateSession(ctx context.Context, input rooms.CreateSessionInput) (rooms.Session, error) {
+	span := s.recorder.Start("service", "rooms.Service.CreateSession", "validate room session create input", map[string]any{"input": roomSessionCreateInputFields(input)})
+	session, err := s.next.CreateSession(ctx, input)
+	span.End("room service returned domain session", map[string]any{"session": roomSessionFields(session)}, err)
+	return session, err
+}
+
+func (s tracedRoomService) GetSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
+	span := s.recorder.Start("service", "rooms.Service.GetSession", "validate room session ids and load session", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String()})
+	session, err := s.next.GetSession(ctx, tenantID, roomID, sessionID)
+	span.End("room service returned domain session", map[string]any{"session": roomSessionFields(session)}, err)
+	return session, err
+}
+
+func (s tracedRoomService) ListSessions(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, page pagination.PageRequest) (rooms.SessionList, error) {
+	span := s.recorder.Start("service", "rooms.Service.ListSessions", "validate room ids and load sessions", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "page": pageRequestFields(page)})
+	list, err := s.next.ListSessions(ctx, tenantID, roomID, page)
+	span.End("room service returned paginated sessions", map[string]any{"list": roomSessionListFields(list)}, err)
+	return list, err
+}
+
+func (s tracedRoomService) UpdateSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID, input rooms.UpdateSessionInput) (rooms.Session, error) {
+	span := s.recorder.Start("service", "rooms.Service.UpdateSession", "validate room session patch", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String(), "input": roomSessionUpdateInputFields(input)})
+	session, err := s.next.UpdateSession(ctx, tenantID, roomID, sessionID, input)
+	span.End("room service returned updated session", map[string]any{"session": roomSessionFields(session)}, err)
+	return session, err
+}
+
+type tracedRoomRepository struct {
+	recorder *Recorder
+	now      func() time.Time
+}
+
+func (r tracedRoomRepository) CreateRoom(ctx context.Context, input rooms.CreateRoomInput) (rooms.Room, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.CreateRoom", "insert tenant room row", map[string]any{"domain_input": roomCreateInputFields(input)})
+	r.recorder.Add("database", "INSERT rooms RETURNING *", "execute query", map[string]any{"params": roomCreateInputFields(input)})
+	room := rooms.Room{
+		ID:              input.ID,
+		Name:            input.Name,
+		TenantID:        input.TenantID,
+		Status:          input.Status,
+		Slug:            input.Slug,
+		MediaPlane:      input.MediaPlane,
+		Metadata:        input.Metadata,
+		RecurringPolicy: input.RecurringPolicy,
+		CreatedByUserID: input.CreatedByUserID,
+		CreatedAt:       r.now(),
+		UpdatedAt:       r.now(),
+	}
+	span.End("map database row to domain room", map[string]any{"room": roomFields(room)}, nil)
+	return room, nil
+}
+
+func (r tracedRoomRepository) GetRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID) (rooms.Room, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.GetRoom", "select room by tenant and id", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String()})
+	room := roomFixture(r.now)
+	span.End("map database row to domain room", map[string]any{"room": roomFields(room)}, nil)
+	return room, nil
+}
+
+func (r tracedRoomRepository) ListRooms(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (rooms.RoomList, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.ListRooms", "select paginated tenant rooms", map[string]any{"tenant_id": tenantID.String(), "page": pageRequestFields(page)})
+	list := rooms.RoomList{Rooms: []rooms.Room{roomFixture(r.now)}, Page: pagination.Page{PageSize: page.Size(), HasMore: false}}
+	span.End("map database rows to room list", map[string]any{"list": roomListFields(list)}, nil)
+	return list, nil
+}
+
+func (r tracedRoomRepository) UpdateRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, input rooms.UpdateRoomInput) (rooms.Room, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.UpdateRoom", "update tenant room row", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "input": roomUpdateInputFields(input)})
+	room := roomFixture(r.now)
+	room.ID = roomID
+	room.TenantID = tenantID
+	if input.Name.Set && input.Name.Value != nil {
+		room.Name = *input.Name.Value
+	}
+	if input.Status.Set && input.Status.Value != nil {
+		room.Status = *input.Status.Value
+	}
+	room.UpdatedAt = r.now()
+	span.End("map database row to updated room", map[string]any{"room": roomFields(room)}, nil)
+	return room, nil
+}
+
+func (r tracedRoomRepository) CreateSession(ctx context.Context, input rooms.CreateSessionInput) (rooms.Session, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.CreateSession", "insert room session row", map[string]any{"domain_input": roomSessionCreateInputFields(input)})
+	session := rooms.Session{ID: input.ID, Status: input.Status, Metadata: input.Metadata, RoomID: input.RoomID, TenantID: input.TenantID, CreatedByUserID: input.CreatedByUserID, StartedAt: input.StartedAt, EndedAt: input.EndedAt, CreatedAt: r.now(), UpdatedAt: r.now()}
+	span.End("map database row to domain session", map[string]any{"session": roomSessionFields(session)}, nil)
+	return session, nil
+}
+
+func (r tracedRoomRepository) GetSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.GetSession", "select room session by tenant, room, and id", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String()})
+	session := roomSessionFixture(r.now)
+	session.ID = sessionID
+	session.RoomID = roomID
+	session.TenantID = tenantID
+	span.End("map database row to domain session", map[string]any{"session": roomSessionFields(session)}, nil)
+	return session, nil
+}
+
+func (r tracedRoomRepository) ListSessions(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, page pagination.PageRequest) (rooms.SessionList, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.ListSessions", "select paginated room sessions", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "page": pageRequestFields(page)})
+	list := rooms.SessionList{Sessions: []rooms.Session{roomSessionFixture(r.now)}, Page: pagination.Page{PageSize: page.Size(), HasMore: false}}
+	span.End("map database rows to session list", map[string]any{"list": roomSessionListFields(list)}, nil)
+	return list, nil
+}
+
+func (r tracedRoomRepository) UpdateSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID, input rooms.UpdateSessionInput) (rooms.Session, error) {
+	_ = ctx
+	span := r.recorder.Start("repository", "RoomRepository.UpdateSession", "update room session row", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String(), "input": roomSessionUpdateInputFields(input)})
+	session := roomSessionFixture(r.now)
+	session.ID = sessionID
+	session.RoomID = roomID
+	session.TenantID = tenantID
+	if input.Status.Set && input.Status.Value != nil {
+		session.Status = *input.Status.Value
+	}
+	session.UpdatedAt = r.now()
+	span.End("map database row to updated session", map[string]any{"session": roomSessionFields(session)}, nil)
+	return session, nil
+}
+
 type tracedDenyLimiter struct {
 	recorder   *Recorder
 	retryAfter time.Duration
@@ -1512,6 +1701,14 @@ func membershipID() utilities.ID {
 	return mustID("44444444-4444-4444-8444-444444444444")
 }
 
+func roomID() utilities.ID {
+	return mustID("66666666-6666-4666-8666-666666666666")
+}
+
+func roomSessionID() utilities.ID {
+	return mustID("77777777-7777-4777-8777-777777777777")
+}
+
 func apiKeyID() utilities.ID {
 	return mustID("55555555-5555-4555-8555-555555555555")
 }
@@ -1545,6 +1742,35 @@ func userFixture(now func() time.Time) users.User {
 
 func membershipFixture(now func() time.Time, role memberships.Role) memberships.Membership {
 	return memberships.Membership{ID: membershipID(), TenantID: tenantID(), UserID: userID(), Role: role, CreatedAt: now(), UpdatedAt: now()}
+}
+
+func roomFixture(now func() time.Time) rooms.Room {
+	return rooms.Room{
+		ID:              roomID(),
+		Name:            "Daily Review",
+		TenantID:        tenantID(),
+		Status:          rooms.StatusActive,
+		Slug:            "daily-review",
+		MediaPlane:      "cf_rtk",
+		Metadata:        json.RawMessage(`{"purpose":"review"}`),
+		CreatedByUserID: userID(),
+		CreatedAt:       now(),
+		UpdatedAt:       now(),
+	}
+}
+
+func roomSessionFixture(now func() time.Time) rooms.Session {
+	startedAt := now()
+	return rooms.Session{
+		ID:              roomSessionID(),
+		Status:          rooms.SessionStatusActive,
+		RoomID:          roomID(),
+		TenantID:        tenantID(),
+		CreatedByUserID: userID(),
+		StartedAt:       &startedAt,
+		CreatedAt:       now(),
+		UpdatedAt:       now(),
+	}
 }
 
 func stringPtr(value string) *string {
@@ -1714,6 +1940,115 @@ func membershipListFields(list memberships.MembershipList) map[string]any {
 		values = append(values, membershipFields(membership))
 	}
 	return map[string]any{"memberships": values, "page": pageFields(list.Page)}
+}
+
+func roomCreateInputFields(input rooms.CreateRoomInput) map[string]any {
+	return map[string]any{
+		"id":                 input.ID.String(),
+		"name":               input.Name,
+		"tenant_id":          input.TenantID.String(),
+		"status":             input.Status,
+		"slug":               input.Slug,
+		"media_plane":        input.MediaPlane,
+		"metadata":           mustDecode(input.Metadata),
+		"recurring_policy":   decodedBody(input.RecurringPolicy),
+		"created_by_user_id": input.CreatedByUserID.String(),
+	}
+}
+
+func roomUpdateInputFields(input rooms.UpdateRoomInput) map[string]any {
+	return map[string]any{
+		"name":             optionalStringField(input.Name),
+		"status":           optionalStringField(input.Status),
+		"slug":             optionalStringField(input.Slug),
+		"media_plane":      optionalStringField(input.MediaPlane),
+		"metadata":         optionalJSONField(input.Metadata),
+		"recurring_policy": optionalJSONField(input.RecurringPolicy),
+	}
+}
+
+func roomFields(room rooms.Room) map[string]any {
+	return map[string]any{
+		"id":                 room.ID.String(),
+		"name":               room.Name,
+		"tenant_id":          room.TenantID.String(),
+		"status":             room.Status,
+		"slug":               room.Slug,
+		"media_plane":        room.MediaPlane,
+		"metadata":           mustDecode(room.Metadata),
+		"recurring_policy":   decodedBody(room.RecurringPolicy),
+		"created_by_user_id": room.CreatedByUserID.String(),
+		"created_at":         timestamp(room.CreatedAt),
+		"updated_at":         timestamp(room.UpdatedAt),
+	}
+}
+
+func roomListFields(list rooms.RoomList) map[string]any {
+	values := make([]map[string]any, 0, len(list.Rooms))
+	for _, room := range list.Rooms {
+		values = append(values, roomFields(room))
+	}
+	return map[string]any{"rooms": values, "page": pageFields(list.Page)}
+}
+
+func roomSessionCreateInputFields(input rooms.CreateSessionInput) map[string]any {
+	return map[string]any{
+		"id":                 input.ID.String(),
+		"status":             input.Status,
+		"metadata":           decodedBody(input.Metadata),
+		"room_id":            input.RoomID.String(),
+		"tenant_id":          input.TenantID.String(),
+		"created_by_user_id": input.CreatedByUserID.String(),
+		"started_at":         optionalTimeField(input.StartedAt),
+		"ended_at":           optionalTimeField(input.EndedAt),
+	}
+}
+
+func roomSessionUpdateInputFields(input rooms.UpdateSessionInput) map[string]any {
+	return map[string]any{
+		"status":     optionalStringField(input.Status),
+		"metadata":   optionalJSONField(input.Metadata),
+		"started_at": optionalPatchTimeField(input.StartedAt),
+		"ended_at":   optionalPatchTimeField(input.EndedAt),
+	}
+}
+
+func roomSessionFields(session rooms.Session) map[string]any {
+	return map[string]any{
+		"id":                 session.ID.String(),
+		"status":             session.Status,
+		"metadata":           decodedBody(session.Metadata),
+		"room_id":            session.RoomID.String(),
+		"tenant_id":          session.TenantID.String(),
+		"created_by_user_id": session.CreatedByUserID.String(),
+		"started_at":         optionalTimeField(session.StartedAt),
+		"ended_at":           optionalTimeField(session.EndedAt),
+		"created_at":         timestamp(session.CreatedAt),
+		"updated_at":         timestamp(session.UpdatedAt),
+	}
+}
+
+func roomSessionListFields(list rooms.SessionList) map[string]any {
+	values := make([]map[string]any, 0, len(list.Sessions))
+	for _, session := range list.Sessions {
+		values = append(values, roomSessionFields(session))
+	}
+	return map[string]any{"sessions": values, "page": pageFields(list.Page)}
+}
+
+func optionalJSONField(value utilities.OptionalJSON) map[string]any {
+	return map[string]any{"set": value.Set, "value": decodedBody(value.Value)}
+}
+
+func optionalTimeField(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return timestamp(*value)
+}
+
+func optionalPatchTimeField(value rooms.OptionalTime) map[string]any {
+	return map[string]any{"set": value.Set, "value": optionalTimeField(value.Value)}
 }
 
 func policyFields(policy ratelimit.Policy) map[string]any {

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -35,14 +36,17 @@ type TenantService interface {
 }
 
 type tenantResponse struct {
-	ID                string  `json:"id"`
-	Name              string  `json:"name"`
-	DefaultRegion     *string `json:"default_region"`
-	DefaultMediaPlane *string `json:"default_media_plane"`
-	LogoKey           *string `json:"logo_key"`
-	Website           *string `json:"website"`
-	UpdatedAt         string  `json:"updated_at"`
-	CreatedAt         string  `json:"created_at"`
+	ID                       string  `json:"id"`
+	Name                     string  `json:"name"`
+	DefaultRegion            *string `json:"default_region"`
+	DefaultMediaPlane        *string `json:"default_media_plane"`
+	MediaPlaneProviderConfig any     `json:"media_plane_provider_config"`
+	AIProviderConfig         any     `json:"ai_provider_config"`
+	StorageProviderConfig    any     `json:"storage_provider_config"`
+	LogoKey                  *string `json:"logo_key"`
+	Website                  *string `json:"website"`
+	UpdatedAt                string  `json:"updated_at"`
+	CreatedAt                string  `json:"created_at"`
 }
 
 type regionResponse struct {
@@ -60,19 +64,25 @@ type regionsResponse struct {
 }
 
 type createTenantRequest struct {
-	Name              string  `json:"name"`
-	DefaultRegion     *string `json:"default_region"`
-	DefaultMediaPlane *string `json:"default_media_plane"`
-	LogoKey           *string `json:"logo_key"`
-	Website           *string `json:"website"`
+	Name                     string          `json:"name"`
+	DefaultRegion            *string         `json:"default_region"`
+	DefaultMediaPlane        *string         `json:"default_media_plane"`
+	MediaPlaneProviderConfig json.RawMessage `json:"media_plane_provider_config"`
+	AIProviderConfig         json.RawMessage `json:"ai_provider_config"`
+	StorageProviderConfig    json.RawMessage `json:"storage_provider_config"`
+	LogoKey                  *string         `json:"logo_key"`
+	Website                  *string         `json:"website"`
 }
 
 type updateTenantRequest struct {
-	Name              utilities.OptionalString `json:"name"`
-	DefaultRegion     utilities.OptionalString `json:"default_region"`
-	DefaultMediaPlane utilities.OptionalString `json:"default_media_plane"`
-	LogoKey           utilities.OptionalString `json:"logo_key"`
-	Website           utilities.OptionalString `json:"website"`
+	Name                     utilities.OptionalString `json:"name"`
+	DefaultRegion            utilities.OptionalString `json:"default_region"`
+	DefaultMediaPlane        utilities.OptionalString `json:"default_media_plane"`
+	MediaPlaneProviderConfig utilities.OptionalJSON   `json:"media_plane_provider_config"`
+	AIProviderConfig         utilities.OptionalJSON   `json:"ai_provider_config"`
+	StorageProviderConfig    utilities.OptionalJSON   `json:"storage_provider_config"`
+	LogoKey                  utilities.OptionalString `json:"logo_key"`
+	Website                  utilities.OptionalString `json:"website"`
 }
 
 type listTenantsRequest struct {
@@ -359,33 +369,42 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 
 func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 	return tenantResponse{
-		ID:                tenant.ID.String(),
-		Name:              tenant.Name,
-		DefaultRegion:     tenant.DefaultRegion,
-		DefaultMediaPlane: tenant.DefaultMediaPlane,
-		LogoKey:           tenant.LogoKey,
-		Website:           tenant.Website,
-		UpdatedAt:         utilities.FormatTimestamp(tenant.UpdatedAt),
-		CreatedAt:         utilities.FormatTimestamp(tenant.CreatedAt),
+		ID:                       tenant.ID.String(),
+		Name:                     tenant.Name,
+		DefaultRegion:            tenant.DefaultRegion,
+		DefaultMediaPlane:        tenant.DefaultMediaPlane,
+		MediaPlaneProviderConfig: utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
+		AIProviderConfig:         utilities.RedactJSONSecrets(tenant.AIProviderConfig),
+		StorageProviderConfig:    utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
+		LogoKey:                  tenant.LogoKey,
+		Website:                  tenant.Website,
+		UpdatedAt:                utilities.FormatTimestamp(tenant.UpdatedAt),
+		CreatedAt:                utilities.FormatTimestamp(tenant.CreatedAt),
 	}
 }
 
 func (r createTenantRequest) input() tenants.CreateTenantInput {
 	return tenants.CreateTenantInput{
-		Name:              r.Name,
-		DefaultRegion:     r.DefaultRegion,
-		DefaultMediaPlane: r.DefaultMediaPlane,
-		LogoKey:           r.LogoKey,
-		Website:           r.Website,
+		Name:                     r.Name,
+		DefaultRegion:            r.DefaultRegion,
+		DefaultMediaPlane:        r.DefaultMediaPlane,
+		MediaPlaneProviderConfig: r.MediaPlaneProviderConfig,
+		AIProviderConfig:         r.AIProviderConfig,
+		StorageProviderConfig:    r.StorageProviderConfig,
+		LogoKey:                  r.LogoKey,
+		Website:                  r.Website,
 	}
 }
 
 func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 	return tenants.UpdateTenantInput{
-		Name:              r.Name,
-		DefaultRegion:     r.DefaultRegion,
-		DefaultMediaPlane: r.DefaultMediaPlane,
-		LogoKey:           r.LogoKey,
-		Website:           r.Website,
+		Name:                     r.Name,
+		DefaultRegion:            r.DefaultRegion,
+		DefaultMediaPlane:        r.DefaultMediaPlane,
+		MediaPlaneProviderConfig: r.MediaPlaneProviderConfig,
+		AIProviderConfig:         r.AIProviderConfig,
+		StorageProviderConfig:    r.StorageProviderConfig,
+		LogoKey:                  r.LogoKey,
+		Website:                  r.Website,
 	}
 }

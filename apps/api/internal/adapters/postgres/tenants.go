@@ -18,10 +18,10 @@ type TenantRepository struct {
 }
 
 type tenantQuerier interface {
-	CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.Tenant, error)
-	GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.Tenant, error)
-	ListTenants(ctx context.Context, arg sqlc.ListTenantsParams) ([]sqlc.Tenant, error)
-	UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.Tenant, error)
+	CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.CreateTenantRow, error)
+	GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.GetTenantRow, error)
+	ListTenants(ctx context.Context, arg sqlc.ListTenantsParams) ([]sqlc.ListTenantsRow, error)
+	UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.UpdateTenantRow, error)
 }
 
 func NewTenantRepository(queries tenantQuerier) TenantRepository {
@@ -30,18 +30,21 @@ func NewTenantRepository(queries tenantQuerier) TenantRepository {
 
 func (s TenantRepository) CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
 	tenant, err := s.queries.CreateTenant(ctx, sqlc.CreateTenantParams{
-		ID:                pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
-		Name:              input.Name,
-		DefaultRegion:     text(input.DefaultRegion),
-		DefaultMediaPlane: text(input.DefaultMediaPlane),
-		LogoKey:           text(input.LogoKey),
-		Website:           text(input.Website),
+		ID:                       pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
+		Name:                     input.Name,
+		DefaultRegion:            text(input.DefaultRegion),
+		DefaultMediaPlane:        text(input.DefaultMediaPlane),
+		MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig),
+		AiProviderConfig:         jsonBytes(input.AIProviderConfig),
+		StorageProviderConfig:    jsonBytes(input.StorageProviderConfig),
+		LogoKey:                  text(input.LogoKey),
+		Website:                  text(input.Website),
 	})
 	if err != nil {
 		return tenants.Tenant{}, fmt.Errorf("create tenant: %w", err)
 	}
 
-	return mapTenant(tenant), nil
+	return mapTenant(createTenantRecord(tenant)), nil
 }
 
 func (s TenantRepository) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
@@ -53,7 +56,7 @@ func (s TenantRepository) GetTenant(ctx context.Context, id utilities.ID) (tenan
 		return tenants.Tenant{}, fmt.Errorf("get tenant: %w", err)
 	}
 
-	return mapTenant(tenant), nil
+	return mapTenant(getTenantRecord(tenant)), nil
 }
 
 func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
@@ -76,7 +79,7 @@ func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageR
 		},
 	}
 	for _, row := range rows {
-		response.Tenants = append(response.Tenants, mapTenant(row))
+		response.Tenants = append(response.Tenants, mapTenant(listTenantRecord(row)))
 	}
 
 	if hasMore && len(response.Tenants) > 0 {
@@ -92,17 +95,23 @@ func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageR
 
 func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
 	tenant, err := s.queries.UpdateTenant(ctx, sqlc.UpdateTenantParams{
-		ID:                   pgtype.UUID{Bytes: id.Bytes(), Valid: true},
-		NameSet:              input.Name.Set,
-		Name:                 requiredText(input.Name),
-		DefaultRegionSet:     input.DefaultRegion.Set,
-		DefaultRegion:        text(input.DefaultRegion.Value),
-		DefaultMediaPlaneSet: input.DefaultMediaPlane.Set,
-		DefaultMediaPlane:    text(input.DefaultMediaPlane.Value),
-		LogoKeySet:           input.LogoKey.Set,
-		LogoKey:              text(input.LogoKey.Value),
-		WebsiteSet:           input.Website.Set,
-		Website:              text(input.Website.Value),
+		ID:                          pgtype.UUID{Bytes: id.Bytes(), Valid: true},
+		NameSet:                     input.Name.Set,
+		Name:                        requiredText(input.Name),
+		DefaultRegionSet:            input.DefaultRegion.Set,
+		DefaultRegion:               text(input.DefaultRegion.Value),
+		DefaultMediaPlaneSet:        input.DefaultMediaPlane.Set,
+		DefaultMediaPlane:           text(input.DefaultMediaPlane.Value),
+		MediaPlaneProviderConfigSet: input.MediaPlaneProviderConfig.Set,
+		MediaPlaneProviderConfig:    jsonBytes(input.MediaPlaneProviderConfig.Value),
+		AiProviderConfigSet:         input.AIProviderConfig.Set,
+		AiProviderConfig:            jsonBytes(input.AIProviderConfig.Value),
+		StorageProviderConfigSet:    input.StorageProviderConfig.Set,
+		StorageProviderConfig:       jsonBytes(input.StorageProviderConfig.Value),
+		LogoKeySet:                  input.LogoKey.Set,
+		LogoKey:                     text(input.LogoKey.Value),
+		WebsiteSet:                  input.Website.Set,
+		Website:                     text(input.Website.Value),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tenants.Tenant{}, tenants.ErrTenantNotFound
@@ -111,7 +120,7 @@ func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, inp
 		return tenants.Tenant{}, fmt.Errorf("update tenant: %w", err)
 	}
 
-	return mapTenant(tenant), nil
+	return mapTenant(updateTenantRecord(tenant)), nil
 }
 
 func listTenantsParams(page pagination.PageRequest) sqlc.ListTenantsParams {
@@ -129,16 +138,97 @@ func listTenantsParams(page pagination.PageRequest) sqlc.ListTenantsParams {
 	return params
 }
 
-func mapTenant(tenant sqlc.Tenant) tenants.Tenant {
+func mapTenant(tenant tenantRecord) tenants.Tenant {
 	return tenants.Tenant{
-		ID:                utilities.IDFromBytes(tenant.ID.Bytes),
-		Name:              tenant.Name,
-		DefaultRegion:     nullableText(tenant.DefaultRegion),
-		DefaultMediaPlane: nullableText(tenant.DefaultMediaPlane),
-		LogoKey:           nullableText(tenant.LogoKey),
-		Website:           nullableText(tenant.Website),
-		UpdatedAt:         timestamp(tenant.UpdatedAt),
-		CreatedAt:         timestamp(tenant.CreatedAt),
+		ID:                       utilities.IDFromBytes(tenant.ID.Bytes),
+		Name:                     tenant.Name,
+		DefaultRegion:            nullableText(tenant.DefaultRegion),
+		DefaultMediaPlane:        nullableText(tenant.DefaultMediaPlane),
+		MediaPlaneProviderConfig: jsonRaw(tenant.MediaPlaneProviderConfig),
+		AIProviderConfig:         jsonRaw(tenant.AiProviderConfig),
+		StorageProviderConfig:    jsonRaw(tenant.StorageProviderConfig),
+		LogoKey:                  nullableText(tenant.LogoKey),
+		Website:                  nullableText(tenant.Website),
+		UpdatedAt:                timestamp(tenant.UpdatedAt),
+		CreatedAt:                timestamp(tenant.CreatedAt),
+	}
+}
+
+type tenantRecord struct {
+	ID                       pgtype.UUID
+	Name                     string
+	DefaultRegion            pgtype.Text
+	DefaultMediaPlane        pgtype.Text
+	MediaPlaneProviderConfig []byte
+	AiProviderConfig         []byte
+	StorageProviderConfig    []byte
+	LogoKey                  pgtype.Text
+	Website                  pgtype.Text
+	UpdatedAt                pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
+}
+
+func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
+	return tenantRecord{
+		ID:                       row.ID,
+		Name:                     row.Name,
+		DefaultRegion:            row.DefaultRegion,
+		DefaultMediaPlane:        row.DefaultMediaPlane,
+		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
+		AiProviderConfig:         row.AiProviderConfig,
+		StorageProviderConfig:    row.StorageProviderConfig,
+		LogoKey:                  row.LogoKey,
+		Website:                  row.Website,
+		UpdatedAt:                row.UpdatedAt,
+		CreatedAt:                row.CreatedAt,
+	}
+}
+
+func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
+	return tenantRecord{
+		ID:                       row.ID,
+		Name:                     row.Name,
+		DefaultRegion:            row.DefaultRegion,
+		DefaultMediaPlane:        row.DefaultMediaPlane,
+		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
+		AiProviderConfig:         row.AiProviderConfig,
+		StorageProviderConfig:    row.StorageProviderConfig,
+		LogoKey:                  row.LogoKey,
+		Website:                  row.Website,
+		UpdatedAt:                row.UpdatedAt,
+		CreatedAt:                row.CreatedAt,
+	}
+}
+
+func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
+	return tenantRecord{
+		ID:                       row.ID,
+		Name:                     row.Name,
+		DefaultRegion:            row.DefaultRegion,
+		DefaultMediaPlane:        row.DefaultMediaPlane,
+		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
+		AiProviderConfig:         row.AiProviderConfig,
+		StorageProviderConfig:    row.StorageProviderConfig,
+		LogoKey:                  row.LogoKey,
+		Website:                  row.Website,
+		UpdatedAt:                row.UpdatedAt,
+		CreatedAt:                row.CreatedAt,
+	}
+}
+
+func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
+	return tenantRecord{
+		ID:                       row.ID,
+		Name:                     row.Name,
+		DefaultRegion:            row.DefaultRegion,
+		DefaultMediaPlane:        row.DefaultMediaPlane,
+		MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
+		AiProviderConfig:         row.AiProviderConfig,
+		StorageProviderConfig:    row.StorageProviderConfig,
+		LogoKey:                  row.LogoKey,
+		Website:                  row.Website,
+		UpdatedAt:                row.UpdatedAt,
+		CreatedAt:                row.CreatedAt,
 	}
 }
 

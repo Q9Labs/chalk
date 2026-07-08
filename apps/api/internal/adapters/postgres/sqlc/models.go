@@ -26,6 +26,22 @@ type ApiKey struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type AuditLog struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	ActorUserID  pgtype.UUID        `json:"actor_user_id"`
+	ActorType    string             `json:"actor_type"`
+	Action       string             `json:"action"`
+	Details      []byte             `json:"details"`
+	Outcome      string             `json:"outcome"`
+	ErrorCode    pgtype.Text        `json:"error_code"`
+	ErrorMessage pgtype.Text        `json:"error_message"`
+	Before       []byte             `json:"before"`
+	After        []byte             `json:"after"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type AuthIdentity struct {
 	ID              pgtype.UUID        `json:"id"`
 	UserID          pgtype.UUID        `json:"user_id"`
@@ -112,14 +128,17 @@ type RoomSession struct {
 }
 
 type Tenant struct {
-	ID                pgtype.UUID        `json:"id"`
-	Name              string             `json:"name"`
-	DefaultRegion     pgtype.Text        `json:"default_region"`
-	DefaultMediaPlane pgtype.Text        `json:"default_media_plane"`
-	LogoKey           pgtype.Text        `json:"logo_key"`
-	Website           pgtype.Text        `json:"website"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ID                       pgtype.UUID        `json:"id"`
+	Name                     string             `json:"name"`
+	DefaultRegion            pgtype.Text        `json:"default_region"`
+	DefaultMediaPlane        pgtype.Text        `json:"default_media_plane"`
+	LogoKey                  pgtype.Text        `json:"logo_key"`
+	Website                  pgtype.Text        `json:"website"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	MediaPlaneProviderConfig []byte             `json:"media_plane_provider_config"`
+	AiProviderConfig         []byte             `json:"ai_provider_config"`
+	StorageProviderConfig    []byte             `json:"storage_provider_config"`
 }
 
 type TenantSigningKey struct {

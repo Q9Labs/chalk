@@ -165,6 +165,7 @@ create table rooms (
     created_at timestamptz not null default now(),
     unique (tenant_id, slug)
 );
+create index rooms_tenant_created_at_id_idx on rooms(tenant_id, created_at desc, id desc);
 
 create table room_sessions (
     id uuid primary key,
@@ -178,6 +179,7 @@ create table room_sessions (
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );
+create index room_sessions_tenant_room_created_at_id_idx on room_sessions(tenant_id, room_id, created_at desc, id desc);
 
 create table participants (
     id uuid primary key,
@@ -206,6 +208,9 @@ create table recordings (
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );
+create index recordings_tenant_created_at_id_idx on recordings(tenant_id, created_at desc, id desc);
+create index recordings_tenant_session_created_at_id_idx on recordings(tenant_id, session_id, created_at desc, id desc);
+
 create table transcriptions (
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
@@ -224,6 +229,8 @@ create table transcriptions (
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );
+create index transcriptions_tenant_created_at_id_idx on transcriptions(tenant_id, created_at desc, id desc);
+create index transcriptions_tenant_recording_created_at_id_idx on transcriptions(tenant_id, recording_id, created_at desc, id desc);
 
 create table audit_logs (
     id uuid primary key,
@@ -240,3 +247,4 @@ create table audit_logs (
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );
+create index audit_logs_tenant_created_at_id_idx on audit_logs(tenant_id, created_at desc, id desc);
