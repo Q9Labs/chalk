@@ -459,6 +459,14 @@ func integrationOwnerScopeUserID(ctx context.Context, authorizer TenantAuthorize
 	return utilities.ID{}, err
 }
 
+func authorizeTenantRequest(w http.ResponseWriter, r *http.Request, authorizer TenantAuthorizer, tenantID utilities.ID, permission authorization.TenantPermission) bool {
+	if err := authorizeTenant(r.Context(), authorizer, tenantID, permission); err != nil {
+		writeAPIError(w, authorizationAPIError(err))
+		return true
+	}
+	return false
+}
+
 func integrationAuditActorUserID(principal authentication.Principal) utilities.ID {
 	if principal.Kind != authentication.PrincipalUser {
 		return utilities.ID{}
@@ -493,6 +501,14 @@ func parseTenantAndConnectionID(w http.ResponseWriter, r *http.Request) (utiliti
 		return utilities.ID{}, utilities.ID{}, false
 	}
 	return tenantID, connectionID, true
+}
+
+func writePaginationError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	writeAPIError(w, paginationAPIError(err))
+	return true
 }
 
 func writeIntegrationServiceError(w http.ResponseWriter, err error) bool {
