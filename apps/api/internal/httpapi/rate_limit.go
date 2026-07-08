@@ -15,32 +15,32 @@ import (
 
 var (
 	authRegisterRateLimit = ratelimit.Policy{
-		Name:   "auth.register",
+		Name:   ratelimit.PolicyNameAuthRegister,
 		Limit:  5,
 		Window: time.Minute,
 	}
 	authLoginRateLimit = ratelimit.Policy{
-		Name:   "auth.login",
+		Name:   ratelimit.PolicyNameAuthLogin,
 		Limit:  10,
 		Window: time.Minute,
 	}
 	authMeRateLimit = ratelimit.Policy{
-		Name:   "auth.me",
+		Name:   ratelimit.PolicyNameAuthMe,
 		Limit:  100,
 		Window: time.Minute,
 	}
 	authOAuthStartRateLimit = ratelimit.Policy{
-		Name:   "auth.oauth.start",
+		Name:   ratelimit.PolicyNameAuthOAuthStart,
 		Limit:  20,
 		Window: time.Minute,
 	}
 	authOAuthCallbackRateLimit = ratelimit.Policy{
-		Name:   "auth.oauth.callback",
+		Name:   ratelimit.PolicyNameAuthOAuthCallback,
 		Limit:  30,
 		Window: time.Minute,
 	}
 	authenticatedWriteRateLimit = ratelimit.Policy{
-		Name:   "v1.authenticated.write",
+		Name:   ratelimit.PolicyNameAuthenticatedWrite,
 		Limit:  60,
 		Window: time.Minute,
 	}
@@ -180,5 +180,5 @@ func writeRateLimited(w http.ResponseWriter, decision ratelimit.Decision) {
 	}
 
 	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-	writeError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+	writeAPIError(w, apiErrorRateLimited)
 }

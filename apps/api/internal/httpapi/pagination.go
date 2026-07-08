@@ -61,12 +61,23 @@ func writePaginationError(w http.ResponseWriter, err error) bool {
 	case err == nil:
 		return false
 	case errors.Is(err, pagination.ErrInvalidPageSize):
-		writeError(w, http.StatusBadRequest, "invalid_page_size", "Invalid page size")
+		writeAPIError(w, apiErrorInvalidPageSize)
 	case errors.Is(err, pagination.ErrInvalidCursor):
-		writeError(w, http.StatusBadRequest, "invalid_cursor", "Invalid cursor")
+		writeAPIError(w, apiErrorInvalidCursor)
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		writeAPIError(w, apiErrorInternal)
 	}
 
 	return true
+}
+
+func paginationAPIError(err error) APIError {
+	switch {
+	case errors.Is(err, pagination.ErrInvalidPageSize):
+		return apiErrorInvalidPageSize
+	case errors.Is(err, pagination.ErrInvalidCursor):
+		return apiErrorInvalidCursor
+	default:
+		return apiErrorInternal
+	}
 }

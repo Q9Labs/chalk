@@ -69,9 +69,9 @@ func bearerToken(header string) (string, bool) {
 }
 
 func writeUnauthenticated(w http.ResponseWriter) {
-	writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required")
+	writeAPIError(w, apiErrorUnauthenticated)
 }
 
 func writeServiceUnavailable(w http.ResponseWriter) {
-	writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
+	writeAPIError(w, apiErrorServiceUnavailable)
 }

@@ -1,0 +1,805 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Chalk API contract preview",
+    "version": "0.0.0-preview"
+  },
+  "paths": {
+    "/v1/regions": {
+      "get": {
+        "operationId": "listRegions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Regions"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": [
+              "unauthenticated"
+            ]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": [
+              "internal_error"
+            ]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": [
+              "service_unavailable"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/tenants": {
+      "get": {
+        "operationId": "listTenants",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": [
+              "invalid_cursor",
+              "invalid_page_size"
+            ]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": [
+              "unauthenticated"
+            ]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": [
+              "forbidden"
+            ]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": [
+              "internal_error"
+            ]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": [
+              "service_unavailable"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createTenant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": [
+              "invalid_request",
+              "invalid_tenant_field",
+              "invalid_tenant_name",
+              "invalid_tenant_region"
+            ]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": [
+              "unauthenticated"
+            ]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "x-chalk-error-codes": [
+              "rate_limited"
+            ]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": [
+              "internal_error"
+            ]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": [
+              "service_unavailable"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}": {
+      "get": {
+        "operationId": "getTenant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": [
+              "invalid_tenant_id"
+            ]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": [
+              "unauthenticated"
+            ]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": [
+              "forbidden"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": [
+              "not_found"
+            ]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": [
+              "internal_error"
+            ]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": [
+              "service_unavailable"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "updateTenant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": [
+              "invalid_request",
+              "invalid_tenant_field",
+              "invalid_tenant_id",
+              "invalid_tenant_name",
+              "invalid_tenant_region"
+            ]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": [
+              "unauthenticated"
+            ]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": [
+              "forbidden"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": [
+              "not_found"
+            ]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "x-chalk-error-codes": [
+              "rate_limited"
+            ]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": [
+              "internal_error"
+            ]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": [
+              "service_unavailable"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionOrBearer": {
+        "description": "Preview placeholder for routes accepted by Chalk session auth or bearer/API-key auth.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CreateTenantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "default_media_plane": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default_region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "website": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "Regions": {
+        "additionalProperties": false,
+        "properties": {
+          "regions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "name"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "regions"
+        ],
+        "type": "object"
+      },
+      "Tenant": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "default_media_plane": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default_region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "logo_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "website": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "created_at",
+          "default_media_plane",
+          "default_region",
+          "id",
+          "logo_key",
+          "name",
+          "updated_at",
+          "website"
+        ],
+        "type": "object"
+      },
+      "TenantList": {
+        "additionalProperties": false,
+        "properties": {
+          "pagination": {
+            "additionalProperties": false,
+            "properties": {
+              "has_more": {
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "page_size": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "has_more",
+              "next_cursor",
+              "page_size"
+            ],
+            "type": "object"
+          },
+          "tenants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "created_at": {
+                  "type": "string"
+                },
+                "default_media_plane": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "default_region": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "logo_key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "website": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "created_at",
+                "default_media_plane",
+                "default_region",
+                "id",
+                "logo_key",
+                "name",
+                "updated_at",
+                "website"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pagination",
+          "tenants"
+        ],
+        "type": "object"
+      },
+      "UpdateTenantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "default_media_plane": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default_region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "website": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

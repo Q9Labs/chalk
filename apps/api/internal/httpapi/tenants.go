@@ -55,6 +55,10 @@ type tenantListResponse struct {
 	Pagination paginationResponse `json:"pagination"`
 }
 
+type regionsResponse struct {
+	Regions []regionResponse `json:"regions"`
+}
+
 type createTenantRequest struct {
 	Name              string  `json:"name"`
 	DefaultRegion     *string `json:"default_region"`
@@ -71,171 +75,269 @@ type updateTenantRequest struct {
 	Website           utilities.OptionalString `json:"website"`
 }
 
-func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants", handleCreateTenant(service))
-	r.Get("/tenants", handleListTenants(service))
-	r.Get("/tenants/{tenant_id}", handleGetTenant(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Patch("/tenants/{tenant_id}", handleUpdateTenant(service, authorizer))
-	r.Get("/regions", handleListRegions(service))
+type listTenantsRequest struct {
+	Page pagination.PageRequest
 }
 
-func handleCreateTenant(service TenantService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
-		}
+type getTenantRequest struct {
+	TenantID utilities.ID
+}
 
-		var request createTenantRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
+type updateTenantEndpointRequest struct {
+	TenantID utilities.ID
+	Body     updateTenantRequest
+}
 
-		tenant, err := service.CreateTenant(r.Context(), request.input())
-		if writeTenantServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, newTenantResponse(tenant))
+func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range tenantEndpoints(service, authorizer) {
+		endpoint.Mount(r, limits)
 	}
 }
 
-func handleListTenants(service TenantService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []RouteEndpoint {
+	return []RouteEndpoint{
+		createTenantEndpoint(service),
+		listTenantsEndpoint(service),
+		getTenantEndpoint(service, authorizer),
+		updateTenantEndpoint(service, authorizer),
+		listRegionsEndpoint(service),
+	}
+}
+
+func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, tenantResponse] {
+	return Post("/v1/tenants", "/tenants", "createTenant", decodeJSONBody[createTenantRequest], func(ctx context.Context, request createTenantRequest) (tenantResponse, error) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return tenantResponse{}, apiErrorServiceUnavailable
 		}
 
-		if authorizeGlobalReadRequest(w, r) {
-			return
+		tenant, err := service.CreateTenant(ctx, request.input())
+		if err != nil {
+			return tenantResponse{}, err
 		}
 
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
+		return newTenantResponse(tenant), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		RequestBody("CreateTenantRequest", createTenantRequest{}).
+		Responds(http.StatusCreated, "Tenant", tenantResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidRequest,
+			apiErrorInvalidTenantName,
+			apiErrorInvalidTenantRegion,
+			apiErrorInvalidTenantField,
+			apiErrorRateLimited,
+			apiErrorInternal,
+		).
+		MapErrors(tenantServiceAPIError)
+}
+
+func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, tenantListResponse] {
+	return Get("/v1/tenants", "/tenants", "listTenants", decodeListTenantsRequest, func(ctx context.Context, request listTenantsRequest) (tenantListResponse, error) {
+		if service == nil {
+			return tenantListResponse{}, apiErrorServiceUnavailable
 		}
 
-		tenants, err := service.ListTenants(r.Context(), page)
-		if writeTenantServiceError(w, err) {
-			return
+		if err := authorizeGlobalRead(ctx); err != nil {
+			return tenantListResponse{}, err
+		}
+
+		tenants, err := service.ListTenants(ctx, request.Page)
+		if err != nil {
+			return tenantListResponse{}, err
 		}
 
 		response, err := newTenantListResponse(tenants)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return tenantListResponse{}, err
 		}
 
-		writeJSON(w, http.StatusOK, response)
-	}
+		return response, nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(
+			APIParameterContract{Name: "page_size", In: "query", Type: "integer", Required: false},
+			APIParameterContract{Name: "cursor", In: "query", Type: "string", Required: false},
+		).
+		Responds(http.StatusOK, "TenantList", tenantListResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidPageSize,
+			apiErrorInvalidCursor,
+			apiErrorInternal,
+		).
+		MapErrors(tenantEndpointAPIError)
 }
 
-func handleGetTenant(service TenantService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, tenantResponse] {
+	return Get("/v1/tenants/{tenant_id}", "/tenants/{tenant_id}", "getTenant", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (tenantResponse, error) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return tenantResponse{}, apiErrorServiceUnavailable
 		}
 
-		id, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTenantPermission); err != nil {
+			return tenantResponse{}, err
+		}
+
+		tenant, err := service.GetTenant(ctx, request.TenantID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
-			return
+			return tenantResponse{}, err
 		}
 
-		if authorizeTenantRequest(w, r, authorizer, id, readTenantPermission) {
-			return
-		}
-
-		tenant, err := service.GetTenant(r.Context(), id)
-		if writeTenantServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newTenantResponse(tenant))
-	}
+		return newTenantResponse(tenant), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
+		Responds(http.StatusOK, "Tenant", tenantResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidTenantID,
+			apiErrorTenantNotFound,
+			apiErrorInternal,
+		).
+		MapErrors(tenantEndpointAPIError)
 }
 
-func handleUpdateTenant(service TenantService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[updateTenantEndpointRequest, tenantResponse] {
+	return Patch("/v1/tenants/{tenant_id}", "/tenants/{tenant_id}", "updateTenant", decodeUpdateTenantRequest, func(ctx context.Context, request updateTenantEndpointRequest) (tenantResponse, error) {
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return tenantResponse{}, apiErrorServiceUnavailable
 		}
 
-		id, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTenantPermission); err != nil {
+			return tenantResponse{}, err
+		}
+
+		tenant, err := service.UpdateTenant(ctx, request.TenantID, request.Body.input())
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
-			return
+			return tenantResponse{}, err
 		}
 
-		if authorizeTenantRequest(w, r, authorizer, id, writeTenantPermission) {
-			return
-		}
-
-		var request updateTenantRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
-		}
-
-		tenant, err := service.UpdateTenant(r.Context(), id, request.input())
-		if writeTenantServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newTenantResponse(tenant))
-	}
+		return newTenantResponse(tenant), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
+		RequestBody("UpdateTenantRequest", updateTenantRequest{}).
+		Responds(http.StatusOK, "Tenant", tenantResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorForbidden,
+			apiErrorServiceUnavailable,
+			apiErrorInvalidRequest,
+			apiErrorInvalidTenantID,
+			apiErrorInvalidTenantName,
+			apiErrorInvalidTenantRegion,
+			apiErrorInvalidTenantField,
+			apiErrorTenantNotFound,
+			apiErrorRateLimited,
+			apiErrorInternal,
+		).
+		MapErrors(tenantEndpointAPIError)
 }
 
-func handleListRegions(service TenantService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func listRegionsEndpoint(service TenantService) Endpoint[noRequest, regionsResponse] {
+	return Get("/v1/regions", "/regions", "listRegions", decodeNoRequest, func(ctx context.Context, request noRequest) (regionsResponse, error) {
+		_ = request
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is not ready")
-			return
+			return regionsResponse{}, apiErrorServiceUnavailable
 		}
 
-		regions, err := service.AvailableRegions(r.Context())
+		regions, err := service.AvailableRegions(ctx)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return regionsResponse{}, err
 		}
 
-		response := make([]regionResponse, 0, len(regions))
+		response := regionsResponse{
+			Regions: make([]regionResponse, 0, len(regions)),
+		}
 		for _, region := range regions {
-			response = append(response, regionResponse{
+			response.Regions = append(response.Regions, regionResponse{
 				Code: region.Code,
 				Name: region.Name,
 			})
 		}
 
-		writeJSON(w, http.StatusOK, map[string][]regionResponse{
-			"regions": response,
-		})
-	}
+		return response, nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Responds(http.StatusOK, "Regions", regionsResponse{}).
+		Errors(
+			apiErrorUnauthenticated,
+			apiErrorServiceUnavailable,
+			apiErrorInternal,
+		)
 }
 
-func writeTenantServiceError(w http.ResponseWriter, err error) bool {
-	switch {
-	case err == nil:
-		return false
-	case errors.Is(err, tenants.ErrInvalidTenantID):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
-	case errors.Is(err, tenants.ErrInvalidTenantName):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_name", "Invalid tenant name")
-	case errors.Is(err, tenants.ErrInvalidTenantRegion):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_region", "Invalid tenant region")
-	case errors.Is(err, tenants.ErrInvalidTenantField):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_field", "Invalid tenant field")
-	case errors.Is(err, tenants.ErrTenantNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Tenant not found")
-	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+func decodeListTenantsRequest(r *http.Request) (listTenantsRequest, error) {
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listTenantsRequest{}, paginationAPIError(err)
+	}
+	return listTenantsRequest{Page: page}, nil
+}
+
+func decodeGetTenantRequest(r *http.Request) (getTenantRequest, error) {
+	tenantID, err := tenantIDFromRequest(r)
+	if err != nil {
+		return getTenantRequest{}, err
+	}
+	return getTenantRequest{TenantID: tenantID}, nil
+}
+
+func decodeUpdateTenantRequest(r *http.Request) (updateTenantEndpointRequest, error) {
+	tenantID, err := tenantIDFromRequest(r)
+	if err != nil {
+		return updateTenantEndpointRequest{}, err
 	}
 
-	return true
+	body, err := decodeJSONBody[updateTenantRequest](r)
+	if err != nil {
+		return updateTenantEndpointRequest{}, err
+	}
+
+	return updateTenantEndpointRequest{TenantID: tenantID, Body: body}, nil
+}
+
+func tenantIDFromRequest(r *http.Request) (utilities.ID, error) {
+	id, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
+	if err != nil {
+		return utilities.ID{}, apiErrorInvalidTenantID
+	}
+	return id, nil
+}
+
+func tenantEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := errorAsAPIError(err); ok {
+		return apiErr, true
+	}
+	if apiErr, ok := tenantServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func tenantServiceAPIError(err error) (APIError, bool) {
+	switch {
+	case errors.Is(err, tenants.ErrInvalidTenantID):
+		return apiErrorInvalidTenantID, true
+	case errors.Is(err, tenants.ErrInvalidTenantName):
+		return apiErrorInvalidTenantName, true
+	case errors.Is(err, tenants.ErrInvalidTenantRegion):
+		return apiErrorInvalidTenantRegion, true
+	case errors.Is(err, tenants.ErrInvalidTenantField):
+		return apiErrorInvalidTenantField, true
+	case errors.Is(err, tenants.ErrTenantNotFound):
+		return apiErrorTenantNotFound, true
+	default:
+		return APIError{}, false
+	}
 }
 
 func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) {

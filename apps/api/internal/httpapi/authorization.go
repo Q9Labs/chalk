@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -10,44 +11,61 @@ import (
 )
 
 func authorizeTenantRequest(w http.ResponseWriter, r *http.Request, authorizer TenantAuthorizer, tenantID utilities.ID, permission authorization.TenantPermission) bool {
-	if authorizer == nil {
-		writeServiceUnavailable(w)
-		return true
-	}
-
-	principal, ok := authentication.PrincipalFromContext(r.Context())
-	if !ok {
-		writeUnauthenticated(w)
-		return true
-	}
-
-	err := authorizer.AuthorizeTenant(r.Context(), principal, tenantID, permission)
-	switch {
-	case err == nil:
+	if err := authorizeTenant(r.Context(), authorizer, tenantID, permission); err == nil {
 		return false
-	case errors.Is(err, authorization.ErrUnauthenticated):
-		writeUnauthenticated(w)
-	case errors.Is(err, authorization.ErrForbidden):
-		writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-	case errors.Is(err, authorization.ErrInvalidTenantID):
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
-	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+	} else {
+		writeAPIError(w, authorizationAPIError(err))
+		return true
 	}
-
-	return true
 }
 
 func authorizeGlobalReadRequest(w http.ResponseWriter, r *http.Request) bool {
-	principal, ok := authentication.PrincipalFromContext(r.Context())
-	if !ok {
-		writeUnauthenticated(w)
+	if err := authorizeGlobalRead(r.Context()); err == nil {
+		return false
+	} else {
+		writeAPIError(w, authorizationAPIError(err))
 		return true
 	}
-	if principal.Kind != authentication.PrincipalSystem {
-		writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-		return true
+}
+
+func authorizeTenant(ctx context.Context, authorizer TenantAuthorizer, tenantID utilities.ID, permission authorization.TenantPermission) error {
+	if authorizer == nil {
+		return apiErrorServiceUnavailable
 	}
 
-	return false
+	principal, ok := authentication.PrincipalFromContext(ctx)
+	if !ok {
+		return apiErrorUnauthenticated
+	}
+
+	return authorizer.AuthorizeTenant(ctx, principal, tenantID, permission)
+}
+
+func authorizeGlobalRead(ctx context.Context) error {
+	principal, ok := authentication.PrincipalFromContext(ctx)
+	if !ok {
+		return apiErrorUnauthenticated
+	}
+	if principal.Kind != authentication.PrincipalSystem {
+		return apiErrorForbidden
+	}
+
+	return nil
+}
+
+func authorizationAPIError(err error) APIError {
+	if apiErr, ok := errorAsAPIError(err); ok {
+		return apiErr
+	}
+
+	switch {
+	case errors.Is(err, authorization.ErrUnauthenticated):
+		return apiErrorUnauthenticated
+	case errors.Is(err, authorization.ErrForbidden):
+		return apiErrorForbidden
+	case errors.Is(err, authorization.ErrInvalidTenantID):
+		return apiErrorInvalidTenantID
+	default:
+		return apiErrorInternal
+	}
 }
