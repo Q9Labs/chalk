@@ -162,11 +162,13 @@ func (a Adapter) RefreshConnection(ctx context.Context, input integrations.Refre
 }
 
 func (a Adapter) DisableConnection(ctx context.Context, input integrations.DisableConnectionInput) error {
-	query := url.Values{}
 	if input.Revoke {
-		query.Set("revoke_on_delete", "true")
+		return a.doConnectedAccount(ctx, http.MethodPost, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef)+"/revoke", nil, nil, http.StatusOK, nil)
 	}
-	return a.doConnectedAccount(ctx, http.MethodDelete, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef), query, nil, http.StatusOK, nil)
+
+	return a.doConnectedAccount(ctx, http.MethodPatch, "/connected_accounts/"+url.PathEscape(input.ExternalAccountRef)+"/status", nil, connectedAccountStatusRequest{
+		Enabled: false,
+	}, http.StatusOK, nil)
 }
 
 func (a Adapter) ExecuteAction(ctx context.Context, input integrations.ExecuteProviderActionInput) (integrations.ProviderActionResult, error) {

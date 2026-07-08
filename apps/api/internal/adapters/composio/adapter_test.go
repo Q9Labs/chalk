@@ -169,6 +169,48 @@ func TestRefreshConnectionReturnsRedirectURL(t *testing.T) {
 	}
 }
 
+func TestDisableConnectionSoftDisablesProviderAccount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/api/v3.1/connected_accounts/ca_slack/status" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		var body connectedAccountStatusRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body.Enabled {
+			t.Fatal("enabled = true, want false")
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{"success": true})
+	}))
+	defer server.Close()
+
+	err := adapterForServer(t, server).DisableConnection(context.Background(), integrations.DisableConnectionInput{
+		ExternalAccountRef: "ca_slack",
+	})
+	if err != nil {
+		t.Fatalf("disable connection: %v", err)
+	}
+}
+
+func TestDisableConnectionRevokesProviderAccount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v3.1/connected_accounts/ca_slack/revoke" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{"success": true})
+	}))
+	defer server.Close()
+
+	err := adapterForServer(t, server).DisableConnection(context.Background(), integrations.DisableConnectionInput{
+		ExternalAccountRef: "ca_slack",
+		Revoke:             true,
+	})
+	if err != nil {
+		t.Fatalf("revoke connection: %v", err)
+	}
+}
+
 func TestExecuteActionPostsConnectedAccountAndArguments(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v3.1/tools/execute/SLACK_SEND_MESSAGE" {
