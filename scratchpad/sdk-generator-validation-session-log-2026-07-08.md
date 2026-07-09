@@ -203,3 +203,8 @@ packages/sdk-core/src/generated/openapi-types.d.ts` passed.
 
 - Verified current Effect v4 package shape: effect has a beta tag, @effect/platform does not, platform-node/platform-browser do have beta tags, and effect beta exports unstable/httpapi.
 - Moving from package-tag verification to compile/API-surface verification for generated HttpApi code.
+
+## 2026-07-09 15:39 PKT
+
+- Compiled current generated contracts against effect@4.0.0-beta.94 by direct tarball install. The test failed as expected because v4 HttpApi and Schema APIs are not source-compatible with the current v3 generator.
+- Inspected API contracts: response headers are supported per success response, Retry-After is currently emitted only on 429 and not declared in error response contracts, and request bodies are globally capped at 1 MiB in decodeRequest without that limit being exposed in route contracts/OpenAPI.
