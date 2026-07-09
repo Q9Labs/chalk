@@ -155,7 +155,7 @@ internal/httpapi/
 Keep this chain explicit:
 
 ```text
-HTTP route -> authentication service -> repository interface -> Postgres adapter -> sqlc query
+HTTP endpoint -> authentication service -> repository interface -> Postgres adapter -> sqlc query
 ```
 
 HTTP owns request parsing and transport-shaped validation. Services own auth
