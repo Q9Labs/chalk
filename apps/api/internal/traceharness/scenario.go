@@ -75,6 +75,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteMembershipUpdateOwner(ctx)
 	case RouteRoomCreateMemberScenario:
 		return runRouteRoomCreateMember(ctx)
+	case RouteRecordingTranscribeScenario:
+		return runRouteRecordingTranscribe(ctx)
 	case PolicyTenantSystemAllowScenario:
 		return runPolicyTenantSystemAllow(ctx)
 	case PolicyTenantAPIKeyScopeScenario:

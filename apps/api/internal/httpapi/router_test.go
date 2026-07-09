@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/ai"
 	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -99,6 +100,8 @@ type guardedRecordingDownloadService struct{}
 
 type guardedTranscriptService struct{}
 
+type guardedAITranscriptionService struct{}
+
 type guardedAuditLogService struct{}
 
 type recordingService struct {
@@ -106,6 +109,14 @@ type recordingService struct {
 	get    func(context.Context, utilities.ID, utilities.ID) (recordings.Recording, error)
 	list   func(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (recordings.RecordingList, error)
 	update func(context.Context, utilities.ID, utilities.ID, recordings.UpdateInput) (recordings.Recording, error)
+}
+
+type transcriptService struct {
+	create func(context.Context, transcripts.CreateInput) (transcripts.Transcript, error)
+}
+
+type aiTranscriptionService struct {
+	transcribe func(context.Context, ai.TranscribeInput) (ai.Transcription, error)
 }
 
 type authenticationService struct {
@@ -324,6 +335,36 @@ func (guardedTranscriptService) List(context.Context, utilities.ID, utilities.ID
 
 func (guardedTranscriptService) Update(context.Context, utilities.ID, utilities.ID, transcripts.UpdateInput) (transcripts.Transcript, error) {
 	return transcripts.Transcript{}, errors.New("unexpected update transcript call")
+}
+
+func (s transcriptService) Create(ctx context.Context, input transcripts.CreateInput) (transcripts.Transcript, error) {
+	if s.create == nil {
+		return transcripts.Transcript{}, errors.New("unexpected create transcript call")
+	}
+	return s.create(ctx, input)
+}
+
+func (s transcriptService) Get(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
+	return transcripts.Transcript{}, errors.New("unexpected get transcript call")
+}
+
+func (s transcriptService) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (transcripts.TranscriptList, error) {
+	return transcripts.TranscriptList{}, errors.New("unexpected list transcripts call")
+}
+
+func (s transcriptService) Update(context.Context, utilities.ID, utilities.ID, transcripts.UpdateInput) (transcripts.Transcript, error) {
+	return transcripts.Transcript{}, errors.New("unexpected update transcript call")
+}
+
+func (guardedAITranscriptionService) Transcribe(context.Context, ai.TranscribeInput) (ai.Transcription, error) {
+	return ai.Transcription{}, errors.New("unexpected ai transcribe call")
+}
+
+func (s aiTranscriptionService) Transcribe(ctx context.Context, input ai.TranscribeInput) (ai.Transcription, error) {
+	if s.transcribe == nil {
+		return ai.Transcription{}, errors.New("unexpected ai transcribe call")
+	}
+	return s.transcribe(ctx, input)
 }
 
 func (guardedAuditLogService) Get(context.Context, utilities.ID, utilities.ID) (auditlogs.AuditLog, error) {
@@ -1110,6 +1151,7 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444", body: `{"status":"failed"}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts/55555555-5555-5555-5555-555555555555"},
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts/55555555-5555-5555-5555-555555555555", body: `{"status":"failed"}`},
@@ -1146,6 +1188,9 @@ func TestTenantScopedMediaRoutesRejectForbiddenPrincipal(t *testing.T) {
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`, options: httpapi.Options{Recordings: guardedRecordingService{}}},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts", options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}, Recordings: guardedRecordingService{}, Tenants: tenantService{getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
+			return tenants.Tenant{}, errors.New("unexpected get tenant call")
+		}}, AITranscriptions: guardedAITranscriptionService{}}},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/audit-logs", options: httpapi.Options{AuditLogs: guardedAuditLogService{}}},
 	}
 
@@ -1239,6 +1284,182 @@ func TestCreateRoomMapsDuplicateSlugToConflict(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
 	}
 	assertErrorCode(t, res, "room_slug_already_used")
+}
+
+func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const recordingID = "44444444-4444-4444-4444-444444444444"
+	const roomID = "22222222-2222-2222-2222-222222222222"
+	const sessionID = "33333333-3333-3333-3333-333333333333"
+	const transcriptID = "55555555-5555-5555-5555-555555555555"
+	createdAt := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/transcriptions",
+		`{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`,
+		httpapi.Options{
+			Tenants: tenantService{
+				getTenant: func(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
+					if id.String() != tenantID {
+						t.Fatalf("tenant id = %q, want %q", id.String(), tenantID)
+					}
+					return tenants.Tenant{
+						ID:               id,
+						Name:             "Acme",
+						AIProviderConfig: json.RawMessage(`{"gateway":"openrouter","api_key":"sk-test","default_model":"openai/whisper-1"}`),
+					}, nil
+				},
+			},
+			Recordings: recordingService{
+				get: func(ctx context.Context, gotTenantID utilities.ID, gotRecordingID utilities.ID) (recordings.Recording, error) {
+					if gotTenantID.String() != tenantID {
+						t.Fatalf("tenant id = %q, want %q", gotTenantID.String(), tenantID)
+					}
+					if gotRecordingID.String() != recordingID {
+						t.Fatalf("recording id = %q, want %q", gotRecordingID.String(), recordingID)
+					}
+					return recordings.Recording{
+						ID:        gotRecordingID,
+						TenantID:  gotTenantID,
+						RoomID:    mustTenantID(t, roomID),
+						SessionID: mustTenantID(t, sessionID),
+						Status:    recordings.StatusCompleted,
+					}, nil
+				},
+			},
+			AITranscriptions: aiTranscriptionService{
+				transcribe: func(ctx context.Context, input ai.TranscribeInput) (ai.Transcription, error) {
+					if input.Config.APIKey != "sk-test" {
+						t.Fatalf("api key = %q, want sk-test", input.Config.APIKey)
+					}
+					if input.Model != "openai/whisper-1" {
+						t.Fatalf("model = %q, want openai/whisper-1", input.Model)
+					}
+					if input.AudioData != "YXVkaW8=" || input.AudioFormat != "wav" {
+						t.Fatalf("audio = %q/%q", input.AudioData, input.AudioFormat)
+					}
+					if input.Language != "en" {
+						t.Fatalf("language = %q, want en", input.Language)
+					}
+					return ai.Transcription{
+						Gateway: ai.GatewayOpenRouter,
+						Model:   input.Model,
+						Text:    "Hello from the meeting",
+						Usage:   json.RawMessage(`{"input_tokens":12,"output_tokens":3}`),
+					}, nil
+				},
+			},
+			Transcripts: transcriptService{
+				create: func(ctx context.Context, input transcripts.CreateInput) (transcripts.Transcript, error) {
+					if input.TenantID.String() != tenantID || input.RecordingID.String() != recordingID {
+						t.Fatalf("ids = %s/%s", input.TenantID, input.RecordingID)
+					}
+					if input.RoomID.String() != roomID || input.SessionID.String() != sessionID {
+						t.Fatalf("room/session = %s/%s", input.RoomID, input.SessionID)
+					}
+					if input.Status != transcripts.StatusCompleted {
+						t.Fatalf("status = %q, want completed", input.Status)
+					}
+					if input.Provider != ai.ProviderOpenRouter || input.Model != "openai/whisper-1" {
+						t.Fatalf("provider/model = %q/%q", input.Provider, input.Model)
+					}
+					if len(input.Languages) != 1 || input.Languages[0] != "en" {
+						t.Fatalf("languages = %#v, want en", input.Languages)
+					}
+					if input.Text == nil || *input.Text != "Hello from the meeting" {
+						t.Fatalf("text = %v, want transcript text", input.Text)
+					}
+					var metadata map[string]any
+					if err := json.Unmarshal(input.Metadata, &metadata); err != nil {
+						t.Fatalf("metadata: %v", err)
+					}
+					if metadata["gateway"] != "openrouter" {
+						t.Fatalf("gateway metadata = %v, want openrouter", metadata["gateway"])
+					}
+					if input.CompletedAt == nil {
+						t.Fatal("completed_at was nil")
+					}
+					return transcripts.Transcript{
+						ID:          mustTenantID(t, transcriptID),
+						TenantID:    input.TenantID,
+						RecordingID: input.RecordingID,
+						RoomID:      input.RoomID,
+						SessionID:   input.SessionID,
+						Status:      input.Status,
+						Provider:    input.Provider,
+						Model:       input.Model,
+						Languages:   input.Languages,
+						Text:        input.Text,
+						Metadata:    input.Metadata,
+						CompletedAt: input.CompletedAt,
+						UpdatedAt:   createdAt,
+						CreatedAt:   createdAt,
+					}, nil
+				},
+			},
+		},
+	)
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	}
+	var body struct {
+		ID       string `json:"id"`
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
+		Text     string `json:"text"`
+	}
+	decodeJSON(t, res, &body)
+	if body.ID != transcriptID || body.Provider != ai.ProviderOpenRouter || body.Model != "openai/whisper-1" || body.Text != "Hello from the meeting" {
+		t.Fatalf("transcript response = %#v", body)
+	}
+}
+
+func TestTranscribeRecordingMapsProviderUnauthorized(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const recordingID = "44444444-4444-4444-4444-444444444444"
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/transcriptions",
+		`{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`,
+		httpapi.Options{
+			Tenants: tenantService{
+				getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
+					return tenants.Tenant{
+						ID:               mustTenantID(t, tenantID),
+						Name:             "Acme",
+						AIProviderConfig: json.RawMessage(`{"gateway":"openrouter","api_key":"sk-test","default_model":"openai/whisper-1"}`),
+					}, nil
+				},
+			},
+			Recordings: recordingService{
+				get: func(context.Context, utilities.ID, utilities.ID) (recordings.Recording, error) {
+					return recordings.Recording{
+						ID:        mustTenantID(t, recordingID),
+						TenantID:  mustTenantID(t, tenantID),
+						RoomID:    mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						SessionID: mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						Status:    recordings.StatusCompleted,
+					}, nil
+				},
+			},
+			AITranscriptions: aiTranscriptionService{
+				transcribe: func(context.Context, ai.TranscribeInput) (ai.Transcription, error) {
+					return ai.Transcription{}, ai.ErrProviderUnauthorized
+				},
+			},
+			Transcripts: guardedTranscriptService{},
+		},
+	)
+
+	if res.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadGateway)
+	}
+	assertErrorCode(t, res, "ai_provider_unauthorized")
 }
 
 func TestCreateRecordingDownloadURLRejectsUnsupportedProvider(t *testing.T) {
@@ -2442,7 +2663,7 @@ func TestListTenantsRejectsInvalidCursor(t *testing.T) {
 
 func TestCreateTenant(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
-	requestBody := `{"name":"Acme","default_region":"us","media_plane_provider_config":{"api_key":"secret","apiKey":"secret","APIKey":"secret","openai_api_key":"secret","x-api-key":"secret","r2_api_key":"secret","credentials":"secret","credential":"secret","secret_key":"secret","secretKey":"secret","secret-key":"secret","aws_secret_key":"secret","awsSecretKey":"secret","authorization":"secret","auth_header":"secret","accessToken":"secret","token":"secret","private_key":"secret","private_key_pem":"secret","privateKeyPem":"secret","secretAccessKey":"secret","aws_secret_access_key":"secret","r2_secret_access_key":"secret","awsSecretAccessKey":"secret","db_password":"secret","redisPassword":"secret","region":"auto"},"ai_provider_config":{"model":"whisper-large-v3"},"storage_provider_config":{"bucket":"chalk-recordings","client_secret":"secret","clientSecret":"secret","webhookSecret":"secret"}}`
+	requestBody := `{"name":"Acme","default_region":"us","media_plane_provider_config":{"api_key":"secret","apiKey":"secret","APIKey":"secret","openai_api_key":"secret","x-api-key":"secret","r2_api_key":"secret","credentials":"secret","credential":"secret","secret_key":"secret","secretKey":"secret","secret-key":"secret","aws_secret_key":"secret","awsSecretKey":"secret","authorization":"secret","auth_header":"secret","accessToken":"secret","token":"secret","private_key":"secret","private_key_pem":"secret","privateKeyPem":"secret","secretAccessKey":"secret","aws_secret_access_key":"secret","r2_secret_access_key":"secret","awsSecretAccessKey":"secret","db_password":"secret","redisPassword":"secret","region":"auto"},"ai_provider_config":{"gateway":"openrouter","api_key":"secret","model":"whisper-large-v3"},"storage_provider_config":{"bucket":"chalk-recordings","client_secret":"secret","clientSecret":"secret","webhookSecret":"secret"}}`
 
 	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants", requestBody, httpapi.Options{
 		Tenants: tenantService{
@@ -2456,7 +2677,7 @@ func TestCreateTenant(t *testing.T) {
 				if string(input.MediaPlaneProviderConfig) != `{"api_key":"secret","apiKey":"secret","APIKey":"secret","openai_api_key":"secret","x-api-key":"secret","r2_api_key":"secret","credentials":"secret","credential":"secret","secret_key":"secret","secretKey":"secret","secret-key":"secret","aws_secret_key":"secret","awsSecretKey":"secret","authorization":"secret","auth_header":"secret","accessToken":"secret","token":"secret","private_key":"secret","private_key_pem":"secret","privateKeyPem":"secret","secretAccessKey":"secret","aws_secret_access_key":"secret","r2_secret_access_key":"secret","awsSecretAccessKey":"secret","db_password":"secret","redisPassword":"secret","region":"auto"}` {
 					t.Fatalf("media plane provider config = %s", input.MediaPlaneProviderConfig)
 				}
-				if string(input.AIProviderConfig) != `{"model":"whisper-large-v3"}` {
+				if string(input.AIProviderConfig) != `{"gateway":"openrouter","api_key":"secret","model":"whisper-large-v3"}` {
 					t.Fatalf("ai provider config = %s", input.AIProviderConfig)
 				}
 				if string(input.StorageProviderConfig) != `{"bucket":"chalk-recordings","client_secret":"secret","clientSecret":"secret","webhookSecret":"secret"}` {
@@ -2578,6 +2799,9 @@ func TestCreateTenant(t *testing.T) {
 	}
 	if response.AIProviderConfig["model"] != "whisper-large-v3" {
 		t.Fatalf("ai model = %v, want whisper-large-v3", response.AIProviderConfig["model"])
+	}
+	if response.AIProviderConfig["api_key"] != "[redacted]" {
+		t.Fatalf("ai api key = %v, want redacted", response.AIProviderConfig["api_key"])
 	}
 	if response.StorageProviderConfig["client_secret"] != "[redacted]" {
 		t.Fatalf("storage client secret = %v, want redacted", response.StorageProviderConfig["client_secret"])

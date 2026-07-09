@@ -161,23 +161,23 @@ does not.
 
 ## HTTP Contract
 
-If this slice exposes a generic AI route, define it with the route workflow in
-`docs/route-workflow.md`.
-
-Candidate route:
+The first slice exposes a recording transcription route rather than a generic AI
+route. Define it with the route workflow in `docs/route-workflow.md`.
 
 ```http
-POST /v1/tenants/{tenantId}/ai/responses
+POST /v1/tenants/{tenant_id}/recordings/{recording_id}/transcriptions
 ```
 
 Request:
 
 ```json
 {
-  "model": "anthropic/claude-sonnet-4",
-  "input": {
-    "messages": [{ "role": "user", "content": "Summarize this meeting." }]
-  }
+  "model": "openai/whisper-1",
+  "input_audio": {
+    "data": "<base64 audio bytes>",
+    "format": "wav"
+  },
+  "language": "en"
 }
 ```
 
@@ -185,10 +185,18 @@ Response:
 
 ```json
 {
-  "gateway": "openrouter",
-  "model": "anthropic/claude-sonnet-4",
-  "output": {},
-  "usage": {}
+  "id": "transcript_id",
+  "tenant_id": "tenant_id",
+  "recording_id": "recording_id",
+  "status": "completed",
+  "provider": "openrouter",
+  "model": "openai/whisper-1",
+  "languages": ["en"],
+  "text": "Transcript text",
+  "metadata": {
+    "gateway": "openrouter",
+    "usage": {}
+  }
 }
 ```
 
@@ -206,9 +214,8 @@ Contract requirements:
 - Add the endpoint to `PreviewRouteContracts()` if a route is implemented.
 - Update the route contract test when the route inventory changes.
 
-If the first use case is a product route such as transcription, use that route
-instead of adding a generic AI endpoint. The same AI core and OpenRouter adapter
-still apply.
+The route accepts base64 audio in the request body for this first synchronous
+MVP. It does not fetch recording storage or enqueue async transcription work.
 
 ## Security
 

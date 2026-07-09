@@ -82,6 +82,38 @@ func TestRunRouteRoomCreateMemberScenario(t *testing.T) {
 	assertEvent(t, result.Events, "database", "INSERT rooms RETURNING *")
 }
 
+func TestRunRouteRecordingTranscribeScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteRecordingTranscribeScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
+	}
+
+	var body struct {
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
+		Text     string `json:"text"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Provider != "openrouter" || body.Model != "openai/whisper-1" || body.Text != "Hello from the trace recording." {
+		t.Fatalf("body = %#v", body)
+	}
+
+	assertEvent(t, result.Events, "http", "POST /v1/tenants/"+tenantID().String()+"/recordings/"+recordingID().String()+"/transcriptions")
+	assertEvent(t, result.Events, "auth", "AuthenticateSession")
+	assertEvent(t, result.Events, "repository", "MembershipRepository.GetTenantMembershipForUser")
+	assertEvent(t, result.Events, "repository", "TenantRepository.GetTenant")
+	assertEvent(t, result.Events, "repository", "RecordingRepository.Get")
+	assertEvent(t, result.Events, "service", "ai.Service.Transcribe")
+	assertEvent(t, result.Events, "provider", "POST openrouter /audio/transcriptions")
+	assertEvent(t, result.Events, "database", "INSERT transcriptions RETURNING *")
+}
+
 func TestRunAllRegisteredScenarios(t *testing.T) {
 	for _, scenario := range ScenarioNames() {
 		t.Run(scenario, func(t *testing.T) {

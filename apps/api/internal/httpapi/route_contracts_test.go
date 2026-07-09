@@ -39,6 +39,7 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/recordings/{recording_id}"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcriptions"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}"},

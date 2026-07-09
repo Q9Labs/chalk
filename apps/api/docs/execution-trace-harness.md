@@ -106,6 +106,7 @@ Registered scenarios:
 - `route:membership-list-viewer`
 - `route:membership-update-owner`
 - `route:room-create-member`
+- `route:recording-transcribe`
 - `policy:tenant-system-allow`
 - `policy:tenant-api-key-scope`
 - `policy:tenant-user-role`

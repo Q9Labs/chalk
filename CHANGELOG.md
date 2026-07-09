@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- OpenRouter BYOK transcription support in the Go API, including a tenant
+  `ai_provider_config` path, OpenRouter adapter, recording transcription route,
+  and trace harness scenario.
 - Go API database foundation for external integrations, including provider/service
   connection records for Composio-backed integrations.
 - npm publish workflow and package metadata for publishing the public SDK

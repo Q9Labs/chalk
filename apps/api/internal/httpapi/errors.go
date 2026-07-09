@@ -64,7 +64,7 @@ var (
 	apiErrorInvalidStorageKey         = APIError{Status: http.StatusBadRequest, Code: "invalid_storage_key", Message: "Invalid storage key"}
 	apiErrorInvalidRecordingField     = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_field", Message: "Invalid recording field"}
 	apiErrorInvalidURLExpiration      = APIError{Status: http.StatusBadRequest, Code: "invalid_url_expiration", Message: "Invalid url expiration"}
-	apiErrorRecordingNotReady         = APIError{Status: http.StatusBadRequest, Code: "recording_not_ready", Message: "Recording is not ready for download"}
+	apiErrorRecordingNotReady         = APIError{Status: http.StatusBadRequest, Code: "recording_not_ready", Message: "Recording is not ready"}
 	apiErrorRecordingNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording not found"}
 	apiErrorRecordingArtifactNotFound = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording artifact not found"}
 
@@ -75,6 +75,16 @@ var (
 	apiErrorInvalidTranscriptLanguages = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_languages", Message: "Invalid transcript languages"}
 	apiErrorInvalidTranscriptField     = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_field", Message: "Invalid transcript field"}
 	apiErrorTranscriptNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Transcript not found"}
+
+	apiErrorInvalidAIConfig        = APIError{Status: http.StatusBadRequest, Code: "invalid_ai_config", Message: "Invalid AI config"}
+	apiErrorInvalidAIGateway       = APIError{Status: http.StatusBadRequest, Code: "invalid_ai_gateway", Message: "Invalid AI gateway"}
+	apiErrorMissingAICredentials   = APIError{Status: http.StatusBadRequest, Code: "missing_ai_credentials", Message: "Missing AI credentials"}
+	apiErrorInvalidAIModel         = APIError{Status: http.StatusBadRequest, Code: "invalid_ai_model", Message: "Invalid AI model"}
+	apiErrorInvalidAIAudio         = APIError{Status: http.StatusBadRequest, Code: "invalid_ai_audio", Message: "Invalid AI audio"}
+	apiErrorAIProviderUnauthorized = APIError{Status: http.StatusBadGateway, Code: "ai_provider_unauthorized", Message: "AI provider rejected credentials"}
+	apiErrorAIProviderPayment      = APIError{Status: http.StatusBadGateway, Code: "ai_provider_payment_required", Message: "AI provider requires payment"}
+	apiErrorAIProviderRateLimited  = APIError{Status: http.StatusTooManyRequests, Code: "ai_provider_rate_limited", Message: "AI provider rate limited the request"}
+	apiErrorAIProviderFailed       = APIError{Status: http.StatusBadGateway, Code: "ai_provider_failed", Message: "AI provider request failed"}
 
 	apiErrorInvalidAuditLogID = APIError{Status: http.StatusBadRequest, Code: "invalid_audit_log_id", Message: "Invalid audit log id"}
 	apiErrorAuditLogNotFound  = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Audit log not found"}

@@ -13,10 +13,12 @@ import (
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
+	openrouteradapter "github.com/q9labs/chalk/apps/api/internal/adapters/openrouter"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
+	"github.com/q9labs/chalk/apps/api/internal/ai"
 	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -123,6 +125,11 @@ func run() error {
 	recordingService := recordings.NewService(recordingRepository)
 	transcriptRepository := postgres.NewTranscriptRepository(operationQueries)
 	transcriptService := transcripts.NewService(transcriptRepository)
+	openRouterAdapter, err := openrouteradapter.NewAdapter(openrouteradapter.Config{})
+	if err != nil {
+		return fmt.Errorf("configure openrouter: %w", err)
+	}
+	aiService := ai.NewService(openRouterAdapter)
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
 	var recordingDownloads httpapi.RecordingDownloadService
@@ -175,10 +182,11 @@ func run() error {
 		SessionCookie: httpapi.SessionCookieOptions{
 			Secure: cfg.Observability.Environment != "local",
 		},
-		TenantAuthz: tenantAuthz,
-		Tenants:     tenantService,
-		Transcripts: transcriptService,
-		Users:       userService,
+		TenantAuthz:      tenantAuthz,
+		Tenants:          tenantService,
+		AITranscriptions: aiService,
+		Transcripts:      transcriptService,
+		Users:            userService,
 	}
 	diagnostics.ApplyHTTP(&routerOptions)
 
