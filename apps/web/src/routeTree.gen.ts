@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WhiteboardRouteImport } from './routes/whiteboard'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatusRouteImport } from './routes/status'
+import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as IndexRouteImport } from './routes/index'
@@ -29,6 +30,11 @@ const TermsRoute = TermsRouteImport.update({
 const StatusRoute = StatusRouteImport.update({
   id: '/status',
   path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SdkPreviewRoute = SdkPreviewRouteImport.update({
+  id: '/sdk-preview',
+  path: '/sdk-preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
+  '/sdk-preview': typeof SdkPreviewRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
+  '/sdk-preview': typeof SdkPreviewRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -68,20 +76,36 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
+  '/sdk-preview': typeof SdkPreviewRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/new' | '/privacy' | '/status' | '/terms' | '/whiteboard'
+  fullPaths:
+    | '/'
+    | '/new'
+    | '/privacy'
+    | '/sdk-preview'
+    | '/status'
+    | '/terms'
+    | '/whiteboard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/new' | '/privacy' | '/status' | '/terms' | '/whiteboard'
+  to:
+    | '/'
+    | '/new'
+    | '/privacy'
+    | '/sdk-preview'
+    | '/status'
+    | '/terms'
+    | '/whiteboard'
   id:
     | '__root__'
     | '/'
     | '/new'
     | '/privacy'
+    | '/sdk-preview'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -91,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   NewRoute: typeof NewRoute
   PrivacyRoute: typeof PrivacyRoute
+  SdkPreviewRoute: typeof SdkPreviewRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
   WhiteboardRoute: typeof WhiteboardRoute
@@ -117,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/status'
       fullPath: '/status'
       preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sdk-preview': {
+      id: '/sdk-preview'
+      path: '/sdk-preview'
+      fullPath: '/sdk-preview'
+      preLoaderRoute: typeof SdkPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -147,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   NewRoute: NewRoute,
   PrivacyRoute: PrivacyRoute,
+  SdkPreviewRoute: SdkPreviewRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
   WhiteboardRoute: WhiteboardRoute,

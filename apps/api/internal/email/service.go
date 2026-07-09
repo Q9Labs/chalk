@@ -124,6 +124,7 @@ func optionalRecipientAddresses(values []string) ([]string, error) {
 
 	prepared := make([]string, 0, len(values))
 	for _, value := range values {
+
 		address, err := parseEmailAddress(value)
 		if err != nil {
 			return nil, err

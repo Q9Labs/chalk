@@ -45,7 +45,7 @@
 - Added regressions for Postgres empty scopes, domain owner enforcement, and
   HTTP actor forwarding.
 - Fresh checks passed: focused package tests, `go test ./...`, `git diff
-  --check`, and `apps/api/scripts/gate.sh`.
+--check`, and `apps/api/scripts/gate.sh`.
 - `apps/api/scripts/perf-local.sh` still blocks at the known tenant seed issue:
   `seed tenants: HTTP 401`.
 
@@ -62,7 +62,7 @@
 - Fixed Composio toolkit metadata lookup to search each requested slug exactly.
 - Added regressions for multi-slug toolkit lookup and soft-disable timestamps.
 - Fresh checks passed: focused package tests, `go test ./...`, `git diff
-  --check`, and `apps/api/scripts/gate.sh`.
+--check`, and `apps/api/scripts/gate.sh`.
 
 ## 2026-07-06 17:26 PKT
 
@@ -110,7 +110,7 @@
 - Reconciled provider `ErrConnectionNotFound` during disable as local
   disable/revoke cleanup, and added focused HTTP/domain regressions.
 - Fresh focused checks passed: `go test ./internal/integrations
-  ./internal/httpapi` and `git diff --check`.
+./internal/httpapi` and `git diff --check`.
 - After removing the now-unused admin/delete permission helper, `go test ./...`
   and `apps/api/scripts/gate.sh` passed.
 
@@ -131,7 +131,7 @@
 - Added HTTP-edge callback URL validation against exact configured allowed
   origins, rejecting wildcard origins and arbitrary domains for OAuth callbacks.
 - Fresh checks passed: `go test ./internal/httpapi`, `go test ./...`, `git diff
-  --check`, and `apps/api/scripts/gate.sh`.
+--check`, and `apps/api/scripts/gate.sh`.
 
 ## 2026-07-06 19:02 PKT
 
@@ -151,8 +151,8 @@
 - Changed the Postgres integration audit adapter to emit a nullable actor UUID
   and added a repository regression for tenant-scoped audit actions.
 - Fresh focused checks passed: `go test ./internal/adapters/postgres
-  ./internal/integrations ./internal/httpapi`, `git diff --check`, `go test
-  ./...`, and `apps/api/scripts/gate.sh`.
+./internal/integrations ./internal/httpapi`, `git diff --check`, `go test
+./...`, and `apps/api/scripts/gate.sh`.
 
 ## 2026-07-06 19:24 PKT
 
@@ -163,8 +163,8 @@
   duplicate external account ref reuse in the integration service, with
   Postgres unique-violation mapping as a race fallback.
 - Fresh focused checks passed: `go test ./internal/adapters/postgres
-  ./internal/integrations ./internal/httpapi`, `git diff --check`, `go test
-  ./...`, and `apps/api/scripts/gate.sh`.
+./internal/integrations ./internal/httpapi`, `git diff --check`, `go test
+./...`, and `apps/api/scripts/gate.sh`.
 
 ## 2026-07-06 20:06 PKT
 
@@ -179,7 +179,7 @@
 - Fixed Composio deprecation parsing so the legacy metadata object currently
   returned in toolkit responses does not mark enabled toolkits as deprecated.
 - Fresh checks passed: `go test ./internal/adapters/composio
-  ./internal/integrations`, live Composio metadata with the rotated runtime key,
+./internal/integrations`, live Composio metadata with the rotated runtime key,
   `go test ./...`, `git diff --check`, and `apps/api/scripts/gate.sh`.
 - `apps/api/scripts/perf-local.sh` still blocks at the known tenant seed issue:
   `seed tenants: HTTP 401`.
@@ -256,4 +256,4 @@
 - Tightened the worker patch so system-principal requests bypass rate limiting
   directly instead of disabling the limiter for all local-server requests.
 - Fresh checks passed: `go test ./internal/config ./internal/httpapi ./cmd
-  ./cmd/perf`, `apps/api/scripts/gate.sh`, and `apps/api/scripts/perf-local.sh`.
+./cmd/perf`, `apps/api/scripts/gate.sh`, and `apps/api/scripts/perf-local.sh`.

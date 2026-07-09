@@ -1,5 +1,19 @@
 {
-  "entry": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx", "apps/api/docs/app.js", "apps/api/scripts/smoke-lifecycle.mjs"],
+  "entry": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "apps/api/docs/app.js",
+    "apps/api/scripts/smoke-lifecycle.mjs",
+    "packages/sdk-core/src/generated/http-api.ts",
+    "packages/sdk-core/src/generated/openapi-types.d.ts",
+    "packages/sdk-core/src/generated/schemas.ts",
+    "scratchpad/sdk-schema-generator-spike/generate-effect-schemas.mjs",
+    "scratchpad/sdk-schema-generator-spike/generated/effect-schemas.ts",
+    "scripts/codegen/generate-effect-http-api.mjs",
+    "scripts/codegen/generate-effect-schemas.mjs"
+  ],
   "publicPackages": ["@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignoreDependencies": [
     "@arethetypeswrong/cli",
@@ -43,7 +57,11 @@
       "packages/sdk-react/src/hooks/useTranscription.ts",
       "packages/sdk-react-native/src/hooks/useTranscripts.ts",
       "packages/chalk-whiteboard/src/collab/presence.ts",
-      "packages/sdk-react/src/components/full/whiteboard-panel/constants.ts"
+      "packages/sdk-react/src/components/full/whiteboard-panel/constants.ts",
+      "packages/sdk-core/src/generated/**",
+      "scratchpad/sdk-schema-generator-spike/**",
+      "scripts/codegen/generate-effect-http-api.mjs",
+      "scripts/codegen/generate-effect-schemas.mjs"
     ]
   },
   "health": {
@@ -76,7 +94,9 @@
       "packages/chalk-whiteboard/src/collab/engine.ts",
       "packages/chalk-whiteboard/src/collab/files.ts",
       "packages/facehash/src/Facehash.tsx",
-      "packages/facehash/src/FacehashSceneSvg.tsx"
+      "packages/facehash/src/FacehashSceneSvg.tsx",
+      "scripts/codegen/generate-effect-http-api.mjs",
+      "scripts/codegen/generate-effect-schemas.mjs"
     ]
   }
 }

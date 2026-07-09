@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260701.1",
+    "@tailwindcss/vite": "^4.3.2",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.10.2",

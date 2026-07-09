@@ -23,3 +23,17 @@ endpoint fill-in.
   it's how he traces and understands the change.
 - Debrief Hasan on the change per `~/.codex/debrief.md`, including how to run the
   new trace.
+
+## API Contracts And SDK Codegen
+
+- Public `/v1` API routes should use the endpoint contract pattern so
+  `cmd/codegen` can include them in `openapi/openapi.json` and downstream SDK
+  generation.
+- After changing route contracts, run `pnpm run generate:sdk` from the repo root
+  and keep `apps/api/openapi/openapi.json` plus `packages/sdk-core/src/generated/*`
+  in sync. This includes OpenAPI types, Effect schemas, and the generated
+  Effect `HttpApi` definition. The root gate runs
+  `pnpm run check:sdk-generated` as a non-mutating drift check.
+- Known gap: `internal/httpapi/integrations.go` still mounts integration routes
+  manually, so those routes are absent from generated OpenAPI and SDK artifacts
+  until they are migrated to endpoint contracts.

@@ -13,8 +13,7 @@ export const Route = createRootRoute({
       { title: "Chalk — Video calls. Your call." },
       {
         name: "description",
-        content:
-          "Chalk is a real-time video platform with two front doors: a meeting app that works out of the box, and an SDK that drops into your product. Managed or self-hosted.",
+        content: "Chalk is a real-time video platform with two front doors: a meeting app that works out of the box, and an SDK that drops into your product. Managed or self-hosted.",
       },
     ],
     links: [

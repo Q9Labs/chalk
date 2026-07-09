@@ -44,10 +44,7 @@ export function Closing() {
             <h2>
               Pick up <Chalked>Chalk</Chalked>.
             </h2>
-            <p>
-              Start a meeting in your browser right now, or put one inside your product this week. Either door leads to
-              the same fast, durable core.
-            </p>
+            <p>Start a meeting in your browser right now, or put one inside your product this week. Either door leads to the same fast, durable core.</p>
             <div className="close-ctas">
               <a href="/new" className="btn btn-light">
                 Start a meeting

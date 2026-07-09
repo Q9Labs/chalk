@@ -103,21 +103,21 @@ Do not create one "Google suite" connection that asks for everything.
 
 Initial Google services:
 
-| Service ID | Composio Toolkit | Purpose |
-| --- | --- | --- |
-| `gmail` | `gmail` | Draft/send follow-ups, read relevant threads when authorized. |
-| `google_calendar` | `googlecalendar` | Read/write meetings, agendas, reminders, scheduling context. |
-| `google_drive` | `googledrive` | Attach, retrieve, and share meeting files. |
-| `google_docs` | `googledocs` | Create and update notes, recaps, specs, and docs. |
-| `google_sheets` | `googlesheets` | Update trackers, lightweight CRM sheets, attendance/action logs. |
-| `google_slides` | `googleslides` | Create/update decks from meeting artifacts; expect custom OAuth if managed auth is unavailable. |
-| `google_forms` | `googleforms` | Generate surveys, feedback forms, onboarding questionnaires; expect custom OAuth if managed auth is unavailable. |
-| `google_tasks` | `googletasks` | Create personal tasks from meeting action items. |
-| `google_contacts` | verify | Resolve contact context only when a workflow needs it. |
-| `google_meet` | `googlemeet` | Meeting metadata parity; expect custom OAuth if managed auth is unavailable. |
-| `google_analytics` | verify | Marketing/customer meeting context for growth teams. |
-| `google_ads` | verify | Marketing workflow follow-ups and campaign context. |
-| `youtube` | verify | Content teams, recordings, publication workflows. |
+| Service ID         | Composio Toolkit | Purpose                                                                                                          |
+| ------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `gmail`            | `gmail`          | Draft/send follow-ups, read relevant threads when authorized.                                                    |
+| `google_calendar`  | `googlecalendar` | Read/write meetings, agendas, reminders, scheduling context.                                                     |
+| `google_drive`     | `googledrive`    | Attach, retrieve, and share meeting files.                                                                       |
+| `google_docs`      | `googledocs`     | Create and update notes, recaps, specs, and docs.                                                                |
+| `google_sheets`    | `googlesheets`   | Update trackers, lightweight CRM sheets, attendance/action logs.                                                 |
+| `google_slides`    | `googleslides`   | Create/update decks from meeting artifacts; expect custom OAuth if managed auth is unavailable.                  |
+| `google_forms`     | `googleforms`    | Generate surveys, feedback forms, onboarding questionnaires; expect custom OAuth if managed auth is unavailable. |
+| `google_tasks`     | `googletasks`    | Create personal tasks from meeting action items.                                                                 |
+| `google_contacts`  | verify           | Resolve contact context only when a workflow needs it.                                                           |
+| `google_meet`      | `googlemeet`     | Meeting metadata parity; expect custom OAuth if managed auth is unavailable.                                     |
+| `google_analytics` | verify           | Marketing/customer meeting context for growth teams.                                                             |
+| `google_ads`       | verify           | Marketing workflow follow-ups and campaign context.                                                              |
+| `youtube`          | verify           | Content teams, recordings, publication workflows.                                                                |
 
 Do not default to Composio's broad Google aggregate toolkit if one is available.
 It fights the consent model because it spans many products and large tool
@@ -126,35 +126,35 @@ to the same underlying toolkit.
 
 Tier 1 non-Google services:
 
-| Service ID | Composio Toolkit | Purpose |
-| --- | --- | --- |
-| `slack` | `slack` | Notifications, digests, channel recaps, async meeting follow-up. |
-| `linear` | `linear` | Engineering/product action items and issue updates. |
-| `github` | `github` | Issues, PR context, release/deployment follow-through. |
-| `notion` | `notion` | Notes, knowledge base pages, product docs. |
+| Service ID | Composio Toolkit | Purpose                                                          |
+| ---------- | ---------------- | ---------------------------------------------------------------- |
+| `slack`    | `slack`          | Notifications, digests, channel recaps, async meeting follow-up. |
+| `linear`   | `linear`         | Engineering/product action items and issue updates.              |
+| `github`   | `github`         | Issues, PR context, release/deployment follow-through.           |
+| `notion`   | `notion`         | Notes, knowledge base pages, product docs.                       |
 
 Tier 2 services:
 
-| Service ID | Composio Toolkit | Purpose |
-| --- | --- | --- |
-| `jira` | `jira` | Enterprise issue tracking alternative to Linear. |
-| `microsoft_outlook` | `outlook` | Enterprise email parity with Gmail. |
-| `microsoft_calendar` | `outlook` | Enterprise calendar parity with Google Calendar; model separately even if backed by the same toolkit. |
-| `microsoft_teams` | `microsoft_teams` | Enterprise chat/meeting workspace parity with Slack. |
-| `onedrive` | `one_drive` | Microsoft file storage parity with Google Drive. |
-| `sharepoint` | `one_drive` initially | Enterprise document/workspace storage until a standalone SharePoint toolkit is verified. |
-| `microsoft_excel` | `excel` | Workbook workflows when OneDrive file tools are too broad. |
-| `hubspot` | `hubspot` | Sales/customer meeting notes and follow-up. |
-| `salesforce` | `salesforce` | Enterprise CRM notes, tasks, opportunities, account context; expect custom auth. |
-| `intercom` | `intercom` | Support/customer conversations and escalation workflows; expect custom auth. |
-| `zendesk` | `zendesk` | Support tickets and customer issue follow-up; expect custom auth. |
-| `sentry` | `sentry` | Incident/debug context, issue creation, release notes. |
-| `figma` | `figma` | Design review context and handoff artifacts. |
-| `asana` | verify | Task/project management for teams outside Linear/Jira. |
-| `pagerduty` | verify | Incident response follow-up and on-call context. |
-| `datadog` | verify | Observability context for incidents and reliability reviews. |
-| `posthog` | verify | Product analytics context. |
-| `stripe` | verify | Customer/billing context for customer-facing meetings. |
+| Service ID           | Composio Toolkit      | Purpose                                                                                               |
+| -------------------- | --------------------- | ----------------------------------------------------------------------------------------------------- |
+| `jira`               | `jira`                | Enterprise issue tracking alternative to Linear.                                                      |
+| `microsoft_outlook`  | `outlook`             | Enterprise email parity with Gmail.                                                                   |
+| `microsoft_calendar` | `outlook`             | Enterprise calendar parity with Google Calendar; model separately even if backed by the same toolkit. |
+| `microsoft_teams`    | `microsoft_teams`     | Enterprise chat/meeting workspace parity with Slack.                                                  |
+| `onedrive`           | `one_drive`           | Microsoft file storage parity with Google Drive.                                                      |
+| `sharepoint`         | `one_drive` initially | Enterprise document/workspace storage until a standalone SharePoint toolkit is verified.              |
+| `microsoft_excel`    | `excel`               | Workbook workflows when OneDrive file tools are too broad.                                            |
+| `hubspot`            | `hubspot`             | Sales/customer meeting notes and follow-up.                                                           |
+| `salesforce`         | `salesforce`          | Enterprise CRM notes, tasks, opportunities, account context; expect custom auth.                      |
+| `intercom`           | `intercom`            | Support/customer conversations and escalation workflows; expect custom auth.                          |
+| `zendesk`            | `zendesk`             | Support tickets and customer issue follow-up; expect custom auth.                                     |
+| `sentry`             | `sentry`              | Incident/debug context, issue creation, release notes.                                                |
+| `figma`              | `figma`               | Design review context and handoff artifacts.                                                          |
+| `asana`              | verify                | Task/project management for teams outside Linear/Jira.                                                |
+| `pagerduty`          | verify                | Incident response follow-up and on-call context.                                                      |
+| `datadog`            | verify                | Observability context for incidents and reliability reviews.                                          |
+| `posthog`            | verify                | Product analytics context.                                                                            |
+| `stripe`             | verify                | Customer/billing context for customer-facing meetings.                                                |
 
 Implementation should verify exact Composio toolkit slugs during adapter work.
 If a desired Google or Microsoft product is not exposed as a separate Composio

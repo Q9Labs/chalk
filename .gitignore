@@ -104,6 +104,7 @@ apps/api/server
 
 # Worktrees
 .worktrees/
+.worktree/
 
 .codex-tmp/
 .collaborator

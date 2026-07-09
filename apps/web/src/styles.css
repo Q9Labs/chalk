@@ -1,4 +1,9 @@
+@import "../../../packages/ui/src/styles/index.css";
+@source "../../../packages/sdk-react/src";
+@source "../../../packages/ui/src";
+
 @import "./styles/tokens.css";
 @import "./styles/base.css";
 @import "./styles/landing.css";
 @import "./styles/sections.css";
+@import "./styles/visuals.css";

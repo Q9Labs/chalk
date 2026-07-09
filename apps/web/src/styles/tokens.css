@@ -2,8 +2,10 @@
   color-scheme: light;
 
   /* surfaces */
-  --paper: #faf9f5;
-  --surface: #ffffff;
+  --paper: #e9e4d8; /* oklch(92% 4% 88deg) — warm greige base */
+  --paper-2: #efeade; /* a hair lighter, for alternating bands */
+  --surface: #fbfaf6; /* warm white cards that float on the greige */
+  --surface-bright: #ffffff;
   --board: #26382f;
   --board-deep: #1e2d26;
 
@@ -13,8 +15,8 @@
   --ink-3: #8b9184;
 
   /* lines */
-  --line: #e7e4d9;
-  --line-strong: #d8d4c5;
+  --line: #d7d1c1;
+  --line-strong: #c6bfab;
 
   /* brand accent (chalk green, deepened for contrast) */
   --accent: #3e7647;

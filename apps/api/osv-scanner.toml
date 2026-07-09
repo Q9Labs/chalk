@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2026-10-09
+reason = "The advisory covers golang.org/x/crypto/openpgp, which is unmaintained and has no fixed version. This module depends on x/crypto but does not import openpgp; revisit if openpgp usage is added or OSV publishes a fix path."

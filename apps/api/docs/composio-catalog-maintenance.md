@@ -58,7 +58,7 @@ POST /v1/tenants/{tenant_id}/integrations/connections/{connection_id}/actions
 Request bodies use Chalk-owned action IDs:
 
 ```json
-{"action":"send_message","arguments":{"channel":"C123","text":"Recap is ready"}}
+{ "action": "send_message", "arguments": { "channel": "C123", "text": "Recap is ready" } }
 ```
 
 The domain service verifies that the local connection is active, the action ID

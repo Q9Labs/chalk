@@ -1,0 +1,1246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>apps/sync — code walk</title>
+<style>
+  :root {
+    --paper:#FBFAF7; --sunk:#F4F2EC; --card:#FFF;
+    --ink:#1B1D1B; --ink2:#4A4E49; --ink3:#7C817B; --ink4:#A6AAA3;
+    --rule:#E4E1D8; --soft:#EDEBE4;
+    --chalk:#2F7A55; --chalk-b:#3E9A6C; --chalk-w:#EAF3ED; --chalk-e:#C9E0D3;
+    --amber:#A8761F; --amber-w:#FBF3E3; --amber-e:#EDDCB8;
+    --rust:#A6482F; --rust-w:#FBEEE9; --rust-e:#EFD2C6;
+    --blue:#2E6C8E; --blue-w:#E8F1F5; --blue-e:#C3DCE7;
+    --violet:#6A4E9C; --violet-w:#F0EBF8;
+
+    --t-key:#A6482F; --t-str:#2F7A55; --t-atom:#2E6C8E; --t-mod:#6A4E9C;
+    --t-attr:#A8761F; --t-com:#9AA096; --t-num:#6A4E9C; --t-doc:#8A9086;
+
+    --sans:"Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --sh-sm:0 1px 2px rgba(27,29,27,.05);
+    --sh-md:0 6px 24px -6px rgba(27,29,27,.12),0 1px 2px rgba(27,29,27,.05);
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --paper:#131513; --sunk:#1A1D1A; --card:#191C19;
+    --ink:#E9E7E0; --ink2:#B0B4AE; --ink3:#7E837D; --ink4:#5E635D;
+    --rule:#2B2F2B; --soft:#232623;
+    --chalk:#6FBF92; --chalk-b:#8FD3AC; --chalk-w:#16261D; --chalk-e:#2A4536;
+    --amber:#D9A648; --amber-w:#241D10; --amber-e:#40331A;
+    --rust:#DE8064; --rust-w:#25160E; --rust-e:#422518;
+    --blue:#6FB0CE; --blue-w:#12222A; --blue-e:#23414F;
+    --violet:#A98FD6; --violet-w:#1D1729;
+    --t-key:#DE8064; --t-str:#7FC79E; --t-atom:#6FB0CE; --t-mod:#A98FD6;
+    --t-attr:#D9A648; --t-com:#5E635D; --t-num:#A98FD6; --t-doc:#6B706A;
+    --sh-sm:0 1px 2px rgba(0,0,0,.3);
+    --sh-md:0 6px 28px -6px rgba(0,0,0,.5);
+  }}
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:76px}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+  /* ---------------------------------------------------------------- chrome */
+  header.top{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--paper) 90%,transparent);
+    backdrop-filter:saturate(1.5) blur(12px);border-bottom:1px solid var(--rule)}
+  .top-in{max-width:1560px;margin:0 auto;padding:11px 26px;display:flex;align-items:center;gap:18px}
+  .brand{display:flex;align-items:center;gap:9px;margin-right:auto}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--chalk);box-shadow:0 0 0 3px var(--chalk-w)}
+  .brand b{font:600 14px/1 var(--mono);letter-spacing:-.01em}
+  .brand span{font-size:12.5px;color:var(--ink3)}
+
+  .modes{display:inline-flex;background:var(--sunk);border:1px solid var(--rule);border-radius:9px;padding:3px;gap:3px}
+  .modes button{font:600 12.5px/1 var(--sans);color:var(--ink3);background:none;border:0;border-radius:6px;
+    padding:7px 13px;cursor:pointer;transition:.12s}
+  .modes button:hover{color:var(--ink)}
+  .modes button[aria-pressed=true]{background:var(--card);color:var(--chalk);box-shadow:var(--sh-sm)}
+
+  .wrap{max-width:1560px;margin:0 auto;padding:34px 26px 120px}
+  .view{display:none} .view.on{display:block}
+
+  h1{font:400 32px/1.2 var(--serif);letter-spacing:-.02em;margin:0 0 12px}
+  h2{font:400 25px/1.25 var(--serif);letter-spacing:-.015em;margin:0 0 14px;scroll-margin-top:80px}
+  h3{font:600 14px/1.4 var(--sans);margin:0 0 8px}
+  p{margin:0 0 14px;color:var(--ink2);max-width:74ch}
+  p strong{color:var(--ink);font-weight:600}
+  .eyebrow{font:600 10.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--chalk);margin-bottom:12px}
+  .lede{font:400 18px/1.6 var(--serif);color:var(--ink);max-width:66ch;margin-bottom:28px}
+  .lede em{color:var(--chalk);font-style:italic}
+
+  code{font:500 13px/1.5 var(--mono);background:var(--sunk);border:1px solid var(--soft);
+       padding:1px 5px;border-radius:5px;white-space:nowrap}
+
+  /* ---------------------------------------------------------------- primer */
+  .primer{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin-bottom:44px}
+  .pc{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:15px 17px;box-shadow:var(--sh-sm)}
+  .pc .sig{font:600 13.5px/1.5 var(--mono);color:var(--ink);margin-bottom:7px;word-break:break-word}
+  .pc .sig em{color:var(--chalk);font-style:normal}
+  .pc p{font-size:13.5px;margin:0;color:var(--ink2);max-width:none}
+  .pc.warn{border-color:var(--amber-e);background:var(--amber-w)}
+  .pc.warn .sig em{color:var(--amber)}
+
+  /* ---------------------------------------------------------------- tabs */
+  .tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:16px;position:sticky;top:60px;z-index:40;
+    background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(8px);padding:10px 0}
+  .tabs button{font:500 12.5px/1 var(--mono);color:var(--ink3);background:var(--card);
+    border:1px solid var(--rule);border-radius:8px;padding:9px 12px;cursor:pointer;transition:.12s}
+  .tabs button:hover{color:var(--ink);border-color:var(--chalk-e)}
+  .tabs button[aria-pressed=true]{background:var(--chalk-w);color:var(--chalk);border-color:var(--chalk-e);font-weight:600}
+  .tabs .cnt{color:var(--ink4);font-size:11px;margin-left:5px}
+
+  .filehead{background:var(--card);border:1px solid var(--rule);border-bottom:0;
+    border-radius:12px 12px 0 0;padding:16px 20px}
+  .filehead .fp{font:600 12.5px/1 var(--mono);color:var(--chalk)}
+  .filehead p{margin:8px 0 0;font-size:13.5px}
+
+  .code{background:var(--card);border:1px solid var(--rule);border-radius:0 0 12px 12px;
+    overflow:hidden;box-shadow:var(--sh-md);margin-bottom:40px}
+  .fpane{display:none} .fpane.on{display:block}
+
+  .cl{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,42ch);
+      border-bottom:1px solid transparent;transition:background .1s}
+  .cl:hover{background:var(--sunk)}
+  .cl.has-note{border-bottom-color:var(--soft)}
+  .cl .ln{font:400 11.5px/1.85 var(--mono);color:var(--ink4);text-align:right;padding:2px 12px 2px 0;
+    user-select:none;border-right:1px solid var(--soft)}
+  .cl .src{font:400 13px/1.85 var(--mono);padding:2px 18px;white-space:pre;overflow-x:auto;color:var(--ink)}
+  .cl .note{font:400 12.5px/1.5 var(--sans);color:var(--ink2);padding:6px 18px 8px;
+    border-left:1px solid var(--soft);background:color-mix(in srgb,var(--sunk) 55%,transparent)}
+  .cl .note:empty{background:none}
+  .cl .note b{color:var(--chalk);font-weight:600}
+  .cl .note code{font-size:11.5px;background:var(--card)}
+  .cl.key{background:var(--chalk-w)}
+  .cl.key .note{background:none;color:var(--ink)}
+  .cl.key .ln{color:var(--chalk);font-weight:700}
+
+  .t-key{color:var(--t-key);font-weight:600} .t-str{color:var(--t-str)}
+  .t-atom{color:var(--t-atom)} .t-mod{color:var(--t-mod)} .t-attr{color:var(--t-attr)}
+  .t-com{color:var(--t-com);font-style:italic} .t-num{color:var(--t-num)}
+  .t-doc{color:var(--t-doc);font-style:italic}
+
+  /* ---------------------------------------------------------------- debugger */
+  .dbg{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,.85fr);gap:16px;align-items:start}
+
+  .stage{background:var(--card);border:1px solid var(--rule);border-radius:13px;
+    box-shadow:var(--sh-md);overflow:hidden;position:sticky;top:76px}
+  .stage-head{display:flex;align-items:center;gap:10px;padding:11px 15px;border-bottom:1px solid var(--rule);background:var(--sunk)}
+  .stage-head .fname{font:600 12px/1 var(--mono);color:var(--chalk)}
+  .stage-head .fnote{font-size:11.5px;color:var(--ink3);margin-left:auto}
+  .dcode{height:min(58vh,560px);overflow-y:auto;padding:8px 0;scroll-behavior:smooth}
+  .dl{display:grid;grid-template-columns:46px 1fr;gap:0;padding:0 4px}
+  .dl .ln{font:400 11px/1.75 var(--mono);color:var(--ink4);text-align:right;padding-right:11px;user-select:none}
+  .dl .src{font:400 12.5px/1.75 var(--mono);white-space:pre;padding:0 12px;border-left:2px solid transparent;color:var(--ink2)}
+  .dl.cur{background:var(--chalk-w)}
+  .dl.cur .src{border-left-color:var(--chalk);color:var(--ink);font-weight:500}
+  .dl.cur .ln{color:var(--chalk);font-weight:700}
+  .dl.ctx{background:color-mix(in srgb,var(--chalk-w) 45%,transparent)}
+
+  .ctrl{display:flex;align-items:center;gap:10px;padding:12px 15px;border-top:1px solid var(--rule);background:var(--sunk)}
+  .ctrl button{font:600 12.5px/1 var(--sans);border:1px solid var(--rule);background:var(--card);
+    color:var(--ink);border-radius:8px;padding:9px 14px;cursor:pointer;transition:.12s}
+  .ctrl button:hover:not(:disabled){border-color:var(--chalk);color:var(--chalk)}
+  .ctrl button:disabled{opacity:.35;cursor:default}
+  .ctrl button.pri{background:var(--chalk);color:#fff;border-color:var(--chalk)}
+  .ctrl button.pri:hover{filter:brightness(1.08);color:#fff}
+  .ctrl .pos{font:600 11.5px/1 var(--mono);color:var(--ink3);margin-left:auto}
+  #scrub{flex:1 1 160px;accent-color:var(--chalk);cursor:pointer;max-width:260px}
+
+  .narr{background:var(--card);border:1px solid var(--rule);border-radius:13px;padding:17px 19px;margin-bottom:12px;box-shadow:var(--sh-sm)}
+  .narr .act{font:600 9.5px/1 var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--chalk);margin-bottom:9px}
+  .narr h3{font:600 15.5px/1.35 var(--sans);margin-bottom:7px}
+  .narr p{font-size:13.5px;margin:0;max-width:none;color:var(--ink2)}
+  .narr .why{margin-top:10px;padding-top:10px;border-top:1px dashed var(--rule);font-size:12.5px;color:var(--ink2)}
+  .narr .why b{color:var(--chalk);font:600 9.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:5px}
+
+  .panel{background:var(--card);border:1px solid var(--rule);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  .panel > h4{font:600 9.5px/1 var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--ink3);
+    margin:0;padding:11px 15px;background:var(--sunk);border-bottom:1px solid var(--rule);display:flex;gap:8px;align-items:center}
+  .panel > h4 .tag{margin-left:auto;font:600 10px/1 var(--mono);color:var(--ink4);letter-spacing:0}
+  .pbody{padding:13px 15px;font:400 12.5px/1.6 var(--mono)}
+  .pbody.empty{color:var(--ink4);font-style:italic;font-family:var(--sans);font-size:12.5px}
+
+  @keyframes flash{0%{background:var(--chalk-w)}100%{background:transparent}}
+  .flash{animation:flash 1.1s ease-out}
+
+  .rev{display:flex;align-items:baseline;gap:9px;margin-bottom:11px}
+  .rev .n{font:700 26px/1 var(--mono);color:var(--chalk);letter-spacing:-.02em}
+  .rev .l{font:600 9.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+  .part{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--soft)}
+  .part .pid{font:600 12px/1 var(--mono);color:var(--ink)}
+  .part .pn{font-family:var(--sans);font-size:12px;color:var(--ink3);margin-right:auto}
+  .part .hand{font-size:14px;filter:grayscale(1);opacity:.3}
+  .part .hand.up{filter:none;opacity:1}
+
+  .ev{display:flex;gap:9px;padding:4px 0;font-size:11.5px;align-items:baseline}
+  .ev .r{color:var(--ink4);min-width:34px}
+  .ev .nm{color:var(--ink)}
+  .ev.new .nm{color:var(--chalk);font-weight:600}
+  .ev.new .r{color:var(--chalk)}
+
+  .wire{padding:0}
+  .frame{padding:11px 15px;border-bottom:1px solid var(--soft);font:400 11.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word}
+  .frame:last-child{border-bottom:0}
+  .frame .dir{font:600 9px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;display:inline-block;
+    padding:3px 6px;border-radius:4px;margin-bottom:6px}
+  .frame.in .dir{background:var(--blue-w);color:var(--blue);border:1px solid var(--blue-e)}
+  .frame.out .dir{background:var(--chalk-w);color:var(--chalk);border:1px solid var(--chalk-e)}
+  .frame .who{font-family:var(--sans);font-size:10.5px;color:var(--ink4);margin-left:7px;letter-spacing:.02em}
+
+  .stk{display:flex;flex-direction:column-reverse;gap:3px}
+  .stk div{font-size:11.5px;padding:5px 9px;border-radius:6px;background:var(--sunk);color:var(--ink3);
+    border-left:2px solid var(--rule)}
+  .stk div:last-child{background:var(--chalk-w);color:var(--chalk);border-left-color:var(--chalk);font-weight:600}
+
+  .mem{font-size:11.5px}
+  .mem div{padding:4px 0;border-top:1px solid var(--soft);display:flex;gap:8px}
+  .mem div:first-child{border-top:0}
+  .mem .k{color:var(--ink3)} .mem .v{color:var(--ink);margin-left:auto}
+  .mem .v.dup{color:var(--amber)}
+
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .chip{font:600 11px/1 var(--sans);padding:7px 11px;border-radius:999px;border:1px solid var(--rule);
+    background:var(--card);color:var(--ink3);cursor:pointer;transition:.12s}
+  .chip:hover{border-color:var(--chalk-e);color:var(--chalk)}
+  .chip[aria-pressed=true]{background:var(--chalk);border-color:var(--chalk);color:#fff}
+
+  .kbd{font:500 10.5px/1 var(--mono);background:var(--sunk);border:1px solid var(--rule);
+    border-bottom-width:2px;border-radius:4px;padding:3px 5px;color:var(--ink3)}
+
+  @media(max-width:1180px){
+    .dbg{grid-template-columns:1fr}
+    .stage{position:static}
+    .cl{grid-template-columns:44px minmax(0,1fr)}
+    .cl .note{grid-column:1/-1;border-left:0;border-top:1px solid var(--soft);padding-left:44px}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><span class="dot"></span><b>apps/sync</b><span>code walk &middot; for someone who has never written Elixir</span></div>
+    <div class="modes" id="modes">
+      <button data-view="learn" aria-pressed="true">Read the code</button>
+      <button data-view="run" aria-pressed="false">Run it</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ================================================================= LEARN -->
+<div class="view on" id="v-learn">
+
+  <div class="eyebrow">Before you read a single line</div>
+  <h1>Nine pieces of Elixir syntax</h1>
+  <p class="lede">
+    Every unfamiliar symbol in these four files is on this page. Learn these nine and the
+    code stops being cryptic — <em>the logic underneath is simple</em>.
+  </p>
+
+  <div class="primer">
+    <div class="pc"><div class="sig"><em>:ok</em> &nbsp; <em>:raise_hand</em> &nbsp; <em>:error</em></div>
+      <p>An <strong>atom</strong>. A constant whose name is its value, like a symbol or an enum member.
+         Cheap to compare. Written with a leading colon.</p></div>
+
+    <div class="pc"><div class="sig">{<em>:ok</em>, event, room}</div>
+      <p>A <strong>tagged tuple</strong>. Elixir doesn't throw exceptions for expected failures — it
+         returns <code>{:ok, …}</code> or <code>{:error, reason}</code> and makes you look at which one you got.</p></div>
+
+    <div class="pc"><div class="sig">%{"type" <em>=></em> "hello"} &nbsp;·&nbsp; %{phase: <em>:joined</em>}</div>
+      <p>A <strong>map</strong>. The first has string keys (data from the wire), the second has atom keys
+         (data we control). This app keeps that line sharp: strings outside, atoms inside.</p></div>
+
+    <div class="pc"><div class="sig">%Room{id: "r-42", revision: <em>0</em>}</div>
+      <p>A <strong>struct</strong>: a map with a fixed set of keys, declared by a module via <code>defstruct</code>.
+         Typo a key and it won't compile.</p></div>
+
+    <div class="pc warn"><div class="sig">def apply_event(%{revision: <em>rev</em>}, %{base_revision: <em>rev</em>})</div>
+      <p><strong>Pattern matching in the function head.</strong> The same variable used twice means
+         "these must be equal." Elixir picks the first clause whose patterns all match. If none match, it crashes.
+         This is the single most important idea in the codebase.</p></div>
+
+    <div class="pc warn"><div class="sig">case map do %{<em>^</em>key => val} -> …</div>
+      <p>The <strong>pin operator</strong> <code>^</code> means "match against the <em>value</em> in this variable,"
+         not "assign to it." Without the pin, <code>key</code> would be rebound instead of tested.</p></div>
+
+    <div class="pc"><div class="sig"><em>with</em> {:ok, x} &lt;- f(), {:ok, y} &lt;- g(x) do … <em>else</em> … end</div>
+      <p>A <strong>happy-path chain.</strong> Each step must match its pattern. The first one that doesn't
+         short-circuits — its value becomes the result (or falls to <code>else</code>). No nested ifs.</p></div>
+
+    <div class="pc"><div class="sig">conn <em>|></em> encode() <em>|></em> send()</div>
+      <p>The <strong>pipe</strong> feeds the value on the left in as the <em>first argument</em> on the right.
+         <code>a |> f(b)</code> is exactly <code>f(a, b)</code>.</p></div>
+
+    <div class="pc"><div class="sig">%{room <em>|</em> revision: 3} &nbsp;·&nbsp; put_in(a.b[c], v)</div>
+      <p><strong>Nothing mutates.</strong> Both of these build and return a <em>new</em> value. The old one is
+         untouched and still valid. <code>%{m | k: v}</code> also refuses to add keys that don't exist yet.</p></div>
+  </div>
+
+  <div class="eyebrow">Two more that only matter in the process layer</div>
+  <div class="primer" style="margin-bottom:52px">
+    <div class="pc"><div class="sig"><em>def</em> foo &nbsp;·&nbsp; <em>defp</em> foo &nbsp;·&nbsp; <em>_ignored</em></div>
+      <p><code>defp</code> is a private function. A leading underscore on an argument means "I'm deliberately
+         not using this" — it silences the unused-variable warning.</p></div>
+
+    <div class="pc"><div class="sig"><em>use</em> GenServer &nbsp;·&nbsp; <em>@impl true</em> &nbsp;·&nbsp; <em>@behaviour</em></div>
+      <p>A <strong>behaviour</strong> is an interface: a list of functions a module promises to define.
+         <code>use GenServer</code> injects boilerplate; <code>@impl true</code> marks the functions that
+         fulfil the contract, so the compiler catches typos.</p></div>
+  </div>
+
+  <div class="eyebrow">Every line, annotated</div>
+  <h2>The four files a command travels through</h2>
+  <p style="margin-bottom:22px">
+    Read them in this order. Notes sit in the right column; the highlighted lines are the ones
+    that carry the design. Nothing is skipped.
+  </p>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="files"></div>
+</div>
+
+<!-- =================================================================== RUN -->
+<div class="view" id="v-run">
+  <div class="eyebrow">Step through it</div>
+  <h1>Watch one room come alive</h1>
+  <p class="lede">
+    Two people join a room, one raises a hand, the network retries the command, then they try
+    to raise an already-raised hand. <em>Every line that executes, in order</em>, with the real
+    state on the right.
+  </p>
+  <p style="margin-bottom:18px;font-size:13.5px;color:var(--ink3)">
+    <span class="kbd">←</span> <span class="kbd">→</span> to step &nbsp;·&nbsp;
+    <span class="kbd">space</span> to advance &nbsp;·&nbsp; jump to any act:
+  </p>
+  <div class="chips" id="acts"></div>
+
+  <div class="dbg">
+    <div>
+      <div class="stage">
+        <div class="stage-head">
+          <span class="fname" id="d-fname">—</span>
+          <span class="fnote" id="d-fnote"></span>
+        </div>
+        <div class="dcode" id="d-code"></div>
+        <div class="ctrl">
+          <button id="b-prev">← Prev</button>
+          <button id="b-next" class="pri">Next →</button>
+          <button id="b-reset">Reset</button>
+          <input type="range" id="scrub" min="0" value="0" />
+          <span class="pos" id="d-pos">1 / 1</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="narr">
+        <div class="act" id="n-act">—</div>
+        <h3 id="n-title">—</h3>
+        <p id="n-desc"></p>
+        <div class="why" id="n-why" hidden><b>Why it's built this way</b><span id="n-why-t"></span></div>
+      </div>
+
+      <div class="panel"><h4>Wire <span class="tag" id="t-wire"></span></h4><div class="pbody wire" id="p-wire"></div></div>
+      <div class="panel"><h4>Room state <span class="tag">the pure struct</span></h4><div class="pbody" id="p-room"></div></div>
+      <div class="panel"><h4>Stateholder <span class="tag" id="t-hold">ETS</span></h4><div class="pbody" id="p-hold"></div></div>
+      <div class="panel"><h4>Idempotency cache <span class="tag">max 256</span></h4><div class="pbody" id="p-mem"></div></div>
+      <div class="panel"><h4>Call stack</h4><div class="pbody stk" id="p-stk"></div></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ============================================================ raw sources -->
+<script type="text/plain" id="src-room">
+defmodule ChalkSync.Rooms.Room do
+  @moduledoc """
+  Pure room-control state machine.
+
+  Commands validate against current state and produce exactly one event; state
+  advances only by applying events (`apply_event/2`), so replaying the event
+  log from any snapshot reproduces the same state. Every event carries an
+  exact `base_revision -> revision` chain — clients use it to detect dropped,
+  duplicated, or reordered updates.
+
+  No processes, no side effects, no clocks. The process shell
+  (`ChalkSync.Rooms.RoomServer`) owns serialization and fanout.
+  """
+
+  @enforce_keys [:id]
+  defstruct [:id, revision: 0, participants: %{}]
+
+  @type participant :: %{display_name: String.t(), hand_raised: boolean()}
+  @type event :: %{
+          name: String.t(),
+          base_revision: non_neg_integer(),
+          revision: pos_integer(),
+          payload: %{optional(String.t()) => term()}
+        }
+  @type t :: %__MODULE__{
+          id: String.t(),
+          revision: non_neg_integer(),
+          participants: %{optional(String.t()) => participant()}
+        }
+
+  @spec new(String.t()) :: t()
+  def new(id), do: %__MODULE__{id: id}
+
+  @doc """
+  Validates a command and returns the resulting event plus the advanced state.
+
+  `:join` and `:leave` are server-driven (socket lifecycle); clients may only
+  issue the commands whitelisted in `ChalkSync.Protocol`.
+  """
+  @spec apply_command(t(), String.t(), atom(), map()) ::
+          {:ok, event(), t()} | {:error, atom()}
+  def apply_command(%__MODULE__{} = room, actor_id, command, payload \\ %{}) do
+    with {:ok, name, event_payload} <- validate(room, actor_id, command, payload) do
+      event = %{
+        name: name,
+        base_revision: room.revision,
+        revision: room.revision + 1,
+        payload: event_payload
+      }
+
+      {:ok, event, apply_event(room, event)}
+    end
+  end
+
+  @doc "Advances state by one event. The event's base_revision must match."
+  @spec apply_event(t(), event()) :: t()
+  def apply_event(%__MODULE__{revision: revision} = room, %{base_revision: revision} = event) do
+    %{apply_payload(room, event) | revision: event.revision}
+  end
+
+  @doc "Wire-shaped snapshot for the `welcome` frame."
+  @spec snapshot(t()) :: map()
+  def snapshot(%__MODULE__{} = room) do
+    participants =
+      Enum.map(room.participants, fn {id, p} ->
+        %{
+          "participant_id" => id,
+          "display_name" => p.display_name,
+          "hand_raised" => p.hand_raised
+        }
+      end)
+
+    %{"control_revision" => room.revision, "participants" => participants}
+  end
+
+  @spec joined?(t(), String.t()) :: boolean()
+  def joined?(%__MODULE__{} = room, participant_id),
+    do: Map.has_key?(room.participants, participant_id)
+
+  defp validate(room, actor_id, :join, %{display_name: display_name}) do
+    if joined?(room, actor_id) do
+      {:error, :already_joined}
+    else
+      {:ok, "participant_joined", %{"participant_id" => actor_id, "display_name" => display_name}}
+    end
+  end
+
+  defp validate(room, actor_id, :leave, _payload) do
+    require_joined(room, actor_id, fn _ ->
+      {:ok, "participant_left", %{"participant_id" => actor_id}}
+    end)
+  end
+
+  defp validate(room, actor_id, :raise_hand, _payload) do
+    require_joined(room, actor_id, fn participant ->
+      if participant.hand_raised do
+        {:error, :no_change}
+      else
+        {:ok, "hand_raised", %{"participant_id" => actor_id}}
+      end
+    end)
+  end
+
+  defp validate(room, actor_id, :lower_hand, _payload) do
+    require_joined(room, actor_id, fn participant ->
+      if participant.hand_raised do
+        {:ok, "hand_lowered", %{"participant_id" => actor_id}}
+      else
+        {:error, :no_change}
+      end
+    end)
+  end
+
+  defp validate(_room, _actor_id, _command, _payload), do: {:error, :unknown_command}
+
+  defp require_joined(room, actor_id, fun) do
+    case room.participants do
+      %{^actor_id => participant} -> fun.(participant)
+      _ -> {:error, :not_joined}
+    end
+  end
+
+  defp apply_payload(room, %{name: "participant_joined", payload: payload}) do
+    participant = %{display_name: payload["display_name"], hand_raised: false}
+    put_in(room.participants[payload["participant_id"]], participant)
+  end
+
+  defp apply_payload(room, %{name: "participant_left", payload: payload}) do
+    %{room | participants: Map.delete(room.participants, payload["participant_id"])}
+  end
+
+  defp apply_payload(room, %{name: "hand_raised", payload: payload}) do
+    put_in(room.participants[payload["participant_id"]].hand_raised, true)
+  end
+
+  defp apply_payload(room, %{name: "hand_lowered", payload: payload}) do
+    put_in(room.participants[payload["participant_id"]].hand_raised, false)
+  end
+end
+</script>
+
+<script type="text/plain" id="src-protocol">
+defmodule ChalkSync.Protocol do
+  @moduledoc """
+  Sync wire protocol v1 — JSON text frames, language-neutral by construction.
+
+  This module is the only place the wire shape lives; transports and room
+  logic never touch raw JSON. The schema source of truth for SDK generation
+  will formalize these shapes (see north star: one schema generates every SDK
+  and the server contract).
+
+  Client -> server:
+
+      {"type":"hello","protocol":1,"token":"...","streams":{"control":{"cursor":41}}}
+      {"type":"command","command_id":"c-1","name":"raise_hand","payload":{}}
+      {"type":"ping"}
+
+  Server -> client:
+
+      {"type":"welcome","protocol":1,"participant_id":"p1",
+       "mode":"snapshot","snapshot":{...}}                      # or
+       "mode":"replay","events":[...],"control_revision":41}
+      {"type":"event","stream":"control","name":"hand_raised",
+       "base_revision":41,"revision":42,"payload":{...}}
+      {"type":"ack","command_id":"c-1","result":"committed","revision":42}
+      {"type":"ack","command_id":"c-1","result":"duplicate","revision":42}
+      {"type":"ack","command_id":"c-1","result":"rejected","reason":"no_change"}
+      {"type":"error","code":"unauthorized","message":"..."}
+      {"type":"pong"}
+  """
+
+  @protocol_version 1
+
+  # Clients may only issue these; join/leave are socket-lifecycle driven.
+  @client_commands %{"raise_hand" => :raise_hand, "lower_hand" => :lower_hand}
+
+  def version, do: @protocol_version
+
+  # -- Decoding ----------------------------------------------------------------
+
+  @type frame ::
+          {:hello, %{token: String.t(), cursor: non_neg_integer() | nil}}
+          | {:command, %{command_id: String.t(), name: atom(), payload: map()}}
+          | :ping
+
+  @spec decode(binary()) :: {:ok, frame()} | {:error, atom()}
+  def decode(text) do
+    case JSON.decode(text) do
+      {:ok, %{"type" => type} = frame} -> decode_frame(type, frame)
+      {:ok, _} -> {:error, :missing_type}
+      {:error, _} -> {:error, :malformed_json}
+    end
+  end
+
+  defp decode_frame("hello", %{"protocol" => @protocol_version, "token" => token} = frame)
+       when is_binary(token) do
+    case get_in(frame, ["streams", "control", "cursor"]) do
+      cursor when is_integer(cursor) and cursor >= 0 ->
+        {:ok, {:hello, %{token: token, cursor: cursor}}}
+
+      nil ->
+        {:ok, {:hello, %{token: token, cursor: nil}}}
+
+      _ ->
+        {:error, :invalid_cursor}
+    end
+  end
+
+  defp decode_frame("hello", %{"protocol" => version}) when version != @protocol_version,
+    do: {:error, :unsupported_protocol}
+
+  defp decode_frame("hello", _frame), do: {:error, :invalid_hello}
+
+  defp decode_frame("command", %{"command_id" => command_id, "name" => name} = frame)
+       when is_binary(command_id) and is_binary(name) do
+    case @client_commands do
+      %{^name => command} ->
+        payload = Map.get(frame, "payload", %{})
+
+        if is_map(payload) do
+          {:ok, {:command, %{command_id: command_id, name: command, payload: payload}}}
+        else
+          {:error, :invalid_payload}
+        end
+
+      _ ->
+        {:error, :unknown_command}
+    end
+  end
+
+  defp decode_frame("command", _frame), do: {:error, :invalid_command}
+  defp decode_frame("ping", _frame), do: {:ok, :ping}
+  defp decode_frame(_type, _frame), do: {:error, :unknown_type}
+
+  # -- Encoding ----------------------------------------------------------------
+
+  def encode_welcome(participant_id, %{snapshot: %{} = snapshot}) do
+    JSON.encode!(%{
+      "type" => "welcome",
+      "protocol" => @protocol_version,
+      "participant_id" => participant_id,
+      "mode" => "snapshot",
+      "snapshot" => snapshot
+    })
+  end
+
+  def encode_welcome(participant_id, %{replay: events, control_revision: revision}) do
+    JSON.encode!(%{
+      "type" => "welcome",
+      "protocol" => @protocol_version,
+      "participant_id" => participant_id,
+      "mode" => "replay",
+      "events" => Enum.map(events, &event_body/1),
+      "control_revision" => revision
+    })
+  end
+
+  def encode_event(event) do
+    JSON.encode!(Map.put(event_body(event), "type", "event"))
+  end
+
+  def encode_ack(command_id, {:committed, revision}),
+    do: ack(command_id, "committed", "revision", revision)
+
+  def encode_ack(command_id, {:duplicate, revision}),
+    do: ack(command_id, "duplicate", "revision", revision)
+
+  def encode_ack(command_id, {:rejected, reason}),
+    do: ack(command_id, "rejected", "reason", to_string(reason))
+
+  def encode_error(code, message) do
+    JSON.encode!(%{"type" => "error", "code" => to_string(code), "message" => message})
+  end
+
+  def encode_pong, do: JSON.encode!(%{"type" => "pong"})
+
+  defp ack(command_id, result, key, value) do
+    JSON.encode!(%{"type" => "ack", "command_id" => command_id, "result" => result, key => value})
+  end
+
+  defp event_body(event) do
+    %{
+      "stream" => "control",
+      "name" => event.name,
+      "base_revision" => event.base_revision,
+      "revision" => event.revision,
+      "payload" => event.payload
+    }
+  end
+end
+</script>
+
+<script type="text/plain" id="src-server">
+defmodule ChalkSync.Rooms.RoomServer do
+  @moduledoc """
+  One authoritative writer per room (north-star sync invariant).
+
+  All live-state mutations for a room serialize through this process. Flow per
+  command: validate against the pure `Room` core -> compare-and-set commit to
+  the stateholder -> only then fan out to subscribers. A revision conflict on
+  commit means another writer exists (split-brain); correctness wins, so this
+  process stops and clients reconnect + re-snapshot.
+
+  The process is a rebuildable projection: it hydrates from the stateholder on
+  start and stops when the last subscriber leaves. Losing it loses nothing.
+  """
+
+  use GenServer, restart: :transient
+
+  require Logger
+
+  alias ChalkSync.Rooms.Room
+  alias ChalkSync.Stateholder
+
+  @max_remembered_commands 256
+
+  # -- Client API --------------------------------------------------------------
+
+  @doc """
+  Joins a participant and subscribes `subscriber` (a socket pid) to room events.
+
+  Returns `{:ok, room_pid, reply}` where `reply` is `%{snapshot: ...}` or,
+  when `cursor` is present and retained, `%{replay: events, control_revision:
+  n}` — computed inside the writer so it is consistent with subsequent fanout.
+  Subscribers should monitor `room_pid` and drop the connection if it dies, so
+  clients reconnect and re-snapshot.
+  """
+  def join(room_id, participant_id, display_name, subscriber, cursor \\ nil) do
+    with {:ok, pid} <- ensure_started(room_id) do
+      case GenServer.call(pid, {:join, participant_id, display_name, subscriber, cursor}) do
+        {:ok, reply} -> {:ok, pid, reply}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  catch
+    # The room can stop (last subscriber left) between lookup and call.
+    :exit, _ -> {:error, :retry}
+  end
+
+  @doc "Returns `{:committed, revision} | {:duplicate, revision} | {:rejected, reason}`."
+  def command(room_id, participant_id, command_id, name, payload) do
+    case Registry.lookup(ChalkSync.Rooms.Registry, room_id) do
+      [{pid, _}] -> GenServer.call(pid, {:command, participant_id, command_id, name, payload})
+      [] -> {:rejected, :not_joined}
+    end
+  catch
+    :exit, _ -> {:rejected, :retry}
+  end
+
+  def whereis(room_id) do
+    case Registry.lookup(ChalkSync.Rooms.Registry, room_id) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  defp ensure_started(room_id) do
+    spec = {__MODULE__, room_id}
+
+    case DynamicSupervisor.start_child(ChalkSync.Rooms.Supervisor, spec) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, {:already_started, pid}} -> {:ok, pid}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def start_link(room_id) do
+    GenServer.start_link(__MODULE__, room_id, name: via(room_id))
+  end
+
+  defp via(room_id), do: {:via, Registry, {ChalkSync.Rooms.Registry, room_id}}
+
+  # -- Server ------------------------------------------------------------------
+
+  @impl true
+  def init(room_id) do
+    room =
+      case Stateholder.load(room_id) do
+        {:ok, room} -> room
+        :not_found -> Room.new(room_id)
+      end
+
+    {:ok,
+     %{
+       room: room,
+       # subscriber pid => %{participant_id, monitor_ref}
+       subscribers: %{},
+       # {participant_id, command_id} => result, bounded FIFO
+       remembered: %{},
+       remembered_order: :queue.new()
+     }}
+  end
+
+  @impl true
+  def handle_call({:join, participant_id, display_name, subscriber, cursor}, _from, state) do
+    case admit(state, participant_id, display_name) do
+      {:ok, state} ->
+        ref = Process.monitor(subscriber)
+        subscriber_info = %{participant_id: participant_id, monitor_ref: ref}
+        state = put_in(state.subscribers[subscriber], subscriber_info)
+        {:reply, {:ok, join_reply(state.room, cursor)}, state}
+
+      {:error, reason} ->
+        {:stop, reason, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:command, participant_id, command_id, name, payload}, _from, state) do
+    key = {participant_id, command_id}
+
+    case state.remembered do
+      %{^key => result} ->
+        {:reply, duplicate_of(result), state}
+
+      _ ->
+        {result, state} = execute(state, participant_id, name, payload)
+
+        case result do
+          {:split_brain, current} ->
+            Logger.error("room #{state.room.id}: revision conflict (current=#{current})")
+            {:stop, :revision_conflict, {:rejected, :retry}, state}
+
+          _ ->
+            {:reply, result, remember(state, key, result)}
+        end
+    end
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    {info, state} = pop_in(state.subscribers[pid])
+
+    state =
+      if info && last_subscription?(state, info.participant_id) do
+        case execute(state, info.participant_id, :leave, %{}) do
+          {{:split_brain, _current}, state} -> state
+          {_result, state} -> state
+        end
+      else
+        state
+      end
+
+    if map_size(state.subscribers) == 0 do
+      {:stop, :normal, state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  # -- Internals ---------------------------------------------------------------
+
+  defp admit(state, participant_id, display_name) do
+    if Room.joined?(state.room, participant_id) do
+      # Reconnect: the participant is already in room state; no join event.
+      {:ok, state}
+    else
+      case execute(state, participant_id, :join, %{display_name: display_name}) do
+        {{:committed, _revision}, state} -> {:ok, state}
+        {{:rejected, reason}, _state} -> {:error, reason}
+        {{:split_brain, _current}, _state} -> {:error, :revision_conflict}
+      end
+    end
+  end
+
+  defp execute(state, participant_id, command, payload) do
+    case Room.apply_command(state.room, participant_id, command, payload) do
+      {:ok, event, room} ->
+        case Stateholder.commit(room.id, event.base_revision, event, room) do
+          :ok ->
+            broadcast(state, event)
+            {{:committed, event.revision}, %{state | room: room}}
+
+          {:error, {:revision_conflict, current}} ->
+            {{:split_brain, current}, state}
+        end
+
+      {:error, reason} ->
+        {{:rejected, reason}, state}
+    end
+  end
+
+  defp broadcast(state, event) do
+    Enum.each(state.subscribers, fn {pid, _info} -> send(pid, {:sync_event, event}) end)
+  end
+
+  defp join_reply(room, cursor) do
+    snapshot = Room.snapshot(room)
+
+    with true <- is_integer(cursor) and cursor >= 0 and cursor <= room.revision,
+         {:ok, events} <- Stateholder.events_since(room.id, cursor) do
+      %{replay: events, control_revision: room.revision, snapshot: nil}
+    else
+      _ -> %{replay: nil, control_revision: room.revision, snapshot: snapshot}
+    end
+  end
+
+  defp last_subscription?(state, participant_id) do
+    not Enum.any?(state.subscribers, fn {_pid, info} ->
+      info.participant_id == participant_id
+    end)
+  end
+
+  defp duplicate_of({:committed, revision}), do: {:duplicate, revision}
+  defp duplicate_of(other), do: other
+
+  defp remember(state, key, result) do
+    order = :queue.in(key, state.remembered_order)
+    remembered = Map.put(state.remembered, key, result)
+
+    if map_size(remembered) > @max_remembered_commands do
+      {{:value, oldest}, order} = :queue.out(order)
+      %{state | remembered: Map.delete(remembered, oldest), remembered_order: order}
+    else
+      %{state | remembered: remembered, remembered_order: order}
+    end
+  end
+end
+</script>
+
+<script type="text/plain" id="src-socket">
+defmodule ChalkSync.Transport.Socket do
+  @moduledoc """
+  WebSocket transport: one process per connection, stateless fanout.
+
+  Owns no authoritative state — it verifies the participant token, joins the
+  room's authoritative writer, relays frames, and pushes room events. If the
+  room server dies, the socket closes (1012) so the client reconnects and
+  re-snapshots; nothing authoritative is lost.
+  """
+
+  @behaviour WebSock
+
+  alias ChalkSync.Auth.TokenVerifier
+  alias ChalkSync.Protocol
+  alias ChalkSync.Rooms.RoomServer
+
+  @hello_timeout_ms 10_000
+
+  @impl true
+  def init(_opts) do
+    timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
+    {:ok, %{phase: :awaiting_hello, hello_timer: timer, claims: nil}}
+  end
+
+  @impl true
+  def handle_in({text, [opcode: :text]}, state) do
+    case Protocol.decode(text) do
+      {:ok, frame} -> handle_frame(frame, state)
+      {:error, reason} -> protocol_error(reason, state)
+    end
+  end
+
+  def handle_in({_payload, _opts}, state) do
+    {:stop, :normal, {1003, "text frames only"}, state}
+  end
+
+  @impl true
+  def handle_info({:sync_event, event}, state) do
+    {:push, {:text, Protocol.encode_event(event)}, state}
+  end
+
+  def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state) do
+    {:stop, :normal, {1002, "hello timeout"}, state}
+  end
+
+  def handle_info(:hello_timeout, state), do: {:ok, state}
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    {:stop, :normal, {1012, "room restarting"}, state}
+  end
+
+  @impl true
+  def terminate(_reason, _state), do: :ok
+
+  # -- Frames ------------------------------------------------------------------
+
+  defp handle_frame({:hello, %{token: token, cursor: cursor}}, %{phase: :awaiting_hello} = state) do
+    with {:ok, claims} <- TokenVerifier.verify(token),
+         {:ok, room_pid, reply} <-
+           RoomServer.join(
+             claims.room_id,
+             claims.participant_id,
+             claims.display_name,
+             self(),
+             cursor
+           ) do
+      Process.cancel_timer(state.hello_timer)
+      Process.monitor(room_pid)
+      welcome = Protocol.encode_welcome(claims.participant_id, reply)
+      {:push, {:text, welcome}, %{state | phase: :joined, claims: claims, hello_timer: nil}}
+    else
+      {:error, :invalid_token} -> {:stop, :normal, {1008, "unauthorized"}, state}
+      {:error, reason} -> {:stop, :normal, {1011, to_string(reason)}, state}
+    end
+  end
+
+  defp handle_frame({:hello, _}, state) do
+    protocol_error(:already_joined, state)
+  end
+
+  defp handle_frame({:command, command}, %{phase: :joined, claims: claims} = state) do
+    result =
+      RoomServer.command(
+        claims.room_id,
+        claims.participant_id,
+        command.command_id,
+        command.name,
+        command.payload
+      )
+
+    {:push, {:text, Protocol.encode_ack(command.command_id, result)}, state}
+  end
+
+  defp handle_frame({:command, _}, %{phase: :awaiting_hello} = state) do
+    {:stop, :normal, {1002, "hello required"}, state}
+  end
+
+  defp handle_frame(:ping, state) do
+    {:push, {:text, Protocol.encode_pong()}, state}
+  end
+
+  defp protocol_error(reason, state) do
+    {:push, {:text, Protocol.encode_error(:protocol_error, to_string(reason))}, state}
+  end
+end
+</script>
+
+<script>
+/* ==================================================================== data */
+
+const FILES = [
+  { key:"room",     path:"lib/chalk_sync/rooms/room.ex",
+    blurb:"The pure core. No processes, no network, no clocks. Every rule about what a room is lives here — and nothing else does." },
+  { key:"protocol", path:"lib/chalk_sync/protocol.ex",
+    blurb:"The wire contract. JSON in, tagged tuples out. The only file that knows what the outside world looks like." },
+  { key:"server",   path:"lib/chalk_sync/rooms/room_server.ex",
+    blurb:"The OTP shell. One process per room, holding the pure core inside it. Serialization, persistence, fanout, idempotency." },
+  { key:"socket",   path:"lib/chalk_sync/transport/socket.ex",
+    blurb:"The edge. One process per connection. It owns nothing — it translates frames and forwards them." },
+];
+
+const NOTES = {};   /* __NOTES__ */
+const TRACE = [];   /* __TRACE__ */
+
+/* =============================================================== highlight */
+
+const KEYWORDS = new Set(["defmodule","def","defp","do","end","case","cond","if","else","with",
+  "fn","when","use","alias","require","import","not","and","or","in","true","false","nil",
+  "receive","after","raise","catch","rescue","defstruct","for","try"]);
+
+function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+const TOK = /("(?:[^"\\]|\\.)*")|(#(?!\{).*$)|(:[a-zA-Z_][a-zA-Z0-9_]*[?!]?)|(@[a-zA-Z_][a-zA-Z0-9_]*)|(\b[A-Z][A-Za-z0-9_]*\b)|(\b\d[\d_]*\b)|([a-zA-Z_][a-zA-Z0-9_]*[?!]?)/g;
+
+function hl(line){
+  let out = "", last = 0, m;
+  TOK.lastIndex = 0;
+  while ((m = TOK.exec(line)) !== null) {
+    out += esc(line.slice(last, m.index));
+    const t = m[0];
+    if (m[1])      out += `<span class="t-str">${esc(t)}</span>`;
+    else if (m[2]) out += `<span class="t-com">${esc(t)}</span>`;
+    else if (m[3]) out += `<span class="t-atom">${esc(t)}</span>`;
+    else if (m[4]) out += `<span class="t-attr">${esc(t)}</span>`;
+    else if (m[5]) out += `<span class="t-mod">${esc(t)}</span>`;
+    else if (m[6]) out += `<span class="t-num">${esc(t)}</span>`;
+    else if (m[7] && KEYWORDS.has(t)) out += `<span class="t-key">${esc(t)}</span>`;
+    else out += esc(t);
+    last = m.index + t.length;
+  }
+  return out + esc(line.slice(last));
+}
+
+/** Render a whole file, tracking heredoc (""" … """) so docs don't get syntax-coloured. */
+function hlFile(lines){
+  let inDoc = false;
+  return lines.map(line => {
+    const fences = (line.match(/"""/g) || []).length;
+    if (inDoc) {
+      const html = `<span class="t-doc">${esc(line)}</span>`;
+      if (fences) inDoc = false;
+      return html;
+    }
+    if (fences === 1) { inDoc = true; return `<span class="t-doc">${esc(line)}</span>`; }
+    return hl(line);
+  });
+}
+
+function srcLines(key){
+  const raw = document.getElementById("src-" + key).textContent;
+  return raw.replace(/^\n/, "").replace(/\n$/, "").split("\n");
+}
+
+const SRC = {}, HL = {};
+FILES.forEach(f => { SRC[f.key] = srcLines(f.key); HL[f.key] = hlFile(SRC[f.key]); });
+
+/* ============================================================ learn view */
+
+function renderFiles(){
+  const tabs = document.getElementById("tabs");
+  const host = document.getElementById("files");
+
+  tabs.innerHTML = FILES.map((f,i) =>
+    `<button data-f="${f.key}" aria-pressed="${i===0}">${f.path.split("/").pop()}
+       <span class="cnt">${SRC[f.key].length}</span></button>`).join("");
+
+  host.innerHTML = FILES.map((f,i) => {
+    const notes = NOTES[f.key] || {};
+    const rows = HL[f.key].map((html, idx) => {
+      const n = idx + 1;
+      const note = notes[n];
+      const isKey = typeof note === "object";
+      const text = isKey ? note.t : (note || "");
+      return `<div class="cl ${text ? "has-note" : ""} ${isKey ? "key" : ""}">
+          <div class="ln">${n}</div>
+          <div class="src">${html || "&nbsp;"}</div>
+          <div class="note">${text}</div>
+        </div>`;
+    }).join("");
+
+    return `<div class="fpane ${i===0?"on":""}" data-f="${f.key}">
+        <div class="filehead"><div class="fp">${f.path}</div><p>${f.blurb}</p></div>
+        <div class="code">${rows}</div>
+      </div>`;
+  }).join("");
+
+  tabs.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    tabs.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    host.querySelectorAll(".fpane").forEach(p => p.classList.toggle("on", p.dataset.f === b.dataset.f));
+    window.scrollTo({ top: host.offsetTop - 130, behavior: "smooth" });
+  });
+}
+
+/* ============================================================== run view */
+
+/** Fold sticky patches into full states. */
+function resolve(trace){
+  const out = [];
+  let s = { room:{rev:0,parts:[]}, log:[], hold:{rev:null,retained:0}, mem:[], wire:[], stack:[] };
+  for (const step of trace) {
+    s = {
+      room:  step.room  ?? s.room,
+      log:   step.log   ?? s.log,
+      hold:  step.hold  ?? s.hold,
+      mem:   step.mem   ?? s.mem,
+      wire:  step.wire  ?? s.wire,
+      stack: step.stack ?? s.stack,
+    };
+    out.push({ ...step, state: s });
+  }
+  return out;
+}
+
+let STEPS = [], cur = 0, prevHTML = {};
+
+const el = id => document.getElementById(id);
+
+function renderCodePane(key){
+  const pane = el("d-code");
+  if (pane.dataset.f === key) return;
+  pane.dataset.f = key;
+  pane.innerHTML = HL[key].map((html, i) =>
+    `<div class="dl" data-n="${i+1}"><div class="ln">${i+1}</div><div class="src">${html || "&nbsp;"}</div></div>`
+  ).join("");
+}
+
+function paintPanel(id, html){
+  const node = el(id);
+  if (prevHTML[id] === html) return;
+  prevHTML[id] = html;
+  node.innerHTML = html;
+  node.classList.remove("flash");
+  void node.offsetWidth;
+  node.classList.add("flash");
+}
+
+function renderStep(i){
+  cur = Math.max(0, Math.min(STEPS.length - 1, i));
+  const s = STEPS[cur], st = s.state;
+  const f = FILES.find(x => x.key === s.f);
+
+  renderCodePane(s.f);
+  el("d-fname").textContent = f.path;
+  el("d-fnote").textContent = s.fnote || "";
+
+  const pane = el("d-code");
+  pane.querySelectorAll(".dl").forEach(d => d.classList.remove("cur","ctx"));
+  const lines = Array.isArray(s.l) ? s.l : [s.l];
+  const [lo, hi] = [Math.min(...lines), Math.max(...lines)];
+  for (let n = lo; n <= hi; n++) {
+    const d = pane.querySelector(`.dl[data-n="${n}"]`);
+    if (d) d.classList.add(n === lo ? "cur" : "ctx");
+  }
+  const target = pane.querySelector(`.dl[data-n="${lo}"]`);
+  if (target) pane.scrollTop = target.offsetTop - pane.clientHeight / 2.6;
+
+  el("n-act").textContent = s.act;
+  el("n-title").textContent = s.t;
+  el("n-desc").innerHTML = s.d;
+  el("n-why").hidden = !s.why;
+  if (s.why) el("n-why-t").innerHTML = s.why;
+
+  /* wire */
+  el("t-wire").textContent = st.wire.length ? "last 3 frames" : "";
+  paintPanel("p-wire", st.wire.length
+    ? st.wire.slice(-3).map(w =>
+        `<div class="frame ${w.dir}"><span class="dir">${w.dir === "in" ? "client → server" : "server → client"}</span>
+         <span class="who">${w.who}</span>\n${esc(w.txt)}</div>`).join("")
+    : `<div class="frame" style="color:var(--ink4);font-family:var(--sans)">Nothing on the wire yet.</div>`);
+
+  /* room */
+  paintPanel("p-room", `
+    <div class="rev"><span class="n">${st.room.rev}</span><span class="l">revision</span></div>
+    ${st.room.parts.length
+      ? st.room.parts.map(p => `<div class="part">
+          <span class="pid">${p.id}</span><span class="pn">${p.name}</span>
+          <span class="hand ${p.hand ? "up" : ""}">✋</span></div>`).join("")
+      : `<div style="color:var(--ink4);font-family:var(--sans);font-size:12.5px">No participants. Room may not even exist yet.</div>`}
+  `);
+
+  /* stateholder = committed revision + retained event log */
+  paintPanel("p-hold", st.hold.rev === null
+    ? `<div style="color:var(--ink4);font-family:var(--sans);font-size:12.5px">Empty. <code>load/1</code> would return <code>:not_found</code>.</div>`
+    : `<div class="rev"><span class="n">${st.hold.rev}</span><span class="l">committed</span></div>` +
+      st.log.map((e,i) => `<div class="ev ${i === st.log.length-1 && e.fresh ? "new":""}">
+          <span class="r">r${e.rev}</span><span class="nm">${e.name}</span></div>`).join(""));
+
+  /* idempotency */
+  paintPanel("p-mem", st.mem.length
+    ? `<div class="mem">${st.mem.map(m => `<div><span class="k">${esc(m.k)}</span>
+        <span class="v ${m.dup ? "dup":""}">${esc(m.v)}</span></div>`).join("")}</div>`
+    : `<div style="color:var(--ink4);font-family:var(--sans);font-size:12.5px">No commands seen yet.</div>`);
+
+  /* stack */
+  paintPanel("p-stk", st.stack.map(x => `<div>${esc(x)}</div>`).join(""));
+
+  el("d-pos").textContent = `${cur + 1} / ${STEPS.length}`;
+  el("scrub").value = cur;
+  el("b-prev").disabled = cur === 0;
+  el("b-next").disabled = cur === STEPS.length - 1;
+
+  document.querySelectorAll("#acts .chip").forEach(c =>
+    c.setAttribute("aria-pressed", String(c.dataset.act === s.act)));
+}
+
+function initRun(){
+  STEPS = resolve(TRACE);
+  el("scrub").max = STEPS.length - 1;
+
+  const acts = [...new Set(STEPS.map(s => s.act))];
+  el("acts").innerHTML = acts.map(a =>
+    `<button class="chip" data-act="${a}">${a}</button>`).join("");
+  el("acts").addEventListener("click", e => {
+    const c = e.target.closest(".chip"); if (!c) return;
+    renderStep(STEPS.findIndex(s => s.act === c.dataset.act));
+  });
+
+  el("b-next").onclick  = () => renderStep(cur + 1);
+  el("b-prev").onclick  = () => renderStep(cur - 1);
+  el("b-reset").onclick = () => renderStep(0);
+  el("scrub").oninput   = e => renderStep(+e.target.value);
+
+  document.addEventListener("keydown", e => {
+    if (!el("v-run").classList.contains("on")) return;
+    if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); renderStep(cur + 1); }
+    if (e.key === "ArrowLeft")  { e.preventDefault(); renderStep(cur - 1); }
+  });
+
+  renderStep(0);
+}
+
+/* ================================================================= modes */
+
+el("modes").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  el("modes").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + b.dataset.view));
+  window.scrollTo({ top: 0 });
+});
+
+renderFiles();
+initRun();
+</script>
+</body>
+</html>

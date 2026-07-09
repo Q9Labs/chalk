@@ -3,11 +3,11 @@ import { MoreVerticalIcon, MicrophoneOff01Icon, Edit02Icon } from "../../../util
 import { Avatar, AudioIndicator, HandRaiseIndicator, IconButton } from "../../atomic";
 import { cn } from "../../../utils/cn";
 import type { ParticipantGradientPreference } from "../../../utils/colorGenerator";
-import type { Participant, ParticipantListVariant } from "./ParticipantList";
+import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantList";
 import { ParticipantOptionsMenu } from "./ParticipantOptionsMenu";
 
 export interface ParticipantRowProps {
-  participant: Participant;
+  participant: ParticipantListParticipant;
   variant: ParticipantListVariant;
   canManageParticipants: boolean;
   onMuteParticipant?: (id: string) => void;

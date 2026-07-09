@@ -32,6 +32,9 @@
     "dev:web:pages": "pnpm --dir apps/web run dev:pages",
     "gate": "bash scripts/gates/commit.sh",
     "gate:explain": "sed -n '1,240p' scripts/gates/README.md",
+    "generate:openapi": "bash apps/api/scripts/generate-openapi.sh",
+    "generate:sdk": "bash scripts/codegen/generate-sdk.sh",
+    "check:sdk-generated": "bash scripts/codegen/check-sdk-generated.sh",
     "hooks:install": "lefthook install",
     "review:commit": "bash scripts/gates/post-commit-review.sh",
     "gate:hygiene": "node scripts/gates/hygiene.mjs",
@@ -52,7 +55,9 @@
     "clean": "turbo clean && rm -rf node_modules"
   },
   "dependencies": {
+    "@effect/platform": "^0.96.2",
     "clsx": "^2.1.1",
+    "effect": "^3.21.4",
     "react": "19.2.7",
     "tailwind-merge": "^3.6.0"
   },

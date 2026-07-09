@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chalk Lobby — Curtains</title>
+    <style>
+      :root {
+        --green: #3e7a5a;
+        --green-deep: #2c5a42;
+        --cream: #f6f1e8;
+        --ink: #2a2622;
+        --dur: 2600ms;
+      }
+      * {
+        margin: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family:
+          ui-sans-serif,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        background: #171512;
+        color: var(--ink);
+        overflow: hidden;
+      }
+
+      .stage {
+        position: relative;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      /* ---------- Lobby scene behind the curtains ---------- */
+      .lobby {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(120% 90% at 50% 0%, #fdf8ee 0%, var(--cream) 45%, #e9e0d0 100%);
+      }
+      .glow {
+        position: absolute;
+        top: 6%;
+        left: 50%;
+        width: 60vmin;
+        height: 60vmin;
+        transform: translateX(-50%);
+        background: radial-gradient(circle, rgba(255, 240, 200, 0.8), transparent 65%);
+      }
+      .floor {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 26%;
+        background: linear-gradient(180deg, #ddd0ba, #c7b79c);
+      }
+      .rug {
+        position: absolute;
+        left: 50%;
+        bottom: 6%;
+        width: 46%;
+        height: 12%;
+        transform: translateX(-50%);
+        background: var(--green);
+        border-radius: 50%;
+        opacity: 0.5;
+        filter: blur(1px);
+      }
+      .desk {
+        position: absolute;
+        left: 50%;
+        bottom: 22%;
+        width: 30%;
+        height: 13%;
+        transform: translateX(-50%);
+        background: linear-gradient(180deg, #a9825e, #8f6b4a);
+        border-radius: 10px 10px 4px 4px;
+        box-shadow: 0 14px 24px -12px rgba(70, 50, 30, 0.5);
+      }
+      .sign {
+        position: absolute;
+        left: 50%;
+        top: 16%;
+        transform: translateX(-50%);
+        font-weight: 800;
+        font-size: clamp(22px, 4vmin, 40px);
+        letter-spacing: 0.04em;
+        color: var(--ink);
+      }
+      .sign .dot {
+        color: var(--green);
+      }
+      .plant {
+        position: absolute;
+        bottom: 23%;
+        width: 8vmin;
+        height: 15vmin;
+      }
+      .plant.p1 {
+        left: 12%;
+      }
+      .plant.p2 {
+        right: 12%;
+        transform: scaleX(-1);
+      }
+      .plant::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 32% 0;
+        background: radial-gradient(circle at 40% 30%, #5c9273, var(--green-deep));
+        border-radius: 55% 45% 40% 50%;
+      }
+      .plant::after {
+        content: "";
+        position: absolute;
+        left: 20%;
+        right: 20%;
+        bottom: 0;
+        height: 34%;
+        background: linear-gradient(180deg, #bb9068, #a0784f);
+        clip-path: polygon(0 0, 100% 0, 85% 100%, 15% 100%);
+        border-radius: 4px;
+      }
+      .welcome {
+        position: absolute;
+        left: 50%;
+        top: 34%;
+        width: 90%;
+        transform: translate(-50%, 16px);
+        text-align: center;
+        opacity: 0;
+        transition:
+          opacity 900ms ease,
+          transform 900ms ease;
+      }
+      body.open .welcome {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        transition-delay: calc(var(--dur) * 0.55);
+      }
+      .welcome h1 {
+        font-size: clamp(26px, 5vmin, 52px);
+        font-weight: 750;
+      }
+      .welcome p {
+        margin-top: 0.5em;
+        font-size: clamp(14px, 2vmin, 19px);
+        color: #6c6154;
+      }
+
+      /* Room stays dim until the curtains part */
+      .dimmer {
+        position: absolute;
+        inset: 0;
+        background: #14110d;
+        opacity: 0.5;
+        transition: opacity var(--dur) ease;
+        pointer-events: none;
+      }
+      body.open .dimmer {
+        opacity: 0;
+      }
+
+      /* ---------- Curtains ---------- */
+      .curtains {
+        position: absolute;
+        inset: 0;
+      }
+      .panel {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 52%;
+        transition: transform var(--dur) cubic-bezier(0.5, 0.08, 0.35, 1);
+        will-change: transform;
+      }
+      body.open .panel {
+        transition-timing-function: cubic-bezier(0.6, 0.04, 0.22, 1);
+      }
+      .panel.left {
+        left: 0;
+        transform-origin: left center;
+        --dir: 1;
+      }
+      .panel.right {
+        right: 0;
+        transform-origin: right center;
+        --dir: -1;
+      }
+      body.open .panel.left {
+        transform: scaleX(0.15);
+      }
+      body.open .panel.right {
+        transform: scaleX(0.15);
+      }
+
+      .fabric {
+        position: absolute;
+        inset: 0;
+        transform-origin: 50% 0;
+        background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0) 18%, rgba(0, 0, 0, 0.16) 82%, rgba(0, 0, 0, 0.38)), repeating-linear-gradient(90deg, #1f3f2f 0px, #35624a 16px, #4c8264 32px, #35624a 48px, #1f3f2f 66px);
+        box-shadow: inset 0 -10px 18px -8px rgba(0, 0, 0, 0.5);
+      }
+      /* soft sheen so the velvet catches the lobby light */
+      .fabric::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(100deg, transparent 30%, rgba(255, 244, 214, 0.1) 50%, transparent 70%);
+      }
+      .panel.left .fabric {
+        box-shadow: 8px 0 22px -6px rgba(0, 0, 0, 0.55);
+      }
+      .panel.right .fabric {
+        box-shadow: -8px 0 22px -6px rgba(0, 0, 0, 0.55);
+      }
+
+      /* cloth sway while the panel travels */
+      .fabric.moving {
+        animation: sway var(--dur) ease-in-out;
+      }
+      .panel.right .fabric.moving {
+        animation-delay: 90ms;
+      }
+      @keyframes sway {
+        0%,
+        100% {
+          transform: skewY(0deg);
+        }
+        22% {
+          transform: skewY(calc(var(--dir) * 0.8deg));
+        }
+        52% {
+          transform: skewY(calc(var(--dir) * -0.5deg));
+        }
+        78% {
+          transform: skewY(calc(var(--dir) * 0.25deg));
+        }
+      }
+
+      .rod {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3.2vmin;
+        min-height: 22px;
+        background: linear-gradient(180deg, #4a4239, #262019);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+        z-index: 5;
+      }
+
+      /* ---------- Controls ---------- */
+      .controls {
+        position: fixed;
+        left: 50%;
+        bottom: 28px;
+        transform: translateX(-50%);
+        z-index: 50;
+      }
+      .controls button {
+        font: 600 15px/1 inherit;
+        color: #fff;
+        background: var(--green);
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 26px;
+        cursor: pointer;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+        transition: background 150ms ease;
+      }
+      .controls button:hover:not(:disabled) {
+        background: var(--green-deep);
+      }
+      .controls button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .chip {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 50;
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        color: var(--ink);
+        background: rgba(246, 241, 232, 0.9);
+        padding: 8px 14px;
+        border-radius: 999px;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+      }
+      .chip:hover {
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="lobby" aria-hidden="true">
+        <div class="glow"></div>
+        <div class="floor"></div>
+        <div class="rug"></div>
+        <div class="sign">chalk<span class="dot">.</span></div>
+        <div class="desk"></div>
+        <div class="plant p1"></div>
+        <div class="plant p2"></div>
+        <div class="welcome">
+          <h1>Welcome to the lobby</h1>
+          <p>Come on in — we saved you a seat.</p>
+        </div>
+      </div>
+      <div class="dimmer"></div>
+      <div class="curtains" aria-hidden="true">
+        <div class="panel left"><div class="fabric"></div></div>
+        <div class="panel right"><div class="fabric"></div></div>
+      </div>
+      <div class="rod"></div>
+    </div>
+
+    <a class="chip" href="blinds.html">Blinds version →</a>
+    <div class="controls">
+      <button id="toggle" type="button">Enter the lobby</button>
+    </div>
+
+    <script>
+      const btn = document.getElementById("toggle");
+      const fabrics = document.querySelectorAll(".fabric");
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const DUR = reduced ? 700 : 2600;
+      document.documentElement.style.setProperty("--dur", DUR + "ms");
+
+      let busy = false;
+      function toggle() {
+        if (busy) return;
+        busy = true;
+        btn.disabled = true;
+        const opening = !document.body.classList.contains("open");
+        document.body.classList.toggle("open", opening);
+        fabrics.forEach((f) => f.classList.add("moving"));
+        setTimeout(() => {
+          fabrics.forEach((f) => f.classList.remove("moving"));
+          btn.textContent = opening ? "Step out of the room" : "Enter the lobby";
+          btn.disabled = false;
+          busy = false;
+        }, DUR + 120);
+      }
+
+      btn.addEventListener("click", toggle);
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") {
+          e.preventDefault();
+          toggle();
+        }
+      });
+    </script>
+  </body>
+</html>

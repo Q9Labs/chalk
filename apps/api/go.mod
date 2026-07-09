@@ -1,6 +1,6 @@
 module github.com/q9labs/chalk/apps/api
 
-go 1.25.11
+go 1.25.12
 
 tool (
 	github.com/pressly/goose/v3/cmd/goose

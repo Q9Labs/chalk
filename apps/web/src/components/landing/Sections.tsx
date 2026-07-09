@@ -1,4 +1,5 @@
 import { Chalked } from "./Chalked";
+import { LatencyVisual, StackVisual } from "./visuals";
 
 export function FrontDoors() {
   return (
@@ -14,10 +15,10 @@ export function FrontDoors() {
         <div className="doors-grid">
           <div className="door">
             <h3>The app</h3>
-            <p>
-              Spin up a room, share the link, and you're meeting. Lobby, roles, recordings, transcripts, chat, and
-              whiteboard are all there on day one — no setup, no downloads for guests.
-            </p>
+            <p>Spin up a room, share the link, and you're meeting. Lobby, roles, recordings, transcripts, chat, and whiteboard are all there on day one — no setup, no downloads for guests.</p>
+            <div className="door-shot" aria-hidden="true">
+              <img src="/images/marketing/hero-1.png" width={2560} height={1476} alt="" loading="lazy" />
+            </div>
             <div className="room-pill" aria-hidden="true">
               <span>chalk.new/standup</span>
               <span className="room-copy">Copy link</span>
@@ -28,18 +29,14 @@ export function FrontDoors() {
           </div>
           <div className="door door-board">
             <h3>The SDK</h3>
-            <p>
-              Drop a full meeting experience into your product with one component, themed to match. Identity comes from
-              tokens you sign — your users never leave your app.
-            </p>
+            <p>Drop a full meeting experience into your product with one component, themed to match. Identity comes from tokens you sign — your users never leave your app.</p>
             <div className="codeboard">
               <code className="codeboard-install">npm install @q9labsai/chalk-react</code>
               <pre>
                 <code>
                   <span className="tok-kw">import</span> {"{ "}
                   <span className="tok-cmp">VideoConference</span>
-                  {" }"} <span className="tok-kw">from</span> <span className="tok-str">"@q9labsai/chalk-react"</span>;
-                  {"\n\n"}
+                  {" }"} <span className="tok-kw">from</span> <span className="tok-str">"@q9labsai/chalk-react"</span>;{"\n\n"}
                   <span className="tok-kw">export function</span> <span className="tok-cmp">Meet</span>
                   {"({ token }) {\n"}
                   {"  "}
@@ -56,8 +53,7 @@ export function FrontDoors() {
               </pre>
             </div>
             <p className="tok-dim" style={{ fontSize: 13.5 }}>
-              React today — Swift, Kotlin, Python, and Go are generated from the same schema, so no language is
-              second-class.
+              React today — Swift, Kotlin, Python, and Go are generated from the same schema, so no language is second-class.
             </p>
           </div>
         </div>
@@ -87,29 +83,30 @@ const STATS = [
 export function PerfBudget() {
   return (
     <section className="section perf" id="performance">
-      <div className="container">
-        <div className="section-head">
-          <p className="eyebrow">Performance budget</p>
-          <h2>
-            Fast is a <Chalked>written spec</Chalked>, not a vibe.
-          </h2>
-          <p className="lede">
-            Chalk is built against a performance budget with numbers attached. Designs that miss it don't ship.
-          </p>
+      <div className="container perf-layout">
+        <div className="perf-copy">
+          <div className="section-head">
+            <p className="eyebrow">Performance budget</p>
+            <h2>
+              Fast is a <Chalked>written spec</Chalked>, not a vibe.
+            </h2>
+            <p className="lede">Chalk is built against a performance budget with numbers attached. Designs that miss it don't ship.</p>
+          </div>
+          <ul className="perf-stats">
+            {STATS.map((s) => (
+              <li className="perf-stat" key={s.what}>
+                <span className="num">{s.num}</span>
+                <span className="perf-stat-text">
+                  <b>{s.what}</b>
+                  <span>{s.how}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="perf-grid">
-          {STATS.map((s) => (
-            <div className="perf-stat" key={s.what}>
-              <div className="num">{s.num}</div>
-              <p className="what">{s.what}</p>
-              <p className="how">{s.how}</p>
-            </div>
-          ))}
+        <div className="perf-media">
+          <LatencyVisual />
         </div>
-        <p className="perf-foot">
-          The budget covers the whole surface — join funnel, sync plane, media plane, and API reads — and correctness
-          still gates first: sync never trades robustness for speed.
-        </p>
       </div>
     </section>
   );
@@ -118,48 +115,44 @@ export function PerfBudget() {
 const STACK = [
   {
     title: "Managed or self-hosted",
-    body: "Run on Chalk's cloud, or host the app tier yourself — API, sync, Redis, and standard Postgres. The portable core depends on nothing proprietary.",
-    chips: ["postgres", "redis", "your-infra"],
+    body: "Run on Chalk's cloud, or host the app tier yourself — API, sync, Redis, and standard Postgres. The core depends on nothing proprietary.",
+    stick: "var(--chalk-green)",
   },
   {
     title: "Swappable media plane",
-    body: "The SFU sits behind one contract, and provider details never leak into your data. Swap the media engine without touching the rest of the system.",
-    chips: ["MediaPlane", "cloudflare-sfu", "bring-your-own"],
+    body: "The SFU sits behind one contract, and provider details never leak into your data. Swap the engine without touching the rest.",
+    stick: "var(--chalk-blue)",
   },
   {
     title: "Your identity, your tokens",
-    body: "You sign participant tokens with your own rotatable keys, asserting who joins and what they can do. Anonymous joining is first-class — auth is an upgrade, never a gate.",
-    chips: ["signed-tokens", "key-rotation", "anonymous-first"],
+    body: "You sign participant tokens with your own rotatable keys. Anonymous joining is first-class — auth is an upgrade, never a gate.",
+    stick: "var(--chalk-yellow)",
   },
 ];
 
 export function SelfHost() {
   return (
     <section className="section stack" id="self-host">
-      <div className="container">
-        <div className="section-head">
-          <p className="eyebrow">Own your stack</p>
-          <h2>
-            No lock-in, <Chalked>by construction</Chalked>.
-          </h2>
-          <p className="lede">
-            Flexibility isn't a roadmap item — the architecture is built so nothing can hold your deployment hostage.
-          </p>
+      <div className="container stack-layout">
+        <div className="stack-copy">
+          <div className="section-head">
+            <p className="eyebrow">Own your stack</p>
+            <h2>
+              No lock-in, <Chalked>by construction</Chalked>.
+            </h2>
+            <p className="lede">Flexibility isn't a roadmap item — the architecture is built so nothing can hold your deployment hostage.</p>
+          </div>
+          <ul className="stack-points">
+            {STACK.map((c) => (
+              <li className="stack-point" key={c.title} style={{ "--f-stick": c.stick } as React.CSSProperties}>
+                <h3>{c.title}</h3>
+                <p>{c.body}</p>
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="stack-grid">
-          {STACK.map((c) => (
-            <div className="stack-card" key={c.title}>
-              <h3>{c.title}</h3>
-              <p>{c.body}</p>
-              <div className="chips">
-                {c.chips.map((chip) => (
-                  <span className="chip" key={chip}>
-                    {chip}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="stack-media">
+          <StackVisual />
         </div>
       </div>
     </section>

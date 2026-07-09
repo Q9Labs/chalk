@@ -1,6 +1,7 @@
 // Overlays & Feedback
 export * from "./NotificationStack";
 export * from "./ConnectionLostOverlay";
+export * from "./LeaveConfirmationDialog";
 
 // Headers & Info
 export * from "./MeetingHeader";
@@ -18,7 +19,7 @@ export * from "./TourOverlay";
 
 // Panels - export components but handle Participant name collision
 export { ParticipantList } from "./ParticipantList";
-export type { ParticipantListProps, Participant as ParticipantListParticipant } from "./ParticipantList";
+export type { ParticipantListParticipant, ParticipantListProps } from "./ParticipantList";
 export * from "./ChatPanel";
 export * from "./TranscriptionPanel";
 export * from "./SettingsPanel";

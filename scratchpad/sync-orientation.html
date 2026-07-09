@@ -1,0 +1,1431 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>apps/sync — orientation</title>
+    <style>
+      :root {
+        --paper: #fbfaf7;
+        --paper-sunk: #f4f2ec;
+        --card: #ffffff;
+        --ink: #1b1d1b;
+        --ink-2: #4a4e49;
+        --ink-3: #7c817b;
+        --rule: #e4e1d8;
+        --rule-soft: #edebe4;
+
+        --chalk: #2f7a55;
+        --chalk-bright: #3e9a6c;
+        --chalk-wash: #eaf3ed;
+        --chalk-edge: #c9e0d3;
+
+        --amber: #a8761f;
+        --amber-wash: #fbf3e3;
+        --amber-edge: #eddcb8;
+
+        --rust: #a6482f;
+        --rust-wash: #fbeee9;
+        --rust-edge: #efd2c6;
+
+        --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+        --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+        --shadow-sm: 0 1px 2px rgba(27, 29, 27, 0.04), 0 1px 1px rgba(27, 29, 27, 0.03);
+        --shadow-md: 0 4px 16px -4px rgba(27, 29, 27, 0.08), 0 1px 2px rgba(27, 29, 27, 0.04);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #141614;
+          --paper-sunk: #1b1e1b;
+          --card: #1a1d1a;
+          --ink: #e9e7e0;
+          --ink-2: #b0b4ae;
+          --ink-3: #7e837d;
+          --rule: #2c302c;
+          --rule-soft: #242724;
+
+          --chalk: #6fbf92;
+          --chalk-bright: #8fd3ac;
+          --chalk-wash: #17281f;
+          --chalk-edge: #2a4536;
+
+          --amber: #d9a648;
+          --amber-wash: #251e10;
+          --amber-edge: #40331a;
+
+          --rust: #de8064;
+          --rust-wash: #26170f;
+          --rust-edge: #422518;
+
+          --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+          --shadow-md: 0 4px 20px -4px rgba(0, 0, 0, 0.45);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 90px;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ------------------------------------------------------------------ chrome */
+
+      header.top {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: color-mix(in srgb, var(--paper) 88%, transparent);
+        backdrop-filter: saturate(1.6) blur(12px);
+        border-bottom: 1px solid var(--rule);
+      }
+      .top-inner {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 12px 32px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-right: auto;
+      }
+      .brand .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--chalk);
+        box-shadow: 0 0 0 3px var(--chalk-wash);
+        align-self: center;
+      }
+      .brand h1 {
+        margin: 0;
+        font: 600 15px/1 var(--mono);
+        letter-spacing: -0.01em;
+        color: var(--ink);
+      }
+      .brand span {
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+
+      .editor-pick {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+      .editor-pick label {
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-size: 10.5px;
+        font-weight: 600;
+      }
+      .seg {
+        display: inline-flex;
+        background: var(--paper-sunk);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 2px;
+        gap: 2px;
+      }
+      .seg button {
+        font: 500 12px/1 var(--sans);
+        color: var(--ink-3);
+        background: none;
+        border: 0;
+        border-radius: 6px;
+        padding: 5px 9px;
+        cursor: pointer;
+        transition: all 0.12s ease;
+      }
+      .seg button:hover {
+        color: var(--ink);
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--card);
+        color: var(--ink);
+        box-shadow: var(--shadow-sm);
+        font-weight: 600;
+      }
+
+      .progress-chip {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font: 600 12px/1 var(--mono);
+        color: var(--ink-2);
+        padding: 7px 12px 7px 10px;
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        box-shadow: var(--shadow-sm);
+      }
+      .ring {
+        width: 16px;
+        height: 16px;
+        transform: rotate(-90deg);
+      }
+      .ring circle {
+        fill: none;
+        stroke-width: 3;
+      }
+      .ring .bg {
+        stroke: var(--rule);
+      }
+      .ring .fg {
+        stroke: var(--chalk);
+        stroke-linecap: round;
+        transition: stroke-dashoffset 0.35s ease;
+      }
+
+      /* ------------------------------------------------------------------ layout */
+
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 32px 140px;
+        display: grid;
+        grid-template-columns: 208px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+
+      nav.side {
+        position: sticky;
+        top: 90px;
+        padding-top: 56px;
+        font-size: 13.5px;
+      }
+      nav.side .grp {
+        margin-bottom: 22px;
+      }
+      nav.side .grp-label {
+        font: 600 10px/1 var(--sans);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin-bottom: 9px;
+        padding-left: 11px;
+      }
+      nav.side a {
+        display: block;
+        padding: 5px 11px;
+        margin-left: -1px;
+        color: var(--ink-2);
+        text-decoration: none;
+        border-left: 2px solid var(--rule-soft);
+        transition: all 0.12s ease;
+      }
+      nav.side a:hover {
+        color: var(--ink);
+        border-left-color: var(--chalk-edge);
+      }
+      nav.side a.active {
+        color: var(--chalk);
+        font-weight: 600;
+        border-left-color: var(--chalk);
+      }
+
+      main {
+        padding-top: 56px;
+        min-width: 0;
+      }
+
+      /* ------------------------------------------------------------------ type */
+
+      .eyebrow {
+        font: 600 11px/1 var(--sans);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--chalk);
+        margin-bottom: 14px;
+      }
+      h2 {
+        font: 400 30px/1.25 var(--serif);
+        letter-spacing: -0.015em;
+        margin: 0 0 18px;
+        scroll-margin-top: 90px;
+      }
+      section + section {
+        margin-top: 76px;
+      }
+      h3 {
+        font: 600 15px/1.4 var(--sans);
+        margin: 34px 0 10px;
+        letter-spacing: -0.005em;
+      }
+      p {
+        margin: 0 0 16px;
+        color: var(--ink-2);
+        max-width: 68ch;
+      }
+      p strong,
+      li strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .lede {
+        font: 400 19px/1.6 var(--serif);
+        color: var(--ink);
+        max-width: 62ch;
+      }
+      .lede em {
+        color: var(--chalk);
+        font-style: italic;
+      }
+
+      code {
+        font: 500 13.5px/1.5 var(--mono);
+        background: var(--paper-sunk);
+        border: 1px solid var(--rule-soft);
+        padding: 1px 5px;
+        border-radius: 5px;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+
+      /* ------------------------------------------------------------------ flow */
+
+      .flow {
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        padding: 26px 24px;
+        box-shadow: var(--shadow-md);
+        margin: 26px 0;
+      }
+      .flow-row {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+      .node {
+        flex: 1 1 0;
+        min-width: 118px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 13px 14px;
+        border-radius: 10px;
+        background: var(--paper-sunk);
+        border: 1px solid var(--rule-soft);
+        text-decoration: none;
+        transition: all 0.14s ease;
+      }
+      .node:hover {
+        border-color: var(--chalk-edge);
+        background: var(--chalk-wash);
+        transform: translateY(-1px);
+      }
+      .node .n-name {
+        font: 600 12.5px/1.2 var(--mono);
+        color: var(--ink);
+      }
+      .node .n-role {
+        font-size: 11px;
+        line-height: 1.35;
+        color: var(--ink-3);
+      }
+      .node.pure {
+        background: var(--chalk-wash);
+        border-color: var(--chalk-edge);
+      }
+      .node.pure .n-name {
+        color: var(--chalk);
+      }
+      .arrow {
+        flex: 0 0 30px;
+        display: grid;
+        place-items: center;
+        color: var(--ink-3);
+        font-size: 13px;
+      }
+      .flow-note {
+        margin: 18px 0 0;
+        padding-top: 16px;
+        border-top: 1px dashed var(--rule);
+        font-size: 13.5px;
+        color: var(--ink-3);
+        max-width: none;
+      }
+
+      /* ------------------------------------------------------------------ table */
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 22px 0;
+        font-size: 14px;
+      }
+      th {
+        text-align: left;
+        font: 600 10.5px/1 var(--sans);
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        padding: 0 14px 10px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      td {
+        padding: 13px 14px 13px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        vertical-align: top;
+        color: var(--ink-2);
+      }
+      td:first-child {
+        color: var(--ink);
+        font-weight: 500;
+        width: 38%;
+      }
+
+      /* ------------------------------------------------------------------ steps */
+
+      .step {
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        margin-bottom: 14px;
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        transition:
+          border-color 0.15s ease,
+          opacity 0.2s ease;
+      }
+      .step:hover {
+        border-color: var(--chalk-edge);
+      }
+      .step.done {
+        opacity: 0.5;
+      }
+      .step.done .s-title {
+        text-decoration: line-through;
+        text-decoration-color: var(--ink-3);
+      }
+
+      .s-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 15px 18px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .s-check {
+        flex: 0 0 20px;
+        height: 20px;
+        border-radius: 6px;
+        border: 1.5px solid var(--rule);
+        background: var(--paper);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: all 0.14s ease;
+      }
+      .s-check:hover {
+        border-color: var(--chalk);
+      }
+      .s-check svg {
+        width: 11px;
+        height: 11px;
+        stroke: var(--card);
+        stroke-width: 3.4;
+        fill: none;
+        opacity: 0;
+        transition: opacity 0.12s;
+      }
+      .step.done .s-check {
+        background: var(--chalk);
+        border-color: var(--chalk);
+      }
+      .step.done .s-check svg {
+        opacity: 1;
+      }
+
+      .s-num {
+        font: 600 11px/1 var(--mono);
+        color: var(--ink-3);
+        flex: 0 0 auto;
+        width: 16px;
+      }
+      .s-meta {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .s-title {
+        font: 600 14.5px/1.35 var(--sans);
+        color: var(--ink);
+        letter-spacing: -0.005em;
+      }
+      .s-file {
+        font: 500 12px/1.4 var(--mono);
+        color: var(--ink-3);
+        display: block;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .s-kind {
+        flex: 0 0 auto;
+        font: 600 9.5px/1 var(--sans);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 5px 8px;
+        border-radius: 5px;
+      }
+      .s-kind.core {
+        background: var(--chalk-wash);
+        color: var(--chalk);
+        border: 1px solid var(--chalk-edge);
+      }
+      .s-kind.test {
+        background: var(--paper-sunk);
+        color: var(--ink-3);
+        border: 1px solid var(--rule);
+      }
+      .s-kind.shell {
+        background: var(--amber-wash);
+        color: var(--amber);
+        border: 1px solid var(--amber-edge);
+      }
+      .s-caret {
+        flex: 0 0 auto;
+        color: var(--ink-3);
+        transition: transform 0.18s ease;
+        font-size: 11px;
+      }
+      .step[open-panel] .s-caret {
+        transform: rotate(90deg);
+      }
+
+      .s-body {
+        display: none;
+        padding: 0 18px 18px 66px;
+      }
+      .step[open-panel] .s-body {
+        display: block;
+      }
+      .s-body > p {
+        font-size: 14px;
+        margin: 0 0 14px;
+      }
+      .s-body > p:first-child {
+        margin-top: -4px;
+      }
+
+      .watch {
+        background: var(--chalk-wash);
+        border: 1px solid var(--chalk-edge);
+        border-radius: 9px;
+        padding: 11px 14px;
+        margin: 0 0 14px;
+        font-size: 13.5px;
+        color: var(--ink-2);
+        max-width: none;
+      }
+      .watch b {
+        color: var(--chalk);
+        font: 600 10px/1 var(--sans);
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .jumps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .jump {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font: 500 12px/1 var(--mono);
+        text-decoration: none;
+        color: var(--ink-2);
+        background: var(--paper-sunk);
+        border: 1px solid var(--rule);
+        border-radius: 7px;
+        padding: 7px 10px;
+        transition: all 0.12s ease;
+      }
+      .jump:hover {
+        background: var(--chalk-wash);
+        border-color: var(--chalk-edge);
+        color: var(--chalk);
+      }
+      .jump .ln {
+        color: var(--ink-3);
+        font-size: 11px;
+      }
+      .jump:hover .ln {
+        color: var(--chalk-bright);
+      }
+
+      /* ------------------------------------------------------------------ findings */
+
+      .finding {
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        padding: 20px 22px;
+        margin-bottom: 14px;
+        background: var(--card);
+        box-shadow: var(--shadow-sm);
+        border-left-width: 3px;
+      }
+      .finding.major {
+        border-left-color: var(--rust);
+      }
+      .finding.minor {
+        border-left-color: var(--amber);
+      }
+      .f-head {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-bottom: 9px;
+        flex-wrap: wrap;
+      }
+      .f-sev {
+        font: 600 9.5px/1 var(--sans);
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        padding: 5px 8px;
+        border-radius: 5px;
+      }
+      .major .f-sev {
+        background: var(--rust-wash);
+        color: var(--rust);
+        border: 1px solid var(--rust-edge);
+      }
+      .minor .f-sev {
+        background: var(--amber-wash);
+        color: var(--amber);
+        border: 1px solid var(--amber-edge);
+      }
+      .f-title {
+        font: 600 15px/1.3 var(--sans);
+        color: var(--ink);
+      }
+      .f-cost {
+        font-size: 12.5px;
+        color: var(--ink-3);
+        font-style: italic;
+      }
+      .finding p {
+        font-size: 14px;
+        margin: 0 0 12px;
+      }
+      .finding p:last-of-type {
+        margin-bottom: 14px;
+      }
+
+      /* ------------------------------------------------------------------ handles */
+
+      .handles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+        gap: 12px;
+        margin-top: 22px;
+      }
+      .handle {
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 11px;
+        padding: 15px 17px;
+      }
+      .handle code {
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--chalk);
+        font-size: 13px;
+        white-space: normal;
+      }
+      .handle p {
+        font-size: 13.5px;
+        margin: 7px 0 0;
+        color: var(--ink-2);
+      }
+
+      /* ------------------------------------------------------------------ cmds */
+
+      .cmd {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 8px;
+      }
+      .cmd code {
+        flex: 0 0 auto;
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--chalk);
+        font-weight: 600;
+      }
+      .cmd .desc {
+        flex: 1 1 auto;
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+      .copy {
+        flex: 0 0 auto;
+        font: 600 11px/1 var(--sans);
+        letter-spacing: 0.04em;
+        background: var(--paper-sunk);
+        color: var(--ink-3);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 6px 10px;
+        cursor: pointer;
+        transition: all 0.12s ease;
+      }
+      .copy:hover {
+        color: var(--chalk);
+        border-color: var(--chalk-edge);
+        background: var(--chalk-wash);
+      }
+      .copy.ok {
+        color: var(--chalk);
+        border-color: var(--chalk);
+      }
+
+      .first-change {
+        display: flex;
+        gap: 14px;
+        padding: 17px 0;
+        border-bottom: 1px solid var(--rule-soft);
+      }
+      .fc-rank {
+        flex: 0 0 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font: 600 11px/1 var(--mono);
+        background: var(--paper-sunk);
+        color: var(--ink-3);
+        border: 1px solid var(--rule);
+      }
+      .first-change.pick .fc-rank {
+        background: var(--chalk);
+        color: #fff;
+        border-color: var(--chalk);
+      }
+      .fc-body h3 {
+        margin: 0 0 5px;
+      }
+      .fc-body p {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      footer {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 32px 60px;
+        border-top: 1px solid var(--rule);
+        font-size: 12.5px;
+        color: var(--ink-3);
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      footer button {
+        font: 500 12.5px/1 var(--sans);
+        background: none;
+        border: 0;
+        color: var(--ink-3);
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      footer button:hover {
+        color: var(--rust);
+      }
+
+      @media (max-width: 940px) {
+        .shell {
+          grid-template-columns: 1fr;
+          gap: 0;
+          padding: 0 22px 100px;
+        }
+        nav.side {
+          display: none;
+        }
+        .s-body {
+          padding-left: 18px;
+        }
+        .top-inner {
+          padding: 12px 22px;
+          flex-wrap: wrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-inner">
+        <div class="brand">
+          <span class="dot"></span>
+          <h1>apps/sync</h1>
+          <span>orientation &middot; 2026-07-08</span>
+        </div>
+
+        <div class="editor-pick">
+          <label>open in</label>
+          <div class="seg" id="seg">
+            <button data-scheme="zed" aria-pressed="true">Zed</button>
+            <button data-scheme="vscode" aria-pressed="false">VS Code</button>
+            <button data-scheme="cursor" aria-pressed="false">Cursor</button>
+          </div>
+        </div>
+
+        <div class="progress-chip">
+          <svg class="ring" viewBox="0 0 20 20">
+            <circle class="bg" cx="10" cy="10" r="8"></circle>
+            <circle class="fg" cx="10" cy="10" r="8" id="ring-fg" stroke-dasharray="50.27" stroke-dashoffset="50.27"></circle>
+          </svg>
+          <span id="progress-text">0 / 10</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="shell">
+      <nav class="side" id="sidenav">
+        <div class="grp">
+          <div class="grp-label">Read</div>
+          <a href="#thesis">The one idea</a>
+          <a href="#flow">How a command flows</a>
+          <a href="#invariants">The four invariants</a>
+        </div>
+        <div class="grp">
+          <div class="grp-label">Walk the code</div>
+          <a href="#walk">Reading order</a>
+        </div>
+        <div class="grp">
+          <div class="grp-label">Reference</div>
+          <a href="#elixir">Elixir handles</a>
+          <a href="#findings">What's missing</a>
+          <a href="#first">First changes</a>
+          <a href="#commands">Commands</a>
+        </div>
+      </nav>
+
+      <main>
+        <!-- ============================================================ thesis -->
+        <section id="thesis">
+          <div class="eyebrow">Start here</div>
+          <h2>This is not an Elixir web app</h2>
+          <p class="lede"><code>apps/sync</code> is a tiny <em>event-sourced sync kernel</em> with a few OTP processes wrapped around it — the authoritative realtime room-control server that Chalk's SDK runtime will eventually talk to.</p>
+          <p>It's small, and the shape is already right: pure room rules, exactly one writer per room, a persistence port, and a WebSocket edge that owns no truth.</p>
+          <p>
+            <strong>Read it from the inside out.</strong> If you start at the socket, Elixir feels spooky — supervisors, monitors, mailboxes, none of it load-bearing to the actual logic. If you start at <code>Room</code>, it's just data transformation with process shells bolted on afterward. The
+            reading order below is that path.
+          </p>
+        </section>
+
+        <!-- ============================================================== flow -->
+        <section id="flow">
+          <div class="eyebrow">Mental model</div>
+          <h2>How a command actually flows</h2>
+          <p>
+            One room, one authoritative process. A socket <em>never</em> mutates room state. It sends a command to the room process; the room process asks the pure <code>Room</code> module whether the command is legal, commits the resulting event through the stateholder, and
+            <strong>only then</strong> broadcasts to connected sockets.
+          </p>
+
+          <div class="flow">
+            <div class="flow-row">
+              <a class="node" data-file="lib/chalk_sync/transport/socket.ex" data-line="26">
+                <span class="n-name">Socket</span>
+                <span class="n-role">Decodes the frame. Owns nothing.</span>
+              </a>
+              <div class="arrow">&rarr;</div>
+              <a class="node" data-file="lib/chalk_sync/rooms/room_server.ex" data-line="172">
+                <span class="n-name">RoomServer</span>
+                <span class="n-role">Serializes. One per room.</span>
+              </a>
+              <div class="arrow">&rarr;</div>
+              <a class="node pure" data-file="lib/chalk_sync/rooms/room.ex" data-line="42">
+                <span class="n-name">Room</span>
+                <span class="n-role">Pure. Is this command legal?</span>
+              </a>
+              <div class="arrow">&rarr;</div>
+              <a class="node" data-file="lib/chalk_sync/stateholder.ex" data-line="20">
+                <span class="n-name">Stateholder</span>
+                <span class="n-role">Compare-and-set commit.</span>
+              </a>
+              <div class="arrow">&rarr;</div>
+              <a class="node" data-file="lib/chalk_sync/rooms/room_server.ex" data-line="189">
+                <span class="n-name">fanout</span>
+                <span class="n-role">Broadcast, then ack.</span>
+              </a>
+            </div>
+
+            <p class="flow-note">
+              <strong>Commit is compare-and-set.</strong> If the revision conflicts, a second writer exists — and the server <em>stops</em> rather than corrupt state. Correctness beats availability here. &nbsp;·&nbsp; <strong>Reconnect works by cursor.</strong> The client says &ldquo;I last saw
+              control revision N,&rdquo; and the room process either replays retained events after N or sends a full snapshot.
+            </p>
+          </div>
+        </section>
+
+        <!-- ======================================================== invariants -->
+        <section id="invariants">
+          <div class="eyebrow">The contract</div>
+          <h2>Four invariants hold this together</h2>
+          <p>Every design choice in this app traces back to one of these. When something looks strange, it's usually one of these four being defended.</p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Invariant</th>
+                <th>Where it lives</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>One authoritative writer per room</td>
+                <td><code>Rooms.RoomServer</code> — one GenServer per room, started on demand via <code>Registry</code></td>
+              </tr>
+              <tr>
+                <td>Stateholder is the single source of truth</td>
+                <td><code>Stateholder</code> port; ETS adapter today, Redis next</td>
+              </tr>
+              <tr>
+                <td>WebSocket nodes are stateless fanout</td>
+                <td><code>Transport.Socket</code> holds no authoritative state; if the room server dies it closes with <code>1012</code> and the client reconnects</td>
+              </tr>
+              <tr>
+                <td>Reconnect is snapshot <em>or</em> exact replay</td>
+                <td>The <code>hello</code> cursor is declarative; the writer decides which</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ============================================================== walk -->
+        <section id="walk">
+          <div class="eyebrow">Ten stops, inside out</div>
+          <h2>Walk the code</h2>
+          <p>
+            Click any row to expand it, the checkbox to mark it read, and any
+            <code>function:line</code> chip to jump straight there in your editor. Progress is saved in this browser.
+          </p>
+          <div id="steps"></div>
+        </section>
+
+        <!-- ============================================================ elixir -->
+        <section id="elixir">
+          <div class="eyebrow">If you need them</div>
+          <h2>Elixir handles</h2>
+          <p>Enough to read this app without detouring into a language tour.</p>
+
+          <div class="handles">
+            <div class="handle">
+              <code>defmodule</code> / <code>def</code> / <code>defp</code>
+              <p>Module, public function, private function. That's the whole file structure.</p>
+            </div>
+            <div class="handle">
+              <code>:ok</code> &nbsp;<code>:join</code> &nbsp;<code>:raise_hand</code>
+              <p>Atoms — interned constants. Think enums or symbols.</p>
+            </div>
+            <div class="handle">
+              <code>{:ok, event, room} = Room.apply_command(...)</code>
+              <p>Tagged tuples carry results. Pattern matching does double duty: the left side both asserts the call succeeded and destructures it. A mismatch raises.</p>
+            </div>
+            <div class="handle">
+              <code>%{"type" =&gt; "hello"}</code> vs <code>%{phase: :joined}</code>
+              <p>String keys vs atom keys. Wire data uses strings; internal state uses atoms.</p>
+            </div>
+            <div class="handle">
+              <code>%Claims{tenant_id: id}</code>
+              <p>A struct — a map with a fixed shape declared by a module.</p>
+            </div>
+            <div class="handle">
+              <code>conn |&gt; put_resp_content_type(...) |&gt; send_resp(...)</code>
+              <p>The pipe passes the previous value as the <em>first</em> argument to the next call.</p>
+            </div>
+            <div class="handle">
+              <code>with ... do ... else ... end</code>
+              <p>A happy-path chain. Every pattern matches and <code>do</code> runs; one doesn't and control jumps to <code>else</code>.</p>
+            </div>
+            <div class="handle">
+              <code>GenServer.call</code> &nbsp;<code>send</code> &nbsp;<code>Process.monitor</code>
+              <p>Synchronous process message; async message; ask the runtime for a <code>:DOWN</code> message when that process dies.</p>
+            </div>
+            <div class="handle">
+              <code>use GenServer</code> &nbsp;<code>@impl true</code>
+              <p><code>use</code> injects behaviour boilerplate. <code>@impl true</code> marks a function as implementing a behaviour callback.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================== findings -->
+        <section id="findings">
+          <div class="eyebrow">Honest state of things</div>
+          <h2>What's missing, and how much it matters</h2>
+
+          <div class="finding major">
+            <div class="f-head">
+              <span class="f-sev">Major</span>
+              <span class="f-title">Signed token verification is not implemented</span>
+              <span class="f-cost">blocks running this as a trusted service</span>
+            </div>
+            <p>
+              The <code>TokenVerifier</code> port is shaped, and prod boot refuses to start with an unset verifier — so the guardrails are in place. But the only real adapter today is the dev one, which trusts unsigned base64url JSON. Real per-tenant signature verification is waiting on the
+              control-plane API's key registry.
+            </p>
+            <div class="jumps">
+              <a class="jump" data-file="lib/chalk_sync/auth/token_verifier.ex" data-line="13"><span>the port</span><span class="ln">:13</span></a>
+              <a class="jump" data-file="lib/chalk_sync/auth/dev_token_verifier.ex" data-line="17"><span>dev verifier</span><span class="ln">:17</span></a>
+              <a class="jump" data-file="config/runtime.exs" data-line="10"><span>prod refuses</span><span class="ln">:10</span></a>
+            </div>
+          </div>
+
+          <div class="finding major">
+            <div class="f-head">
+              <span class="f-sev">Major</span>
+              <span class="f-title">Capabilities are carried but never consulted</span>
+              <span class="f-cost">correctness — and it gets worse with time</span>
+            </div>
+            <p>
+              <code>Claims.capabilities</code> rides along on every verified token and nothing reads it. Before host controls or moderation commands land, command authorization needs to sit between verified claims and <code>Room.apply_command/4</code> — most likely inside
+              <code>RoomServer.execute/5</code> or a small policy module called from there.
+            </p>
+            <p>Adding host-only commands <em>first</em> would mean retrofitting a trust boundary under live code. That's why this is the change I'd make before any other.</p>
+            <div class="jumps">
+              <a class="jump" data-file="lib/chalk_sync/auth/claims.ex" data-line="10"><span>capabilities field</span><span class="ln">:10</span></a>
+              <a class="jump" data-file="lib/chalk_sync/rooms/room_server.ex" data-line="172"><span>where it'd go</span><span class="ln">:172</span></a>
+            </div>
+          </div>
+
+          <div class="finding minor">
+            <div class="f-head">
+              <span class="f-sev">Minor</span>
+              <span class="f-title"><code>Stateholder.Memory</code> is single-node only</span>
+              <span class="f-cost">not urgent, just finite</span>
+            </div>
+            <p>ETS is correct for dev and test, and stays correct right up until the second WebSocket node. The port shape already anticipates the Redis adapter — compare-and-set commit plus a retained event tail — so this is a fill-in, not a redesign.</p>
+            <div class="jumps">
+              <a class="jump" data-file="lib/chalk_sync/stateholder.ex" data-line="19"><span>the port shape</span><span class="ln">:19</span></a>
+              <a class="jump" data-file="lib/chalk_sync/stateholder/memory.ex" data-line="67"><span>serialized commit</span><span class="ln">:67</span></a>
+            </div>
+          </div>
+
+          <div class="finding minor">
+            <div class="f-head">
+              <span class="f-sev">Minor</span>
+              <span class="f-title">Protocol types are hand-written</span>
+              <span class="f-cost">maintainability</span>
+            </div>
+            <p>Fine today. It's also the highest-leverage place to connect API/SDK generation, since that's the thing that stops client and server from drifting apart.</p>
+            <div class="jumps">
+              <a class="jump" data-file="lib/chalk_sync/protocol.ex" data-line="1"><span>protocol.ex</span><span class="ln">:1</span></a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================= first -->
+        <section id="first">
+          <div class="eyebrow">Where to start</div>
+          <h2>Good first changes</h2>
+
+          <div class="first-change pick">
+            <div class="fc-rank">1</div>
+            <div class="fc-body">
+              <h3>Add capability enforcement for <code>raise_hand</code> and <code>lower_hand</code></h3>
+              <p>Small enough to learn the app, meaningful enough that you touch the real trust boundary. This is the one I'd start with.</p>
+            </div>
+          </div>
+
+          <div class="first-change">
+            <div class="fc-rank">2</div>
+            <div class="fc-body">
+              <h3>Add one command end-to-end</h3>
+              <p>
+                Something like <code>set_participant_status</code> — but decide its wire event name and snapshot shape <em>before</em> writing code. The path is mechanical once you've picked those: <code>Protocol</code> whitelist &rarr; <code>Room.validate/4</code> &rarr;
+                <code>Room.apply_payload/2</code> &rarr; room tests &rarr; room-server tests &rarr; socket integration test.
+              </p>
+            </div>
+          </div>
+
+          <div class="first-change">
+            <div class="fc-rank">&times;</div>
+            <div class="fc-body">
+              <h3>Don't add schema generation around <code>Protocol</code> yet</h3>
+              <p>It's a contract move that should follow the SDK direction — not a local cleanup you do while you happen to be in the file.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================== commands -->
+        <section id="commands">
+          <div class="eyebrow">From <code>apps/sync</code></div>
+          <h2>Commands</h2>
+
+          <div class="cmd"><code>mix test</code><span class="desc">the whole suite</span><button class="copy" data-copy="mix test">Copy</button></div>
+          <div class="cmd"><code>scripts/gate.sh</code><span class="desc">canonical pre-commit gate — format, compile, credo, test</span><button class="copy" data-copy="scripts/gate.sh">Copy</button></div>
+          <div class="cmd"><code>iex -S mix</code><span class="desc">dev server on localhost:4100</span><button class="copy" data-copy="iex -S mix">Copy</button></div>
+
+          <h3>Focused runs</h3>
+          <div class="cmd"><code>mix test test/chalk_sync/rooms/room_test.exs</code><span class="desc">pure core</span><button class="copy" data-copy="mix test test/chalk_sync/rooms/room_test.exs">Copy</button></div>
+          <div class="cmd"><code>mix test test/chalk_sync/rooms/room_server_test.exs</code><span class="desc">process layer</span><button class="copy" data-copy="mix test test/chalk_sync/rooms/room_server_test.exs">Copy</button></div>
+          <div class="cmd"><code>mix test test/chalk_sync/transport/socket_test.exs</code><span class="desc">end-to-end over a real socket</span><button class="copy" data-copy="mix test test/chalk_sync/transport/socket_test.exs">Copy</button></div>
+        </section>
+      </main>
+    </div>
+
+    <footer>
+      <span>Jump links open <code>/Users/macmini/code/chalk/apps/sync/…</code> at the given line.</span>
+      <button id="reset">Reset reading progress</button>
+    </footer>
+
+    <script>
+      const ROOT = "/Users/macmini/code/chalk/apps/sync";
+      const SCHEMES = { zed: "zed://file", vscode: "vscode://file", cursor: "cursor://file" };
+
+      const STEPS = [
+        {
+          file: "lib/chalk_sync/rooms/room.ex",
+          kind: "core",
+          title: "The pure domain core",
+          body: `No processes, no network, no clocks, no persistence — this module is the entire
+           rulebook for what a room is and what may happen to it. <code>apply_command/4</code>
+           validates a command and returns exactly one revisioned event plus the next state.
+           <code>apply_event/2</code> advances state only when the event's
+           <code>base_revision</code> matches the current revision. <code>snapshot/1</code>
+           produces the wire-shaped welcome payload. That's the whole thing.`,
+          watch: `One command produces <em>exactly one</em> event, and state advances <em>only</em>
+            through <code>apply_event/2</code>. Those two facts together are what make the
+            event log replayable.`,
+          jumps: [
+            ["apply_command/4", 42],
+            ["apply_event/2", 57],
+            ["snapshot/1", 63],
+            ["validate/4 clauses", 80],
+          ],
+        },
+        {
+          file: "test/chalk_sync/rooms/room_test.exs",
+          kind: "test",
+          title: "Intent, stated as tests",
+          body: `The clearest statement of what this app believes, anywhere in the repo. Read the
+           test names top to bottom before you read a single assertion.`,
+          watch: `&ldquo;Replaying the event log reproduces the exact state&rdquo; is the load-bearing
+            one. If that test ever goes red, the sync model is broken, not the test.`,
+          jumps: [
+            ["revision chain from zero", 6],
+            ["non-joined rejected", 15],
+            ["no-op hand changes rejected", 22],
+            ["replay reproduces state", 39],
+          ],
+        },
+        {
+          file: "lib/chalk_sync/rooms/room_server.ex",
+          kind: "shell",
+          title: "The OTP shell around the pure room",
+          body: `<code>join/5</code> starts or finds the room process, subscribes a socket pid, and
+           returns either a snapshot or a replay. <code>command/5</code> routes client commands
+           in. The server hydrates from the stateholder on startup and stops when the last
+           subscriber leaves — which is safe, because the process is a rebuildable projection.
+           Losing it loses nothing.`,
+          watch: `In <code>execute/4</code>, the commit happens <em>before</em> the broadcast. Never
+            the other way around. A revision conflict means split-brain, and the process stops
+            rather than serve wrong state.`,
+          jumps: [
+            ["join/5", 35],
+            ["command/5", 48],
+            ["init — hydrate", 83],
+            ["admit/3", 159],
+            ["execute — commit then fanout", 172],
+            ["join_reply — replay vs snapshot", 193],
+          ],
+        },
+        {
+          file: "test/chalk_sync/rooms/room_server_test.exs",
+          kind: "test",
+          title: "Behavior guide for the process layer",
+          body: `Eight tests, four of which carry the design. Idempotency is per
+           <code>{participant_id, command_id}</code>, remembered in a bounded FIFO of the last
+           256 commands.`,
+          watch: `&ldquo;Server stops when its last subscriber dies and rehydrates on rejoin&rdquo; is
+            the one that proves the process is disposable.`,
+          jumps: [
+            ["fanout to subscribers", 14],
+            ["command-id idempotency", 29],
+            ["cursor replay", 38],
+            ["future cursor rejected", 49],
+            ["stop + rehydrate", 83],
+          ],
+        },
+        {
+          file: "lib/chalk_sync/stateholder.ex",
+          kind: "core",
+          title: "The persistence port",
+          body: `A <em>behaviour</em> — Elixir's word for an interface. Three callbacks:
+           <code>load/1</code>, compare-and-set <code>commit/4</code>, and
+           <code>events_since/2</code>.`,
+          watch: `The point of this file is what it <em>prevents</em>: <code>RoomServer</code> has no
+            idea whether storage is ETS, Redis, or something else.`,
+          jumps: [
+            ["load/1", 19],
+            ["commit/4", 20],
+            ["events_since/2", 26],
+          ],
+        },
+        {
+          file: "lib/chalk_sync/stateholder/memory.ex",
+          kind: "shell",
+          title: "The only adapter today (ETS)",
+          body: `ETS tables hold rooms and retained events. Writes funnel through a GenServer so
+           compare-and-set stays serialized. Replay pulls events newer than the cursor,
+           oldest first.`,
+          watch: `Reads hit ETS directly; only writes go through the process. That's the whole reason
+            this is fast <em>and</em> correct on a single node.`,
+          jumps: [
+            ["ETS tables", 61],
+            ["serialized commit", 67],
+            ["events_since/2", 35],
+          ],
+        },
+        {
+          file: "lib/chalk_sync/protocol.ex",
+          kind: "core",
+          title: "The wire contract",
+          body: `The only place the wire shape lives — transports and room logic never touch raw JSON.
+           Clients may only issue whitelisted commands (<code>raise_hand</code> and
+           <code>lower_hand</code> today; join and leave are driven by socket lifecycle). Every
+           event carries <code>base_revision &rarr; revision</code> so clients detect drops,
+           duplicates, and reorders. Every command acks exactly one of
+           <code>committed | duplicate | rejected</code>.`,
+          watch: `The moduledoc at the top is a complete, readable spec of every frame in both
+            directions. Read it first — it's faster than reading the code.`,
+          jumps: [
+            ["frame spec (moduledoc)", 10],
+            ["client command whitelist", 33],
+            ["decode/1", 45],
+            ["encode_welcome/2", 95],
+          ],
+        },
+        {
+          file: "lib/chalk_sync/auth/",
+          kind: "core",
+          title: "The auth port",
+          body: `Claims carry tenant, room, participant, display name, and capabilities. The verifier
+           is a behaviour-backed port. The dev verifier <em>deliberately</em> trusts unsigned
+           base64url JSON — and prod boot refuses to start with it configured.`,
+          watch: `<code>capabilities</code> is populated and read by nobody. See the findings below;
+            this is the trust boundary that isn't finished.`,
+          jumps: [
+            ["claims.ex — defstruct", 10, "lib/chalk_sync/auth/claims.ex"],
+            ["token_verifier.ex — @callback", 13, "lib/chalk_sync/auth/token_verifier.ex"],
+            ["dev_token_verifier.ex — verify/1", 17, "lib/chalk_sync/auth/dev_token_verifier.ex"],
+            ["runtime.exs — prod refuses", 10, "config/runtime.exs"],
+          ],
+        },
+        {
+          file: "lib/chalk_sync/transport/socket.ex",
+          kind: "shell",
+          title: "The thin edge",
+          body: `Wait for <code>hello</code>, verify the token, join the room, encode the welcome,
+           forward commands to <code>RoomServer</code>, push room events back out. That is
+           genuinely all it does.`,
+          watch: `The branch worth knowing: when the room server dies, the socket closes with
+            <code>1012</code> and the client reconnects and re-snapshots. No state to recover,
+            because the socket never held any.`,
+          jumps: [
+            ["handle_in — text frame", 26],
+            ["push room event", 38],
+            [":DOWN &rarr; close 1012", 48],
+          ],
+        },
+        {
+          file: "lib/chalk_sync/transport/router.ex",
+          kind: "shell",
+          title: "Routes and supervision tree",
+          body: `The router exposes exactly two routes: <code>GET /healthz</code> (unversioned, for
+           ops) and <code>GET /v1/sync</code> (the WebSocket). The application starts the room
+           registry, the dynamic room supervisor, the stateholder, and the Bandit listener.`,
+          watch: `Two routes. That's the entire public surface of this server.`,
+          jumps: [
+            ["GET /healthz", 12],
+            ["GET /v1/sync", 18],
+            ["supervision tree", 8, "lib/chalk_sync/application.ex"],
+          ],
+        },
+      ];
+
+      /* ---------------------------------------------------------------- editor scheme */
+
+      let scheme = localStorage.getItem("sync-orient-scheme") || "zed";
+
+      function href(file, line) {
+        return `${SCHEMES[scheme]}${ROOT}/${file}:${line}`;
+      }
+
+      function paintLinks() {
+        document.querySelectorAll("[data-file]").forEach((el) => {
+          el.setAttribute("href", href(el.dataset.file, el.dataset.line || 1));
+        });
+        document.querySelectorAll("#seg button").forEach((b) => {
+          b.setAttribute("aria-pressed", String(b.dataset.scheme === scheme));
+        });
+      }
+
+      document.getElementById("seg").addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        scheme = b.dataset.scheme;
+        localStorage.setItem("sync-orient-scheme", scheme);
+        paintLinks();
+      });
+
+      /* ---------------------------------------------------------------- steps */
+
+      const CHECK_SVG = `<svg viewBox="0 0 12 12"><polyline points="2,6.5 4.6,9 10,3"/></svg>`;
+      const done = new Set(JSON.parse(localStorage.getItem("sync-orient-done") || "[]"));
+
+      function renderSteps() {
+        const host = document.getElementById("steps");
+        host.innerHTML = STEPS.map((s, i) => {
+          const isDone = done.has(s.file);
+          const jumps = s.jumps
+            .map(
+              ([label, line, override]) =>
+                `<a class="jump" data-file="${override || s.file}" data-line="${line}">
+         <span>${label}</span><span class="ln">:${line}</span>
+       </a>`,
+            )
+            .join("");
+
+          return `<article class="step ${isDone ? "done" : ""}" data-key="${s.file}">
+      <div class="s-head">
+        <div class="s-check" role="checkbox" aria-checked="${isDone}" tabindex="0">${CHECK_SVG}</div>
+        <div class="s-num">${String(i + 1).padStart(2, "0")}</div>
+        <div class="s-meta">
+          <div class="s-title">${s.title}</div>
+          <span class="s-file">${s.file}</span>
+        </div>
+        <div class="s-kind ${s.kind}">${s.kind}</div>
+        <div class="s-caret">&#9654;</div>
+      </div>
+      <div class="s-body">
+        <p>${s.body}</p>
+        <p class="watch"><b>What to watch for</b>${s.watch}</p>
+        <div class="jumps">${jumps}</div>
+      </div>
+    </article>`;
+        }).join("");
+
+        paintLinks();
+        updateProgress();
+      }
+
+      document.getElementById("steps").addEventListener("click", (e) => {
+        const step = e.target.closest(".step");
+        if (!step) return;
+
+        if (e.target.closest(".s-check")) {
+          const key = step.dataset.key;
+          done.has(key) ? done.delete(key) : done.add(key);
+          localStorage.setItem("sync-orient-done", JSON.stringify([...done]));
+          step.classList.toggle("done", done.has(key));
+          step.querySelector(".s-check").setAttribute("aria-checked", String(done.has(key)));
+          updateProgress();
+          return;
+        }
+
+        if (e.target.closest(".jump")) return; // let the link fire
+
+        if (e.target.closest(".s-head")) {
+          step.toggleAttribute("open-panel");
+        }
+      });
+
+      document.getElementById("steps").addEventListener("keydown", (e) => {
+        if ((e.key === " " || e.key === "Enter") && e.target.classList.contains("s-check")) {
+          e.preventDefault();
+          e.target.click();
+        }
+      });
+
+      function updateProgress() {
+        const n = done.size,
+          total = STEPS.length;
+        document.getElementById("progress-text").textContent = `${n} / ${total}`;
+        const C = 2 * Math.PI * 8;
+        document.getElementById("ring-fg").style.strokeDashoffset = C - (n / total) * C;
+      }
+
+      document.getElementById("reset").addEventListener("click", () => {
+        done.clear();
+        localStorage.removeItem("sync-orient-done");
+        renderSteps();
+      });
+
+      /* ---------------------------------------------------------------- copy buttons */
+
+      document.addEventListener("click", async (e) => {
+        const b = e.target.closest(".copy");
+        if (!b) return;
+        await navigator.clipboard.writeText(b.dataset.copy);
+        const prev = b.textContent;
+        b.textContent = "Copied";
+        b.classList.add("ok");
+        setTimeout(() => {
+          b.textContent = prev;
+          b.classList.remove("ok");
+        }, 1200);
+      });
+
+      /* ---------------------------------------------------------------- scrollspy */
+
+      const links = [...document.querySelectorAll("nav.side a")];
+      const sections = links.map((a) => document.querySelector(a.getAttribute("href")));
+
+      const spy = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((en) => {
+            if (!en.isIntersecting) return;
+            const i = sections.indexOf(en.target);
+            links.forEach((a, j) => a.classList.toggle("active", i === j));
+          });
+        },
+        { rootMargin: "-88px 0px -70% 0px" },
+      );
+
+      sections.forEach((s) => s && spy.observe(s));
+
+      renderSteps();
+    </script>
+  </body>
+</html>

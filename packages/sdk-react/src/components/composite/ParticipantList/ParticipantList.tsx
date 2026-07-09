@@ -7,7 +7,7 @@ import { cn } from "../../../utils/cn";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../../utils/colorGenerator";
 import { ParticipantRow } from "./ParticipantRow";
 
-export interface Participant {
+export interface ParticipantListParticipant {
   id: string;
   displayName: string;
   isLocal?: boolean;
@@ -21,7 +21,7 @@ export interface Participant {
 export type ParticipantListVariant = "default" | "sidebar" | "mobile";
 
 export interface ParticipantListProps {
-  participants: Participant[];
+  participants: ParticipantListParticipant[];
   onMuteParticipant?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
   onMakeHost?: (id: string) => void;
@@ -42,7 +42,7 @@ export interface ParticipantListProps {
   title?: string;
 }
 
-function getParticipantIdentity(participant: Participant): string {
+function getParticipantIdentity(participant: ParticipantListParticipant): string {
   return participant.id || participant.displayName || "__unknown-participant__";
 }
 

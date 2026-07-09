@@ -1,10 +1,10 @@
 import { Crown01Icon, Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, Shield01Icon, UserRemove01Icon } from "../../../utils/icons";
 import { cn } from "../../../utils/cn";
 import { VolumeSlider } from "../../atomic";
-import type { Participant, ParticipantListVariant } from "./ParticipantList";
+import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantList";
 
 export interface ParticipantOptionsMenuProps {
-  participant: Participant;
+  participant: ParticipantListParticipant;
   variant: ParticipantListVariant;
   canManageParticipants: boolean;
   onClose: () => void;
