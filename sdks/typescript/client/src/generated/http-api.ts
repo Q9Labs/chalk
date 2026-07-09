@@ -385,6 +385,37 @@ const recordingsGroup = HttpApiGroup.make("recordings")
     }),
   )
   .add(
+    HttpApiEndpoint.post("transcribeRecording", "/v1/tenants/:tenant_id/recordings/:recording_id/transcriptions", {
+      params: S.TranscribeRecordingPathParamsSchema,
+      payload: S.TranscribeRecordingRequestBodySchema,
+      success: S.TranscribeRecordingResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.InvalidAiAudioErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidAiConfigErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidAiGatewayErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidAiModelErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRecordingIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidStorageKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidStorageProviderErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.MissingAiCredentialsErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RecordingNotReadyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.AiProviderRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.AiProviderFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.AiProviderPaymentRequiredErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.AiProviderUnauthorizedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.patch("updateRecording", "/v1/tenants/:tenant_id/recordings/:recording_id", {
       params: S.UpdateRecordingPathParamsSchema,
       payload: S.UpdateRecordingRequestBodySchema,

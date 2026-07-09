@@ -55,7 +55,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
 	endpoints = append(endpoints, roomEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil)...)
-	endpoints = append(endpoints, transcriptEndpoints(nil, nil, nil, nil, nil)...)
+	endpoints = append(endpoints, transcriptEndpoints(nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
 	endpoints = append(endpoints, integrationEndpoints(nil, nil, integrationRouteOptions{})...)
 	return routeContracts(endpoints)

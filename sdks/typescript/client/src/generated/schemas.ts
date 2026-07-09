@@ -462,6 +462,12 @@ export const TenantListSchema = Schema.Struct({
 });
 export type TenantList = typeof TenantListSchema.Type;
 
+export const TranscribeRecordingRequestSchema = Schema.Struct({
+  language: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+  model: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+});
+export type TranscribeRecordingRequest = typeof TranscribeRecordingRequestSchema.Type;
+
 export const TranscriptIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TranscriptId"));
 export type TranscriptId = typeof TranscriptIdSchema.Type;
 
@@ -1054,6 +1060,25 @@ export const StartIntegrationConnection429ResponseHeadersSchema = Schema.Struct(
 });
 export type StartIntegrationConnection429ResponseHeaders = typeof StartIntegrationConnection429ResponseHeadersSchema.Type;
 
+export const TranscribeRecordingPathParamsSchema = Schema.Struct({
+  recording_id: RecordingIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type TranscribeRecordingPathParams = typeof TranscribeRecordingPathParamsSchema.Type;
+
+export const TranscribeRecordingRequestBodySchema = TranscribeRecordingRequestSchema;
+export type TranscribeRecordingRequestBody = typeof TranscribeRecordingRequestBodySchema.Type;
+
+export const TranscribeRecordingResponseSchema = TranscriptSchema;
+export type TranscribeRecordingResponse = typeof TranscribeRecordingResponseSchema.Type;
+
+export const TranscribeRecording429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type TranscribeRecording429ResponseHeaders = typeof TranscribeRecording429ResponseHeadersSchema.Type;
+
 export const UpdateMembershipPathParamsSchema = Schema.Struct({
   membership_id: MembershipIdSchema,
   tenant_id: TenantIdSchema,
@@ -1167,6 +1192,82 @@ export const UpdateTranscript429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type UpdateTranscript429ResponseHeaders = typeof UpdateTranscript429ResponseHeadersSchema.Type;
+
+export class AiProviderFailedError extends Schema.TaggedErrorClass<AiProviderFailedError>()("AiProviderFailedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_failed"),
+    message: Schema.String,
+  }),
+}) {}
+export const AiProviderFailedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_failed"),
+    message: Schema.String,
+  }),
+});
+export const AiProviderFailedErrorSchema = AiProviderFailedErrorWireSchema.pipe(
+  Schema.decodeTo(AiProviderFailedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderFailedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AiProviderPaymentRequiredError extends Schema.TaggedErrorClass<AiProviderPaymentRequiredError>()("AiProviderPaymentRequiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_payment_required"),
+    message: Schema.String,
+  }),
+}) {}
+export const AiProviderPaymentRequiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_payment_required"),
+    message: Schema.String,
+  }),
+});
+export const AiProviderPaymentRequiredErrorSchema = AiProviderPaymentRequiredErrorWireSchema.pipe(
+  Schema.decodeTo(AiProviderPaymentRequiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderPaymentRequiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AiProviderRateLimitedError extends Schema.TaggedErrorClass<AiProviderRateLimitedError>()("AiProviderRateLimitedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_rate_limited"),
+    message: Schema.String,
+  }),
+}) {}
+export const AiProviderRateLimitedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_rate_limited"),
+    message: Schema.String,
+  }),
+});
+export const AiProviderRateLimitedErrorSchema = AiProviderRateLimitedErrorWireSchema.pipe(
+  Schema.decodeTo(AiProviderRateLimitedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderRateLimitedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AiProviderUnauthorizedError extends Schema.TaggedErrorClass<AiProviderUnauthorizedError>()("AiProviderUnauthorizedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_unauthorized"),
+    message: Schema.String,
+  }),
+}) {}
+export const AiProviderUnauthorizedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("ai_provider_unauthorized"),
+    message: Schema.String,
+  }),
+});
+export const AiProviderUnauthorizedErrorSchema = AiProviderUnauthorizedErrorWireSchema.pipe(
+  Schema.decodeTo(AiProviderUnauthorizedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderUnauthorizedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
 
 export class EmailAlreadyRegisteredError extends Schema.TaggedErrorClass<EmailAlreadyRegisteredError>()("EmailAlreadyRegisteredError", {
   error: Schema.Struct({
@@ -1373,6 +1474,82 @@ export const InternalErrorWireSchema = Schema.Struct({
 export const InternalErrorSchema = InternalErrorWireSchema.pipe(
   Schema.decodeTo(InternalError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InternalError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidAiAudioError extends Schema.TaggedErrorClass<InvalidAiAudioError>()("InvalidAiAudioError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_audio"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidAiAudioErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_audio"),
+    message: Schema.String,
+  }),
+});
+export const InvalidAiAudioErrorSchema = InvalidAiAudioErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidAiAudioError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiAudioError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidAiConfigError extends Schema.TaggedErrorClass<InvalidAiConfigError>()("InvalidAiConfigError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_config"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidAiConfigErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_config"),
+    message: Schema.String,
+  }),
+});
+export const InvalidAiConfigErrorSchema = InvalidAiConfigErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidAiConfigError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiConfigError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidAiGatewayError extends Schema.TaggedErrorClass<InvalidAiGatewayError>()("InvalidAiGatewayError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_gateway"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidAiGatewayErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_gateway"),
+    message: Schema.String,
+  }),
+});
+export const InvalidAiGatewayErrorSchema = InvalidAiGatewayErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidAiGatewayError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiGatewayError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidAiModelError extends Schema.TaggedErrorClass<InvalidAiModelError>()("InvalidAiModelError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_model"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidAiModelErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_ai_model"),
+    message: Schema.String,
+  }),
+});
+export const InvalidAiModelErrorSchema = InvalidAiModelErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidAiModelError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiModelError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2137,6 +2314,25 @@ export const InvalidUserNameErrorSchema = InvalidUserNameErrorWireSchema.pipe(
   }),
 );
 
+export class MissingAiCredentialsError extends Schema.TaggedErrorClass<MissingAiCredentialsError>()("MissingAiCredentialsError", {
+  error: Schema.Struct({
+    code: Schema.Literal("missing_ai_credentials"),
+    message: Schema.String,
+  }),
+}) {}
+export const MissingAiCredentialsErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("missing_ai_credentials"),
+    message: Schema.String,
+  }),
+});
+export const MissingAiCredentialsErrorSchema = MissingAiCredentialsErrorWireSchema.pipe(
+  Schema.decodeTo(MissingAiCredentialsError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MissingAiCredentialsError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("NotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("not_found"),
@@ -2601,6 +2797,32 @@ export const StartIntegrationConnectionErrorSchema = Schema.Union([
 ]);
 export type StartIntegrationConnectionError = typeof StartIntegrationConnectionErrorSchema.Type;
 
+export const TranscribeRecordingErrorSchema = Schema.Union([
+  AiProviderFailedErrorSchema,
+  AiProviderPaymentRequiredErrorSchema,
+  AiProviderRateLimitedErrorSchema,
+  AiProviderUnauthorizedErrorSchema,
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidAiAudioErrorSchema,
+  InvalidAiConfigErrorSchema,
+  InvalidAiGatewayErrorSchema,
+  InvalidAiModelErrorSchema,
+  InvalidRecordingIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidStorageKeyErrorSchema,
+  InvalidStorageProviderErrorSchema,
+  InvalidTenantIdErrorSchema,
+  MissingAiCredentialsErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  RecordingNotReadyErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type TranscribeRecordingError = typeof TranscribeRecordingErrorSchema.Type;
+
 export const UpdateMembershipErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   InternalErrorSchema,
@@ -2719,6 +2941,7 @@ export const ChalkOperationPolicies = {
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   startIntegrationConnection: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  transcribeRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRoom: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

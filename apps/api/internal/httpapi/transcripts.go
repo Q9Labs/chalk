@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
@@ -38,6 +42,10 @@ type TranscriptService interface {
 
 type AITranscriptionService interface {
 	Transcribe(ctx context.Context, input ai.TranscribeInput) (ai.Transcription, error)
+}
+
+type RecordingObjectService interface {
+	GetObject(ctx context.Context, key string) (objectstorage.ObjectReader, error)
 }
 
 type transcriptResponse struct {
@@ -75,14 +83,8 @@ type createTranscriptRequest struct {
 }
 
 type transcribeRecordingRequest struct {
-	Model      string                   `json:"model"`
-	InputAudio transcribeRecordingAudio `json:"input_audio"`
-	Language   string                   `json:"language"`
-}
-
-type transcribeRecordingAudio struct {
-	Data   string `json:"data"`
-	Format string `json:"format"`
+	Model    utilities.OptionalString `json:"model"`
+	Language utilities.OptionalString `json:"language"`
 }
 
 type updateTranscriptRequest struct {
@@ -124,16 +126,16 @@ type updateTranscriptEndpointRequest struct {
 	Body         updateTranscriptRequest
 }
 
-func mountTranscriptRoutes(r chi.Router, service TranscriptService, recordings RecordingService, tenants TenantService, ai AITranscriptionService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range transcriptEndpoints(service, recordings, tenants, ai, authorizer) {
+func mountTranscriptRoutes(r chi.Router, service TranscriptService, recordings RecordingService, recordingObjects RecordingObjectService, tenants TenantService, ai AITranscriptionService, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range transcriptEndpoints(service, recordings, recordingObjects, tenants, ai, authorizer) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func transcriptEndpoints(service TranscriptService, recordings RecordingService, tenants TenantService, ai AITranscriptionService, authorizer TenantAuthorizer) []RouteEndpoint {
+func transcriptEndpoints(service TranscriptService, recordings RecordingService, recordingObjects RecordingObjectService, tenants TenantService, ai AITranscriptionService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createTranscriptEndpoint(service, authorizer),
-		transcribeRecordingEndpoint(service, recordings, tenants, ai, authorizer),
+		transcribeRecordingEndpoint(service, recordings, recordingObjects, tenants, ai, authorizer),
 		listTranscriptsEndpoint(service, authorizer),
 		getTranscriptEndpoint(service, authorizer),
 		updateTranscriptEndpoint(service, authorizer),
@@ -168,9 +170,9 @@ func createTranscriptEndpoint(service TranscriptService, authorizer TenantAuthor
 		MapErrors(transcriptEndpointAPIError)
 }
 
-func transcribeRecordingEndpoint(service TranscriptService, recordingService RecordingService, tenantService TenantService, aiService AITranscriptionService, authorizer TenantAuthorizer) Endpoint[transcribeRecordingEndpointRequest, transcriptResponse] {
+func transcribeRecordingEndpoint(service TranscriptService, recordingService RecordingService, recordingObjects RecordingObjectService, tenantService TenantService, aiService AITranscriptionService, authorizer TenantAuthorizer) Endpoint[transcribeRecordingEndpointRequest, transcriptResponse] {
 	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/transcriptions", "/tenants/{tenant_id}/recordings/{recording_id}/transcriptions", "transcribeRecording", decodeTranscribeRecordingRequest, func(ctx context.Context, request transcribeRecordingEndpointRequest) (transcriptResponse, error) {
-		if service == nil || recordingService == nil || tenantService == nil || aiService == nil {
+		if service == nil || recordingService == nil || recordingObjects == nil || tenantService == nil || aiService == nil {
 			return transcriptResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTranscriptsPermission); err != nil {
@@ -188,17 +190,40 @@ func transcribeRecordingEndpoint(service TranscriptService, recordingService Rec
 		if recording.Status != recordings.StatusCompleted {
 			return transcriptResponse{}, apiErrorRecordingNotReady
 		}
+		if recording.StorageKey == nil {
+			return transcriptResponse{}, apiErrorRecordingNotReady
+		}
+		if recording.StorageProvider != recordings.StorageProviderR2 {
+			return transcriptResponse{}, apiErrorInvalidStorageProvider
+		}
+		if !recordings.TenantStorageKey(request.TenantID, recording.StorageKey) {
+			return transcriptResponse{}, apiErrorInvalidStorageKey
+		}
 
 		config, err := ai.ParseConfig(tenant.AIProviderConfig)
 		if err != nil {
 			return transcriptResponse{}, err
 		}
+		model, err := optionalRequestString(request.Body.Model, false)
+		if err != nil {
+			return transcriptResponse{}, err
+		}
+		language, err := optionalRequestString(request.Body.Language, true)
+		if err != nil {
+			return transcriptResponse{}, err
+		}
+		object, err := recordingObjects.GetObject(ctx, *recording.StorageKey)
+		if err != nil {
+			return transcriptResponse{}, err
+		}
+		defer object.Body.Close()
+
 		result, err := aiService.Transcribe(ctx, ai.TranscribeInput{
 			Config:      config,
-			Model:       request.Body.Model,
-			AudioData:   request.Body.InputAudio.Data,
-			AudioFormat: request.Body.InputAudio.Format,
-			Language:    request.Body.Language,
+			Model:       model,
+			Audio:       object.Body,
+			AudioFormat: recordingAudioFormat(*recording.StorageKey, object.ContentType),
+			Language:    language,
 		})
 		if err != nil {
 			return transcriptResponse{}, err
@@ -214,7 +239,7 @@ func transcribeRecordingEndpoint(service TranscriptService, recordingService Rec
 			Status:      transcripts.StatusCompleted,
 			Provider:    ai.ProviderOpenRouter,
 			Model:       result.Model,
-			Languages:   transcriptionLanguages(request.Body.Language),
+			Languages:   transcriptionLanguages(language),
 			Text:        &text,
 			Metadata:    transcriptionMetadata(result),
 			CompletedAt: &completedAt,
@@ -230,7 +255,7 @@ func transcribeRecordingEndpoint(service TranscriptService, recordingService Rec
 		Parameters(tenantIDParameter(), recordingIDParameter()).
 		RequestBody("TranscribeRecordingRequest", transcribeRecordingRequest{}).
 		Responds(http.StatusCreated, "Transcript", transcriptResponse{}).
-		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorInvalidAIConfig, apiErrorInvalidAIGateway, apiErrorMissingAICredentials, apiErrorInvalidAIModel, apiErrorInvalidAIAudio, apiErrorAIProviderUnauthorized, apiErrorAIProviderPayment, apiErrorAIProviderRateLimited, apiErrorAIProviderFailed, apiErrorRateLimited)...).
+		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorRecordingArtifactNotFound, apiErrorInvalidAIConfig, apiErrorInvalidAIGateway, apiErrorMissingAICredentials, apiErrorInvalidAIModel, apiErrorInvalidAIAudio, apiErrorAIProviderUnauthorized, apiErrorAIProviderPayment, apiErrorAIProviderRateLimited, apiErrorAIProviderFailed, apiErrorRateLimited)...).
 		MapErrors(transcriptEndpointAPIError)
 }
 
@@ -404,6 +429,9 @@ func transcriptEndpointAPIError(err error) (APIError, bool) {
 	if apiErr, ok := recordingServiceAPIError(err); ok {
 		return apiErr, true
 	}
+	if apiErr, ok := objectStorageAPIError(err); ok {
+		return apiErr, true
+	}
 	if apiErr, ok := tenantServiceAPIError(err); ok {
 		return apiErr, true
 	}
@@ -530,6 +558,50 @@ func transcriptionMetadata(transcription ai.Transcription) json.RawMessage {
 		return nil
 	}
 	return raw
+}
+
+func recordingAudioFormat(storageKey string, contentType string) string {
+	format := strings.TrimPrefix(strings.ToLower(path.Ext(storageKey)), ".")
+	if format != "" {
+		return format
+	}
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	if err != nil {
+		mediaType = strings.TrimSpace(contentType)
+	}
+	switch strings.ToLower(mediaType) {
+	case "audio/wav", "audio/x-wav":
+		return "wav"
+	case "audio/mpeg":
+		return "mp3"
+	case "audio/mp4":
+		return "m4a"
+	case "video/mp4":
+		return "mp4"
+	case "audio/ogg":
+		return "ogg"
+	case "audio/webm", "video/webm":
+		return "webm"
+	case "audio/aac":
+		return "aac"
+	case "audio/flac":
+		return "flac"
+	default:
+		return ""
+	}
+}
+
+func optionalRequestString(value utilities.OptionalString, allowNull bool) (string, error) {
+	if !value.Set {
+		return "", nil
+	}
+	if value.Value == nil {
+		if allowNull {
+			return "", nil
+		}
+		return "", apiErrorInvalidRequest
+	}
+	return *value.Value, nil
 }
 
 func (r createTranscriptRequest) toCreateInputValue(tenantID utilities.ID, recordingID utilities.ID) (transcripts.CreateInput, error) {

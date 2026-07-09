@@ -1,10 +1,11 @@
 package ai
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 
@@ -43,6 +44,8 @@ type Config struct {
 
 type Client interface {
 	Transcribe(ctx context.Context, input TranscribeInput) (Transcription, error)
+	GenerateText(ctx context.Context, input GenerateTextInput) (Generation, error)
+	GenerateObject(ctx context.Context, input GenerateObjectInput) (Generation, error)
 }
 
 type Service struct {
@@ -52,7 +55,7 @@ type Service struct {
 type TranscribeInput struct {
 	Config      Config
 	Model       string
-	AudioData   string
+	Audio       io.Reader
 	AudioFormat string
 	Language    string
 }
@@ -61,6 +64,33 @@ type Transcription struct {
 	Gateway Gateway
 	Model   string
 	Text    string
+	Usage   json.RawMessage
+}
+
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type GenerateTextInput struct {
+	Config   Config
+	Model    string
+	Messages []Message
+}
+
+type GenerateObjectInput struct {
+	Config     Config
+	Model      string
+	Messages   []Message
+	SchemaName string
+	Schema     json.RawMessage
+}
+
+type Generation struct {
+	Gateway Gateway
+	Model   string
+	Text    string
+	Object  json.RawMessage
 	Usage   json.RawMessage
 }
 
@@ -78,11 +108,10 @@ func ParseConfig(raw json.RawMessage) (Config, error) {
 		return Config{}, ErrInvalidConfig
 	}
 
-	gateway, err := requiredGateway(config.Gateway)
-	if err != nil {
-		return Config{}, err
+	config.Gateway = Gateway(strings.TrimSpace(string(config.Gateway)))
+	if config.Gateway != GatewayOpenRouter {
+		return Config{}, ErrInvalidGateway
 	}
-	config.Gateway = gateway
 
 	apiKey, err := utilities.RequiredString(config.APIKey)
 	if err != nil {
@@ -90,11 +119,13 @@ func ParseConfig(raw json.RawMessage) (Config, error) {
 	}
 	config.APIKey = apiKey
 
-	defaultModel, err := optionalTrimmedString(config.DefaultModel)
-	if err != nil {
-		return Config{}, ErrInvalidModel
+	if config.DefaultModel != "" {
+		defaultModel, err := utilities.RequiredString(config.DefaultModel)
+		if err != nil {
+			return Config{}, ErrInvalidModel
+		}
+		config.DefaultModel = defaultModel
 	}
-	config.DefaultModel = defaultModel
 
 	return config, nil
 }
@@ -119,15 +150,26 @@ func (s Service) Transcribe(ctx context.Context, input TranscribeInput) (Transcr
 	}
 	input.AudioFormat = audioFormat
 
-	if err := validateBase64Audio(input.AudioData); err != nil {
-		return Transcription{}, err
-	}
-
-	language, err := optionalTrimmedString(input.Language)
-	if err != nil {
+	if input.Audio == nil {
 		return Transcription{}, ErrInvalidAudio
 	}
-	input.Language = language
+	var firstByte [1]byte
+	n, err := input.Audio.Read(firstByte[:])
+	if err != nil && err != io.EOF {
+		return Transcription{}, ErrInvalidAudio
+	}
+	if n == 0 {
+		return Transcription{}, ErrInvalidAudio
+	}
+	input.Audio = io.MultiReader(bytes.NewReader(firstByte[:n]), input.Audio)
+
+	if input.Language != "" {
+		language, err := utilities.RequiredString(input.Language)
+		if err != nil {
+			return Transcription{}, ErrInvalidAudio
+		}
+		input.Language = language
+	}
 
 	transcription, err := s.client.Transcribe(ctx, input)
 	if err != nil {
@@ -138,6 +180,70 @@ func (s Service) Transcribe(ctx context.Context, input TranscribeInput) (Transcr
 		transcription.Model = input.Model
 	}
 	return transcription, nil
+}
+
+func (s Service) GenerateText(ctx context.Context, input GenerateTextInput) (Generation, error) {
+	if s.client == nil {
+		return Generation{}, ErrClientUnavailable
+	}
+	if input.Config.Gateway != GatewayOpenRouter {
+		return Generation{}, ErrInvalidGateway
+	}
+
+	model, err := resolvedModel(input.Model, input.Config.DefaultModel)
+	if err != nil {
+		return Generation{}, err
+	}
+	input.Model = model
+	if err := validateMessages(input.Messages); err != nil {
+		return Generation{}, err
+	}
+
+	generation, err := s.client.GenerateText(ctx, input)
+	if err != nil {
+		return Generation{}, err
+	}
+	generation.Gateway = input.Config.Gateway
+	if generation.Model == "" {
+		generation.Model = input.Model
+	}
+	return generation, nil
+}
+
+func (s Service) GenerateObject(ctx context.Context, input GenerateObjectInput) (Generation, error) {
+	if s.client == nil {
+		return Generation{}, ErrClientUnavailable
+	}
+	if input.Config.Gateway != GatewayOpenRouter {
+		return Generation{}, ErrInvalidGateway
+	}
+
+	model, err := resolvedModel(input.Model, input.Config.DefaultModel)
+	if err != nil {
+		return Generation{}, err
+	}
+	input.Model = model
+	if err := validateMessages(input.Messages); err != nil {
+		return Generation{}, err
+	}
+	schemaName, err := utilities.RequiredString(input.SchemaName)
+	if err != nil {
+		return Generation{}, ErrInvalidConfig
+	}
+	input.SchemaName = schemaName
+	if len(input.Schema) == 0 || !json.Valid(input.Schema) {
+		return Generation{}, ErrInvalidConfig
+	}
+
+	generation, err := s.client.GenerateObject(ctx, input)
+	if err != nil {
+		return Generation{}, err
+	}
+	generation.Gateway = input.Config.Gateway
+	if generation.Model == "" {
+		generation.Model = input.Model
+	}
+	return generation, nil
 }
 
 func resolvedModel(requestModel string, defaultModel string) (string, error) {
@@ -154,17 +260,6 @@ func resolvedModel(requestModel string, defaultModel string) (string, error) {
 	return defaultModel, nil
 }
 
-func requiredGateway(value Gateway) (Gateway, error) {
-	gateway := Gateway(strings.TrimSpace(string(value)))
-	if gateway == "" {
-		return "", ErrInvalidGateway
-	}
-	if gateway != GatewayOpenRouter {
-		return "", ErrInvalidGateway
-	}
-	return gateway, nil
-}
-
 func audioFormat(value string) (string, error) {
 	format, err := utilities.RequiredString(value)
 	if err != nil {
@@ -177,21 +272,17 @@ func audioFormat(value string) (string, error) {
 	return format, nil
 }
 
-func validateBase64Audio(value string) error {
-	data, err := utilities.RequiredString(value)
-	if err != nil {
-		return ErrInvalidAudio
+func validateMessages(messages []Message) error {
+	if len(messages) == 0 {
+		return ErrInvalidConfig
 	}
-	decoded, err := base64.StdEncoding.DecodeString(data)
-	if err != nil || len(decoded) == 0 {
-		return ErrInvalidAudio
+	for _, message := range messages {
+		if _, err := utilities.RequiredString(message.Role); err != nil {
+			return ErrInvalidConfig
+		}
+		if _, err := utilities.RequiredString(message.Content); err != nil {
+			return ErrInvalidConfig
+		}
 	}
 	return nil
-}
-
-func optionalTrimmedString(value string) (string, error) {
-	if value == "" {
-		return "", nil
-	}
-	return utilities.RequiredString(value)
 }

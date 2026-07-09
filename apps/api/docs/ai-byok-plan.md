@@ -173,10 +173,6 @@ Request:
 ```json
 {
   "model": "openai/whisper-1",
-  "input_audio": {
-    "data": "<base64 audio bytes>",
-    "format": "wav"
-  },
   "language": "en"
 }
 ```
@@ -214,8 +210,11 @@ Contract requirements:
 - Add the endpoint to `PreviewRouteContracts()` if a route is implemented.
 - Update the route contract test when the route inventory changes.
 
-The route accepts base64 audio in the request body for this first synchronous
-MVP. It does not fetch recording storage or enqueue async transcription work.
+The route reads the completed recording artifact from object storage using the
+recording row's tenant-owned `storage_key`; it does not accept caller-supplied
+audio bytes. This first slice remains synchronous. Async transcription should be
+owned by Chalk with a job queue and transcript state transitions rather than
+assuming OpenRouter provides async STT.
 
 ## Security
 

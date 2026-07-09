@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -98,6 +99,8 @@ type guardedRecordingService struct{}
 
 type guardedRecordingDownloadService struct{}
 
+type guardedRecordingObjectService struct{}
+
 type guardedTranscriptService struct{}
 
 type guardedAITranscriptionService struct{}
@@ -117,6 +120,10 @@ type transcriptService struct {
 
 type aiTranscriptionService struct {
 	transcribe func(context.Context, ai.TranscribeInput) (ai.Transcription, error)
+}
+
+type recordingObjectService struct {
+	getObject func(context.Context, string) (objectstorage.ObjectReader, error)
 }
 
 type authenticationService struct {
@@ -293,6 +300,17 @@ func (guardedRecordingDownloadService) CreateDownloadURL(context.Context, object
 	return objectstorage.SignedURL{}, errors.New("unexpected create download url call")
 }
 
+func (guardedRecordingObjectService) GetObject(context.Context, string) (objectstorage.ObjectReader, error) {
+	return objectstorage.ObjectReader{}, errors.New("unexpected get object call")
+}
+
+func (s recordingObjectService) GetObject(ctx context.Context, key string) (objectstorage.ObjectReader, error) {
+	if s.getObject == nil {
+		return objectstorage.ObjectReader{}, errors.New("unexpected get object call")
+	}
+	return s.getObject(ctx, key)
+}
+
 func (s recordingService) Create(ctx context.Context, input recordings.CreateInput) (recordings.Recording, error) {
 	if s.create == nil {
 		return recordings.Recording{}, errors.New("unexpected create recording call")
@@ -360,11 +378,27 @@ func (guardedAITranscriptionService) Transcribe(context.Context, ai.TranscribeIn
 	return ai.Transcription{}, errors.New("unexpected ai transcribe call")
 }
 
+func (guardedAITranscriptionService) GenerateText(context.Context, ai.GenerateTextInput) (ai.Generation, error) {
+	return ai.Generation{}, errors.New("unexpected ai generate text call")
+}
+
+func (guardedAITranscriptionService) GenerateObject(context.Context, ai.GenerateObjectInput) (ai.Generation, error) {
+	return ai.Generation{}, errors.New("unexpected ai generate object call")
+}
+
 func (s aiTranscriptionService) Transcribe(ctx context.Context, input ai.TranscribeInput) (ai.Transcription, error) {
 	if s.transcribe == nil {
 		return ai.Transcription{}, errors.New("unexpected ai transcribe call")
 	}
 	return s.transcribe(ctx, input)
+}
+
+func (s aiTranscriptionService) GenerateText(context.Context, ai.GenerateTextInput) (ai.Generation, error) {
+	return ai.Generation{}, errors.New("unexpected ai generate text call")
+}
+
+func (s aiTranscriptionService) GenerateObject(context.Context, ai.GenerateObjectInput) (ai.Generation, error) {
+	return ai.Generation{}, errors.New("unexpected ai generate object call")
 }
 
 func (guardedAuditLogService) Get(context.Context, utilities.ID, utilities.ID) (auditlogs.AuditLog, error) {
@@ -1151,7 +1185,7 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444", body: `{"status":"failed"}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","language":"en"}`},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts/55555555-5555-5555-5555-555555555555"},
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts/55555555-5555-5555-5555-555555555555", body: `{"status":"failed"}`},
@@ -1188,7 +1222,7 @@ func TestTenantScopedMediaRoutesRejectForbiddenPrincipal(t *testing.T) {
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/download-url", body: `{"expires_in_seconds":300}`, options: httpapi.Options{Recordings: guardedRecordingService{}}},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts", options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcripts", body: `{"room_id":"22222222-2222-2222-2222-222222222222","session_id":"33333333-3333-3333-3333-333333333333","status":"ready","provider":"deepgram","model":"nova-3","languages":["en"]}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}}},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}, Recordings: guardedRecordingService{}, Tenants: tenantService{getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444/transcriptions", body: `{"model":"openai/whisper-1","language":"en"}`, options: httpapi.Options{Transcripts: guardedTranscriptService{}, Recordings: guardedRecordingService{}, RecordingObjects: guardedRecordingObjectService{}, Tenants: tenantService{getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
 			return tenants.Tenant{}, errors.New("unexpected get tenant call")
 		}}, AITranscriptions: guardedAITranscriptionService{}}},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/audit-logs", options: httpapi.Options{AuditLogs: guardedAuditLogService{}}},
@@ -1292,13 +1326,14 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 	const roomID = "22222222-2222-2222-2222-222222222222"
 	const sessionID = "33333333-3333-3333-3333-333333333333"
 	const transcriptID = "55555555-5555-5555-5555-555555555555"
+	storageKey := "tenants/" + tenantID + "/recordings/meeting"
 	createdAt := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
 
 	res := authenticatedRequestWithOptionsAndBody(
 		t,
 		http.MethodPost,
 		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/transcriptions",
-		`{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`,
+		`{"model":"openai/whisper-1","language":"en"}`,
 		httpapi.Options{
 			Tenants: tenantService{
 				getTenant: func(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
@@ -1321,11 +1356,28 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 						t.Fatalf("recording id = %q, want %q", gotRecordingID.String(), recordingID)
 					}
 					return recordings.Recording{
-						ID:        gotRecordingID,
-						TenantID:  gotTenantID,
-						RoomID:    mustTenantID(t, roomID),
-						SessionID: mustTenantID(t, sessionID),
-						Status:    recordings.StatusCompleted,
+						ID:              gotRecordingID,
+						TenantID:        gotTenantID,
+						RoomID:          mustTenantID(t, roomID),
+						SessionID:       mustTenantID(t, sessionID),
+						Status:          recordings.StatusCompleted,
+						StorageProvider: recordings.StorageProviderR2,
+						StorageKey:      &storageKey,
+					}, nil
+				},
+			},
+			RecordingObjects: recordingObjectService{
+				getObject: func(ctx context.Context, key string) (objectstorage.ObjectReader, error) {
+					if key != storageKey {
+						t.Fatalf("object key = %q, want %q", key, storageKey)
+					}
+					return objectstorage.ObjectReader{
+						Object: objectstorage.Object{
+							Key:         key,
+							ContentType: "video/webm; codecs=opus",
+							Size:        5,
+						},
+						Body: io.NopCloser(strings.NewReader("audio")),
 					}, nil
 				},
 			},
@@ -1337,8 +1389,12 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 					if input.Model != "openai/whisper-1" {
 						t.Fatalf("model = %q, want openai/whisper-1", input.Model)
 					}
-					if input.AudioData != "YXVkaW8=" || input.AudioFormat != "wav" {
-						t.Fatalf("audio = %q/%q", input.AudioData, input.AudioFormat)
+					audioBytes, err := io.ReadAll(input.Audio)
+					if err != nil {
+						t.Fatalf("read audio: %v", err)
+					}
+					if string(audioBytes) != "audio" || input.AudioFormat != "webm" {
+						t.Fatalf("audio = %q/%q", string(audioBytes), input.AudioFormat)
 					}
 					if input.Language != "en" {
 						t.Fatalf("language = %q, want en", input.Language)
@@ -1417,15 +1473,16 @@ func TestTranscribeRecordingCreatesCompletedTranscript(t *testing.T) {
 	}
 }
 
-func TestTranscribeRecordingMapsProviderUnauthorized(t *testing.T) {
+func TestTranscribeRecordingRejectsNullModelBeforeFetchingObject(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const recordingID = "44444444-4444-4444-4444-444444444444"
+	storageKey := "tenants/" + tenantID + "/recordings/meeting.wav"
 
 	res := authenticatedRequestWithOptionsAndBody(
 		t,
 		http.MethodPost,
 		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/transcriptions",
-		`{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`,
+		`{"model":null}`,
 		httpapi.Options{
 			Tenants: tenantService{
 				getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
@@ -1439,11 +1496,66 @@ func TestTranscribeRecordingMapsProviderUnauthorized(t *testing.T) {
 			Recordings: recordingService{
 				get: func(context.Context, utilities.ID, utilities.ID) (recordings.Recording, error) {
 					return recordings.Recording{
-						ID:        mustTenantID(t, recordingID),
-						TenantID:  mustTenantID(t, tenantID),
-						RoomID:    mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
-						SessionID: mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
-						Status:    recordings.StatusCompleted,
+						ID:              mustTenantID(t, recordingID),
+						TenantID:        mustTenantID(t, tenantID),
+						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						Status:          recordings.StatusCompleted,
+						StorageProvider: recordings.StorageProviderR2,
+						StorageKey:      &storageKey,
+					}, nil
+				},
+			},
+			RecordingObjects: guardedRecordingObjectService{},
+			AITranscriptions: guardedAITranscriptionService{},
+			Transcripts:      guardedTranscriptService{},
+		},
+	)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	assertErrorCode(t, res, "invalid_request")
+}
+
+func TestTranscribeRecordingMapsProviderUnauthorized(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const recordingID = "44444444-4444-4444-4444-444444444444"
+	storageKey := "tenants/" + tenantID + "/recordings/meeting.wav"
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/recordings/"+recordingID+"/transcriptions",
+		`{"model":"openai/whisper-1","language":"en"}`,
+		httpapi.Options{
+			Tenants: tenantService{
+				getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
+					return tenants.Tenant{
+						ID:               mustTenantID(t, tenantID),
+						Name:             "Acme",
+						AIProviderConfig: json.RawMessage(`{"gateway":"openrouter","api_key":"sk-test","default_model":"openai/whisper-1"}`),
+					}, nil
+				},
+			},
+			Recordings: recordingService{
+				get: func(context.Context, utilities.ID, utilities.ID) (recordings.Recording, error) {
+					return recordings.Recording{
+						ID:              mustTenantID(t, recordingID),
+						TenantID:        mustTenantID(t, tenantID),
+						RoomID:          mustTenantID(t, "22222222-2222-2222-2222-222222222222"),
+						SessionID:       mustTenantID(t, "33333333-3333-3333-3333-333333333333"),
+						Status:          recordings.StatusCompleted,
+						StorageProvider: recordings.StorageProviderR2,
+						StorageKey:      &storageKey,
+					}, nil
+				},
+			},
+			RecordingObjects: recordingObjectService{
+				getObject: func(context.Context, string) (objectstorage.ObjectReader, error) {
+					return objectstorage.ObjectReader{
+						Object: objectstorage.Object{ContentType: "audio/wav"},
+						Body:   io.NopCloser(strings.NewReader("audio")),
 					}, nil
 				},
 			},

@@ -13,7 +13,7 @@ import (
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
-	openrouteradapter "github.com/q9labs/chalk/apps/api/internal/adapters/openrouter"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/openrouter"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -125,7 +125,7 @@ func run() error {
 	recordingService := recordings.NewService(recordingRepository)
 	transcriptRepository := postgres.NewTranscriptRepository(operationQueries)
 	transcriptService := transcripts.NewService(transcriptRepository)
-	openRouterAdapter, err := openrouteradapter.NewAdapter(openrouteradapter.Config{})
+	openRouterAdapter, err := openrouter.NewAdapter(openrouter.Config{})
 	if err != nil {
 		return fmt.Errorf("configure openrouter: %w", err)
 	}
@@ -133,12 +133,15 @@ func run() error {
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
 	var recordingDownloads httpapi.RecordingDownloadService
+	var recordingObjects httpapi.RecordingObjectService
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
 			return fmt.Errorf("configure r2 object storage: %w", err)
 		}
-		recordingDownloads = objectstorage.NewService(store)
+		recordingStorage := objectstorage.NewService(store)
+		recordingDownloads = recordingStorage
+		recordingObjects = recordingStorage
 	}
 	integrationCatalog, err := integrations.DefaultCatalog()
 	if err != nil {
@@ -177,6 +180,7 @@ func run() error {
 		Memberships:        membershipService,
 		AuditLogs:          auditLogService,
 		RecordingDownloads: recordingDownloads,
+		RecordingObjects:   recordingObjects,
 		Recordings:         recordingService,
 		Rooms:              roomService,
 		SessionCookie: httpapi.SessionCookieOptions{

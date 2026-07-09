@@ -137,7 +137,15 @@ func createRecordingEndpoint(service RecordingService, authorizer TenantAuthoriz
 			return recordingResponse{}, err
 		}
 
-		recording, err := service.Create(ctx, request.Body.toCreateInput(request.TenantID, request.RoomID, request.SessionID))
+		recording, err := service.Create(ctx, recordings.CreateInput{
+			TenantID:        request.TenantID,
+			RoomID:          request.RoomID,
+			SessionID:       request.SessionID,
+			Status:          request.Body.Status,
+			StorageProvider: request.Body.StorageProvider,
+			StorageKey:      request.Body.StorageKey,
+			Metadata:        request.Body.Metadata.Value,
+		})
 		if err != nil {
 			return recordingResponse{}, err
 		}
@@ -205,7 +213,12 @@ func updateRecordingEndpoint(service RecordingService, authorizer TenantAuthoriz
 			return recordingResponse{}, err
 		}
 
-		recording, err := service.Update(ctx, request.TenantID, request.RecordingID, request.Body.toUpdateInput())
+		recording, err := service.Update(ctx, request.TenantID, request.RecordingID, recordings.UpdateInput{
+			Status:          request.Body.Status,
+			StorageProvider: request.Body.StorageProvider,
+			StorageKey:      request.Body.StorageKey,
+			Metadata:        request.Body.Metadata,
+		})
 		if err != nil {
 			return recordingResponse{}, err
 		}
@@ -446,26 +459,5 @@ func newRecordingResponse(recording recordings.Recording) recordingResponse {
 		Metadata:        rawJSONValue(recording.Metadata),
 		UpdatedAt:       utilities.FormatTimestamp(recording.UpdatedAt),
 		CreatedAt:       utilities.FormatTimestamp(recording.CreatedAt),
-	}
-}
-
-func (r createRecordingRequest) toCreateInput(tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) recordings.CreateInput {
-	return recordings.CreateInput{
-		TenantID:        tenantID,
-		RoomID:          roomID,
-		SessionID:       sessionID,
-		Status:          r.Status,
-		StorageProvider: r.StorageProvider,
-		StorageKey:      r.StorageKey,
-		Metadata:        r.Metadata.Value,
-	}
-}
-
-func (r updateRecordingRequest) toUpdateInput() recordings.UpdateInput {
-	return recordings.UpdateInput{
-		Status:          r.Status,
-		StorageProvider: r.StorageProvider,
-		StorageKey:      r.StorageKey,
-		Metadata:        r.Metadata,
 	}
 }

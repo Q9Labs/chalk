@@ -447,8 +447,7 @@ func runRouteRoomCreateMember(ctx context.Context) (ScenarioResult, error) {
 func runRouteRecordingTranscribe(ctx context.Context) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
-	body := json.RawMessage(`{"model":"openai/whisper-1","input_audio":{"data":"YXVkaW8=","format":"wav"},"language":"en"}`)
-	traceBody := json.RawMessage(`{"model":"openai/whisper-1","input_audio":{"data":"[base64 omitted]","format":"wav"},"language":"en"}`)
+	body := json.RawMessage(`{"model":"openai/whisper-1","language":"en"}`)
 
 	return runRouteTrace(ctx, routeTraceConfig{
 		Name:     RouteRecordingTranscribeScenario,
@@ -474,6 +473,9 @@ func runRouteRecordingTranscribe(ctx context.Context) (ScenarioResult, error) {
 				recorder: recorder,
 				next:     recordings.NewService(tracedRecordingRepository{recorder: recorder, now: now}),
 			},
+			RecordingObjects: tracedRecordingObjectService{
+				recorder: recorder,
+			},
 			AITranscriptions: tracedAITranscriptionService{
 				recorder: recorder,
 				next:     ai.NewService(tracedOpenRouterClient{recorder: recorder}),
@@ -486,7 +488,6 @@ func runRouteRecordingTranscribe(ctx context.Context) (ScenarioResult, error) {
 		Method:         http.MethodPost,
 		Path:           "/v1/tenants/" + tenantID().String() + "/recordings/" + recordingID().String() + "/transcriptions",
 		Body:           body,
-		DisplayBody:    traceBody,
 		Authorization:  "Bearer trace-session-token",
 		ExpectedStatus: http.StatusCreated,
 	})
@@ -1490,6 +1491,27 @@ func (tracedRecordingRepository) Update(context.Context, utilities.ID, utilities
 	return recordings.Recording{}, errors.New("update recording is not used by this trace scenario")
 }
 
+type tracedRecordingObjectService struct {
+	recorder *Recorder
+}
+
+func (s tracedRecordingObjectService) GetObject(ctx context.Context, key string) (objectstorage.ObjectReader, error) {
+	_ = ctx
+	s.recorder.Add("storage", "objectstorage.Service.GetObject", "stream completed recording object from durable storage", map[string]any{
+		"storage_key":  key,
+		"content_type": "audio/webm",
+		"body":         "[stream]",
+	})
+	return objectstorage.ObjectReader{
+		Object: objectstorage.Object{
+			Key:         key,
+			ContentType: "audio/webm",
+			Size:        42,
+		},
+		Body: io.NopCloser(bytes.NewReader([]byte("trace audio"))),
+	}, nil
+}
+
 type tracedAITranscriptionService struct {
 	recorder *Recorder
 	next     ai.Service
@@ -1516,7 +1538,7 @@ func (c tracedOpenRouterClient) Transcribe(ctx context.Context, input ai.Transcr
 		"audio_format": input.AudioFormat,
 		"language":     input.Language,
 		"api_key":      "[redacted]",
-		"audio_data":   "[base64 omitted]",
+		"audio":        "[streamed recording object]",
 	})
 	return ai.Transcription{
 		Gateway: ai.GatewayOpenRouter,
@@ -1524,6 +1546,14 @@ func (c tracedOpenRouterClient) Transcribe(ctx context.Context, input ai.Transcr
 		Text:    "Hello from the trace recording.",
 		Usage:   json.RawMessage(`{"input_tokens":12,"output_tokens":3}`),
 	}, nil
+}
+
+func (tracedOpenRouterClient) GenerateText(context.Context, ai.GenerateTextInput) (ai.Generation, error) {
+	return ai.Generation{}, errors.New("generate text is not used by this trace scenario")
+}
+
+func (tracedOpenRouterClient) GenerateObject(context.Context, ai.GenerateObjectInput) (ai.Generation, error) {
+	return ai.Generation{}, errors.New("generate object is not used by this trace scenario")
 }
 
 type tracedTranscriptService struct {
@@ -2081,7 +2111,7 @@ func aiTranscribeInputFields(input ai.TranscribeInput) map[string]any {
 		"model":        input.Model,
 		"audio_format": input.AudioFormat,
 		"language":     input.Language,
-		"audio_data":   "[base64 omitted]",
+		"audio":        "[streamed recording object]",
 	}
 }
 
