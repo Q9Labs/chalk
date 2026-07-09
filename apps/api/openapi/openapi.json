@@ -89,6 +89,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -147,6 +167,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -227,6 +267,17 @@
             "description": "Unauthorized",
             "x-chalk-error-codes": ["invalid_credentials"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -236,6 +287,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -263,6 +334,7 @@
         },
         "security": [],
         "summary": "Login",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 10,
           "name": "auth.login",
@@ -383,6 +455,17 @@
             "description": "Conflict",
             "x-chalk-error-codes": ["email_already_registered"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -392,6 +475,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -419,6 +522,7 @@
         },
         "security": [],
         "summary": "Register",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 5,
           "name": "auth.register",
@@ -460,6 +564,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -694,6 +818,17 @@
             "description": "Unauthorized",
             "x-chalk-error-codes": ["unauthenticated"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -703,6 +838,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -734,6 +889,7 @@
           }
         ],
         "summary": "Create tenant",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -916,6 +1072,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -925,6 +1092,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -956,6 +1143,7 @@
           }
         ],
         "summary": "Update tenant",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -1343,6 +1531,17 @@
             "description": "Forbidden",
             "x-chalk-error-codes": ["forbidden"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1352,6 +1551,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -1383,6 +1602,7 @@
           }
         ],
         "summary": "Create membership",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -1476,6 +1696,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1485,6 +1716,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -1516,6 +1767,7 @@
           }
         ],
         "summary": "Update membership",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -1826,6 +2078,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1835,6 +2098,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -1866,6 +2149,7 @@
           }
         ],
         "summary": "Update recording",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -1959,6 +2243,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found", "not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -1968,6 +2263,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -1999,6 +2314,7 @@
           }
         ],
         "summary": "Create recording download u r l",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -2092,6 +2408,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2101,6 +2428,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -2132,6 +2479,7 @@
           }
         ],
         "summary": "Create transcript",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -2319,6 +2667,17 @@
             "description": "Conflict",
             "x-chalk-error-codes": ["room_slug_already_used"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2328,6 +2687,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -2359,6 +2738,7 @@
           }
         ],
         "summary": "Create room",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -2568,6 +2948,17 @@
             "description": "Conflict",
             "x-chalk-error-codes": ["room_slug_already_used"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2577,6 +2968,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -2608,6 +3019,7 @@
           }
         ],
         "summary": "Update room",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -2811,6 +3223,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2820,6 +3243,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -2851,6 +3294,7 @@
           }
         ],
         "summary": "Create room session",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -3065,6 +3509,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3074,6 +3529,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -3105,6 +3580,7 @@
           }
         ],
         "summary": "Update room session",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -3206,6 +3682,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3215,6 +3702,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -3246,6 +3753,7 @@
           }
         ],
         "summary": "Create recording",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -3556,6 +4064,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3565,6 +4084,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -3596,6 +4135,7 @@
           }
         ],
         "summary": "Update transcript",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -3743,6 +4283,17 @@
             "description": "Unauthorized",
             "x-chalk-error-codes": ["unauthenticated"]
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
           "429": {
             "content": {
               "application/json": {
@@ -3752,6 +4303,26 @@
               }
             },
             "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
@@ -3783,6 +4354,7 @@
           }
         ],
         "summary": "Create user",
+        "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",

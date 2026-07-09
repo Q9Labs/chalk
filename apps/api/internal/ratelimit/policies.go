@@ -8,3 +8,9 @@ const (
 	PolicyNameAuthOAuthCallback  = "auth.oauth.callback"
 	PolicyNameAuthenticatedWrite = "v1.authenticated.write"
 )
+
+const (
+	HeaderLimit      = "X-RateLimit-Limit"
+	HeaderRemaining  = "X-RateLimit-Remaining"
+	HeaderRetryAfter = "Retry-After"
+)

@@ -33,16 +33,17 @@ type APIParameterContract struct {
 }
 
 type APIRouteContract struct {
-	OperationID string
-	Method      string
-	Path        string
-	MountPath   string
-	Auth        APIAuth
-	RateLimit   ratelimit.Policy
-	Parameters  []APIParameterContract
-	Request     *APISchemaRef
-	Responses   []APIResponseContract
-	Errors      []APIError
+	OperationID    string
+	Method         string
+	Path           string
+	MountPath      string
+	Auth           APIAuth
+	RateLimit      ratelimit.Policy
+	BodyLimitBytes int64
+	Parameters     []APIParameterContract
+	Request        *APISchemaRef
+	Responses      []APIResponseContract
+	Errors         []APIError
 }
 
 func PreviewRouteContracts() []APIRouteContract {

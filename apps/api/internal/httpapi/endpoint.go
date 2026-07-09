@@ -65,6 +65,8 @@ func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint
 
 func (e Endpoint[Request, Response]) RequestBody(name string, sample any) Endpoint[Request, Response] {
 	e.contract.Request = &APISchemaRef{Name: name, Type: sample}
+	e.contract.BodyLimitBytes = maxRequestBodyBytes
+	e.contract.Errors = appendAPIError(e.contract.Errors, apiErrorPayloadTooLarge)
 	return e
 }
 
@@ -193,7 +195,20 @@ func decodeNoRequest(r *http.Request) (noRequest, error) {
 func decodeJSONBody[Request any](r *http.Request) (Request, error) {
 	var request Request
 	if err := decodeRequest(r, &request); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			return request, apiErrorPayloadTooLarge
+		}
 		return request, apiErrorInvalidRequest
 	}
 	return request, nil
+}
+
+func appendAPIError(errors []APIError, apiError APIError) []APIError {
+	for _, existing := range errors {
+		if existing.Status == apiError.Status && existing.Code == apiError.Code {
+			return errors
+		}
+	}
+	return append(errors, apiError)
 }

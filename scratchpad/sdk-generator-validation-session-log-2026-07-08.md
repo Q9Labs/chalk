@@ -208,3 +208,19 @@ packages/sdk-core/src/generated/openapi-types.d.ts` passed.
 
 - Compiled current generated contracts against effect@4.0.0-beta.94 by direct tarball install. The test failed as expected because v4 HttpApi and Schema APIs are not source-compatible with the current v3 generator.
 - Inspected API contracts: response headers are supported per success response, Retry-After is currently emitted only on 429 and not declared in error response contracts, and request bodies are globally capped at 1 MiB in decodeRequest without that limit being exposed in route contracts/OpenAPI.
+
+## 2026-07-09 17:15 PKT
+
+- Started implementation pass for Effect v4 codegen, SDK client factory, auth/header injection, response header schemas, and body-limit contract metadata.
+
+- 2026-07-09T17:32:35+05:00: Implemented Effect v4 wire-to-tagged-error schema generation, updated HttpApi endpoint error schemas, added explicit fetch injection to the SDK client factory, and verified focused TypeScript compile plus client tests.
+
+- 2026-07-09T17:33:20+05:00: check:sdk-generated passed. Go focused test exposed the intended oversized-body behavior change from 400 invalid_request to 413 payload_too_large; updated the regression assertion.
+
+- 2026-07-09T17:34:05+05:00: gopls diagnostics reported no build errors on touched Go files; only pre-existing modernization hints in ratelimit policies. Reran focused Go tests after diagnostics.
+
+- 2026-07-09T17:36:40+05:00: Full pnpm gate progressed through API gate and generated drift, then failed at repository-wide format check because scratchpad/sync-codewalk.html is dirty and unrelated. Formatted owned generator file and verified targeted oxfmt, check:sdk-generated, SDK client vitest, TypeScript compile, and diff whitespace checks.
+
+- 2026-07-09T18:35:10+05:00: Started codex review --uncommitted. The review process emitted MCP transport/model refresh warnings, then remained idle with no output for roughly 56 minutes. Terminated the blocked reviewer process; no review findings were produced.
+
+- 2026-07-09T18:47:00+05:00: Preparing commit for SDK codegen, Effect v4 schemas/client, OpenAPI body-limit/rate-limit metadata, and API runtime contract changes.

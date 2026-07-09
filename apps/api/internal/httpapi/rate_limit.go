@@ -81,6 +81,7 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 			}
 
 			decision := options.Limiter.Allow(r.Context(), rateLimitKey(r, options.ClientIP), policy, now())
+			writeRateLimitHeaders(w, policy, decision)
 			if decision.Allowed {
 				next.ServeHTTP(w, r)
 				return
@@ -89,6 +90,11 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 			writeRateLimited(w, decision)
 		})
 	}
+}
+
+func writeRateLimitHeaders(w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) {
+	w.Header().Set(ratelimit.HeaderLimit, strconv.Itoa(policy.Limit))
+	w.Header().Set(ratelimit.HeaderRemaining, strconv.Itoa(decision.Remaining))
 }
 
 func rateLimitKey(r *http.Request, options ClientIPOptions) string {
@@ -183,6 +189,6 @@ func writeRateLimited(w http.ResponseWriter, decision ratelimit.Decision) {
 		retryAfter = 1
 	}
 
-	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	w.Header().Set(ratelimit.HeaderRetryAfter, strconv.Itoa(retryAfter))
 	writeAPIError(w, apiErrorRateLimited)
 }

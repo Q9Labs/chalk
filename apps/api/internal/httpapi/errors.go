@@ -25,6 +25,7 @@ var (
 	apiErrorInvalidTenantField  = APIError{Status: http.StatusBadRequest, Code: "invalid_tenant_field", Message: "Invalid tenant field"}
 	apiErrorTenantNotFound      = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Tenant not found"}
 	apiErrorRateLimited         = APIError{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: "Too many requests"}
+	apiErrorPayloadTooLarge     = APIError{Status: http.StatusRequestEntityTooLarge, Code: "payload_too_large", Message: "Request body is too large"}
 	apiErrorInternal            = APIError{Status: http.StatusInternalServerError, Code: "internal_error", Message: "Internal server error"}
 
 	apiErrorInvalidEmail              = APIError{Status: http.StatusBadRequest, Code: "invalid_email", Message: "Invalid email"}

@@ -55,9 +55,8 @@
     "clean": "turbo clean && rm -rf node_modules"
   },
   "dependencies": {
-    "@effect/platform": "^0.96.2",
     "clsx": "^2.1.1",
-    "effect": "^3.21.4",
+    "effect": "4.0.0-beta.94",
     "react": "19.2.7",
     "tailwind-merge": "^3.6.0"
   },

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -151,6 +152,9 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 	}
 
 	if route.Request != nil {
+		if route.BodyLimitBytes > 0 {
+			operation["x-chalk-max-body-bytes"] = route.BodyLimitBytes
+		}
 		operation["requestBody"] = map[string]any{
 			"required": true,
 			"content": map[string]any{
@@ -187,7 +191,7 @@ func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 	}
 
 	for status, errors := range groupErrors(route.Errors) {
-		responses[strconv.Itoa(status)] = map[string]any{
+		body := map[string]any{
 			"description":         http.StatusText(status),
 			"x-chalk-error-codes": errorCodes(errors),
 			"content": map[string]any{
@@ -196,6 +200,10 @@ func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 				},
 			},
 		}
+		if status == http.StatusTooManyRequests {
+			body["headers"] = headers(rateLimitResponseHeaders(true))
+		}
+		responses[strconv.Itoa(status)] = body
 	}
 
 	return responses
@@ -212,6 +220,17 @@ func headers(headers []httpapi.APIHeaderContract) map[string]any {
 		}
 	}
 	return result
+}
+
+func rateLimitResponseHeaders(includeRetryAfter bool) []httpapi.APIHeaderContract {
+	responseHeaders := []httpapi.APIHeaderContract{
+		{Name: ratelimit.HeaderLimit, Type: "integer", Required: true},
+		{Name: ratelimit.HeaderRemaining, Type: "integer", Required: true},
+	}
+	if includeRetryAfter {
+		responseHeaders = append(responseHeaders, httpapi.APIHeaderContract{Name: ratelimit.HeaderRetryAfter, Type: "integer", Required: true})
+	}
+	return responseHeaders
 }
 
 func (g *generator) parameters(parameters []httpapi.APIParameterContract) []map[string]any {

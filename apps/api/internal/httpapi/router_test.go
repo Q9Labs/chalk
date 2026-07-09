@@ -2527,13 +2527,13 @@ func TestCreateTenantRejectsOversizedBody(t *testing.T) {
 		},
 	})
 
-	if res.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	if res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusRequestEntityTooLarge)
 	}
 	if called {
 		t.Fatal("tenant service was called")
 	}
-	assertErrorCode(t, res, "invalid_request")
+	assertErrorCode(t, res, "payload_too_large")
 }
 
 func TestUpdateTenantClearsNullableField(t *testing.T) {
