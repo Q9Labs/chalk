@@ -1886,7 +1886,348 @@
           },
         },
       };
-      const TRACE = []; /* __TRACE__ */
+/* ---- scenario fixtures -------------------------------------------------- */
+
+const A = { id:"p1", name:"Ada" }, B = { id:"p2", name:"Bob" };
+
+const R0 = { rev:0, parts:[] };
+const R1 = { rev:1, parts:[{...A, hand:false}] };
+const R2 = { rev:2, parts:[{...A, hand:false}, {...B, hand:false}] };
+const R3 = { rev:3, parts:[{...A, hand:true},  {...B, hand:false}] };
+
+const L1 = [{rev:1, name:"participant_joined", fresh:true}];
+const L2 = [{rev:1, name:"participant_joined"}, {rev:2, name:"participant_joined", fresh:true}];
+const L3 = [{rev:1, name:"participant_joined"}, {rev:2, name:"participant_joined"}, {rev:3, name:"hand_raised", fresh:true}];
+
+const fr = (dir, who, txt) => ({ dir, who, txt });
+
+const W = {
+  helloA:   fr("in","Ada",  '{"type":"hello","protocol":1,\n "token":"eyJyb29tX2lkIjoicjQyIi4uLg"}'),
+  welcomeA: fr("out","Ada", '{"type":"welcome","protocol":1,\n "participant_id":"p1","mode":"snapshot",\n "snapshot":{"control_revision":1,\n  "participants":[{"participant_id":"p1",\n   "display_name":"Ada","hand_raised":false}]}}'),
+  helloB:   fr("in","Bob",  '{"type":"hello","protocol":1,\n "token":"eyJyb29tX2lkIjoicjQyIi4uLg"}'),
+  evJoinB:  fr("out","Ada", '{"type":"event","stream":"control",\n "name":"participant_joined",\n "base_revision":1,"revision":2,\n "payload":{"participant_id":"p2",\n  "display_name":"Bob"}}'),
+  welcomeB: fr("out","Bob", '{"type":"welcome","protocol":1,\n "participant_id":"p2","mode":"snapshot",\n "snapshot":{"control_revision":2,\n  "participants":[ Ada, Bob ]}}'),
+  cmd1:     fr("in","Ada",  '{"type":"command","command_id":"c-1",\n "name":"raise_hand","payload":{}}'),
+  evRaise:  fr("out","Ada + Bob", '{"type":"event","stream":"control",\n "name":"hand_raised",\n "base_revision":2,"revision":3,\n "payload":{"participant_id":"p1"}}'),
+  ackOk:    fr("out","Ada", '{"type":"ack","command_id":"c-1",\n "result":"committed","revision":3}'),
+  cmd1r:    fr("in","Ada",  '{"type":"command","command_id":"c-1",   <- same id\n "name":"raise_hand","payload":{}}'),
+  ackDup:   fr("out","Ada", '{"type":"ack","command_id":"c-1",\n "result":"duplicate","revision":3}'),
+  cmd2:     fr("in","Ada",  '{"type":"command","command_id":"c-2",\n "name":"raise_hand","payload":{}}'),
+  ackRej:   fr("out","Ada", '{"type":"ack","command_id":"c-2",\n "result":"rejected","reason":"no_change"}'),
+};
+
+const w = (...keys) => keys.map(k => W[k]);
+
+const MEM1 = [{ k:'{"p1", "c-1"}', v:"{:committed, 3}" }];
+const MEM2 = [{ k:'{"p1", "c-1"}', v:"{:duplicate, 3}", dup:true }];
+const MEM3 = [{ k:'{"p1", "c-1"}', v:"{:committed, 3}" }, { k:'{"p1", "c-2"}', v:"{:rejected, :no_change}", dup:true }];
+
+const S = {
+  init:   "Socket.init/1",
+  sock:   "Socket.handle_in/2",
+  sockF:  "Socket.handle_frame/2",
+  sockI:  "Socket.handle_info/2",
+  dec:    "Protocol.decode/1",
+  decF:   "Protocol.decode_frame/2",
+  join:   "RoomServer.join/5  (still the socket's process)",
+  call:   "GenServer.call — socket blocks",
+  hcJoin: "RoomServer.handle_call {:join}",
+  hcCmd:  "RoomServer.handle_call {:command}",
+  admit:  "RoomServer.admit/3",
+  exec:   "RoomServer.execute/4",
+  bcast:  "RoomServer.broadcast/2",
+  reply:  "RoomServer.join_reply/2",
+  apply:  "Room.apply_command/4",
+  valid:  "Room.validate/4",
+  ev:     "Room.apply_event/2",
+  pay:    "Room.apply_payload/2",
+  ack:    "Protocol.encode_ack/2",
+};
+
+const ACT1 = "1 · Ada connects", ACT2 = "2 · Bob joins",
+      ACT3 = "3 · Ada raises her hand", ACT4 = "4 · The network retries",
+      ACT5 = "5 · The hand is already up";
+
+/* ---- the trace ---------------------------------------------------------
+   Each step patches only what changed; everything else carries forward.   */
+
+const TRACE = [
+
+/* ================================================================= ACT 1 */
+{ act:ACT1, f:"socket", l:[20,23], t:"A connection opens",
+  fnote:"one process, per connection",
+  d:"Bandit accepted a WebSocket upgrade and started a process just for this client. No room exists yet. Nothing has been verified. The socket's entire state is three fields.",
+  why:"Line 21 arms a ten-second self-destruct by sending <em>itself</em> a message from the future. A client that connects and then says nothing cannot sit on a process forever.",
+  stack:[S.init], room:R0, log:[], hold:{rev:null,retained:0}, mem:[], wire:[] },
+
+{ act:ACT1, f:"socket", l:26, t:"Ada's hello arrives",
+  d:"A text frame. The pattern <code>{text, [opcode: :text]}</code> destructures the payload and simultaneously asserts it isn't a binary frame.",
+  stack:[S.sock], wire:w("helloA") },
+
+{ act:ACT1, f:"protocol", l:[45,46], t:"Bytes become data",
+  d:"The socket hands the raw text to Protocol and never looks at JSON again. <code>JSON.decode</code> returns a tuple rather than raising, which is why this can be a plain <code>case</code>.",
+  stack:[S.sock, S.dec] },
+
+{ act:ACT1, f:"protocol", l:47, t:"Two patterns, one line",
+  d:"<code>{:ok, %{\"type\" => type} = frame}</code> does three jobs at once: confirm decoding succeeded, confirm the map has a <code>\"type\"</code> key, and bind both that value and the whole map.",
+  stack:[S.sock, S.dec] },
+
+{ act:ACT1, f:"protocol", l:[53,54], t:"Is this a well-formed hello?",
+  d:"The clause matches only if the type is <code>\"hello\"</code> <em>and</em> <code>\"protocol\"</code> equals 1 <em>and</em> the guard on line 54 confirms the token really is a string.",
+  why:"Three separate validity conditions, zero <code>if</code> statements. A frame failing any of them simply doesn't match this clause, and falls through to the more specific error clauses below it.",
+  stack:[S.sock, S.dec, S.decF] },
+
+{ act:ACT1, f:"protocol", l:55, t:"Looking for a cursor",
+  d:"Ada is connecting for the first time, so her hello has no <code>streams</code> key at all. <code>get_in</code> walks the missing path and calmly returns <code>nil</code> instead of crashing.",
+  stack:[S.sock, S.dec, S.decF] },
+
+{ act:ACT1, f:"protocol", l:[59,60], t:"A tagged tuple comes out",
+  d:"No cursor means: send me everything. The string <code>\"hello\"</code> is now gone forever — from here on the rest of the app sees only <code>{:hello, %{token: …, cursor: nil}}</code>.",
+  why:"This is the whole job of Protocol. Untrusted, stringly-typed JSON goes in; a validated, atom-tagged Elixir term comes out. Nothing downstream ever has to ask \"but what if this field is missing?\"",
+  stack:[S.sock, S.dec, S.decF] },
+
+{ act:ACT1, f:"socket", l:57, t:"The state machine, enforced by a pattern",
+  d:"<code>%{phase: :awaiting_hello} = state</code> sits in the function head. This clause can only run when the socket is expecting a hello. A second hello later wouldn't match, and would fall to line 77 instead.",
+  why:"There is no <code>if state.phase == :awaiting_hello</code> anywhere in this file. The legal transitions <em>are</em> the function clauses.",
+  stack:[S.sock, S.sockF] },
+
+{ act:ACT1, f:"socket", l:58, t:"Verify the token",
+  d:"The dev verifier decodes unsigned base64url JSON and returns <code>%Claims{room_id: \"r-42\", participant_id: \"p1\", display_name: \"Ada\"}</code>.",
+  why:"In production this is where a per-tenant signature check belongs. It isn't written yet — which is exactly why prod boot refuses to start if the dev verifier is still configured.",
+  stack:[S.sock, S.sockF, "TokenVerifier.verify/1"] },
+
+{ act:ACT1, f:"socket", l:[60,66], t:"Join the room",
+  d:"Look closely at what gets passed: <code>claims.room_id</code> and <code>claims.participant_id</code>. Both come from the <em>verified token</em>, never from anything Ada typed into the frame.",
+  why:"A client cannot join a room it wasn't issued a token for, because the room id it sends is never read. It isn't validated — it's ignored.",
+  stack:[S.sock, S.sockF, S.join] },
+
+{ act:ACT1, f:"server", l:[64,71], t:"Start the room on demand",
+  d:"No process is registered for <code>\"r-42\"</code>, so <code>DynamicSupervisor</code> starts one. Rooms aren't pre-created; they spring into existence when the first person arrives.",
+  why:"Line 69 quietly treats <code>{:error, {:already_started, pid}}</code> as success. Two sockets racing to create the same room isn't prevented — it's designed for, and the loser just uses the winner's process.",
+  stack:[S.sock, S.sockF, S.join, "RoomServer.ensure_started/1"] },
+
+{ act:ACT1, f:"server", l:[83,88], t:"Inside the new process",
+  fnote:"we are now in the room server",
+  d:"<code>init</code> runs inside the freshly spawned room process. It asks the stateholder for room <code>\"r-42\"</code>, gets <code>:not_found</code>, and builds an empty one.",
+  why:"The room server never holds knowledge that isn't recoverable from the stateholder. This is the line that makes the process disposable — and disposable is what lets it crash safely.",
+  stack:["RoomServer.init/1  (new process)"] },
+
+{ act:ACT1, f:"server", l:[90,98], t:"The room server's state",
+  d:"Four fields: the pure room struct, a map of subscriber pids, the idempotency cache, and a queue tracking that cache's insertion order.",
+  stack:["RoomServer.init/1"], room:R0 },
+
+{ act:ACT1, f:"server", l:37, t:"A synchronous message",
+  d:"Back in the socket's process. <code>GenServer.call</code> sends <code>{:join, …}</code> to the room process and <strong>blocks until it replies</strong>.",
+  why:"The room handles exactly one message at a time, to completion. That queue <em>is</em> the \"one authoritative writer\" invariant. There are no locks in this codebase because there is nothing to lock.",
+  stack:[S.sock, S.sockF, S.join, S.call] },
+
+{ act:ACT1, f:"server", l:[102,103], t:"The room takes the call",
+  d:"The message is destructured right in the function head. <code>admit</code> now decides whether this is a fresh join or a reconnect.",
+  stack:[S.hcJoin] },
+
+{ act:ACT1, f:"server", l:[159,164], t:"New, or returning?",
+  d:"<code>Room.joined?</code> says Ada isn't in the room's state, so this is a genuine join and we run a <code>:join</code> command.",
+  why:"Had she been present already, line 161 would return early with <em>no event at all</em>. A reconnecting participant must not emit a second <code>participant_joined</code>. Easy to get wrong; handled in three lines.",
+  stack:[S.hcJoin, S.admit] },
+
+{ act:ACT1, f:"server", l:[172,173], t:"The heart of the application",
+  d:"Validate, then commit, then broadcast. Everything below is that sequence, and the order is the whole design. First: ask the pure core.",
+  stack:[S.hcJoin, S.admit, S.exec] },
+
+{ act:ACT1, f:"room", l:[42,43], t:"Into the pure core",
+  fnote:"no processes, no side effects",
+  d:"<code>%__MODULE__{} = room</code> asserts we really were handed a Room. Then <code>with</code> begins its happy-path chain: if <code>validate</code> returns <code>{:ok, name, payload}</code>, continue; anything else short-circuits straight back out.",
+  stack:[S.hcJoin, S.admit, S.exec, S.apply] },
+
+{ act:ACT1, f:"room", l:[80,84], t:"Clause 1 of 5 matches",
+  d:"The literal <code>:join</code> in the third argument position selects this clause. The fourth pattern demands a <code>:display_name</code> key and binds it in the same motion. Ada isn't joined, so we produce an event name and a payload.",
+  why:"Five clauses, tried top to bottom. Adding a command means adding a clause — and the catch-all on line 114 guarantees an unknown one can never fall through silently.",
+  stack:[S.hcJoin, S.admit, S.exec, S.apply, S.valid] },
+
+{ act:ACT1, f:"room", l:[44,49], t:"Build the event",
+  d:"An ordinary map. The room sits at revision 0, so this event records <code>base_revision: 0</code> and <code>revision: 1</code> — where the jump starts, and where it lands.",
+  why:"Storing <em>both ends</em> of every jump is what lets a client later prove it missed something. It costs one integer per frame, and it's the reason reconnect can be exact rather than approximate.",
+  stack:[S.hcJoin, S.admit, S.exec, S.apply] },
+
+{ act:ACT1, f:"room", l:57, t:"The line that makes disorder impossible",
+  d:"<code>revision</code> is bound by the first pattern, then <em>reused</em> in the second. Elixir demands the two be equal. The room is at 0; the event's <code>base_revision</code> is 0. Match.",
+  why:"Hand this function an out-of-order event and no clause matches — the process crashes instantly. Applying events in the wrong order isn't a bug that could slip through review. It cannot be expressed.",
+  stack:[S.hcJoin, S.admit, S.exec, S.apply, S.ev] },
+
+{ act:ACT1, f:"room", l:[123,125], t:"Apply the payload",
+  d:"Dispatch on the event's name, matched in the head. <code>put_in</code> reaches into the nested struct and returns a <strong>new</strong> room. The one we passed in is untouched, and still perfectly valid.",
+  stack:[S.hcJoin, S.admit, S.exec, S.apply, S.ev, S.pay] },
+
+{ act:ACT1, f:"room", l:58, t:"Revision 0 → 1",
+  d:"<code>%{map | revision: …}</code> replaces the key. It would raise if <code>revision</code> didn't already exist, so a typo can never silently add a junk field.",
+  stack:[S.hcJoin, S.admit, S.exec, S.apply, S.ev], room:R1 },
+
+{ act:ACT1, f:"server", l:175, t:"Compare-and-set",
+  d:"We hand the stateholder <code>event.base_revision</code> — 0 — as the revision we <em>expect</em> to still be stored. It matches, so the write lands and returns <code>:ok</code>.",
+  why:"This is the only place the outside world gets to say no. Had another writer advanced this room, the stored revision wouldn't be 0 any more, and this commit would be refused.",
+  stack:[S.hcJoin, S.admit, S.exec], hold:{rev:1, retained:1}, log:L1 },
+
+{ act:ACT1, f:"server", l:[189,190], t:"Broadcast to… nobody",
+  d:"<code>Enum.each</code> over <code>state.subscribers</code>, which is still an empty map. Ada isn't subscribed yet — that happens back on line 105, <em>after</em> <code>admit</code> returns.",
+  why:"So Ada never receives her own <code>participant_joined</code> event. She doesn't need it: the snapshot built moments later derives from the same state and already contains her. Not an oversight — it's the reason the snapshot has to be computed inside the writer.",
+  stack:[S.hcJoin, S.admit, S.exec, S.bcast] },
+
+{ act:ACT1, f:"server", l:[105,108], t:"Subscribe, then reply",
+  d:"<code>Process.monitor</code> asks the runtime to notify this room if Ada's socket ever dies — that's how a disconnect eventually becomes a <code>participant_left</code>. Then the reply is computed.",
+  why:"<code>join_reply</code> runs <em>inside</em> the room process, holding the very state that just committed. A snapshot therefore can never disagree with the events broadcast around it.",
+  stack:[S.hcJoin] },
+
+{ act:ACT1, f:"server", l:[196,200], t:"Snapshot or replay?",
+  d:"<code>is_integer(nil)</code> is false, so the <code>with</code> fails on its very first condition and drops to <code>else</code>. Ada gets a full snapshot.",
+  why:"Look at everything <code>_ -></code> on line 200 catches: no cursor, a malformed cursor, a cursor from the future, or events no longer retained. All of them resolve to the same safe answer. <strong>The fallback is always correct — merely more expensive.</strong>",
+  stack:[S.hcJoin, S.reply] },
+
+{ act:ACT1, f:"socket", l:[67,70], t:"Welcome aboard",
+  d:"Cancel the ten-second timer. Monitor the room server. Encode the welcome, push it, and flip <code>phase</code> to <code>:joined</code> — only now may this socket send commands.",
+  why:"Line 68 is the other half of line 48. Having asked to be told when the room dies, the socket can respond by simply closing, letting the client reconnect and re-snapshot.",
+  stack:[S.sock, S.sockF], wire:w("helloA","welcomeA") },
+
+/* ================================================================= ACT 2 */
+{ act:ACT2, f:"socket", l:57, t:"A second, entirely separate process",
+  fnote:"Bob's socket",
+  d:"Bob's connection gets its own socket process, its own state, its own ten-second timer. It knows nothing whatsoever about Ada's.",
+  stack:["Socket.handle_frame/2  (Bob's process)"], wire:w("helloA","welcomeA","helloB") },
+
+{ act:ACT2, f:"server", l:[67,69], t:"The room already exists",
+  d:"<code>start_child</code> returns <code>{:error, {:already_started, pid}}</code>, and line 69 turns that into <code>{:ok, pid}</code>. Bob's socket now talks to the very same room process Ada created.",
+  stack:["Socket.handle_frame/2", S.join, "RoomServer.ensure_started/1"] },
+
+{ act:ACT2, f:"room", l:57, t:"Revision 1 → 2",
+  d:"The same pure path as before: validate, build the event, check that <code>base_revision</code> (1) equals the room's revision (1), apply it.",
+  stack:[S.hcJoin, S.admit, S.exec, S.apply, S.ev], room:R2 },
+
+{ act:ACT2, f:"server", l:175, t:"Commit at revision 1",
+  d:"Compare-and-set again, this time expecting 1. The stateholder agrees, and stores revision 2.",
+  stack:[S.hcJoin, S.admit, S.exec], hold:{rev:2, retained:2}, log:L2 },
+
+{ act:ACT2, f:"server", l:[189,190], t:"Now there is a subscriber",
+  d:"<code>state.subscribers</code> holds one pid — Ada's socket. <code>send</code> drops the event into its mailbox and returns <em>immediately</em>, without waiting for anything.",
+  why:"Asynchronous fanout means the room server never blocks on a slow client. One person on terrible hotel wifi cannot stall the room for everybody else.",
+  stack:[S.hcJoin, S.admit, S.exec, S.bcast] },
+
+{ act:ACT2, f:"socket", l:[38,39], t:"Ada's socket wakes up",
+  fnote:"back in Ada's process",
+  d:"The message lands in Ada's socket's mailbox as an ordinary <code>handle_info</code>. It encodes the event and pushes a frame. She learns Bob exists.",
+  why:"Ada finds out about Bob through the <em>same event stream</em> that will carry every future change. There's no special \"someone joined\" code path, and so no way for the two to drift apart.",
+  stack:[S.sockI], wire:w("welcomeA","helloB","evJoinB") },
+
+{ act:ACT2, f:"server", l:[193,194], t:"Bob gets his snapshot",
+  d:"Bob had no cursor either, so he receives a full snapshot: <code>control_revision: 2</code>, with both participants. He never sees the two join events that produced it.",
+  stack:[S.hcJoin, S.reply], wire:w("helloB","evJoinB","welcomeB") },
+
+/* ================================================================= ACT 3 */
+{ act:ACT3, f:"protocol", l:[72,73], t:"Ada raises her hand",
+  fnote:"back in Ada's process",
+  d:"A command frame. Both <code>command_id</code> and <code>name</code> must be strings — a client sending <code>\"command_id\": 7</code> is rejected here, at the edge, not three modules deep.",
+  stack:[S.sock, S.dec, S.decF], wire:w("evJoinB","welcomeB","cmd1") },
+
+{ act:ACT3, f:"protocol", l:[74,75], t:"The whitelist",
+  d:"<code>%{^name => command}</code> — the pin operator asks whether the string Ada sent is a <em>key</em> of <code>@client_commands</code>. It is, so <code>\"raise_hand\"</code> becomes the atom <code>:raise_hand</code>.",
+  why:"This is why a client cannot send <code>\"leave\"</code> or <code>\"join\"</code>. Those atoms exist in <code>Room.validate/4</code>, but there is no path from a wire string to them. The security boundary of the entire app is one map literal, on line 33.",
+  stack:[S.sock, S.dec, S.decF] },
+
+{ act:ACT3, f:"socket", l:81, t:"Only joined sockets may command",
+  d:"The head requires <code>phase: :joined</code> and pulls <code>claims</code> out of the state in the same breath. Ada's socket is joined, so this clause runs.",
+  stack:[S.sock, S.sockF] },
+
+{ act:ACT3, f:"server", l:[49,50], t:"Find the room — but never start it",
+  d:"<code>command</code> only looks the room up in the <code>Registry</code>. Unlike <code>join</code>, it will not create one. If the room isn't running, you aren't in it, and the command is rejected.",
+  stack:[S.sock, S.sockF, "RoomServer.command/5"] },
+
+{ act:ACT3, f:"server", l:[115,116], t:"Have we seen this command before?",
+  d:"The idempotency key is the <em>pair</em> <code>{participant_id, command_id}</code>, not the command name. Ada and Bob can both send a command called <code>\"c-1\"</code> without ever colliding.",
+  stack:[S.hcCmd] },
+
+{ act:ACT3, f:"server", l:[118,122], t:"Cache miss",
+  d:"<code>%{^key => result}</code> doesn't match — the cache is empty — so control falls to the <code>_</code> clause and we actually run the command.",
+  stack:[S.hcCmd] },
+
+{ act:ACT3, f:"room", l:[94,96], t:"Is the hand already up?",
+  d:"<code>require_joined</code> finds Ada via a pinned map match, then hands her participant map to the callback. Her hand is down, so this is a real change.",
+  stack:[S.hcCmd, S.exec, S.apply, S.valid] },
+
+{ act:ACT3, f:"room", l:99, t:"One command, exactly one event",
+  d:"<code>{:ok, \"hand_raised\", %{\"participant_id\" => \"p1\"}}</code>. The payload uses string keys, because it's bound for JSON.",
+  stack:[S.hcCmd, S.exec, S.apply, S.valid] },
+
+{ act:ACT3, f:"room", l:[132,133], t:"Revision 2 → 3",
+  d:"Three levels deep — struct, then participants map, then the participant's own field — and still nothing mutates. A brand-new room comes back.",
+  stack:[S.hcCmd, S.exec, S.apply, S.ev, S.pay], room:R3 },
+
+{ act:ACT3, f:"server", l:[175,176], t:"Commit before anything else",
+  d:"Compare-and-set, expecting revision 2. It holds. The stateholder now stores revision 3, and retains the event for future replays.",
+  stack:[S.hcCmd, S.exec], hold:{rev:3, retained:3}, log:L3 },
+
+{ act:ACT3, f:"server", l:177, t:"Only now, broadcast",
+  d:"Both sockets are subscribed. Each gets <code>{:sync_event, event}</code> dropped into its mailbox.",
+  why:"Swap lines 176 and 177 and every test still passes — until the day a commit is refused. Then clients have already seen an event that never happened, and no reconnect can repair it, because the stateholder never knew about it. <strong>The ordering is the invariant.</strong>",
+  stack:[S.hcCmd, S.exec, S.bcast], wire:w("welcomeB","cmd1","evRaise") },
+
+{ act:ACT3, f:"server", l:131, t:"Remember the command id",
+  d:"The result <code>{:committed, 3}</code> is filed under <code>{\"p1\", \"c-1\"}</code> — in a map for lookup, and in a queue for eviction order.",
+  stack:[S.hcCmd], mem:MEM1 },
+
+{ act:ACT3, f:"socket", l:91, t:"And finally, the ack",
+  d:"Ada's socket pushes <code>{\"result\":\"committed\",\"revision\":3}</code>.",
+  why:"Notice the ordering on the wire: Ada received the <em>event</em> before the <em>ack</em>. Her client must therefore be able to apply an event for a command it hasn't had confirmed yet. Every correct client of this protocol is written that way.",
+  stack:[S.sock, S.sockF], wire:w("cmd1","evRaise","ackOk") },
+
+/* ================================================================= ACT 4 */
+{ act:ACT4, f:"socket", l:26, t:"The ack never arrived",
+  d:"Ada's wifi dropped the frame. Her client does the correct thing and retries — <strong>with the same <code>command_id</code></strong>.",
+  why:"This is the moment the idempotency cache exists for. Without it a retry would raise an already-raised hand; in a system with less forgiving commands, it would transfer the money twice.",
+  stack:[S.sock], wire:w("evRaise","ackOk","cmd1r") },
+
+{ act:ACT4, f:"server", l:119, t:"Cache hit",
+  d:"<code>%{^key => result}</code> matches this time. <code>result</code> is the remembered <code>{:committed, 3}</code>.",
+  why:"Look at what does <em>not</em> happen next. No <code>validate</code>. No event. No commit. No broadcast. The room never learns this frame arrived at all.",
+  stack:[S.hcCmd] },
+
+{ act:ACT4, f:"server", l:210, t:"Committed becomes duplicate",
+  d:"<code>duplicate_of({:committed, 3})</code> returns <code>{:duplicate, 3}</code> — the <em>same revision</em>, under a different tag.",
+  why:"Ada's client learns two things at once: your command did take effect, and this is the second time you've asked. It can stop retrying without having to guess.",
+  stack:[S.hcCmd, "RoomServer.duplicate_of/1"], mem:MEM2 },
+
+{ act:ACT4, f:"protocol", l:123, t:"A duplicate ack",
+  d:"The second <code>encode_ack</code> clause fires, selected purely by the shape of the result tuple. The room, the log, and the stateholder are all exactly where they were.",
+  stack:[S.sock, S.sockF, S.ack],
+  room:R3, log:L3, hold:{rev:3, retained:3}, wire:w("ackOk","cmd1r","ackDup") },
+
+/* ================================================================= ACT 5 */
+{ act:ACT5, f:"socket", l:26, t:"A genuinely new command",
+  d:"Ada's client sends <code>raise_hand</code> again, but with a fresh <code>command_id</code> of <code>\"c-2\"</code>. Perhaps she double-clicked.",
+  stack:[S.sock], wire:w("cmd1r","ackDup","cmd2") },
+
+{ act:ACT5, f:"server", l:[118,123], t:"Cache miss — this really is new",
+  d:"<code>{\"p1\", \"c-2\"}</code> isn't in the cache, so idempotency offers no protection here. The command runs for real.",
+  why:"Idempotency and validity are different problems. The cache only knows about <em>repeats</em>. Whether a command makes any sense is the pure core's job — and it is about to say no.",
+  stack:[S.hcCmd] },
+
+{ act:ACT5, f:"room", l:[95,97], t:"The hand is already up",
+  d:"<code>participant.hand_raised</code> is <code>true</code>, so <code>validate</code> returns <code>{:error, :no_change}</code>.",
+  why:"No event is produced. The log records only things that actually changed, so replaying it reproduces the same room with no meaningless no-op entries strewn in between.",
+  stack:[S.hcCmd, S.exec, S.apply, S.valid] },
+
+{ act:ACT5, f:"room", l:43, t:"The `with` chain bails out",
+  d:"<code>{:error, :no_change}</code> does not match the pattern <code>{:ok, name, event_payload}</code>. So <code>with</code> short-circuits and returns that error value <em>unchanged</em>, straight to the caller. Lines 44–51 never run.",
+  why:"No <code>else</code> clause was needed, and no exception was thrown. The failure simply propagates as an ordinary value. This is what people mean when they say Elixir doesn't need exceptions for expected failures.",
+  stack:[S.hcCmd, S.exec, S.apply] },
+
+{ act:ACT5, f:"server", l:[184,185], t:"Rejected, and nothing moved",
+  d:"<code>execute</code> returns <code>{{:rejected, :no_change}, state}</code> — note it hands back the <strong>original</strong> state. The stateholder was never called. Nothing was broadcast.",
+  stack:[S.hcCmd, S.exec], room:R3, log:L3, hold:{rev:3, retained:3} },
+
+{ act:ACT5, f:"protocol", l:[126,127], t:"An ack with a reason, not a revision",
+  d:"The third <code>encode_ack</code> clause. It carries <code>\"reason\"</code> instead of <code>\"revision\"</code>, because nothing was committed and there <em>is</em> no revision to report. <code>to_string</code> turns the atom <code>:no_change</code> into a string — atoms never cross the wire.",
+  why:"Three commands arrived. One committed, one was a duplicate, one was rejected: three different acks, three different shapes — and exactly <strong>one</strong> event in the log. That is the entire design, and you have now watched all of it run.",
+  stack:[S.sock, S.sockF, S.ack], mem:MEM3, wire:w("ackDup","cmd2","ackRej") },
+
+];
 
       /* =============================================================== highlight */
 
@@ -1937,9 +2278,16 @@
         });
       }
 
+      /* Formatters like to re-indent embedded <script type="text/plain"> blocks.
+         Strip whatever common indent they added, so line N here is line N in the
+         real .ex file and the code renders at its true indentation. */
       function srcLines(key) {
-        const raw = document.getElementById("src-" + key).textContent;
-        return raw.replace(/^\n/, "").replace(/\n$/, "").split("\n");
+        const lines = document.getElementById("src-" + key).textContent.split("\n");
+        while (lines.length && !lines[0].trim()) lines.shift();
+        while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+        const indents = lines.filter(l => l.trim()).map(l => l.match(/^ */)[0].length);
+        const pad = indents.length ? Math.min(...indents) : 0;
+        return lines.map(l => l.slice(pad));
       }
 
       const SRC = {},
