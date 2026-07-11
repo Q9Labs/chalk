@@ -67,7 +67,7 @@ function connect(participant, useCursor = false) {
     if (participant.socket !== socket) return;
     participant.socket = null;
     participant.status = "offline";
-    addClientStory(participant, `Connection closed (${code}${reason ? `: ${reason}` : ""}).`);
+    addClientStory(participant, `Connection closed (\`${code}\`${reason ? `: ${reason}` : ""}).`);
     render(state);
   });
 
@@ -100,14 +100,14 @@ function applyServerFrame(participant, frame) {
     if (frame.mode === "snapshot") applySnapshot(frame.snapshot);
     if (frame.mode === "replay") frame.events.forEach(applyEvent);
     participant.cursor = frame.mode === "snapshot" ? frame.snapshot.control_revision : frame.control_revision;
-    addClientStory(participant, `Joined with a ${frame.mode} at revision ${participant.cursor}.`);
+    addClientStory(participant, `Joined with a \`${frame.mode}\` at revision \`${participant.cursor}\`.`);
   }
   if (frame.type === "event") {
     applyEvent(frame);
     participant.cursor = frame.revision;
   }
   if (frame.type === "ack") {
-    addClientStory(participant, `Command ${frame.command_id} was ${frame.result}.`);
+    addClientStory(participant, `Command \`${frame.command_id}\` was \`${frame.result}\`.`);
   }
   if (frame.type === "error") addClientStory(participant, `Protocol error: ${frame.message}.`);
   render(state);
@@ -196,23 +196,23 @@ function addServerTrace(event) {
 function describeTrace(event) {
   const d = event.details;
   const descriptions = {
-    "socket.connected": `WebSocket connection #${d.connection_id} opened.`,
-    "socket.participant_joined": `${d.participant_id} authenticated and joined with a ${d.welcome_mode}.`,
-    "socket.event_sent": `Sent ${d.event} at revision ${d.revision} to connection #${d.connection_id}.`,
-    "socket.disconnected": `Connection #${d.connection_id} closed.`,
-    "room.writer_started": `The authoritative room writer started at revision ${d.revision}.`,
-    "room.subscriber_added": `${d.participant_id} subscribed; ${d.subscribers} connection(s) now listening.`,
-    "room.event_committed": `Committed ${d.event}; room advanced to revision ${d.revision}.`,
-    "room.writer_stopped": `The room writer stopped at revision ${d.revision} because the room became empty.`,
-    "command.processed": `${d.participant_id} sent ${d.command}; result was ${d.result}.`,
-    "auth.token_rejected": `Rejected the token on connection #${d.connection_id}.`,
+    "socket.connected": `Connection \`#${d.connection_id}\` opened.`,
+    "socket.participant_joined": `\`${d.participant_id}\` authenticated and joined with a \`${d.welcome_mode}\`.`,
+    "socket.event_sent": `Sent \`${d.event}\` at revision \`${d.revision}\` to connection \`#${d.connection_id}\`.`,
+    "socket.disconnected": `Connection \`#${d.connection_id}\` closed.`,
+    "room.writer_started": `The authoritative room writer started at revision \`${d.revision}\`.`,
+    "room.subscriber_added": `\`${d.participant_id}\` subscribed; ${d.subscribers} connection(s) now listening.`,
+    "room.event_committed": `Committed \`${d.event}\`; room advanced to revision \`${d.revision}\`.`,
+    "room.writer_stopped": `The room writer stopped at revision \`${d.revision}\` because the room became empty.`,
+    "command.processed": `\`${d.participant_id}\` sent \`${d.command}\`; result was \`${d.result}\`.`,
+    "auth.token_rejected": `Rejected the token on connection \`#${d.connection_id}\`.`,
     "protocol.frame_rejected": `Rejected a frame: ${d.reason}.`,
   };
   return descriptions[`${event.source}.${event.action}`] || `${event.source} ${event.action.replaceAll("_", " ")}.`;
 }
 
 function participantFrom(target) {
-  const id = target.closest(".participant-card")?.dataset.participantId;
+  const id = target.closest(".card")?.dataset.participantId;
   return state.participants.find((person) => person.id === id);
 }
 
@@ -247,12 +247,24 @@ $("#room-id").addEventListener("change", ({ target }) => {
   state.participants.forEach((participant) => (participant.cursor = null));
   render(state);
 });
-$("#clear-logs").addEventListener("click", () => { state.traces = []; state.frames = []; renderLogs(state); });
-document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
-  document.querySelectorAll(".tab").forEach((item) => item.classList.toggle("active", item === tab));
-  $("#story-log").classList.toggle("hidden", tab.dataset.tab !== "story");
-  $("#frame-log").classList.toggle("hidden", tab.dataset.tab !== "frames");
-}));
+$("#clear-logs").addEventListener("click", () => {
+  state.traces = [];
+  state.frames = [];
+  renderLogs(state);
+});
+document.querySelectorAll(".tab").forEach((tab) =>
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((item) => {
+      const active = item === tab;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-selected", String(active));
+    });
+    const framesActive = tab.dataset.tab === "frames";
+    $("#story-log").classList.toggle("hidden", framesActive);
+    $("#frame-log").classList.toggle("hidden", !framesActive);
+    $(".trace-scroll").classList.toggle("frames-active", framesActive);
+  }),
+);
 
 ["Ada", "Bo", "Cora"].forEach(addParticipant);
 connectTraceStream();

@@ -4,105 +4,96 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chalk Sync Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/dev/lab/styles.css" />
   </head>
   <body>
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
     <header class="topbar">
       <div class="brand">
-        <div class="mark">C</div>
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1.5 8h3l2-4.5 3 9 2-4.5h3" />
+          </svg>
+        </span>
         <div>
-          <strong>Chalk Sync Lab</strong>
-          <span>Live protocol observatory</span>
+          <strong>Sync Lab</strong>
+          <span>Chalk protocol observatory</span>
         </div>
       </div>
-      <div class="server-pill"><i id="server-dot"></i><span id="server-status">Connecting to trace stream</span></div>
+      <div class="topbar-right">
+        <div class="revision-chip">
+          <span>Revision</span>
+          <strong id="revision">0</strong>
+        </div>
+        <div class="server-pill"><i id="server-dot"></i><span id="server-status">Connecting to trace stream</span></div>
+      </div>
     </header>
 
     <main>
-      <section class="hero">
-        <div>
-          <p class="eyebrow">REAL SERVER · REAL WEBSOCKETS</p>
-          <h1>See a room think.</h1>
-          <p>Act as several participants and watch every command become ordered shared state.</p>
+      <section class="panel room-panel">
+        <header class="panel-bar">
+          <h2>Room</h2>
+          <div class="room-id-group">
+            <input id="room-id" autocomplete="off" spellcheck="false" aria-label="Room ID" />
+            <button class="btn ghost" id="new-room" title="Start a fresh room with a new ID">New room</button>
+          </div>
+          <span class="count" id="participant-count">0 connected</span>
+        </header>
+        <div class="toolbar">
+          <button class="btn primary" id="connect-all">Connect all</button>
+          <button class="btn" id="add-participant">Add participant</button>
+          <button class="btn ghost danger" id="disconnect-all">Disconnect all</button>
         </div>
-        <div class="revision-card">
-          <span>CONTROL REVISION</span>
-          <strong id="revision">0</strong>
-          <small id="continuity">Waiting for the first snapshot</small>
+        <div class="room-scroll">
+          <div id="participants" class="participants"></div>
+          <div id="empty-room" class="empty-room">
+            <strong>The room is quiet</strong>
+            <span>Add a participant and connect them to start the event stream.</span>
+          </div>
         </div>
       </section>
 
-      <section class="workspace">
-        <aside class="control-panel panel">
-          <div class="panel-heading">
-            <div><span class="step">01</span><h2>Scenario</h2></div>
-            <button class="icon-button" id="new-room" title="Start a fresh room">↻</button>
+      <section class="panel trace-panel">
+        <header class="panel-bar">
+          <div class="tabs" role="tablist">
+            <button class="tab active" role="tab" aria-selected="true" data-tab="story">Activity</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="frames">Raw frames</button>
           </div>
-          <label class="field-label" for="room-id">Room ID</label>
-          <input id="room-id" autocomplete="off" spellcheck="false" />
-          <div class="button-stack">
-            <button class="primary" id="connect-all">Connect everyone</button>
-            <button class="secondary" id="add-participant">Add participant</button>
-            <button class="ghost danger" id="disconnect-all">Disconnect all</button>
-          </div>
-          <div class="explainer">
-            <span>How to explore</span>
+          <button class="btn ghost" id="clear-logs">Clear</button>
+        </header>
+        <div class="trace-scroll">
+          <div id="trace-hint" class="trace-hint">
+            <strong>Nothing traced yet</strong>
             <ol>
               <li>Connect the participants.</li>
               <li>Raise a hand from any card.</li>
-              <li>Disconnect and reconnect someone.</li>
-              <li>Follow the server trace on the right.</li>
+              <li>Disconnect someone, then reconnect them to watch the replay.</li>
             </ol>
-          </div>
-          <div class="legend">
-            <span><i class="dot client"></i>Client frame</span>
-            <span><i class="dot server"></i>Server trace</span>
-          </div>
-        </aside>
-
-        <section class="room-panel panel">
-          <div class="panel-heading">
-            <div><span class="step">02</span><h2>Live room</h2></div>
-            <span class="count" id="participant-count">0 connected</span>
-          </div>
-          <div id="participants" class="participants"></div>
-          <div id="empty-room" class="empty-room">
-            <div class="empty-rings"><i></i><i></i><i></i><b>⌁</b></div>
-            <strong>The room is quiet</strong>
-            <span>Connect a participant to begin the event stream.</span>
-          </div>
-        </section>
-
-        <aside class="trace-panel panel">
-          <div class="panel-heading trace-heading">
-            <div><span class="step">03</span><h2>Observe</h2></div>
-            <button class="text-button" id="clear-logs">Clear</button>
-          </div>
-          <div class="tabs" role="tablist">
-            <button class="tab active" data-tab="story">Readable trace</button>
-            <button class="tab" data-tab="frames">Raw frames</button>
           </div>
           <div id="story-log" class="log"></div>
           <div id="frame-log" class="log hidden"></div>
-        </aside>
+        </div>
       </section>
     </main>
 
     <template id="participant-template">
-      <article class="participant-card">
-        <div class="card-top">
-          <div class="avatar"></div>
-          <div class="identity"><strong></strong><span></span></div>
-          <i class="connection-dot"></i>
-        </div>
-        <div class="participant-state"><span>Hand</span><strong>Lowered</strong></div>
+      <article class="card">
+        <header class="card-top">
+          <span class="avatar"></span>
+          <div class="identity"><strong></strong><code></code></div>
+          <span class="status-badge"></span>
+        </header>
+        <div class="hand-row"><span class="hand-icon">✋</span><span class="hand-label">Hand lowered</span></div>
         <div class="card-actions">
-          <button class="hand-action">Raise hand</button>
-          <button class="connection-action">Connect</button>
+          <button class="btn hand-action">Raise hand</button>
+          <button class="btn connection-action">Connect</button>
         </div>
-        <button class="reconnect-action">Reconnect from last revision</button>
+        <button class="reconnect-action">Reconnect &amp; replay</button>
       </article>
     </template>
     <script type="module" src="/dev/lab/app.js"></script>
