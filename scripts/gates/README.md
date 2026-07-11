@@ -27,7 +27,7 @@ scripts, and test helpers by explicit Chalk policy. Set
 scope.
 
 The gate also runs Fallow, Semgrep, Gitleaks, OSV-Scanner, the focused
-`apps/api` Go gate when present, Syncpack, CSpell, OpenAPI drift/stub checks,
+`apps/api` Go gate when present, Syncpack, OpenAPI drift/stub checks,
 TypeScript, lint, tests, coverage, build, publint, and Are The Types Wrong.
 Gitleaks scans the commit delta from `origin/master` by default; set
 `GITLEAKS_BASE_REF` or `GITLEAKS_LOG_OPTS` to change that range.

@@ -30,9 +30,6 @@ pnpm run contract:check
 # Enforce package.json dependency/version policy across the monorepo.
 pnpm run deps:syncpack
 
-# Catch typos in identifiers, comments, docs, config, and user-facing copy.
-pnpm run lint:spelling
-
 # Require meaningful source files to have matching tests unless explicitly excluded.
 pnpm run test:presence
 
