@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Test-only sync breaker harness with deterministic model histories, real
+  WebSocket campaigns, controlled writer faults, replay-ready JSONL traces, and
+  failure-first Markdown reports.
 - Development-only sync server lab that starts empty and exercises live
   WebSocket participants, shared state, raw protocol frames, reconnects,
   redacted human-readable traces, and production failure drills.
