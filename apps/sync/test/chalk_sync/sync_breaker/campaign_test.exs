@@ -51,6 +51,32 @@ defmodule ChalkSync.SyncBreaker.CampaignTest do
     refute Enum.any?(messages, &tcp_message?/1)
   end
 
+  test "rejects empty and unknown scenario selections before starting a campaign" do
+    assert_raise ArgumentError, "at least one sync breaker scenario must be selected", fn ->
+      Campaign.run(scenarios: [])
+    end
+
+    assert_raise ArgumentError, "unknown sync breaker scenarios: missing", fn ->
+      Campaign.run(scenarios: ["model", "missing"])
+    end
+  end
+
+  @tag :tmp_dir
+  test "accepts a repeated valid scenario and executes it once", %{tmp_dir: tmp_dir} do
+    result =
+      Campaign.run(
+        seed: 600,
+        cases: 1,
+        steps: 1,
+        participants: 1,
+        output: tmp_dir,
+        scenarios: ["model", "model"]
+      )
+
+    assert result.verdict == :pass
+    assert [%{scenario: "model"}] = result.results
+  end
+
   defp tcp_message?({:tcp, _socket, _data}), do: true
   defp tcp_message?({:tcp_closed, _socket}), do: true
   defp tcp_message?({:tcp_error, _socket, _reason}), do: true

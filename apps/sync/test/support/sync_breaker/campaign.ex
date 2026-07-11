@@ -22,7 +22,7 @@ defmodule ChalkSync.SyncBreaker.Campaign do
     config = config(options)
     run_directory = Report.create_run_directory(config.output, config.seed)
     reset_memory_stateholder()
-    {:ok, listener} = Bandit.start_link(plug: Router, port: 0)
+    {:ok, listener} = Bandit.start_link(plug: Router, ip: {127, 0, 0, 1}, port: 0)
     {:ok, {_address, port}} = ThousandIsland.listener_info(listener)
 
     try do
@@ -180,7 +180,7 @@ defmodule ChalkSync.SyncBreaker.Campaign do
   end
 
   defp config(options) do
-    scenarios = Keyword.get(options, :scenarios, :all)
+    scenarios = options |> Keyword.get(:scenarios, :all) |> validate_scenarios!()
 
     %{
       seed: positive_option(options, :seed, @default_seed),
@@ -192,6 +192,28 @@ defmodule ChalkSync.SyncBreaker.Campaign do
       output: Keyword.get(options, :output, default_output()),
       scenarios: scenarios
     }
+  end
+
+  defp validate_scenarios!(:all), do: :all
+
+  defp validate_scenarios!(scenarios) when is_list(scenarios) do
+    known = scenario_names()
+    unknown = Enum.reject(scenarios, &(&1 in known))
+
+    cond do
+      scenarios == [] ->
+        raise ArgumentError, "at least one sync breaker scenario must be selected"
+
+      unknown != [] ->
+        raise ArgumentError, "unknown sync breaker scenarios: #{Enum.join(unknown, ", ")}"
+
+      true ->
+        scenarios
+    end
+  end
+
+  defp validate_scenarios!(scenarios) do
+    raise ArgumentError, "scenarios must be :all or a list, got: #{inspect(scenarios)}"
   end
 
   defp boolean_option(options, key, default) do
