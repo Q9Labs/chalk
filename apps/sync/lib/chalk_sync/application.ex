@@ -10,6 +10,7 @@ defmodule ChalkSync.Application do
         {Registry, keys: :unique, name: ChalkSync.Rooms.Registry},
         {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Rooms.Supervisor},
         stateholder_child(),
+        observability_child(),
         dev_tools_child(),
         listener_child()
       ]
@@ -28,6 +29,10 @@ defmodule ChalkSync.Application do
   defp dev_tools_child do
     if Application.fetch_env!(:chalk_sync, :dev_tools),
       do: {ChalkSync.DevTools.TraceHub, []}
+  end
+
+  defp observability_child do
+    if ChalkSync.Observability.enabled?(), do: ChalkSync.Observability
   end
 
   # Tests set port: :none and boot their own listener on an ephemeral port.

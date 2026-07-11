@@ -8,7 +8,7 @@ import { useChat } from "../hooks/useChat";
 import { useMedia } from "../hooks/useMedia";
 import { useParticipants } from "../hooks/useParticipants";
 import { useRoom } from "../hooks/useRoom";
-import { useSession } from "../context/chalk-native-provider";
+import { useChalkSession, useSession } from "../context/chalk-native-provider";
 import { useTranscripts } from "../hooks/useTranscripts";
 import { Theme } from "../ui/theme";
 import { NativeEndScreen, type NativeMeetingEndData } from "./NativeEndScreen";
@@ -65,6 +65,7 @@ export interface NativeVideoConferenceDiagnosticsSnapshot {
 export function NativeVideoConference({ roomId, roomName, userName, role = "participant", autoJoin = false, callKit, initialPhase, initialJoinSettings, features, onJoin, onLeave, onEnd, onClose, onError, onDiagnosticsChange }: NativeVideoConferenceProps): React.JSX.Element {
   const simulatorMediaDisabled = isIosSimulator();
   const session = useSession();
+  const { telemetry } = useChalkSession();
   const connection = useConnection();
   const media = useMedia();
   const room = useRoom();
@@ -204,13 +205,14 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
         setPhase("lobby");
       }
 
+      telemetry?.recordSyncFrame({ direction: "client_to_server", frameType: "room.leave" });
       await connection.leave();
 
       if (options?.closeAfterLeave) {
         onClose?.();
       }
     },
-    [connection, endCallKitCall, finalizeMeeting, onClose, phase],
+    [connection, endCallKitCall, finalizeMeeting, onClose, phase, telemetry],
   );
 
   useEffect(() => {
@@ -295,11 +297,12 @@ export function NativeVideoConference({ roomId, roomName, userName, role = "part
         setJoinError(wrappedError.message);
         setPhase("lobby");
       });
+    telemetry?.recordSyncFrame({ direction: "client_to_server", frameType: "room.join" });
 
     return () => {
       cancelled = true;
     };
-  }, [connection.join, endCallKitCall, joinNonce, joinSettings.audioEnabled, joinSettings.displayName, joinSettings.videoEnabled, phase, promoteToMeeting, role, roomId, session, simulatorMediaDisabled]);
+  }, [connection.join, endCallKitCall, joinNonce, joinSettings.audioEnabled, joinSettings.displayName, joinSettings.videoEnabled, phase, promoteToMeeting, role, roomId, session, simulatorMediaDisabled, telemetry]);
 
   useEffect(() => {
     if (phase !== "joining" || !connection.isConnected) {

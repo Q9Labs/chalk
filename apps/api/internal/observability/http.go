@@ -69,6 +69,10 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 	}
 }
 
+func (r *responseRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 func (r *responseRecorder) WriteHeader(status int) {
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)

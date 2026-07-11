@@ -1,0 +1,233 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Chalk observability health
+    folder: Chalk
+    interval: 1m
+    rules:
+      - uid: chalk-collector-refused
+        title: Chalk collector is refusing telemetry
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(otelcol_receiver_refused_spans_total[5m])) + sum(increase(otelcol_receiver_refused_metric_points_total[5m])) + sum(increase(otelcol_receiver_refused_log_records_total[5m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 3
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: The local collector refused one or more traces, metric points, or log records in the last five minutes.
+          summary: Chalk telemetry is being dropped at the collector boundary.
+        labels:
+          service: chalk-observability
+          severity: critical
+      - uid: chalk-ledger-failures
+        title: Chalk journey ledger writes are failing
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(chalk_api_journey_events_ledger_failures_total[5m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 1
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: The API could not durably accept one or more journey events in the last five minutes.
+          summary: Chalk journey completeness is impaired.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-pipeline-stale
+        title: Chalk independent telemetry metric smoke is stale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: last_over_time(chalk_observability_canary_signal_fresh{service_name="chalk-observability-canary",signal="metrics"}[5m])
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A < 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 3
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: The independent canary has not confirmed its metric path within five minutes.
+          summary: Chalk cannot prove the metrics pipeline is working.
+        labels:
+          service: chalk-observability
+          severity: critical
+      - uid: chalk-pipeline-trace-stale
+        title: Chalk independent telemetry trace smoke is stale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: last_over_time(chalk_observability_canary_signal_fresh{service_name="chalk-observability-canary",signal="traces"}[5m])
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A < 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 5
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: The independent canary has not confirmed its trace in Tempo within five minutes.
+          summary: Chalk cannot prove the traces pipeline is working.
+        labels:
+          service: chalk-observability
+          severity: critical
+      - uid: chalk-pipeline-log-stale
+        title: Chalk independent telemetry log smoke is stale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: last_over_time(chalk_observability_canary_signal_fresh{service_name="chalk-observability-canary",signal="logs"}[5m])
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A < 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 7
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: The independent canary has not confirmed its log in Loki within five minutes.
+          summary: Chalk cannot prove the logs pipeline is working.
+        labels:
+          service: chalk-observability
+          severity: critical

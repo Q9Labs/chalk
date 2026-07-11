@@ -1,5 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
+import { webTelemetry } from "../lib/telemetry";
+import { installWebTelemetryLifecycle } from "../lib/telemetryLifecycle";
 import appCss from "../styles.css?url";
 
 installChunkLoadAutoReload();
@@ -37,11 +40,21 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <WebTelemetryBootstrap />
         {children}
         <Scripts />
       </body>
     </html>
   );
+}
+
+function WebTelemetryBootstrap() {
+  useEffect(() => {
+    const journey = webTelemetry.startJourney({ kind: "web.application" });
+    return installWebTelemetryLifecycle(webTelemetry, journey);
+  }, []);
+
+  return null;
 }
 
 function BlankPage() {

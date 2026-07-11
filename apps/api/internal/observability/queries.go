@@ -15,7 +15,7 @@ type operationQuerier struct {
 }
 
 func OperationQueries(next sqlc.Querier, logger *slog.Logger) sqlc.Querier {
-	if next == nil || logger == nil {
+	if next == nil {
 		return next
 	}
 
@@ -116,6 +116,13 @@ func (q operationQuerier) GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.G
 	return tenant, err
 }
 
+func (q operationQuerier) GetJourneyTerminalState(ctx context.Context, journeyID pgtype.UUID) (string, error) {
+	startedAt := time.Now()
+	state, err := q.next.GetJourneyTerminalState(ctx, journeyID)
+	LogOperation(ctx, q.logger, "db.query", "GetJourneyTerminalState", startedAt, err)
+	return state, err
+}
+
 func (q operationQuerier) GetTenantAuditLog(ctx context.Context, arg sqlc.GetTenantAuditLogParams) (sqlc.AuditLog, error) {
 	startedAt := time.Now()
 	log, err := q.next.GetTenantAuditLog(ctx, arg)
@@ -142,6 +149,13 @@ func (q operationQuerier) GetUser(ctx context.Context, id pgtype.UUID) (sqlc.Use
 	user, err := q.next.GetUser(ctx, id)
 	LogOperation(ctx, q.logger, "db.query", "GetUser", startedAt, err)
 	return user, err
+}
+
+func (q operationQuerier) InsertJourneyEvent(ctx context.Context, arg sqlc.InsertJourneyEventParams) (pgtype.UUID, error) {
+	startedAt := time.Now()
+	eventID, err := q.next.InsertJourneyEvent(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "InsertJourneyEvent", startedAt, err)
+	return eventID, err
 }
 
 func (q operationQuerier) GetLoginSessionByTokenHash(ctx context.Context, tokenHash string) (sqlc.GetLoginSessionByTokenHashRow, error) {
@@ -212,6 +226,13 @@ func (q operationQuerier) ListTenantMemberships(ctx context.Context, arg sqlc.Li
 	memberships, err := q.next.ListTenantMemberships(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "ListTenantMemberships", startedAt, err)
 	return memberships, err
+}
+
+func (q operationQuerier) ListJourneyEvents(ctx context.Context, journeyID pgtype.UUID) ([]sqlc.ObservabilityJourneyEvent, error) {
+	startedAt := time.Now()
+	events, err := q.next.ListJourneyEvents(ctx, journeyID)
+	LogOperation(ctx, q.logger, "db.query", "ListJourneyEvents", startedAt, err)
+	return events, err
 }
 
 func (q operationQuerier) ListTenantAuditLogs(ctx context.Context, arg sqlc.ListTenantAuditLogsParams) ([]sqlc.AuditLog, error) {

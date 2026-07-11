@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { ChalkApi } from "./generated/http-api";
+import { journeyHeaders, type JourneyTelemetryContext } from "./telemetry";
 
 export type ChalkBearerAuth = {
   readonly type: "bearer";
@@ -17,6 +18,8 @@ export type ChalkEffectClientOptions = {
   readonly auth?: ChalkAuth;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: ChalkClientHeaders;
+  /** Optional v1 journey context. Generated API calls receive lowercase x-chalk-journey-id and W3C trace headers. */
+  readonly telemetry?: JourneyTelemetryContext;
 };
 
 export const createChalkEffectClient = (options: ChalkEffectClientOptions) => {
@@ -35,6 +38,7 @@ export const createChalkEffectClient = (options: ChalkEffectClientOptions) => {
 function requestHeaders(options: ChalkEffectClientOptions): Record<string, string> {
   return {
     ...options.headers,
+    ...(options.telemetry ? journeyHeaders(options.telemetry) : {}),
     ...authHeaders(options.auth),
   };
 }

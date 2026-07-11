@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -412,6 +414,15 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 	if fieldName == "pagination" {
 		return schemaReference("Pagination")
 	}
+	if (schemaName == "JourneyEventBatch" || schemaName == "JourneyLedger") && fieldName == "attributes" {
+		return journeyAttributesSchema()
+	}
+	if fieldName == "trace_id" {
+		return nullableSchema(traceIdentifierSchema(32))
+	}
+	if fieldName == "span_id" {
+		return nullableSchema(traceIdentifierSchema(16))
+	}
 	if name, ok := idSchemaName(schemaName, fieldName); ok {
 		return schemaReference(name)
 	}
@@ -441,6 +452,29 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 	return applyFieldConstraints(schema, schemaName, fieldName, request)
 }
 
+func journeyAttributesSchema() map[string]any {
+	return map[string]any{
+		"type":          "object",
+		"maxProperties": journeys.MaxAttributes,
+		"additionalProperties": map[string]any{
+			"anyOf": []map[string]any{
+				{"type": "string", "maxLength": journeys.MaxAttributeText},
+				{"type": "number"},
+				{"type": "boolean"},
+			},
+		},
+	}
+}
+
+func traceIdentifierSchema(length int) map[string]any {
+	return map[string]any{
+		"type":      "string",
+		"minLength": length,
+		"maxLength": length,
+		"pattern":   fmt.Sprintf("^(?=.*[1-9a-fA-F])[0-9a-fA-F]{%d}$", length),
+	}
+}
+
 func applyFieldConstraints(schema map[string]any, schemaName string, fieldName string, request bool) map[string]any {
 	if enum := fieldEnum(schemaName, fieldName); len(enum) > 0 {
 		schema["enum"] = enum
@@ -464,6 +498,9 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		if items, ok := schema["items"].(map[string]any); ok {
 			items["minLength"] = 1
 		}
+	}
+	if schemaName == "JourneyEventBatch" && fieldName == "events" {
+		schema["maxItems"] = journeys.MaxEventsPerBatch
 	}
 	return schema
 }
@@ -865,6 +902,9 @@ func suffixIDSchemaName(fieldName string) (string, bool) {
 }
 
 func isUUIDField(fieldName string) bool {
+	if fieldName == "trace_id" || fieldName == "span_id" {
+		return false
+	}
 	return fieldName == "id" || strings.HasSuffix(fieldName, "_id")
 }
 

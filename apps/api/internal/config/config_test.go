@@ -67,6 +67,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.CloudflareRealtime.RTKAppID != "" {
 		t.Fatalf("cloudflare rtk app id = %q, want empty", cfg.CloudflareRealtime.RTKAppID)
 	}
+	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
+		t.Fatalf("cloudflare rtk token org id = %q, want empty", cfg.CloudflareRealtime.RTKTokenOrgID)
+	}
 	if cfg.CloudflareRealtime.RTKPresetFacilitator != config.DefaultCloudflareRTKPresetFacilitator {
 		t.Fatalf("cloudflare rtk facilitator preset = %q, want %q", cfg.CloudflareRealtime.RTKPresetFacilitator, config.DefaultCloudflareRTKPresetFacilitator)
 	}
@@ -286,6 +289,7 @@ func TestLoadCloudflareRealtime(t *testing.T) {
 	t.Setenv(config.CloudflareRealtimeAppID, "sfu-app-id")
 	t.Setenv(config.CloudflareRealtimeAppSecret, "sfu-app-secret")
 	t.Setenv(config.CloudflareRTKAppID, "rtk-app-id")
+	t.Setenv(config.CloudflareRTKTokenOrgID, "rtk-token-org-id")
 	t.Setenv(config.CloudflareRTKPresetFacilitator, "host-preset")
 	t.Setenv(config.CloudflareRTKPresetContributor, "participant-preset")
 	t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "2500")
@@ -309,6 +313,9 @@ func TestLoadCloudflareRealtime(t *testing.T) {
 	}
 	if cfg.CloudflareRealtime.RTKAppID != "rtk-app-id" {
 		t.Fatalf("cloudflare rtk app id = %q, want rtk-app-id", cfg.CloudflareRealtime.RTKAppID)
+	}
+	if cfg.CloudflareRealtime.RTKTokenOrgID != "rtk-token-org-id" {
+		t.Fatalf("cloudflare rtk token org id = %q, want rtk-token-org-id", cfg.CloudflareRealtime.RTKTokenOrgID)
 	}
 	if cfg.CloudflareRealtime.RTKPresetFacilitator != "host-preset" {
 		t.Fatalf("cloudflare rtk facilitator preset = %q, want host-preset", cfg.CloudflareRealtime.RTKPresetFacilitator)
@@ -402,6 +409,7 @@ func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.APILogFormat, "text")
 	t.Setenv(config.APILogLevel, "debug")
+	t.Setenv(config.APIOTLPEndpoint, "https://otel.chalk.test:4318")
 	t.Setenv(config.APIProfiler, "true")
 	t.Setenv(config.APIOperationLogs, "1")
 	t.Setenv(config.APIRequestLogs, "sampled")
@@ -435,6 +443,9 @@ func TestLoadObservability(t *testing.T) {
 	}
 	if cfg.Observability.LogLevel != "debug" {
 		t.Fatalf("log level = %q, want debug", cfg.Observability.LogLevel)
+	}
+	if cfg.Observability.OTLPEndpoint != "https://otel.chalk.test:4318" || cfg.Observability.OTLPInsecure {
+		t.Fatalf("OTLP config = %#v", cfg.Observability)
 	}
 	if cfg.Observability.RequestLogs != "sampled" {
 		t.Fatalf("request logs = %q, want sampled", cfg.Observability.RequestLogs)
@@ -666,6 +677,22 @@ func TestLoadRejectsInvalidObservabilitySettings(t *testing.T) {
 			name: "negative slow request threshold",
 			env: map[string]string{
 				config.APISlowRequestMS: "-1",
+			},
+		},
+		{
+			name: "insecure OTLP outside local",
+			env: map[string]string{
+				config.APIEnvironment:  "staging",
+				config.DatabaseURL:     "postgres://db.internal/chalk?sslmode=require",
+				config.ComposioAPIKey:  "composio-key",
+				config.APIOTLPEndpoint: "http://otel.test:4318",
+				config.APIOTLPInsecure: "true",
+			},
+		},
+		{
+			name: "OTLP endpoint without TLS",
+			env: map[string]string{
+				config.APIOTLPEndpoint: "http://otel.test:4318",
 			},
 		},
 	}

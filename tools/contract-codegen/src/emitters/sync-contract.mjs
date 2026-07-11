@@ -176,6 +176,9 @@ function validateSyncContract(value) {
     throw new Error("Invalid sync v1 contract: protocol must describe version 1 JSON text frames");
   }
 
+  assertObject(value.correlation, "correlation is required");
+  validateFieldMap(value.correlation.optionalTopLevelFields, "optional correlation fields are required");
+
   assertArray(value.phases, "phases are required");
   assertObject(value.hello, "hello is required");
   validateField(value.hello.token);

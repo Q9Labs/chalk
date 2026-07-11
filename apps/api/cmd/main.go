@@ -11,6 +11,7 @@ import (
 	"time"
 
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
+	rtkadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk"
 	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/openrouter"
@@ -25,6 +26,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
+	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
@@ -48,11 +50,30 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	telemetry, err := observability.Start(context.Background(), observability.Config{
+		Environment:  cfg.Observability.Environment,
+		OTLPEndpoint: cfg.Observability.OTLPEndpoint,
+		OTLPInsecure: cfg.Observability.OTLPInsecure,
+		Service:      cfg.Observability.Service,
+		Version:      cfg.Observability.Version,
+	})
+	if err != nil {
+		return fmt.Errorf("start telemetry: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := observability.TelemetryShutdownContext()
+		defer cancel()
+		if err := telemetry.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "api: shutdown telemetry: %v\n", err)
+		}
+	}()
 
 	diagnostics := observability.New(observability.Config{
 		Environment:          cfg.Observability.Environment,
 		LogFormat:            observability.LogFormat(cfg.Observability.LogFormat),
 		LogLevel:             cfg.Observability.LogLevel,
+		OTLPEndpoint:         cfg.Observability.OTLPEndpoint,
+		OTLPInsecure:         cfg.Observability.OTLPInsecure,
 		OperationLogs:        cfg.Observability.OperationLogs,
 		Profiler:             cfg.Observability.Profiler,
 		RequestLogs:          observability.RequestLogMode(cfg.Observability.RequestLogs),
@@ -67,6 +88,7 @@ func run() error {
 		"address", cfg.API.Address,
 		"log_format", cfg.Observability.LogFormat,
 		"log_level", cfg.Observability.LogLevel,
+		"otlp_endpoint_configured", cfg.Observability.OTLPEndpoint != "",
 		"operation_logs", cfg.Observability.OperationLogs,
 		"profiler", cfg.Observability.Profiler,
 		"request_logs", cfg.Observability.RequestLogs,
@@ -132,6 +154,16 @@ func run() error {
 	aiService := ai.NewService(openRouterAdapter)
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
+	journeyRepository := postgres.NewJourneyRepository(pool)
+	journeyService := journeys.NewService(journeyRepository)
+	var meetingCredentials httpapi.MeetingCredentialVerifier
+	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
+		verifier, err := rtkadapter.NewCredentialVerifier(cfg.CloudflareRealtime)
+		if err != nil {
+			return fmt.Errorf("configure realtimekit meeting credential verifier: %w", err)
+		}
+		meetingCredentials = verifier
+	}
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService
 	if r2Configured(cfg.R2) {
@@ -177,6 +209,9 @@ func run() error {
 		Readiness:          postgres.Readiness{Pool: pool},
 		Authentication:     authenticationService,
 		Integrations:       integrationService,
+		Journeys:           journeyService,
+		LocalTelemetry:     cfg.Observability.Environment == config.DefaultEnvironment,
+		MeetingCredentials: meetingCredentials,
 		Memberships:        membershipService,
 		AuditLogs:          auditLogService,
 		RecordingDownloads: recordingDownloads,

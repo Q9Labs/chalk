@@ -114,6 +114,30 @@ func TestRunRouteRecordingTranscribeScenario(t *testing.T) {
 	assertEvent(t, result.Events, "database", "INSERT transcriptions RETURNING *")
 }
 
+func TestRunRouteJourneyEventIntakeScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteJourneyEventIntakeScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusAccepted)
+	}
+	var body struct {
+		AcceptedCount  int      `json:"accepted_count"`
+		DuplicateCount int      `json:"duplicate_count"`
+		JourneyIDs     []string `json:"journey_ids"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.AcceptedCount != 1 || body.DuplicateCount != 1 || len(body.JourneyIDs) != 1 {
+		t.Fatalf("body = %#v", body)
+	}
+	assertEvent(t, result.Events, "http", "POST /v1/telemetry/journey-events")
+	assertEvent(t, result.Events, "ledger", "JourneyService.Intake")
+	assertEvent(t, result.Events, "ledger", "observability_journey_events.insert")
+}
+
 func TestRunAllRegisteredScenarios(t *testing.T) {
 	for _, scenario := range ScenarioNames() {
 		t.Run(scenario, func(t *testing.T) {

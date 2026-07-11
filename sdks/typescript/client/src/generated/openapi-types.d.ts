@@ -123,6 +123,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/telemetry/journey-events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Intake journey events */
+    post: operations["intakeJourneyEvents"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants": {
     parameters: {
       query?: never;
@@ -831,6 +848,31 @@ export interface components {
           risk_tags: string[];
         }[];
       }[];
+    };
+    JourneyEventBatch: {
+      events: {
+        attributes?: {
+          [key: string]: string | number | boolean;
+        };
+        event_id: components["schemas"]["UUID"];
+        first_observed_layer: string;
+        journey_id: components["schemas"]["UUID"];
+        name: string;
+        occurred_at: components["schemas"]["DateTimeString"];
+        origin_kind: string;
+        parent_event_id?: components["schemas"]["UUID"] | null;
+        phase: string;
+        sequence: number;
+        span_id?: string | null;
+        state: string;
+        trace_id?: string | null;
+        upstream_visibility: string;
+      }[];
+    };
+    JourneyEventIntake: {
+      accepted_count: number;
+      duplicate_count: number;
+      journey_ids: string[];
     };
     LoginRequest: {
       email: components["schemas"]["Email"];
@@ -1614,6 +1656,88 @@ export interface operations {
       /** @description Unauthorized */
       401: {
         headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  intakeJourneyEvents: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["JourneyEventBatch"];
+      };
+    };
+    responses: {
+      /** @description Accepted */
+      202: {
+        headers: {
+          "x-chalk-journey-id"?: string;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JourneyEventIntake"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {

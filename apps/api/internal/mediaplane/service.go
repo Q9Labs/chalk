@@ -21,6 +21,8 @@ var (
 	ErrProviderUnauthorized     = errors.New("media provider unauthorized")
 	ErrProviderRateLimited      = errors.New("media provider rate limited")
 	ErrProviderFailed           = errors.New("media provider failed")
+	ErrCredentialNotApplicable  = errors.New("credential is not a media plane credential")
+	ErrInvalidCredential        = errors.New("invalid media plane credential")
 )
 
 type Provider string

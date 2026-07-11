@@ -678,6 +678,139 @@
         "summary": "List regions"
       }
     },
+    "/v1/telemetry/journey-events": {
+      "post": {
+        "operationId": "intakeJourneyEvents",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JourneyEventBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JourneyEventIntake"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "x-chalk-journey-id": {
+                "required": false,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_journey_event", "invalid_request"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["journey_ledger_unavailable", "service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Intake journey events",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 600,
+          "name": "v1.telemetry.intake",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants": {
       "get": {
         "operationId": "listTenants",
@@ -6398,6 +6531,119 @@
           }
         },
         "required": ["families"],
+        "type": "object"
+      },
+      "JourneyEventBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "attributes": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "maxProperties": 32,
+                  "type": "object"
+                },
+                "event_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "first_observed_layer": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "journey_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "occurred_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                },
+                "origin_kind": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "parent_event_id": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UUID"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "phase": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "integer"
+                },
+                "span_id": {
+                  "maxLength": 16,
+                  "minLength": 16,
+                  "pattern": "^(?=.*[1-9a-fA-F])[0-9a-fA-F]{16}$",
+                  "type": ["string", "null"]
+                },
+                "state": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "trace_id": {
+                  "maxLength": 32,
+                  "minLength": 32,
+                  "pattern": "^(?=.*[1-9a-fA-F])[0-9a-fA-F]{32}$",
+                  "type": ["string", "null"]
+                },
+                "upstream_visibility": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["event_id", "first_observed_layer", "journey_id", "name", "occurred_at", "origin_kind", "phase", "sequence", "state", "upstream_visibility"],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "type": "array"
+          }
+        },
+        "required": ["events"],
+        "type": "object"
+      },
+      "JourneyEventIntake": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_count": {
+            "type": "integer"
+          },
+          "duplicate_count": {
+            "type": "integer"
+          },
+          "journey_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["accepted_count", "duplicate_count", "journey_ids"],
         "type": "object"
       },
       "LoginRequest": {

@@ -17,6 +17,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Test-only sync breaker harness with deterministic model histories, real
   WebSocket campaigns, controlled writer faults, replay-ready JSONL traces, and
   failure-first Markdown reports.
+- End-to-end observability v1 across the TypeScript client, Go API, Elixir sync
+  server, Cloudflare provider adapters, durable journey ledger, OpenTelemetry
+  signals, and a provisioned local Grafana/Tempo/Prometheus/Loki surface with
+  critical pipeline alerts and a reproducible full-journey proof.
 - Development-only sync server lab that starts empty and exercises live
   WebSocket participants, shared state, raw protocol frames, reconnects,
   redacted human-readable traces, and production failure drills.

@@ -42,50 +42,91 @@ defmodule ChalkSync.Protocol do
     end
   end
 
+  @doc "Decodes a frame while preserving optional correlation fields as atom-keyed payload fields; ping becomes `{:ping, correlation_fields}`."
+  @spec decode_with_context(binary()) ::
+          {:ok, frame(), ChalkSync.Observability.context() | nil} | {:error, atom()}
+  def decode_with_context(text) do
+    case JSON.decode(text) do
+      {:ok, %{} = raw_frame} ->
+        case Generated.decode_client_frame(raw_frame) do
+          {:ok, frame} -> {:ok, frame, ChalkSync.Observability.context(raw_frame)}
+          {:error, _reason} = error -> error
+        end
+
+      {:ok, _other} ->
+        {:error, :missing_type}
+
+      {:error, _reason} ->
+        {:error, :malformed_json}
+    end
+  end
+
   # -- Encoding ----------------------------------------------------------------
 
-  def encode_welcome(participant_id, %{snapshot: %{} = snapshot}) do
-    JSON.encode!(%{
-      "type" => "welcome",
-      "protocol" => Generated.protocol_version(),
-      "participant_id" => participant_id,
-      "mode" => "snapshot",
-      "snapshot" => snapshot
-    })
+  def encode_welcome(participant_id, reply, context \\ nil)
+
+  def encode_welcome(participant_id, %{snapshot: %{} = snapshot}, context) do
+    encode(
+      %{
+        "type" => "welcome",
+        "protocol" => Generated.protocol_version(),
+        "participant_id" => participant_id,
+        "mode" => "snapshot",
+        "snapshot" => snapshot
+      },
+      context
+    )
   end
 
-  def encode_welcome(participant_id, %{replay: events, control_revision: revision}) do
-    JSON.encode!(%{
-      "type" => "welcome",
-      "protocol" => Generated.protocol_version(),
-      "participant_id" => participant_id,
-      "mode" => "replay",
-      "events" => Enum.map(events, &event_body/1),
-      "control_revision" => revision
-    })
+  def encode_welcome(participant_id, %{replay: events, control_revision: revision}, context) do
+    encode(
+      %{
+        "type" => "welcome",
+        "protocol" => Generated.protocol_version(),
+        "participant_id" => participant_id,
+        "mode" => "replay",
+        "events" => Enum.map(events, &event_body/1),
+        "control_revision" => revision
+      },
+      context
+    )
   end
 
-  def encode_event(event) do
-    JSON.encode!(Map.put(event_body(event), "type", "event"))
+  def encode_event(event, context \\ nil) do
+    event
+    |> event_body()
+    |> Map.put("type", "event")
+    |> encode(context)
   end
 
-  def encode_ack(command_id, {:committed, revision}),
-    do: ack(command_id, "committed", "revision", revision)
+  def encode_ack(command_id, result, context \\ nil)
 
-  def encode_ack(command_id, {:duplicate, revision}),
-    do: ack(command_id, "duplicate", "revision", revision)
+  def encode_ack(command_id, {:committed, revision}, context),
+    do: ack(command_id, "committed", "revision", revision, context)
 
-  def encode_ack(command_id, {:rejected, reason}),
-    do: ack(command_id, "rejected", "reason", to_string(reason))
+  def encode_ack(command_id, {:duplicate, revision}, context),
+    do: ack(command_id, "duplicate", "revision", revision, context)
 
-  def encode_error(code, message) do
-    JSON.encode!(%{"type" => "error", "code" => to_string(code), "message" => message})
+  def encode_ack(command_id, {:rejected, reason}, context),
+    do: ack(command_id, "rejected", "reason", to_string(reason), context)
+
+  def encode_error(code, message, context \\ nil) do
+    encode(%{"type" => "error", "code" => to_string(code), "message" => message}, context)
   end
 
-  def encode_pong, do: JSON.encode!(%{"type" => "pong"})
+  def encode_pong(context \\ nil), do: encode(%{"type" => "pong"}, context)
 
-  defp ack(command_id, result, key, value) do
-    JSON.encode!(%{"type" => "ack", "command_id" => command_id, "result" => result, key => value})
+  defp ack(command_id, result, key, value, context) do
+    encode(
+      %{"type" => "ack", "command_id" => command_id, "result" => result, key => value},
+      context
+    )
+  end
+
+  defp encode(frame, context) do
+    frame
+    |> Map.merge(ChalkSync.Observability.frame_fields(context))
+    |> JSON.encode!()
   end
 
   defp event_body(event) do

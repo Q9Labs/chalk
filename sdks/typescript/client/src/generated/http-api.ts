@@ -98,6 +98,23 @@ const authGroup = HttpApiGroup.make("auth")
     }),
   );
 
+const defaultGroup = HttpApiGroup.make("default").add(
+  HttpApiEndpoint.post("intakeJourneyEvents", "/v1/telemetry/journey-events", {
+    payload: S.IntakeJourneyEventsRequestBodySchema,
+    success: S.IntakeJourneyEventsResponseSchema.pipe(HttpApiSchema.status(202)),
+    error: [
+      S.InvalidJourneyEventErrorSchema.pipe(HttpApiSchema.status(400)),
+      S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+      S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+      S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+      S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+      S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+      S.JourneyLedgerUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+    ],
+  }),
+);
+
 const integrationsGroup = HttpApiGroup.make("integrations")
   .add(
     HttpApiEndpoint.delete("disableIntegrationConnection", "/v1/tenants/:tenant_id/integrations/connections/:connection_id", {
@@ -792,4 +809,17 @@ const usersGroup = HttpApiGroup.make("users")
     }),
   );
 
-export class ChalkApi extends HttpApi.make("ChalkApi").add(auditLogsGroup).add(authGroup).add(integrationsGroup).add(meGroup).add(membershipsGroup).add(recordingsGroup).add(regionsGroup).add(roomsGroup).add(roomSessionsGroup).add(tenantsGroup).add(transcriptsGroup).add(usersGroup) {}
+export class ChalkApi extends HttpApi.make("ChalkApi")
+  .add(auditLogsGroup)
+  .add(authGroup)
+  .add(defaultGroup)
+  .add(integrationsGroup)
+  .add(meGroup)
+  .add(membershipsGroup)
+  .add(recordingsGroup)
+  .add(regionsGroup)
+  .add(roomsGroup)
+  .add(roomSessionsGroup)
+  .add(tenantsGroup)
+  .add(transcriptsGroup)
+  .add(usersGroup) {}

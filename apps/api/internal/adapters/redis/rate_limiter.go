@@ -8,6 +8,10 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	goredis "github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const rateLimitScript = `
@@ -54,6 +58,8 @@ type RateLimiter struct {
 	client rateLimitScriptClient
 }
 
+var rateLimitTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/redis/rate_limiter")
+
 func NewRateLimiter(client *goredis.Client) RateLimiter {
 	return RateLimiter{client: client}
 }
@@ -66,6 +72,9 @@ func (l RateLimiter) Allow(ctx context.Context, key string, policy ratelimit.Pol
 	if l.client == nil || policy.Limit <= 0 || policy.Window <= 0 {
 		return ratelimit.Decision{Allowed: true}
 	}
+	ctx, span := rateLimitTracer.Start(ctx, "cache.redis.rate_limit.allow", trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+	span.SetAttributes(attribute.String("rate_limit.policy", policy.Name))
 
 	result, err := l.client.Eval(ctx, rateLimitScript, []string{rateLimitKey(policy.Name, key)},
 		policy.Limit,
@@ -73,13 +82,18 @@ func (l RateLimiter) Allow(ctx context.Context, key string, policy ratelimit.Pol
 		now.UnixMilli(),
 	).Result()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "redis rate limit request failed")
 		return ratelimit.Decision{Allowed: false, RetryAfter: time.Second}
 	}
 
 	decision, err := parseRateLimitDecision(result)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "invalid redis rate limit response")
 		return ratelimit.Decision{Allowed: false, RetryAfter: time.Second}
 	}
+	span.SetAttributes(attribute.Bool("rate_limit.allowed", decision.Allowed), attribute.Int("rate_limit.remaining", decision.Remaining))
 
 	return decision
 }

@@ -50,6 +50,7 @@ const (
 	RouteMembershipUpdateOwnerScenario  = "route:membership-update-owner"
 	RouteRoomCreateMemberScenario       = "route:room-create-member"
 	RouteRecordingTranscribeScenario    = "route:recording-transcribe"
+	RouteJourneyEventIntakeScenario     = "route:telemetry-journey-event-intake"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
 	PolicyTenantAPIKeyScopeScenario = "policy:tenant-api-key-scope"
@@ -94,6 +95,7 @@ func ScenarioNames() []string {
 		RouteMembershipUpdateOwnerScenario,
 		RouteRoomCreateMemberScenario,
 		RouteRecordingTranscribeScenario,
+		RouteJourneyEventIntakeScenario,
 		PolicyTenantSystemAllowScenario,
 		PolicyTenantAPIKeyScopeScenario,
 		PolicyTenantUserRoleScenario,

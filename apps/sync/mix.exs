@@ -26,6 +26,9 @@ defmodule ChalkSync.MixProject do
     [
       {:bandit, "~> 1.6"},
       {:websock_adapter, "~> 0.5"},
+      {:opentelemetry_api, "~> 1.5"},
+      {:opentelemetry, "~> 1.7"},
+      {:opentelemetry_exporter, "~> 1.10"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mint_web_socket, "~> 1.0", only: :test}
     ]

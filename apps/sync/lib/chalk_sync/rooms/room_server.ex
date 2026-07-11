@@ -17,6 +17,7 @@ defmodule ChalkSync.Rooms.RoomServer do
   require Logger
 
   alias ChalkSync.DevTools.TraceHub
+  alias ChalkSync.Observability
   alias ChalkSync.Rooms.Room
   alias ChalkSync.Stateholder
 
@@ -33,9 +34,12 @@ defmodule ChalkSync.Rooms.RoomServer do
   Subscribers should monitor `room_pid` and drop the connection if it dies, so
   clients reconnect and re-snapshot.
   """
-  def join(room_id, participant_id, display_name, subscriber, cursor \\ nil) do
+  def join(room_id, participant_id, display_name, subscriber, cursor \\ nil, observability \\ nil) do
     with {:ok, pid} <- ensure_started(room_id) do
-      case GenServer.call(pid, {:join, participant_id, display_name, subscriber, cursor}) do
+      case GenServer.call(
+             pid,
+             {:join, participant_id, display_name, subscriber, cursor, observability}
+           ) do
         {:ok, reply} -> {:ok, pid, reply}
         {:error, reason} -> {:error, reason}
       end
@@ -46,10 +50,13 @@ defmodule ChalkSync.Rooms.RoomServer do
   end
 
   @doc "Returns `{:committed, revision} | {:duplicate, revision} | {:rejected, reason}`."
-  def command(room_id, participant_id, command_id, name, payload) do
+  def command(room_id, participant_id, command_id, name, payload, observability \\ nil) do
     case Registry.lookup(ChalkSync.Rooms.Registry, room_id) do
-      [{pid, _}] -> GenServer.call(pid, {:command, participant_id, command_id, name, payload})
-      [] -> {:rejected, :not_joined}
+      [{pid, _}] ->
+        GenServer.call(pid, {:command, participant_id, command_id, name, payload, observability})
+
+      [] ->
+        {:rejected, :not_joined}
     end
   catch
     :exit, _ -> {:rejected, :retry}
@@ -82,11 +89,13 @@ defmodule ChalkSync.Rooms.RoomServer do
 
   @impl true
   def init(room_id) do
-    room =
+    {room, recovery} =
       case Stateholder.load(room_id) do
-        {:ok, room} -> room
-        :not_found -> Room.new(room_id)
+        {:ok, room} -> {room, "rehydrated"}
+        :not_found -> {Room.new(room_id), "new"}
       end
+
+    Observability.phase(nil, "sync.room.writer.started", %{recovery: recovery})
 
     TraceHub.record("room", "writer_started", %{
       "revision" => room.revision,
@@ -96,7 +105,7 @@ defmodule ChalkSync.Rooms.RoomServer do
     {:ok,
      %{
        room: room,
-       # subscriber pid => %{participant_id, monitor_ref}
+       # subscriber pid => %{participant_id, monitor_ref, observability}
        subscribers: %{},
        # {participant_id, command_id} => result, bounded FIFO
        remembered: %{},
@@ -105,11 +114,21 @@ defmodule ChalkSync.Rooms.RoomServer do
   end
 
   @impl true
-  def handle_call({:join, participant_id, display_name, subscriber, cursor}, _from, state) do
-    case admit(state, participant_id, display_name) do
+  def handle_call(
+        {:join, participant_id, display_name, subscriber, cursor, observability},
+        _from,
+        state
+      ) do
+    case admit(state, participant_id, display_name, observability) do
       {:ok, state} ->
         ref = Process.monitor(subscriber)
-        subscriber_info = %{participant_id: participant_id, monitor_ref: ref}
+
+        subscriber_info = %{
+          participant_id: participant_id,
+          monitor_ref: ref,
+          observability: observability
+        }
+
         state = put_in(state.subscribers[subscriber], subscriber_info)
 
         TraceHub.record("room", "subscriber_added", %{
@@ -118,14 +137,22 @@ defmodule ChalkSync.Rooms.RoomServer do
           "subscribers" => map_size(state.subscribers)
         })
 
-        {:reply, {:ok, join_reply(state.room, cursor)}, state}
+        Observability.linked_phase(observability, "sync.room.subscriber.joined", %{
+          outcome: "accepted"
+        })
+
+        {:reply, {:ok, join_reply(state.room, cursor, observability)}, state}
 
       {:error, reason} ->
         {:stop, reason, {:error, reason}, state}
     end
   end
 
-  def handle_call({:command, participant_id, command_id, name, payload}, _from, state) do
+  def handle_call(
+        {:command, participant_id, command_id, name, payload, observability},
+        _from,
+        state
+      ) do
     key = {participant_id, command_id}
 
     case state.remembered do
@@ -133,7 +160,7 @@ defmodule ChalkSync.Rooms.RoomServer do
         {:reply, duplicate_of(result), state}
 
       _ ->
-        {result, state} = execute(state, participant_id, name, payload)
+        {result, state} = execute(state, participant_id, name, payload, observability)
 
         case result do
           {:split_brain, current} ->
@@ -152,7 +179,7 @@ defmodule ChalkSync.Rooms.RoomServer do
 
     state =
       if info && last_subscription?(state, info.participant_id) do
-        case execute(state, info.participant_id, :leave, %{}) do
+        case execute(state, info.participant_id, :leave, %{}, info.observability) do
           {{:split_brain, _current}, state} -> state
           {_result, state} -> state
         end
@@ -167,6 +194,8 @@ defmodule ChalkSync.Rooms.RoomServer do
         "room_id" => state.room.id
       })
 
+      Observability.phase(nil, "sync.room.writer.stopped", %{reason: "room_empty"})
+
       {:stop, :normal, state}
     else
       {:noreply, state}
@@ -175,12 +204,12 @@ defmodule ChalkSync.Rooms.RoomServer do
 
   # -- Internals ---------------------------------------------------------------
 
-  defp admit(state, participant_id, display_name) do
+  defp admit(state, participant_id, display_name, observability) do
     if Room.joined?(state.room, participant_id) do
       # Reconnect: the participant is already in room state; no join event.
       {:ok, state}
     else
-      case execute(state, participant_id, :join, %{display_name: display_name}) do
+      case execute(state, participant_id, :join, %{display_name: display_name}, observability) do
         {{:committed, _revision}, state} -> {:ok, state}
         {{:rejected, reason}, _state} -> {:error, reason}
         {{:split_brain, _current}, _state} -> {:error, :revision_conflict}
@@ -188,12 +217,16 @@ defmodule ChalkSync.Rooms.RoomServer do
     end
   end
 
-  defp execute(state, participant_id, command, payload) do
+  defp execute(state, participant_id, command, payload, observability) do
     case Room.apply_command(state.room, participant_id, command, payload) do
       {:ok, event, room} ->
-        case Stateholder.commit(room.id, event.base_revision, event, room) do
+        case Stateholder.commit(room.id, event.base_revision, event, room, observability) do
           :ok ->
-            broadcast(state, event)
+            broadcast(state, event, observability)
+
+            Observability.linked_phase(observability, "sync.room.event.committed", %{
+              event_name: event.name
+            })
 
             TraceHub.record("room", "event_committed", %{
               "event" => event.name,
@@ -204,26 +237,39 @@ defmodule ChalkSync.Rooms.RoomServer do
             {{:committed, event.revision}, %{state | room: room}}
 
           {:error, {:revision_conflict, current}} ->
+            Observability.linked_phase(observability, "sync.room.revision_conflict", %{})
             {{:split_brain, current}, state}
         end
 
       {:error, reason} ->
+        Observability.linked_phase(observability, "sync.room.command.rejected", %{
+          reason: rejection_label(reason)
+        })
+
         {{:rejected, reason}, state}
     end
   end
 
-  defp broadcast(state, event) do
-    Enum.each(state.subscribers, fn {pid, _info} -> send(pid, {:sync_event, event}) end)
+  defp broadcast(state, event, observability) do
+    context =
+      Observability.linked_phase(observability, "sync.room.broadcast", %{
+        event_name: event.name
+      })
+
+    Enum.each(state.subscribers, fn {pid, _info} -> send(pid, {:sync_event, event, context}) end)
   end
 
-  defp join_reply(room, cursor) do
+  defp join_reply(room, cursor, observability) do
     snapshot = Room.snapshot(room)
 
     with true <- is_integer(cursor) and cursor >= 0 and cursor <= room.revision,
-         {:ok, events} <- Stateholder.events_since(room.id, cursor) do
+         {:ok, events} <- Stateholder.events_since(room.id, cursor, observability) do
+      Observability.linked_phase(observability, "sync.room.replay", %{mode: "replay"})
       %{replay: events, control_revision: room.revision, snapshot: nil}
     else
-      _ -> %{replay: nil, control_revision: room.revision, snapshot: snapshot}
+      _ ->
+        Observability.linked_phase(observability, "sync.room.replay", %{mode: "snapshot"})
+        %{replay: nil, control_revision: room.revision, snapshot: snapshot}
     end
   end
 
@@ -235,6 +281,10 @@ defmodule ChalkSync.Rooms.RoomServer do
 
   defp duplicate_of({:committed, revision}), do: {:duplicate, revision}
   defp duplicate_of(other), do: other
+  defp rejection_label(:no_change), do: "no_change"
+  defp rejection_label(:not_joined), do: "not_joined"
+  defp rejection_label(:unknown_command), do: "unknown_command"
+  defp rejection_label(_reason), do: "rejected"
 
   defp remember(state, key, result) do
     order = :queue.in(key, state.remembered_order)

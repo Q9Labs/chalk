@@ -166,9 +166,19 @@ Candidate env vars:
 - `CHALK_CLOUDFLARE_REALTIME_APP_ID`
 - `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`
 - `CHALK_CLOUDFLARE_RTK_APP_ID`
+- `CHALK_CLOUDFLARE_RTK_TOKEN_ORG_ID`
 - `CHALK_CLOUDFLARE_RTK_PRESET_FACILITATOR`
 - `CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR`
 - `CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS`
+
+`CHALK_CLOUDFLARE_RTK_TOKEN_ORG_ID` is the exact `orgId` claim from a
+RealtimeKit participant token and is intentionally separate from the app ID.
+Telemetry intake only sends matching JWTs to RealtimeKit for verification.
+The verifier follows the bootstrap contract in the pinned official
+`@cloudflare/realtimekit` client: `https://api.dyte.io/v2/internals/participant-details`
+with the participant bearer. That provider call validates the signature and
+expiry before the append-only intake accepts the credential. Keep the pinned
+client bootstrap path and the Go verifier in sync when upgrading RealtimeKit.
 
 Keep separate RTK and SFU/realtime app config fields even if smoke tests reuse
 the same Cloudflare app value.

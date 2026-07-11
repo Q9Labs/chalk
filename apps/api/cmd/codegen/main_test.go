@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/journeys"
 )
 
 func TestIntegrationSchemasPreserveWireSemantics(t *testing.T) {
@@ -39,6 +40,29 @@ func TestIntegrationOperationsDeclareScopedErrors(t *testing.T) {
 	}
 	if _, exists := responses["429"]; exists {
 		t.Fatal("list integration services must not advertise write/provider rate limits")
+	}
+}
+
+func TestJourneyTraceIdentifiersMatchIntakeValidation(t *testing.T) {
+	doc := generatedDocument()
+	batch := mapValue(t, doc.Components.Schemas["JourneyEventBatch"])
+	properties := mapValue(t, batch["properties"])
+	events := mapValue(t, properties["events"])
+	if events["maxItems"] != journeys.MaxEventsPerBatch {
+		t.Fatalf("events maxItems = %#v, want %d", events["maxItems"], journeys.MaxEventsPerBatch)
+	}
+	event := mapValue(t, events["items"])
+	eventProperties := mapValue(t, event["properties"])
+
+	for field, length := range map[string]int{"trace_id": 32, "span_id": 16} {
+		schema := mapValue(t, eventProperties[field])
+		types, ok := schema["type"].([]string)
+		if !ok || !slices.Contains(types, "string") || !slices.Contains(types, "null") {
+			t.Fatalf("%s schema = %#v, want nullable string", field, schema)
+		}
+		if schema["minLength"] != length || schema["maxLength"] != length || schema["pattern"] == nil {
+			t.Fatalf("%s schema = %#v, want length %d and hex pattern", field, schema, length)
+		}
 	}
 }
 

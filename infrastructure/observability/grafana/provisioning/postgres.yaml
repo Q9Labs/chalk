@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: Chalk Journey Ledger
+    type: postgres
+    uid: chalk-journey-ledger
+    access: proxy
+    url: postgres:5432
+    user: postgres
+    editable: false
+    jsonData:
+      database: chalk_observability
+      postgresVersion: 1800
+      sslmode: disable
+      timescaledb: false
+    secureJsonData:
+      password: postgres

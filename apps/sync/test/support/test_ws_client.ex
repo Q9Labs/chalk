@@ -14,9 +14,9 @@ defmodule ChalkSync.TestWSClient do
 
   @timeout 2_000
 
-  def connect(port, path \\ "/v1/sync") do
+  def connect(port, path \\ "/v1/sync", headers \\ []) do
     {:ok, conn} = HTTP.connect(:http, "127.0.0.1", port)
-    {:ok, conn, ref} = WebSocket.upgrade(:ws, conn, path, [])
+    {:ok, conn, ref} = WebSocket.upgrade(:ws, conn, path, headers)
 
     with {:ok, conn, status, headers} <- await_upgrade(conn, ref, %{headers: []}),
          {:ok, conn, websocket} <- WebSocket.new(conn, ref, status, headers) do

@@ -14,6 +14,24 @@ export const SyncProtocolMetadata = {
     clientToServer: "client-to-server",
     serverToClient: "server-to-client",
   },
+  correlation: {
+    optionalTopLevelFields: {
+      journey_id: {
+        kind: "string",
+        format: "chalk-journey-id",
+      },
+      traceparent: {
+        kind: "string",
+        format: "w3c-traceparent",
+      },
+      tracestate: {
+        kind: "string",
+        format: "w3c-tracestate",
+      },
+    },
+    upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate"],
+    rule: "propagate_from_first_observed_layer_to_every_downstream_frame",
+  },
   phases: [
     {
       id: "awaiting_hello",
@@ -86,6 +104,13 @@ export const SyncProtocolMetadata = {
 
 export const SyncCloseCodes = SyncProtocolMetadata.closeCodes;
 
+export const SyncCorrelationFieldsSchema = Schema.Struct({
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
+});
+export type SyncCorrelationFields = typeof SyncCorrelationFieldsSchema.Type;
+
 export const ParticipantSchema = Schema.Struct({
   participant_id: Schema.String,
   display_name: Schema.String,
@@ -112,6 +137,9 @@ export const HelloFrameSchema = Schema.Struct({
       ),
     }),
   ),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type HelloFrame = typeof HelloFrameSchema.Type;
 
@@ -125,6 +153,9 @@ export const ParticipantJoinedEventFrameSchema = Schema.Struct({
     display_name: Schema.String,
     participant_id: Schema.String,
   }),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 }).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
 export type ParticipantJoinedEventFrame = typeof ParticipantJoinedEventFrameSchema.Type;
 
@@ -137,6 +168,9 @@ export const ParticipantLeftEventFrameSchema = Schema.Struct({
   payload: Schema.Struct({
     participant_id: Schema.String,
   }),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 }).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
 export type ParticipantLeftEventFrame = typeof ParticipantLeftEventFrameSchema.Type;
 
@@ -149,6 +183,9 @@ export const HandRaisedEventFrameSchema = Schema.Struct({
   payload: Schema.Struct({
     participant_id: Schema.String,
   }),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 }).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
 export type HandRaisedEventFrame = typeof HandRaisedEventFrameSchema.Type;
 
@@ -161,6 +198,9 @@ export const HandLoweredEventFrameSchema = Schema.Struct({
   payload: Schema.Struct({
     participant_id: Schema.String,
   }),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 }).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
 export type HandLoweredEventFrame = typeof HandLoweredEventFrameSchema.Type;
 
@@ -173,6 +213,9 @@ export const WelcomeSnapshotFrameSchema = Schema.Struct({
   participant_id: Schema.String,
   mode: Schema.Literal("snapshot"),
   snapshot: SnapshotSchema,
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type WelcomeSnapshotFrame = typeof WelcomeSnapshotFrameSchema.Type;
 
@@ -183,6 +226,9 @@ export const WelcomeReplayFrameSchema = Schema.Struct({
   mode: Schema.Literal("replay"),
   events: Schema.Array(EventFrameSchema),
   control_revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type WelcomeReplayFrame = typeof WelcomeReplayFrameSchema.Type;
 
@@ -191,6 +237,9 @@ export const RaiseHandCommandFrameSchema = Schema.Struct({
   command_id: Schema.String,
   name: Schema.Literal("raise_hand"),
   payload: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type RaiseHandCommandFrame = typeof RaiseHandCommandFrameSchema.Type;
 
@@ -199,6 +248,9 @@ export const LowerHandCommandFrameSchema = Schema.Struct({
   command_id: Schema.String,
   name: Schema.Literal("lower_hand"),
   payload: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type LowerHandCommandFrame = typeof LowerHandCommandFrameSchema.Type;
 
@@ -207,6 +259,9 @@ export const CommittedAckFrameSchema = Schema.Struct({
   command_id: Schema.String,
   result: Schema.Literal("committed"),
   revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type CommittedAckFrame = typeof CommittedAckFrameSchema.Type;
 
@@ -215,6 +270,9 @@ export const DuplicateAckFrameSchema = Schema.Struct({
   command_id: Schema.String,
   result: Schema.Literal("duplicate"),
   revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type DuplicateAckFrame = typeof DuplicateAckFrameSchema.Type;
 
@@ -223,6 +281,9 @@ export const RejectedAckFrameSchema = Schema.Struct({
   command_id: Schema.String,
   result: Schema.Literal("rejected"),
   reason: Schema.String,
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type RejectedAckFrame = typeof RejectedAckFrameSchema.Type;
 
@@ -230,13 +291,26 @@ export const ErrorFrameSchema = Schema.Struct({
   type: Schema.Literal("error"),
   code: Schema.String,
   message: Schema.String,
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
 });
 export type ErrorFrame = typeof ErrorFrameSchema.Type;
 
-export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
+export const PingFrameSchema = Schema.Struct({
+  type: Schema.Literal("ping"),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
+});
 export type PingFrame = typeof PingFrameSchema.Type;
 
-export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong") });
+export const PongFrameSchema = Schema.Struct({
+  type: Schema.Literal("pong"),
+  journey_id: Schema.optional(Schema.String),
+  traceparent: Schema.optional(Schema.String),
+  tracestate: Schema.optional(Schema.String),
+});
 export type PongFrame = typeof PongFrameSchema.Type;
 
 export const ClientFrameSchema = Schema.Union([HelloFrameSchema, RaiseHandCommandFrameSchema, LowerHandCommandFrameSchema, PingFrameSchema]);

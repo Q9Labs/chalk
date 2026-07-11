@@ -19,6 +19,10 @@ type TenantAuthorizer interface {
 	AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error
 }
 
+type MeetingCredentialVerifier interface {
+	Verify(ctx context.Context, credential string) error
+}
+
 type Options struct {
 	CORS               CORSOptions
 	LocalSystemToken   string
@@ -28,6 +32,10 @@ type Options struct {
 	Readiness          ReadinessChecker
 	Authentication     AuthenticationService
 	Integrations       IntegrationService
+	Journeys           JourneyService
+	JourneyMetrics     JourneyMetricRecorder
+	LocalTelemetry     bool
+	MeetingCredentials MeetingCredentialVerifier
 	Memberships        MembershipService
 	AuditLogs          AuditLogService
 	RecordingDownloads RecordingDownloadService
@@ -117,7 +125,15 @@ func mountV1Routes(r chi.Router, options Options) {
 		mountMeRoutes(r, options.Authentication, options.RateLimit)
 
 		r.Group(func(r chi.Router) {
+			r.Use(requireTelemetryIntakeCredential(options.Authentication, options.MeetingCredentials))
+			mountJourneyIntakeRoutes(r, options.Journeys, options.JourneyMetrics, options.RateLimit)
+		})
+
+		r.Group(func(r chi.Router) {
 			r.Use(requireAuthentication(options.Authentication))
+			if options.LocalTelemetry {
+				mountLocalJourneyQueryRoutes(r, options.Journeys, options.RateLimit)
+			}
 			mountIntegrationRoutes(r, options.Integrations, options.TenantAuthz, options.RateLimit, integrationRouteOptions{
 				CallbackAllowedOrigins: options.CORS.AllowedOrigins,
 			})

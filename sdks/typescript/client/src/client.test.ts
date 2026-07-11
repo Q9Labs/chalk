@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createChalkEffectClient } from "./client";
 import { ChalkOperationPolicies, type Email, type TenantId } from "./generated/schemas";
+import { createTelemetryClient } from "./telemetry";
 
 const tenantId = "11111111-1111-4111-8111-111111111111" as TenantId;
 const email = "person@example.com" as Email;
@@ -39,6 +40,7 @@ describe("createChalkEffectClient", () => {
         auth: { type: "bearer", token: "test-token" },
         fetch: fetchMock as typeof fetch,
         headers: { "X-Chalk-Test": "yes" },
+        telemetry: createTelemetryClient({ enabled: true }).startJourney({ kind: "tenant.read" }).context,
       }),
     );
 
@@ -53,6 +55,8 @@ describe("createChalkEffectClient", () => {
     expect(String(input)).toBe("https://api.chalk.test/v1/tenants/11111111-1111-4111-8111-111111111111");
     expect(headers.get("authorization")).toBe("Bearer test-token");
     expect(headers.get("x-chalk-test")).toBe("yes");
+    expect(headers.get("x-chalk-journey-id")).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    expect(headers.get("traceparent")).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
   }, 20_000);
 
   it("decodes generated tagged API errors", async () => {

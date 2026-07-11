@@ -149,6 +149,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@q9labsai/chalk-client": "workspace:^",
     "@q9labsai/facehash": "workspace:^"
   },
   "devDependencies": {

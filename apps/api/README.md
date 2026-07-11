@@ -108,6 +108,27 @@ CHALK_API_REQUEST_LOGS=errors
 CHALK_API_SLOW_REQUEST_MS=250
 ```
 
+OpenTelemetry traces and metrics export over OTLP/HTTP when an endpoint is
+configured. The endpoint is a base URL; the API sends traces to `/v1/traces`
+and metrics to `/v1/metrics`.
+
+```bash
+CHALK_API_OTLP_ENDPOINT=https://otel.example.com:4318
+```
+
+`CHALK_API_OTLP_INSECURE=true` allows an `http://` endpoint only in `local`
+environments. The runtime emits Go runtime metrics, HTTP server spans, database
+operation spans, Redis rate-limit spans, and Cloudflare media-plane request
+spans. It propagates W3C `traceparent` and mirrors or creates the lowercase
+`x-chalk-journey-id` response header. Request bodies and operation content are
+never included in traces or logs.
+
+Authenticated runtimes can acknowledge at-least-once journey events through
+`POST /v1/telemetry/journey-events`. Event identifiers, journey identifiers,
+and parent event identifiers are RFC 4122 UUIDs. The local, system-principal
+ledger query route is `GET /v1/telemetry/journeys/{journey_id}`; it is not
+mounted outside local environments.
+
 `CHALK_API_REQUEST_LOGS` accepts `off`, `errors`, `slow`, `sampled`, or `all`.
 Successful request logs are off by default; startup, shutdown, and error logs
 still use the shared logger. `sampled` uses `CHALK_API_REQUEST_SAMPLE_RATE`

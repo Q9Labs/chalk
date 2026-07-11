@@ -3,10 +3,31 @@ package httpapi_test
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 )
+
+func TestJourneyEventIntakeRateLimitContract(t *testing.T) {
+	for _, contract := range httpapi.PreviewRouteContracts() {
+		if contract.OperationID != "intakeJourneyEvents" {
+			continue
+		}
+
+		want := ratelimit.Policy{
+			Name:   ratelimit.PolicyNameTelemetryIntake,
+			Limit:  600,
+			Window: time.Minute,
+		}
+		if contract.RateLimit != want {
+			t.Fatalf("rate limit = %#v, want %#v", contract.RateLimit, want)
+		}
+		return
+	}
+
+	t.Fatal("missing intakeJourneyEvents contract")
+}
 
 func TestPreviewRouteContracts(t *testing.T) {
 	contracts := httpapi.PreviewRouteContracts()
@@ -17,6 +38,7 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/auth/logout"},
 		{http.MethodPost, "/v1/auth/register"},
 		{http.MethodGet, "/v1/me"},
+		{http.MethodPost, "/v1/telemetry/journey-events"},
 		{http.MethodGet, "/v1/regions"},
 		{http.MethodGet, "/v1/tenants"},
 		{http.MethodPost, "/v1/tenants"},

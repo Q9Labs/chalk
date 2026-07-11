@@ -3,10 +3,12 @@ package httpapi
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
 type sessionUserContextKey struct{}
@@ -63,6 +65,37 @@ func requireAuthentication(service AuthenticationService) func(http.Handler) htt
 			ctx = context.WithValue(ctx, sessionUserContextKey{}, sessionUser)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// requireTelemetryIntakeCredential accepts a verified Chalk meeting or API
+// session credential for the isolated append-only telemetry intake route.
+func requireTelemetryIntakeCredential(service AuthenticationService, verifier MeetingCredentialVerifier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.IsAuthenticated() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if token, ok := bearerToken(r.Header.Get("Authorization")); ok && verifier != nil {
+				err := verifier.Verify(r.Context(), token)
+				switch {
+				case err == nil:
+					next.ServeHTTP(w, r)
+					return
+				case errors.Is(err, mediaplane.ErrCredentialNotApplicable):
+				case errors.Is(err, mediaplane.ErrInvalidCredential):
+					writeUnauthenticated(w)
+					return
+				default:
+					writeServiceUnavailable(w)
+					return
+				}
+			}
+
+			requireAuthentication(service)(next).ServeHTTP(w, r)
 		})
 	}
 }

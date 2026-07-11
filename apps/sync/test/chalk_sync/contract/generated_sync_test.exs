@@ -3,7 +3,7 @@ defmodule ChalkSync.Contract.GeneratedTest do
 
   alias ChalkSync.Contract.Generated
 
-  test "exports the protocol lifecycle, continuity, idempotency, close, and error metadata" do
+  test "exports the correlation, lifecycle, continuity, idempotency, close, and error metadata" do
     assert Generated.protocol_version() == 1
 
     assert Generated.client_commands() == %{
@@ -15,6 +15,12 @@ defmodule ChalkSync.Contract.GeneratedTest do
              Generated.close_code(1002)
 
     metadata = Generated.metadata()
+
+    assert get_in(metadata, ["correlation", "optionalTopLevelFields"]) == %{
+             "journey_id" => %{"kind" => "string", "format" => "chalk-journey-id"},
+             "traceparent" => %{"kind" => "string", "format" => "w3c-traceparent"},
+             "tracestate" => %{"kind" => "string", "format" => "w3c-tracestate"}
+           }
 
     assert get_in(metadata, ["continuity", "events", "rule"]) ==
              "revision_equals_base_revision_plus_one"
@@ -38,6 +44,51 @@ defmodule ChalkSync.Contract.GeneratedTest do
                "protocol" => 1,
                "token" => "token",
                "streams" => %{"control" => %{"cursor" => 4}}
+             })
+
+    assert {:ok,
+            {:hello,
+             %{
+               token: "token",
+               journey_id: "00000000-0000-4000-8000-000000000001",
+               traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+               tracestate: "chalk=sync"
+             }}} =
+             Generated.decode_client_frame(%{
+               "type" => "hello",
+               "protocol" => 1,
+               "token" => "token",
+               "journey_id" => "00000000-0000-4000-8000-000000000001",
+               "traceparent" => "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+               "tracestate" => "chalk=sync"
+             })
+
+    assert {:ok,
+            {:command,
+             %{
+               command_id: "c-1",
+               name: :lower_hand,
+               payload: %{},
+               journey_id: "00000000-0000-4000-8000-000000000001"
+             }}} =
+             Generated.decode_client_frame(%{
+               "type" => "command",
+               "command_id" => "c-1",
+               "name" => "lower_hand",
+               "journey_id" => "00000000-0000-4000-8000-000000000001"
+             })
+
+    assert {:ok,
+            {:ping, %{traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}}} =
+             Generated.decode_client_frame(%{
+               "type" => "ping",
+               "traceparent" => "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+             })
+
+    assert {:error, :invalid_correlation_fields} =
+             Generated.decode_client_frame(%{
+               "type" => "ping",
+               "journey_id" => 1
              })
 
     assert {:error, :invalid_cursor} =
@@ -107,6 +158,16 @@ defmodule ChalkSync.Contract.GeneratedTest do
 
     assert Generated.valid_server_frame?(snapshot)
     assert Generated.valid_server_frame?(replay)
+
+    assert Generated.valid_server_frame?(
+             Map.put(
+               snapshot,
+               "traceparent",
+               "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+             )
+           )
+
+    refute Generated.valid_server_frame?(Map.put(snapshot, "traceparent", 1))
 
     assert Generated.valid_server_frame?(%{
              "type" => "ack",

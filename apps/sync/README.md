@@ -75,7 +75,48 @@ shape. Highlights:
 - Client-issuable commands are whitelisted (`raise_hand`, `lower_hand` today);
   join/leave are socket-lifecycle driven.
 
-Routes: `GET /healthz` (unversioned, ops) and `GET /v1/sync` (WebSocket).
+Routes: `GET /healthz` (liveness), `GET /readyz` (room registry, supervisor,
+and stateholder readiness), and `GET /v1/sync` (WebSocket).
+
+## Observability v1
+
+`ChalkSync.Observability` is the only production observability boundary. It
+emits stable `:telemetry` events, correlated Logger metadata, and short
+OpenTelemetry spans. It does not retain a connection-long span. Socket work
+uses root, phase, and terminal events; room-writer work links back to the
+originating socket span after crossing the OTP process boundary.
+
+Set `CHALK_SYNC_OTLP_ENDPOINT` to enable OTLP HTTP/protobuf export. The
+service resource name is `chalk-sync`; the exporter is otherwise disabled.
+The batch processor isolates collector failures from room and socket work.
+
+```bash
+CHALK_SYNC_OTLP_ENDPOINT=http://localhost:4318 mix run --no-halt
+```
+
+The stable telemetry event name is `[:chalk_sync, :observability, :event]`.
+Its measurements are `%{count: 1}` and its metadata contains `event`, `stage`
+(`root`, `phase`, or `terminal`), `journey_id`, and bounded `attributes`.
+BEAM health uses `[:chalk_sync, :runtime, :health]` with memory, process, and
+run-queue measurements. Logger events include the journey and, when tracing is
+enabled, the trace and span identifiers. Tokens, room ids, participant ids,
+command ids, and raw revisions are never observability dimensions.
+
+Every client and server protocol frame may carry these optional top-level
+fields without changing v1 frame semantics:
+
+```json
+{
+  "journey_id": "00000000-0000-4000-8000-000000000042",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "tracestate": "vendor=value"
+}
+```
+
+`traceparent` and `tracestate` use W3C Trace Context. HTTP upgrades use the
+same headers plus `x-chalk-journey-id`; browser clients that cannot set upgrade
+headers send the three fields on `hello`. The server forwards valid context on
+its response frames and creates a journey at sync ingress when one is absent.
 
 ## What is deliberately not here yet
 

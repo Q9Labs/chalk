@@ -1,3 +1,6 @@
+import type { NativeSessionTelemetry } from "../telemetry";
+import { correlateNativeTransports } from "../runtime/transport-correlation";
+
 export type ReactionEmoji = string;
 export type LayoutMode = "grid" | "speaker" | "sidebar" | string;
 export type PanelType = "chat" | "participants" | "transcripts" | "settings" | "whiteboard" | null;
@@ -188,11 +191,24 @@ export interface IncidentReporter {
 }
 
 export interface ConferenceClientConfig {
+  telemetry?: NativeSessionTelemetry;
   wideEvents?: {
     enabled?: boolean;
     includeDebugInfo?: boolean;
     handler?: ((event: unknown) => void) | null;
   };
+}
+
+export interface ChalkSessionConfig extends ConferenceClientConfig {
+  apiUrl: string;
+  wsUrl?: string;
+  token?: string;
+  tokenProvider?: () => Promise<string>;
+  dynamicTransportCredentials?: ReadonlySet<string>;
+  apiKey?: string;
+  debug?: boolean;
+  demoMode?: boolean;
+  realtimeKitLoader?: () => Promise<unknown>;
 }
 
 export interface IncidentConfig {
@@ -272,6 +288,8 @@ function createManager<State>(state: State): any {
 }
 
 export class ChalkSession {
+  private readonly stopTransportCorrelation: (() => void) | undefined;
+  readonly telemetry: NativeSessionTelemetry | undefined;
   readonly room = createManager(emptyRoomState);
   readonly participants = createManager({ participants: [], localParticipant: null, activeSpeaker: null, count: 0 } satisfies ParticipantState);
   readonly media = createManager({
@@ -300,10 +318,23 @@ export class ChalkSession {
   readonly ui = createManager({ layout: "grid", activePanel: null, controlsVisible: true, isMobileView: false, isFullscreen: false } satisfies UIState);
   readonly whiteboard = createManager({ isOpen: false, cursors: [], openParticipants: [], canDraw: false, elements: [], elementCount: 0, lastSeq: 0 } satisfies WhiteboardState);
 
-  constructor(_config?: unknown) {}
+  constructor(config: ChalkSessionConfig) {
+    this.telemetry = config.telemetry;
+    this.stopTransportCorrelation = config.telemetry
+      ? correlateNativeTransports({
+          apiUrl: config.apiUrl,
+          credentials: [config.token, config.apiKey].filter((credential): credential is string => Boolean(credential)),
+          dynamicCredentials: config.dynamicTransportCredentials,
+          wsUrl: config.wsUrl,
+          telemetry: config.telemetry,
+        })
+      : undefined;
+  }
 
   configureIncident(_config?: IncidentConfig): void {}
-  dispose(): void {}
+  dispose(): void {
+    this.stopTransportCorrelation?.();
+  }
   preloadRealtimeKit(): Promise<void> {
     return Promise.resolve();
   }

@@ -49,6 +49,25 @@ func TestRequestMiddlewareSkipsWhenOff(t *testing.T) {
 	}
 }
 
+func TestRequestMiddlewareUnwrapsResponseWriterForResponseController(t *testing.T) {
+	response := &flushResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+	var flushErr error
+	handler := observability.RequestMiddleware(nil, observability.RequestLogConfig{
+		Mode: observability.RequestLogOff,
+	})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		flushErr = http.NewResponseController(w).Flush()
+	}))
+
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/profile", nil))
+
+	if flushErr != nil {
+		t.Fatalf("flush response controller: %v", flushErr)
+	}
+	if !response.flushed {
+		t.Fatal("response writer was not flushed")
+	}
+}
+
 func TestRequestMiddlewareLogsErrors(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
@@ -101,4 +120,13 @@ func TestRequestMiddlewareSampledModeCanSkipSuccesses(t *testing.T) {
 	if logs.Len() != 0 {
 		t.Fatalf("log = %s, want sampled success to be skipped", logs.String())
 	}
+}
+
+type flushResponseRecorder struct {
+	*httptest.ResponseRecorder
+	flushed bool
+}
+
+func (r *flushResponseRecorder) Flush() {
+	r.flushed = true
 }

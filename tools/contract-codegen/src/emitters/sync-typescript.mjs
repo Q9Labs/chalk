@@ -29,6 +29,7 @@ function renderTypeScript(contract) {
       version: contract.version,
       protocol: contract.protocol,
       directions: contract.directions,
+      correlation: contract.correlation,
       phases: contract.phases,
       continuity: contract.continuity,
       idempotency: contract.idempotency,
@@ -39,6 +40,11 @@ function renderTypeScript(contract) {
     "export const SyncCloseCodes = SyncProtocolMetadata.closeCodes;",
     "",
   ];
+  const correlationFields = renderCorrelationFields(contract.correlation);
+
+  lines.push(`export const SyncCorrelationFieldsSchema = ${renderStruct(correlationFields)};`);
+  lines.push("export type SyncCorrelationFields = typeof SyncCorrelationFieldsSchema.Type;");
+  lines.push("");
 
   lines.push(`export const ParticipantSchema = ${renderParticipantSchema(contract.welcome.modes)};`);
   lines.push("export type Participant = typeof ParticipantSchema.Type;");
@@ -46,13 +52,13 @@ function renderTypeScript(contract) {
   lines.push(`export const SnapshotSchema = ${renderSnapshotSchema(contract.welcome.modes)};`);
   lines.push("export type Snapshot = typeof SnapshotSchema.Type;");
   lines.push("");
-  lines.push(`export const HelloFrameSchema = ${renderHelloSchema(contract.hello, contract.protocol.value)};`);
+  lines.push(`export const HelloFrameSchema = ${renderHelloSchema(contract.hello, contract.protocol.value, correlationFields)};`);
   lines.push("export type HelloFrame = typeof HelloFrameSchema.Type;");
   lines.push("");
 
   for (const event of contract.events) {
     const name = `${pascalCase(event.name)}EventFrame`;
-    lines.push(`export const ${name}Schema = ${renderEventSchema(event)};`);
+    lines.push(`export const ${name}Schema = ${renderEventSchema(event, correlationFields)};`);
     lines.push(`export type ${name} = typeof ${name}Schema.Type;`);
     lines.push("");
   }
@@ -63,32 +69,32 @@ function renderTypeScript(contract) {
 
   for (const mode of contract.welcome.modes) {
     const name = `Welcome${pascalCase(mode.id)}Frame`;
-    lines.push(`export const ${name}Schema = ${renderWelcomeSchema(contract, mode)};`);
+    lines.push(`export const ${name}Schema = ${renderWelcomeSchema(contract, mode, correlationFields)};`);
     lines.push(`export type ${name} = typeof ${name}Schema.Type;`);
     lines.push("");
   }
 
   for (const command of contract.commands) {
     const name = `${pascalCase(command.name)}CommandFrame`;
-    lines.push(`export const ${name}Schema = ${renderCommandSchema(command)};`);
+    lines.push(`export const ${name}Schema = ${renderCommandSchema(command, correlationFields)};`);
     lines.push(`export type ${name} = typeof ${name}Schema.Type;`);
     lines.push("");
   }
 
   for (const ack of contract.acks) {
     const name = `${pascalCase(ack.result)}AckFrame`;
-    lines.push(`export const ${name}Schema = ${renderAckSchema(ack)};`);
+    lines.push(`export const ${name}Schema = ${renderAckSchema(ack, correlationFields)};`);
     lines.push(`export type ${name} = typeof ${name}Schema.Type;`);
     lines.push("");
   }
 
-  lines.push(`export const ErrorFrameSchema = ${renderErrorSchema(contract.error)};`);
+  lines.push(`export const ErrorFrameSchema = ${renderErrorSchema(contract.error, correlationFields)};`);
   lines.push("export type ErrorFrame = typeof ErrorFrameSchema.Type;");
   lines.push("");
-  lines.push(`export const PingFrameSchema = Schema.Struct({ type: Schema.Literal(${JSON.stringify(contract.ping.type)}) });`);
+  lines.push(`export const PingFrameSchema = ${renderStruct(withCorrelationFields({ type: `Schema.Literal(${JSON.stringify(contract.ping.type)})` }, correlationFields))};`);
   lines.push("export type PingFrame = typeof PingFrameSchema.Type;");
   lines.push("");
-  lines.push(`export const PongFrameSchema = Schema.Struct({ type: Schema.Literal(${JSON.stringify(contract.pong.type)}) });`);
+  lines.push(`export const PongFrameSchema = ${renderStruct(withCorrelationFields({ type: `Schema.Literal(${JSON.stringify(contract.pong.type)})` }, correlationFields))};`);
   lines.push("export type PongFrame = typeof PongFrameSchema.Type;");
   lines.push("");
   lines.push(`export const ClientFrameSchema = ${renderUnion(["HelloFrameSchema", ...contract.commands.map((command) => `${pascalCase(command.name)}CommandFrameSchema`), "PingFrameSchema"])};`);
@@ -138,41 +144,56 @@ function renderSnapshotSchema(modes) {
  * @param {Record<string, any>} hello
  * @param {number} protocolVersion
  */
-function renderHelloSchema(hello, protocolVersion) {
+function renderHelloSchema(hello, protocolVersion, correlationFields) {
   const cursor = schemaForField(hello.cursor);
-  return renderStruct({
-    type: `Schema.Literal(${JSON.stringify(hello.type)})`,
-    protocol: `Schema.Literal(${protocolVersion})`,
-    token: schemaForField(hello.token),
-    streams: `Schema.optional(${renderStruct({ control: `Schema.optional(${renderStruct({ cursor })})` })})`,
-  });
+  return renderStruct(
+    withCorrelationFields(
+      {
+        type: `Schema.Literal(${JSON.stringify(hello.type)})`,
+        protocol: `Schema.Literal(${protocolVersion})`,
+        token: schemaForField(hello.token),
+        streams: `Schema.optional(${renderStruct({ control: `Schema.optional(${renderStruct({ cursor })})` })})`,
+      },
+      correlationFields,
+    ),
+  );
 }
 
 /**
  * @param {Record<string, any>} command
  */
-function renderCommandSchema(command) {
-  return renderStruct({
-    type: `Schema.Literal(${JSON.stringify(command.type)})`,
-    command_id: schemaForField(command.commandId),
-    name: `Schema.Literal(${JSON.stringify(command.name)})`,
-    payload: schemaForField(command.payload),
-  });
+function renderCommandSchema(command, correlationFields) {
+  return renderStruct(
+    withCorrelationFields(
+      {
+        type: `Schema.Literal(${JSON.stringify(command.type)})`,
+        command_id: schemaForField(command.commandId),
+        name: `Schema.Literal(${JSON.stringify(command.name)})`,
+        payload: schemaForField(command.payload),
+      },
+      correlationFields,
+    ),
+  );
 }
 
 /**
  * @param {Record<string, any>} event
  */
-function renderEventSchema(event) {
+function renderEventSchema(event, correlationFields) {
   const payload = Object.fromEntries(Object.entries(event.payload).map(([name, field]) => [snakeCase(name), schemaForField(field)]));
-  return `${renderStruct({
-    type: `Schema.Literal(${JSON.stringify(event.type)})`,
-    stream: `Schema.Literal(${JSON.stringify(event.stream)})`,
-    name: `Schema.Literal(${JSON.stringify(event.name)})`,
-    base_revision: schemaForField(event.baseRevision),
-    revision: schemaForField(event.revision),
-    payload: renderStruct(payload),
-  })}.check(
+  return `${renderStruct(
+    withCorrelationFields(
+      {
+        type: `Schema.Literal(${JSON.stringify(event.type)})`,
+        stream: `Schema.Literal(${JSON.stringify(event.stream)})`,
+        name: `Schema.Literal(${JSON.stringify(event.name)})`,
+        base_revision: schemaForField(event.baseRevision),
+        revision: schemaForField(event.revision),
+        payload: renderStruct(payload),
+      },
+      correlationFields,
+    ),
+  )}.check(
   Schema.makeFilter((frame) =>
     frame.revision === frame.base_revision + 1
       ? undefined
@@ -185,7 +206,7 @@ function renderEventSchema(event) {
  * @param {Record<string, any>} contract
  * @param {Record<string, any>} mode
  */
-function renderWelcomeSchema(contract, mode) {
+function renderWelcomeSchema(contract, mode, correlationFields) {
   const fields = {
     type: `Schema.Literal(${JSON.stringify(contract.welcome.type)})`,
     protocol: `Schema.Literal(${contract.protocol.value})`,
@@ -200,13 +221,13 @@ function renderWelcomeSchema(contract, mode) {
     fields.control_revision = schemaForField(mode.controlRevision);
   }
 
-  return renderStruct(fields);
+  return renderStruct(withCorrelationFields(fields, correlationFields));
 }
 
 /**
  * @param {Record<string, any>} ack
  */
-function renderAckSchema(ack) {
+function renderAckSchema(ack, correlationFields) {
   const fields = {
     type: `Schema.Literal(${JSON.stringify(ack.type)})`,
     command_id: schemaForField(ack.commandId),
@@ -219,18 +240,38 @@ function renderAckSchema(ack) {
   if (ack.reason) {
     fields.reason = schemaForField(ack.reason);
   }
-  return renderStruct(fields);
+  return renderStruct(withCorrelationFields(fields, correlationFields));
 }
 
 /**
  * @param {Record<string, any>} error
  */
-function renderErrorSchema(error) {
-  return renderStruct({
-    type: `Schema.Literal(${JSON.stringify(error.type)})`,
-    code: schemaForField(error.code),
-    message: schemaForField(error.message),
-  });
+function renderErrorSchema(error, correlationFields) {
+  return renderStruct(
+    withCorrelationFields(
+      {
+        type: `Schema.Literal(${JSON.stringify(error.type)})`,
+        code: schemaForField(error.code),
+        message: schemaForField(error.message),
+      },
+      correlationFields,
+    ),
+  );
+}
+
+/**
+ * @param {Record<string, any>} correlation
+ */
+function renderCorrelationFields(correlation) {
+  return Object.fromEntries(Object.entries(correlation.optionalTopLevelFields).map(([name, field]) => [name, schemaForField({ ...field, optional: true })]));
+}
+
+/**
+ * @param {Record<string, string>} fields
+ * @param {Record<string, string>} correlationFields
+ */
+function withCorrelationFields(fields, correlationFields) {
+  return { ...fields, ...correlationFields };
 }
 
 /**

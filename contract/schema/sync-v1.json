@@ -10,6 +10,24 @@
     "clientToServer": "client-to-server",
     "serverToClient": "server-to-client"
   },
+  "correlation": {
+    "optionalTopLevelFields": {
+      "journey_id": {
+        "kind": "string",
+        "format": "chalk-journey-id"
+      },
+      "traceparent": {
+        "kind": "string",
+        "format": "w3c-traceparent"
+      },
+      "tracestate": {
+        "kind": "string",
+        "format": "w3c-tracestate"
+      }
+    },
+    "upgradeHeaders": ["x-chalk-journey-id", "traceparent", "tracestate"],
+    "rule": "propagate_from_first_observed_layer_to_every_downstream_frame"
+  },
   "phases": [
     {
       "id": "awaiting_hello",

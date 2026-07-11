@@ -42,8 +42,13 @@ defmodule ChalkSync.ProtocolTest do
       assert {:error, :invalid_command} = Protocol.decode(~s({"type":"command","name":"x"}))
     end
 
-    test "ping decodes" do
-      assert {:ok, :ping} = Protocol.decode(~s({"type":"ping"}))
+    test "ping decodes with normalized correlation fields" do
+      assert {:ok, {:ping, %{}}} = Protocol.decode(~s({"type":"ping"}))
+
+      assert {:ok, {:ping, %{journey_id: "00000000-0000-4000-8000-000000000001"}}} =
+               Protocol.decode(
+                 ~s({"type":"ping","journey_id":"00000000-0000-4000-8000-000000000001"})
+               )
     end
   end
 

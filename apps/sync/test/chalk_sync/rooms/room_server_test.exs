@@ -17,10 +17,17 @@ defmodule ChalkSync.Rooms.RoomServerTest do
 
     other = joiner(room_id, "p2", "Bo")
 
-    assert_receive {:sync_event, %{name: "participant_joined", base_revision: 1, revision: 2}}
+    assert_receive {:sync_event, %{name: "participant_joined", base_revision: 1, revision: 2},
+                    %{journey_id: journey_id}}
+
+    assert journey_id =~ ~r/^[0-9a-f-]{36}$/
 
     assert {:committed, 3} = RoomServer.command(room_id, "p2", "c-1", :raise_hand, %{})
-    assert_receive {:sync_event, %{name: "hand_raised", base_revision: 2, revision: 3} = event}
+
+    assert_receive {:sync_event, %{name: "hand_raised", base_revision: 2, revision: 3} = event,
+                    %{journey_id: command_journey_id}}
+
+    assert command_journey_id =~ ~r/^[0-9a-f-]{36}$/
     assert event.payload == %{"participant_id" => "p2"}
 
     send(other, :done)
@@ -66,14 +73,14 @@ defmodule ChalkSync.Rooms.RoomServerTest do
     {:ok, pid, _} = RoomServer.join(room_id, "p1", "Ada", self())
 
     other = joiner(room_id, "p2", "Bo")
-    assert_receive {:sync_event, %{name: "participant_joined"}}
+    assert_receive {:sync_event, %{name: "participant_joined"}, _context}
 
     ref = Process.monitor(other)
     send(other, :done)
     assert_receive {:DOWN, ^ref, :process, ^other, :normal}
 
     assert_receive {:sync_event,
-                    %{name: "participant_left", payload: %{"participant_id" => "p2"}}}
+                    %{name: "participant_left", payload: %{"participant_id" => "p2"}}, _context}
 
     # While we are still subscribed the server must stay up.
     server_ref = Process.monitor(pid)

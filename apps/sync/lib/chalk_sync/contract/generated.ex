@@ -5,6 +5,11 @@ defmodule ChalkSync.Contract.Generated do
 
   @protocol_version 1
   @client_commands %{"lower_hand" => :lower_hand, "raise_hand" => :raise_hand}
+  @correlation_field_keys %{
+    "journey_id" => :journey_id,
+    "traceparent" => :traceparent,
+    "tracestate" => :tracestate
+  }
   @close_codes %{
     1002 => %{
       "code" => 1002,
@@ -22,6 +27,15 @@ defmodule ChalkSync.Contract.Generated do
     "directions" => %{
       "clientToServer" => "client-to-server",
       "serverToClient" => "server-to-client"
+    },
+    "correlation" => %{
+      "optionalTopLevelFields" => %{
+        "journey_id" => %{"kind" => "string", "format" => "chalk-journey-id"},
+        "traceparent" => %{"kind" => "string", "format" => "w3c-traceparent"},
+        "tracestate" => %{"kind" => "string", "format" => "w3c-tracestate"}
+      },
+      "upgradeHeaders" => ["x-chalk-journey-id", "traceparent", "tracestate"],
+      "rule" => "propagate_from_first_observed_layer_to_every_downstream_frame"
     },
     "phases" => [
       %{
@@ -72,11 +86,31 @@ defmodule ChalkSync.Contract.Generated do
     "errorConnection" => "open"
   }
 
+  @type correlation_fields :: %{
+          optional(:journey_id) => String.t(),
+          optional(:traceparent) => String.t(),
+          optional(:tracestate) => String.t()
+        }
   @type command_name :: :lower_hand | :raise_hand
   @type client_frame ::
-          {:hello, %{token: String.t(), cursor: non_neg_integer() | nil}}
-          | {:command, %{command_id: String.t(), name: command_name(), payload: map()}}
-          | :ping
+          {:hello,
+           %{
+             required(:token) => String.t(),
+             required(:cursor) => non_neg_integer() | nil,
+             optional(:journey_id) => String.t(),
+             optional(:traceparent) => String.t(),
+             optional(:tracestate) => String.t()
+           }}
+          | {:command,
+             %{
+               required(:command_id) => String.t(),
+               required(:name) => command_name(),
+               required(:payload) => map(),
+               optional(:journey_id) => String.t(),
+               optional(:traceparent) => String.t(),
+               optional(:tracestate) => String.t()
+             }}
+          | {:ping, correlation_fields()}
 
   def protocol_version, do: @protocol_version
   def client_commands, do: @client_commands
@@ -85,71 +119,80 @@ defmodule ChalkSync.Contract.Generated do
 
   @spec decode_client_frame(map()) :: {:ok, client_frame()} | {:error, atom()}
   def decode_client_frame(frame) when is_map(frame) do
-    case Map.fetch(frame, "type") do
-      :error -> {:error, :missing_type}
-      {:ok, "hello"} -> decode_hello(frame)
-      {:ok, "command"} -> decode_command(frame)
-      {:ok, "ping"} -> {:ok, :ping}
-      {:ok, _type} -> {:error, :unknown_type}
+    if valid_correlation_fields?(frame) do
+      case Map.fetch(frame, "type") do
+        :error -> {:error, :missing_type}
+        {:ok, "hello"} -> decode_hello(frame)
+        {:ok, "command"} -> decode_command(frame)
+        {:ok, "ping"} -> {:ok, {:ping, correlation_fields(frame)}}
+        {:ok, _type} -> {:error, :unknown_type}
+      end
+    else
+      {:error, :invalid_correlation_fields}
     end
   end
 
   def decode_client_frame(_frame), do: {:error, :missing_type}
 
   @spec valid_server_frame?(map()) :: boolean()
-  def valid_server_frame?(%{
-        "type" => "welcome",
-        "protocol" => @protocol_version,
-        "participant_id" => participant_id,
-        "mode" => "snapshot",
-        "snapshot" => snapshot
-      }) do
+  def valid_server_frame?(frame) when is_map(frame),
+    do: valid_correlation_fields?(frame) and valid_server_frame_body?(frame)
+
+  def valid_server_frame?(_frame), do: false
+
+  defp valid_server_frame_body?(%{
+         "type" => "welcome",
+         "protocol" => @protocol_version,
+         "participant_id" => participant_id,
+         "mode" => "snapshot",
+         "snapshot" => snapshot
+       }) do
     is_binary(participant_id) and valid_snapshot?(snapshot)
   end
 
-  def valid_server_frame?(%{
-        "type" => "welcome",
-        "protocol" => @protocol_version,
-        "participant_id" => participant_id,
-        "mode" => "replay",
-        "events" => events,
-        "control_revision" => revision
-      }) do
+  defp valid_server_frame_body?(%{
+         "type" => "welcome",
+         "protocol" => @protocol_version,
+         "participant_id" => participant_id,
+         "mode" => "replay",
+         "events" => events,
+         "control_revision" => revision
+       }) do
     is_binary(participant_id) and valid_non_negative_integer?(revision) and is_list(events) and
       Enum.all?(events, &valid_event_frame?/1)
   end
 
-  def valid_server_frame?(%{"type" => "event"} = frame), do: valid_event_frame?(frame)
+  defp valid_server_frame_body?(%{"type" => "event"} = frame), do: valid_event_frame?(frame)
 
-  def valid_server_frame?(%{
-        "type" => "ack",
-        "command_id" => command_id,
-        "result" => "committed",
-        "revision" => revision
-      }),
-      do: is_binary(command_id) and valid_positive_integer?(revision)
+  defp valid_server_frame_body?(%{
+         "type" => "ack",
+         "command_id" => command_id,
+         "result" => "committed",
+         "revision" => revision
+       }),
+       do: is_binary(command_id) and valid_positive_integer?(revision)
 
-  def valid_server_frame?(%{
-        "type" => "ack",
-        "command_id" => command_id,
-        "result" => "duplicate",
-        "revision" => revision
-      }),
-      do: is_binary(command_id) and valid_positive_integer?(revision)
+  defp valid_server_frame_body?(%{
+         "type" => "ack",
+         "command_id" => command_id,
+         "result" => "duplicate",
+         "revision" => revision
+       }),
+       do: is_binary(command_id) and valid_positive_integer?(revision)
 
-  def valid_server_frame?(%{
-        "type" => "ack",
-        "command_id" => command_id,
-        "result" => "rejected",
-        "reason" => reason
-      }),
-      do: is_binary(command_id) and is_binary(reason)
+  defp valid_server_frame_body?(%{
+         "type" => "ack",
+         "command_id" => command_id,
+         "result" => "rejected",
+         "reason" => reason
+       }),
+       do: is_binary(command_id) and is_binary(reason)
 
-  def valid_server_frame?(%{"type" => "error", "code" => code, "message" => message}),
+  defp valid_server_frame_body?(%{"type" => "error", "code" => code, "message" => message}),
     do: is_binary(code) and is_binary(message)
 
-  def valid_server_frame?(%{"type" => "pong"}), do: true
-  def valid_server_frame?(_frame), do: false
+  defp valid_server_frame_body?(%{"type" => "pong"}), do: true
+  defp valid_server_frame_body?(_frame), do: false
 
   defp decode_hello(frame) do
     case Map.fetch(frame, "protocol") do
@@ -170,16 +213,16 @@ defmodule ChalkSync.Contract.Generated do
   defp decode_hello_cursor(frame, token) do
     case control_cursor(frame) do
       :missing ->
-        {:ok, {:hello, %{token: token, cursor: nil}}}
+        {:ok, {:hello, Map.merge(%{token: token, cursor: nil}, correlation_fields(frame))}}
 
       :invalid ->
         {:error, :invalid_cursor}
 
       {:present, nil} ->
-        {:ok, {:hello, %{token: token, cursor: nil}}}
+        {:ok, {:hello, Map.merge(%{token: token, cursor: nil}, correlation_fields(frame))}}
 
       {:present, cursor} when is_integer(cursor) and cursor >= 0 ->
-        {:ok, {:hello, %{token: token, cursor: cursor}}}
+        {:ok, {:hello, Map.merge(%{token: token, cursor: cursor}, correlation_fields(frame))}}
 
       {:present, _cursor} ->
         {:error, :invalid_cursor}
@@ -202,7 +245,12 @@ defmodule ChalkSync.Contract.Generated do
   defp decode_command_payload(frame, command_id, command) do
     case Map.get(frame, "payload", %{}) do
       payload when is_map(payload) ->
-        {:ok, {:command, %{command_id: command_id, name: command, payload: payload}}}
+        {:ok,
+         {:command,
+          Map.merge(
+            %{command_id: command_id, name: command, payload: payload},
+            correlation_fields(frame)
+          )}}
 
       _ ->
         {:error, :invalid_payload}
@@ -247,49 +295,60 @@ defmodule ChalkSync.Contract.Generated do
 
   defp valid_participant?(_participant), do: false
 
-  defp valid_event_frame?(%{
-         "type" => "event",
-         "stream" => "control",
-         "name" => "participant_joined",
-         "base_revision" => base_revision,
-         "revision" => revision,
-         "payload" => %{"display_name" => display_name, "participant_id" => participant_id}
-       }) do
-    valid_revision_pair?(base_revision, revision) and is_binary(display_name) and
+  defp valid_event_frame?(
+         %{
+           "type" => "event",
+           "stream" => "control",
+           "name" => "participant_joined",
+           "base_revision" => base_revision,
+           "revision" => revision,
+           "payload" => %{"display_name" => display_name, "participant_id" => participant_id}
+         } = frame
+       ) do
+    valid_correlation_fields?(frame) and valid_revision_pair?(base_revision, revision) and
+      is_binary(display_name) and is_binary(participant_id)
+  end
+
+  defp valid_event_frame?(
+         %{
+           "type" => "event",
+           "stream" => "control",
+           "name" => "participant_left",
+           "base_revision" => base_revision,
+           "revision" => revision,
+           "payload" => %{"participant_id" => participant_id}
+         } = frame
+       ) do
+    valid_correlation_fields?(frame) and valid_revision_pair?(base_revision, revision) and
       is_binary(participant_id)
   end
 
-  defp valid_event_frame?(%{
-         "type" => "event",
-         "stream" => "control",
-         "name" => "participant_left",
-         "base_revision" => base_revision,
-         "revision" => revision,
-         "payload" => %{"participant_id" => participant_id}
-       }) do
-    valid_revision_pair?(base_revision, revision) and is_binary(participant_id)
+  defp valid_event_frame?(
+         %{
+           "type" => "event",
+           "stream" => "control",
+           "name" => "hand_raised",
+           "base_revision" => base_revision,
+           "revision" => revision,
+           "payload" => %{"participant_id" => participant_id}
+         } = frame
+       ) do
+    valid_correlation_fields?(frame) and valid_revision_pair?(base_revision, revision) and
+      is_binary(participant_id)
   end
 
-  defp valid_event_frame?(%{
-         "type" => "event",
-         "stream" => "control",
-         "name" => "hand_raised",
-         "base_revision" => base_revision,
-         "revision" => revision,
-         "payload" => %{"participant_id" => participant_id}
-       }) do
-    valid_revision_pair?(base_revision, revision) and is_binary(participant_id)
-  end
-
-  defp valid_event_frame?(%{
-         "type" => "event",
-         "stream" => "control",
-         "name" => "hand_lowered",
-         "base_revision" => base_revision,
-         "revision" => revision,
-         "payload" => %{"participant_id" => participant_id}
-       }) do
-    valid_revision_pair?(base_revision, revision) and is_binary(participant_id)
+  defp valid_event_frame?(
+         %{
+           "type" => "event",
+           "stream" => "control",
+           "name" => "hand_lowered",
+           "base_revision" => base_revision,
+           "revision" => revision,
+           "payload" => %{"participant_id" => participant_id}
+         } = frame
+       ) do
+    valid_correlation_fields?(frame) and valid_revision_pair?(base_revision, revision) and
+      is_binary(participant_id)
   end
 
   defp valid_event_frame?(_frame), do: false
@@ -301,4 +360,19 @@ defmodule ChalkSync.Contract.Generated do
 
   defp valid_non_negative_integer?(value), do: is_integer(value) and value >= 0
   defp valid_positive_integer?(value), do: is_integer(value) and value >= 1
+
+  defp correlation_fields(frame) do
+    Enum.reduce(@correlation_field_keys, %{}, fn {wire_key, field}, fields ->
+      case Map.fetch(frame, wire_key) do
+        {:ok, value} -> Map.put(fields, field, value)
+        :error -> fields
+      end
+    end)
+  end
+
+  defp valid_correlation_fields?(frame),
+    do:
+      (not Map.has_key?(frame, "journey_id") or is_binary(frame["journey_id"])) and
+        (not Map.has_key?(frame, "traceparent") or is_binary(frame["traceparent"])) and
+        (not Map.has_key?(frame, "tracestate") or is_binary(frame["tracestate"]))
 end

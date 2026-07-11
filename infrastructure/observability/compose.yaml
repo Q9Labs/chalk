@@ -1,0 +1,73 @@
+name: chalk-observability
+
+services:
+  canary:
+    image: node:24-alpine
+    container_name: chalk-observability-canary
+    command: ["node", "/app/canary.mjs"]
+    depends_on:
+      lgtm:
+        condition: service_healthy
+    environment:
+      CHALK_OTLP_HTTP_ENDPOINT: http://lgtm:4318
+      CHALK_LOKI_ENDPOINT: http://lgtm:3100
+      CHALK_PROMETHEUS_ENDPOINT: http://lgtm:9090
+      CHALK_TEMPO_ENDPOINT: http://lgtm:3200
+    restart: unless-stopped
+    volumes:
+      - ./scripts/canary.mjs:/app/canary.mjs:ro
+
+  postgres:
+    image: postgres:18.3-alpine
+    container_name: chalk-observability-postgres
+    environment:
+      POSTGRES_DB: chalk_observability
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chalk_observability"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - 127.0.0.1:55432:5432
+    restart: unless-stopped
+    volumes:
+      - chalk-observability-postgres-data:/var/lib/postgresql
+
+  lgtm:
+    image: grafana/otel-lgtm:0.28.0
+    container_name: chalk-observability-lgtm
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /otel-lgtm/grafana/conf/provisioning/dashboards/chalk/chalk-observability.json
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 127.0.0.1:3000:3000
+      - 127.0.0.1:3100:3100
+      - 127.0.0.1:3200:3200
+      - 127.0.0.1:4040:4040
+      - 127.0.0.1:4317:4317
+      - 127.0.0.1:4318:4318
+      - 127.0.0.1:9090:9090
+      - 127.0.0.1:13133:13133
+    restart: unless-stopped
+    volumes:
+      - chalk-observability-data:/data
+      - ./grafana/dashboards/chalk-observability.json:/otel-lgtm/grafana/conf/provisioning/dashboards/chalk/chalk-observability.json:ro
+      - ./grafana/provisioning/alerts.yaml:/otel-lgtm/grafana/conf/provisioning/alerting/chalk-alerts.yaml:ro
+      - ./grafana/provisioning/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/chalk.yaml:ro
+      - ./grafana/provisioning/postgres.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/chalk-postgres.yaml:ro
+
+volumes:
+  chalk-observability-data:
+    name: chalk-observability-lgtm-data
+  chalk-observability-postgres-data:
+    name: chalk-observability-postgres-data

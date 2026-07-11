@@ -89,6 +89,11 @@ var (
 	apiErrorInvalidAuditLogID = APIError{Status: http.StatusBadRequest, Code: "invalid_audit_log_id", Message: "Invalid audit log id"}
 	apiErrorAuditLogNotFound  = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Audit log not found"}
 
+	apiErrorInvalidJourneyID         = APIError{Status: http.StatusBadRequest, Code: "invalid_journey_id", Message: "Invalid journey id"}
+	apiErrorInvalidJourneyEvent      = APIError{Status: http.StatusBadRequest, Code: "invalid_journey_event", Message: "Invalid journey event"}
+	apiErrorJourneyNotFound          = APIError{Status: http.StatusNotFound, Code: "journey_not_found", Message: "Journey not found"}
+	apiErrorJourneyLedgerUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "journey_ledger_unavailable", Message: "Journey ledger is unavailable"}
+
 	apiErrorInvalidIntegrationCallbackURL       = APIError{Status: http.StatusBadRequest, Code: "invalid_callback_url", Message: "Invalid callback URL"}
 	apiErrorInvalidIntegrationProvider          = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_provider", Message: "Invalid integration provider"}
 	apiErrorInvalidIntegrationService           = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_service", Message: "Invalid integration service"}

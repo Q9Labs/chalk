@@ -6,7 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
-import { ClientFrameSchema, ServerFrameSchema, SyncCloseCodes, SyncProtocolMetadata } from "../../../sdks/typescript/client/src/generated/sync.ts";
+import { ClientFrameSchema, ServerFrameSchema, SyncCloseCodes, SyncCorrelationFieldsSchema, SyncProtocolMetadata } from "../../../sdks/typescript/client/src/generated/sync.ts";
 import { loadSyncContract } from "../src/emitters/sync-contract.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -61,18 +61,38 @@ describe("sync v1 contract generation", () => {
       await expect(loadSyncContract(invalidPath)).rejects.toThrow("field definitions require a kind");
     });
   });
+
+  it("requires optional correlation fields in the schema source", async () => {
+    await withTemporaryDirectory(async (directory) => {
+      const invalidPath = resolve(directory, "sync-v1.json");
+      const contract = JSON.parse(await readFile(schemaPath, "utf8"));
+      delete contract.correlation;
+      await writeFile(invalidPath, JSON.stringify(contract));
+
+      await expect(loadSyncContract(invalidPath)).rejects.toThrow("correlation is required");
+    });
+  });
 });
 
 describe("generated TypeScript sync codecs", () => {
   it("decodes the client union and rejects an invalid cursor or unknown command", () => {
+    const correlation = {
+      journey_id: "00000000-0000-4000-8000-000000000001",
+      traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      tracestate: "chalk=client",
+    };
+
     expect(
       Schema.decodeUnknownSync(ClientFrameSchema)({
         type: "hello",
         protocol: 1,
         token: "token",
         streams: { control: { cursor: 0 } },
+        ...correlation,
       }),
-    ).toMatchObject({ type: "hello", streams: { control: { cursor: 0 } } });
+    ).toMatchObject({ type: "hello", streams: { control: { cursor: 0 } }, ...correlation });
+
+    expect(Schema.decodeUnknownSync(SyncCorrelationFieldsSchema)(correlation)).toEqual(correlation);
 
     expect(() =>
       Schema.decodeUnknownSync(ClientFrameSchema)({
@@ -80,6 +100,13 @@ describe("generated TypeScript sync codecs", () => {
         protocol: 1,
         token: "token",
         streams: { control: { cursor: -1 } },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      Schema.decodeUnknownSync(ClientFrameSchema)({
+        type: "ping",
+        journey_id: 1,
       }),
     ).toThrow();
 
@@ -113,8 +140,11 @@ describe("generated TypeScript sync codecs", () => {
         participant_id: "p1",
         mode: "snapshot",
         snapshot: { control_revision: 1, participants: [{ participant_id: "p1", display_name: "Ada", hand_raised: false }] },
+        journey_id: "00000000-0000-4000-8000-000000000001",
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        tracestate: "chalk=server",
       }),
-    ).toMatchObject({ type: "welcome", mode: "snapshot" });
+    ).toMatchObject({ type: "welcome", mode: "snapshot", tracestate: "chalk=server" });
 
     expect(
       decode({
@@ -158,7 +188,16 @@ describe("generated TypeScript sync codecs", () => {
     ).toThrow(/revision must equal base_revision \+ 1/);
   });
 
-  it("exports phase, continuity, idempotency, close-code, and error-connection metadata", () => {
+  it("exports correlation, phase, continuity, idempotency, close-code, and error-connection metadata", () => {
+    expect(SyncProtocolMetadata.correlation).toEqual({
+      optionalTopLevelFields: {
+        journey_id: { kind: "string", format: "chalk-journey-id" },
+        traceparent: { kind: "string", format: "w3c-traceparent" },
+        tracestate: { kind: "string", format: "w3c-tracestate" },
+      },
+      upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate"],
+      rule: "propagate_from_first_observed_layer_to_every_downstream_frame",
+    });
     expect(SyncProtocolMetadata.phases.map((phase) => phase.id)).toEqual(["awaiting_hello", "joined"]);
     expect(SyncProtocolMetadata.continuity.events.rule).toBe("revision_equals_base_revision_plus_one");
     expect(SyncProtocolMetadata.continuity.snapshotFallback.welcomeMode).toBe("snapshot");

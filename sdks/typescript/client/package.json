@@ -15,12 +15,29 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "telemetry": [
+        "./dist/telemetry/index.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry/index.d.ts",
+      "react-native": "./dist/telemetry/index.js",
+      "import": "./dist/telemetry/index.js",
+      "require": "./dist/telemetry/index.js",
+      "default": "./dist/telemetry/index.js"
     }
   },
   "publishConfig": {
@@ -28,9 +45,9 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external effect && pnpm run build:types",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/telemetry/index.ts --format esm --out-dir ./dist --platform browser --external effect && pnpm run build:types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
-    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
+    "dev": "tsup ./src/index.ts ./src/telemetry/index.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",

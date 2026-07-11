@@ -98,6 +98,24 @@ type Membership struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type ObservabilityJourneyEvent struct {
+	EventID            pgtype.UUID        `json:"event_id"`
+	JourneyID          pgtype.UUID        `json:"journey_id"`
+	Sequence           int64              `json:"sequence"`
+	OccurredAt         pgtype.Timestamptz `json:"occurred_at"`
+	ReceivedAt         pgtype.Timestamptz `json:"received_at"`
+	Name               string             `json:"name"`
+	Phase              string             `json:"phase"`
+	State              string             `json:"state"`
+	OriginKind         string             `json:"origin_kind"`
+	FirstObservedLayer string             `json:"first_observed_layer"`
+	UpstreamVisibility string             `json:"upstream_visibility"`
+	ParentEventID      pgtype.UUID        `json:"parent_event_id"`
+	TraceID            pgtype.Text        `json:"trace_id"`
+	SpanID             pgtype.Text        `json:"span_id"`
+	Attributes         []byte             `json:"attributes"`
+}
+
 type Participant struct {
 	ID           pgtype.UUID        `json:"id"`
 	Name         pgtype.Text        `json:"name"`

@@ -30,14 +30,44 @@ defmodule ChalkSync.Stateholder do
   def impl, do: Application.fetch_env!(:chalk_sync, :stateholder)
 
   @spec load(String.t()) :: {:ok, Room.t()} | :not_found
-  def load(room_id), do: impl().load(room_id)
+  def load(room_id, observability \\ nil) do
+    result = impl().load(room_id)
+
+    ChalkSync.Observability.linked_phase(observability, "sync.stateholder.load", %{
+      result: load_result(result)
+    })
+
+    result
+  end
 
   @spec commit(String.t(), non_neg_integer(), Room.event(), Room.t()) ::
           :ok | {:error, {:revision_conflict, non_neg_integer()}}
-  def commit(room_id, expected_revision, event, state),
-    do: impl().commit(room_id, expected_revision, event, state)
+  def commit(room_id, expected_revision, event, state, observability \\ nil) do
+    result = impl().commit(room_id, expected_revision, event, state)
+
+    ChalkSync.Observability.linked_phase(observability, "sync.stateholder.commit", %{
+      result: commit_result(result)
+    })
+
+    result
+  end
 
   @spec events_since(String.t(), non_neg_integer()) ::
           {:ok, [Room.event()]} | {:error, :cursor_unavailable}
-  def events_since(room_id, cursor), do: impl().events_since(room_id, cursor)
+  def events_since(room_id, cursor, observability \\ nil) do
+    result = impl().events_since(room_id, cursor)
+
+    ChalkSync.Observability.linked_phase(observability, "sync.stateholder.replay", %{
+      result: replay_result(result)
+    })
+
+    result
+  end
+
+  defp load_result({:ok, _room}), do: "found"
+  defp load_result(:not_found), do: "not_found"
+  defp commit_result(:ok), do: "committed"
+  defp commit_result({:error, {:revision_conflict, _current}}), do: "revision_conflict"
+  defp replay_result({:ok, _events}), do: "available"
+  defp replay_result({:error, :cursor_unavailable}), do: "cursor_unavailable"
 end

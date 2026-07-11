@@ -17,9 +17,22 @@ defmodule ChalkSync.Transport.Router do
     |> send_resp(200, JSON.encode!(%{"status" => "ok"}))
   end
 
-  get "/v1/sync" do
+  get "/readyz" do
+    status = if ChalkSync.Observability.ready?(), do: 200, else: 503
+    body = if status == 200, do: %{"status" => "ready"}, else: %{"status" => "not_ready"}
+
     conn
-    |> WebSockAdapter.upgrade(ChalkSync.Transport.Socket, [], timeout: 60_000)
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, JSON.encode!(body))
+  end
+
+  get "/v1/sync" do
+    observability_context = ChalkSync.Observability.context(conn.req_headers)
+
+    conn
+    |> WebSockAdapter.upgrade(ChalkSync.Transport.Socket, %{observability: observability_context},
+      timeout: 60_000
+    )
     |> halt()
   end
 

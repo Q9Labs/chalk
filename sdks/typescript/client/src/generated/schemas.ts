@@ -313,6 +313,35 @@ export const IntegrationServicesSchema = Schema.Struct({
 });
 export type IntegrationServices = typeof IntegrationServicesSchema.Type;
 
+export const JourneyEventBatchSchema = Schema.Struct({
+  events: Schema.Array(
+    Schema.Struct({
+      attributes: Schema.optional(Schema.Record(Schema.String, Schema.Union([Schema.String.check(Schema.isMaxLength(1024)), Schema.Number, Schema.Boolean]))),
+      event_id: UUIDSchema,
+      first_observed_layer: Schema.String.check(Schema.isMinLength(1)),
+      journey_id: UUIDSchema,
+      name: Schema.String.check(Schema.isMinLength(1)),
+      occurred_at: DateTimeStringSchema,
+      origin_kind: Schema.String.check(Schema.isMinLength(1)),
+      parent_event_id: Schema.optional(Schema.NullOr(UUIDSchema)),
+      phase: Schema.String.check(Schema.isMinLength(1)),
+      sequence: Schema.Number,
+      span_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(16), Schema.isPattern(new RegExp("^(?=.*[1-9a-fA-F])[0-9a-fA-F]{16}$"))))),
+      state: Schema.String.check(Schema.isMinLength(1)),
+      trace_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(32), Schema.isMaxLength(32), Schema.isPattern(new RegExp("^(?=.*[1-9a-fA-F])[0-9a-fA-F]{32}$"))))),
+      upstream_visibility: Schema.String.check(Schema.isMinLength(1)),
+    }),
+  ).check(Schema.isMaxLength(100)),
+});
+export type JourneyEventBatch = typeof JourneyEventBatchSchema.Type;
+
+export const JourneyEventIntakeSchema = Schema.Struct({
+  accepted_count: Schema.Number,
+  duplicate_count: Schema.Number,
+  journey_ids: Schema.Array(Schema.String),
+});
+export type JourneyEventIntake = typeof JourneyEventIntakeSchema.Type;
+
 export const LoginRequestSchema = Schema.Struct({
   email: EmailSchema,
   password: Schema.String.check(Schema.isMinLength(1)),
@@ -851,6 +880,24 @@ export type GetUserPathParams = typeof GetUserPathParamsSchema.Type;
 
 export const GetUserResponseSchema = UserSchema;
 export type GetUserResponse = typeof GetUserResponseSchema.Type;
+
+export const IntakeJourneyEventsRequestBodySchema = JourneyEventBatchSchema;
+export type IntakeJourneyEventsRequestBody = typeof IntakeJourneyEventsRequestBodySchema.Type;
+
+export const IntakeJourneyEventsResponseSchema = JourneyEventIntakeSchema;
+export type IntakeJourneyEventsResponse = typeof IntakeJourneyEventsResponseSchema.Type;
+
+export const IntakeJourneyEvents202ResponseHeadersSchema = Schema.Struct({
+  "x-chalk-journey-id": Schema.optional(Schema.String),
+});
+export type IntakeJourneyEvents202ResponseHeaders = typeof IntakeJourneyEvents202ResponseHeadersSchema.Type;
+
+export const IntakeJourneyEvents429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type IntakeJourneyEvents429ResponseHeaders = typeof IntakeJourneyEvents429ResponseHeadersSchema.Type;
 
 export const ListAuditLogsPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -1763,6 +1810,25 @@ export const InvalidIntegrationServiceErrorSchema = InvalidIntegrationServiceErr
   }),
 );
 
+export class InvalidJourneyEventError extends Schema.TaggedErrorClass<InvalidJourneyEventError>()("InvalidJourneyEventError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_journey_event"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidJourneyEventErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_journey_event"),
+    message: Schema.String,
+  }),
+});
+export const InvalidJourneyEventErrorSchema = InvalidJourneyEventErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidJourneyEventError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidJourneyEventError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class InvalidMembershipIdError extends Schema.TaggedErrorClass<InvalidMembershipIdError>()("InvalidMembershipIdError", {
   error: Schema.Struct({
     code: Schema.Literal("invalid_membership_id"),
@@ -2314,6 +2380,25 @@ export const InvalidUserNameErrorSchema = InvalidUserNameErrorWireSchema.pipe(
   }),
 );
 
+export class JourneyLedgerUnavailableError extends Schema.TaggedErrorClass<JourneyLedgerUnavailableError>()("JourneyLedgerUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("journey_ledger_unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const JourneyLedgerUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("journey_ledger_unavailable"),
+    message: Schema.String,
+  }),
+});
+export const JourneyLedgerUnavailableErrorSchema = JourneyLedgerUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(JourneyLedgerUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "JourneyLedgerUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class MissingAiCredentialsError extends Schema.TaggedErrorClass<MissingAiCredentialsError>()("MissingAiCredentialsError", {
   error: Schema.Struct({
     code: Schema.Literal("missing_ai_credentials"),
@@ -2698,6 +2783,9 @@ export type GetTranscriptError = typeof GetTranscriptErrorSchema.Type;
 export const GetUserErrorSchema = Schema.Union([InternalErrorSchema, InvalidUserIdErrorSchema, NotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type GetUserError = typeof GetUserErrorSchema.Type;
 
+export const IntakeJourneyEventsErrorSchema = Schema.Union([InternalErrorSchema, InvalidJourneyEventErrorSchema, InvalidRequestErrorSchema, JourneyLedgerUnavailableErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type IntakeJourneyEventsError = typeof IntakeJourneyEventsErrorSchema.Type;
+
 export const ListAuditLogsErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, InvalidTenantIdErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type ListAuditLogsError = typeof ListAuditLogsErrorSchema.Type;
 
@@ -2936,6 +3024,7 @@ export const ChalkOperationPolicies = {
   disableIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getMe: { rateLimit: { limit: 100, policy: "auth.me", windowSeconds: 60 } },
+  intakeJourneyEvents: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },

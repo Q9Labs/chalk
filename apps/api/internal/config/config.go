@@ -16,6 +16,8 @@ const (
 	APITrustedProxyCIDRs  = "CHALK_API_TRUSTED_PROXY_CIDRS"
 	APILogFormat          = "CHALK_API_LOG_FORMAT"
 	APILogLevel           = "CHALK_API_LOG_LEVEL"
+	APIOTLPEndpoint       = "CHALK_API_OTLP_ENDPOINT"
+	APIOTLPInsecure       = "CHALK_API_OTLP_INSECURE"
 	APIOperationLogs      = "CHALK_API_OPERATION_LOGS"
 	APIProfiler           = "CHALK_API_PROFILER"
 	APIRequestLogs        = "CHALK_API_REQUEST_LOGS"
@@ -44,6 +46,7 @@ const (
 	CloudflareRealtimeAppID            = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
 	CloudflareRealtimeAppSecret        = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
 	CloudflareRTKAppID                 = "CHALK_CLOUDFLARE_RTK_APP_ID"
+	CloudflareRTKTokenOrgID            = "CHALK_CLOUDFLARE_RTK_TOKEN_ORG_ID"
 	CloudflareRTKPresetFacilitator     = "CHALK_CLOUDFLARE_RTK_PRESET_FACILITATOR"
 	CloudflareRTKPresetContributor     = "CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR"
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
@@ -118,6 +121,7 @@ type CloudflareRealtimeConfig struct {
 	RealtimeAppID        string
 	RealtimeAppSecret    string
 	RTKAppID             string
+	RTKTokenOrgID        string
 	RTKPresetFacilitator string
 	RTKPresetContributor string
 	RequestTimeout       time.Duration
@@ -160,6 +164,8 @@ type ObservabilityConfig struct {
 	Environment          string
 	LogFormat            string
 	LogLevel             string
+	OTLPEndpoint         string
+	OTLPInsecure         bool
 	OperationLogs        bool
 	Profiler             bool
 	RequestLogs          string
@@ -229,6 +235,11 @@ func Load() (Config, error) {
 	}
 	logLevel, err := envEnum(APILogLevel, DefaultLogLevel, "debug", "info", "warn", "error")
 	if err != nil {
+		return Config{}, err
+	}
+	otlpEndpoint := strings.TrimSpace(envOrDefault(APIOTLPEndpoint, ""))
+	otlpInsecure := envBool(APIOTLPInsecure)
+	if err := validateOTLPEndpoint(environment, otlpEndpoint, otlpInsecure); err != nil {
 		return Config{}, err
 	}
 	operationLogs := envBool(APIOperationLogs)
@@ -305,6 +316,7 @@ func Load() (Config, error) {
 			RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
 			RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
 			RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
+			RTKTokenOrgID:        envOrDefault(CloudflareRTKTokenOrgID, ""),
 			RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
 			RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
 			RequestTimeout:       cloudflareRealtimeRequestTimeout,
@@ -329,6 +341,8 @@ func Load() (Config, error) {
 			Environment:          environment,
 			LogFormat:            logFormat,
 			LogLevel:             logLevel,
+			OTLPEndpoint:         otlpEndpoint,
+			OTLPInsecure:         otlpInsecure,
 			OperationLogs:        operationLogs,
 			Profiler:             envBool(APIProfiler),
 			RequestLogs:          requestLogs,
@@ -353,6 +367,36 @@ func Load() (Config, error) {
 			Timeout: resendTimeout,
 		},
 	}, nil
+}
+
+func validateOTLPEndpoint(environment string, endpoint string, insecure bool) error {
+	if endpoint == "" {
+		if insecure {
+			return fmt.Errorf("%s requires %s", APIOTLPInsecure, APIOTLPEndpoint)
+		}
+		return nil
+	}
+	if insecure && environment != DefaultEnvironment {
+		return fmt.Errorf("%s is only supported in local environments", APIOTLPInsecure)
+	}
+
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid URL: %w", APIOTLPEndpoint, err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" && parsed.Path != "/" {
+		return fmt.Errorf("%s must be an absolute base URL without a path", APIOTLPEndpoint)
+	}
+	if insecure {
+		if parsed.Scheme != "http" {
+			return fmt.Errorf("%s must use http when %s is enabled", APIOTLPEndpoint, APIOTLPInsecure)
+		}
+		return nil
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("%s must use https unless %s is enabled locally", APIOTLPEndpoint, APIOTLPInsecure)
+	}
+	return nil
 }
 
 func validateDatabaseURL(environment string, databaseURL string) error {

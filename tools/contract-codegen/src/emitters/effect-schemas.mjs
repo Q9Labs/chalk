@@ -121,7 +121,7 @@ function renderSchema(schema, context = {}) {
       return `Schema.NullOr(${renderSchema(nonNullSchemas[0], context)})`;
     }
 
-    return "Schema.Unknown";
+    return `Schema.Union([${nonNullSchemas.map((member) => renderSchema(member, context)).join(", ")}])`;
   }
 
   if (schema.enum) {

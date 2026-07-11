@@ -12,6 +12,10 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -21,6 +25,8 @@ const (
 )
 
 var ErrMissingConfig = errors.New("missing cloudflare sfu config")
+
+var sfuTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu")
 
 type httpClient interface {
 	Do(*http.Request) (*http.Response, error)
@@ -127,7 +133,7 @@ func (a Adapter) SessionUsage(_ context.Context, input mediaplane.SessionUsageIn
 	return mediaplane.Usage{Metadata: a.providerMetadata()}, nil
 }
 
-func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (SessionMetadata, error) {
+func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (metadata SessionMetadata, err error) {
 	sessionRef = strings.TrimSpace(sessionRef)
 	if sessionRef == "" {
 		return SessionMetadata{}, mediaplane.ErrInvalidSessionRef
@@ -135,6 +141,15 @@ func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (
 	if a.client == nil {
 		return SessionMetadata{}, mediaplane.ErrPlaneUnavailable
 	}
+	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu.verify_session", trace.WithSpanKind(trace.SpanKindClient))
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Cloudflare SFU request failed")
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("http.request.method", http.MethodGet), attribute.String("server.address", "rtc.live.cloudflare.com"))
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/apps/%s/sessions/%s", a.endpoint, url.PathEscape(a.appID), url.PathEscape(sessionRef)), nil)
 	if err != nil {
@@ -148,6 +163,7 @@ func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (
 		return SessionMetadata{}, fmt.Errorf("send sfu request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
 	}
 	defer response.Body.Close()
+	span.SetAttributes(attribute.Int("http.response.status_code", response.StatusCode))
 
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {

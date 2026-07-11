@@ -13,11 +13,17 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const defaultEndpoint = "https://api.cloudflare.com/client/v4"
 
 var ErrMissingConfig = errors.New("missing cloudflare realtimekit config")
+
+var realtimeKitTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk")
 
 type httpClient interface {
 	Do(*http.Request) (*http.Response, error)
@@ -228,7 +234,16 @@ func (p Plane) kickAllPath(meetingID string) string {
 	return fmt.Sprintf("%s/%s/active-session/kick-all", p.meetingsPath(), url.PathEscape(meetingID))
 }
 
-func (p Plane) do(ctx context.Context, method string, path string, body any, output any) error {
+func (p Plane) do(ctx context.Context, method string, path string, body any, output any) (err error) {
+	ctx, span := realtimeKitTracer.Start(ctx, "mediaplane.cloudflare.realtimekit.request", trace.WithSpanKind(trace.SpanKindClient))
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Cloudflare RealtimeKit request failed")
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("http.request.method", method), attribute.String("server.address", "api.cloudflare.com"))
 	var reader io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -253,6 +268,7 @@ func (p Plane) do(ctx context.Context, method string, path string, body any, out
 		return fmt.Errorf("send rtk request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
 	}
 	defer response.Body.Close()
+	span.SetAttributes(attribute.Int("http.response.status_code", response.StatusCode))
 
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
