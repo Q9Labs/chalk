@@ -13,7 +13,7 @@ writer-restart convergence without retries, retention fallback, and
 multi-subscription lifecycle checks passed.
 
 The harness itself completed every campaign without a harness error. The sync
-server quality gate passes 82 tests with zero failures.
+server quality gate passes 84 tests with zero failures.
 
 ## Confirmed issues
 
