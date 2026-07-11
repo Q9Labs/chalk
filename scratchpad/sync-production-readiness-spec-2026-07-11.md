@@ -1,1708 +1,1518 @@
-# Chalk Sync Server Production-Readiness Specification
+# Chalk Sync Engine Production Overhaul Specification
 
-<!-- cspell:words appendfsync erpc failback fsyncs goldens libcluster parameterizes Redix testdata transactionally WAITAOF -->
+<!-- cspell:words backpressure bytea coalescible discoverably erpc goldens idempotently libcluster PITR Postgrex replayable transactionally unclustered unpartitioned -->
 
-Status: Proposed for implementation
-Date: 2026-07-11
-Scope: correctness, reliability, multi-node authority, client convergence,
-resource safety, operations, and release proof for the declared sync protocol.
+**Status:** Proposed implementation specification
+**Date:** 2026-07-11
+**Applies to:** `apps/sync`, the sync contract, the TypeScript client runtime,
+the API lifecycle boundary, database migrations, and the sync stress harness
 
 ## Decision
 
-Chalk will complete the current sync architecture instead of rebuilding it.
-The Stateholder remains the authoritative coordination boundary. A session
-writer is a disposable, fenced working copy. WebSocket processes own transport
-state only. SDK clients maintain revisioned replicas and recover by exact replay
-or complete snapshot.
+Chalk will overhaul the current sync engine in place and preserve the parts
+that already express useful boundaries. The production design has one durable
+authority: Postgres.
 
-The implementation is production-ready only when every terminal command
-outcome is recoverable after process and node loss, every event belongs to one
-contiguous authoritative order, every client can prove its position in that
-order, slow consumers cannot create unbounded resource growth, and the declared
-failure matrix passes against real Redis and multiple sync nodes.
+Postgres owns durable Session control state, the ordered event log, command
+receipts, participant-session lifecycle facts, and lifecycle delivery intents.
+An acknowledged outcome is recoverable from Postgres after every supported
+process, node, or database failover.
 
-The baseline storage target is Redis 7.2 or newer with one writable primary,
-two promotion-eligible replicas, AOF enabled with `appendfsync always` on all
-three nodes, `min-replicas-to-write 2`, `min-replicas-max-lag 1`, and Sentinel
-configured to promote only a replica that participated in the acknowledged
-durability barrier. `WAITAOF 1 2 <deadline>` is the minimum post-mutation
-barrier. The exact launch topology may replace this baseline only when it
-provides equal or stronger semantics and passes the same failure proof. A
-topology that cannot prove those semantics is not an approved Stateholder.
+BEAM processes own disposable working copies, local subscriptions, connection
+state, and bounded queues. Postgres row locking establishes the order of
+concurrent commands. The design omits cluster-wide BEAM writer leases,
+application fencing epochs, `libcluster` command routing, and `:erpc` command
+paths.
 
-Exactly two replicas are promotion-eligible in the baseline, and every
-acknowledged write waits for both. Redis replica count alone is insufficient
-because `min-replicas-to-write` ignores Sentinel promotion priority. The
-topology controller maintains a separate durable write gate and topology
-generation. It disables the gate before any replica membership or eligibility
-change, admits a replacement only after full synchronization and a barrier
-checkpoint, then enables the gate when exactly two directly verified replicas
-are both online and promotion-eligible. Every mutation script verifies the
-current gated topology generation in addition to Redis's replica-count check.
-Readiness is false while the gate is disabled. Release proof races writes with
-every gate, membership, priority, and synchronization transition.
+Postgres `LISTEN/NOTIFY` is the default committed-head hint. Periodic
+authoritative head comparison repairs every missed hint. Redis may later carry
+the same hints, volatile presence, or rebuildable caches. Durable control stays
+correct and ready with Redis completely absent.
 
-This specification turns the existing learning model and breaker findings into
-one executable contract. It does not authorize a second sync rewrite.
+The server implements a strict sync protocol v2 and a production TypeScript
+client runtime. The existing v1 schema remains frozen as historical contract
+evidence. Production clients and servers move to v2 together before launch.
 
-## Product intent
+Server-side SQLite is outside the launch design. SQLite remains appropriate for
+device-local pending-command persistence and may become a separately specified
+single-node development adapter. Postgres remains the shared production
+authority.
 
-The sync server makes live Chalk state feel immediate while preserving a
-stronger rule: a fast answer may never weaken correctness. A participant may
-disconnect, retry, reconnect through another node, miss an acknowledgement, or
-observe a delayed event without producing duplicate effects, contradictory
-outcomes, revision gaps, or silent divergence.
+## Answer about the Elixir layout
 
-The same language-neutral contract serves the first-party app and every public
-SDK. TypeScript is the first production client implementation, not a privileged
-protocol dialect.
+Yes. Application modules conventionally live under `lib/` in a Mix project.
+Tests live under `test/`, configuration under `config/`, and runtime assets such
+as SQL under `priv/`. Chalk already follows that convention.
 
-## Meaning of “production-ready”
+The `lib/` placement is correct. The overhaul repairs responsibility boundaries
+inside it by separating the pure reducer, durable decisions, node-local
+coordination, recovery, fanout, presence, and transport.
 
-This specification makes the declared `session.control` sync contract ready for
-production. The first command surface may remain small, but every advertised
-command and event must satisfy the complete contract.
+## Current-state verdict
 
-A production-ready claim covers:
+The current engine is a valuable prototype and is not production-ready. Its
+pure reducer, Stateholder seam, snapshot/replay behavior, protocol schema,
+generated types, WebSocket transport, and breaker harness are worth retaining.
+The harness has also shown that the basic model can converge for 100,000 pure
+operations and that the real wire path works in several fault-free recovery
+cases.
 
-- authoritative state and stable command outcomes;
-- contiguous event ordering and deterministic replay;
-- reconnect and acknowledgement recovery;
-- multi-node ownership, fencing, and fanout recovery;
-- bounded subscriber, writer, event, and receipt resources;
-- a real TypeScript client replica and reconciliation loop;
-- dependency-aware readiness, telemetry, release artifacts, CI, load, chaos,
-  and soak evidence.
+Six deterministic correctness failures currently block launch:
 
-It does not claim that every future Chalk stream or meeting feature is shipped.
-Unsupported streams and commands must remain absent from the public contract
-instead of appearing as placeholders.
+1. A writer restart loses committed and rejected command outcomes.
+2. The 256-entry local outcome cache forgets old command IDs and permits an old
+   request to be decided again.
+3. A durable commit can succeed while the caller receives `rejected: retry`,
+   leaving the committed outcome undiscoverable.
+4. Revision-conflict recovery can leave an empty writer process alive.
+5. A non-reading subscriber grows its mailbox without a bound.
+6. The reducer accepts a supplied event whose revision is not exactly next.
 
-## Scope
+The overhaul must also close these code-proven gaps:
+
+- durable authority is currently keyed by `room_id`, so separate Sessions can
+  collide;
+- tokens and runtime routing lack participant-session identity and generation;
+- production can boot with the in-memory Stateholder;
+- socket loss currently creates a durable participant-leave event;
+- the reducer and v1 generated validator disagree about revision contiguity;
+- stable terminal rejections exist only in process memory;
+- replay frames, inbound work, outbound delivery, payloads, and mailboxes are
+  not comprehensively bounded;
+- a stale process heap participates in authoritative validation;
+- the TypeScript package has generated frame shapes but no production sync
+  runtime;
+- multi-node, real-Postgres, API lifecycle, real-browser, slow-TCP, and database
+  failover paths remain unproved.
+
+Every item above remains traceable to an executable release gate. Detector
+tests that merely demonstrate the old failure do not satisfy the gate; they
+must assert the corrected behavior and pass.
+
+## Product boundary
 
 ### In scope
 
-- `session.control`, beginning with the current participant and hand-state
-  behavior and providing the foundation for later control commands;
-- the language-neutral sync schema and generated Elixir and TypeScript types;
-- the Elixir sync server, Memory Stateholder, Redis Stateholder, and authority
-  coordination;
-- the TypeScript SDK transport, replica, pending-command queue, diagnostics,
-  and reconnect loop;
-- deterministic breaker, real-wire, real-Redis, multi-node, load, and soak
-  verification;
-- production build, configuration, health, readiness, graceful shutdown, and
-  CI boundaries.
+- durable `session.control` state and events;
+- command idempotency and stable terminal decisions;
+- snapshot, replay, live catch-up, and replica convergence;
+- Session and participant-session lifecycle integration with the API;
+- multi-node sync service operation through one Postgres authority;
+- bounded WebSocket delivery and overload behavior;
+- the TypeScript core client plus browser and React Native persistence seams;
+- dependency-aware boot, readiness, drain, telemetry, and release artifacts;
+- deterministic, real-wire, real-Postgres, failover, load, and soak evidence.
 
 ### Outside this specification
 
-- media transport and WebRTC behavior;
-- whiteboard merge semantics, CRDTs, and operational transformation;
-- chat, transcript, recording artifact, and file persistence;
-- presence payload design beyond separating volatile connection presence from
-  durable session control;
-- adversarial cybersecurity testing, token cryptography, key rotation, abuse
-  prevention, and end-to-end encryption;
-- production deployment or production traffic changes.
+- media-plane synchronization provided by Cloudflare RealtimeKit;
+- cursor, typing, speaking, and other volatile streams beyond their separation
+  from durable control;
+- general-purpose document CRDTs;
+- a server-side SQLite production topology;
+- a required Redis deployment;
+- penetration testing, offensive security testing, and cryptographic redesign;
+- deployment to production without explicit approval in the active thread.
 
-The sync server consumes verified identity and capability claims. The separate
-authentication and authorization launch gate must still pass before Chalk as a
-whole is production-ready. This specification does not weaken or bypass that
-gate.
+Token signature verification and capability enforcement remain functional
+correctness requirements. Cybersecurity testing remains outside this work.
 
-## Canonical language
+## Canonical language and identity
 
 ### Room
 
-A durable product container that may host many meeting occurrences. A Room is
-not a live sync authority boundary.
+A Room is the durable product container. It can have many distinct
+occurrences.
 
 ### Session
 
-One live occurrence inside a Room. All control revisions, events, command
-receipts, writer ownership, snapshots, replay cursors, and cleanup lifetimes are
-scoped to one Session.
+A Session is one occurrence of a Room. Every durable sync revision, event,
+receipt, lifecycle intent, snapshot, and retention window belongs to one
+Session.
 
 ### Participant session
 
-One participant identity inside one Session. It is the idempotency actor scope
-and may have multiple simultaneous WebSocket connections. It is not a native
-Chalk User.
+A participant session is one admitted participation occurrence inside a
+Session. The current `participants` row represents this concept and is evolved
+with explicit `status` and `generation` columns. `participants.id` is the
+`participant_session_id`; `users.id`, when present, remains the user identity.
+
+Reconnects reuse the same participant-session ID and generation. Explicit
+removal or replacement invalidates the old generation. Multiple sockets may
+belong to one active participant session without creating extra durable joins.
 
 ### Session key
 
-`{tenant_id, session_id}`. Every Stateholder key and writer-ownership decision
-uses this namespace. `room_id` remains contextual metadata and cannot identify
-live state by itself.
+The authority and revision key is `{tenant_id, session_id}`. `room_id` supplies
+verified context. Every query also verifies that the Session belongs to the
+claimed tenant and Room.
 
 ### Command key
 
-`{tenant_id, session_id, participant_session_id, command_id}`. A command ID is
-generated once as UUIDv7 by the client and reused unchanged across every retry.
-Its embedded time establishes the supported retry and receipt-retention window.
-Using Stateholder time, a new command ID is admissible only when its timestamp is
-no more than 24 hours old and no more than five minutes in the future. Malformed
-IDs return `invalid_command`; future IDs return `command_clock_skew`; old IDs
-return `command_expired`. Receipt lookup precedes age rejection, so a retained
-terminal outcome remains resolvable at the boundary. Golden boundary vectors are
-shared by Elixir and TypeScript.
-
-### Server-cause key
-
-`{tenant_id, session_id, cause_kind, cause_id}`. Server-driven admission,
-control-plane removal, reconnect-grace expiry, and Session-end work uses the
-same atomic decision semantics as a client command. Explicit client leave is
-excluded. A cause ID is issued once by the control-plane event or derived
-deterministically from the lifecycle generation that created the work.
-
-Each cause also carries `participant_session_generation | session_generation`,
-`issued_at`, and `expires_at` signed or supplied by its authoritative issuer.
-The Stateholder rejects a cause outside that delivery interval or for an older
-generation, even after its full receipt has compacted. Terminal generation
-tombstones survive through the maximum token and cause lifetime.
-
-API-driven causes additionally carry a stable `lifecycle_intent_id` that does
-not change across delivery generations or cause IDs. The Stateholder atomically
-indexes that intent to its first committed or intent-terminal receipt and
-revision. Cause-scoped delivery rejection such as `cause_expired` is recorded
-only under the individual cause key and cannot finalize or poison the intent
-index. Receipt lookup first returns an existing individual cause receipt. Only
-a cause key with no receipt checks the committed or intent-terminal index; a
-pending intent may accept one later valid delivery generation. A reissued cause
-therefore resolves committed work without emitting another event, while
-retrying an expired earlier cause always returns its own stable rejection.
-
-### Command receipt
-
-The authoritative terminal outcome of one command key, including the request
-fingerprint and either its committed revision/event or stable rejection reason.
-A receipt is durable for the idempotency lifetime.
-
-### Event
-
-One authoritative control transition in a Session. It carries an event ID,
-stream, base revision, next revision, name, payload, and the originating command
-ID when a client command caused it.
-
-### Snapshot
-
-A complete replacement projection of one stream at one declared revision. A
-snapshot is sufficient to heal a replica without hidden prior state.
-
-### Writer
-
-The single active Elixir process allowed to validate and order commands for one
-Session. Its heap is a disposable working copy. Its lease and fencing token,
-not the local process registry, establish authority.
-
-### Replica
-
-A client or non-authority node projection derived from a snapshot plus a
-contiguous suffix of authoritative events.
-
-## Authority and system boundaries
-
-The ownership chain is:
+The command key is:
 
 ```text
-Stateholder record and event stream
-    -> fenced session writer working copy
-        -> local and cross-node fanout
-            -> SDK client replica
+{tenant_id, session_id, participant_session_id, command_id}
 ```
 
-The Stateholder owns:
+The client creates one opaque command ID and reuses it unchanged for every
+retry. V2 accepts 16–64 ASCII characters matching `[A-Za-z0-9_-]+`. UUIDs and
+ULIDs are suitable; the server does not derive expiry from a client clock.
 
-- the current Session control snapshot and revision;
-- the retained authoritative event sequence;
-- command receipts and request fingerprints;
-- writer lease state, active authority epoch, and monotonically increasing
-  in-epoch fencing counter;
-- the durable head used to detect fanout lag.
+The server stores a fingerprint of the normalized command name and payload.
+Reuse of one key with different intent returns `command_id_conflict` and never
+changes the original decision. The receipt stores the generation submitted with
+the first decision. The idempotency key deliberately excludes generation, so a
+retry after token rotation resolves the original receipt before current
+generation validation. A genuinely new participation has a new
+participant-session ID and a separate command namespace.
 
-The session writer owns:
+### Lifecycle intent key
 
-- deterministic command validation against its current authoritative
-  projection;
-- serialization of commands for its Session;
-- a hot receipt cache that is an optimization only;
-- local subscriber registration and lifecycle;
-- publishing committed events after the authoritative commit.
+Every durable join, explicit removal, or Session end has an API-generated
+`lifecycle_intent_id`. Delivery attempts reuse that ID. At most one control
+event may originate from it.
 
-A WebSocket process owns:
+## Authority model
 
-- protocol phase and connection state;
-- one verified participant-session identity;
-- bounded outbound delivery;
-- forwarding commands to the authority;
-- converting authoritative outcomes into protocol frames;
-- reconnect or snapshot-replacement signals when continuity cannot be
-  maintained.
+```text
+API product rows + lifecycle intents
+                 │
+                 ▼
+Postgres folded control row + event log + command receipts
+                 │
+                 ├── transactional NOTIFY head hint
+                 ├── optional Redis head hint
+                 ▼
+disposable node-local Session coordinators
+                 │
+                 ▼
+bounded socket queues → SDK canonical replicas + pending overlays
+```
 
-The TypeScript client owns:
+The source-of-truth map is exact:
 
-- the canonical server replica and its revision;
-- optimistic pending commands as a separate overlay;
-- command IDs across retries;
-- strict event application and gap detection;
-- snapshot replacement, replay, acknowledgement reconciliation, and reconnect.
+| Fact                          | Durable authority                     | Disposable copies                      |
+| ----------------------------- | ------------------------------------- | -------------------------------------- |
+| Room and Session lifecycle    | API Postgres tables                   | API and sync caches                    |
+| Participant-session lifecycle | `participants` plus lifecycle intents | token claims, local presence           |
+| Durable control state         | `sync_session_control`                | coordinator and SDK replicas           |
+| Ordered control history       | `sync_control_events`                 | recovery pages and local caches        |
+| Command outcomes              | `sync_command_receipts`               | process hot cache and SDK pending map  |
+| Connection presence           | no historical authority               | local ETS; optional Redis TTL state    |
+| Client retry queue            | client persistence adapter            | in-memory pending overlay              |
+| Fanout notification           | no authority                          | Postgres notifications; optional Redis |
 
-Postgres continues to own durable product facts such as Room and Session
-records. Real-time control state does not move to Postgres as part of this work.
+Deleting Redis, every sync node, and every SDK replica must leave every
+acknowledged durable outcome recoverable from Postgres.
 
-## Correctness invariants
+## Target Elixir structure
 
-These invariants are release blockers.
+The implementation evolves the existing code in place:
 
-### C1. Correct authority key
+```text
+apps/sync/lib/chalk_sync/
+  sessions/reducer.ex              pure command/event/state rules
+  sessions/coordinator.ex          node-local cache and subscriptions only
+  sessions/command_admission.ex    bounded node and Session admission
+  stateholder.ex                    semantic durable-decision contract
+  stateholder/postgres.ex           production Postgrex transactions
+  stateholder/memory.ex             deterministic test adapter only
+  fanout.ex                         committed-head hint port
+  fanout/postgres_notifications.ex  default LISTEN/NOTIFY adapter
+  fanout/redis.ex                   optional optimization, added only if needed
+  presence.ex                       explicitly volatile presence port
+  presence/local.ex                 local TTL implementation
+  transport/socket.ex               protocol and connection state
+  transport/recovery.ex             snapshot/replay/live catch-up
+  transport/outbound_queue.ex       bounded per-socket delivery
+  protocol.ex                       generated-v2 boundary and error mapping
+```
 
-Live state is partitioned by `{tenant_id, session_id}`. A Room with two Sessions
-has two independent revision sequences, writers, event streams, receipts, and
-snapshots. No key can collide across tenants, Sessions, or participant sessions.
+`ChalkSync.Rooms.Room` becomes `ChalkSync.Sessions.Reducer` because it models a
+Session occurrence. `RoomServer` becomes a node-local `SessionCoordinator`; it
+does not own command order or a cluster-wide identity. The rename is performed
+once with compiler-checked call-site changes. No compatibility wrapper remains.
 
-### C2. One fenced writer
+The Stateholder boundary exposes semantic decisions and reads. Its API prevents
+callers from assembling only part of a transaction through generic
+compare-and-set operations. Production behavior names Postgres explicitly.
+Memory exists solely for deterministic conformance and model tests.
 
-At most one writer fencing token can commit for a Session. A stale or partitioned
-writer is rejected before mutation even when its local process is still alive.
-Only the token returned by the latest atomic acquisition and paired with its
-unexpired lease is valid. A numerically larger caller-supplied token has no
-authority.
+## Release-blocking invariants
 
-### C3. Atomic command decision
+### C1. Correct isolation
 
-One Stateholder operation atomically establishes the command receipt and, for a
-commit, the event, next snapshot, and next revision. No observer can see only a
-subset of that unit.
+Different tenants and different Sessions of one Room have independent state,
+revision chains, receipts, lifecycle intents, and retention. A token cannot
+select another authority key through frame data.
 
-Primary mutation is not yet an externally visible decision. The Stateholder
-returns a terminal result only after the configured durability barrier succeeds.
-Fanout, acknowledgement, and receipt resolution may expose the decision only
-after that barrier. A barrier timeout leaves the outcome uncertain and
-unpublished until resolution either re-establishes durability or proves the
-mutation absent after authoritative failover.
+### C2. Postgres is the durable authority
 
-### C4. Stable terminal outcome
+No process heap, ETS table, Registry entry, notification, Redis key, or client
+replica is needed to recover a terminal command decision or durable control
+state.
 
-Every retry of the same command key and request fingerprint returns the same
-semantic terminal outcome for the full idempotency lifetime:
+### C3. One atomic command decision
 
-- an original commit returns `duplicate` with the original revision;
-- an original terminal rejection returns the same rejection reason;
-- neither path emits another event or side effect.
+One Postgres transaction produces exactly one of these outcomes:
 
-A command ID reused with a different command name or payload returns
-`command_id_conflict` and performs no mutation. This guarantee covers the
-24-hour supported retry window. A UUIDv7 command ID outside that window returns
-`command_expired` and can never start new work.
+- a committed event, folded-state update, revision increment, and committed
+  receipt; or
+- a terminal rejected receipt with no event and no state revision change.
 
-### C5. Honest acknowledgements
+Partial durable outcomes are impossible.
 
-`committed` means the event, snapshot, revision, and recoverable receipt are
-authoritative. `duplicate` points to the original committed revision.
-`rejected` is a terminal business outcome and guarantees no mutation occurred.
+`command_id_conflict` is a derived response when the authoritative receipt key
+already exists with another fingerprint. It returns from that original receipt
+and does not create a contradictory second receipt.
 
-Transport loss, Stateholder timeout, writer loss, and unknown commit status are
-not business rejections. The server resolves the durable receipt or closes the
-connection with a retryable recovery signal. The client retries the same command
-ID and never invents success or rejection from transport loss.
+### C4. Stable idempotency
+
+Within the supported retention period, one command key has one stable terminal
+decision. Retrying the same intent returns that decision. A committed retry is
+reported as `duplicate`; `duplicate` is derived from the committed receipt and
+is not a third stored outcome.
+
+### C5. Honest uncertainty
+
+The server sends `committed`, `duplicate`, or terminal `rejected` only after it
+has read the corresponding committed receipt from the writable Postgres
+authority. A timeout or connection loss around `COMMIT` triggers receipt lookup
+on a fresh primary connection. If resolution remains unavailable, the command
+stays pending and receives a retryable error. Infrastructure uncertainty is
+never encoded as terminal rejection.
+
+For `command_id_conflict`, the corresponding authority is the original receipt
+whose stored fingerprint proves the mismatch.
 
 ### C6. Exact event chain
 
-For every event:
+While history is inside its declared retention window, for event `n`,
+`revision = base_revision + 1`, and its base revision equals the previous
+durable head. A Session has at most one event at each revision. The folded state
+at revision `n` equals an independent fold of events through `n`. The reducer
+returns an error for a gap, duplicate, unknown event, invalid payload, or
+invalid state transition; it never crashes on decoded input.
+
+Each stored revision also has a deterministic state digest. The server and SDK
+recompute it from the schema-defined canonical control projection. A digest
+mismatch at the same numeric revision is corruption and forces snapshot
+replacement; revision equality alone never proves convergence.
+
+### C7. Durable lifecycle is transport-independent
+
+Socket attachment and loss update volatile presence only. Durable join,
+participant removal, and Session end originate from idempotent lifecycle
+intents. Losing the last socket never emits `participant_left`.
+
+### C8. Gap-free recovery
+
+Every accepted hello produces one bounded active recovery result—`snapshot`,
+`replay`, or `up_to_date`—or a terminal lifecycle result at an explicit
+Postgres head. Events committed after an active recovery head are then delivered
+as an exact suffix. Missed notifications are repaired by authoritative head
+reads. `up_to_date` requires both revision and state digest to match.
+
+### C9. Client convergence
+
+After faults stop and dependencies recover, every connected SDK canonical
+replica reaches the Postgres head. ACK/event reordering, duplicate frames,
+reconnects, snapshot replacement, and retained optimistic commands do not
+change the final canonical state.
+
+### C10. Hints are disposable
+
+Dropping, duplicating, delaying, reordering, or disabling all fanout hints may
+increase recovery latency. It cannot lose an event, invent a revision, change a
+receipt, or block durable command decisions.
+
+### C11. Every queue and retained set is bounded
+
+Inbound frames, command work, Postgres waits, replay pages, snapshots, outbound
+delivery, client pending commands, diagnostic traces, events, receipts, and
+lifecycle intents have named limits and explicit overflow behavior. Slow
+subscribers are disconnected into normal recovery without slowing other
+subscribers or command commits.
+
+### C12. Acknowledged durability matches the database topology
+
+At launch, an acknowledged terminal decision survives loss of one sync node,
+all sync nodes, the Postgres primary process, and a promoted synchronous
+standby. The release report states the exact database settings and demonstrated
+recovery point. Chalk makes no stronger durability claim than the tested
+topology provides.
+
+## Postgres data model
+
+All schema changes use the repository's operational migration ledger under
+`apps/api/db/migrations/`. `apps/api/db/schema.sql` is updated as the checked-in
+schema snapshot. The API does not run hidden startup migrations. The sync
+release refuses readiness when the required migration version is absent.
+
+The API and sync server connect to the same Postgres authority. The sync server
+uses `Postgrex` directly for its transaction path; it does not call the Go API
+for each command.
+
+### Existing product tables
+
+`room_sessions` remains the canonical Session row. It gains a database
+constraint that allows tenant, Room, and Session consistency to be referenced
+as one key.
+
+The existing `participants` table is the participant-session table for this
+release. It gains:
 
 ```text
-event.base_revision == current_revision
-event.revision == event.base_revision + 1
+generation bigint not null
+status text not null       -- joining | active | leaving | left
+joined_at timestamptz
+left_at timestamptz
 ```
 
-The production reducer returns an explicit error for a gap, unknown event,
-invalid payload, duplicate participant identity, or semantically invalid state
-transition. It never advances to a supplied arbitrary revision.
+Allowed statuses and transitions are enforced by database checks and API
+logic. The token carries the row ID and generation. Explicit removal ends that
+row, and a later admission creates a new row at generation one. Administrative
+token invalidation for an otherwise continuing participation increments the
+existing row's generation. API, token, receipt, and event keys apply this rule
+consistently.
 
-### C7. Command/event correlation
+The durable v2 participant projection contains only
+`participant_session_id`, a display name of at most 256 UTF-8 bytes, and the
+generated control flags such as `hand_raised`. Product metadata and capability
+arrays remain outside the folded sync snapshot. API admission validates these
+limits before inserting an intent or issuing a token. Cross-language maximum
+encoding fixtures, including worst-case JSON escaping, must prove that one
+canonical participant entry fits the 2 KiB reservation.
 
-Every unique committed command key produces exactly one event carrying its
-`command_id`, regardless of the number of transport attempts. Every terminally
-rejected command produces no event. Every unique committed server-cause key
-produces exactly one event carrying its `cause_id`; it never fabricates a client
-command ID. Lifecycle retries resolve the original server-cause receipt.
+### `sync_session_control`
 
-### C8. Snapshot and replay equivalence
-
-A snapshot at revision `n` equals the independent fold of the authoritative
-event prefix through `n`. Replay from cursor `c` to head `n` is the exact ordered
-suffix `(c, n]`; an equivalent final state produced by different events is not
-accepted as correct replay.
-
-Snapshots and events use RFC 8785 JSON canonicalization. The state-digest
-projection contains exactly `record_schema_version`, tenant, Room, Session,
-control revision, status, and participant control state. It excludes
-`state_digest`, `chain_digest`, `updated_at`, transport metadata, and every other
-derived or volatile field. `state_digest` is the lowercase hexadecimal SHA-256
-of that projection's UTF-8 RFC 8785 encoding.
-
-At revision zero, `chain_digest` is SHA-256 of the UTF-8 bytes
-`chalk.sync.v2.chain.genesis\n` followed by the raw 32 state-digest bytes. For
-event `n`, `chain_digest` is SHA-256 of the raw 32 previous-chain-digest bytes
-followed by the UTF-8 RFC 8785 encoding of the complete event excluding only
-`chain_digest`. The event includes the resulting `state_digest` and
-`previous_chain_digest` in that encoded input. This order removes any circular
-digest dependency.
-
-JSON nulls, integers, strings, Unicode, and object ordering follow RFC 8785;
-payloads that cannot be represented by the schema and canonicalizer are
-rejected. Elixir and TypeScript consume golden genesis, event, snapshot,
-compaction, and Unicode vectors. A replica at the correct revision with the
-wrong state or chain digest is corrupt and must replace its state from a
-snapshot.
-
-### C9. Gap-free welcome cut
-
-Joining or reconnecting creates one linearized cut. The welcome represents a
-declared head revision, and subsequent live delivery begins strictly after that
-head. Events committed while the welcome is assembled are buffered or replayed;
-they cannot disappear between recovery and subscription.
-
-### C10. Replica convergence
-
-After all accepted messages are delivered or recovery completes, every correct
-replica at revision `n` equals the authoritative projection at `n`. A replica's
-observed authoritative revision never decreases.
-
-### C11. Bounded resources
-
-No participant, subscriber, Session, event tail, command receipt set, trace,
-retry loop, or process mailbox grows without an explicit bound or lifecycle.
-Crossing an outbound subscriber bound disconnects that subscriber into the
-normal replay/snapshot recovery path without blocking the writer.
-
-### C12. Acknowledged durability
-
-An acknowledged terminal command outcome survives writer loss, sync-node loss,
-and the supported Redis primary-failover configuration. Authority fencing
-tokens never regress across crash, promotion, failback, restore, or authority
-record loss. Missing or regressed authority metadata beside existing Session
-state is corruption and makes that Session unavailable. If the configured
-Stateholder cannot establish these properties, the server cannot return a
-terminal acknowledgement.
-
-Fences are `{authority_epoch, counter}` pairs. `authority_epoch` is a random
-128-bit value owned outside restored Redis data by the topology controller.
-Normal acquisitions increment the Redis counter within one epoch. Before backup
-restore, disaster recovery, or cluster replacement begins, the topology
-controller durably disables the write gate and makes the target Redis endpoint
-unreachable to every sync node. It restores data into that isolated endpoint,
-rotates and durably installs a new authority epoch, verifies the barrier and
-topology generation, then exposes the endpoint and enables writes in that order.
-Mutation requires exact equality with the active epoch and counter, so a stale
-writer from the pre-restore epoch cannot commit even when the restored counter
-repeats. Restore without prior gate disablement, endpoint isolation, and epoch
-rotation is forbidden and covered by release proof.
-
-## Authoritative data model
-
-The adapter may encode these records differently, but their semantics are
-portable and covered by Stateholder conformance tests.
-
-### Session control record
+One row exists per `{tenant_id, session_id}`:
 
 ```text
-SessionControl {
-  record_schema_version
-  tenant_id
-  room_id
-  session_id
-  control_revision
-  state_digest
-  chain_digest
-  status
-  participants_by_participant_session_id
-  updated_at
-}
+tenant_id uuid
+room_id uuid
+session_id uuid
+control_revision bigint not null default 0
+folded_state jsonb not null
+state_schema_version integer not null
+state_digest bytea not null
+snapshot_bytes bigint not null
+snapshot_reserved_bytes bigint not null default 0
+participant_event_count bigint not null default 0
+participant_event_bytes bigint not null default 0
+lifecycle_event_count bigint not null default 0
+lifecycle_event_bytes bigint not null default 0
+lifecycle_reserved_events bigint not null default 1
+lifecycle_reserved_bytes bigint not null default 16384
+lifecycle_intent_count bigint not null default 0
+lifecycle_intent_bytes bigint not null default 0
+lifecycle_reserved_intents bigint not null default 1
+lifecycle_reserved_intent_bytes bigint not null default 16384
+receipt_count bigint not null default 0
+receipt_bytes bigint not null default 0
+created_at timestamptz not null
+updated_at timestamptz not null
+primary key (tenant_id, session_id)
 ```
 
-`status` is at minimum `active | ended`. Participant control state is keyed by
-participant-session identity. Volatile socket presence is not stored here.
+The row is the command serialization lock. Revisions are calculated from this
+row; a Postgres sequence is forbidden because rollback would create gaps.
+Tenant, Room, and Session consistency is enforced by a composite foreign key.
+`snapshot_bytes` is the exact encoded v2 snapshot size;
+`snapshot_reserved_bytes` protects admitted but unapplied state growth.
 
-### Control event
+`state_digest` is SHA-256 over the ASCII prefix
+`chalk-sync-state-v2`, a zero byte, the big-endian state-schema version, and the
+RFC 8785 encoding of the generated durable control-state projection. The
+projection excludes presence, connection IDs, timestamps, and other volatile
+fields and sorts schema-defined collections by their stable IDs. Elixir and
+TypeScript share golden digest vectors, including Unicode and empty-state
+cases. The digest detects replica corruption and carries no security or
+tamper-evidence guarantee.
+
+### `sync_control_events`
+
+The append-only event table contains:
 
 ```text
-ControlEvent {
-  record_schema_version
-  event_id
-  tenant_id
-  room_id
-  session_id
-  stream = "control"
-  base_revision
-  revision
-  name
-  participant_session_id | null
-  command_id | null
-  cause_id | null
-  previous_chain_digest
-  chain_digest
-  state_digest
-  payload
-}
+tenant_id uuid
+room_id uuid
+session_id uuid
+event_id uuid
+base_revision bigint
+revision bigint
+event_name text
+payload jsonb
+actor_participant_session_id uuid null
+actor_generation bigint null
+command_id text null
+lifecycle_intent_id uuid null
+event_schema_version integer
+resulting_state_digest bytea
+encoded_bytes integer
+created_at timestamptz
 ```
 
-`event_id` and `revision` identify delivery. `command_id` correlates optimistic
-client work with its authoritative result. `cause_id` identifies server-driven
-lifecycle work without pretending it was a client command.
+Required constraints are:
 
-### Command receipt
+- primary or unique key on `{tenant_id, session_id, revision}`;
+- unique `event_id`;
+- unique non-null `{tenant_id, session_id, lifecycle_intent_id}`;
+- unique non-null
+  `{tenant_id, session_id, actor_participant_session_id, command_id}`;
+- `revision = base_revision + 1`;
+- exactly one origin: command ID or lifecycle intent ID;
+- a command origin requires actor participant-session ID and generation;
+- a 32-byte resulting digest and positive encoded size within the event limit;
+- bounded event name and payload size at the application boundary;
+- composite Session and participant-session consistency.
+
+### `sync_command_receipts`
+
+The terminal receipt table contains:
 
 ```text
-DecisionReceipt {
-  record_schema_version
-  tenant_id
-  session_id
-  actor_kind = participant_command | server_cause
-  participant_command = {
-    participant_session_id
-    participant_session_generation
-    command_id
-    command_timestamp
-  } | null
-  server_cause = {
-    cause_kind
-    cause_id
-    lifecycle_intent_id | null
-    issuance_generation
-    issued_at
-    cause_expires_at
-  } | null
-  request_fingerprint
-  outcome = committed | rejected
-  validated_revision
-  revision | null
-  event_id | null
-  rejection_reason | null
-  recorded_at
-  expires_at
-}
+tenant_id uuid
+session_id uuid
+participant_session_id uuid
+submitted_generation bigint
+command_id text
+request_fingerprint bytea
+command_name text
+outcome text                  -- committed | rejected
+rejection_reason text null
+event_id uuid null
+resulting_revision bigint null
+created_at timestamptz
 ```
 
-The request fingerprint is
-`jcs-sha256-v1:<lowercase hexadecimal SHA-256>`. Its input is an RFC 8785
-canonical JSON object containing the actor scope, command name, and
-schema-validated payload. Unknown payload fields are rejected before hashing.
-The protocol repository contains golden Unicode, number, key-order, and nested
-payload vectors consumed by Elixir and TypeScript. The fingerprint detects reuse
-of one command ID for different intent without storing duplicate payloads.
+The composite command key without generation is the primary key. Constraints
+require an event ID and revision only for `committed`, and a reason only for
+`rejected`. Rejection reasons use an exhaustive protocol enum. A composite
+foreign key for committed receipts references the
+exact command-origin event, including tenant, Session, participant-session,
+submitted/actor generation, command ID, event ID, and revision. Generation
+remains excluded from the command-origin uniqueness key.
 
-For participant commands the actor scope contains tenant, Session,
-participant-session ID and generation, command ID, name, and payload. For server
-causes it contains tenant, Session, cause kind, cause ID, optional lifecycle
-intent ID, issuance generation, issued-at, expiry, name, and payload. Timestamps
-use RFC 3339 UTC with exactly millisecond precision before canonicalization.
+Receipts remain available for the whole active Session and seven days after it
+ends. This is longer than the SDK's maximum 24-hour pending-command lifetime.
+Cleanup never removes a receipt from an active Session.
 
-Committed receipts record the event base revision in `validated_revision` and
-the resulting revision in `revision`. Rejected receipts record the revision
-against which the rejection was validated and have no event or result revision.
-`duplicate` is a response derived from an existing committed receipt; it is not
-a third stored outcome.
+### `sync_lifecycle_intents`
 
-The receipt schema is a tagged union. `actor_kind = participant_command` requires
-`participant_session_id`, `participant_session_generation`, `command_id`, and
-`command_timestamp`. `actor_kind = server_cause` requires `cause_kind`,
-`cause_id`, `issuance_generation`, `issued_at`, and `cause_expires_at`. Fields
-from the other variant are forbidden. Both variants include fingerprint,
-outcome, validated revision, result references, decision time, and receipt
-expiry. The Stateholder exposes `resolve_command/1` and `resolve_cause/1`; both
-use the same atomic decision implementation and conformance suite.
-API lifecycle work also exposes `resolve_lifecycle_intent/1`, backed by the
-atomic intent index rather than a scan of cause receipts.
-
-### Writer authority
+This table is both the API-to-sync delivery ledger and the idempotency boundary
+for durable lifecycle work:
 
 ```text
-WriterAuthority {
-  record_schema_version
-  tenant_id
-  session_id
-  owner_node_id
-  authority_epoch
-  fencing_counter
-  lease_expires_at
-}
+tenant_id uuid
+room_id uuid
+session_id uuid
+lifecycle_intent_id uuid
+request_key text
+request_fingerprint bytea
+intent_name text              -- participant_joined | participant_left | session_ended
+participant_session_id uuid null
+participant_session_generation bigint null
+payload jsonb
+status text                   -- pending | applied | superseded
+terminal_reason text null
+applied_event_id uuid null
+applied_revision bigint null
+attempt_count integer
+last_error_code text null
+created_at timestamptz
+completed_at timestamptz null
 ```
 
-Fencing counters increase on every acquisition within one authority epoch.
-Every authoritative command operation validates the epoch and counter
-atomically.
-
-## Stateholder contract
-
-`ChalkSync.Stateholder` must be redesigned around semantic operations instead
-of treating Redis as a mechanical replacement for ETS.
-
-The portable boundary must support:
-
-- reading one consistent Session view containing the snapshot, revision, state
-  digest, chain digest, event floor, durability generation, record version, and
-  authority metadata;
-- acquiring, renewing, and releasing writer authority;
-- atomically recording a committed command decision;
-- atomically recording a terminal rejection against the validated revision;
-- resolving an existing command receipt, server-cause receipt, or lifecycle
-  intent index by its stable key;
-- reading the exact event suffix after a cursor;
-- reading the authoritative head for lag detection;
-- subscribing to or being notified of head advancement;
-- ending a Session and applying its retention lifecycle;
-- health and readiness checks;
-- explicit unavailable, timeout, stale-fence, revision-conflict, cursor-unavailable,
-  command-ID-conflict, and corruption errors.
-
-The commit operation verifies all of the following before mutation:
-
-1. Stateholder time is strictly before the current lease expiry;
-2. the writer authority epoch and fencing counter are the pair bound to that
-   lease;
-3. the expected revision equals the authoritative revision;
-4. the command or server-cause key has no conflicting receipt;
-5. the event is exactly the next revision;
-6. the new snapshot and digest are the valid result of the event.
-
-Receipt lookup, validation, and terminal rejection use one compare-and-set
-operation. The operation returns an existing receipt first. Otherwise it writes
-the rejection only if its validated revision is still current; a revision race
-returns `revision_conflict` for reload and revalidation.
-
-All lease acquisition, renewal, expiry, takeover, and commit comparisons use
-Redis server time inside the atomic operation. Expiry is exclusive: a lease
-cannot commit when `server_time >= lease_expires_at`. Renewal failure stops
-admission of new commands immediately. An operation already in flight remains
-safe because its commit repeats the token and expiry checks atomically. Lease
-duration and renewal cadence are configuration constrained to exceed measured
-99.99th-percentile VM pause plus the Stateholder operation deadline by at least
-two renewal intervals.
-
-The Memory and Redis adapters run the same conformance suite. Memory remains
-dev/test-only and may not satisfy production configuration validation.
-
-## Redis production adapter
-
-Redis is a correctness component, not an unexamined cache.
-
-The adapter must:
-
-- namespace every key by tenant and Session;
-- keep all records touched by one atomic operation in a compatible Redis key
-  slot;
-- implement command decision and fencing checks as one atomic server-side
-  operation;
-- verify the topology controller's enabled write gate and generation in every
-  mutation;
-- store the current snapshot, head, event floor, state and chain digests,
-  durability generation, fencing counter, and lease metadata in one
-  hash-slot-compatible aggregate whose read is atomic;
-- retain an authoritative ordered event tail and current snapshot;
-- use Pub/Sub only as an optional wake-up signal, never as the sole event
-  record;
-- recover a missed or final dropped notification by comparing the local cursor
-  with the authoritative head and reading the missing suffix;
-- expose connection, command, replication, persistence, stream-lag, and
-  readiness failures explicitly;
-- fail closed for mutations when durability or authority is uncertain;
-- pass immediate process loss and supported primary-failover tests after an
-  acknowledged commit.
-
-The mutation script and durability barrier are distinct steps:
-
-1. reserve one exclusive Redis connection to the current primary;
-2. execute the atomic mutation on that connection, writing a unique
-   `durability_generation` into the aggregate and decision;
-3. without releasing the connection or interleaving unrelated writes, execute
-   `WAITAOF 1 2 <deadline>` for local and both replica fsyncs;
-4. expose the receipt and event only after the barrier succeeds;
-5. on timeout, suppress fanout and terminal acknowledgement;
-6. on connection loss or later resolution of an existing unproved decision,
-   reserve a new exclusive connection to the authoritative primary, atomically
-   verify the decision and write an idempotent durability marker for its
-   generation, then run `WAITAOF` on that same connection before exposure;
-7. after authoritative failover, an absent decision may be retried only after
-   the adapter proves the new primary's epoch and durable head.
-
-Raw Redis records may contain an unproved generation between mutation and
-barrier. They are private adapter storage. Every semantic Stateholder read,
-receipt resolution, head read, suffix read, and fanout path either carries a
-connection-local durability proof for that generation or runs the marker and
-barrier sequence before returning it. No protocol or writer observer can see an
-unproved receipt, head, snapshot, or event. A pooled or replacement connection
-cannot reuse another connection's `WAITAOF` result.
-
-Lease acquisition and renewal, fencing-counter advancement, snapshots, events,
-receipts, and tombstones use the same barrier. The adapter configures and checks
-the minimum replica constraints at readiness. Loss of either required replica
-makes mutations fail closed.
-
-The baseline guarantee is RPO zero for acknowledged outcomes under primary
-process or host loss, promotion of a barrier-confirmed replica, replica restart,
-and controlled failback. The campaign also partitions the primary from its
-replicas and quorum; the isolated primary must stop accepting mutations.
-Simultaneous loss of the primary and both fsynced replicas is outside this
-availability guarantee and is reported as unrecoverable storage loss rather
-than silently reconstructed history.
-
-Conformance tests swap pooled connections, inject unrelated writes, drop the
-exclusive connection between mutation and barrier, read every semantic surface
-during that window, kill the primary before and after barrier completion, and
-perform failback. No unproved generation may escape, and every acknowledged
-generation must remain present.
-
-## Writer ownership and multi-node routing
-
-The production topology permits WebSocket connections for one Session to land
-on multiple sync nodes while maintaining one fenced writer.
-
-The first implementation uses `libcluster` for node discovery and Erlang
-distribution for authenticated node-to-node command forwarding. A
-`ChalkSync.Cluster.NodeRouter` resolves the `owner_node_id` from the Stateholder
-and performs a bounded `:erpc` call to `ChalkSync.Sessions.SessionServer` on that
-node. A routing timeout is uncertainty, never rejection. The origin resolves the
-receipt or lets the client retry. Redis Pub/Sub carries coalesced head-advanced
-hints; `ChalkSync.Sessions.Fanout` reads the retained authoritative suffix and
-never treats the hint payload as state. Redis remains the authority if cluster
-membership and owner discovery disagree.
-
-1. The first node requiring authority acquires a renewable Session lease and a
-   new fencing token.
-2. Non-owner nodes register local subscribers and forward commands to the known
-   owner through the cluster command-routing boundary.
-3. The owner validates and commits through the Stateholder, then returns the
-   durable outcome and publishes head advancement.
-4. Every node with local subscribers advances its local projection from the
-   authoritative event suffix. Notifications accelerate delivery; the retained
-   event sequence heals loss.
-5. The lease defaults to three seconds and renews once per second when the
-   measured-pause constraint permits those values. Renewal failure immediately
-   stops new owner work. Every commit still verifies the lease against Redis
-   server time. A replacement owner receives a higher fencing token.
-6. A stale owner cannot mutate even if delayed messages or a network partition
-   later heal.
-7. If command forwarding or the response is lost, the origin resolves the
-   receipt or lets the client reconnect and retry the same command ID.
-
-The local Elixir `Registry` remains process discovery inside one node. It is not
-the cluster authority mechanism.
-
-The two-node test topology starts named BEAM nodes with `libcluster`, one Redis
-primary, two replicas, and Sentinel from
-`apps/sync/test/support/redis_topology/`. Tests cover owner-cache staleness,
-forward timeout, node disconnect, delayed `:erpc`, lease expiry during a VM
-pause, and arbitrary higher or regressed fencing tokens.
-
-## Protocol contract
-
-The language-neutral schema remains the only protocol source of truth. Generated
-Elixir and TypeScript files are never edited directly.
-
-### Identity
-
-Verified connection claims include `tenant_id`, `room_id`, `session_id`, and
-`participant_session_id`. The Session key comes from verified claims, never an
-untrusted frame field.
-
-### Hello and welcome
-
-The client declares its protocol version, desired streams, and last applied
-`{revision, state_digest, chain_digest}` cursor per durable stream. For
-`session.control`, the server responds with one of:
-
-- `snapshot`: a complete replacement snapshot, control revision, state digest,
-  and chain digest;
-- `replay`: the exact events after the supplied cursor through the declared
-  head and head digests;
-- `up_to_date`: an explicit head revision and digests equal to the client cursor.
-
-A missing, future, corrupt, or unavailable cursor produces a snapshot. Unknown
-required protocol features fail explicitly rather than being ignored. A cursor
-whose revision matches but either digest differs always produces a snapshot.
-
-The gap-free cut is implemented in this order:
-
-1. allocate a bounded pre-welcome queue and subscribe to coalesced head hints;
-2. atomically read the consistent snapshot/head/digest view at revision `h`;
-3. read and validate every retained event after `h` that arrived while the view
-   was being installed;
-4. send a welcome declaring `h` and its state and chain digests;
-5. drain only the contiguous buffered suffix beginning at `h + 1`;
-6. switch the same queue to live mode without replacing the subscription.
-
-Head hints received before, during, or after the read cause an authoritative
-head comparison, so a lost hint cannot create a gap. Buffer overflow, cursor
-compaction, or a non-contiguous suffix restarts the cut from a fresh snapshot up
-to three times, then closes with the retryable `recovery_overloaded` signal.
-Tests commit at every numbered boundary and assert that each revision appears
-once after the declared welcome head.
-
-### Commands and acknowledgements
-
-Commands carry `command_id`, name, and payload. The server returns terminal
-acknowledgements only from authoritative receipts:
-
-- `committed(command_id, revision)`;
-- `duplicate(command_id, original_revision)`;
-- `rejected(command_id, stable_reason)`.
-
-Infrastructure uncertainty does not use `rejected`. The connection closes with
-a retryable service signal or returns a non-terminal protocol error containing
-the command ID. The client keeps the command pending and retries unchanged.
-
-Initial stable rejection reasons are an exhaustive generated union:
-`invalid_command`, `invalid_transition`, `not_participant`, `no_change`,
-`session_ended`, `command_id_conflict`, `command_clock_skew`, and
-`command_expired`. Retryable errors
-are a separate frame with `command_id`, `code`, and optional `retry_after_ms`;
-the initial codes are `authority_unavailable`, `stateholder_unavailable`,
-`commit_uncertain`, `server_draining`, `recovery_overloaded`, and
-`session_capacity`, and `session_overloaded`.
-
-### Events
-
-Client-command events include `command_id`. All events include `event_id`,
-`base_revision`, and `revision`. Clients apply an event only when it is the exact
-next transition. A duplicate is ignored; a gap, conflicting revision, unknown
-required event, or invalid transition suspends live application and starts
-recovery.
-
-### Compatibility
-
-The existing v1 contract remains sourced from `contract/schema/sync-v1.json`.
-Corrected protocol changes originate in a new versioned schema, regenerate every
-target, and pass drift checks. The server never silently serves incompatible
-semantics under an existing version.
-
-The corrected protocol is `sync-v2`; v1 remains frozen. The v2 schema adds:
-
-- verified `session_id` and `participant_session_id` claim requirements;
-- UUIDv7 command IDs and the 24-hour command window;
-- `{revision, state_digest, chain_digest}` cursors;
-- `snapshot`, `replay`, and `up_to_date` welcome variants;
-- `event_id`, `command_id | cause_id`, `previous_chain_digest`, `chain_digest`,
-  and `state_digest` on events;
-- exhaustive terminal rejection and retryable-error frames;
-- explicit participant leave and Session-end lifecycle commands/events.
-
-`contract/schema/sync-v2.json` is the source. Golden wire fixtures live under
-`contract/schema/fixtures/sync-v2/` and are decoded and re-encoded by both
-Elixir and TypeScript. A v1 socket can connect only while the compatibility
-server is explicitly enabled; it cannot enter v2 Sessions. The API/token owner
-is `apps/api`. Phase 0 adds
-`POST /v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/join` on top
-of `mediaplane.Service.CreateJoin`. Its response contains the provider join
-payload plus `sync: {url, token, protocol}`. The signed sync token contains
-`tenant_id`, `room_id`, `session_id`, `participant_session_id`,
-`participant_session_generation`, `session_generation`, protocol version,
-issued-at, and expiry. The participant-session generation is created and stored
-transactionally with the join decision. An ended or ending Session returns a
-stable API conflict and no sync token. Checked-in redacted response/token
-fixtures under `apps/api/internal/mediaplane/testdata/sync_v2/` are decoded by
-`ChalkSync.Auth.TokenVerifier` contract tests. Phase 0 also inventories the
-supported v1 client window.
-
-The current contract-codegen loaders and emitters are v1-specific. Before any
-v2 generated file is accepted, Phase 0 parameterizes
-`tools/contract-codegen/src/emitters/sync-contract.mjs`,
-`sync-elixir.mjs`, and `sync-typescript.mjs` for explicit v1 and v2 modes. V1
-goldens must remain byte-for-byte stable. V2 emitters cover digest cursors,
-welcome variants, correlated events, receipt unions, lifecycle frames, and
-retryable errors. Generator tests and `scripts/codegen/` commands exercise both
-versions and write separate generated outputs; a missing or unsupported version
-fails rather than falling back to v1.
-
-## Primary workflows
-
-### First join
-
-1. The socket verifies claims and derives the Session and participant-session
-   keys.
-2. The node registers the local subscription and ensures an authority exists.
-3. The authority admits or restores the participant-session control projection.
-4. The server creates a gap-free welcome cut and sends a complete snapshot.
-5. Live events begin strictly after the snapshot revision.
-
-Participant admission and participant connection presence are different facts.
-Losing a socket does not immediately delete durable participant-session control
-state.
-
-### Command commit
-
-1. The client applies an optional optimistic overlay and stores the command in
-   its pending queue.
-2. The receiving node routes the command to the fenced writer.
-3. The writer checks its hot cache, then the authoritative receipt.
-4. The writer validates against its current projection.
-5. The Stateholder atomically records the receipt and, when committed, the event,
-   next snapshot, and next revision.
-6. The Stateholder completes the durability barrier.
-7. The writer advances its working copy from the durable event.
-8. The writer publishes head advancement and returns the durable outcome.
-9. The socket sends the acknowledgement. Event and acknowledgement may arrive
-   in either order; both carry the same command ID and revision relationship.
-
-### Terminal rejection
-
-A deterministic business rejection is recorded against the revision used for
-validation. It emits no event. If the revision changed before the rejection was
-recorded, the writer reloads and revalidates instead of persisting a stale
-decision.
-
-### Lost acknowledgement
-
-If the event and receipt committed but the writer, origin node, socket, or
-network failed before the acknowledgement arrived, the retry resolves the
-existing receipt and returns the original outcome. It cannot commit again or
-turn into `no_change`.
-
-### Reconnect
-
-1. The client retains its last authoritative cursor and pending command IDs.
-2. It reconnects with exponential backoff and jitter.
-3. The server sends an exact replay, complete snapshot, or up-to-date response.
-4. The client replaces or advances its canonical replica.
-5. The client reapplies still-pending optimistic commands over canonical state.
-6. It sends unresolved commands again with their original IDs.
-7. Durable receipts resolve acknowledgement loss without duplicate effects.
-
-### Gap during live delivery
-
-The client or non-authority node stops applying live events at the first gap. It
-requests the exact suffix from its last valid cursor. If the suffix is outside
-retention or fails validation, it replaces state from a snapshot. It never skips
-forward to the new revision.
-
-### Slow subscriber
-
-Outbound delivery is bounded by queued bytes, event count, and oldest-event age.
-Defaults are one MiB, 256 pending control events, or five seconds. A subscriber
-that crosses any bound is detached and closed with a documented overload
-recovery signal. The writer remains responsive, and the client reconnects
-through replay or snapshot.
-
-### Writer or node loss
-
-The old writer stops committing as soon as lease renewal is uncertain. Local
-sockets close with a restart signal or route to the replacement authority. A new
-writer acquires a higher fencing token, hydrates the snapshot and head, and
-serves existing receipts. Recovery must not create an empty permanently running
-writer.
-
-### Stateholder unavailability
-
-Readiness becomes false. New joins and terminal command acknowledgements stop.
-No mutation proceeds from a local working copy. Existing clients receive a
-retryable service signal and reconnect with backoff. Recovery begins only after
-the Stateholder and authority boundary are healthy.
+The intent ID is the primary key.
+`{tenant_id, session_id, intent_name, request_key}` is unique and lets an API
+retry return the original product transition and intent. The request
+fingerprint covers tenant, Room, Session, target participant and generation,
+intent name, and normalized payload. Reuse with another fingerprint returns an
+API idempotency conflict. Session end is additionally unique per Session, and
+join or leave is unique per target participant-session transition. Request keys
+contain 16–128 ASCII characters, and normalized intent payloads are at most
+16 KiB. Product-row mutation and intent insertion occur in the same API
+transaction. Sync workers
+discover pending IDs in bounded pages and apply each ID through the same locked
+Session control row used by commands. Concurrent workers may attempt one ID;
+the unique origin constraint and locked intent status make the operation
+idempotent. A crash leaves the intent pending or discoverably applied; it never
+creates two events.
+
+Discovery returns IDs from a completed read transaction and holds no row lock.
+The application transaction then locks the Session control row first, the
+specific intent second, and rechecks `pending` before touching product rows.
+`FOR UPDATE SKIP LOCKED` discovery is forbidden when its lock would be retained
+into application.
+
+`applied` requires an event ID and revision and has no terminal reason.
+`superseded` requires one of `superseded_by_session_end`,
+`participant_already_terminal`, or `participant_generation_replaced` and
+forbids event fields. When
+Session end wins before a join or removal is applied, that pending intent is
+atomically superseded, its product row is normalized to the ended state, and
+its unused event and snapshot reservations are released. The single
+`session_ended` event represents the terminal folded state.
+
+Completed intents remain for seven days after Session end. Pending intents are
+bounded by the Session counters, never expire silently, and raise an alert
+after the configured delivery deadline. A permanently invalid internal intent
+remains visible and blocks lifecycle readiness until repaired; it is not
+discarded or converted into a fabricated event.
+
+### Indexes and partitioning
+
+Indexes cover Session revision reads, command-key lookup, pending lifecycle
+work, and ended-Session cleanup. The launch tables remain unpartitioned so their
+global uniqueness constraints stay direct. A later partitioning migration
+requires measured need and separate proof that command, event, and revision
+uniqueness remain enforceable.
+
+Every query used by recovery and decision paths has an `EXPLAIN (ANALYZE,
+BUFFERS)` fixture at launch-scale cardinality. Sequential scans on retained
+event or receipt tables block release.
+
+### Migration-level constraints
+
+The migration encodes the invariants directly:
+
+- `room_sessions` has unique `{tenant_id, room_id, id}` and a checked lifecycle
+  enum including `active`, `ending`, and `ended`;
+- `participants` has its existing primary key, positive generation, checked
+  status, and unique `{tenant_id, room_id, session_id, id}`;
+- the control table has its declared primary key, composite Session foreign key,
+  nonnegative revision and counters, 32-byte state digest, snapshot bound, and
+  lifecycle used-plus-reserved checks;
+- the event table has its Session-revision primary key, unique event ID,
+  positive exact-next revision check, origin-variant check, partial unique
+  command and lifecycle origin indexes, and composite Session and participant
+  foreign keys;
+- a unique event tuple supports the committed-receipt composite foreign key on
+  `{tenant_id, session_id, actor_participant_session_id, actor_generation,
+command_id, event_id, revision}`, with `submitted_generation` mapped to
+  `actor_generation`;
+- receipts have the command-key primary key, positive submitted generation,
+  bounded command/fingerprint fields, and committed/rejected variant checks;
+- lifecycle intents have their intent-ID primary key, request and transition
+  uniqueness, a fixed-length request fingerprint, bounded payload, checked
+  status/reason variants, and a composite applied-event foreign key;
+- authoritative parents use `ON DELETE RESTRICT` while retained sync rows exist;
+  explicit post-retention product deletion orders child cleanup before parent
+  deletion.
+
+Status transitions in both Go and Elixir use conditional updates such as
+`UPDATE ... WHERE status = $expected AND generation = $expected_generation` and
+assert exactly one affected row. Database checks validate states; conditional
+updates and concurrency tests validate transitions.
+
+## Atomic command workflow
+
+The public Stateholder operation is one semantic `decide_command` call. The
+Postgres adapter performs this sequence on the writable primary:
+
+1. Acquire bounded command-admission capacity before checking out a connection.
+2. Begin a transaction with explicit checkout, lock, statement, and total
+   deadlines.
+3. Lock `sync_session_control` for the Session with `SELECT ... FOR UPDATE`.
+4. Lock the matching `room_sessions` and `participants` rows and verify their
+   tenant/Room relationship; defer mutable lifecycle validation until after
+   receipt resolution.
+5. Look up the command receipt before evaluating current lifecycle or control
+   state.
+6. If a receipt exists with the same fingerprint, return the stored decision.
+7. If the key exists with a different fingerprint, derive
+   `command_id_conflict` from the original receipt without mutation.
+8. Verify Session status, participant status and generation, capabilities,
+   command schema, and business preconditions from the locked Postgres facts.
+9. For a terminal business rejection, insert the rejected receipt, update the
+   receipt capacity counters, and commit without an event or revision change.
+10. For an accepted command, calculate exactly
+    `next_revision = control_revision + 1`.
+11. Run the pure reducer against the locked folded state, compute the canonical
+    snapshot size, state digest, and exact encoded event bytes, and construct
+    the exact next event. Reject ordinary state growth that would exceed the
+    snapshot or event bound.
+12. Insert the event, update the folded state, revision, and capacity counters,
+    and insert the committed receipt in the same transaction.
+13. Call transactional `pg_notify` with only the Session key and new head.
+14. Commit.
+15. Update disposable local state and respond only from the committed returned
+    receipt and event.
+
+The fixed lock order is Session control row, existing lifecycle intent row when
+present, product Session row, then participant-session row. Commands omit the
+intent lock. API join, removal, and end transactions acquire the same Session
+control row before mutating product rows or inserting intents, so lifecycle
+capacity and command/end order share one serialization point. They never wait
+on a sync network call. Session creation inserts its new product and control
+rows together because no prior control row exists.
+
+A command already inside its transaction either commits before a concurrent
+Session-end product update or observes `ending`/`ended` and receives the stable
+`session_ended` rejection. Network calls never occur while database locks are
+held.
+
+If the adapter loses the connection before it can observe `COMMIT`, it opens a
+fresh primary connection and resolves the exact command receipt. A present
+receipt is authoritative. If no receipt exists, retrying the same transaction
+is safe. If the primary cannot be reached, the server returns retryable
+`decision_unavailable` and the SDK keeps the command pending.
+
+## Lifecycle workflows
+
+### Session creation
+
+The API transaction creates `room_sessions` and its revision-zero
+`sync_session_control` row together. The initial folded state is schema-valid
+and empty. It reserves one lifecycle event and one lifecycle intent, each with
+a 16 KiB byte charge, for eventual Session end. A retry uses the API request's
+existing idempotency boundary.
+
+### Participant join
+
+The API locks the Session control row and active product Session, checks
+lifecycle, intent, participant, and snapshot capacity, reserves one join event,
+one future removal event and intent, and the maximum participant snapshot
+entry. The same transaction consumes one current intent slot to create the
+`joining` participant-session row and `participant_joined` intent. It issues a
+token containing that exact intent ID only after the transaction commits. A
+background sync consumer applies the intent. If the socket arrives first, hello
+applies the token's intent before computing recovery. The application
+transaction consumes the join event reservation, appends one join event,
+advances folded state and exact snapshot bytes, releases the snapshot
+reservation, leaves the removal event and intent reservations protected, marks
+the participant `active`, and marks the intent `applied` atomically. Retrying
+the API request with the same request key returns the same participant-session
+row and lifecycle intent.
+
+### Reconnect and multiple sockets
+
+Reconnect uses the same participant-session ID and generation. Attaching a
+second socket changes only volatile presence. Welcome recovery reconstructs
+durable control; no extra join event is emitted.
+
+### Explicit participant removal
+
+The API transaction locks the Session control, product Session, and active
+participant rows, verifies its protected removal reservation, changes the
+participant status to `leaving`, converts the protected removal-intent reserve
+into the inserted `participant_left` intent, and leaves the event reserve in
+place.
+That status immediately stops new commands from the old token. The sync
+application transaction consumes the removal reservation, appends the event,
+removes the participant from folded state, changes status to `left`, and marks
+the intent applied. A token for that ended participant session receives a
+terminal lifecycle rejection. Retrying the removal request with the same
+request key returns the original transition and intent.
 
 ### Session end
 
-The authority commits one terminal control event, rejects later commands with a
-stable `session_ended` outcome, closes subscribers, releases authority, and
-starts the retention clock. A repeated Session-end cause first returns its own
-individual cause receipt. Only a cause key with no receipt consults the original
-lifecycle-intent index.
-Session end uses a control-plane-issued server-cause key. Admission,
-control-plane removal, and reconnect-grace expiry also have unique server-cause
-keys and durable cause receipts, so authority loss cannot repeat lifecycle
-events. Explicit client leave remains a command and never enters this workflow.
+The API end transaction locks the Session control and product Session, consumes
+no new capacity because Session creation already protected the end event and
+intent, converts the intent reserve into the inserted `session_ended` intent,
+and changes the Session from `active` to `ending`. New joins and commands stop
+immediately. The sync
+application transaction consumes the end reservation, supersedes every other
+pending lifecycle intent, releases their unused join, removal, and snapshot
+reservations, marks every participant row `left`, appends the terminal event,
+folds terminal control state, marks the end intent applied, and changes the
+product Session to `ended` with `ended_at`. Repeated end requests resolve the
+same lifecycle intent. After the terminal event is delivered, the server drains
+its bounded queue and closes the socket; the SDK enters `ended` and does not
+reconnect. Cleanup begins only after end is durably applied.
 
-## Participant and connection lifecycle
+### Socket loss
 
-Durable participant-session control and volatile connection presence must be
-separate streams.
+Socket loss removes a volatile connection record after its TTL. It emits no
+durable event and changes no product or participant-session row.
 
-- A participant session may own multiple WebSocket subscriptions.
-- Closing one subscription cannot remove the participant while another remains.
-- Temporary socket loss enters reconnect grace instead of immediately emitting
-  a durable participant-left event.
-- Explicit leave, removal, or Session end changes durable control membership.
-- Volatile online/offline presence is derived from cluster-wide connections and
-  TTL/heartbeat state when that stream is implemented.
-- Writer idle shutdown occurs after zero subscribers and no queued work. An
-  abnormal writer exit does not create an empty transient restart loop.
+## Protocol v2
 
-The initial reconnect grace is 30 seconds and is configurable between 5 and
-120 seconds. The participant-session generation from the join token identifies
-one admission lifecycle. Explicit leave or removal bypasses grace. The API owns
-Session status and the non-reusable Session generation; sync owns ordered
-control events after admission. Volatile online/offline presence remains
-outside this protocol version.
+`contract/schema/sync-v2.json` is the language-neutral source. Code generation
+is parameterized by protocol version and continues to reproduce v1 Elixir and
+TypeScript outputs byte-for-byte. Generated-code drift fails CI.
 
-API-driven removal and Session end use a transactional outbox. One Postgres
-transaction writes the lifecycle intent, cause ID, issuance generation, and
-outbox row and moves the resource to `removing` or `ending`, which blocks new
-tokens. The dispatcher delivers the cause to sync at least once. Sync orders it,
-persists the cause receipt, and returns the durable result. The API resolves the
-receipt and only then marks the resource `removed` or `ended`. Delivery or final
-status failure is retried with the same cause key. Sync treats `ending` as an
-admission block while commands ordered before the end cause retain their
-authoritative order. The outbox cannot be acknowledged from a transport result;
-it requires the durable sync cause receipt.
+The production WebSocket route is `/v2/sync`. `/v1/sync` remains available only
+for explicit compatibility tests during the migration and is disabled in the
+production launch configuration. HTTP route and frame protocol versions are
+both explicit and independently validated.
 
-The durable `lifecycle_intent_id` survives individual cause expiry. When an
-outbox delivery window expires, one API transaction issues a higher delivery
-generation and fresh cause ID for the same intent. Every cause carries the stable
-intent ID. Sync first returns any existing receipt for that cause key. For a new
-cause key, it atomically resolves or creates the intent index as part of the
-cause-key decision. A reissued intent that already committed resolves to the
-original lifecycle revision and emits no event; one that never committed may be
-ordered once. Retrying an earlier expired cause continues to return that cause's
-stored rejection.
+### Identity
 
-One delivery window is 24 hours. The API permits at most three windows, alerts
-after the second, and after 72 hours moves the resource to terminal
-`lifecycle_sync_failed`, permanently blocks new tokens, and stops reissuing. Sync
-retains the compact intent index for seven days after API finalization or failure
-confirmation. Operator recovery must resolve that stable intent before creating
-any new intent; if safe resolution is unavailable after retention, the Session
-stays terminal and its generation is never reused. Campaigns hold sync
-unavailable past each boundary and prove bounded records, a final API state, and
-at most one lifecycle event.
+The verified token supplies:
 
-Join admission uses the signed participant-session generation as its cause key.
-Explicit client leave remains a participant command and uses its original
-command key and receipt; it never converts into a server cause. Reconnect-grace
-expiry uses the participant-session generation plus a monotonic grace epoch.
-Re-admission creates a higher participant-session generation, so a delayed cause
-for an older generation is rejected without an event even after the full receipt
-compacts.
+```text
+tenant_id
+room_id
+session_id
+participant_session_id
+participant_session_generation
+admission_lifecycle_intent_id
+capabilities
+issued_at
+expires_at
+```
+
+Frame fields cannot override this identity. The server rechecks Session and
+participant-session lifecycle inside every decision transaction. The admission
+intent must be the unique `participant_joined` intent for the claimed tenant,
+Session, participant-session ID, and generation.
+
+### Connection states
+
+The server socket state machine is:
+
+```text
+awaiting_hello -> recovering -> live -> draining/closed
+                           \-> terminal -> closed
+```
+
+Hello must arrive within five seconds. Only hello and ping are accepted before
+recovery. Commands are accepted only in `live`. The connection has a 20-second
+heartbeat interval and closes after two missed heartbeat deadlines.
+
+### Recovery frames
+
+Hello carries protocol version, token, requested streams, and the last applied
+control cursor or `null`. A control cursor is
+`{revision, state_schema_version, state_digest}`. Welcome declares:
+
+- participant-session ID and generation;
+- authoritative control head with revision, schema version, and state digest;
+- recovery mode: `snapshot`, `replay`, `up_to_date`, or `terminal`;
+- a recovery ID and schema version.
+
+Snapshot mode carries one bounded folded state. Replay mode is followed by
+ordered `replay_page` frames. Each page declares its exact first and last
+revision. `recovery_complete` declares the recovered head. Live events begin
+only after completion.
+
+A null, future, malformed, expired, unavailable, or same-revision digest-mismatch
+cursor receives a snapshot. For an older cursor, the server compares its digest
+with the stored resulting digest at that revision before replay. A valid cursor
+receives replay only when the suffix contains at most 2,048 events and 2 MiB of
+stored encoded event bytes; otherwise it receives a snapshot.
+
+A cryptographically valid hello for an ended Session, inactive participant, or
+stale generation receives `terminal` with reason `session_ended`,
+`participant_inactive`, or `stale_participant_generation`, plus the authoritative
+terminal revision, schema version, and digest. The server then closes normally
+after the frame drains. The SDK enters `ended` for `session_ended`; the other
+reasons enter a stopped, rejoin-required state. None of these outcomes starts a
+reconnect loop. An expired or invalid signature remains an authentication
+failure.
+
+### Commands and results
+
+Every command contains `type`, `command_id`, a generated command-name enum, and
+a strictly generated payload. Unknown fields and unknown commands are rejected.
+
+Terminal ACKs are:
+
+```text
+committed  -- command_id, event_id, revision
+duplicate  -- command_id, original event_id, original revision
+rejected   -- command_id, exhaustive rejection reason
+```
+
+Retryable command errors carry the command ID and one of
+`overloaded`, `server_draining`, `dependency_unavailable`, or
+`decision_unavailable`. They are not receipts and tell the SDK to retain the
+same pending command.
+
+The initial terminal rejection enum includes `session_ended`,
+`participant_inactive`, `stale_participant_generation`, `capability_denied`,
+`invalid_state`, and `command_id_conflict`. Schema-invalid frames are protocol
+errors and never enter the decision transaction.
+
+### Events
+
+Every event contains:
+
+```text
+event_id
+stream
+name
+base_revision
+revision
+schema_version
+resulting_state_digest
+payload
+command_id or lifecycle_intent_id
+```
+
+The origin fields are mutually exclusive. Clients accept ACK and event in
+either order and reconcile them by command ID and event ID.
+
+### Limits and close behavior
+
+- decoded inbound frame: 64 KiB;
+- token: 8 KiB;
+- command ID: 16–64 bytes;
+- decoded command payload: 16 KiB;
+- encoded live event: 32 KiB;
+- replay page: at most 128 events and 256 KiB encoded;
+- complete replay: at most 2,048 events and 2 MiB encoded;
+- snapshot: at most 1 MiB encoded;
+- protocol error detail: 1 KiB and no reflected payload;
+- retryable service restart or drain: WebSocket 1012;
+- invalid token or policy violation: WebSocket 1008;
+- malformed or oversized frame: WebSocket 1009 or a bounded protocol error,
+  followed by close when the connection cannot safely continue.
+
+Limits are enforced before copying decoded data into long-lived state.
+
+### Schema and rolling compatibility
+
+Every stored aggregate and event carries a schema version. A release must read
+all versions still inside retention. A new write version is enabled only after
+all serving nodes and the released SDK can read it. Database changes follow
+expand, backfill, validate, enable, and later contract steps. Rollback remains
+permitted until the enable step; after new-version writes begin, rollback is
+allowed only to an artifact that declares support for that version.
+
+The first production v2 launch may use a drain-and-replace deployment because
+there is no production v1 client contract to preserve. Subsequent releases must
+pass mixed-version read and rolling-drain tests. Protocol negotiation never
+silently downgrades a v2 client into v1 semantics.
+
+## Recovery, fanout, and local coordination
+
+Each node owns one dedicated Postgres notification connection and node-local
+coordinators only for Sessions with local sockets. A notification contains a
+coalescible Session head, never event payload or authority state.
+
+Each socket has a coordinator-owned recovery barrier with `mode`,
+`enqueued_revision`, and `target_head`. All queue writes and live transitions
+for that socket pass through the coordinator's serialized control path.
+Notification callbacks only raise a coalesced target head; they never enqueue an
+event directly.
+
+Recovery follows this sequence:
+
+1. Register the socket and its bounded queue in `recovering` mode before reading
+   a head.
+2. Ensure the node-level notification listener and authoritative repair loop
+   are active. Hints received now only raise `target_head`.
+3. In a short read-only `REPEATABLE READ` transaction, read one consistent
+   folded state, digest, retained-event floor, fixed head `H`, and replay
+   event/byte counts. Close the transaction before waiting on transport.
+4. Through the coordinator, choose the active or terminal result and enqueue
+   its welcome frame. A snapshot welcome includes the bounded snapshot;
+   up-to-date has no content page. A terminal welcome skips content and
+   completion frames and proceeds directly to bounded drain and close.
+5. For replay, fetch immutable pages with `revision > cursor AND revision <= H`
+   on transport demand. Only the next query cursor and range remain in memory;
+   a page is fetched and enqueued only after the prior page drains. Retention
+   forbids deletion of these rows during active recovery.
+6. After the snapshot, final replay page, or up-to-date welcome is successfully
+   reserved, enqueue `recovery_complete(H)` and set `enqueued_revision = H`.
+   Hints accumulated during recovery remain only in `target_head` until this
+   point.
+7. For an active result, read the exact contiguous suffix
+   `(enqueued_revision, target_head]`, enqueue each revision once, and advance
+   `enqueued_revision` only after a successful queue reservation. A terminal
+   result drains and closes without entering live mode.
+8. Repeat suffix reads while hints raise the target. For one finite observed
+   target, atomically change the socket to `live` at its enqueued revision.
+   Later hints begin a new exact suffix read after that revision.
+9. Compare every active coordinator's cursor with Postgres at least every five
+   seconds and immediately after a gap, queue overflow, listener restart, or
+   node resume.
+
+The bounded queue preserves `recovery_complete(H)` before event `H + 1` on the
+wire. A hint that races any step can only raise the target. Exact revision
+checks suppress duplicates and detect omissions. Fault tests pause execution at
+every barrier transition and notification boundary.
+
+Local replicas reject a gap, unknown event, invalid payload, or impossible
+transition and replace themselves from Postgres. They never invent an event or
+advance a cursor to silence an error.
+
+`Fanout.Redis`, if later enabled, publishes the same opaque head hints. Tests
+must prove identical durable results with Redis healthy, unavailable, flushed,
+and removed. Redis failure cannot make durable control unready.
+
+## Bounded command and socket work
+
+Decoded commands never accumulate as payload-bearing messages in a
+`GenServer` mailbox. `CommandAdmission` reserves capacity in a bounded local
+table before starting a supervised decision task.
+
+Initial hard bounds are:
+
+- 32 queued or in-flight commands and 512 KiB of decoded command data per
+  Session per node;
+- 512 queued or in-flight commands and 16 MiB per node;
+- eight simultaneous database decision tasks for one Session on one node;
+- one-second Postgres pool checkout deadline;
+- 750 ms lock deadline, two-second statement deadline, and three-second total
+  decision deadline;
+- a configurable Postgrex pool whose size is part of the launch envelope and
+  whose waiting queue never exceeds the node command bound.
+
+Because every node can accept work for the same Session, Postgres remains the
+final serialization point. Excess work receives retryable `overloaded` before
+any terminal receipt is promised. Admission capacity is always released in an
+`after` path, including task crashes and socket loss.
+
+Each socket owns a bounded ETS-backed outbound queue. Producers write payloads
+to that queue and send at most one coalesced wake-up signal. They never send one
+mailbox message per event. The socket pulls frames while the transport is
+writable and hands at most one frame at a time to the WebSocket implementation,
+so a hidden transport buffer cannot bypass the queue bounds.
+
+The queue closes only the slow socket when any limit is exceeded:
+
+- 256 queued control events;
+- 1 MiB encoded queued bytes;
+- five seconds since the oldest queued event;
+- five replay pages awaiting transport.
+
+The close is retryable and includes the last successfully delivered revision
+when safe. Recovery resumes from Postgres. Other sockets and command commits
+remain responsive.
+
+Coordinator and socket mailboxes contain only bounded, coalesced control
+signals. Release tests assert mailbox length, ETS bytes, task counts, pool wait,
+and outbound age continuously throughout each run.
 
 ## TypeScript client runtime
 
-The client package is the source of truth for product sync behavior. Demo apps
-remain thin.
+The production runtime lives under `sdks/typescript/client`; web and mobile apps
+remain thin consumers.
 
-The runtime must provide:
-
-- WebSocket connection and protocol-version negotiation;
-- schema validation through generated sync types;
-- a canonical control replica and authoritative revision;
-- a separate ordered pending-command overlay;
-- one command ID per user intent, preserved across transport retries;
-- exact event application, duplicate classification, and gap recovery;
-- snapshot replacement and exact replay;
-- acknowledgement/event correlation in either arrival order;
-- stable handling of terminal rejection and retryable uncertainty;
-- reconnect backoff with jitter and a bounded retry policy;
-- observable connection, recovery, pending-command, and last-revision state;
-- sanitized diagnostics suitable for browser, React, React Native, and support
-  surfaces.
-
-The public owner is `sdks/typescript/client/src/sync/SyncClient.ts`, exported as
-`SyncClient`. It accepts an injected WebSocket factory and
-`PendingCommandStore`. Browser builds provide an IndexedDB store; React Native
-provides an AsyncStorage adapter; tests use an in-memory store. A sent command
-with unknown outcome is persisted before transmission and is never evicted.
-The default capacity is 128 unresolved commands; capacity rejects a new intent
-before transmission and surfaces `pending_capacity_exceeded`.
-
-Reconnect uses full jitter starting at 250 ms and capped at 30 seconds. It
-continues while a sent command is inside the 24-hour supported window. At window
-expiry the promise and diagnostics surface `outcome_unresolved`; the SDK never
-reports success or rejection. Hosts can explicitly export unresolved command
-records for support. Browser and React Native integration suites must terminate
-and recreate the runtime between send and acknowledgement to prove persistence.
-
-Expiry transactionally removes the command from the active pending set, removes
-its optimistic overlay, and writes a payload-free archive record containing the
-command ID, fingerprint, timestamps, and `outcome_unresolved`. The archive is a
-1,024-record or 30-day ring, whichever limit is reached first, and remains
-exportable. Expiry therefore frees active capacity without erasing the fact that
-the outcome was unknown. A late frame for an archived ID is diagnostic evidence
-and cannot silently change application state; the client recovers from an
-authoritative snapshot.
-
-Receiving `committed` is not enough to reveal a lower authoritative revision as
-final state. The optimistic overlay remains until the corresponding event is
-observed or a snapshot at or beyond the committed revision proves the effect is
-present. Rejection removes or rolls back the overlay explicitly.
-
-## Retention and cleanup
-
-The current snapshot is retained for the active Session. The replay tail retains
-the newest 50,000 events and at least one hour of events, subject to a hard
-256 MiB compressed-data ceiling per Session. Checkpoint snapshots are produced
-at least every 1,000 events. Compaction publishes an explicit replay floor;
-older cursors receive a snapshot.
-
-A checkpoint atomically stores `{revision, snapshot, state_digest,
-chain_digest}` and sets `replay_floor` to that revision only after its durability
-barrier. The first retained event is `replay_floor + 1` and its
-`previous_chain_digest` equals the checkpoint chain digest. A cursor below the
-floor receives the current complete snapshot. A cursor at the floor receives a
-suffix only when both checkpoint digests match; a cursor above the floor
-receives an exact suffix only when its retained event digests match. Compaction
-conformance reconnects at every cursor class before, at, and after the floor and
-proves either exact-chain replay or complete snapshot equivalence.
-
-Command receipts are retained through
-`command_timestamp + 24 hours + 5 minutes`, strictly beyond the last admissible
-instant including future-clock skew. Server-cause receipts or compact cause
-tombstones remain through `cause_expires_at + 5 minutes`. Terminal participant
-and Session generation tombstones remain through the longest token, reconnect,
-cause-delivery, and retry lifetime. These records are independent of event
-compaction.
-Lifecycle-intent indexes remain for seven days after API finalization or
-`lifecycle_sync_failed` confirmation and are capped by the authoritative receipt
-quotas below.
-Deployments may raise these limits but cannot remove hard count and byte quotas.
-The authoritative receipt plus lifecycle-index quota is 2,000,000 records or
-512 MiB per Session and 10,000,000 records or 4 GiB per tenant, whichever limit
-is reached first. Participant commands may consume at most 1,900,000 records or
-480 MiB per Session and 9,000,000 records or 3.5 GiB per tenant. The remainder
-is a separate lifecycle reserve that participant commands cannot consume.
-
-Within each Session lifecycle reserve, the final 1,600 records or 16 MiB is
-exclusive to control-plane removal and Session end. Within the tenant lifecycle
-reserve, the final 10,000 records or 32 MiB is exclusive to Session end. Because
-one intent may temporarily retain an expired cause receipt beside a fresh cause
-receipt, every admission, removal, or end intent is charged for two cause
-receipts plus one intent-index record. Five hundred participant removals plus one
-Session end therefore require at most 1,503 records, leaving 97 records as
-critical headroom.
-
-Every lifecycle admission, removal, or end receipt and intent-index record is
-payload-free and charged as eight KiB against the byte quota even when smaller.
-The schema and launch proof cap and measure worst-case Redis `MEMORY USAGE`,
-including the key, value, metadata, and allocator overhead, at eight KiB per
-record. A record shape that exceeds that bound is rejected before launch. The
-Session requirement therefore charges at most 12,312,576 bytes, below the
-16-MiB reserve.
-
-Quota accounting reserves three records and 24 KiB for every lifecycle intent
-from its first cause until its intent index expires, even when fewer records
-currently exist or the API has finalized it. A lifecycle cause without an
-explicit intent ID is its own quota intent. The charge therefore cannot fall
-while a delayed reissue could still add a receipt. `accounted_session_critical`
-is the sum for retained removal and end intents in one Session;
-`accounted_tenant_lifecycle` is the sum for every retained admission, removal,
-and end intent in a tenant; and `accounted_tenant_end` is its Session-end subset.
-
-Participant admission requires
-`accounted_session_critical + 3 * (active_participant_sessions + 1) + 3` to fit
-both Session critical-reserve limits; the final three records preserve the
-Session-end path.
-
-The same transaction checks tenant-wide capacity. Participant admission requires
-the following charge to fit both full tenant lifecycle-reserve limits:
+The core owns these states:
 
 ```text
-accounted_tenant_lifecycle
-  + 3                         # incoming admission intent
-  + 3 * (tenant_active_participant_sessions + 1)
-  + 3 * active_sessions
+idle -> connecting -> authenticating -> recovering -> live
+                                   \-> backoff -> connecting
+live -> recovering | backoff | ended | stopped
 ```
 
-Session admission uses:
+It provides:
+
+- one managed socket and explicit `start`, `stop`, and token-refresh behavior;
+- heartbeat handling and bounded exponential backoff with jitter;
+- browser online/offline and React Native app/network lifecycle adapters;
+- one canonical durable replica plus a separate optimistic pending overlay;
+- stable command IDs across every resend;
+- exact-next event application, cross-language state-digest verification,
+  duplicate suppression, and gap recovery;
+- ACK/event reconciliation in either order;
+- snapshot replacement followed by deterministic pending-overlay reapplication;
+- terminal rejection rollback and a typed user-visible failure;
+- retryable dependency errors that retain the pending command;
+- terminal hello handling that enters `ended` or rejoin-required without
+  reconnecting;
+- bounded diagnostics that exclude tokens, names, and payload bodies.
+
+The pending store interface has in-memory, browser IndexedDB, and React Native
+persistence adapters. Device-local SQLite or AsyncStorage may implement the
+mobile adapter. The server does not treat client persistence as authority.
+
+Client bounds are 256 pending commands, 1 MiB normalized pending bytes, and 24
+hours from first local enqueue. Reaching a bound rejects new optimistic work
+locally with a typed capacity error. Expired pending work is surfaced to the
+application; it is not silently given a new command ID.
+
+Golden v2 frames are decoded and re-encoded by Elixir and TypeScript. Real
+browser tests connect the packaged TypeScript client to the real Elixir server
+and real Postgres adapter.
+
+## Retention and capacity
+
+The full control event log and all receipts remain available while a Session is
+active. They remain for seven days after Session end, then cleanup may delete
+them according to the product retention policy. The folded terminal control row
+is retained with the product Session unless that Session is deleted under a
+separate product policy.
+
+C6 independent-fold equivalence applies while the event history is retained.
+Before deleting eligible history, cleanup writes the terminal revision, state
+digest, event count, and cleanup timestamp into the control row and verifies one
+final independent fold. After deletion, Chalk exposes terminal folded state but
+does not claim that the deleted history remains independently auditable or
+replayable. A longer audit archive requires a separate product retention
+decision and durable archive specification.
+
+Hard per-Session logical budgets protect the shared database:
+
+- 250,000 participant-command events or 2 GiB of normalized event payload,
+  whichever comes first;
+- 500,000 command receipts or 4 GiB of normalized receipt data, whichever comes
+  first;
+- 2,048 lifecycle event rows and 32 MiB of fixed-charge lifecycle capacity;
+- 2,048 lifecycle intent rows and 32 MiB of normalized intent payload;
+- a 1 MiB exact canonical snapshot, including admitted growth reservations;
+- at most 500 active participant sessions unless the product launch envelope
+  declares and proves a different limit.
+
+The control row maintains transactionally checked logical counters and
+reservations. Every lifecycle event has a conservative 16 KiB reservation
+charge, and every admitted participant has a 2 KiB maximum snapshot-entry
+reservation until its join is folded. All API admission and sync application
+transactions enforce:
 
 ```text
-accounted_tenant_lifecycle
-  + 3                         # incoming Session-admission intent
-  + 3 * tenant_active_participant_sessions
-  + 3 * (active_sessions + 1)
+lifecycle_event_count + lifecycle_reserved_events <= 2,048
+lifecycle_event_bytes + lifecycle_reserved_bytes <= 32 MiB
+lifecycle_intent_count + lifecycle_reserved_intents <= 2,048
+lifecycle_intent_bytes + lifecycle_reserved_intent_bytes <= 32 MiB
+snapshot_bytes + snapshot_reserved_bytes <= 1 MiB
 ```
 
-Both count and eight-KiB byte charges are checked atomically with admission.
+Session creation reserves one event and intent for Session end. Join admission
+consumes one intent slot for the join and reserves two events—its join and one
+future explicit removal—plus one future removal intent. Applying join consumes
+the join-event reservation and preserves the removal event/intent reservations.
+Admitting removal converts the intent reservation into a retained intent;
+applying it consumes the event reservation. Admitting and applying Session end
+likewise convert and consume its original reserves, then release every unused
+participant reservation. Every lifecycle intent is bounded to a 16 KiB charge,
+so event and intent terminal capacity remain independently protected. Ordinary
+work and participant churn cannot make a valid active participant or the
+Session impossible to terminate.
 
-Tenant Session admission is also capped at 1,000 active Sessions and requires
-`accounted_tenant_end + 3 * (active_sessions + 1)` to fit both exclusive tenant
-terminal-reserve limits. At 1,000 active Sessions the protected future end
-charge is at most 3,000 records and 24,576,000 bytes. Ending participants or
-Sessions converts protected future charge into accounted intent charge without
-increasing the equation, so seven-day churn cannot consume capacity needed by
-currently active work. The 500-participant and 1,000-Session limits are
-independent maxima, not a promise that every maximum can coexist under one
-tenant quota. Admission that would cross any equation returns retryable
-`tenant_capacity`. At
-90 percent of a participant ceiling the Session rejects new participant commands
-with retryable `session_capacity`. At 90 percent of the noncritical lifecycle
-reserve it rejects new admissions and grace-expiry work while preserving
-removal/end capacity. It never evicts an unexpired receipt or crosses any hard
-quota. At the hard event ceiling the adapter compacts to a checkpoint before
-admitting more work or fails closed. Production may lower these quotas only when
-the proportional removal/end reserve remains sufficient; raising them requires
-the resource-change proof defined below.
+Logical command and intent bytes use normalized encoded lengths; physical
+database and index growth is measured independently in load and soak evidence.
+Participant commands or new joins at capacity receive retryable overload before
+decision. Explicit removal and Session end use their protected capacity.
 
-Snapshot fallback is the required recovery path below the published replay
-floor.
+Cleanup uses small `SKIP LOCKED` batches, records rows and bytes removed, and
+never deletes active-Session events, active-Session receipts, pending lifecycle
+intents, or data inside the supported post-end window. Cleanup lag has an alert
+and readiness does not hide it.
 
-Cleanup must:
+Database-capacity monitoring reserves the final 20 percent of provisioned
+storage for WAL, indexes, lifecycle completion, and recovery. Crossing that
+watermark stops new Session admission and ordinary participant commands through
+a shared operational admission mode while preserving the lifecycle reserve.
+The release load and failover runs prove that the reserve covers the declared
+maximum active Sessions and participants; physical disk exhaustion is not
+treated as a normal retry mechanism.
 
-- remove the Session snapshot, event sequence, receipts, authority record, and
-  indexes as one lifecycle;
-- avoid deleting while an active lease, subscriber, or retry window remains;
-- expose pending and failed cleanup metrics;
-- remain idempotent under repeated end and cleanup requests;
-- keep debug traces outside authoritative retention.
+Diagnostic traces retain at most 10,000 spans or five minutes in node memory.
+Passing harness traces may be sampled after invariant summaries are written.
+The complete trace for a failing scenario is written to ignored artifacts
+before any in-memory ring overwrites it.
 
-Session IDs and Session generations are never reused. Cleanup retains a compact
-ended tombstone for seven days, which exceeds token and retry lifetimes. After
-the tombstone expires, first-state creation requires a fresh signed admission
-decision from the API; the API rejects an ended generation from Postgres. This
-control-plane check occurs only on creation and never on the real-time command
-path. Delayed joins and commands are tested before, during, and after cleanup.
+## Database durability and recovery promise
 
-No fixed FIFO may silently shorten command idempotency. A hot in-process cache
-may be bounded because the Stateholder remains the fallback.
+The launch topology uses PostgreSQL 18 or a later explicitly qualified version
+with `fsync`, `full_page_writes`, and checksums enabled. Production writes go to
+one writable primary. Read replicas never resolve command receipts or recovery
+heads.
 
-## Resource safety
+The launch durability promise is zero acknowledged sync-decision loss after one
+primary failure. It requires at least one synchronous standby and
+`synchronous_commit = on` or stronger for sync decision transactions and API
+Session create, join, remove, and end transactions. The Elixir Postgres adapter
+and Go lifecycle transaction layer set and verify the transaction-effective
+value. The topology manifest names a nonempty approved
+`synchronous_standby_names` set and permits promotion only of a standby that
+participated synchronously in acknowledging writes.
 
-Production limits are explicit configuration with safe defaults and metrics.
+Before accepting durable commands, readiness observes the writable primary and
+at least one matching `pg_stat_replication` row with `state = 'streaming'`,
+`sync_state = 'sync'`, and WAL byte lag below the numeric launch-envelope
+threshold. Release failover proof confirms that the automation promotes only an
+approved synchronous participant. If the selected managed service cannot
+provide this topology, the product durability promise and this acceptance gate
+must be changed explicitly before launch; the application cannot manufacture
+the guarantee.
 
-- one MiB, 256 queued events, or five seconds maximum queued-event age per
-  subscriber;
-- 128 active pending client commands and 1,024 archived unresolved records;
-- at most 12 reconnect attempts per rolling minute, with jitter and a 30-second
-  backoff cap;
-- at most 4,096 local receipt entries and 2,048 local event entries per node;
-- at most 10,000 retained diagnostic spans per node or five minutes of spans,
-  with payload redaction;
-- a 15-minute writer idle timeout after the last subscriber and the seven-day
-  ended tombstone described above;
-- a 64 KiB decoded control-frame limit and a 25 ms p99 decode-time ceiling on
-  release hardware;
-- at most 256 events or one MiB per replay page, followed by continuation or
-  snapshot fallback;
-- at most 500 participant sessions, three subscriptions per participant
-  session, and 1,000 subscriptions per Session;
-- 256 queued commands or one MiB per Session writer, 1,024 forwarded commands
-  or four MiB per node, and 64 coalesced/system messages per writer BEAM mailbox;
-- no tenant, Session, participant, or command IDs as unbounded metric labels.
-
-Production configuration may lower these defaults. Raising one requires an
-explicit specification change, a memory-budget calculation, slow-consumer proof,
-and release-load evidence; it cannot be changed through an unchecked environment
-variable.
-
-Exceeding a limit produces a documented rejection, disconnect, continuation, or
-snapshot path. It cannot silently drop authoritative state.
-
-`ChalkSync.Sessions.CommandAdmission` rejects before any request enters a shared
-process mailbox. Each socket permits one admission attempt at a time and pauses
-WebSocket read demand until that attempt resolves. Every local and remote
-command uses one Redis script to reserve from the same Session-wide
-256-command/one-MiB credit pool before ETS insertion or `:erpc`; a reservation
-carries command key, bytes, and owner epoch. A pending reservation has a
-five-second TTL. After ETS insertion, one Redis script atomically changes the
-pending reservation to a non-expiring `enqueued` state. If that claim fails, the
-endpoint removes the ETS entry before returning; the writer may process only
-claimed entries. No origin can enqueue or forward without a reservation.
-
-`ChalkSync.Sessions.CommandQueue` is a bounded ETS queue, not a GenServer
-mailbox. The remote `:erpc` endpoint validates the reservation, inserts directly
-into ETS, and emits one coalesced writer wake-up. `NodeRouter` is a stateless
-module with no request mailbox. The writer pulls one command at a time, releases
-the reservation after a Stateholder decision, and never receives command payloads
-as process messages. Duplicate, expired, wrong-owner, and over-byte reservations
-are rejected before insertion. Claimed credits cannot expire while their ETS
-entries remain queued. On authority takeover, the new owner atomically reaps
-claimed credits from older fenced epochs only after the old queue is unreachable;
-an orphan ETS entry without a claimed credit is discarded and cannot execute.
-Raw `GenServer.call`, `send`, and unreserved `:erpc` delivery to a writer are
-forbidden.
-
-At most 256 reserved command workers may exist cluster-wide for one Session and
-1,024 per node. Load proof floods every socket and origin concurrently,
-asserts no unreserved command is processed, and keeps writer/system mailboxes
-below 64 coalesced or lifecycle messages while every ETS/credit boundary stays
-within its count, byte, and TTL ceiling.
-
-`ChalkSync.Transport.OutboundQueue` is the sole owner of queued frames for one
-socket. Writers and fanout processes use a demand-aware enqueue call and never
-send event payloads directly to a WebSock process mailbox. Only one encoded
-frame may be handed to the transport at a time. Replay pages are at most 256
-events or one MiB. Cross-node head hints are coalesced to one pending head per
-Session. The acceptance test observes the outbound queue, WebSock mailbox,
-fanout mailbox, replay buffer, process heap, and node memory while the peer stops
-reading; every measured boundary must plateau and recover after disconnect.
+Release proof kills the command task, sync node, backend connection, primary
+process, and primary host boundary at controlled points before and after
+`COMMIT`. After promotion it verifies every acknowledged receipt, event,
+revision, and folded state. Backup/PITR restore is drilled into isolation and
+the restored independent fold is compared with the stored fold. The same fault
+matrix surrounds API Session and lifecycle commits and verifies that every
+returned Session, participant admission, issued token, removal, and end intent
+survives promotion.
 
 ## Operational contract
 
+### Boot and configuration
+
+Production boot fails when:
+
+- the Stateholder adapter is Memory;
+- the development token verifier is enabled;
+- required environment values are missing or malformed;
+- the database migration version is absent or too new for the release;
+- the configured database endpoint is not the writable authority;
+- neither the notification listener nor the authoritative head-repair loop can
+  initialize;
+- the declared synchronous durability prerequisite is unmet.
+
+Optional Redis absence never blocks durable-control boot.
+
 ### Health and readiness
 
-`/healthz` means the BEAM and HTTP listener are alive. `/readyz` means the node
-can safely accept sync work.
+`/healthz` reports only that the BEAM and HTTP listener are alive. `/readyz`
+returns success only when the node is not draining and all required checks pass:
 
-Readiness requires:
+- production adapter and verifier;
+- writable-primary connectivity;
+- compatible schema version;
+- bounded pool checkout and authoritative head read;
+- authoritative head-repair-loop health, with notification-listener status
+  reported as an acceleration signal;
+- required synchronous standby state;
+- lifecycle-consumer health and acceptable pending-intent lag.
 
-- a production Stateholder adapter, never Memory;
-- Stateholder command and head-read success within the readiness budget;
-- authority acquisition/renewal capability;
-- change-notification or head-reconciliation capability;
-- valid production configuration;
-- an enabled topology write gate with exactly two directly verified
-  promotion-eligible replicas;
-- the separately supplied production token-verifier dependency;
-- no active drain state.
+Readiness uses reads and startup transaction checks and creates no synthetic
+durable customer-like row. The database observations include
+`pg_is_in_recovery() = false`, the exact migration version, the configured
+`synchronous_standby_names`, transaction-effective `synchronous_commit`, and
+the matching streaming/sync replication row and lag. The oldest pending
+lifecycle intent warns at five seconds and fails cluster lifecycle readiness at
+30 seconds. Each node also fails readiness if its repair loop or lifecycle
+consumer supervisor is not running.
 
-Readiness returns a machine-readable failing component without exposing secret
-or customer data.
+Required probes run at least once per second. Two consecutive failures make the
+node unready within two seconds; recovery requires three consecutive successful
+checks spanning at least five seconds. The approved launch envelope supplies
+the numeric WAL-lag ceiling and may tighten, but not silently relax, these age
+and hysteresis limits. The response is bounded and contains no credentials or
+customer identifiers.
 
-`/readyz` returns `200 {"status":"ready"}` or
-`503 {"status":"not_ready","components":[...]}`. Startup remains unready until
-every required check passes. Runtime probes cover every configured Redis shard
-with disposable, versioned synthetic keys and remove them after the barrier
-test. Readiness is a coarse admission signal; each real operation repeats its
-own authority and durability checks and fails closed independently.
+### Graceful drain
 
-### Graceful shutdown
+On SIGTERM the node becomes unready within 500 ms, rejects new upgrades, stops
+admitting commands, lets already-started decision transactions resolve for at
+most their deadline, writes no local-only terminal result, and closes sockets
+with retryable 1012 after bounded queues drain. There is no application writer
+lease to transfer. Other nodes recover clients and authoritative suffixes from
+Postgres.
 
-On termination the node becomes unready, stops accepting new upgrades and
-commands, lets bounded in-flight Stateholder operations resolve, relinquishes or
-expires writer leases, and closes remaining sockets with a reconnect signal.
-No shutdown path acknowledges an uncommitted command.
+### Telemetry
 
-The drain state machine is `ready -> draining -> stopped`. Entering `draining`
-must affect `/readyz` within 500 ms, reject new upgrades with HTTP 503, return
-retryable `server_draining` for commands that have not entered Stateholder, wait
-at most one Stateholder deadline for in-flight decisions, and close sockets with
-WebSocket code 1012. A SIGTERM integration test proves lease handoff and command
-resolution through the replacement node.
+Metrics and structured traces cover:
 
-### Required telemetry
+- command admission, overload, outcome, duplicate, and decision uncertainty;
+- Postgres checkout, transaction, lock, query, error, and receipt-resolution
+  latency;
+- event revision, local cursor, fanout hint lag, head-repair count, and gaps;
+- recovery mode, replay pages/bytes, snapshot bytes, and time to live;
+- sockets, participant sessions, local coordinators, queue events/bytes/age,
+  task counts, and mailbox lengths;
+- lifecycle pending age, apply attempts, failures, and completion latency;
+- receipt/event retained rows and logical/physical bytes, cleanup lag, and
+  lifecycle reserve;
+- primary role, synchronous standby state, WAL/replication lag, and failover;
+- SDK connection state, pending count/age, reconnect count, and convergence
+  latency using redacted identifiers.
 
-Metrics and structured events cover:
+Every scenario has `run_id`, seed, tenant/session test IDs, node ID, command ID,
+event ID, revision, transaction attempt, and injected-fault ID. Logs omit token
+values, participant names, and command payload bodies.
 
-- command count, terminal outcome, end-to-end latency, and ambiguous resolution;
-- receipt hit, command-ID conflict, and receipt age;
-- Stateholder latency, timeout, error, persistence, and failover;
-- revision conflict, gap, corrupt event, and snapshot mismatch;
-- writer start, stop, lease renewal, fencing rejection, and handoff time;
-- event-head lag, backfill length, replay length, snapshot fallback, and
-  reconnect mode;
-- subscriber queue bytes/events/age, overflow, and disconnect;
-- active Sessions, writers, sockets, and subscriptions;
-- process memory, mailbox length, scheduler utilization, and restart rate;
-- liveness, readiness, drain, and cleanup failures.
+### Release artifact
 
-Logs and traces include correlation IDs, protocol version, revision, node ID,
-and failure class. Tokens, command payloads, participant display names, and raw
-customer content are excluded. High-cardinality identities may appear only in
-controlled structured diagnostics, never metric labels.
+The release is a reproducible uniquely tagged artifact containing the Git SHA,
+protocol version, migration compatibility range, build timestamp, and runtime
+dependency versions. A production-equivalent local instance must boot, report
+ready, accept a real v2 browser client, drain, restart, and recover before the
+artifact can be handed off.
 
-### Release artifact and CI
+## Stress harness and release proof
 
-The sync server has a reproducible release/container artifact, production config
-validation, an Elixir CI job, generated-contract drift checks, the focused sync
-gate, and breaker smoke coverage. Production boot fails if Memory, dev tooling,
-or incomplete required adapters are selected.
+The harness tests correctness first and throughput second. It exposes
+independent dimensions with no named profiles:
 
-Every Stateholder aggregate and event carries `record_schema_version` and
-`minimum_writer_version`. Authority acquisition fails when the node cannot read
-the record or is older than the minimum writer. Fanout replaces its projection
-from a snapshot on an unknown required event. Mixed-version release tests run
-old and new writers and fanout nodes through acquisition, handoff,
-forward-written records, and rollback. A forward release may raise the minimum
-writer only after all old nodes drain.
+- number of sync nodes;
+- Sessions, participants, sockets, and subscriptions;
+- command mix, rate, burst, and concurrency;
+- cursor age and recovery mode;
+- client read speed and network interruption schedule;
+- Postgres topology and fault points;
+- notification loss, delay, duplicate, and reorder schedule;
+- node and process restart schedule;
+- run duration and deterministic seed.
 
-## Performance and recovery budgets
+The release command reads an approved launch-envelope artifact that supplies
+the expected concurrent sockets, active Sessions, hot-Session size, command
+rate, geographic latency assumptions, and latency SLOs. The load gate runs at
+the declared peak plus 30 percent headroom. Missing launch-envelope values are
+an explicit release blocker; the harness does not invent product traffic.
 
-Correctness gates every performance result.
+### Required scenario families
 
-- control command acknowledgement: less than 100 ms p95 in-region under the
-  release baseline;
-- node-to-client committed event propagation: less than 100 ms p95 in-region;
-- writer handoff after owner loss: less than 5 seconds p95;
-- client convergence after node loss: less than 7.5 seconds p95, including
-  reconnect backoff;
-- readiness failure after Stateholder loss: less than 2 seconds;
-- no sustained mailbox or heap growth after load returns to baseline.
+1. **Pure model:** at least 100,000 generated operations per seed; independent
+   fold, receipt model, and replica model checked after every operation.
+2. **Postgres transaction:** real adapter conformance, concurrent decisions,
+   stable rejection, command-ID conflict, and crash injection around every
+   transaction boundary.
+3. **Multi-node:** at least two unclustered BEAM nodes accept concurrent commands
+   for one Session; node death and stale local state still produce one Postgres
+   order.
+4. **Notification:** hints are lost, duplicated, delayed, reordered, and
+   disabled; exact head reconciliation heals every node.
+5. **Transport:** real TCP peers stop reading, reconnect, duplicate frames,
+   cross ACK/event order, and exercise snapshot and paged replay.
+6. **Client:** the packaged TypeScript runtime runs in a real browser and Node
+   test process against the real Elixir socket and persists pending commands
+   across process restart.
+7. **Lifecycle:** real API create/join/remove/end operations share the database
+   with sync commands and prove generation-safe ordering.
+8. **Database recovery:** connection loss, backend termination, primary failure,
+   synchronous-standby promotion, isolated restore, and cleanup contention.
+9. **Load and soak:** the approved launch envelope plus headroom runs for at
+   least 60 minutes; an eight-hour soak shows bounded queues, tables, tasks,
+   mailboxes, memory, and connection pools with no unexplained positive slope.
 
-The minimum release load baseline is:
+### Mandatory fault points
 
-- two sync nodes and the production Redis topology;
-- 10,000 concurrent WebSockets across the cluster;
-- 1,000 active Sessions;
-- up to 250 participants in one Session;
-- 500 control commands per second across the cluster;
-- 20 control commands per second in one hot Session;
-- ten percent deliberately slow or non-reading clients during the dedicated
-  slow-consumer profile.
+At minimum, deterministic hooks stop or disconnect execution:
 
-The release profile runs for at least 60 minutes and retains at least 30 percent
-CPU and memory headroom. The soak profile runs for eight hours with stable
-memory, bounded queues, no unexplained restarts, no lost terminal outcomes, and
-no convergence failures. A higher declared launch target raises these numbers;
-it never lowers them without an explicit spec change and evidence.
+- before connection checkout;
+- after transaction begin;
+- after Session row lock;
+- after receipt lookup;
+- after rejected-receipt insert;
+- after event insert;
+- after folded-state update;
+- after committed-receipt insert;
+- immediately before `COMMIT`;
+- after the server sends `COMMIT` but before it sees the result;
+- after commit and before local cache update;
+- after notification and before outbound enqueue;
+- after outbound enqueue and before ACK;
+- during snapshot/replay catch-up;
+- while the peer is not reading.
 
-## Failure matrix
+After every injected fault, the harness resolves the command key from the
+writable authority, independently folds the event log, compares the stored
+folded state, checks exact revisions, reconnects replicas, and verifies that
+every terminal result remains stable.
 
-| Failure                                 | Required server behavior                                              | Required client behavior                         |
-| --------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
-| Writer dies before commit               | No event or receipt; replacement may retry validation                 | Retry same command ID                            |
-| Writer dies after commit before ack     | Receipt, event, state, and revision survive                           | Retry same ID and receive original outcome       |
-| Origin node dies after forwarding       | Authority may commit once; receipt remains queryable                  | Reconnect, recover, retry same ID                |
-| Ack is dropped                          | No second effect                                                      | Resolve from event/snapshot or retry same ID     |
-| Event notification is dropped           | Node detects head lag and backfills exact suffix                      | Detect any local gap and recover                 |
-| Events are duplicated/reordered         | Replica never applies outside exact chain                             | Ignore exact duplicate; recover on gap/conflict  |
-| Writer lease is lost                    | Old token is fenced before mutation                                   | Reconnect or await routed replacement            |
-| Two nodes claim authority               | Only the latest acquired token with an unexpired lease can commit     | Observe one authoritative history                |
-| Redis is unavailable                    | Node becomes unready; no terminal ack or local-only mutation          | Keep pending and retry with backoff              |
-| Redis response times out                | Resolve receipt; otherwise return uncertainty, never rejection        | Retry same command ID                            |
-| Durability barrier times out            | Suppress fanout/ack; resolve or prove absent after failover           | Keep pending and retry same ID                   |
-| Redis primary fails after ack           | Acknowledged state and receipt recover under declared topology        | Reconnect without duplicated effect              |
-| Older Redis backup is restored          | New authority epoch fences every pre-restore writer                   | Recover from snapshot without revision invention |
-| Subscriber stops reading                | Only that subscriber is bounded and disconnected                      | Reconnect through replay/snapshot                |
-| Cursor is missing/future/unavailable    | Send complete snapshot                                                | Replace canonical replica                        |
-| Cursor revision matches, digest differs | Send complete snapshot and corruption telemetry                       | Replace canonical replica                        |
-| Replay is corrupt or non-contiguous     | Stop replay and snapshot; emit invariant telemetry                    | Refuse partial application                       |
-| Empty writer restarts                   | Process exits and stays absent until demanded                         | No visible effect                                |
-| Rolling deploy drains a node            | Node becomes unready, transfers/expires authority, closes cleanly     | Reconnect with compatible protocol               |
-| Session ends during a pending command   | One terminal order decides commit or stable `session_ended` rejection | Reconcile from receipt/event                     |
-| Delayed work arrives after cleanup      | Tombstone or API admission rejects the ended generation               | Surface stable Session-ended state               |
-| Lifecycle cause expires in outbox       | Reissue the same intent generation and commit at most one event       | No direct client action                          |
+### Failure artifacts
 
-## Testing and proof
+Every run writes to:
 
-### Unit and conformance tests
+```text
+.artifacts/sync/<git-sha>/<run-id>/
+  manifest.json
+  verdict.json
+  trace.jsonl
+  server.log
+  client.log
+  postgres.log
+  metrics.json
+  failure.md
+  reproducer.json
+```
 
-- pure reducer commands, semantic event validation, exact revision transitions,
-  and complete snapshot parsing;
-- shared Memory/Redis Stateholder conformance for receipts, atomicity, fencing,
-  suffix reads, retention, cleanup, and failure errors;
-- protocol generation and validation in Elixir and TypeScript;
-- TypeScript replica, pending overlay, acknowledgement ordering, replay,
-  snapshot, gap, retry, and diagnostics;
-- writer and subscription lifecycle, multi-subscription behavior, and bounded
-  outbound delivery.
+`manifest.json` records the seed, exact dimensions, fault schedule, commit,
+artifact identity, protocol version, migration version, database settings, and
+dependency versions. `verdict.json` is binary and lists every invariant.
 
-### Breaker acceptance
+On failure, `trace.jsonl` contains the complete scenario trace from setup
+through verdict. `failure.md` leads with the
+violated invariant, exact observed mismatch, first bad revision or receipt,
+minimal reproduction command, and relevant trace IDs. The harness attempts
+deterministic shrinking without replacing the original trace.
 
-The six current deterministic engine failures become passing engine assertions:
+Raw artifacts remain ignored because they may be large. Each implementation
+milestone rewrites one redacted human report at
+`scratchpad/sync-production-readiness-report-YYYY-MM-DD.md`. Any harness error,
+missing artifact, skipped required fault, unresolved command, or invariant
+failure produces a failing exit status and blocks release.
 
-1. retry after writer restart returns the original outcome;
-2. retry after more than 256 command IDs remains stable;
-3. commit/ack interruption recovers the committed receipt;
-4. revision-conflict recovery leaves no empty orphan writer;
-5. a non-reading subscriber remains within the declared bound and is recovered;
-6. the reducer explicitly rejects a non-contiguous revision.
+## Verification gates
 
-Tests that currently expect a structured breaker failure are inverted. A green
-ExUnit suite containing expected engine failures is not production evidence.
+### Focused correctness
 
-The existing passing boundaries remain mandatory:
+- all six confirmed breaker failures are converted to passing assertions;
+- Memory and real-Postgres semantic conformance pass;
+- reducer and database revision constraints agree;
+- 100,000-operation model runs retain the existing passing boundary;
+- every stable rejection and committed outcome survives process and node
+  restart;
+- unknown commit results resolve by receipt without duplicate effect;
+- exact event fold equals the stored fold at every checkpoint.
 
-- 100,000 independent model operations;
-- real-wire concurrency, abrupt reconnect, and replica/stateholder comparison;
-- writer restart with retries disabled;
-- exact replay suffix and snapshot equivalence;
-- snapshot fallback beyond event retention;
-- multiple subscriptions for one participant session.
+### Integration
 
-### Multi-node and Redis campaigns
+- two nodes concurrently accept one Session's commands;
+- Postgres notification loss heals from the durable log;
+- API lifecycle transactions and sync event application are idempotent;
+- socket loss creates no durable participant leave;
+- real TypeScript clients converge through retry, restart, replay, snapshot,
+  ACK/event reorder, and Session end;
+- a slow TCP peer reaches a bounded disconnect while healthy peers continue.
 
-At least two sync nodes serve connections for the same Session. Campaigns inject
-concurrent commands, retries, owner loss before and after commit, origin-node
-loss, lease expiry, stale owners, notification loss, delayed messages, Redis
-timeouts, supported Redis failover, rolling drains, retention fallback, and slow
-subscribers.
+### Operations and recovery
 
-Redis campaigns run the checked-in baseline topology and every proposed launch
-topology manifest. They inject sudden primary death, controlled promotion,
-replica lag, partition from the write quorum, restart from AOF, failback, loss
-between atomic mutation and `WAITAOF`, and fencing-record corruption. Passing a
-single-node Redis fixture is never launch evidence.
+- migration apply, rollback-safe expand/contract behavior, and schema snapshot
+  verification pass;
+- production config refuses Memory and incompatible schemas;
+- readiness follows database and lifecycle-consumer health;
+- SIGTERM drain preserves in-flight decisions and recovers clients elsewhere;
+- primary failover preserves the stated acknowledged-write guarantee;
+- cleanup respects active and post-end retention and lifecycle reserve;
+- load and soak satisfy the approved envelope and every declared bound.
 
-The campaign continuously runs a pre-restore writer while it disables the gate,
-isolates the target endpoint, restores an older coherent backup, rotates the
-authority epoch, exposes the endpoint, and reenables the gate in the required
-order. It attempts mutation and readiness after every step, including attempted
-endpoint exposure before epoch rotation. Every forbidden-order attempt fails,
-and every old-epoch commit is fenced.
+### Repository gates
 
-The checker asserts continuously:
+Completion requires execution and observation of the applicable focused gates
+and the root gate:
 
-- one authoritative event order;
-- model and replica convergence at equal revisions;
-- acknowledgement/event correlation;
-- rejected commands do not mutate;
-- terminal outcomes remain stable;
-- stale fencing tokens never commit;
-- replay is the exact authoritative suffix;
-- snapshots equal the authoritative fold;
-- revisions never regress;
-- queue, mailbox, process, and retained-data bounds hold.
+```text
+apps/sync/scripts/gate.sh
+apps/api/scripts/gate.sh       # whenever API, Go, or migrations change
+pnpm run gate
+```
 
-### CI profiles
-
-- Pull request: sync gate, Stateholder conformance, TypeScript client tests,
-  generated drift, 32 model seeds, 16 real-wire seeds, and focused failure
-  matrix.
-- Nightly: 1,000 model seeds, 250 real-wire seeds, 100 multi-node Redis seeds,
-  randomized restarts/retries, and resource assertions.
-- Release: complete monorepo gate, 60-minute load profile, eight-hour soak,
-  Redis failover, rolling-node drain, and saved machine-readable breaker reports.
-
-Every failure records the seed, source revision, protocol version, commit SHA,
-materialized operations, fault schedule, complete normalized trace, and a
-failure-first Markdown report. A release report containing any harness error or
-invariant failure blocks release.
-
-Canonical commands and outputs are:
-
-| Profile       | Command                                   | Maximum duration | Evidence                               |
-| ------------- | ----------------------------------------- | ---------------- | -------------------------------------- |
-| Focused       | `apps/sync/scripts/gate.sh`               | 10 minutes       | console plus JUnit                     |
-| Breaker smoke | `apps/sync/scripts/breaker.sh smoke`      | 10 minutes       | `.artifacts/sync/<commit>/smoke/`      |
-| Multi-node    | `apps/sync/scripts/breaker.sh multi-node` | 30 minutes       | `.artifacts/sync/<commit>/multi-node/` |
-| Nightly       | `apps/sync/scripts/breaker.sh nightly`    | 2 hours          | `.artifacts/sync/<commit>/nightly/`    |
-| Load          | `apps/sync/scripts/load.sh release`       | 90 minutes       | `.artifacts/sync/<commit>/load/`       |
-| Soak          | `apps/sync/scripts/soak.sh release`       | 9 hours          | `.artifacts/sync/<commit>/soak/`       |
-| Release proof | `apps/sync/scripts/release-proof.sh`      | 12 hours         | `.artifacts/sync/<commit>/release/`    |
-
-The scripts create the Redis/Sentinel and named-BEAM topology through OrbStack,
-build a uniquely tagged release artifact, enforce timeouts, and always write
-`summary.json`, `report.md`, normalized traces, resource samples, and the
-topology manifest. Raw artifacts stay ignored under `.artifacts/`; the final
-redacted release summary is copied to `scratchpad/` when it is safe for the
-public repo.
-
-Phase 3 owns the topology manifests and `breaker.sh`; Phase 4 owns `load.sh`,
-`soak.sh`, `release-proof.sh`, report writers, and CI wiring. These are tracked
-repository deliverables. The relevant phase exit and every later profile fail
-immediately when a declared script, topology file, result field, or report is
-missing. None is an external prerequisite.
-
-“Stable memory” means the final 30-minute linear-regression slope is within one
-percent of allocated memory per hour after warm-up. Headroom is measured against
-configured container CPU and memory limits. Any unexpected process restart,
-unresolved command, invariant failure, harness error, or missing sample fails
-the profile.
-
-## Implementation ownership map
-
-| Concern                                | Primary repository surface                                                                 | Required proof                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| v2 protocol and golden frames          | `contract/schema/sync-v2.json`, `contract/schema/fixtures/sync-v2/`, contract generators   | Elixir and TypeScript golden round trips plus drift check                        |
-| Join identity and lifecycle generation | `apps/api/internal/mediaplane/`, API join response contract                                | API fixtures decoded by sync claim tests; ended-generation rejection             |
-| Claims and protocol phases             | `apps/sync/lib/chalk_sync/auth/claims.ex`, `protocol.ex`, `transport/socket.ex`            | real-wire v1/v2 negotiation and identity-isolation tests                         |
-| Session reducer and writer             | rename `rooms/room.ex` and `room_server.ex` under `ChalkSync.Sessions`                     | reducer conformance and six fixed breaker regressions                            |
-| Stateholder port and Memory            | `apps/sync/lib/chalk_sync/stateholder.ex`, `stateholder/memory.ex`                         | shared adapter conformance suite                                                 |
-| Redis durability                       | new `stateholder/redis.ex` and versioned server-side scripts under `apps/sync/priv/redis/` | baseline topology atomicity, barrier, recovery, and corruption campaigns         |
-| Cluster routing and fanout             | new `cluster/node_router.ex`, `sessions/fanout.ex`, release node discovery config          | named two-node forwarding, partition, stale-owner, and gap-free-cut tests        |
-| Bounded socket delivery                | new `transport/outbound_queue.ex`, existing router/socket                                  | non-reading peer resource plateau and recovery proof                             |
-| TypeScript replica                     | new `sdks/typescript/client/src/sync/` exported by `src/index.ts`                          | unit, browser, React Native adapter, process-restart, and Elixir real-wire tests |
-| Operations and artifact                | `application.ex`, `transport/router.ex`, runtime config, `apps/sync/scripts/`              | production-equivalent boot, readiness, SIGTERM drain, load, and soak             |
-| CI                                     | repository workflows plus `pnpm run gate`                                                  | PR smoke, nightly, and release profiles with retained summaries                  |
-
-The rename from `Rooms` to `Sessions` is a scoped semantic migration in the sync
-app, including tests and supervisors. It does not rename the product Room model
-or unrelated API/SDK surfaces.
+Nontrivial implementation also receives the repository's required automated
+code review. No failing test may be deleted, skipped, or weakened to obtain a
+green result.
 
 ## Implementation phases
 
-### Phase 0 — Correct identity and contract
+### Phase 0 — Set the authority and contract
 
-- change sync authority from Room to `{tenant_id, session_id}`;
-- add `session_id` and `participant_session_id` to verified claims;
-- add event ID and command correlation to the schema;
-- define terminal versus retryable outcomes;
-- regenerate Elixir and TypeScript outputs;
-- add contract drift and identity-isolation tests;
-- update the `apps/api` join-token issuer and fixtures for Session and
-  participant-session identity;
-- publish v2 golden frames, fingerprint vectors, rejection enums, and the
-  v1-to-v2 support inventory.
+- update `apps/sync/README.md`, `apps/sync/AGENTS.md`,
+  `docs/redesign/north-star.md`, and the active architecture record so they name
+  Postgres as durable authority and Redis as optional;
+- finalize Session and participant-session identity and lifecycle transitions;
+- add the Postgres migration design, constraints, retention, and launch
+  durability settings;
+- add and generate the strict v2 contract while freezing v1 outputs;
+- record the approved launch envelope and operational SLOs.
 
-Exit: two Sessions in one Room and identical IDs in two tenants remain fully
-isolated in contract, Stateholder keys, writers, events, and receipts. The API
-join endpoint issues a redacted fixture that sync verifies, ended Sessions issue
-no token, v1 generated goldens remain unchanged, and v2 codegen plus golden wire,
-fingerprint, digest, and UUID boundary vectors pass in Elixir and TypeScript.
+Exit gate: documents, schema tests, generated goldens, and migration plan agree
+on one authority, one identity, one protocol, and one launch promise.
 
-### Phase 1 — Repair single-node correctness
+### Phase 1 — Build the single-node durable core
 
-- redesign the Stateholder port around atomic command decisions and receipts;
-- update Memory to one atomic record boundary;
-- enforce exact and semantically valid event transitions;
-- remove the 256-entry receipt cache as an authority;
-- recover committed and rejected outcomes after writer restart;
-- separate transient uncertainty from terminal rejection;
-- fix empty-writer lifecycle.
+- add Postgrex and the Postgres Stateholder semantic transaction;
+- create revision-zero Session state and durable events and receipts;
+- make the reducer total and exact-next;
+- remove the 256-entry cache as authority;
+- resolve uncertain commits through receipts;
+- convert the restart, eviction, ambiguity, conflict, and revision breakers to
+  passing assertions against real Postgres;
+- keep Memory as a deterministic conformance adapter only.
 
-Exit: the revision, restart, eviction, commit-ambiguity, and orphan-writer
-breaker scenarios pass against Memory.
+Exit gate: all decision invariants and five non-backpressure confirmed failures
+pass under crash injection on one node and real Postgres.
 
-### Phase 2 — Bound delivery and complete the client
+### Phase 2 — Bound delivery and recovery
 
-- introduce bounded per-subscriber outbound delivery and overflow recovery;
-- preserve multiple subscriptions and reconnect grace;
-- implement the TypeScript transport, canonical replica, pending overlay,
-  acknowledgement reconciliation, and reconnect loop;
-- run the real TypeScript client against the Elixir server.
+- replace payload-bearing direct fanout with bounded outbound queues;
+- implement snapshot, paged replay, up-to-date, and exact live catch-up;
+- add notification hints and periodic head repair;
+- enforce frame, payload, queue, admission, task, pool, and retention limits;
+- test a real slow TCP peer and convert the mailbox-growth breaker to a passing
+  bounded-delivery assertion.
 
-Exit: slow-subscriber and end-to-end SDK recovery scenarios pass with bounded
-resources and no app-owned sync logic.
+Exit gate: recovery is gap-free under notification faults, and every server
+resource plateaus under slow and reconnecting clients.
 
-### Phase 3 — Add Redis and fenced multi-node authority
+### Phase 3 — Integrate lifecycle and the SDK
 
-- implement Redis Stateholder conformance;
-- add writer lease, renewal, fencing, takeover, and command routing;
-- add cross-node head notification, exact backfill, and local fanout;
-- reject Memory in production;
-- add real Redis and two-node breaker profiles;
-- implement `Redix`, `libcluster`, `NodeRouter`, server-time leases, the
-  mutation/durability split, and record-version compatibility.
+- migrate API Session and participant-session lifecycle rows and intents;
+- apply join, remove, and end intents idempotently through the control log;
+- remove socket-driven durable leave;
+- implement the TypeScript connection, replica, pending-overlay, persistence,
+  diagnostics, and lifecycle runtime;
+- prove real browser and React Native-compatible core behavior against the real
+  server.
 
-Exit: multi-node commands, owner/origin loss, stale-writer partitions,
-notification loss, and supported Redis failover preserve one history and every
-terminal outcome.
+Exit gate: API, server, and TypeScript tests prove generation-safe lifecycle
+ordering and convergence through all v2 recovery and command outcomes.
 
-### Phase 4 — Production operations
+### Phase 4 — Prove multi-node and operational behavior
 
-- add dependency-aware readiness, graceful drain, and startup validation;
-- add metrics, structured telemetry, diagnostics, and resource alerts;
-- create the release/container artifact and Elixir CI job;
-- add load, soak, and release-report automation.
+- run two or more independent sync nodes against one Postgres authority;
+- add dependency-aware readiness, drain, telemetry, cleanup, and unique release
+  artifacts;
+- exercise concurrent hot Sessions, node loss, lost hints, pool pressure,
+  rolling versions, and synchronous-standby promotion;
+- confirm Redis is absent from the correctness path.
 
-Exit: the release artifact boots in a production-equivalent local topology,
-passes readiness and drain checks, and produces complete operational evidence.
+Exit gate: multi-node, failover, migration, readiness, drain, and compatibility
+campaigns pass with one event history and stable receipts.
 
 ### Phase 5 — Release proof
 
-- run the complete breaker, multi-node, load, soak, and failover gates;
-- verify protocol compatibility and generated-client consumption;
-- drain old Memory-backed development rooms rather than pretending they can be
-  migrated as authoritative production state;
-- produce the uniquely identified release artifact and complete evidence map.
+- run the full deterministic, real-wire, browser, lifecycle, failover, load, and
+  eight-hour soak matrix against the uniquely identified artifact;
+- run focused gates, root gate, and automated review;
+- write the redacted failure-first production-readiness report;
+- list any external production deployment prerequisites separately from the
+  implementation verdict.
 
-Exit: every definition-of-done item below has direct observed evidence.
+Exit gate: every required verdict is green, every artifact is present, and the
+binary implementation status is `done`. Production deployment remains a
+separate explicitly approved action.
 
-## Release compatibility and external rollout
+## Ownership map
 
-Live rollout is outside this implementation specification. The following
-compatibility contract is an external launch prerequisite and later belongs in
-an environment-specific runbook approved in the active thread.
-
-Redis keys are namespaced and schema-versioned. New Sessions start on the new
-authority model; old development-only Memory Sessions are allowed to drain or
-are explicitly discarded. There is no silent conversion of volatile ETS state
-into claimed durable production history.
-
-Server and SDK rollout order follows protocol compatibility:
-
-1. deploy a server that understands old and new supported client versions;
-2. release the new client runtime;
-3. observe adoption and invariant telemetry;
-4. remove an old protocol only after its support window ends.
-
-Rollback may return to a server version only when it understands every record
-and protocol version written by the forward release. A rollback that would
-discard receipts, fencing state, or revisions is forbidden. When compatibility
-cannot be guaranteed, forward-fix while keeping the server unready for new work.
-
-The release proof writes v2 receipts, fencing state, events, snapshots, and
-tombstones, then boots the previous compatible artifact against them. It also
-hands authority between old and new nodes in both directions. The generated
-compatibility matrix names readable/writable record versions and protocol
-versions for each artifact. A missing downgrade proof marks rollback unsafe.
-
-No production action is authorized by this specification. Deployment requires
-the exact environment and deployment ID to be confirmed in the active thread.
-
-## Definition of done
-
-The sync server is done against this specification only when all statements are
-true:
-
-- live authority is tenant- and Session-scoped;
-- Memory is dev/test-only and Redis passes the shared Stateholder contract;
-- every acknowledged command has one durable, recoverable receipt;
-- every exposed receipt and event has crossed the supported Redis durability
-  barrier;
-- retries after restart, eviction pressure, acknowledgement loss, node loss,
-  and Redis failover preserve the original outcome;
-- command ID reuse with different intent is rejected without mutation;
-- one fenced writer produces one contiguous authoritative history;
-- the reducer rejects revision gaps and invalid transitions explicitly;
-- every committed command correlates to exactly one event;
-- replay is an exact suffix and snapshots equal the authoritative fold;
-- same-revision digest corruption forces snapshot replacement;
-- welcome and live fanout have a gap-free cut;
-- TypeScript clients converge through event/ack reordering, reconnect, replay,
-  snapshot, and retry;
-- slow clients, mailboxes, caches, traces, event tails, receipts, and Session
-  data remain within declared bounds;
-- writer, node, Stateholder, notification, and rolling-deploy failures satisfy
-  the failure matrix;
-- liveness, readiness, graceful drain, telemetry, and cleanup work in the
-  release artifact;
-- control latency, handoff, recovery, load, and soak budgets pass with measured
-  headroom;
-- all focused breaker scenarios pass as engine assertions;
-- the sync gate, generated drift checks, TypeScript client gate, Elixir CI, and
-  canonical monorepo gate are green;
-- the release report contains zero invariant failures and zero harness errors;
-- separate production launch prerequisites outside this specification are
-  complete.
-
-Anything less is not production-ready. A green unit suite, a successful local
-demo, final-state convergence without continuous checks, or a Redis adapter that
-has not survived the declared failures is insufficient evidence.
-
-## Execution guardrails
-
-- Extend the current Stateholder, Room, RoomServer, transport, protocol, and SDK
-  boundaries before introducing new parallel abstractions.
-- Change the schema source first and regenerate; never hand-edit generated
-  contract files.
-- Keep the independent breaker model independent from production reducers.
-- Never weaken, skip, or invert a failing invariant to obtain a green gate.
-- Convert every fixed breaker reproduction into a passing permanent regression.
-- Treat command receipts as authority and process caches as optimizations.
-- Treat local Registry uniqueness as local only.
-- Treat Redis notifications as hints and retained state as truth.
-- Keep demo and app code thin; product sync behavior belongs in the SDK package.
-- Reject implicit fallbacks in production configuration.
-- Add bounded queues before adding load.
-- Make transient uncertainty visible and retryable; never relabel it as a
-  terminal business rejection.
-- Preserve unrelated work in the shared repository and avoid repository-wide
-  refactors while executing this spec.
+| Concern                       | Primary location                                          | Required proof                                          |
+| ----------------------------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| Reducer and local coordinator | `apps/sync/lib/chalk_sync/sessions/`                      | model, exact-next, restart, and local lifecycle tests   |
+| Durable decisions             | `apps/sync/lib/chalk_sync/stateholder/postgres.ex`        | real-Postgres atomicity and crash matrix                |
+| Database schema               | `apps/api/db/migrations/`, `apps/api/db/schema.sql`       | apply, constraints, plans, and compatibility            |
+| Lifecycle API                 | `apps/api` plus lifecycle-intent consumer in `apps/sync`  | join/remove/end concurrency tests                       |
+| Protocol source and codegen   | `contract/schema/`, existing generators                   | v1 stability and v2 cross-language goldens              |
+| Socket recovery and bounds    | `apps/sync/lib/chalk_sync/transport/`                     | real-wire gap and slow-peer tests                       |
+| TypeScript runtime            | `sdks/typescript/client`                                  | unit, persistence, browser, and real-server tests       |
+| Optional Redis acceleration   | future `fanout/redis.ex`                                  | zero correctness difference when removed                |
+| Harness and reports           | `apps/sync/test`, `apps/sync/scripts`, `.artifacts/sync/` | deterministic binary verdict and complete failure trace |
+| Operations and release        | sync config, release files, repository CI                 | boot, readiness, drain, failover, soak, root gate       |
 
 ## Traceability to confirmed failures
 
-| Confirmed failure                       | Specification closure                        |
-| --------------------------------------- | -------------------------------------------- |
-| Outcomes lost after writer restart      | C3–C5, durable receipts, Phase 1             |
-| Outcomes forgotten after 256 IDs        | C4, authoritative receipt retention, Phase 1 |
-| Commit succeeds without recoverable ack | C3, C5, lost-ack workflow, Phase 1           |
-| Conflict restart leaves empty writer    | C2, writer lifecycle, Phase 1                |
-| Slow subscriber mailbox grows linearly  | C11, bounded delivery, Phase 2               |
-| Reducer accepts revision jump           | C6, reducer conformance, Phase 1             |
+| Confirmed failure                       | Required correction                                    | Release evidence                                                        |
+| --------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| outcomes lost after writer restart      | durable Postgres receipts                              | retry returns original result after all node heaps are deleted          |
+| outcome forgotten after 256 later IDs   | active-Session receipt retention                       | oldest retained ID remains stable beyond former cache size              |
+| commit succeeds without recoverable ACK | receipt-based commit resolution                        | fault after `COMMIT` returns committed/duplicate, never false rejection |
+| revision conflict leaves empty writer   | coordinator is disposable and loads only from Postgres | no empty authority process or transient restart loop                    |
+| non-reading subscriber mailbox grows    | bounded ETS outbound queue and coalesced wake-up       | real slow TCP peer disconnects at the declared bound                    |
+| reducer accepts non-contiguous revision | total exact-next reducer and DB check                  | gap is rejected without state mutation or crash                         |
 
-## Acceptance evidence index
+## Definition of done
 
-| Contract                                              | Owner                                          | Command or profile                     | Pass threshold                                                                                      |
-| ----------------------------------------------------- | ---------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| C1 identity partitioning                              | API, protocol, Stateholder                     | focused gate                           | zero cross-tenant, cross-Session, or participant-session collisions                                 |
-| C2 fencing and lease time                             | Redis adapter, SessionServer                   | multi-node plus release proof          | only latest acquired unexpired token commits; zero regression after every failover/failback case    |
-| C3–C5 decisions, receipts, and honest acks            | Stateholder adapters, protocol                 | adapter conformance plus breaker smoke | one durable outcome per command key; zero fanout/terminal acks before barrier                       |
-| C6–C8 reducer, event correlation, replay, and digests | reducer, contract generators                   | focused gate plus nightly model        | exact revision chain, one event per committed key, exact suffix, equal fold/digest for every seed   |
-| C9 welcome cut                                        | fanout, transport                              | multi-node                             | commits at every handshake boundary produce no missing or repeated post-welcome revision            |
-| C10 replica convergence                               | TypeScript SyncClient                          | real-wire nightly plus load            | every replica at equal revision has the authoritative digest                                        |
-| C11 bounds                                            | outbound queue, client store, retention worker | slow-consumer load plus soak           | every declared count, byte, and age bound holds and memory slope passes                             |
-| C12 acknowledged durability                           | Redis adapter and topology                     | release proof                          | zero lost acknowledged decisions across every supported storage failure                             |
-| Failure matrix                                        | breaker harness owners                         | multi-node plus release proof          | every row has an injected trace and expected server/client outcome; no skipped row                  |
-| Latency and recovery budgets                          | load harness                                   | load plus release proof                | every listed p95 and readiness deadline passes with at least 30 percent headroom                    |
-| Operations and compatibility                          | release and config owners                      | release proof                          | boot, shard probes, SIGTERM drain, old/new handoff, downgrade-read test, and artifact identity pass |
+The overhaul is done only when all statements below are observed true:
 
-The release summary links every row to its individual test result and trace. One
-generic green job cannot satisfy a row whose fault or measurement did not run.
+- Postgres is the sole durable authority for control state, events, receipts,
+  lifecycle facts, and lifecycle delivery intent.
+- Redis and all BEAM state can be deleted without losing an acknowledged
+  outcome.
+- Authority is tenant- and Session-scoped and participant generations are
+  enforced.
+- Every command has at most one terminal receipt and at most one event.
+- Event append, folded-state update, revision increment, and committed receipt
+  are one transaction.
+- Terminal rejection is stable and changes no control revision.
+- Unknown commit status resolves through the writable-primary receipt.
+- Every retained event is exactly next, independent fold equals stored state,
+  and post-retention cleanup records the verified terminal checkpoint.
+- All six confirmed breaker failures pass as corrected engine assertions.
+- Socket loss never becomes durable participant removal.
+- Join, remove, and Session end are transactionally intended, idempotently
+  delivered, and generation-safe.
+- Two or more nodes concurrently serve one Session with one Postgres order and
+  no application writer lease.
+- Lost fanout hints heal from the authoritative head and event log.
+- TypeScript clients converge through ACK/event reorder, retry, restart,
+  reconnect, replay, and snapshot.
+- Every declared queue, mailbox, task set, pool, frame, replay, receipt set,
+  event set, trace, and cleanup process remains bounded.
+- Required migrations are applied and verified.
+- Real Postgres failover satisfies the declared acknowledged-write guarantee.
+- Focused, API, multi-node, SDK, load, chaos, soak, sync, and monorepo gates are
+  green.
+- The unique release artifact boots with production configuration, reports
+  dependency-aware readiness, serves a real v2 client, drains, and recovers.
+- The final report contains zero invariant failures, zero harness errors, no
+  skipped required scenario, and a binary `done` implementation verdict.
 
-## Required evidence at handoff
-
-The implementation handoff includes:
-
-- the final language-neutral protocol and generated drift proof;
-- Stateholder conformance results for Memory and Redis;
-- focused breaker, model, real-wire, and multi-node reports;
-- the exact seeds and traces for any fixed counterexamples;
-- TypeScript client unit and real-server integration results;
-- load, eight-hour soak, Redis failover, and rolling-drain reports;
-- release artifact identity and production-equivalent boot/readiness proof;
-- a binary readiness verdict listing any incomplete external launch prerequisite.
+Until every item is green, the sync engine remains not production-ready.
