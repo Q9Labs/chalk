@@ -243,6 +243,12 @@ libraries consumed by SDKs and first-party apps. SDK packages depend on these
 libraries through intentional public or bundled boundaries; applications do
 not reach into SDK source paths.
 
+`@q9labsai/chalk-whiteboard/react` owns the reusable React canvas, Excalidraw
+loading and collaboration lifecycle, file synchronization, and math authoring.
+`@q9labsai/chalk-react` composes that surface into meetings and supplies Chalk's
+visual treatment. This keeps whiteboard behavior available to any React surface
+without coupling it to the TypeScript meeting SDK.
+
 ## Migration Map
 
 - `packages/sdk-core` becomes `sdks/typescript/client` and gains a complete

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createMathImageAsset, getChalkMathData, getSelectedMathElement, isChalkMathElement, svgToDataUrl } from "../../components/full/whiteboard-panel/mathElements";
+import { createMathImageAsset, getChalkMathData, getSelectedMathElement, isChalkMathElement, svgToDataUrl } from "@q9labsai/chalk-whiteboard/react";
 
 describe("whiteboard math elements", () => {
   it("encodes SVG as an Excalidraw data URL", () => {

@@ -69,6 +69,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Reorganized customer SDKs under `sdks/typescript`, extracted shared assets to
   `packages/assets`, moved whiteboard sources to `packages/whiteboard`, and kept
   existing public npm package names and UI asset compatibility exports.
+- Moved reusable React whiteboard rendering, collaboration lifecycle, file sync,
+  and math authoring into `@q9labsai/chalk-whiteboard/react`, leaving the React
+  SDK to provide meeting composition and Chalk-specific presentation.
 - Replaced private historical scratchpad entries with curated public summaries.
 - Replaced internal agent/runbook guidance with public contributor guidance.
 - Renamed public package scopes from `@q9labs/*` to `@q9labsai/*` for npm.

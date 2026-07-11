@@ -14,6 +14,18 @@ const CURSOR_STALE_MS = 10_000;
 const asArray = (value: unknown) => (Array.isArray(value) ? value : []);
 const toReconcileRemoteElements = (elements: readonly OrderedExcalidrawElement[]): Parameters<typeof reconcileElements>[1] => elements as unknown as Parameters<typeof reconcileElements>[1];
 
+export interface ExcalidrawCollabEngineOptions {
+  excalidrawAPI: ExcalidrawImperativeAPI;
+  canDraw: boolean;
+  sendUpdateV2: (payload: { schemaVersion: 2; sceneId: string; syncAll: boolean; elements: readonly OrderedExcalidrawElement[]; seq: number }) => void;
+  sendCursor: (payload: { x: number; y: number }) => void;
+  requestSync: () => void;
+  sendClear?: () => void;
+  presignUpload: (fileId: string, mimeType: string) => Promise<{ uploadUrl: string }>;
+  presignDownload: (fileId: string) => Promise<{ downloadUrl: string }>;
+  onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
+}
+
 export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;
   private canDraw = true;
@@ -31,19 +43,7 @@ export class ExcalidrawCollabEngine {
   private readonly presence: WhiteboardPresence;
   private readonly unsubPointerUp: (() => void) | null;
 
-  constructor(
-    private readonly opts: {
-      excalidrawAPI: ExcalidrawImperativeAPI;
-      canDraw: boolean;
-      sendUpdateV2: (payload: { schemaVersion: 2; sceneId: string; syncAll: boolean; elements: readonly OrderedExcalidrawElement[]; seq: number }) => void;
-      sendCursor: (payload: { x: number; y: number }) => void;
-      requestSync: () => void;
-      sendClear?: () => void;
-      presignUpload: (fileId: string, mimeType: string) => Promise<{ uploadUrl: string }>;
-      presignDownload: (fileId: string) => Promise<{ downloadUrl: string }>;
-      onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
-    },
-  ) {
+  constructor(private readonly opts: ExcalidrawCollabEngineOptions) {
     this.canDraw = opts.canDraw;
 
     this.filesSync = new WhiteboardFilesSync({

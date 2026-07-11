@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { appendOrReplaceMathElement, createMathImageAsset, getInsertionPoint } from "./mathElements";
+import { appendOrReplaceMathElement, createMathImageAsset, getInsertionPoint } from "./math-elements";
 
 describe("mathElements", () => {
   it("calculates centered insertion points from the Excalidraw viewport", () => {

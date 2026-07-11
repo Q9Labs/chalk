@@ -70,10 +70,10 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && NODE_ENV=production tsup ./src/index.ts ./src/components/atomic/index.ts ./src/components/composite/index.ts ./src/components/full/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @excalidraw/excalidraw --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external mathjax --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge && pnpm run build:fix-use-client && pnpm run build:types",
+    "build": "rm -rf ./dist && NODE_ENV=production tsup ./src/index.ts ./src/components/atomic/index.ts ./src/components/composite/index.ts ./src/components/full/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge && pnpm run build:fix-use-client && pnpm run build:types",
     "build:fix-use-client": "node -e \"const fs=require('fs');const files=['./dist/index.js','./dist/components/atomic/index.js','./dist/components/composite/index.js','./dist/components/full/index.js','./dist/components/ui/index.js','./dist/utils/index.js'];for(const f of files){if(!fs.existsSync(f))continue;let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);}\"",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
-    "dev": "tsup ./src/index.ts ./src/components/atomic/index.ts ./src/components/composite/index.ts ./src/components/full/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @excalidraw/excalidraw --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external mathjax --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge --watch",
+    "dev": "tsup ./src/index.ts ./src/components/atomic/index.ts ./src/components/composite/index.ts ./src/components/full/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge --watch",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
@@ -81,7 +81,6 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0-alpha.11",
-    "@excalidraw/excalidraw": "^0.18.1",
     "@hugeicons/core-free-icons": "^3.1.0",
     "@hugeicons/react": "^1.0.16",
     "@q9labsai/chalk-ui": "workspace:^",

@@ -63,6 +63,8 @@ export function createMathImageAsset(args: { svg: string; width: number; height:
   };
 }
 
+// Excalidraw custom data is untrusted and requires explicit runtime narrowing.
+// fallow-ignore-next-line complexity
 export function getChalkMathData(element: ExcalidrawElement | null | undefined): ChalkMathCustomData | null {
   const data = element?.customData?.[CHALK_MATH_CUSTOM_DATA_KEY] as Partial<ChalkMathCustomData> | undefined;
   if (data?.kind !== "math" || typeof data.latex !== "string") return null;
@@ -86,10 +88,16 @@ export function getSelectedMathElement(api: ExcalidrawImperativeAPI): Excalidraw
   return selected ? (selected as ExcalidrawImageElement) : null;
 }
 
+// Excalidraw's zoom shape varies across serialized and live app states.
+// fallow-ignore-next-line complexity
+const getZoom = (zoom: unknown): number => {
+  const value = typeof zoom === "object" && zoom !== null && "value" in zoom ? Number(zoom.value) : 1;
+  return Number.isFinite(value) && value > 0 ? value : 1;
+};
+
 export function getInsertionPoint(api: ExcalidrawImperativeAPI, width: number, height: number): { x: number; y: number } {
   const appState = api.getAppState();
-  const zoomValue = typeof appState.zoom === "object" && appState.zoom !== null && "value" in appState.zoom ? Number(appState.zoom.value) : 1;
-  const zoom = Number.isFinite(zoomValue) && zoomValue > 0 ? zoomValue : 1;
+  const zoom = getZoom(appState.zoom);
   const viewportWidth = typeof window === "undefined" ? 1200 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
 
@@ -97,6 +105,41 @@ export function getInsertionPoint(api: ExcalidrawImperativeAPI, width: number, h
     x: Math.round((-appState.scrollX + viewportWidth / 2) / zoom - width / 2),
     y: Math.round((-appState.scrollY + viewportHeight / 2) / zoom - height / 2),
   };
+}
+
+type MathElementMutationArgs = {
+  api: ExcalidrawImperativeAPI;
+  excalidraw: Pick<typeof import("@excalidraw/excalidraw"), "CaptureUpdateAction" | "convertToExcalidrawElements" | "newElementWith">;
+  asset: MathImageAsset;
+  status: ExcalidrawImageElement["status"];
+};
+
+function replaceMathElement(args: MathElementMutationArgs, existingElement: ExcalidrawImageElement): OrderedExcalidrawElement {
+  const { api, asset, excalidraw, status } = args;
+  const nextElement = excalidraw.newElementWith(existingElement, {
+    fileId: asset.file.id,
+    width: asset.width,
+    height: asset.height,
+    status,
+    customData: { ...(existingElement.customData ?? {}), ...asset.customData },
+  }) as OrderedExcalidrawElement;
+  const elements = api.getSceneElementsIncludingDeleted().map((element) => (element.id === existingElement.id ? nextElement : element));
+  api.updateScene({ elements, captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY });
+  return nextElement;
+}
+
+function appendMathElement(args: MathElementMutationArgs): OrderedExcalidrawElement {
+  const { api, asset, excalidraw, status } = args;
+  const point = getInsertionPoint(api, asset.width, asset.height);
+  const [element] = excalidraw.convertToExcalidrawElements([{ type: "image", x: point.x, y: point.y, width: asset.width, height: asset.height, fileId: asset.file.id, status, customData: asset.customData }], { regenerateIds: true });
+  if (!element) throw new Error("Failed to create math element");
+
+  api.updateScene({
+    elements: [...api.getSceneElementsIncludingDeleted(), element],
+    appState: { selectedElementIds: { [element.id]: true } },
+    captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY,
+  });
+  return element;
 }
 
 export function appendOrReplaceMathElement(args: {
@@ -108,55 +151,7 @@ export function appendOrReplaceMathElement(args: {
 }): OrderedExcalidrawElement {
   const { api, asset, excalidraw, existingElement } = args;
   const status = args.status ?? "pending";
-
   api.addFiles([asset.file]);
-
-  if (existingElement) {
-    const nextElement = excalidraw.newElementWith(existingElement, {
-      fileId: asset.file.id,
-      width: asset.width,
-      height: asset.height,
-      status,
-      customData: {
-        ...(existingElement.customData ?? {}),
-        ...asset.customData,
-      },
-    }) as OrderedExcalidrawElement;
-
-    const nextElements = api.getSceneElementsIncludingDeleted().map((element) => (element.id === existingElement.id ? nextElement : element));
-    api.updateScene({
-      elements: nextElements,
-      captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY,
-    });
-    return nextElement;
-  }
-
-  const point = getInsertionPoint(api, asset.width, asset.height);
-  const [element] = excalidraw.convertToExcalidrawElements(
-    [
-      {
-        type: "image",
-        x: point.x,
-        y: point.y,
-        width: asset.width,
-        height: asset.height,
-        fileId: asset.file.id,
-        status,
-        customData: asset.customData,
-      },
-    ],
-    { regenerateIds: true },
-  );
-
-  if (!element) throw new Error("Failed to create math element");
-
-  api.updateScene({
-    elements: [...api.getSceneElementsIncludingDeleted(), element],
-    appState: {
-      selectedElementIds: { [element.id]: true },
-    },
-    captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY,
-  });
-
-  return element;
+  const mutationArgs = { api, asset, excalidraw, status };
+  return existingElement ? replaceMathElement(mutationArgs, existingElement) : appendMathElement(mutationArgs);
 }

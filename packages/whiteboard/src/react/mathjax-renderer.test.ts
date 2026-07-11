@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getRenderedSvgSize } from "./mathjaxRenderer";
+import { getRenderedSvgSize } from "./mathjax-renderer";
 
 describe("mathjaxRenderer", () => {
   it("derives dimensions from SVG width and height attributes", () => {
