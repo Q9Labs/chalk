@@ -1,0 +1,9 @@
+# Sync contract codegen worker session log — 2026-07-11
+
+- 2026-07-11 10:33 PKT — Read the workspace and sync-server invariants. Scoped the v1 schema to current `ChalkSync.Protocol`, `Room`, `RoomServer`, and socket behavior. The shared worktree already contains unrelated migration and HTTP-codegen changes, which remain untouched.
+- 2026-07-11 10:33 PKT — Added the native JSON sync-v1 source contract and its focused loader/validator. The contract records frame directions, protocol version, phases, snapshot/replay continuity, idempotency, close behavior, and error-frame connection behavior.
+- 2026-07-11 10:33 PKT — Added focused TypeScript and Elixir emitters. They generate Effect v4 discriminated frame codecs and a server metadata/validation module without touching the existing HTTP codegen path.
+- 2026-07-11 10:33 PKT — Generated the initial client codecs and server contract module. `ChalkSync.Protocol` now delegates inbound frame validation, command allow-listing, and protocol-version metadata to the generated server contract while retaining JSON adaptation and room-output encoding.
+- 2026-07-11 10:33 PKT — Added byte-for-byte generation drift coverage plus runnable Effect codec tests. Added generated-module tests for the server lifecycle metadata, decode rules, output families, and event revision continuity.
+- 2026-07-11 10:48 PKT — Client lint caught unformatted generated TypeScript. The emitter now formats only its emitted output with the workspace formatter so drift generation and the client lint gate share one canonical result.
+- 2026-07-11 10:56 PKT — Verification passed: the sync server gate passed (format, warnings-as-errors compile, Credo, and 38 tests); focused sync codegen passed (5 tests); focused generated-contract and Protocol runtime tests passed (11 tests).

@@ -27,10 +27,10 @@ endpoint fill-in.
 ## API Contracts And SDK Codegen
 
 - Public `/v1` API routes should use the endpoint contract pattern so
-  `cmd/codegen` can include them in `openapi/openapi.json` and downstream SDK
+  `cmd/codegen` can include them in `../../contract/generated/openapi.json` and downstream SDK
   generation.
 - After changing route contracts, run `pnpm run generate:sdk` from the repo root
-  and keep `apps/api/openapi/openapi.json` plus `packages/sdk-core/src/generated/*`
+  and keep `contract/generated/openapi.json` plus `sdks/typescript/client/src/generated/*`
   in sync. This includes OpenAPI types, Effect schemas, and the generated
   Effect `HttpApi` definition. The root gate runs
   `pnpm run check:sdk-generated` as a non-mutating drift check.

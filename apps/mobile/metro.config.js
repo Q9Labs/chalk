@@ -4,9 +4,9 @@ const { getDefaultConfig } = require("expo/metro-config");
 const config = getDefaultConfig(__dirname);
 const appNodeModules = path.resolve(__dirname, "node_modules");
 const workspaceNodeModules = path.resolve(__dirname, "../../node_modules");
-const sdkReactNativeRoot = path.resolve(__dirname, "../../packages/sdk-react-native");
+const sdkReactNativeRoot = path.resolve(__dirname, "../../sdks/typescript/react-native");
 const facehashRoot = path.resolve(__dirname, "../../packages/facehash");
-const sdkNodeModules = path.resolve(__dirname, "../../packages/sdk-react-native/node_modules");
+const sdkNodeModules = path.resolve(__dirname, "../../sdks/typescript/react-native/node_modules");
 const escapePathForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Keep Metro focused on the app and the workspace packages it imports.

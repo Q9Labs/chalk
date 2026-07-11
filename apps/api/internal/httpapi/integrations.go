@@ -68,7 +68,7 @@ type integrationServiceFamilyResponse struct {
 }
 
 type integrationServiceResponse struct {
-	ID             string                      `json:"id"`
+	ID             string                      `json:"id" schema:"IntegrationServiceId"`
 	Provider       string                      `json:"provider"`
 	Family         string                      `json:"family"`
 	DisplayName    string                      `json:"display_name"`
@@ -78,7 +78,7 @@ type integrationServiceResponse struct {
 }
 
 type integrationActionResponse struct {
-	ID             string   `json:"id"`
+	ID             string   `json:"id" schema:"IntegrationActionId"`
 	DisplayName    string   `json:"display_name"`
 	CapabilityTags []string `json:"capability_tags"`
 	RiskTags       []string `json:"risk_tags"`
@@ -99,13 +99,13 @@ type startIntegrationConnectionResponse struct {
 
 type refreshIntegrationConnectionResponse struct {
 	Connection integrationConnectionResponse `json:"connection"`
-	ConnectURL string                        `json:"connect_url,omitempty"`
+	ConnectURL *string                       `json:"connect_url,omitempty"`
 }
 
 type executeIntegrationActionRequest struct {
-	Action    string         `json:"action"`
-	Arguments map[string]any `json:"arguments"`
-	Text      *string        `json:"text"`
+	Action    string          `json:"action"`
+	Arguments *map[string]any `json:"arguments"`
+	Text      *string         `json:"text"`
 }
 
 type executeIntegrationActionResponse struct {
@@ -138,82 +138,126 @@ type integrationConnectionListResponse struct {
 	Pagination  paginationResponse              `json:"pagination"`
 }
 
+type listIntegrationServicesRequest struct {
+	TenantID utilities.ID
+}
+
+type startIntegrationConnectionEndpointRequest struct {
+	TenantID    utilities.ID
+	httpRequest *http.Request
+}
+
+type listIntegrationConnectionsRequest struct {
+	TenantID    utilities.ID
+	httpRequest *http.Request
+}
+
+type integrationConnectionRequest struct {
+	TenantID     utilities.ID
+	ConnectionID utilities.ID
+}
+
+type executeIntegrationActionEndpointRequest struct {
+	TenantID     utilities.ID
+	ConnectionID utilities.ID
+	httpRequest  *http.Request
+}
+
+type disableIntegrationConnectionRequest struct {
+	TenantID     utilities.ID
+	ConnectionID utilities.ID
+	httpRequest  *http.Request
+}
+
 func mountIntegrationRoutes(r chi.Router, service IntegrationService, authorizer TenantAuthorizer, limits RateLimitOptions, options integrationRouteOptions) {
-	r.Get("/tenants/{tenant_id}/integrations/services", handleListIntegrationServices(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/integrations/connections", handleStartIntegrationConnection(service, authorizer, options))
-	r.Get("/tenants/{tenant_id}/integrations/connections", handleListIntegrationConnections(service, authorizer))
-	r.Get("/tenants/{tenant_id}/integrations/connections/{connection_id}", handleGetIntegrationConnection(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/integrations/connections/{connection_id}/refresh", handleRefreshIntegrationConnection(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Post("/tenants/{tenant_id}/integrations/connections/{connection_id}/actions", handleExecuteIntegrationAction(service, authorizer))
-	r.With(rateLimit(limits, authenticatedWriteRateLimit)).Delete("/tenants/{tenant_id}/integrations/connections/{connection_id}", handleDisableIntegrationConnection(service, authorizer))
-}
-
-func handleListIntegrationServices(service IntegrationService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, ok := parseTenantID(w, r)
-		if !ok {
-			return
-		}
-		if authorizeTenantRequest(w, r, authorizer, tenantID, readIntegrationPermission) {
-			return
-		}
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		services, err := service.ListServices(r.Context())
-		if writeIntegrationServiceError(w, err) {
-			return
-		}
-
-		writeJSON(w, http.StatusOK, newIntegrationServicesResponse(services))
+	for _, endpoint := range integrationEndpoints(service, authorizer, options) {
+		endpoint.Mount(r, limits)
 	}
 }
 
-func handleStartIntegrationConnection(service IntegrationService, authorizer TenantAuthorizer, options integrationRouteOptions) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, ok := parseTenantID(w, r)
-		if !ok {
-			return
-		}
-		if authorizeTenantRequest(w, r, authorizer, tenantID, writeIntegrationPermission) {
-			return
+func integrationEndpoints(service IntegrationService, authorizer TenantAuthorizer, options integrationRouteOptions) []RouteEndpoint {
+	return []RouteEndpoint{
+		listIntegrationServicesEndpoint(service, authorizer),
+		startIntegrationConnectionEndpoint(service, authorizer, options),
+		listIntegrationConnectionsEndpoint(service, authorizer),
+		getIntegrationConnectionEndpoint(service, authorizer),
+		refreshIntegrationConnectionEndpoint(service, authorizer),
+		executeIntegrationActionEndpoint(service, authorizer),
+		disableIntegrationConnectionEndpoint(service, authorizer),
+	}
+}
+
+func listIntegrationServicesEndpoint(service IntegrationService, authorizer TenantAuthorizer) Endpoint[listIntegrationServicesRequest, integrationServicesResponse] {
+	return Get("/v1/tenants/{tenant_id}/integrations/services", "/tenants/{tenant_id}/integrations/services", "listIntegrationServices", decodeListIntegrationServicesRequest, func(ctx context.Context, request listIntegrationServicesRequest) (integrationServicesResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readIntegrationPermission); err != nil {
+			return integrationServicesResponse{}, err
 		}
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return integrationServicesResponse{}, apiErrorServiceUnavailable
 		}
 
-		principal, _ := authentication.PrincipalFromContext(r.Context())
+		services, err := service.ListServices(ctx)
+		if err != nil {
+			return integrationServicesResponse{}, err
+		}
+		return newIntegrationServicesResponse(services), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(tenantIDParameter()).
+		Responds(http.StatusOK, "IntegrationServices", integrationServicesResponse{}).
+		Errors(integrationErrors()...).
+		MapErrors(integrationEndpointAPIError)
+}
+
+func startIntegrationConnectionEndpoint(service IntegrationService, authorizer TenantAuthorizer, options integrationRouteOptions) Endpoint[startIntegrationConnectionEndpointRequest, startIntegrationConnectionResponse] {
+	return Post("/v1/tenants/{tenant_id}/integrations/connections", "/tenants/{tenant_id}/integrations/connections", "startIntegrationConnection", decodeStartIntegrationConnectionRequest, func(ctx context.Context, request startIntegrationConnectionEndpointRequest) (startIntegrationConnectionResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeIntegrationPermission); err != nil {
+			return startIntegrationConnectionResponse{}, err
+		}
+		if service == nil {
+			return startIntegrationConnectionResponse{}, apiErrorServiceUnavailable
+		}
+
+		principal, _ := authentication.PrincipalFromContext(ctx)
 		if principal.Kind != authentication.PrincipalUser || principal.UserID.IsZero() {
-			writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-			return
+			return startIntegrationConnectionResponse{}, apiErrorForbidden
 		}
-		var request startIntegrationConnectionRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
+		body, err := decodeIntegrationJSONBody[startIntegrationConnectionRequest](request.httpRequest)
+		if err != nil {
+			return startIntegrationConnectionResponse{}, err
 		}
-		if !validIntegrationCallbackURL(request.CallbackURL, options.CallbackAllowedOrigins) {
-			writeError(w, http.StatusBadRequest, "invalid_callback_url", "Invalid callback URL")
-			return
+		if !validIntegrationCallbackURL(body.CallbackURL, options.CallbackAllowedOrigins) {
+			return startIntegrationConnectionResponse{}, apiErrorInvalidIntegrationCallbackURL
 		}
 
-		result, err := service.StartConnection(r.Context(), integrations.StartConnectionInput{
-			TenantID:     tenantID,
+		result, err := service.StartConnection(ctx, integrations.StartConnectionInput{
+			TenantID:     request.TenantID,
 			UserID:       principal.UserID,
-			Provider:     integrations.ProviderName(strings.TrimSpace(request.Provider)),
-			Service:      integrations.ServiceID(strings.TrimSpace(request.Service)),
-			CallbackURL:  request.CallbackURL,
-			AccountAlias: request.AccountAlias,
+			Provider:     integrations.ProviderName(strings.TrimSpace(body.Provider)),
+			Service:      integrations.ServiceID(strings.TrimSpace(body.Service)),
+			CallbackURL:  body.CallbackURL,
+			AccountAlias: body.AccountAlias,
 		})
-		if writeIntegrationServiceError(w, err) {
-			return
+		if err != nil {
+			return startIntegrationConnectionResponse{}, err
 		}
-
-		writeJSON(w, http.StatusCreated, newStartIntegrationConnectionResponse(result))
-	}
+		return newStartIntegrationConnectionResponse(result), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter()).
+		RequestBody("StartIntegrationConnectionRequest", startIntegrationConnectionRequest{}).
+		Responds(http.StatusCreated, "IntegrationConnectionStart", startIntegrationConnectionResponse{}).
+		Errors(integrationWriteErrors(
+			apiErrorInvalidRequest,
+			apiErrorInvalidIntegrationCallbackURL,
+			apiErrorInvalidIntegrationProvider,
+			apiErrorInvalidIntegrationService,
+			apiErrorIntegrationProviderAuthUnconfigured,
+			apiErrorIntegrationProviderUnavailable,
+			apiErrorIntegrationConnectionAlreadyExists,
+		)...).
+		MapErrors(integrationEndpointAPIError)
 }
 
 func validIntegrationCallbackURL(callbackURL *string, allowedOrigins []string) bool {
@@ -254,190 +298,356 @@ func localCallbackHost(host string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
-func handleListIntegrationConnections(service IntegrationService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, ok := parseTenantID(w, r)
-		if !ok {
-			return
-		}
-		if authorizeTenantRequest(w, r, authorizer, tenantID, readIntegrationPermission) {
-			return
+func listIntegrationConnectionsEndpoint(service IntegrationService, authorizer TenantAuthorizer) Endpoint[listIntegrationConnectionsRequest, integrationConnectionListResponse] {
+	return Get("/v1/tenants/{tenant_id}/integrations/connections", "/tenants/{tenant_id}/integrations/connections", "listIntegrationConnections", decodeListIntegrationConnectionsRequest, func(ctx context.Context, request listIntegrationConnectionsRequest) (integrationConnectionListResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readIntegrationPermission); err != nil {
+			return integrationConnectionListResponse{}, err
 		}
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return integrationConnectionListResponse{}, apiErrorServiceUnavailable
 		}
 
-		page, err := parsePageRequest(r)
-		if writePaginationError(w, err) {
-			return
+		page, err := parsePageRequest(request.httpRequest)
+		if err != nil {
+			return integrationConnectionListResponse{}, paginationAPIError(err)
 		}
-
-		principal, _ := authentication.PrincipalFromContext(r.Context())
+		principal, _ := authentication.PrincipalFromContext(ctx)
 		input := integrations.ListConnectionsInput{
-			TenantID: tenantID,
-			Provider: integrations.ProviderName(strings.TrimSpace(r.URL.Query().Get("provider"))),
-			Service:  integrations.ServiceID(strings.TrimSpace(r.URL.Query().Get("service"))),
-			Status:   integrations.ConnectionStatus(strings.TrimSpace(r.URL.Query().Get("status"))),
+			TenantID: request.TenantID,
+			Provider: integrations.ProviderName(strings.TrimSpace(request.httpRequest.URL.Query().Get("provider"))),
+			Service:  integrations.ServiceID(strings.TrimSpace(request.httpRequest.URL.Query().Get("service"))),
+			Status:   integrations.ConnectionStatus(strings.TrimSpace(request.httpRequest.URL.Query().Get("status"))),
 			Page:     page,
 		}
-		ownerScopeUserID, err := integrationOwnerScopeUserID(r.Context(), authorizer, principal, tenantID, readIntegrationAdminPermission)
+		ownerScopeUserID, err := integrationOwnerScopeUserID(ctx, authorizer, principal, request.TenantID, readIntegrationAdminPermission)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return integrationConnectionListResponse{}, apiErrorInternal
 		}
 		input.UserID = ownerScopeUserID
 
-		list, err := service.ListConnections(r.Context(), input)
-		if writeIntegrationServiceError(w, err) {
-			return
+		list, err := service.ListConnections(ctx, input)
+		if err != nil {
+			return integrationConnectionListResponse{}, err
 		}
-
 		response, err := newIntegrationConnectionListResponse(list, principal, ownerScopeUserID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return integrationConnectionListResponse{}, apiErrorInternal
 		}
-		writeJSON(w, http.StatusOK, response)
-	}
+		return response, nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(integrationConnectionListParameters()...).
+		Responds(http.StatusOK, "IntegrationConnectionList", integrationConnectionListResponse{}).
+		Errors(integrationErrors(
+			apiErrorInvalidPageSize,
+			apiErrorInvalidCursor,
+			apiErrorInvalidIntegrationProvider,
+			apiErrorInvalidIntegrationService,
+		)...).
+		MapErrors(integrationEndpointAPIError)
 }
 
-func handleGetIntegrationConnection(service IntegrationService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, connectionID, ok := parseTenantAndConnectionID(w, r)
-		if !ok {
-			return
-		}
-		if authorizeTenantRequest(w, r, authorizer, tenantID, readIntegrationPermission) {
-			return
+func getIntegrationConnectionEndpoint(service IntegrationService, authorizer TenantAuthorizer) Endpoint[integrationConnectionRequest, integrationConnectionResponse] {
+	return Get("/v1/tenants/{tenant_id}/integrations/connections/{connection_id}", "/tenants/{tenant_id}/integrations/connections/{connection_id}", "getIntegrationConnection", decodeIntegrationConnectionRequest, func(ctx context.Context, request integrationConnectionRequest) (integrationConnectionResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, readIntegrationPermission); err != nil {
+			return integrationConnectionResponse{}, err
 		}
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return integrationConnectionResponse{}, apiErrorServiceUnavailable
 		}
 
-		principal, _ := authentication.PrincipalFromContext(r.Context())
-		ownerScopeUserID, err := integrationOwnerScopeUserID(r.Context(), authorizer, principal, tenantID, readIntegrationAdminPermission)
+		principal, _ := authentication.PrincipalFromContext(ctx)
+		ownerScopeUserID, err := integrationOwnerScopeUserID(ctx, authorizer, principal, request.TenantID, readIntegrationAdminPermission)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return integrationConnectionResponse{}, apiErrorInternal
 		}
-		connection, err := service.GetConnection(r.Context(), tenantID, ownerScopeUserID, connectionID)
-		if writeIntegrationServiceError(w, err) {
-			return
-		}
-		writeJSON(w, http.StatusOK, newIntegrationConnectionResponseForPrincipal(connection, principal, ownerScopeUserID))
-	}
-}
-
-func handleRefreshIntegrationConnection(service IntegrationService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, connectionID, ok := parseTenantAndConnectionID(w, r)
-		if !ok {
-			return
-		}
-		if authorizeTenantRequest(w, r, authorizer, tenantID, writeIntegrationPermission) {
-			return
-		}
-		if service == nil {
-			writeServiceUnavailable(w)
-			return
-		}
-
-		principal, _ := authentication.PrincipalFromContext(r.Context())
-		ownerScopeUserID, err := integrationOwnerScopeUserID(r.Context(), authorizer, principal, tenantID, writeIntegrationAdminPermission)
+		connection, err := service.GetConnection(ctx, request.TenantID, ownerScopeUserID, request.ConnectionID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return integrationConnectionResponse{}, err
 		}
-		result, err := service.RefreshConnection(r.Context(), tenantID, ownerScopeUserID, integrationAuditActorUserID(principal), integrationAuditActorType(principal), connectionID)
-		if writeIntegrationServiceError(w, err) {
-			return
-		}
-		writeJSON(w, http.StatusOK, newRefreshIntegrationConnectionResponse(result, principal, ownerScopeUserID))
-	}
+		return newIntegrationConnectionResponseForPrincipal(connection, principal, ownerScopeUserID), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		Parameters(tenantIDParameter(), integrationConnectionIDParameter()).
+		Responds(http.StatusOK, "IntegrationConnection", integrationConnectionResponse{}).
+		Errors(integrationErrors(
+			apiErrorInvalidIntegrationConnectionID,
+			apiErrorIntegrationConnectionNotFound,
+		)...).
+		MapErrors(integrationEndpointAPIError)
 }
 
-func handleExecuteIntegrationAction(service IntegrationService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, connectionID, ok := parseTenantAndConnectionID(w, r)
-		if !ok {
-			return
-		}
-		if authorizeTenantRequest(w, r, authorizer, tenantID, writeIntegrationPermission) {
-			return
+func refreshIntegrationConnectionEndpoint(service IntegrationService, authorizer TenantAuthorizer) Endpoint[integrationConnectionRequest, refreshIntegrationConnectionResponse] {
+	return Post("/v1/tenants/{tenant_id}/integrations/connections/{connection_id}/refresh", "/tenants/{tenant_id}/integrations/connections/{connection_id}/refresh", "refreshIntegrationConnection", decodeIntegrationConnectionRequest, func(ctx context.Context, request integrationConnectionRequest) (refreshIntegrationConnectionResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeIntegrationPermission); err != nil {
+			return refreshIntegrationConnectionResponse{}, err
 		}
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return refreshIntegrationConnectionResponse{}, apiErrorServiceUnavailable
 		}
 
-		var request executeIntegrationActionRequest
-		if err := decodeRequest(r, &request); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-			return
+		principal, _ := authentication.PrincipalFromContext(ctx)
+		ownerScopeUserID, err := integrationOwnerScopeUserID(ctx, authorizer, principal, request.TenantID, writeIntegrationAdminPermission)
+		if err != nil {
+			return refreshIntegrationConnectionResponse{}, apiErrorInternal
 		}
-		if strings.TrimSpace(request.Action) == "" {
-			writeError(w, http.StatusBadRequest, "invalid_integration_action", "Invalid integration action")
-			return
+		result, err := service.RefreshConnection(ctx, request.TenantID, ownerScopeUserID, integrationAuditActorUserID(principal), integrationAuditActorType(principal), request.ConnectionID)
+		if err != nil {
+			return refreshIntegrationConnectionResponse{}, err
 		}
-		if request.Text != nil && request.Arguments != nil {
-			writeError(w, http.StatusBadRequest, "invalid_integration_action_input", "Use either action arguments or text")
-			return
+		return newRefreshIntegrationConnectionResponse(result, principal, ownerScopeUserID), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), integrationConnectionIDParameter()).
+		Responds(http.StatusOK, "IntegrationConnectionRefresh", refreshIntegrationConnectionResponse{}).
+		Errors(integrationWriteErrors(
+			apiErrorInvalidIntegrationConnectionID,
+			apiErrorIntegrationConnectionNotFound,
+			apiErrorIntegrationConnectionNotActive,
+			apiErrorIntegrationProviderUnauthorized,
+			apiErrorIntegrationProviderRateLimited,
+			apiErrorIntegrationProviderAuthUnconfigured,
+			apiErrorIntegrationProviderUnavailable,
+		)...).
+		MapErrors(integrationEndpointAPIError)
+}
+
+func executeIntegrationActionEndpoint(service IntegrationService, authorizer TenantAuthorizer) Endpoint[executeIntegrationActionEndpointRequest, executeIntegrationActionResponse] {
+	return Post("/v1/tenants/{tenant_id}/integrations/connections/{connection_id}/actions", "/tenants/{tenant_id}/integrations/connections/{connection_id}/actions", "executeIntegrationAction", decodeExecuteIntegrationActionRequest, func(ctx context.Context, request executeIntegrationActionEndpointRequest) (executeIntegrationActionResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeIntegrationPermission); err != nil {
+			return executeIntegrationActionResponse{}, err
 		}
-		if request.Text != nil && strings.TrimSpace(*request.Text) == "" {
-			writeError(w, http.StatusBadRequest, "invalid_integration_action_text", "Invalid integration action text")
-			return
+		if service == nil {
+			return executeIntegrationActionResponse{}, apiErrorServiceUnavailable
 		}
 
-		principal, _ := authentication.PrincipalFromContext(r.Context())
+		body, err := decodeIntegrationJSONBody[executeIntegrationActionRequest](request.httpRequest)
+		if err != nil {
+			return executeIntegrationActionResponse{}, err
+		}
+		if strings.TrimSpace(body.Action) == "" {
+			return executeIntegrationActionResponse{}, apiErrorInvalidIntegrationAction
+		}
+		if body.Text != nil && body.Arguments != nil {
+			return executeIntegrationActionResponse{}, apiErrorInvalidIntegrationActionInput
+		}
+		if body.Text != nil && strings.TrimSpace(*body.Text) == "" {
+			return executeIntegrationActionResponse{}, apiErrorInvalidIntegrationActionText
+		}
+
+		principal, _ := authentication.PrincipalFromContext(ctx)
 		if principal.Kind != authentication.PrincipalUser || principal.UserID.IsZero() {
-			writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-			return
+			return executeIntegrationActionResponse{}, apiErrorForbidden
 		}
-		result, err := service.ExecuteAction(r.Context(), integrations.ExecuteActionInput{
-			TenantID:         tenantID,
+		result, err := service.ExecuteAction(ctx, integrations.ExecuteActionInput{
+			TenantID:         request.TenantID,
 			OwnerScopeUserID: principal.UserID,
 			ActorUserID:      integrationAuditActorUserID(principal),
 			ActorType:        integrationAuditActorType(principal),
-			ConnectionID:     connectionID,
-			Action:           integrations.ActionID(strings.TrimSpace(request.Action)),
-			Arguments:        request.Arguments,
-			Text:             request.Text,
+			ConnectionID:     request.ConnectionID,
+			Action:           integrations.ActionID(strings.TrimSpace(body.Action)),
+			Arguments:        optionalIntegrationArguments(body.Arguments),
+			Text:             body.Text,
 		})
-		if writeIntegrationServiceError(w, err) {
-			return
+		if err != nil {
+			return executeIntegrationActionResponse{}, err
 		}
-		writeJSON(w, http.StatusOK, newExecuteIntegrationActionResponse(result, principal, principal.UserID))
-	}
+		return newExecuteIntegrationActionResponse(result, principal, principal.UserID), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), integrationConnectionIDParameter()).
+		RequestBody("ExecuteIntegrationActionRequest", executeIntegrationActionRequest{}).
+		Responds(http.StatusOK, "IntegrationActionExecution", executeIntegrationActionResponse{}).
+		Errors(integrationWriteErrors(
+			apiErrorInvalidRequest,
+			apiErrorInvalidIntegrationConnectionID,
+			apiErrorInvalidIntegrationAction,
+			apiErrorInvalidIntegrationActionInput,
+			apiErrorInvalidIntegrationActionText,
+			apiErrorIntegrationConnectionNotFound,
+			apiErrorIntegrationConnectionNotActive,
+			apiErrorIntegrationActionNotAllowed,
+			apiErrorIntegrationProviderUnauthorized,
+			apiErrorIntegrationProviderRateLimited,
+			apiErrorIntegrationProviderAuthUnconfigured,
+			apiErrorIntegrationProviderUnavailable,
+		)...).
+		MapErrors(integrationEndpointAPIError)
 }
 
-func handleDisableIntegrationConnection(service IntegrationService, authorizer TenantAuthorizer) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID, connectionID, ok := parseTenantAndConnectionID(w, r)
-		if !ok {
-			return
-		}
-		if authorizeTenantRequest(w, r, authorizer, tenantID, deleteIntegrationPermission) {
-			return
+func disableIntegrationConnectionEndpoint(service IntegrationService, authorizer TenantAuthorizer) Endpoint[disableIntegrationConnectionRequest, integrationConnectionResponse] {
+	return Delete("/v1/tenants/{tenant_id}/integrations/connections/{connection_id}", "/tenants/{tenant_id}/integrations/connections/{connection_id}", "disableIntegrationConnection", decodeDisableIntegrationConnectionRequest, func(ctx context.Context, request disableIntegrationConnectionRequest) (integrationConnectionResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, deleteIntegrationPermission); err != nil {
+			return integrationConnectionResponse{}, err
 		}
 		if service == nil {
-			writeServiceUnavailable(w)
-			return
+			return integrationConnectionResponse{}, apiErrorServiceUnavailable
 		}
 
-		principal, _ := authentication.PrincipalFromContext(r.Context())
-		ownerScopeUserID, err := integrationOwnerScopeUserID(r.Context(), authorizer, principal, tenantID, deleteIntegrationAdminPermission)
+		principal, _ := authentication.PrincipalFromContext(ctx)
+		ownerScopeUserID, err := integrationOwnerScopeUserID(ctx, authorizer, principal, request.TenantID, deleteIntegrationAdminPermission)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-			return
+			return integrationConnectionResponse{}, apiErrorInternal
 		}
-		revoke := strings.EqualFold(r.URL.Query().Get("revoke"), "true")
-		connection, err := service.DisableConnection(r.Context(), tenantID, ownerScopeUserID, integrationAuditActorUserID(principal), integrationAuditActorType(principal), connectionID, revoke)
-		if writeIntegrationServiceError(w, err) {
-			return
+		revoke := strings.EqualFold(request.httpRequest.URL.Query().Get("revoke"), "true")
+		connection, err := service.DisableConnection(ctx, request.TenantID, ownerScopeUserID, integrationAuditActorUserID(principal), integrationAuditActorType(principal), request.ConnectionID, revoke)
+		if err != nil {
+			return integrationConnectionResponse{}, err
 		}
-		writeJSON(w, http.StatusOK, newIntegrationConnectionResponseForPrincipal(connection, principal, ownerScopeUserID))
+		return newIntegrationConnectionResponseForPrincipal(connection, principal, ownerScopeUserID), nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), integrationConnectionIDParameter(), integrationRevokeParameter()).
+		Responds(http.StatusOK, "IntegrationConnection", integrationConnectionResponse{}).
+		Errors(integrationWriteErrors(
+			apiErrorInvalidIntegrationConnectionID,
+			apiErrorIntegrationConnectionNotFound,
+			apiErrorIntegrationConnectionNotActive,
+			apiErrorIntegrationProviderUnauthorized,
+			apiErrorIntegrationProviderRateLimited,
+			apiErrorIntegrationProviderAuthUnconfigured,
+			apiErrorIntegrationProviderUnavailable,
+		)...).
+		MapErrors(integrationEndpointAPIError)
+}
+
+func decodeListIntegrationServicesRequest(r *http.Request) (listIntegrationServicesRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listIntegrationServicesRequest{}, err
+	}
+	return listIntegrationServicesRequest{TenantID: tenantID}, nil
+}
+
+func decodeStartIntegrationConnectionRequest(r *http.Request) (startIntegrationConnectionEndpointRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return startIntegrationConnectionEndpointRequest{}, err
+	}
+	return startIntegrationConnectionEndpointRequest{TenantID: tenantID, httpRequest: r}, nil
+}
+
+func decodeListIntegrationConnectionsRequest(r *http.Request) (listIntegrationConnectionsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listIntegrationConnectionsRequest{}, err
+	}
+	return listIntegrationConnectionsRequest{TenantID: tenantID, httpRequest: r}, nil
+}
+
+func decodeIntegrationConnectionRequest(r *http.Request) (integrationConnectionRequest, error) {
+	tenantID, connectionID, err := integrationConnectionIDsRequest(r)
+	if err != nil {
+		return integrationConnectionRequest{}, err
+	}
+	return integrationConnectionRequest{TenantID: tenantID, ConnectionID: connectionID}, nil
+}
+
+func decodeExecuteIntegrationActionRequest(r *http.Request) (executeIntegrationActionEndpointRequest, error) {
+	tenantID, connectionID, err := integrationConnectionIDsRequest(r)
+	if err != nil {
+		return executeIntegrationActionEndpointRequest{}, err
+	}
+	return executeIntegrationActionEndpointRequest{TenantID: tenantID, ConnectionID: connectionID, httpRequest: r}, nil
+}
+
+func decodeDisableIntegrationConnectionRequest(r *http.Request) (disableIntegrationConnectionRequest, error) {
+	tenantID, connectionID, err := integrationConnectionIDsRequest(r)
+	if err != nil {
+		return disableIntegrationConnectionRequest{}, err
+	}
+	return disableIntegrationConnectionRequest{TenantID: tenantID, ConnectionID: connectionID, httpRequest: r}, nil
+}
+
+func integrationConnectionIDsRequest(r *http.Request) (utilities.ID, utilities.ID, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	connectionID, err := routeID(r, "connection_id", apiErrorInvalidIntegrationConnectionID)
+	if err != nil {
+		return utilities.ID{}, utilities.ID{}, err
+	}
+	return tenantID, connectionID, nil
+}
+
+func decodeIntegrationJSONBody[Request any](r *http.Request) (Request, error) {
+	return decodeJSONBody[Request](r)
+}
+
+func integrationConnectionIDParameter() APIParameterContract {
+	return APIParameterContract{Name: "connection_id", In: "path", Type: "string", Required: true}
+}
+
+func integrationConnectionListParameters() []APIParameterContract {
+	return append([]APIParameterContract{
+		tenantIDParameter(),
+		{Name: "provider", In: "query", Type: "string", Required: false},
+		{Name: "service", In: "query", Type: "string", Required: false},
+		{Name: "status", In: "query", Type: "string", Required: false},
+	}, paginationParameters()...)
+}
+
+func integrationRevokeParameter() APIParameterContract {
+	return APIParameterContract{Name: "revoke", In: "query", Type: "boolean", Required: false}
+}
+
+func integrationErrors(extra ...APIError) []APIError {
+	errors := []APIError{
+		apiErrorUnauthenticated,
+		apiErrorForbidden,
+		apiErrorServiceUnavailable,
+		apiErrorInvalidTenantID,
+		apiErrorInternal,
+	}
+	for _, apiError := range extra {
+		errors = appendAPIError(errors, apiError)
+	}
+	return errors
+}
+
+func integrationWriteErrors(extra ...APIError) []APIError {
+	return integrationErrors(append(extra, apiErrorRateLimited)...)
+}
+
+func integrationEndpointAPIError(err error) (APIError, bool) {
+	if apiErr, ok := integrationServiceAPIError(err); ok {
+		return apiErr, true
+	}
+	return authorizationAPIError(err), true
+}
+
+func integrationServiceAPIError(err error) (APIError, bool) {
+	switch {
+	case err == nil:
+		return APIError{}, false
+	case errors.Is(err, integrations.ErrInvalidProvider):
+		return apiErrorInvalidIntegrationProvider, true
+	case errors.Is(err, integrations.ErrInvalidService):
+		return apiErrorInvalidIntegrationService, true
+	case errors.Is(err, integrations.ErrInvalidConnectionID):
+		return apiErrorInvalidIntegrationConnectionID, true
+	case errors.Is(err, integrations.ErrProviderUnauthorized):
+		return apiErrorIntegrationProviderUnauthorized, true
+	case errors.Is(err, integrations.ErrProviderRateLimited):
+		return apiErrorIntegrationProviderRateLimited, true
+	case errors.Is(err, integrations.ErrConnectionAuthUnconfigured):
+		return apiErrorIntegrationProviderAuthUnconfigured, true
+	case errors.Is(err, integrations.ErrProviderUnavailable):
+		return apiErrorIntegrationProviderUnavailable, true
+	case errors.Is(err, integrations.ErrConnectionNotFound):
+		return apiErrorIntegrationConnectionNotFound, true
+	case errors.Is(err, integrations.ErrConnectionAlreadyExists):
+		return apiErrorIntegrationConnectionAlreadyExists, true
+	case errors.Is(err, integrations.ErrConnectionNotActive):
+		return apiErrorIntegrationConnectionNotActive, true
+	case errors.Is(err, integrations.ErrActionNotAllowed):
+		return apiErrorIntegrationActionNotAllowed, true
+	default:
+		return APIError{}, false
 	}
 }
 
@@ -459,14 +669,6 @@ func integrationOwnerScopeUserID(ctx context.Context, authorizer TenantAuthorize
 	return utilities.ID{}, err
 }
 
-func authorizeTenantRequest(w http.ResponseWriter, r *http.Request, authorizer TenantAuthorizer, tenantID utilities.ID, permission authorization.TenantPermission) bool {
-	if err := authorizeTenant(r.Context(), authorizer, tenantID, permission); err != nil {
-		writeAPIError(w, authorizationAPIError(err))
-		return true
-	}
-	return false
-}
-
 func integrationAuditActorUserID(principal authentication.Principal) utilities.ID {
 	if principal.Kind != authentication.PrincipalUser {
 		return utilities.ID{}
@@ -479,68 +681,6 @@ func integrationAuditActorType(principal authentication.Principal) string {
 		return "unknown"
 	}
 	return string(principal.Kind)
-}
-
-func parseTenantID(w http.ResponseWriter, r *http.Request) (utilities.ID, bool) {
-	tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_tenant_id", "Invalid tenant id")
-		return utilities.ID{}, false
-	}
-	return tenantID, true
-}
-
-func parseTenantAndConnectionID(w http.ResponseWriter, r *http.Request) (utilities.ID, utilities.ID, bool) {
-	tenantID, ok := parseTenantID(w, r)
-	if !ok {
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	connectionID, err := utilities.ParseID(chi.URLParam(r, "connection_id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_integration_connection_id", "Invalid integration connection id")
-		return utilities.ID{}, utilities.ID{}, false
-	}
-	return tenantID, connectionID, true
-}
-
-func writePaginationError(w http.ResponseWriter, err error) bool {
-	if err == nil {
-		return false
-	}
-	writeAPIError(w, paginationAPIError(err))
-	return true
-}
-
-func writeIntegrationServiceError(w http.ResponseWriter, err error) bool {
-	switch {
-	case err == nil:
-		return false
-	case errors.Is(err, integrations.ErrInvalidProvider):
-		writeError(w, http.StatusBadRequest, "invalid_integration_provider", "Invalid integration provider")
-	case errors.Is(err, integrations.ErrInvalidService):
-		writeError(w, http.StatusBadRequest, "invalid_integration_service", "Invalid integration service")
-	case errors.Is(err, integrations.ErrInvalidConnectionID):
-		writeError(w, http.StatusBadRequest, "invalid_integration_connection_id", "Invalid integration connection id")
-	case errors.Is(err, integrations.ErrProviderUnauthorized):
-		writeError(w, http.StatusBadGateway, "integration_provider_unauthorized", "Integration provider rejected the request")
-	case errors.Is(err, integrations.ErrProviderRateLimited):
-		writeError(w, http.StatusTooManyRequests, "integration_provider_rate_limited", "Integration provider rate limited the request")
-	case errors.Is(err, integrations.ErrConnectionAuthUnconfigured):
-		writeError(w, http.StatusServiceUnavailable, "integration_provider_unavailable", "Integration provider auth is not configured")
-	case errors.Is(err, integrations.ErrProviderUnavailable):
-		writeError(w, http.StatusBadGateway, "integration_provider_unavailable", "Integration provider unavailable")
-	case errors.Is(err, integrations.ErrConnectionNotFound):
-		writeError(w, http.StatusNotFound, "integration_connection_not_found", "Integration connection not found")
-	case errors.Is(err, integrations.ErrConnectionAlreadyExists):
-		writeError(w, http.StatusConflict, "integration_connection_already_exists", "Integration connection already exists")
-	case errors.Is(err, integrations.ErrConnectionNotActive):
-		writeError(w, http.StatusConflict, "integration_connection_not_active", "Integration connection is not active")
-	case errors.Is(err, integrations.ErrActionNotAllowed):
-		writeError(w, http.StatusForbidden, "integration_action_not_allowed", "Integration action not allowed")
-	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
-	}
-	return true
 }
 
 func newIntegrationServicesResponse(services []integrations.ServiceEntry) integrationServicesResponse {
@@ -596,14 +736,23 @@ func newStartIntegrationConnectionResponse(result integrations.StartConnectionRe
 }
 
 func newRefreshIntegrationConnectionResponse(result integrations.RefreshConnectionResult, principal authentication.Principal, ownerScopeUserID utilities.ID) refreshIntegrationConnectionResponse {
-	connectURL := result.ConnectURL
+	var connectURL *string
 	if shouldRedactIntegrationConnectionDetails(result.Connection, principal, ownerScopeUserID) {
-		connectURL = ""
+		connectURL = nil
+	} else if result.ConnectURL != "" {
+		connectURL = &result.ConnectURL
 	}
 	return refreshIntegrationConnectionResponse{
 		Connection: newIntegrationConnectionResponseForPrincipal(result.Connection, principal, ownerScopeUserID),
 		ConnectURL: connectURL,
 	}
+}
+
+func optionalIntegrationArguments(arguments *map[string]any) map[string]any {
+	if arguments == nil {
+		return nil
+	}
+	return *arguments
 }
 
 func newExecuteIntegrationActionResponse(result integrations.ExecuteActionResult, principal authentication.Principal, ownerScopeUserID utilities.ID) executeIntegrationActionResponse {

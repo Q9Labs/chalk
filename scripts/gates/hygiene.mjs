@@ -11,8 +11,9 @@ const packageJsonPaths = [
   "infrastructure/uptime-worker/package.json",
   "packages/assets/package.json",
   "packages/facehash/package.json",
-  "packages/sdk-react-native/package.json",
-  "packages/sdk-react/package.json",
+  "sdks/typescript/client/package.json",
+  "sdks/typescript/react-native/package.json",
+  "sdks/typescript/react/package.json",
   "packages/ui/package.json",
   "packages/whiteboard/package.json",
 ];

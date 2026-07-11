@@ -63,9 +63,11 @@ apps/mobile/android/app/debug.keystore
 apps/mobile/android/app/keystore.properties
 apps/mobile/android/app/*.jks
 apps/mobile/android/app/*.keystore
-packages/sdk-react-native/.turbo
-packages/sdk-react-native/dist
-packages/sdk-react-native/tsconfig.tsbuildinfo
+sdks/typescript/react-native/.turbo
+sdks/typescript/react-native/dist
+sdks/typescript/react-native/tsconfig.tsbuildinfo
+sdks/typescript/react/tsconfig.tsbuildinfo
+sdks/typescript/client/tsconfig.tsbuildinfo
 
 # iOS / Xcode
 *.ipa

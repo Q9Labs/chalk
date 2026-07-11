@@ -376,15 +376,15 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 		}
 
 		fieldType := field.Type
-		optional := request && isOptionalRequestField(fieldType)
+		optional := (request && isOptionalRequestField(fieldType)) || jsonFieldOmitsEmpty(field)
 		nullable := fieldType.Kind() == reflect.Pointer || nullableHelperField(currentName, name, fieldType)
-		property := g.fieldSchema(currentName, name, fieldType, request)
+		property := g.fieldSchema(currentName, name, field, request)
 		if nullable && !schemaIncludesNull(property) {
 			property = nullableSchema(property)
 		}
 
 		properties[name] = property
-		if !request || !optional {
+		if !optional {
 			required = append(required, name)
 		}
 	}
@@ -401,7 +401,11 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 	return schema
 }
 
-func (g *generator) fieldSchema(schemaName string, fieldName string, fieldType reflect.Type, request bool) map[string]any {
+func (g *generator) fieldSchema(schemaName string, fieldName string, field reflect.StructField, request bool) map[string]any {
+	fieldType := field.Type
+	if schemaName := field.Tag.Get("schema"); schemaName != "" {
+		return schemaReference(schemaName)
+	}
 	if name, ok := providerConfigSchemaName(fieldName); ok {
 		return schemaReference(name)
 	}
@@ -494,6 +498,11 @@ func jsonFieldName(field reflect.StructField) (string, bool) {
 		name = field.Name
 	}
 	return name, true
+}
+
+func jsonFieldOmitsEmpty(field reflect.StructField) bool {
+	parts := strings.Split(field.Tag.Get("json"), ",")
+	return includes(parts[1:], "omitempty")
 }
 
 func nullableSchema(schema map[string]any) map[string]any {
@@ -710,10 +719,12 @@ func secretCapableStringSchema() map[string]any {
 
 func scalarSchemas() map[string]map[string]any {
 	schemas := map[string]map[string]any{
-		"UUID":           brandedStringSchema("UUID", "uuid", 36, 36),
-		"Email":          brandedStringSchema("Email", "email", 0, 0),
-		"URLString":      brandedStringSchema("URLString", "uri", 0, 0),
-		"DateTimeString": brandedStringSchema("DateTimeString", "date-time", 0, 0),
+		"UUID":                 brandedStringSchema("UUID", "uuid", 36, 36),
+		"Email":                brandedStringSchema("Email", "email", 0, 0),
+		"URLString":            brandedStringSchema("URLString", "uri", 0, 0),
+		"DateTimeString":       brandedStringSchema("DateTimeString", "date-time", 0, 0),
+		"IntegrationServiceId": brandedStringSchema("IntegrationServiceId", "", 1, 0),
+		"IntegrationActionId":  brandedStringSchema("IntegrationActionId", "", 1, 0),
 	}
 	for _, name := range idSchemaNames() {
 		schemas[name] = brandedStringSchema(name, "uuid", 36, 36)

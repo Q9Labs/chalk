@@ -43,7 +43,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build packages
-        run: pnpm --filter './packages/*' build
+        run: pnpm --filter './packages/*' --filter './sdks/typescript/*' build
 
       - name: Check packages
         run: |
@@ -54,8 +54,8 @@ jobs:
         if: inputs.dry_run
         run: |
           mkdir -p "$RUNNER_TEMP/npm-packages"
-          pnpm --filter './packages/*' --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
+          pnpm --filter './packages/*' --filter './sdks/typescript/*' --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm --filter './packages/*' --recursive publish --access public --no-git-checks
+        run: pnpm --filter './packages/*' --filter './sdks/typescript/*' --recursive publish --access public --no-git-checks

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 )
 
 func TestPreviewRouteContracts(t *testing.T) {
@@ -26,6 +27,13 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodGet, "/v1/tenants/{tenant_id}/memberships"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/memberships"},
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/memberships/{membership_id}"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/integrations/services"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/integrations/connections"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/integrations/connections"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}/refresh"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}/actions"},
+		{http.MethodDelete, "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/recordings"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/recordings/{recording_id}"},
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/recordings/{recording_id}"},
@@ -88,6 +96,124 @@ func TestPreviewRouteContracts(t *testing.T) {
 	}
 }
 
+func TestIntegrationRouteContracts(t *testing.T) {
+	contracts := make(map[string]httpapi.APIRouteContract)
+	for _, contract := range httpapi.PreviewRouteContracts() {
+		contracts[contract.OperationID] = contract
+	}
+
+	tests := []struct {
+		operationID string
+		method      string
+		path        string
+		status      int
+		body        string
+		rateLimited bool
+		parameters  []string
+		errors      []string
+	}{
+		{
+			operationID: "listIntegrationServices",
+			method:      http.MethodGet,
+			path:        "/v1/tenants/{tenant_id}/integrations/services",
+			status:      http.StatusOK,
+			parameters:  []string{"path:tenant_id"},
+		},
+		{
+			operationID: "startIntegrationConnection",
+			method:      http.MethodPost,
+			path:        "/v1/tenants/{tenant_id}/integrations/connections",
+			status:      http.StatusCreated,
+			body:        "StartIntegrationConnectionRequest",
+			rateLimited: true,
+			parameters:  []string{"path:tenant_id"},
+			errors:      []string{"invalid_request", "payload_too_large", "invalid_callback_url", "rate_limited"},
+		},
+		{
+			operationID: "listIntegrationConnections",
+			method:      http.MethodGet,
+			path:        "/v1/tenants/{tenant_id}/integrations/connections",
+			status:      http.StatusOK,
+			parameters:  []string{"path:tenant_id", "query:provider", "query:service", "query:status", "query:page_size", "query:cursor"},
+			errors:      []string{"invalid_page_size", "invalid_cursor"},
+		},
+		{
+			operationID: "getIntegrationConnection",
+			method:      http.MethodGet,
+			path:        "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}",
+			status:      http.StatusOK,
+			parameters:  []string{"path:tenant_id", "path:connection_id"},
+			errors:      []string{"invalid_integration_connection_id"},
+		},
+		{
+			operationID: "refreshIntegrationConnection",
+			method:      http.MethodPost,
+			path:        "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}/refresh",
+			status:      http.StatusOK,
+			rateLimited: true,
+			parameters:  []string{"path:tenant_id", "path:connection_id"},
+			errors:      []string{"invalid_integration_connection_id", "rate_limited"},
+		},
+		{
+			operationID: "executeIntegrationAction",
+			method:      http.MethodPost,
+			path:        "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}/actions",
+			status:      http.StatusOK,
+			body:        "ExecuteIntegrationActionRequest",
+			rateLimited: true,
+			parameters:  []string{"path:tenant_id", "path:connection_id"},
+			errors:      []string{"invalid_request", "payload_too_large", "invalid_integration_action", "invalid_integration_action_input", "invalid_integration_action_text", "rate_limited"},
+		},
+		{
+			operationID: "disableIntegrationConnection",
+			method:      http.MethodDelete,
+			path:        "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}",
+			status:      http.StatusOK,
+			rateLimited: true,
+			parameters:  []string{"path:tenant_id", "path:connection_id", "query:revoke"},
+			errors:      []string{"invalid_integration_connection_id", "rate_limited"},
+		},
+	}
+
+	for _, test := range tests {
+		contract, ok := contracts[test.operationID]
+		if !ok {
+			t.Fatalf("missing %s contract", test.operationID)
+		}
+		if contract.Method != test.method || contract.Path != test.path {
+			t.Fatalf("%s route = %s %s, want %s %s", test.operationID, contract.Method, contract.Path, test.method, test.path)
+		}
+		if contract.Auth != httpapi.APIAuthSessionOrBearer {
+			t.Fatalf("%s auth = %q, want session or bearer", test.operationID, contract.Auth)
+		}
+		if contract.Responses[0].Status != test.status {
+			t.Fatalf("%s success status = %d, want %d", test.operationID, contract.Responses[0].Status, test.status)
+		}
+		if test.rateLimited {
+			if contract.RateLimit.Name != ratelimit.PolicyNameAuthenticatedWrite {
+				t.Fatalf("%s rate limit = %q, want %q", test.operationID, contract.RateLimit.Name, ratelimit.PolicyNameAuthenticatedWrite)
+			}
+		} else if contract.RateLimit.Name != "" {
+			t.Fatalf("%s unexpectedly declares rate limit %q", test.operationID, contract.RateLimit.Name)
+		}
+		if test.body == "" {
+			if contract.Request != nil || contract.BodyLimitBytes != 0 {
+				t.Fatalf("%s unexpectedly declares a request body: %#v", test.operationID, contract)
+			}
+		} else if contract.Request == nil || contract.Request.Name != test.body || contract.BodyLimitBytes != 1<<20 {
+			t.Fatalf("%s request body = %#v, want %s limited to %d bytes", test.operationID, contract.Request, test.body, 1<<20)
+		}
+		if got := contractParameterNames(contract); !sameStrings(got, test.parameters) {
+			t.Fatalf("%s parameters = %v, want %v", test.operationID, got, test.parameters)
+		}
+		for _, code := range append([]string{"unauthenticated", "forbidden", "service_unavailable", "invalid_tenant_id", "internal_error"}, test.errors...) {
+			if !contractHasErrorCode(contract, code) {
+				t.Fatalf("%s does not declare %q", test.operationID, code)
+			}
+		}
+	}
+}
+
 type expectedRoute struct {
 	method string
 	path   string
@@ -102,4 +228,33 @@ func publicContract(method string, path string) bool {
 	}
 	_, ok := public[method+" "+path]
 	return ok
+}
+
+func contractParameterNames(contract httpapi.APIRouteContract) []string {
+	parameters := make([]string, 0, len(contract.Parameters))
+	for _, parameter := range contract.Parameters {
+		parameters = append(parameters, parameter.In+":"+parameter.Name)
+	}
+	return parameters
+}
+
+func sameStrings(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for index := range got {
+		if got[index] != want[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func contractHasErrorCode(contract httpapi.APIRouteContract, code string) bool {
+	for _, apiError := range contract.Errors {
+		if apiError.Code == code {
+			return true
+		}
+	}
+	return false
 }

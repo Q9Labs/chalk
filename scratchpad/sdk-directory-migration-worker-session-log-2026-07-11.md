@@ -1,0 +1,5 @@
+# TypeScript SDK directory migration worker session log
+
+- 2026-07-11T09:38:44+05:00 — Started the requested history-preserving relocation of the TypeScript client, React, and React Native SDKs. Existing unrelated changes in the root package files, lockfile, workspace file, tools, docs, and scratchpad are out of scope and will be preserved.
+- 2026-07-11T09:55:41+05:00 — Moved the SDK directories with `git mv`, created the publishable `@q9labsai/chalk-client` manifest and TypeScript build configuration, and updated editable path references. Focused SDK tests, SDK and app typechecks, formatting, Semgrep, hygiene, test-presence, client build, publint, and attw passed. Fallow still reports pre-existing SDK platform-wrapper and unrelated contract-codegen findings because the full directory rename is in its merge-base diff; no source-quality suppressions were added.
+- 2026-07-11T10:01:45+05:00 — Reconfirmed the client manifest, moved-path reference scope, SDK checks, app typechecks, hygiene, Semgrep, and whitespace validation. The migration remains uncommitted. Root package integration and lockfile/codegen updates remain untouched for centralized follow-up.

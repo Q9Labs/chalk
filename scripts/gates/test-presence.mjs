@@ -5,7 +5,7 @@ import path from "node:path";
 const repoRoot = process.cwd();
 const errors = [];
 
-const sourceRoots = ["apps/web/src", "apps/mobile/src", "infrastructure/uptime-worker/src", "packages/assets/src", "packages/facehash/src", "packages/sdk-react-native/src", "packages/sdk-react/src", "packages/ui/src", "packages/whiteboard/src"];
+const sourceRoots = ["apps/web/src", "apps/mobile/src", "infrastructure/uptime-worker/src", "packages/assets/src", "packages/facehash/src", "packages/ui/src", "packages/whiteboard/src", "sdks/typescript/client/src", "sdks/typescript/react-native/src", "sdks/typescript/react/src"];
 
 const ignoredPathParts = new Set(["__tests__", "__mocks__", "generated", "assets"]);
 const ignoredBasenames = new Set(["index.ts", "index.tsx", "routeTree.gen.ts", "vite-env.d.ts", "setup.ts"]);
@@ -39,9 +39,10 @@ function walk(relativeDir) {
 function isMeaningfulSourceFile(relativePath) {
   const parsed = path.parse(relativePath);
   const hasSourceExtension = [".ts", ".tsx"].includes(parsed.ext);
+  const hasIgnoredPathPart = parsed.dir.split(path.sep).some((part) => ignoredPathParts.has(part));
   const isIgnoredFile = ignoredBasenames.has(path.basename(relativePath)) || ignoredExtensions.has(parsed.ext) || relativePath.endsWith(".d.ts");
 
-  return hasSourceExtension && !isIgnoredFile && !ignoredPathMatchers.some((matches) => matches(relativePath));
+  return hasSourceExtension && !hasIgnoredPathPart && !isIgnoredFile && !ignoredPathMatchers.some((matches) => matches(relativePath));
 }
 
 function gitLines(args) {

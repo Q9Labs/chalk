@@ -1,0 +1,168 @@
+{
+  "name": "@q9labsai/chalk-react-native",
+  "version": "0.0.85",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "sdks/typescript/react-native"
+  },
+  "files": [
+    "dist",
+    "src",
+    "android",
+    "ios",
+    "*.podspec"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "android": [
+        "./dist/android.d.ts"
+      ],
+      "ios": [
+        "./dist/ios.d.ts"
+      ],
+      "ios-phone": [
+        "./dist/ios-phone.d.ts"
+      ],
+      "ios-pad": [
+        "./dist/ios-pad.d.ts"
+      ],
+      "macos": [
+        "./dist/macos.d.ts"
+      ],
+      "runtime": [
+        "./dist/runtime.d.ts"
+      ],
+      "storage": [
+        "./dist/storage.d.ts"
+      ],
+      "clipboard": [
+        "./dist/clipboard.d.ts"
+      ],
+      "diagnostics": [
+        "./dist/diagnostics.d.ts"
+      ],
+      "invites": [
+        "./dist/invites.d.ts"
+      ],
+      "theme": [
+        "./dist/ui/theme.d.ts"
+      ],
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
+  "react-native": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./dist/index.js",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./android": {
+      "types": "./dist/android.d.ts",
+      "react-native": "./dist/android.js",
+      "import": "./dist/android.js",
+      "default": "./dist/android.js"
+    },
+    "./ios": {
+      "types": "./dist/ios.d.ts",
+      "react-native": "./dist/ios.js",
+      "import": "./dist/ios.js",
+      "default": "./dist/ios.js"
+    },
+    "./ios-phone": {
+      "types": "./dist/ios-phone.d.ts",
+      "react-native": "./dist/ios-phone.js",
+      "import": "./dist/ios-phone.js",
+      "default": "./dist/ios-phone.js"
+    },
+    "./ios-pad": {
+      "types": "./dist/ios-pad.d.ts",
+      "react-native": "./dist/ios-pad.js",
+      "import": "./dist/ios-pad.js",
+      "default": "./dist/ios-pad.js"
+    },
+    "./macos": {
+      "types": "./dist/macos.d.ts",
+      "react-native": "./dist/macos.js",
+      "import": "./dist/macos.js",
+      "default": "./dist/macos.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "react-native": "./dist/runtime.js",
+      "import": "./dist/runtime.js",
+      "default": "./dist/runtime.js"
+    },
+    "./storage": {
+      "types": "./dist/storage.d.ts",
+      "react-native": "./dist/storage.js",
+      "import": "./dist/storage.js",
+      "default": "./dist/storage.js"
+    },
+    "./clipboard": {
+      "types": "./dist/clipboard.d.ts",
+      "react-native": "./dist/clipboard.js",
+      "import": "./dist/clipboard.js",
+      "default": "./dist/clipboard.js"
+    },
+    "./diagnostics": {
+      "types": "./dist/diagnostics.d.ts",
+      "react-native": "./dist/diagnostics.js",
+      "import": "./dist/diagnostics.js",
+      "default": "./dist/diagnostics.js"
+    },
+    "./invites": {
+      "types": "./dist/invites.d.ts",
+      "react-native": "./dist/invites.js",
+      "import": "./dist/invites.js",
+      "default": "./dist/invites.js"
+    },
+    "./theme": {
+      "types": "./dist/ui/theme.d.ts",
+      "react-native": "./dist/ui/theme.js",
+      "import": "./dist/ui/theme.js",
+      "default": "./dist/ui/theme.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/storage.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc && pnpm run build:types",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
+    "dev": "tsup ./src/index.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/storage.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --watch",
+    "test": "pnpm exec vitest run",
+    "check-types": "tsc --noEmit",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@q9labsai/facehash": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "@cloudflare/react-native-webrtc": "~125.0.1 || ~125.0.3",
+    "@cloudflare/realtimekit-react-native": "^0.3.1",
+    "@hugeicons/core-free-icons": "^4.0.0",
+    "@hugeicons/react-native": "^1.0.13",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-native": ">=0.77",
+    "react-native-svg": "^15.15.3"
+  }
+}

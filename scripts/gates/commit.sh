@@ -24,8 +24,8 @@ if [[ -x apps/api/scripts/gate.sh ]]; then
   apps/api/scripts/gate.sh
 fi
 
-# Ensure generated OpenAPI and SDK contracts are current without mutating files.
-pnpm run check:sdk-generated
+# Ensure the normalized contract, OpenAPI, and SDK artifacts are current without mutating files.
+pnpm run contract:check
 
 # Enforce package.json dependency/version policy across the monorepo.
 pnpm run deps:syncpack

@@ -67,14 +67,15 @@ rules:
       include:
         - "/apps/**/src/**"
         - "/packages/**/src/**"
+        - "/sdks/typescript/**/src/**"
       exclude:
         - "**/*.test.*"
         - "**/*.spec.*"
         - "**/debug/**"
         - "**/diagnostics/**"
-        - "/packages/sdk-core/src/wide-events/**"
-        - "/packages/sdk-react/src/utils/debug*.ts"
-        - "/packages/sdk-react/src/components/composite/DiagnosticErrorSheet.tsx"
+        - "/sdks/typescript/client/src/wide-events/**"
+        - "/sdks/typescript/react/src/utils/debug*.ts"
+        - "/sdks/typescript/react/src/components/composite/DiagnosticErrorSheet.tsx"
 
   - id: chalk.forbid-direct-process-env
     message: Read environment through approved config modules, app config, or scripts.
@@ -85,6 +86,7 @@ rules:
       include:
         - "/apps/**/src/**"
         - "/packages/**/src/**"
+        - "/sdks/typescript/**/src/**"
         - "/infrastructure/**/src/**"
       exclude:
         - "**/*.test.*"
@@ -109,8 +111,8 @@ rules:
       exclude:
         - "**/*.test.*"
         - "**/*.spec.*"
-        - "/packages/sdk-core/src/token-provider.ts"
-        - "/packages/sdk-react/src/hooks/useMeetingRoomSettings.ts"
+        - "/sdks/typescript/client/src/token-provider.ts"
+        - "/sdks/typescript/react/src/hooks/useMeetingRoomSettings.ts"
 
   - id: chalk.forbid-placeholder-scripts
     message: Package scripts must not be placeholders or use --passWithNoTests.
@@ -131,8 +133,8 @@ rules:
     paths:
       include:
         - "/apps/api/openapi.yaml"
-        - "/packages/sdk-core/src/generated/**"
-        - "/packages/sdk-core/openapi-generated/**"
+        - "/sdks/typescript/client/src/generated/**"
+        - "/sdks/typescript/client/openapi-generated/**"
 
   - id: chalk.forbid-source-path-package-exports
     message: Publishable package exports should point at built artifacts, not source paths.
@@ -142,6 +144,7 @@ rules:
     paths:
       include:
         - "/packages/*/package.json"
+        - "/sdks/typescript/*/package.json"
 
   - id: chalk.forbid-sdk-importing-app-code
     message: SDK packages must not import app-only modules.
@@ -151,9 +154,9 @@ rules:
     paths:
       include:
         - "/packages/assets/src/**"
-        - "/packages/sdk-core/src/**"
-        - "/packages/sdk-react/src/**"
-        - "/packages/sdk-react-native/src/**"
+        - "/sdks/typescript/client/src/**"
+        - "/sdks/typescript/react/src/**"
+        - "/sdks/typescript/react-native/src/**"
         - "/packages/whiteboard/src/**"
 
   - id: chalk.forbid-shell-true-with-interpolation

@@ -37,10 +37,10 @@ specific domain vocabulary.
 
 Packages are the source of truth; demo apps should stay thin.
 
-- `packages/sdk-core`: client logic, room management, transport integration,
+- `sdks/typescript/client`: client logic, room management, transport integration,
   auth helpers, shared types, diagnostics, webhooks.
-- `packages/sdk-react`: React hooks and components.
-- `packages/sdk-react-native`: React Native hooks, components, and native
+- `sdks/typescript/react`: React hooks and components.
+- `sdks/typescript/react-native`: React Native hooks, components, and native
   bridges.
 - `packages/assets`: reusable CDN asset metadata and brand assets.
 - `packages/whiteboard`: whiteboard collaboration features.

@@ -1,9 +1,7 @@
 packages:
-  - "packages/chalk-whiteboard"
-  - "packages/facehash"
-  - "packages/sdk-react"
-  - "packages/sdk-react-native"
-  - "packages/ui"
+  - "packages/*"
+  - "sdks/typescript/*"
+  - "tools/*"
   - "apps/mobile"
   - "apps/web"
   - "infrastructure/uptime-worker"

@@ -1,0 +1,299 @@
+{
+  "$schema": "chalk.sync.v1",
+  "version": 1,
+  "protocol": {
+    "field": "protocol",
+    "value": 1,
+    "transport": "websocket-json-text"
+  },
+  "directions": {
+    "clientToServer": "client-to-server",
+    "serverToClient": "server-to-client"
+  },
+  "phases": [
+    {
+      "id": "awaiting_hello",
+      "accepts": ["hello", "ping"],
+      "hello": {
+        "transitionsTo": "joined"
+      }
+    },
+    {
+      "id": "joined",
+      "accepts": ["command", "ping"],
+      "hello": {
+        "connection": "open",
+        "error": "already_joined"
+      }
+    }
+  ],
+  "hello": {
+    "direction": "client-to-server",
+    "type": "hello",
+    "token": {
+      "kind": "string"
+    },
+    "cursor": {
+      "kind": "integer",
+      "minimum": 0,
+      "nullable": true,
+      "optional": true,
+      "path": ["streams", "control", "cursor"]
+    }
+  },
+  "welcome": {
+    "direction": "server-to-client",
+    "participantId": {
+      "kind": "string"
+    },
+    "type": "welcome",
+    "modes": [
+      {
+        "id": "snapshot",
+        "snapshot": {
+          "controlRevision": {
+            "kind": "integer",
+            "minimum": 0
+          },
+          "participants": {
+            "items": {
+              "displayName": {
+                "kind": "string"
+              },
+              "handRaised": {
+                "kind": "boolean"
+              },
+              "participantId": {
+                "kind": "string"
+              }
+            },
+            "kind": "array"
+          }
+        }
+      },
+      {
+        "controlRevision": {
+          "kind": "integer",
+          "minimum": 0
+        },
+        "events": {
+          "kind": "array",
+          "of": "event"
+        },
+        "id": "replay"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "commandId": {
+        "kind": "string"
+      },
+      "direction": "client-to-server",
+      "name": "raise_hand",
+      "payload": {
+        "additionalProperties": true,
+        "kind": "object",
+        "optional": true
+      },
+      "type": "command"
+    },
+    {
+      "commandId": {
+        "kind": "string"
+      },
+      "direction": "client-to-server",
+      "name": "lower_hand",
+      "payload": {
+        "additionalProperties": true,
+        "kind": "object",
+        "optional": true
+      },
+      "type": "command"
+    }
+  ],
+  "events": [
+    {
+      "baseRevision": {
+        "kind": "integer",
+        "minimum": 0
+      },
+      "direction": "server-to-client",
+      "name": "participant_joined",
+      "payload": {
+        "displayName": {
+          "kind": "string"
+        },
+        "participantId": {
+          "kind": "string"
+        }
+      },
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      },
+      "stream": "control",
+      "type": "event"
+    },
+    {
+      "baseRevision": {
+        "kind": "integer",
+        "minimum": 0
+      },
+      "direction": "server-to-client",
+      "name": "participant_left",
+      "payload": {
+        "participantId": {
+          "kind": "string"
+        }
+      },
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      },
+      "stream": "control",
+      "type": "event"
+    },
+    {
+      "baseRevision": {
+        "kind": "integer",
+        "minimum": 0
+      },
+      "direction": "server-to-client",
+      "name": "hand_raised",
+      "payload": {
+        "participantId": {
+          "kind": "string"
+        }
+      },
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      },
+      "stream": "control",
+      "type": "event"
+    },
+    {
+      "baseRevision": {
+        "kind": "integer",
+        "minimum": 0
+      },
+      "direction": "server-to-client",
+      "name": "hand_lowered",
+      "payload": {
+        "participantId": {
+          "kind": "string"
+        }
+      },
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      },
+      "stream": "control",
+      "type": "event"
+    }
+  ],
+  "acks": [
+    {
+      "commandId": {
+        "kind": "string"
+      },
+      "result": "committed",
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      },
+      "type": "ack"
+    },
+    {
+      "commandId": {
+        "kind": "string"
+      },
+      "result": "duplicate",
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      },
+      "type": "ack"
+    },
+    {
+      "commandId": {
+        "kind": "string"
+      },
+      "reason": {
+        "kind": "string"
+      },
+      "result": "rejected",
+      "type": "ack"
+    }
+  ],
+  "error": {
+    "code": {
+      "kind": "string"
+    },
+    "connection": "open",
+    "direction": "server-to-client",
+    "message": {
+      "kind": "string"
+    },
+    "type": "error"
+  },
+  "ping": {
+    "direction": "client-to-server",
+    "type": "ping"
+  },
+  "pong": {
+    "direction": "server-to-client",
+    "type": "pong"
+  },
+  "continuity": {
+    "cursor": {
+      "field": "streams.control.cursor",
+      "resume": "events_after_cursor",
+      "stream": "control"
+    },
+    "events": {
+      "baseRevisionField": "base_revision",
+      "revisionField": "revision",
+      "rule": "revision_equals_base_revision_plus_one",
+      "stream": "control"
+    },
+    "snapshotFallback": {
+      "when": ["cursor_missing", "cursor_future", "cursor_unavailable"],
+      "welcomeMode": "snapshot"
+    }
+  },
+  "idempotency": {
+    "key": "command_id",
+    "outcomes": ["committed", "duplicate", "rejected"],
+    "scope": "participant_session",
+    "duplicate": "reuses_original_result"
+  },
+  "closeCodes": [
+    {
+      "code": 1002,
+      "connection": "closed",
+      "reasons": ["hello timeout", "hello required"]
+    },
+    {
+      "code": 1003,
+      "connection": "closed",
+      "reasons": ["text frames only"]
+    },
+    {
+      "code": 1008,
+      "connection": "closed",
+      "reasons": ["unauthorized"]
+    },
+    {
+      "code": 1011,
+      "connection": "closed",
+      "reasons": ["internal room error"]
+    },
+    {
+      "code": 1012,
+      "connection": "closed",
+      "reasons": ["room restarting"]
+    }
+  ]
+}

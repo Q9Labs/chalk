@@ -22,6 +22,9 @@ defmodule ChalkSync.ProtocolTest do
                Protocol.decode(
                  ~s({"type":"hello","protocol":1,"token":"t","streams":{"control":{"cursor":-1}}})
                )
+
+      assert {:error, :invalid_cursor} =
+               Protocol.decode(~s({"type":"hello","protocol":1,"token":"t","streams":"bad"}))
     end
 
     test "commands map to the whitelist only" do

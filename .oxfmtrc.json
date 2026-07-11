@@ -20,8 +20,12 @@
     "apps/web/public/privacy/index.html",
     "apps/web/public/privacy-policy/index.html",
     "apps/web/public/terms/index.html",
+    "contract/generated/frontend-proof.ir.json",
+    "contract/generated/frontend-proof.report.md",
+    "contract/schema/proof/invalid/**",
     "scratchpad/api-performance-*.html",
     "scratchpad/api-performance-*.md",
-    "scratchpad/chalk-cost-calculator.html"
+    "scratchpad/chalk-cost-calculator.html",
+    "scratchpad/sync-codewalk.html"
   ]
 }

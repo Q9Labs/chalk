@@ -1,0 +1,45 @@
+{
+  "name": "@q9labsai/chalk-client",
+  "version": "0.0.85",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "sdks/typescript/client"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "rm -rf ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external effect && pnpm run build:types",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
+    "dev": "tsup ./src/index.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
+    "test": "pnpm exec vitest run",
+    "check-types": "tsc --noEmit",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "effect": "4.0.0-beta.94"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

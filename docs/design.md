@@ -1,6 +1,6 @@
 # Chalk Design System
 
-Canonical source of truth for Chalk UI work across `packages/sdk-react`, `apps/web`, and future `apps/mobile`.
+Canonical source of truth for Chalk UI work across `sdks/typescript/react`, `apps/web`, and future `apps/mobile`.
 
 ## Purpose
 
@@ -8,7 +8,7 @@ This document defines Chalk's current design system and the normalized model we 
 
 Use it for:
 
-- working inside `packages/sdk-react`
+- working inside `sdks/typescript/react`
 - working inside `apps/web`
 - designing or implementing the mobile theme
 - resolving ownership questions before adding new tokens, surfaces, or component styling
@@ -37,15 +37,15 @@ Future flexibility is intentional:
 
 ## Canonical Sources
 
-| Source                                                             | Role                                                                                           |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `packages/sdk-react/src/styles/styles.css`                         | core design tokens, semantic colors, meeting-specific surfaces, radii, shadows, motion         |
-| `packages/sdk-react/src/utils/theme.ts`                            | theme mode detection and propagation via `data-chalk-theme`, `data-theme`, and root classes    |
-| `packages/sdk-react/src/utils/colorGenerator.ts`                   | dynamic participant accent palettes and runtime `--primary` / `--primary-foreground` overrides |
-| `packages/sdk-react/src/components/full/video-conference/types.ts` | current public theme API contract                                                              |
-| `apps/docs/src/content/docs/sdk/react.mdx`                         | published mirror of the public theme API                                                       |
-| `apps/web/src/styles.css`                                          | first-party brand overlay, app/display typography, app-level theme variants like `nord`        |
-| `apps/mobile/src/screens/*.tsx`                                    | current native implementation snapshot; not canonical yet                                      |
+| Source                                                                | Role                                                                                           |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `sdks/typescript/react/src/styles/styles.css`                         | core design tokens, semantic colors, meeting-specific surfaces, radii, shadows, motion         |
+| `sdks/typescript/react/src/utils/theme.ts`                            | theme mode detection and propagation via `data-chalk-theme`, `data-theme`, and root classes    |
+| `sdks/typescript/react/src/utils/colorGenerator.ts`                   | dynamic participant accent palettes and runtime `--primary` / `--primary-foreground` overrides |
+| `sdks/typescript/react/src/components/full/video-conference/types.ts` | current public theme API contract                                                              |
+| `apps/docs/src/content/docs/sdk/react.mdx`                            | published mirror of the public theme API                                                       |
+| `apps/web/src/styles.css`                                             | first-party brand overlay, app/display typography, app-level theme variants like `nord`        |
+| `apps/mobile/src/screens/*.tsx`                                       | current native implementation snapshot; not canonical yet                                      |
 
 ## Current Design System
 

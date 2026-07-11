@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { ControlBar } from "../../../../packages/sdk-react/src/components/composite/ControlBar";
-import { MediaPreview } from "../../../../packages/sdk-react/src/components/composite/MediaPreview";
-import { MeetingHeader } from "../../../../packages/sdk-react/src/components/composite/MeetingHeader";
-import { MeetingHub } from "../../../../packages/sdk-react/src/components/composite/MeetingHub";
-import { ParticipantList, type ParticipantListParticipant } from "../../../../packages/sdk-react/src/components/composite/ParticipantList/ParticipantList";
-import { VideoGrid, type Participant as GridParticipant, type VideoGridProps } from "../../../../packages/sdk-react/src/components/composite/VideoGrid";
-import { WaitingRoom, type WaitingParticipant } from "../../../../packages/sdk-react/src/components/composite/WaitingRoom";
+import { ControlBar } from "../../../../sdks/typescript/react/src/components/composite/ControlBar";
+import { MediaPreview } from "../../../../sdks/typescript/react/src/components/composite/MediaPreview";
+import { MeetingHeader } from "../../../../sdks/typescript/react/src/components/composite/MeetingHeader";
+import { MeetingHub } from "../../../../sdks/typescript/react/src/components/composite/MeetingHub";
+import { ParticipantList, type ParticipantListParticipant } from "../../../../sdks/typescript/react/src/components/composite/ParticipantList/ParticipantList";
+import { VideoGrid, type Participant as GridParticipant, type VideoGridProps } from "../../../../sdks/typescript/react/src/components/composite/VideoGrid";
+import { WaitingRoom, type WaitingParticipant } from "../../../../sdks/typescript/react/src/components/composite/WaitingRoom";
 
 export const Route = createFileRoute("/sdk-preview")({
   component: SdkPreviewPage,

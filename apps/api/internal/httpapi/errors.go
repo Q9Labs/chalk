@@ -78,6 +78,22 @@ var (
 
 	apiErrorInvalidAuditLogID = APIError{Status: http.StatusBadRequest, Code: "invalid_audit_log_id", Message: "Invalid audit log id"}
 	apiErrorAuditLogNotFound  = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Audit log not found"}
+
+	apiErrorInvalidIntegrationCallbackURL       = APIError{Status: http.StatusBadRequest, Code: "invalid_callback_url", Message: "Invalid callback URL"}
+	apiErrorInvalidIntegrationProvider          = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_provider", Message: "Invalid integration provider"}
+	apiErrorInvalidIntegrationService           = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_service", Message: "Invalid integration service"}
+	apiErrorInvalidIntegrationConnectionID      = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_connection_id", Message: "Invalid integration connection id"}
+	apiErrorInvalidIntegrationAction            = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_action", Message: "Invalid integration action"}
+	apiErrorInvalidIntegrationActionInput       = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_action_input", Message: "Use either action arguments or text"}
+	apiErrorInvalidIntegrationActionText        = APIError{Status: http.StatusBadRequest, Code: "invalid_integration_action_text", Message: "Invalid integration action text"}
+	apiErrorIntegrationProviderUnauthorized     = APIError{Status: http.StatusBadGateway, Code: "integration_provider_unauthorized", Message: "Integration provider rejected the request"}
+	apiErrorIntegrationProviderRateLimited      = APIError{Status: http.StatusTooManyRequests, Code: "integration_provider_rate_limited", Message: "Integration provider rate limited the request"}
+	apiErrorIntegrationProviderAuthUnconfigured = APIError{Status: http.StatusServiceUnavailable, Code: "integration_provider_unavailable", Message: "Integration provider auth is not configured"}
+	apiErrorIntegrationProviderUnavailable      = APIError{Status: http.StatusBadGateway, Code: "integration_provider_unavailable", Message: "Integration provider unavailable"}
+	apiErrorIntegrationConnectionNotFound       = APIError{Status: http.StatusNotFound, Code: "integration_connection_not_found", Message: "Integration connection not found"}
+	apiErrorIntegrationConnectionAlreadyExists  = APIError{Status: http.StatusConflict, Code: "integration_connection_already_exists", Message: "Integration connection already exists"}
+	apiErrorIntegrationConnectionNotActive      = APIError{Status: http.StatusConflict, Code: "integration_connection_not_active", Message: "Integration connection is not active"}
+	apiErrorIntegrationActionNotAllowed         = APIError{Status: http.StatusForbidden, Code: "integration_action_not_allowed", Message: "Integration action not allowed"}
 )
 
 func writeAPIError(w http.ResponseWriter, err APIError) {

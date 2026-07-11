@@ -25,6 +25,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Local Redis and combined Postgres/Redis service helpers for Go API
   development.
 - MIT license metadata across the workspace.
+- Private language-neutral contract codegen with a validated canonical IR,
+  reproducible frontend comparison, generated OpenAPI/TypeScript/Effect output,
+  generated TypeScript and Elixir sync bindings, and non-mutating drift checks.
 - Generic Go API logging/observability hooks and local performance harness for
   request, database, lifecycle, and footprint profiling.
 - Go API Execution Trace Harness with a colorized local `tenant-create`
@@ -58,8 +61,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   database TLS guardrails, safer diagnostics mounting, and escaped Cloudflare
   provider paths.
 - Migrated Go API v1 route registration to declarative endpoint contracts for
-  auth, users, memberships, rooms, recordings, transcripts, audit logs, and
-  contract generator previews.
+  auth, users, memberships, rooms, recordings, transcripts, audit logs,
+  integrations, and contract generator previews.
+- Reorganized customer SDKs under `sdks/typescript`, extracted shared assets to
+  `packages/assets`, moved whiteboard sources to `packages/whiteboard`, and kept
+  existing public npm package names and UI asset compatibility exports.
 - Replaced private historical scratchpad entries with curated public summaries.
 - Replaced internal agent/runbook guidance with public contributor guidance.
 - Renamed public package scopes from `@q9labs/*` to `@q9labsai/*` for npm.

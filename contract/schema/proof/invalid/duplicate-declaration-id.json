@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "declarations": [
+    {
+      "id": "chalk.Duplicate",
+      "kind": "opaque",
+      "encoding": "json"
+    },
+    {
+      "id": "chalk.Duplicate",
+      "kind": "opaque",
+      "encoding": "json"
+    }
+  ],
+  "http": { "groups": [] },
+  "sync": {
+    "revision": {
+      "field": "revision",
+      "mode": "monotonic",
+      "cursorField": "cursor",
+      "resume": "inclusive"
+    },
+    "hello": {},
+    "commands": [],
+    "events": [],
+    "acks": {},
+    "error": { "ref": "chalk.Duplicate" },
+    "ping": { "ref": "chalk.Duplicate" },
+    "pong": { "ref": "chalk.Duplicate" },
+    "closeCodes": []
+  }
+}

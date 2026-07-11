@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "declarations": [
+    {
+      "id": "chalk.Valid",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "missing",
+          "type": { "ref": "chalk.Missing" },
+          "optional": false,
+          "nullable": false
+        }
+      ]
+    }
+  ],
+  "http": { "groups": [] },
+  "sync": {
+    "revision": {
+      "field": "revision",
+      "mode": "monotonic",
+      "cursorField": "cursor",
+      "resume": "inclusive"
+    },
+    "hello": {},
+    "commands": [],
+    "events": [],
+    "acks": {},
+    "error": { "ref": "chalk.Valid" },
+    "ping": { "ref": "chalk.Valid" },
+    "pong": { "ref": "chalk.Valid" },
+    "closeCodes": []
+  }
+}

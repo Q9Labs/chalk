@@ -40,6 +40,10 @@ func Patch[Request any, Response any](path string, mountPath string, operationID
 	return newEndpoint(http.MethodPatch, path, mountPath, operationID, decode, handle)
 }
 
+func Delete[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodDelete, path, mountPath, operationID, decode, handle)
+}
+
 func newEndpoint[Request any, Response any](method string, path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
 	return Endpoint[Request, Response]{
 		contract: APIRouteContract{
@@ -99,7 +103,9 @@ func (e Endpoint[Request, Response]) Parameters(parameters ...APIParameterContra
 }
 
 func (e Endpoint[Request, Response]) Errors(errors ...APIError) Endpoint[Request, Response] {
-	e.contract.Errors = append(e.contract.Errors, errors...)
+	for _, apiError := range errors {
+		e.contract.Errors = appendAPIError(e.contract.Errors, apiError)
+	}
 	return e
 }
 

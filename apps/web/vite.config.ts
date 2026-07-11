@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 import { execSync } from "child_process";
 import { fileURLToPath } from "node:url";
 import pkg from "./package.json";
-import sdkReactPkg from "../../packages/sdk-react/package.json";
+import sdkReactPkg from "../../sdks/typescript/react/package.json";
 
 const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
 const buildTime = new Date().toISOString();

@@ -1502,6 +1502,9 @@ func TestStartIntegrationConnection(t *testing.T) {
 	if res.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
 	}
+	if contentType := res.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("content type = %q, want application/json", contentType)
+	}
 
 	var body struct {
 		ConnectURL string `json:"connect_url"`
@@ -1541,6 +1544,41 @@ func TestStartIntegrationConnectionRejectsUntrustedCallbackURL(t *testing.T) {
 		t.Fatal("integration service was called")
 	}
 	assertErrorCode(t, res, "invalid_callback_url")
+}
+
+func TestStartIntegrationConnectionAuthorizesBeforeBodyValidation(t *testing.T) {
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections", `{`, httpapi.Options{
+		TenantAuthz: tenantAuthorizer{
+			authorizeTenant: func(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error {
+				return authorization.ErrForbidden
+			},
+		},
+	})
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+	assertErrorCode(t, res, "forbidden")
+}
+
+func TestStartIntegrationConnectionRejectsOversizedBody(t *testing.T) {
+	called := false
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections", `{"provider":"`+strings.Repeat("x", 1<<20)+`"}`, httpapi.Options{
+		Integrations: integrationService{
+			startConnection: func(context.Context, integrations.StartConnectionInput) (integrations.StartConnectionResult, error) {
+				called = true
+				return integrations.StartConnectionResult{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusRequestEntityTooLarge)
+	}
+	if called {
+		t.Fatal("integration service was called")
+	}
+	assertErrorCode(t, res, "payload_too_large")
 }
 
 func TestStartIntegrationConnectionRejectsWildcardCallbackOrigin(t *testing.T) {
@@ -1674,6 +1712,36 @@ func TestListIntegrationConnectionsLeavesAdminTenantScoped(t *testing.T) {
 	if body.Connections[0].AccountLabel != nil || body.Connections[0].AccountEmail != nil {
 		t.Fatalf("personal account details were not redacted: %#v", body.Connections[0])
 	}
+}
+
+func TestListIntegrationConnectionsMasksAdminAuthorizationFailure(t *testing.T) {
+	authorizationCalls := 0
+	called := false
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections", httpapi.Options{
+		TenantAuthz: tenantAuthorizer{
+			authorizeTenant: func(context.Context, authentication.Principal, utilities.ID, authorization.TenantPermission) error {
+				authorizationCalls++
+				if authorizationCalls == 1 {
+					return nil
+				}
+				return errors.New("admin authorization backend failed")
+			},
+		},
+		Integrations: integrationService{
+			listConnections: func(context.Context, integrations.ListConnectionsInput) (integrations.ConnectionList, error) {
+				called = true
+				return integrations.ConnectionList{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusInternalServerError)
+	}
+	if called {
+		t.Fatal("integration service was called")
+	}
+	assertErrorCode(t, res, "internal_error")
 }
 
 func TestGetIntegrationConnectionPassesActorUserID(t *testing.T) {
@@ -1901,6 +1969,27 @@ func TestExecuteIntegrationActionRejectsSystemPrincipal(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
 	}
 	assertErrorCode(t, res, "forbidden")
+}
+
+func TestExecuteIntegrationActionRejectsOversizedBody(t *testing.T) {
+	connectionID := "33333333-3333-4333-8333-333333333333"
+	called := false
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/"+connectionID+"/actions", `{"action":"`+strings.Repeat("x", 1<<20)+`"}`, httpapi.Options{
+		Integrations: integrationService{
+			executeAction: func(context.Context, integrations.ExecuteActionInput) (integrations.ExecuteActionResult, error) {
+				called = true
+				return integrations.ExecuteActionResult{}, nil
+			},
+		},
+	})
+
+	if res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusRequestEntityTooLarge)
+	}
+	if called {
+		t.Fatal("integration service was called")
+	}
+	assertErrorCode(t, res, "payload_too_large")
 }
 
 func TestDisableIntegrationConnectionUsesDeletePermission(t *testing.T) {

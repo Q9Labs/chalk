@@ -1,0 +1,2437 @@
+{
+  "declarations": [
+    {
+      "fields": [
+        {
+          "name": "body",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.RoomResponse"
+          }
+        },
+        {
+          "name": "etag",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "requestId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "statusCode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 201
+          }
+        }
+      ],
+      "id": "chalk.CreateRoomCreated",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "metadata",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.OpaqueJson"
+          }
+        },
+        {
+          "name": "provider",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ProviderConfig"
+          }
+        },
+        {
+          "constraints": {
+            "maxLength": 120,
+            "minLength": 1
+          },
+          "name": "title",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.CreateRoomRequest",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "body",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.TenantResponse"
+          }
+        },
+        {
+          "name": "etag",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "statusCode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 200
+          }
+        }
+      ],
+      "id": "chalk.GetTenantOk",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "constraints": {
+            "maximum": 9007199254740991,
+            "minimum": 1
+          },
+          "name": "installationId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "provider",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "github"
+          }
+        }
+      ],
+      "id": "chalk.GitHubProviderConfig",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "constraints": {
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "name": "projectId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "provider",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "google"
+          }
+        }
+      ],
+      "id": "chalk.GoogleProviderConfig",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "NOT_FOUND"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "resourceId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.HttpNotFound",
+      "kind": "error",
+      "scope": "http",
+      "tags": ["resource"],
+      "wireCode": "NOT_FOUND"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "UNAUTHORIZED"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "requestId",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.HttpUnauthorized",
+      "kind": "error",
+      "scope": "http",
+      "tags": ["auth", "request"],
+      "wireCode": "UNAUTHORIZED"
+    },
+    {
+      "fields": [
+        {
+          "name": "body",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.RoomListResponse"
+          }
+        },
+        {
+          "name": "etag",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "requestId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "statusCode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 200
+          }
+        }
+      ],
+      "id": "chalk.ListRoomsOk",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "command_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "lower_hand"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "ref": "chalk.OpaqueJson"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "command"
+          }
+        }
+      ],
+      "id": "chalk.LowerHandCommand",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "command_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "lower_hand"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "ref": "chalk.OpaqueJson"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "command"
+          }
+        }
+      ],
+      "id": "chalk.LowerHandCommandMessage",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "body",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.HttpNotFound"
+          }
+        },
+        {
+          "name": "requestId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "statusCode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 404
+          }
+        }
+      ],
+      "id": "chalk.NotFoundResponse",
+      "kind": "object"
+    },
+    {
+      "encoding": "json",
+      "id": "chalk.OpaqueJson",
+      "kind": "opaque"
+    },
+    {
+      "brand": "participant-id",
+      "constraints": {
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+      },
+      "id": "chalk.ParticipantId",
+      "kind": "scalar",
+      "wireType": "string"
+    },
+    {
+      "discriminator": "provider",
+      "id": "chalk.ProviderConfig",
+      "kind": "union",
+      "variants": [
+        {
+          "tag": "github",
+          "type": {
+            "ref": "chalk.GitHubProviderConfig"
+          }
+        },
+        {
+          "tag": "google",
+          "type": {
+            "ref": "chalk.GoogleProviderConfig"
+          }
+        }
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "command_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "raise_hand"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "ref": "chalk.OpaqueJson"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "command"
+          }
+        }
+      ],
+      "id": "chalk.RaiseHandCommand",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "command_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "raise_hand"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "ref": "chalk.OpaqueJson"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "command"
+          }
+        }
+      ],
+      "id": "chalk.RaiseHandCommandMessage",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "RATE_LIMITED"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "retryAfterSeconds",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        }
+      ],
+      "id": "chalk.RateLimitedError",
+      "kind": "error",
+      "scope": "http",
+      "tags": ["throttle"],
+      "wireCode": "RATE_LIMITED"
+    },
+    {
+      "fields": [
+        {
+          "name": "body",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.RateLimitedError"
+          }
+        },
+        {
+          "name": "retryAfter",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "statusCode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 429
+          }
+        }
+      ],
+      "id": "chalk.RateLimitedResponse",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "constraints": {
+            "maxLength": 2000
+          },
+          "name": "description",
+          "nullable": true,
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.RoomId"
+          }
+        },
+        {
+          "name": "metadata",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.OpaqueJson"
+          }
+        },
+        {
+          "name": "ownerId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.UserId"
+          }
+        },
+        {
+          "name": "participants",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "items": {
+              "ref": "chalk.User"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "participantsById",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "record",
+            "values": {
+              "ref": "chalk.User"
+            }
+          }
+        },
+        {
+          "name": "tenantId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.TenantId"
+          }
+        },
+        {
+          "constraints": {
+            "maxLength": 120,
+            "minLength": 1
+          },
+          "name": "title",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.Room",
+      "kind": "object"
+    },
+    {
+      "brand": "room-id",
+      "constraints": {
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+      },
+      "id": "chalk.RoomId",
+      "kind": "scalar",
+      "wireType": "string"
+    },
+    {
+      "fields": [
+        {
+          "name": "nextCursor",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "rooms",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "items": {
+              "ref": "chalk.Room"
+            },
+            "kind": "array"
+          }
+        }
+      ],
+      "id": "chalk.RoomListResponse",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "room",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.Room"
+          }
+        }
+      ],
+      "id": "chalk.RoomResponse",
+      "kind": "object"
+    },
+    {
+      "discriminator": "result",
+      "id": "chalk.SyncAck",
+      "kind": "union",
+      "variants": [
+        {
+          "tag": "committed",
+          "type": {
+            "ref": "chalk.SyncAckCommitted"
+          }
+        },
+        {
+          "tag": "duplicate",
+          "type": {
+            "ref": "chalk.SyncAckDuplicate"
+          }
+        },
+        {
+          "tag": "rejected",
+          "type": {
+            "ref": "chalk.SyncAckRejected"
+          }
+        }
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "command_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "result",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "committed"
+          }
+        },
+        {
+          "name": "revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "ack"
+          }
+        }
+      ],
+      "id": "chalk.SyncAckCommitted",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "command_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "result",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "duplicate"
+          }
+        },
+        {
+          "name": "revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "ack"
+          }
+        }
+      ],
+      "id": "chalk.SyncAckDuplicate",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "command_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "reason",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "result",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "rejected"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "ack"
+          }
+        }
+      ],
+      "id": "chalk.SyncAckRejected",
+      "kind": "object"
+    },
+    {
+      "discriminator": "name",
+      "id": "chalk.SyncCommand",
+      "kind": "union",
+      "variants": [
+        {
+          "tag": "lower_hand",
+          "type": {
+            "ref": "chalk.LowerHandCommandMessage"
+          }
+        },
+        {
+          "tag": "raise_hand",
+          "type": {
+            "ref": "chalk.RaiseHandCommandMessage"
+          }
+        }
+      ]
+    },
+    {
+      "fields": [
+        {
+          "constraints": {
+            "minimum": 0
+          },
+          "name": "cursor",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        }
+      ],
+      "id": "chalk.SyncControlCursor",
+      "kind": "object"
+    },
+    {
+      "discriminator": "name",
+      "id": "chalk.SyncEvent",
+      "kind": "union",
+      "variants": [
+        {
+          "tag": "hand_lowered",
+          "type": {
+            "ref": "chalk.SyncHandLoweredEvent"
+          }
+        },
+        {
+          "tag": "hand_raised",
+          "type": {
+            "ref": "chalk.SyncHandRaisedEvent"
+          }
+        },
+        {
+          "tag": "participant_joined",
+          "type": {
+            "ref": "chalk.SyncParticipantJoinedEvent"
+          }
+        },
+        {
+          "tag": "participant_left",
+          "type": {
+            "ref": "chalk.SyncParticipantLeftEvent"
+          }
+        }
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "base_revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "hand_lowered"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.SyncHandLoweredPayload"
+          }
+        },
+        {
+          "name": "revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "stream",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "control"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "event"
+          }
+        }
+      ],
+      "id": "chalk.SyncHandLoweredEvent",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "participant_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ParticipantId"
+          }
+        }
+      ],
+      "id": "chalk.SyncHandLoweredPayload",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "base_revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "hand_raised"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.SyncHandRaisedPayload"
+          }
+        },
+        {
+          "name": "revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "stream",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "control"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "event"
+          }
+        }
+      ],
+      "id": "chalk.SyncHandRaisedEvent",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "participant_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ParticipantId"
+          }
+        }
+      ],
+      "id": "chalk.SyncHandRaisedPayload",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "protocol",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 1
+          }
+        },
+        {
+          "name": "streams",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "ref": "chalk.SyncStreams"
+          }
+        },
+        {
+          "name": "token",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "hello"
+          }
+        }
+      ],
+      "id": "chalk.SyncHello",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "protocol",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 1
+          }
+        },
+        {
+          "name": "streams",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "ref": "chalk.SyncStreams"
+          }
+        },
+        {
+          "name": "token",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "hello"
+          }
+        }
+      ],
+      "id": "chalk.SyncHelloFrame",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "display_name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "hand_raised",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "boolean"
+          }
+        },
+        {
+          "name": "participant_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ParticipantId"
+          }
+        }
+      ],
+      "id": "chalk.SyncParticipant",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "base_revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "participant_joined"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.SyncParticipantJoinedPayload"
+          }
+        },
+        {
+          "name": "revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "stream",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "control"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "event"
+          }
+        }
+      ],
+      "id": "chalk.SyncParticipantJoinedEvent",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "display_name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "participant_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ParticipantId"
+          }
+        }
+      ],
+      "id": "chalk.SyncParticipantJoinedPayload",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "base_revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "participant_left"
+          }
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.SyncParticipantLeftPayload"
+          }
+        },
+        {
+          "name": "revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "stream",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "control"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "event"
+          }
+        }
+      ],
+      "id": "chalk.SyncParticipantLeftEvent",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "participant_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ParticipantId"
+          }
+        }
+      ],
+      "id": "chalk.SyncParticipantLeftPayload",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "ping"
+          }
+        }
+      ],
+      "id": "chalk.SyncPing",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "pong"
+          }
+        }
+      ],
+      "id": "chalk.SyncPong",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.SyncProtocolClose",
+      "kind": "error",
+      "scope": "sync",
+      "tags": ["connection"],
+      "wireCode": "PROTOCOL"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "protocol_error"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "error"
+          }
+        }
+      ],
+      "id": "chalk.SyncProtocolError",
+      "kind": "error",
+      "scope": "sync",
+      "tags": ["frame"],
+      "wireCode": "protocol_error"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.SyncRoomRestartClose",
+      "kind": "error",
+      "scope": "sync",
+      "tags": ["connection"],
+      "wireCode": "ROOM_RESTARTING"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.SyncServerFailureClose",
+      "kind": "error",
+      "scope": "sync",
+      "tags": ["connection"],
+      "wireCode": "SERVER_FAILURE"
+    },
+    {
+      "fields": [
+        {
+          "name": "control_revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "participants",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "items": {
+              "ref": "chalk.SyncParticipant"
+            },
+            "kind": "array"
+          }
+        }
+      ],
+      "id": "chalk.SyncSnapshot",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "control",
+          "nullable": false,
+          "optional": true,
+          "type": {
+            "ref": "chalk.SyncControlCursor"
+          }
+        }
+      ],
+      "id": "chalk.SyncStreams",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.SyncUnauthorizedClose",
+      "kind": "error",
+      "scope": "sync",
+      "tags": ["connection"],
+      "wireCode": "UNAUTHORIZED"
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.SyncUnsupportedDataClose",
+      "kind": "error",
+      "scope": "sync",
+      "tags": ["connection"],
+      "wireCode": "UNSUPPORTED_DATA"
+    },
+    {
+      "discriminator": "mode",
+      "id": "chalk.SyncWelcome",
+      "kind": "union",
+      "variants": [
+        {
+          "tag": "replay",
+          "type": {
+            "ref": "chalk.SyncWelcomeReplay"
+          }
+        },
+        {
+          "tag": "snapshot",
+          "type": {
+            "ref": "chalk.SyncWelcomeSnapshot"
+          }
+        }
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "control_revision",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "events",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "items": {
+              "ref": "chalk.SyncEvent"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "mode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "replay"
+          }
+        },
+        {
+          "name": "participant_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ParticipantId"
+          }
+        },
+        {
+          "name": "protocol",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 1
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "welcome"
+          }
+        }
+      ],
+      "id": "chalk.SyncWelcomeReplay",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "mode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "snapshot"
+          }
+        },
+        {
+          "name": "participant_id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ParticipantId"
+          }
+        },
+        {
+          "name": "protocol",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 1
+          }
+        },
+        {
+          "name": "snapshot",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.SyncSnapshot"
+          }
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "welcome"
+          }
+        }
+      ],
+      "id": "chalk.SyncWelcomeSnapshot",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "childrenById",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "record",
+            "values": {
+              "ref": "chalk.Tenant"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.TenantId"
+          }
+        },
+        {
+          "name": "members",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "items": {
+              "ref": "chalk.User"
+            },
+            "kind": "array"
+          }
+        },
+        {
+          "name": "parent",
+          "nullable": true,
+          "optional": true,
+          "type": {
+            "ref": "chalk.Tenant"
+          }
+        },
+        {
+          "name": "settings",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.OpaqueJson"
+          }
+        }
+      ],
+      "id": "chalk.Tenant",
+      "kind": "object"
+    },
+    {
+      "brand": "tenant-id",
+      "constraints": {
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+      },
+      "id": "chalk.TenantId",
+      "kind": "scalar",
+      "wireType": "string"
+    },
+    {
+      "fields": [
+        {
+          "name": "tenant",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.Tenant"
+          }
+        }
+      ],
+      "id": "chalk.TenantResponse",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "body",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.HttpUnauthorized"
+          }
+        },
+        {
+          "name": "requestId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "statusCode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 401
+          }
+        }
+      ],
+      "id": "chalk.UnauthorizedResponse",
+      "kind": "object"
+    },
+    {
+      "fields": [
+        {
+          "name": "displayName",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "constraints": {
+            "format": "email"
+          },
+          "name": "email",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.UserId"
+          }
+        },
+        {
+          "name": "manager",
+          "nullable": true,
+          "optional": true,
+          "type": {
+            "ref": "chalk.User"
+          }
+        },
+        {
+          "name": "provider",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ProviderConfig"
+          }
+        },
+        {
+          "name": "role",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.UserRole"
+          }
+        },
+        {
+          "name": "tenantId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.TenantId"
+          }
+        }
+      ],
+      "id": "chalk.User",
+      "kind": "object"
+    },
+    {
+      "brand": "user-id",
+      "constraints": {
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+      },
+      "id": "chalk.UserId",
+      "kind": "scalar",
+      "wireType": "string"
+    },
+    {
+      "id": "chalk.UserRole",
+      "kind": "enum",
+      "values": ["admin", "member", "owner"]
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string",
+            "literal": "VALIDATION_FAILED"
+          }
+        },
+        {
+          "name": "fields",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "record",
+            "values": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "name": "message",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ],
+      "id": "chalk.ValidationError",
+      "kind": "error",
+      "scope": "http",
+      "tags": ["input"],
+      "wireCode": "VALIDATION_FAILED"
+    },
+    {
+      "fields": [
+        {
+          "name": "body",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "ref": "chalk.ValidationError"
+          }
+        },
+        {
+          "name": "requestId",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "name": "statusCode",
+          "nullable": false,
+          "optional": false,
+          "type": {
+            "kind": "integer",
+            "literal": 400
+          }
+        }
+      ],
+      "id": "chalk.ValidationErrorResponse",
+      "kind": "object"
+    }
+  ],
+  "http": {
+    "groups": [
+      {
+        "auth": {
+          "kind": "bearer",
+          "scopes": []
+        },
+        "basePath": "/v1/tenants",
+        "bodyLimitBytes": 65536,
+        "id": "tenants",
+        "operations": [
+          {
+            "body": {
+              "ref": "chalk.CreateRoomRequest"
+            },
+            "errors": [
+              {
+                "body": {
+                  "ref": "chalk.ValidationError"
+                },
+                "headers": [
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 400
+              },
+              {
+                "body": {
+                  "ref": "chalk.HttpUnauthorized"
+                },
+                "headers": [
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 401
+              },
+              {
+                "body": {
+                  "ref": "chalk.RateLimitedError"
+                },
+                "headers": [
+                  {
+                    "name": "retry-after",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 429
+              }
+            ],
+            "headers": [
+              {
+                "name": "idempotency-key",
+                "nullable": false,
+                "optional": false,
+                "type": {
+                  "kind": "string"
+                }
+              }
+            ],
+            "id": "rooms.create",
+            "method": "POST",
+            "path": "/{tenantId}/rooms",
+            "pathParameters": [
+              {
+                "name": "tenantId",
+                "nullable": false,
+                "optional": false,
+                "type": {
+                  "ref": "chalk.TenantId"
+                }
+              }
+            ],
+            "queryParameters": [],
+            "successes": [
+              {
+                "body": {
+                  "ref": "chalk.RoomResponse"
+                },
+                "headers": [
+                  {
+                    "name": "etag",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  },
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 201
+              }
+            ]
+          },
+          {
+            "errors": [
+              {
+                "body": {
+                  "ref": "chalk.ValidationError"
+                },
+                "headers": [
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 400
+              },
+              {
+                "body": {
+                  "ref": "chalk.HttpUnauthorized"
+                },
+                "headers": [
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 401
+              },
+              {
+                "body": {
+                  "ref": "chalk.RateLimitedError"
+                },
+                "headers": [
+                  {
+                    "name": "retry-after",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 429
+              }
+            ],
+            "headers": [],
+            "id": "rooms.list",
+            "method": "GET",
+            "path": "/{tenantId}/rooms",
+            "pathParameters": [
+              {
+                "name": "tenantId",
+                "nullable": false,
+                "optional": false,
+                "type": {
+                  "ref": "chalk.TenantId"
+                }
+              }
+            ],
+            "queryParameters": [
+              {
+                "name": "cursor",
+                "nullable": false,
+                "optional": true,
+                "type": {
+                  "kind": "string"
+                }
+              },
+              {
+                "name": "pageSize",
+                "nullable": false,
+                "optional": false,
+                "type": {
+                  "kind": "integer"
+                }
+              }
+            ],
+            "successes": [
+              {
+                "body": {
+                  "ref": "chalk.RoomListResponse"
+                },
+                "headers": [
+                  {
+                    "name": "etag",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  },
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 200
+              }
+            ]
+          },
+          {
+            "errors": [
+              {
+                "body": {
+                  "ref": "chalk.HttpUnauthorized"
+                },
+                "headers": [
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 401
+              },
+              {
+                "body": {
+                  "ref": "chalk.HttpNotFound"
+                },
+                "headers": [
+                  {
+                    "name": "x-request-id",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 404
+              }
+            ],
+            "headers": [],
+            "id": "tenants.get",
+            "method": "GET",
+            "path": "/{tenantId}",
+            "pathParameters": [
+              {
+                "name": "tenantId",
+                "nullable": false,
+                "optional": false,
+                "type": {
+                  "ref": "chalk.TenantId"
+                }
+              }
+            ],
+            "queryParameters": [
+              {
+                "name": "consistency",
+                "nullable": false,
+                "optional": false,
+                "type": {
+                  "kind": "string",
+                  "literal": "strong"
+                }
+              },
+              {
+                "name": "expand",
+                "nullable": false,
+                "optional": true,
+                "type": {
+                  "kind": "string",
+                  "literal": "users"
+                }
+              }
+            ],
+            "successes": [
+              {
+                "body": {
+                  "ref": "chalk.TenantResponse"
+                },
+                "headers": [
+                  {
+                    "name": "etag",
+                    "optional": false,
+                    "type": {
+                      "kind": "string"
+                    }
+                  }
+                ],
+                "status": 200
+              }
+            ]
+          }
+        ],
+        "rateLimit": {
+          "requests": 60,
+          "windowSeconds": 60
+        }
+      }
+    ]
+  },
+  "sync": {
+    "acks": {
+      "command": {
+        "ref": "chalk.SyncAck"
+      }
+    },
+    "closeCodes": [
+      {
+        "code": 1002,
+        "error": {
+          "ref": "chalk.SyncProtocolClose"
+        },
+        "id": "sync-protocol-close",
+        "reason": "protocol error or hello timeout"
+      },
+      {
+        "code": 1012,
+        "error": {
+          "ref": "chalk.SyncRoomRestartClose"
+        },
+        "id": "sync-room-restart-close",
+        "reason": "room restarting; reconnect and re-snapshot"
+      },
+      {
+        "code": 1011,
+        "error": {
+          "ref": "chalk.SyncServerFailureClose"
+        },
+        "id": "sync-server-failure-close",
+        "reason": "room server failure"
+      },
+      {
+        "code": 1008,
+        "error": {
+          "ref": "chalk.SyncUnauthorizedClose"
+        },
+        "id": "sync-unauthorized-close",
+        "reason": "unauthorized"
+      },
+      {
+        "code": 1003,
+        "error": {
+          "ref": "chalk.SyncUnsupportedDataClose"
+        },
+        "id": "sync-unsupported-data-close",
+        "reason": "text frames only"
+      }
+    ],
+    "commands": [
+      {
+        "ack": {
+          "ref": "chalk.SyncAck"
+        },
+        "errors": [
+          {
+            "ref": "chalk.SyncProtocolError"
+          }
+        ],
+        "id": "lower_hand",
+        "payload": {
+          "ref": "chalk.LowerHandCommandMessage"
+        }
+      },
+      {
+        "ack": {
+          "ref": "chalk.SyncAck"
+        },
+        "errors": [
+          {
+            "ref": "chalk.SyncProtocolError"
+          }
+        ],
+        "id": "raise_hand",
+        "payload": {
+          "ref": "chalk.RaiseHandCommandMessage"
+        }
+      }
+    ],
+    "connection": {
+      "helloTimeoutMs": 10000,
+      "protocolErrorFrame": {
+        "ref": "chalk.SyncProtocolError"
+      },
+      "reconnectOnCloseCodes": [1012],
+      "requiredFirstFrame": "hello",
+      "textFramesOnly": true
+    },
+    "error": {
+      "ref": "chalk.SyncProtocolError"
+    },
+    "events": [
+      {
+        "id": "hand_lowered",
+        "payload": {
+          "ref": "chalk.SyncHandLoweredEvent"
+        }
+      },
+      {
+        "id": "hand_raised",
+        "payload": {
+          "ref": "chalk.SyncHandRaisedEvent"
+        }
+      },
+      {
+        "id": "participant_joined",
+        "payload": {
+          "ref": "chalk.SyncParticipantJoinedEvent"
+        }
+      },
+      {
+        "id": "participant_left",
+        "payload": {
+          "ref": "chalk.SyncParticipantLeftEvent"
+        }
+      }
+    ],
+    "frames": [
+      {
+        "direction": "server-to-client",
+        "id": "sync.ack",
+        "kind": "ack",
+        "payload": {
+          "ref": "chalk.SyncAck"
+        }
+      },
+      {
+        "direction": "client-to-server",
+        "id": "sync.command",
+        "kind": "command",
+        "payload": {
+          "ref": "chalk.SyncCommand"
+        }
+      },
+      {
+        "direction": "server-to-client",
+        "id": "sync.error",
+        "kind": "error",
+        "payload": {
+          "ref": "chalk.SyncProtocolError"
+        }
+      },
+      {
+        "direction": "server-to-client",
+        "id": "sync.event",
+        "kind": "event",
+        "payload": {
+          "ref": "chalk.SyncEvent"
+        }
+      },
+      {
+        "direction": "client-to-server",
+        "id": "sync.hello",
+        "kind": "hello",
+        "payload": {
+          "ref": "chalk.SyncHelloFrame"
+        }
+      },
+      {
+        "direction": "client-to-server",
+        "id": "sync.ping",
+        "kind": "ping",
+        "payload": {
+          "ref": "chalk.SyncPing"
+        }
+      },
+      {
+        "direction": "server-to-client",
+        "id": "sync.pong",
+        "kind": "pong",
+        "payload": {
+          "ref": "chalk.SyncPong"
+        }
+      },
+      {
+        "direction": "server-to-client",
+        "id": "sync.welcome",
+        "kind": "welcome",
+        "payload": {
+          "ref": "chalk.SyncWelcome"
+        }
+      }
+    ],
+    "hello": {
+      "ack": {
+        "ref": "chalk.SyncWelcome"
+      },
+      "request": {
+        "ref": "chalk.SyncHelloFrame"
+      }
+    },
+    "ping": {
+      "ref": "chalk.SyncPing"
+    },
+    "pong": {
+      "ref": "chalk.SyncPong"
+    },
+    "protocolVersion": "1",
+    "revision": {
+      "baseField": "base_revision",
+      "cursorPath": "streams.control.cursor",
+      "eventField": "revision",
+      "resume": "exclusive",
+      "stateField": "control_revision",
+      "stream": "control"
+    }
+  },
+  "version": "1"
+}
