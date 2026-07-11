@@ -11,6 +11,7 @@ defmodule ChalkSync.Transport.Socket do
   @behaviour WebSock
 
   alias ChalkSync.Auth.TokenVerifier
+  alias ChalkSync.DevTools.TraceHub
   alias ChalkSync.Protocol
   alias ChalkSync.Rooms.RoomServer
 
@@ -19,7 +20,11 @@ defmodule ChalkSync.Transport.Socket do
   @impl true
   def init(_opts) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
-    {:ok, %{phase: :awaiting_hello, hello_timer: timer, claims: nil}}
+    connection_id = System.unique_integer([:positive, :monotonic])
+    TraceHub.record("socket", "connected", %{"connection_id" => connection_id})
+
+    {:ok,
+     %{phase: :awaiting_hello, hello_timer: timer, claims: nil, connection_id: connection_id}}
   end
 
   @impl true
@@ -36,21 +41,37 @@ defmodule ChalkSync.Transport.Socket do
 
   @impl true
   def handle_info({:sync_event, event}, state) do
+    TraceHub.record("socket", "event_sent", %{
+      "connection_id" => state.connection_id,
+      "event" => event.name,
+      "revision" => event.revision
+    })
+
     {:push, {:text, Protocol.encode_event(event)}, state}
   end
 
   def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state) do
+    TraceHub.record("socket", "hello_timed_out", %{"connection_id" => state.connection_id})
     {:stop, :normal, {1002, "hello timeout"}, state}
   end
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
 
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    TraceHub.record("socket", "room_restarting", trace_context(state))
     {:stop, :normal, {1012, "room restarting"}, state}
   end
 
   @impl true
-  def terminate(_reason, _state), do: :ok
+  def terminate(reason, state) do
+    TraceHub.record(
+      "socket",
+      "disconnected",
+      Map.put(trace_context(state), "reason", inspect(reason))
+    )
+
+    :ok
+  end
 
   # -- Frames ------------------------------------------------------------------
 
@@ -67,10 +88,22 @@ defmodule ChalkSync.Transport.Socket do
       Process.cancel_timer(state.hello_timer)
       Process.monitor(room_pid)
       welcome = Protocol.encode_welcome(claims.participant_id, reply)
+
+      TraceHub.record("socket", "participant_joined", %{
+        "connection_id" => state.connection_id,
+        "participant_id" => claims.participant_id,
+        "room_id" => claims.room_id,
+        "welcome_mode" => welcome_mode(reply)
+      })
+
       {:push, {:text, welcome}, %{state | phase: :joined, claims: claims, hello_timer: nil}}
     else
-      {:error, :invalid_token} -> {:stop, :normal, {1008, "unauthorized"}, state}
-      {:error, reason} -> {:stop, :normal, {1011, to_string(reason)}, state}
+      {:error, :invalid_token} ->
+        TraceHub.record("auth", "token_rejected", %{"connection_id" => state.connection_id})
+        {:stop, :normal, {1008, "unauthorized"}, state}
+
+      {:error, reason} ->
+        {:stop, :normal, {1011, to_string(reason)}, state}
     end
   end
 
@@ -88,6 +121,15 @@ defmodule ChalkSync.Transport.Socket do
         command.payload
       )
 
+    TraceHub.record("command", "processed", %{
+      "command" => Atom.to_string(command.name),
+      "command_id" => command.command_id,
+      "connection_id" => state.connection_id,
+      "participant_id" => claims.participant_id,
+      "result" => result_label(result),
+      "room_id" => claims.room_id
+    })
+
     {:push, {:text, Protocol.encode_ack(command.command_id, result)}, state}
   end
 
@@ -100,6 +142,26 @@ defmodule ChalkSync.Transport.Socket do
   end
 
   defp protocol_error(reason, state) do
+    TraceHub.record("protocol", "frame_rejected", %{
+      "connection_id" => state.connection_id,
+      "reason" => to_string(reason)
+    })
+
     {:push, {:text, Protocol.encode_error(:protocol_error, to_string(reason))}, state}
   end
+
+  defp trace_context(%{claims: nil} = state),
+    do: %{"connection_id" => state.connection_id}
+
+  defp trace_context(state) do
+    %{
+      "connection_id" => state.connection_id,
+      "participant_id" => state.claims.participant_id,
+      "room_id" => state.claims.room_id
+    }
+  end
+
+  defp result_label({result, value}), do: "#{result}:#{value}"
+  defp welcome_mode(%{snapshot: %{}}), do: "snapshot"
+  defp welcome_mode(%{replay: events}), do: "replay (#{length(events)} events)"
 end

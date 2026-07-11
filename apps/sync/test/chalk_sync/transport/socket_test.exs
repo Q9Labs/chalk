@@ -12,6 +12,25 @@ defmodule ChalkSync.Transport.SocketTest do
     assert port > 0
   end
 
+  test "development lab is served by the sync server", %{port: port} do
+    conn = Plug.Test.conn(:get, "/dev/lab")
+    conn = Router.call(conn, [])
+
+    assert conn.status == 200
+    assert conn.resp_body =~ "Chalk Sync Lab"
+    assert port > 0
+  end
+
+  test "development trace socket streams server activity", %{port: port} do
+    {:ok, trace_client} = Client.connect(port, "/dev/traces")
+    {:json, %{"type" => "history"}, trace_client} = Client.recv(trace_client)
+
+    {:ok, sync_client} = Client.connect(port)
+
+    assert_trace_action(trace_client, "connected")
+    assert %Client{} = sync_client
+  end
+
   test "hello -> welcome snapshot -> command -> ack + fanout", %{port: port} do
     room_id = unique_room_id()
 
@@ -118,6 +137,25 @@ defmodule ChalkSync.Transport.SocketTest do
     case opts[:cursor] do
       nil -> frame
       cursor -> Map.put(frame, "streams", %{"control" => %{"cursor" => cursor}})
+    end
+  end
+
+  defp assert_trace_action(client, action, attempts \\ 10)
+
+  defp assert_trace_action(_client, action, 0) do
+    flunk("trace action #{inspect(action)} was not received")
+  end
+
+  defp assert_trace_action(client, action, attempts) do
+    case Client.recv(client) do
+      {:json, %{"type" => "trace", "event" => %{"action" => ^action}}, _client} ->
+        :ok
+
+      {:json, _message, client} ->
+        assert_trace_action(client, action, attempts - 1)
+
+      other ->
+        flunk("unexpected trace response: #{inspect(other)}")
     end
   end
 end

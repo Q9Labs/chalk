@@ -13,6 +13,18 @@ iex -S mix          # dev server on http://localhost:4100
 scripts/gate.sh     # canonical pre-commit gate (format, compile, credo, test)
 ```
 
+## Interactive sync lab
+
+Start the development server with `mix run --no-halt`, then open
+`http://localhost:4100/dev/lab`. The lab connects several participants to the
+real `/v1/sync` WebSocket and shows shared state, command acknowledgements, raw
+protocol frames, reconnect behavior, and a human-readable server trace.
+
+The lab and its `/dev/traces` stream are enabled only when `dev_tools` is true.
+Development and test enable them; production keeps them disabled and returns
+404 for both surfaces. Trace records are bounded in memory and never include
+participant tokens.
+
 ## Architecture
 
 The north-star sync invariants, mapped onto OTP:

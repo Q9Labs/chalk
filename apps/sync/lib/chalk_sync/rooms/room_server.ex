@@ -16,6 +16,7 @@ defmodule ChalkSync.Rooms.RoomServer do
 
   require Logger
 
+  alias ChalkSync.DevTools.TraceHub
   alias ChalkSync.Rooms.Room
   alias ChalkSync.Stateholder
 
@@ -87,6 +88,11 @@ defmodule ChalkSync.Rooms.RoomServer do
         :not_found -> Room.new(room_id)
       end
 
+    TraceHub.record("room", "writer_started", %{
+      "revision" => room.revision,
+      "room_id" => room_id
+    })
+
     {:ok,
      %{
        room: room,
@@ -105,6 +111,13 @@ defmodule ChalkSync.Rooms.RoomServer do
         ref = Process.monitor(subscriber)
         subscriber_info = %{participant_id: participant_id, monitor_ref: ref}
         state = put_in(state.subscribers[subscriber], subscriber_info)
+
+        TraceHub.record("room", "subscriber_added", %{
+          "participant_id" => participant_id,
+          "room_id" => state.room.id,
+          "subscribers" => map_size(state.subscribers)
+        })
+
         {:reply, {:ok, join_reply(state.room, cursor)}, state}
 
       {:error, reason} ->
@@ -148,6 +161,12 @@ defmodule ChalkSync.Rooms.RoomServer do
       end
 
     if map_size(state.subscribers) == 0 do
+      TraceHub.record("room", "writer_stopped", %{
+        "reason" => "room_empty",
+        "revision" => state.room.revision,
+        "room_id" => state.room.id
+      })
+
       {:stop, :normal, state}
     else
       {:noreply, state}
@@ -175,6 +194,13 @@ defmodule ChalkSync.Rooms.RoomServer do
         case Stateholder.commit(room.id, event.base_revision, event, room) do
           :ok ->
             broadcast(state, event)
+
+            TraceHub.record("room", "event_committed", %{
+              "event" => event.name,
+              "revision" => event.revision,
+              "room_id" => room.id
+            })
+
             {{:committed, event.revision}, %{state | room: room}}
 
           {:error, {:revision_conflict, current}} ->

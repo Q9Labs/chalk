@@ -8,5 +8,6 @@ defmodule ChalkSyncTest do
     assert ChalkSync.Rooms.Registry in ids
     assert ChalkSync.Rooms.Supervisor in ids
     assert ChalkSync.Stateholder.Memory in ids
+    assert ChalkSync.DevTools.TraceHub in ids
   end
 end

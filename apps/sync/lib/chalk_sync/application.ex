@@ -10,6 +10,7 @@ defmodule ChalkSync.Application do
         {Registry, keys: :unique, name: ChalkSync.Rooms.Registry},
         {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Rooms.Supervisor},
         stateholder_child(),
+        dev_tools_child(),
         listener_child()
       ]
       |> Enum.reject(&is_nil/1)
@@ -22,6 +23,11 @@ defmodule ChalkSync.Application do
       ChalkSync.Stateholder.Memory -> {ChalkSync.Stateholder.Memory, []}
       _adapter -> nil
     end
+  end
+
+  defp dev_tools_child do
+    if Application.fetch_env!(:chalk_sync, :dev_tools),
+      do: {ChalkSync.DevTools.TraceHub, []}
   end
 
   # Tests set port: :none and boot their own listener on an ephemeral port.
