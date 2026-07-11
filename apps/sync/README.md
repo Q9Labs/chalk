@@ -16,9 +16,15 @@ scripts/gate.sh     # canonical pre-commit gate (format, compile, credo, test)
 ## Interactive sync lab
 
 Start the development server with `mix run --no-halt`, then open
-`http://localhost:4100/dev/lab`. The lab connects several participants to the
-real `/v1/sync` WebSocket and shows shared state, command acknowledgements, raw
+`http://localhost:4100/dev/lab`. The lab starts empty so a session can be
+observed from its first participant. It connects participants to the real
+`/v1/sync` WebSocket and shows shared state, command acknowledgements, raw
 protocol frames, reconnect behavior, and a human-readable server trace.
+
+The production drills exercise bad authentication, malformed frames, duplicate
+commands, cursor fallback, and room-writer loss. The lab labels which behavior
+is real, which behavior is a local approximation, and which production work is
+still missing.
 
 The lab and its `/dev/traces` stream are enabled only when `dev_tools` is true.
 Development and test enable them; production keeps them disabled and returns

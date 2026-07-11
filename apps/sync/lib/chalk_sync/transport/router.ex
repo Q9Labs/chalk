@@ -49,6 +49,17 @@ defmodule ChalkSync.Transport.Router do
     end
   end
 
+  post "/dev/rooms/:room_id/restart" do
+    if DevTools.enabled?() do
+      case DevTools.restart_room(room_id) do
+        :ok -> send_json(conn, 202, %{"status" => "restarting"})
+        :not_found -> send_json(conn, 404, %{"error" => "room_not_found"})
+      end
+    else
+      not_found(conn)
+    end
+  end
+
   match _ do
     not_found(conn)
   end
@@ -66,8 +77,12 @@ defmodule ChalkSync.Transport.Router do
   end
 
   defp not_found(conn) do
+    send_json(conn, 404, %{"error" => "not_found"})
+  end
+
+  defp send_json(conn, status, body) do
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(404, JSON.encode!(%{"error" => "not_found"}))
+    |> send_resp(status, JSON.encode!(body))
   end
 end

@@ -6,6 +6,8 @@
     "**/*.spec.tsx",
     "apps/api/docs/app.js",
     "apps/api/scripts/smoke-lifecycle.mjs",
+    "apps/sync/priv/lab/app.js",
+    "apps/sync/priv/lab/styles.css",
     "sdks/typescript/client/src/generated/http-api.ts",
     "sdks/typescript/client/src/generated/openapi-types.d.ts",
     "sdks/typescript/client/src/generated/schemas.ts",

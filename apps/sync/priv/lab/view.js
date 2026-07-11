@@ -14,31 +14,60 @@ export function render(state) {
 function renderParticipants(state) {
   const container = $("#participants");
   container.replaceChildren();
-  state.participants.forEach((participant, index) => {
-    const card = $("#participant-template").content.firstElementChild.cloneNode(true);
-    const roomParticipant = state.room.participants.get(participant.id);
-    const handRaised = Boolean(roomParticipant?.hand_raised);
-    card.dataset.participantId = participant.id;
-    card.classList.toggle("hand-up", handRaised);
-    const avatar = card.querySelector(".avatar");
-    avatar.textContent = participant.name.slice(0, 2).toUpperCase();
-    avatar.style.background = avatarColors[index % avatarColors.length];
-    card.querySelector(".identity strong").textContent = participant.name;
-    card.querySelector(".identity code").textContent = participant.id;
-    const badge = card.querySelector(".status-badge");
-    badge.textContent = participant.status;
-    badge.classList.toggle("live", participant.status === "live");
-    badge.classList.toggle("connecting", participant.status === "connecting");
-    card.querySelector(".hand-label").textContent = handRaised ? "Hand raised" : "Hand lowered";
-    card.querySelector(".hand-action").textContent = handRaised ? "Lower hand" : "Raise hand";
-    card.querySelector(".hand-action").disabled = participant.status !== "live";
-    card.querySelector(".connection-action").textContent = participant.socket ? "Disconnect" : "Connect";
-    const reconnect = card.querySelector(".reconnect-action");
-    reconnect.textContent =
-      participant.cursor === null ? "Reconnect & replay" : `Reconnect & replay from revision ${participant.cursor}`;
-    reconnect.disabled = participant.cursor === null || participant.status === "connecting";
-    container.append(card);
-  });
+  state.participants.forEach((participant, index) => container.append(participantCard(state, participant, index)));
+}
+
+function participantCard(state, participant, index) {
+  const card = $("#participant-template").content.firstElementChild.cloneNode(true);
+  const handRaised = state.room.participants.get(participant.id)?.hand_raised === true;
+  card.dataset.participantId = participant.id;
+  card.classList.toggle("hand-up", handRaised);
+  setParticipantIdentity(card, participant, index);
+  setParticipantStatus(card, participant);
+  setParticipantActions(card, participant, handRaised);
+  return card;
+}
+
+function setParticipantIdentity(card, participant, index) {
+  const avatar = card.querySelector(".avatar");
+  avatar.textContent = participant.name.slice(0, 2).toUpperCase();
+  avatar.style.background = avatarColors[index % avatarColors.length];
+  card.querySelector(".identity strong").textContent = participant.name;
+  card.querySelector(".identity code").textContent = participant.id;
+}
+
+function setParticipantStatus(card, participant) {
+  const badge = card.querySelector(".status-badge");
+  badge.textContent = participant.status;
+  badge.classList.toggle("live", participant.status === "live");
+  badge.classList.toggle("connecting", participant.status === "connecting");
+}
+
+function setParticipantActions(card, participant, handRaised) {
+  setHandAction(card, participant, handRaised);
+  setConnectionAction(card, participant);
+  setReconnectAction(card, participant);
+}
+
+function setHandAction(card, participant, handRaised) {
+  card.querySelector(".hand-label").textContent = handRaised ? "Hand raised" : "Hand lowered";
+  const handAction = card.querySelector(".hand-action");
+  handAction.textContent = handRaised ? "Lower hand" : "Raise hand";
+  handAction.disabled = participant.status !== "live";
+}
+
+function setConnectionAction(card, participant) {
+  card.querySelector(".connection-action").textContent = participant.socket ? "Disconnect" : "Connect";
+}
+
+function setReconnectAction(card, participant) {
+  const reconnect = card.querySelector(".reconnect-action");
+  reconnect.textContent = reconnectLabel(participant.cursor);
+  reconnect.disabled = participant.cursor === null || participant.status === "connecting";
+}
+
+function reconnectLabel(cursor) {
+  return cursor === null ? "Reconnect & replay" : `Reconnect & replay from revision ${cursor}`;
 }
 
 export function renderStatus(state) {
@@ -53,10 +82,10 @@ export function renderLogs(state) {
 }
 
 function storyElement(entry) {
-  const category = entry.source === "client" ? "client" : entry.source;
+  const category = entry.source;
   const element = document.createElement("article");
   element.className = `trace-entry cat-${category}`;
-  if (entry.source === "room" && entry.action === "event_committed") element.classList.add("commit");
+  markCommit(element, entry);
 
   const rev = document.createElement("span");
   rev.className = "rev";
@@ -64,6 +93,18 @@ function storyElement(entry) {
 
   const body = document.createElement("div");
   body.className = "trace-body";
+  body.append(traceMeta(entry, category), traceMessage(entry.message));
+  appendTraceDetails(body, entry.details);
+
+  element.append(rev, body);
+  return element;
+}
+
+function markCommit(element, entry) {
+  if (entry.source === "room" && entry.action === "event_committed") element.classList.add("commit");
+}
+
+function traceMeta(entry, category) {
   const meta = document.createElement("div");
   meta.className = "trace-meta";
   const tag = document.createElement("span");
@@ -72,23 +113,24 @@ function storyElement(entry) {
   const time = document.createElement("time");
   time.textContent = entry.at.toLocaleTimeString();
   meta.append(tag, time);
+  return meta;
+}
 
+function traceMessage(text) {
   const message = document.createElement("p");
-  message.append(...messageNodes(entry.message));
-  body.append(meta, message);
+  message.append(...messageNodes(text));
+  return message;
+}
 
-  if (entry.details && Object.keys(entry.details).length > 0) {
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.textContent = "payload";
-    const code = document.createElement("code");
-    code.textContent = JSON.stringify(entry.details, null, 2);
-    details.append(summary, code);
-    body.append(details);
-  }
-
-  element.append(rev, body);
-  return element;
+function appendTraceDetails(body, payload) {
+  if (!payload || Object.keys(payload).length === 0) return;
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "payload";
+  const code = document.createElement("code");
+  code.textContent = JSON.stringify(payload, null, 2);
+  details.append(summary, code);
+  body.append(details);
 }
 
 function messageNodes(message) {

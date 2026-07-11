@@ -2,6 +2,7 @@ defmodule ChalkSync.Transport.SocketTest do
   use ChalkSync.ServerCase, async: true
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Rooms.RoomServer
   alias ChalkSync.TestWSClient, as: Client
   alias ChalkSync.Transport.Router
 
@@ -21,6 +22,16 @@ defmodule ChalkSync.Transport.SocketTest do
     assert port > 0
   end
 
+  test "development lab starts without seeded participants", %{port: port} do
+    conn = Plug.Test.conn(:get, "/dev/lab/app.js")
+    conn = Router.call(conn, [])
+
+    assert conn.status == 200
+    assert conn.resp_body =~ "participants: []"
+    refute conn.resp_body =~ ~S|["Ada", "Bo", "Cora"].forEach(addParticipant)|
+    assert port > 0
+  end
+
   test "development trace socket streams server activity", %{port: port} do
     {:ok, trace_client} = Client.connect(port, "/dev/traces")
     {:json, %{"type" => "history"}, trace_client} = Client.recv(trace_client)
@@ -29,6 +40,19 @@ defmodule ChalkSync.Transport.SocketTest do
 
     assert_trace_action(trace_client, "connected")
     assert %Client{} = sync_client
+  end
+
+  test "development room restart stops the writer and its sockets", %{port: port} do
+    room_id = unique_room_id()
+    {:ok, room_pid, _reply} = RoomServer.join(room_id, "p1", "Ada", self())
+    monitor_ref = Process.monitor(room_pid)
+
+    conn = Plug.Test.conn(:post, "/dev/rooms/#{room_id}/restart")
+    conn = Router.call(conn, [])
+
+    assert conn.status == 202
+    assert_receive {:DOWN, ^monitor_ref, :process, ^room_pid, :shutdown}
+    assert port > 0
   end
 
   test "hello -> welcome snapshot -> command -> ack + fanout", %{port: port} do

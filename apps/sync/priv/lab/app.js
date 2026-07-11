@@ -1,4 +1,4 @@
-import { render, renderLogs, renderStatus } from "/dev/lab/view.js";
+import { render, renderLogs, renderStatus } from "./view.js";
 
 const state = {
   roomId: `lab-${crypto.randomUUID().slice(0, 8)}`,
@@ -7,11 +7,13 @@ const state = {
   traces: [],
   frames: [],
   traceConnected: false,
+  traceStartedAt: Date.now(),
   seenTraceKeys: new Set(),
   seenTraceOrder: [],
 };
 
 const names = ["Ada", "Bo", "Cora", "Dax", "Eli", "Fia"];
+const labActor = { id: "lab", name: "Lab" };
 const $ = (selector) => document.querySelector(selector);
 const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 
@@ -42,7 +44,7 @@ function tokenFor(participant) {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-function connect(participant, useCursor = false) {
+function connect(participant, options = {}) {
   if (participant.socket) participant.socket.close();
   participant.status = "connecting";
   const socket = new WebSocket(`${wsBase}/v1/sync`);
@@ -50,9 +52,9 @@ function connect(participant, useCursor = false) {
   render(state);
 
   socket.addEventListener("open", () => {
-    const frame = { type: "hello", protocol: 1, token: tokenFor(participant) };
-    if (useCursor && participant.cursor !== null) {
-      frame.streams = { control: { cursor: participant.cursor } };
+    const frame = { type: "hello", protocol: 1, token: options.token ?? tokenFor(participant) };
+    if (Number.isInteger(options.cursor)) {
+      frame.streams = { control: { cursor: options.cursor } };
     }
     sendFrame(participant, frame);
   });
@@ -95,23 +97,29 @@ function sendHandCommand(participant) {
 }
 
 function applyServerFrame(participant, frame) {
-  if (frame.type === "welcome") {
+  serverFrameHandlers[frame.type]?.(participant, frame);
+  render(state);
+}
+
+const serverFrameHandlers = {
+  welcome(participant, frame) {
     participant.status = "live";
     if (frame.mode === "snapshot") applySnapshot(frame.snapshot);
     if (frame.mode === "replay") frame.events.forEach(applyEvent);
     participant.cursor = frame.mode === "snapshot" ? frame.snapshot.control_revision : frame.control_revision;
     addClientStory(participant, `Joined with a \`${frame.mode}\` at revision \`${participant.cursor}\`.`);
-  }
-  if (frame.type === "event") {
+  },
+  event(participant, frame) {
     applyEvent(frame);
     participant.cursor = frame.revision;
-  }
-  if (frame.type === "ack") {
+  },
+  ack(participant, frame) {
     addClientStory(participant, `Command \`${frame.command_id}\` was \`${frame.result}\`.`);
-  }
-  if (frame.type === "error") addClientStory(participant, `Protocol error: ${frame.message}.`);
-  render(state);
-}
+  },
+  error(participant, frame) {
+    addClientStory(participant, `Protocol error: ${frame.message}.`);
+  },
+};
 
 function applySnapshot(snapshot) {
   state.room.revision = snapshot.control_revision;
@@ -119,19 +127,28 @@ function applySnapshot(snapshot) {
 }
 
 function applyEvent(event) {
-  const people = state.room.participants;
-  if (event.name === "participant_joined") {
-    people.set(event.payload.participant_id, {
-      participant_id: event.payload.participant_id,
-      display_name: event.payload.display_name,
-      hand_raised: false,
-    });
-  }
-  if (event.name === "participant_left") people.delete(event.payload.participant_id);
-  if (event.name === "hand_raised") people.get(event.payload.participant_id).hand_raised = true;
-  if (event.name === "hand_lowered") people.get(event.payload.participant_id).hand_raised = false;
+  roomEventHandlers[event.name]?.(state.room.participants, event.payload);
   state.room.revision = event.revision;
 }
+
+const roomEventHandlers = {
+  participant_joined(people, payload) {
+    people.set(payload.participant_id, {
+      participant_id: payload.participant_id,
+      display_name: payload.display_name,
+      hand_raised: false,
+    });
+  },
+  participant_left(people, payload) {
+    people.delete(payload.participant_id);
+  },
+  hand_raised(people, payload) {
+    people.get(payload.participant_id).hand_raised = true;
+  },
+  hand_lowered(people, payload) {
+    people.get(payload.participant_id).hand_raised = false;
+  },
+};
 
 function logFrame(participant, direction, frame) {
   state.frames.unshift({ at: new Date(), participant: participant.name, direction, frame });
@@ -170,7 +187,8 @@ function connectTraceStream() {
 }
 
 function relevantTrace(event) {
-  return !event.details.room_id || event.details.room_id === state.roomId;
+  if (event.details.room_id) return event.details.room_id === state.roomId;
+  return Date.parse(event.timestamp) >= state.traceStartedAt;
 }
 
 function addServerTrace(event) {
@@ -204,12 +222,69 @@ function describeTrace(event) {
     "room.subscriber_added": `\`${d.participant_id}\` subscribed; ${d.subscribers} connection(s) now listening.`,
     "room.event_committed": `Committed \`${d.event}\`; room advanced to revision \`${d.revision}\`.`,
     "room.writer_stopped": `The room writer stopped at revision \`${d.revision}\` because the room became empty.`,
+    "room.restart_requested": "A development drill stopped the authoritative room writer.",
     "command.processed": `\`${d.participant_id}\` sent \`${d.command}\`; result was \`${d.result}\`.`,
     "auth.token_rejected": `Rejected the token on connection \`#${d.connection_id}\`.`,
     "protocol.frame_rejected": `Rejected a frame: ${d.reason}.`,
   };
   return descriptions[`${event.source}.${event.action}`] || `${event.source} ${event.action.replaceAll("_", " ")}.`;
 }
+
+function firstLiveParticipant() {
+  return state.participants.find((participant) => participant.status === "live");
+}
+
+function runInvalidTokenDrill() {
+  const socket = new WebSocket(`${wsBase}/v1/sync`);
+  socket.addEventListener("open", () => {
+    const frame = { type: "hello", protocol: 1, token: "invalid-production-token" };
+    socket.send(JSON.stringify(frame));
+    logFrame({ name: "Auth probe" }, "outbound", { ...frame, token: "<invalid token>" });
+  });
+  socket.addEventListener("close", ({ code, reason }) => {
+    addClientStory(labActor, `Bad-token probe closed with \`${code}\`${reason ? `: ${reason}` : ""}.`);
+  });
+}
+
+function runMalformedFrameDrill() {
+  const participant = firstLiveParticipant();
+  if (!participant) return addClientStory(labActor, "Connect a participant before sending a malformed frame.");
+  participant.socket.send("{not json");
+  logFrame(participant, "outbound", { malformed_text: "{not json" });
+}
+
+function runDuplicateCommandDrill() {
+  const participant = state.participants.find((person) => person.status === "live" && person.lastCommand);
+  if (!participant) return addClientStory(labActor, "Commit a hand command before repeating its command ID.");
+  sendFrame(participant, participant.lastCommand);
+}
+
+function runFutureCursorDrill() {
+  const participant = firstLiveParticipant();
+  if (!participant) return addClientStory(labActor, "Connect a participant before testing cursor fallback.");
+  const futureCursor = state.room.revision + 100;
+  addClientStory(participant, `Reconnecting with future cursor \`${futureCursor}\`; the server should return a snapshot.`);
+  disconnect(participant);
+  setTimeout(() => connect(participant, { cursor: futureCursor }), 350);
+}
+
+async function runWriterRestartDrill() {
+  if (!firstLiveParticipant()) return addClientStory(labActor, "Connect a participant before restarting the room writer.");
+  try {
+    const response = await fetch(`/dev/rooms/${encodeURIComponent(state.roomId)}/restart`, { method: "POST" });
+    addClientStory(labActor, response.ok ? "Room writer restart requested; connected sockets should close with `1012`." : "Room writer restart failed.");
+  } catch {
+    addClientStory(labActor, "Room writer restart could not reach the development server.");
+  }
+}
+
+const drills = {
+  "invalid-token": runInvalidTokenDrill,
+  "malformed-frame": runMalformedFrameDrill,
+  "duplicate-command": runDuplicateCommandDrill,
+  "future-cursor": runFutureCursorDrill,
+  "restart-writer": runWriterRestartDrill,
+};
 
 function participantFrom(target) {
   const id = target.closest(".card")?.dataset.participantId;
@@ -219,34 +294,51 @@ function participantFrom(target) {
 $("#participants").addEventListener("click", ({ target }) => {
   const participant = participantFrom(target);
   if (!participant) return;
-  if (target.matches(".hand-action")) sendHandCommand(participant);
-  if (target.matches(".connection-action")) participant.socket ? disconnect(participant) : connect(participant);
-  if (target.matches(".reconnect-action")) {
-    disconnect(participant);
-    setTimeout(() => connect(participant, true), 350);
-  }
+  const action = participantActions.find(({ selector }) => target.matches(selector));
+  action?.run(participant);
+});
+
+const participantActions = [
+  { selector: ".hand-action", run: sendHandCommand },
+  {
+    selector: ".connection-action",
+    run: (participant) => (participant.socket ? disconnect(participant) : connect(participant)),
+  },
+  {
+    selector: ".reconnect-action",
+    run(participant) {
+      disconnect(participant);
+      setTimeout(() => connect(participant, { cursor: participant.cursor }), 350);
+    },
+  },
+];
+
+document.querySelector(".drill-grid").addEventListener("click", ({ target }) => {
+  const drill = drills[target.dataset.drill];
+  if (drill) drill();
 });
 
 $("#connect-all").addEventListener("click", () => state.participants.filter((p) => !p.socket).forEach((p) => connect(p)));
 $("#disconnect-all").addEventListener("click", () => state.participants.forEach(disconnect));
 $("#add-participant").addEventListener("click", () => addParticipant());
-$("#new-room").addEventListener("click", () => {
-  state.participants.forEach(disconnect);
-  state.roomId = `lab-${crypto.randomUUID().slice(0, 8)}`;
+$("#new-room").addEventListener("click", () => resetRoom(`lab-${crypto.randomUUID().slice(0, 8)}`));
+$("#room-id").addEventListener("change", ({ target }) => resetRoom(target.value.trim() || state.roomId));
+
+function resetRoom(roomId) {
+  state.participants.forEach((participant) => {
+    disconnect(participant);
+    participant.socket = null;
+    participant.status = "offline";
+    participant.cursor = null;
+  });
+  state.roomId = roomId;
   state.room = { revision: 0, participants: new Map() };
   state.traces = [];
   state.frames = [];
-  state.participants.forEach((participant) => (participant.cursor = null));
+  state.traceStartedAt = Date.now();
   render(state);
   renderLogs(state);
-});
-$("#room-id").addEventListener("change", ({ target }) => {
-  state.participants.forEach(disconnect);
-  state.roomId = target.value.trim() || state.roomId;
-  state.room = { revision: 0, participants: new Map() };
-  state.participants.forEach((participant) => (participant.cursor = null));
-  render(state);
-});
+}
 $("#clear-logs").addEventListener("click", () => {
   state.traces = [];
   state.frames = [];
@@ -266,6 +358,5 @@ document.querySelectorAll(".tab").forEach((tab) =>
   }),
 );
 
-["Ada", "Bo", "Cora"].forEach(addParticipant);
 connectTraceStream();
 render(state);

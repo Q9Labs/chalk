@@ -3,17 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/dev/lab/" />
     <title>Chalk Sync Lab</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/dev/lab/styles.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="topbar">
+    <header class="top-bar">
       <div class="brand">
         <span class="mark" aria-hidden="true">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -25,7 +23,7 @@
           <span>Chalk protocol observatory</span>
         </div>
       </div>
-      <div class="topbar-right">
+      <div class="top-bar-right">
         <div class="revision-chip">
           <span>Revision</span>
           <strong id="revision">0</strong>
@@ -49,6 +47,30 @@
           <button class="btn" id="add-participant">Add participant</button>
           <button class="btn ghost danger" id="disconnect-all">Disconnect all</button>
         </div>
+        <details class="drills">
+          <summary>Production drills <span>Exercise real failure paths</span></summary>
+          <div class="drill-grid">
+            <button class="btn" data-drill="invalid-token">Reject bad token</button>
+            <button class="btn" data-drill="malformed-frame">Malformed frame</button>
+            <button class="btn" data-drill="duplicate-command">Repeat last command</button>
+            <button class="btn" data-drill="future-cursor">Future cursor fallback</button>
+            <button class="btn danger" data-drill="restart-writer">Restart room writer</button>
+          </div>
+          <div class="parity-grid">
+            <div>
+              <strong>Real server behavior</strong>
+              <p>Snapshots, replay, ordered revisions, fanout, command acknowledgements, duplicate detection, protocol rejection, and writer-loss close code 1012.</p>
+            </div>
+            <div>
+              <strong>Local approximation</strong>
+              <p>The bad-token drill uses the unsigned development verifier. Writer restart kills the local room process while keeping its memory-backed state.</p>
+            </div>
+            <div>
+              <strong>Requires production implementation</strong>
+              <p>Signed key rotation, token expiry, capabilities, session scoping, Redis and multiple nodes, volatile presence, SDK auto-reconnect, production metrics, and load behavior.</p>
+            </div>
+          </div>
+        </details>
         <div class="room-scroll">
           <div id="participants" class="participants"></div>
           <div id="empty-room" class="empty-room">
@@ -70,7 +92,7 @@
           <div id="trace-hint" class="trace-hint">
             <strong>Nothing traced yet</strong>
             <ol>
-              <li>Connect the participants.</li>
+              <li>Add and connect a participant.</li>
               <li>Raise a hand from any card.</li>
               <li>Disconnect someone, then reconnect them to watch the replay.</li>
             </ol>
@@ -96,6 +118,6 @@
         <button class="reconnect-action">Reconnect &amp; replay</button>
       </article>
     </template>
-    <script type="module" src="/dev/lab/app.js"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>

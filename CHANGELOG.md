@@ -14,9 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- Development-only sync server lab for exercising multiple live WebSocket
-  participants while viewing shared state, raw protocol frames, reconnects,
-  and redacted human-readable server traces.
+- Development-only sync server lab that starts empty and exercises live
+  WebSocket participants, shared state, raw protocol frames, reconnects,
+  redacted human-readable traces, and production failure drills.
 - OpenRouter BYOK transcription support in the Go API, including a tenant
   `ai_provider_config` path, OpenRouter adapter, recording transcription route,
   and trace harness scenario.
