@@ -78,6 +78,7 @@ jobs:
 
       - name: Build package entries
         run: |
+          pnpm --filter @q9labsai/chalk-assets build
           pnpm --filter @q9labsai/chalk-whiteboard build
           pnpm --filter @q9labsai/chalk-ui build
 

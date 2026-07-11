@@ -9,11 +9,12 @@ const packageJsonPaths = [
   "apps/mobile/package.json",
   "apps/web/package.json",
   "infrastructure/uptime-worker/package.json",
-  "packages/chalk-whiteboard/package.json",
+  "packages/assets/package.json",
   "packages/facehash/package.json",
   "packages/sdk-react-native/package.json",
   "packages/sdk-react/package.json",
   "packages/ui/package.json",
+  "packages/whiteboard/package.json",
 ];
 
 const weakScriptPattern = /^(echo\b.*|true|exit\s+0)$/;

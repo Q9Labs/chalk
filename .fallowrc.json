@@ -14,7 +14,7 @@
     "scripts/codegen/generate-effect-http-api.mjs",
     "scripts/codegen/generate-effect-schemas.mjs"
   ],
-  "publicPackages": ["@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
+  "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignoreDependencies": [
     "@arethetypeswrong/cli",
     "publint",
@@ -56,7 +56,7 @@
       "packages/sdk-react/src/hooks/features/useTranscripts.ts",
       "packages/sdk-react/src/hooks/useTranscription.ts",
       "packages/sdk-react-native/src/hooks/useTranscripts.ts",
-      "packages/chalk-whiteboard/src/collab/presence.ts",
+      "packages/whiteboard/src/collab/presence.ts",
       "packages/sdk-react/src/components/full/whiteboard-panel/constants.ts",
       "packages/sdk-core/src/generated/**",
       "scratchpad/sdk-schema-generator-spike/**",
@@ -91,8 +91,8 @@
       "packages/sdk-react/src/components/composite/ChatPanel.tsx",
       "packages/sdk-react/src/components/composite/MessageBubble.tsx",
       "packages/sdk-react/src/hooks/features/useTranscripts.ts",
-      "packages/chalk-whiteboard/src/collab/engine.ts",
-      "packages/chalk-whiteboard/src/collab/files.ts",
+      "packages/whiteboard/src/collab/engine.ts",
+      "packages/whiteboard/src/collab/files.ts",
       "packages/facehash/src/Facehash.tsx",
       "packages/facehash/src/FacehashSceneSvg.tsx",
       "scripts/codegen/generate-effect-http-api.mjs",

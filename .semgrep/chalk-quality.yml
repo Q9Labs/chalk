@@ -150,10 +150,11 @@ rules:
     pattern-regex: 'from\s+["''](?:\.\./)*apps/'
     paths:
       include:
+        - "/packages/assets/src/**"
         - "/packages/sdk-core/src/**"
         - "/packages/sdk-react/src/**"
         - "/packages/sdk-react-native/src/**"
-        - "/packages/chalk-whiteboard/src/**"
+        - "/packages/whiteboard/src/**"
 
   - id: chalk.forbid-shell-true-with-interpolation
     message: Avoid interpolating untrusted values into shell commands.

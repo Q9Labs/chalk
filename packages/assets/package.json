@@ -1,0 +1,42 @@
+{
+  "name": "@q9labsai/chalk-assets",
+  "version": "0.0.85",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Q9Labs/chalk.git",
+    "directory": "packages/assets"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./logos/*": "./dist/logos/*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "rm -rf ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform node && pnpm run build:types && pnpm run build:logos",
+    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:logos": "mkdir -p ./dist && cp -R ./src/logos ./dist/",
+    "dev": "pnpm run build:logos && tsup ./src/index.ts --format esm --out-dir ./dist --platform node --watch",
+    "check-types": "tsc --noEmit",
+    "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.7.2"
+  }
+}

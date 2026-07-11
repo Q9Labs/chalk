@@ -5,7 +5,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Q9Labs/chalk.git",
-    "directory": "packages/chalk-whiteboard"
+    "directory": "packages/whiteboard"
   },
   "files": [
     "dist"

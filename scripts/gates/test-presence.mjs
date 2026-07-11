@@ -5,7 +5,7 @@ import path from "node:path";
 const repoRoot = process.cwd();
 const errors = [];
 
-const sourceRoots = ["apps/web/src", "apps/mobile/src", "infrastructure/uptime-worker/src", "packages/chalk-whiteboard/src", "packages/facehash/src", "packages/sdk-react-native/src", "packages/sdk-react/src", "packages/ui/src"];
+const sourceRoots = ["apps/web/src", "apps/mobile/src", "infrastructure/uptime-worker/src", "packages/assets/src", "packages/facehash/src", "packages/sdk-react-native/src", "packages/sdk-react/src", "packages/ui/src", "packages/whiteboard/src"];
 
 const ignoredPathParts = new Set(["__tests__", "__mocks__", "generated", "assets"]);
 const ignoredBasenames = new Set(["index.ts", "index.tsx", "routeTree.gen.ts", "vite-env.d.ts", "setup.ts"]);

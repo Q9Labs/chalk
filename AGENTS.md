@@ -42,7 +42,8 @@ Packages are the source of truth; demo apps should stay thin.
 - `packages/sdk-react`: React hooks and components.
 - `packages/sdk-react-native`: React Native hooks, components, and native
   bridges.
-- `packages/chalk-whiteboard`: whiteboard collaboration features.
+- `packages/assets`: reusable CDN asset metadata and brand assets.
+- `packages/whiteboard`: whiteboard collaboration features.
 - `packages/ui`: shared UI primitives.
 - `apps/web`: Chalk web app and local verification surface.
 - `apps/docs`: public documentation.

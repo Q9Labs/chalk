@@ -21,7 +21,7 @@
   "typesVersions": {
     "*": {
       "assets": [
-        "./dist/assets/index.d.ts"
+        "./dist/assets.d.ts"
       ],
       "button": [
         "./dist/button.d.ts"
@@ -43,14 +43,14 @@
       "import": "./dist/index.js"
     },
     "./assets": {
-      "types": "./dist/assets/index.d.ts",
-      "import": "./dist/assets/index.js"
+      "types": "./dist/assets.d.ts",
+      "import": "./dist/assets.js"
     },
     "./button": {
       "types": "./dist/button.d.ts",
       "import": "./dist/button.js"
     },
-    "./logos/*": "./dist/assets/logos/*",
+    "./logos/*": "./dist/logos/*",
     "./reactions": {
       "types": "./dist/reactions.d.ts",
       "import": "./dist/reactions.js"
@@ -66,11 +66,11 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:assets",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/assets.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge && pnpm run build:types && pnpm run build:css && pnpm run build:logos",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
-    "build:assets": "mkdir -p ./dist/assets && cp -R ./src/assets/logos ./dist/assets/",
-    "dev": "pnpm run build:css && pnpm run build:assets && tsup ./src/index.ts ./src/assets/index.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --external react --external @base-ui/react --external class-variance-authority --external clsx --external tailwind-merge --watch",
+    "build:logos": "mkdir -p ./dist && cp -R ../assets/src/logos ./dist/",
+    "dev": "pnpm run build:css && pnpm run build:logos && tsup ./src/index.ts ./src/assets.ts ./src/button.tsx ./src/lib/utils.ts ./src/reactions.ts --format esm --out-dir ./dist --platform node --no-splitting --external react --external @base-ui/react --external @q9labsai/chalk-assets --external class-variance-authority --external clsx --external tailwind-merge --watch",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
@@ -78,6 +78,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
+    "@q9labsai/chalk-assets": "workspace:^",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.6.0"

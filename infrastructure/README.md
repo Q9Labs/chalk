@@ -23,9 +23,10 @@ Public asset paths use this prefix:
 ui/
 ```
 
-The package surface should stay metadata-only. `@q9labsai/chalk-ui/assets`
-exports CDN URLs, filenames, MIME types, byte sizes, and hash prefixes; it should
-not bundle background or sound binaries into npm packages.
+The package surface should stay metadata-only. `@q9labsai/chalk-assets` exports
+CDN URLs, filenames, MIME types, byte sizes, and hash prefixes;
+`@q9labsai/chalk-ui/assets` re-exports that surface for compatibility. Neither
+package should bundle background or sound binaries into npm packages.
 
 ### Paths
 
@@ -70,7 +71,7 @@ Max age: 86400
 2. Normalize and export hashed derivatives.
 3. Upload hashed media to `chalk-assets`.
 4. Upload `ui/manifest.json` with the short manifest cache policy.
-5. Update `packages/ui/src/assets/index.ts`.
+5. Update `packages/assets/src/index.ts`.
 6. Verify live URLs, CORS, content types, and cache headers.
 
 If replacing immutable assets, delete stale R2 objects and purge exact old URLs

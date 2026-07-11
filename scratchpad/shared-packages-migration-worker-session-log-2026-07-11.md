@@ -1,0 +1,9 @@
+# Shared packages migration worker session log — 2026-07-11
+
+- 2026-07-11 09:38 PKT — Started the scoped shared-package migration. Preserving unrelated worktree changes and the explicitly excluded paths.
+- 2026-07-11 09:40 PKT — Inventory found the whiteboard package path in repository guidance, quality tooling, and CI-adjacent configuration. UI assets provide a metadata manifest and two public logo files; the existing UI package exposes both `./assets` and `./logos/*`.
+- 2026-07-11 09:46 PKT — Moved the whiteboard directory to `packages/whiteboard` without changing its public npm name. Extracted the UI asset manifest and logos into `packages/assets`, added the `@q9labsai/chalk-assets` package, and retained UI compatibility entry points.
+- 2026-07-11 09:49 PKT — Asset and whiteboard builds passed. UI declaration generation initially failed with `TS6059` because a package-local source alias crossed its configured root directory; removed that alias so the compatibility module resolves the declared workspace dependency.
+- 2026-07-11 09:52 PKT — Runtime compatibility validation found tsup code-splitting dropped the UI asset entry’s `export *` at runtime. Disabled splitting for the UI multi-entry build and watch commands; the focused no-splitting build re-exported all seven asset exports.
+- 2026-07-11 09:54 PKT — Added a focused UI source test for the compatibility export. The built-package runtime assertion remains necessary because it covers tsup’s generated entry point and static logo files.
+- 2026-07-11 09:57 PKT — UI build and runtime compatibility assertions passed. UI and whiteboard tests, assets lint, hygiene, and test-presence checks passed. Removed two stale generated declarations that moved from the former UI asset directory and were outside the package build output.
