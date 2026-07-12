@@ -43,7 +43,6 @@ Future flexibility is intentional:
 | `sdks/typescript/react/src/utils/theme.ts`                            | theme mode detection and propagation via `data-chalk-theme`, `data-theme`, and root classes    |
 | `sdks/typescript/react/src/utils/colorGenerator.ts`                   | dynamic participant accent palettes and runtime `--primary` / `--primary-foreground` overrides |
 | `sdks/typescript/react/src/components/full/video-conference/types.ts` | current public theme API contract                                                              |
-| `apps/docs/src/content/docs/sdk/react.mdx`                            | published mirror of the public theme API                                                       |
 | `apps/web/src/styles.css`                                             | first-party brand overlay, app/display typography, app-level theme variants like `nord`        |
 | `apps/mobile/src/screens/*.tsx`                                       | current native implementation snapshot; not canonical yet                                      |
 

@@ -113,6 +113,30 @@ v1.
 | Telemetry pipeline     | collector health, rejected/refused exports, stale-pipeline canary                                                   | independent critical alerts                         |
 | Operations             | traces, metrics, logs, profiles, durable journey timeline, alert state                                              | one provisioned Grafana surface                     |
 
+## Shipping contract
+
+Observability is part of each feature's acceptance criteria. New or changed API
+and service behavior must preserve `journey_id`, `traceparent`, and `tracestate`
+across every boundary Chalk controls, then expose meaningful success, rejection,
+retry, timeout, and terminal-failure signals through the existing stack. Prefer
+bounded attributes that identify the operation and failure class; credentials,
+tokens, webhook secrets, and sensitive request or event bodies never belong in
+telemetry.
+
+A local execution trace is an explanation aid, not operational proof. The
+relevant end-to-end check must exercise a successful journey and an
+operationally distinct failure, then query the resulting trace, metrics, logs,
+and durable journey events where the lifecycle uses the ledger. Add alerts when
+an operator must act, and verify the alert's signal source rather than assuming
+dashboard presence proves it works.
+
+Every new deployed service must join uptime coverage in the same change. Add an
+appropriate health or synthetic target to the registry in
+`infrastructure/uptime-worker/src/index.ts`, cover it with focused tests, and add
+status projection when customers experience it as a distinct component. The
+proof must observe the deployed check fail and recover; a handler returning 200
+in isolation is insufficient.
+
 ## Deliberate limits and blind spots
 
 Cloudflare's private SFU implementation is outside Chalk's process and account

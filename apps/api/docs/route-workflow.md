@@ -29,8 +29,16 @@ the implementation:
 - Authn, tenant/global authz, rate limits, and idempotency where relevant.
 - Data requirements: migrations, indexes, constraints, sqlc queries, and
   transactions.
-- Observability requirements: logs, metrics/traces, audit records, and debug
-  hooks.
+- Observability requirements: journey and W3C trace propagation, meaningful
+  spans, bounded-cardinality metrics, structured logs, durable lifecycle events
+  where relevant, audit records, alerts, and debug hooks. Define how both the
+  success path and each operationally distinct failure become visible without
+  recording secrets or sensitive payloads.
+- Consumer SDK requirements: generated client contracts plus any hand-written
+  runtime support the consumer needs to use the capability safely. Webhook work
+  also needs versioned event types, raw-body signature verification, typed
+  processing, idempotency support or guidance, fixtures, and a server-only
+  package boundary.
 
 If any part of the contract is intentionally deferred, name it plainly in the
 handoff so it is not mistaken for an omission.
@@ -51,7 +59,10 @@ Typical implementation order:
 4. Add Postgres repository mapping between domain types and sqlc/pgx types.
 5. Add HTTP DTOs, decoders, endpoint factories, error mapping, and route mounts.
 6. Wire the service and repository in `cmd/main.go`.
-7. Add focused tests at the lowest useful layer, then HTTP tests for transport
+7. Wire tracing and observability through every new boundary, including async
+   work and provider calls, and extend the journey ledger for user-visible
+   lifecycle transitions.
+8. Add focused tests at the lowest useful layer, then HTTP tests for transport
    shape, auth, authz, rate limits, and error mapping.
 
 Parse request-shaped values at the HTTP edge. Keep services free of HTTP types
@@ -120,8 +131,12 @@ apps/api/scripts/gate.sh
 ```
 
 For route-only changes, also inspect the generated contract preview for the
-specific routes touched. If the full gate is blocked by unrelated dirty work,
-run the equivalent checks for the touched slice and call out the blocker in the
+specific routes touched. Run the relevant observability proof and inspect the
+resulting trace, metrics, logs, and durable journey events for both a success and
+an operationally meaningful failure. When the route exposes a consumer-facing
+capability, verify the generated and hand-written SDK surface from a realistic
+consumer entry point. If the full gate is blocked by unrelated dirty work, run
+the equivalent checks for the touched slice and call out the blocker in the
 handoff.
 
 ## 6. Handoff
@@ -130,6 +145,10 @@ Provide a short review map Hasan can quickly inspect:
 
 - Routes or behaviors added or changed.
 - Contract shape: inputs, outputs, parameters, auth, rate limits, and errors.
+- Operational evidence: where success and failure appear in traces, metrics,
+  logs, alerts, and the journey ledger.
+- Consumer evidence: generated SDK output and any runtime helpers, fixtures, or
+  documentation required to use the capability safely.
 - Key files with clickable full paths and line numbers.
 - Functions/types worth reading first.
 - Concerns, tradeoffs, or open questions.

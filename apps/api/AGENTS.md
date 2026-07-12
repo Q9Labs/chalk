@@ -37,3 +37,19 @@ endpoint fill-in.
 - Known gap: `internal/httpapi/integrations.go` still mounts integration routes
   manually, so those routes are absent from generated OpenAPI and SDK artifacts
   until they are migrated to endpoint contracts.
+
+## Observability Contract
+
+- Read `../../docs/observability.md` before adding or changing API behavior.
+- Propagate the incoming journey ID and W3C trace context through service,
+  repository, async, sync, and provider boundaries. Create a root only when the
+  API is the first observer, and use span links for late callbacks or independent
+  fan-out.
+- Instrument meaningful success, rejection, retry, timeout, and terminal failure
+  paths with bounded-cardinality metrics, structured logs, and spans. Keep
+  credentials, tokens, webhook secrets, and sensitive payloads out of every
+  signal.
+- Extend the durable journey ledger when the behavior changes a user-visible
+  lifecycle, and add or update the local observability end-to-end proof. A trace
+  harness scenario helps explain the code path but does not replace operational
+  telemetry or the observability proof.

@@ -67,6 +67,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Tightened API and service completion rules around end-to-end observability,
+  uptime-monitor registration, and consumer SDK support, while removing stale
+  implementation and store-review documentation.
 - Made sync-breaker snapshot-boundary verification audit the complete persisted
   event stream in bounded pages and retain event/head evidence before replica
   convergence checks.

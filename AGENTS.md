@@ -33,6 +33,27 @@ verify the flow in a real browser when the local app can exercise it. Keep
 user-facing product language role-neutral unless an integration requires a
 specific domain vocabulary.
 
+## Operational Completeness
+
+Treat observability as part of the behavior being shipped. Every new or changed
+API capability must propagate Chalk's journey and W3C trace context across its
+boundaries and add useful traces, metrics, structured logs, and failure signals
+to the existing observability stack. The change is incomplete until its success
+and failure paths are visible and the relevant local observability proof passes;
+never log secrets or sensitive payloads to gain that visibility.
+
+Every newly deployed service must expose an appropriate health or synthetic
+check and be added to the monitor registry in
+`infrastructure/uptime-worker/src/index.ts`, with focused tests and status
+projection when it is a user-visible component. Verify the monitor's real
+failure and recovery path before calling the service complete.
+
+Consumer-facing platform capabilities must ship with the SDK surface needed to
+use them safely. For webhooks, this includes versioned event types and schemas,
+signature verification over the raw request body, typed dispatch or processing
+helpers, idempotent consumer guidance or helpers, test fixtures, and package
+documentation. Keep server-only webhook handling out of browser bundles.
+
 ## Where To Write Code
 
 Packages are the source of truth; demo apps should stay thin.
