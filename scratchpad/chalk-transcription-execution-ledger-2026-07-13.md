@@ -23,7 +23,8 @@ worktree:
   creation, and a media-free asynchronous wake hint;
 - the dispatcher passed its focused provider, normalization, fallback,
   multi-track overlap, mixed-provider finalization, late-result, cleanup, and
-  reconciliation tests;
+  reconciliation tests, including partial word coverage, nested intervals, and
+  a 12,000-cue bounded overlap proof;
 - both OpenTofu modules validated and the static dispatcher infrastructure
   contract passed; and
 - OpenAPI and TypeScript SDK artifacts were regenerated from the new public
@@ -32,9 +33,10 @@ worktree:
   artifact-backed schema;
 - lint, monorepo typechecking, tests, coverage, package publication checks, and
   TypeScript package-resolution checks passed; and
-- two dirty-source local release builds produced and verified the identical
-  dispatcher ZIP SHA-256
-  `e0bee23b5bcd97f1f60e310abc108fa29f23560d78cebe4968ea9c2ffb0afe15`.
+- two clean-source builds from commit `6fced0c3` used unique release IDs and a
+  fixed source epoch, then produced and verified the identical dispatcher ZIP
+  SHA-256
+  `92203b8b0b5fcf6f12fa46a71afbae2320cc68e38ddb7c7e386c71c98b98bb7f`.
 
 The canonical `pnpm run gate` is not green on this `origin/master` base. Its
 repository-wide format stage reports eleven pre-existing, out-of-scope files;
@@ -43,7 +45,12 @@ and fixed an SDK schema-name collision, after which all stages passed except the
 unrelated mobile build: Expo/Hermes rejects `import.meta.env` in the checked-in
 Effect dependency without `unstable_transformImportMeta`. The transcription
 dispatcher, client SDK, and web build completed before Turbo stopped. The
-post-commit review remains pending until the implementation commit exists.
+two bounded post-commit review passes completed. The first pass found five
+artifact ownership, lease recovery, retry, finalizer-bound, and reconciliation
+defects; the combined re-review found six normalization, overlap, request,
+source-replacement, and error-mapping defects. Every finding was fixed with a
+focused regression, and the affected full gates passed afterward. The review
+policy permits no third pass.
 
 ## Unmet launch gates
 
