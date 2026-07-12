@@ -475,37 +475,6 @@ const recordingsGroup = HttpApiGroup.make("recordings")
     }),
   )
   .add(
-    HttpApiEndpoint.post("transcribeRecording", "/v1/tenants/:tenant_id/recordings/:recording_id/transcriptions", {
-      params: S.TranscribeRecordingPathParamsSchema,
-      payload: S.TranscribeRecordingRequestBodySchema,
-      success: S.TranscribeRecordingResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.InvalidAiAudioErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidAiConfigErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidAiGatewayErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidAiModelErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidRecordingIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidStorageKeyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidStorageProviderErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MissingAiCredentialsErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RecordingNotReadyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.AiProviderRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.AiProviderFailedErrorSchema.pipe(HttpApiSchema.status(502)),
-        S.AiProviderPaymentRequiredErrorSchema.pipe(HttpApiSchema.status(502)),
-        S.AiProviderUnauthorizedErrorSchema.pipe(HttpApiSchema.status(502)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.patch("updateRecording", "/v1/tenants/:tenant_id/recordings/:recording_id", {
       params: S.UpdateRecordingPathParamsSchema,
       payload: S.UpdateRecordingRequestBodySchema,
@@ -779,25 +748,33 @@ const tenantsGroup = HttpApiGroup.make("tenants")
 
 const transcriptsGroup = HttpApiGroup.make("transcripts")
   .add(
-    HttpApiEndpoint.post("createTranscript", "/v1/tenants/:tenant_id/recordings/:recording_id/transcripts", {
-      params: S.CreateTranscriptPathParamsSchema,
-      payload: S.CreateTranscriptRequestBodySchema,
-      success: S.CreateTranscriptResponseSchema.pipe(HttpApiSchema.status(201)),
+    HttpApiEndpoint.post("createTranscriptDownloadURL", "/v1/tenants/:tenant_id/transcripts/:transcript_id/download-url", {
+      params: S.CreateTranscriptDownloadURLPathParamsSchema,
+      payload: S.CreateTranscriptDownloadURLRequestBodySchema,
+      success: S.CreateTranscriptDownloadURLResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
-        S.InvalidRecordingIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidRoomIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptFieldErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptLanguagesErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptModelErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptProviderErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptStatusErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidUrlExpirationErrorSchema.pipe(HttpApiSchema.status(400)),
         S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TranscriptNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
         S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("deleteTranscript", "/v1/tenants/:tenant_id/transcripts/:transcript_id", {
+      params: S.DeleteTranscriptPathParamsSchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTranscriptIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -837,19 +814,16 @@ const transcriptsGroup = HttpApiGroup.make("transcripts")
     }),
   )
   .add(
-    HttpApiEndpoint.patch("updateTranscript", "/v1/tenants/:tenant_id/transcripts/:transcript_id", {
-      params: S.UpdateTranscriptPathParamsSchema,
-      payload: S.UpdateTranscriptRequestBodySchema,
-      success: S.UpdateTranscriptResponseSchema.pipe(HttpApiSchema.status(200)),
+    HttpApiEndpoint.post("requestTranscript", "/v1/tenants/:tenant_id/recordings/:recording_id/transcripts", {
+      params: S.RequestTranscriptPathParamsSchema,
+      payload: S.RequestTranscriptRequestBodySchema,
+      success: S.RequestTranscriptResponseSchema.pipe(HttpApiSchema.status(202)),
       error: [
+        S.InvalidRecordingIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptFieldErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidTranscriptIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptLanguagesErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptModelErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptProviderErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidTranscriptStatusErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RecordingNotReadyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),

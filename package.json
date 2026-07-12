@@ -6,6 +6,7 @@
     "packages/*",
     "sdks/typescript/*",
     "tools/*",
+    "apps/transcription-dispatcher",
     "apps/mobile",
     "apps/web",
     "infrastructure/uptime-worker"
@@ -27,6 +28,9 @@
     "observability:logs": "bash infrastructure/observability/scripts/local.sh logs",
     "observability:smoke": "bash infrastructure/observability/scripts/local.sh smoke",
     "observability:e2e": "bash infrastructure/observability/scripts/local.sh e2e",
+    "transcription:build": "pnpm --dir apps/transcription-dispatcher run build",
+    "transcription:test": "pnpm --dir apps/transcription-dispatcher run test",
+    "transcription:infra:check": "bash scripts/transcription-dispatcher/validate-contract.sh",
     "mobile:sync-local-env": "pnpm exec tsx scripts/sync-local-mobile-env.ts",
     "dev:mobile": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run start'",
     "dev:mobile:android": "bash -lc 'if command -v adb >/dev/null 2>&1; then adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1 || true; adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; fi; pnpm --dir apps/mobile run android'",

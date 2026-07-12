@@ -5,6 +5,7 @@
 *.tfvars.json
 .terraform/
 .terraform.lock.hcl
+!opentofu/modules/**/.terraform.lock.hcl
 crash.log
 crash.*.log
 override.tf
@@ -13,6 +14,7 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+.artifacts/
 
 # IDE
 .idea/

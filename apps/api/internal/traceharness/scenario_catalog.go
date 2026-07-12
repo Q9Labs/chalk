@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/ai"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/email"
@@ -21,7 +20,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
-	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -455,7 +453,7 @@ func runRouteRoomCreateMember(ctx context.Context) (ScenarioResult, error) {
 func runRouteRecordingTranscribe(ctx context.Context) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
-	body := json.RawMessage(`{"model":"openai/whisper-1","language":"en"}`)
+	body := json.RawMessage(`{"idempotency_key":"trace-transcript-1","language":"en"}`)
 
 	return runRouteTrace(ctx, routeTraceConfig{
 		Name:     RouteRecordingTranscribeScenario,
@@ -473,31 +471,13 @@ func runRouteRecordingTranscribe(ctx context.Context) (ScenarioResult, error) {
 				now:        now,
 				policyRole: memberships.RoleMember,
 			}),
-			Tenants: tracedAIByokTenantService{
-				recorder: recorder,
-				now:      now,
-			},
-			Recordings: tracedRecordingService{
-				recorder: recorder,
-				next:     recordings.NewService(tracedRecordingRepository{recorder: recorder, now: now}),
-			},
-			RecordingObjects: tracedRecordingObjectService{
-				recorder: recorder,
-			},
-			AITranscriptions: tracedAITranscriptionService{
-				recorder: recorder,
-				next:     ai.NewService(tracedOpenRouterClient{recorder: recorder}),
-			},
-			Transcripts: tracedTranscriptService{
-				recorder: recorder,
-				next:     transcripts.NewService(tracedTranscriptRepository{recorder: recorder, now: now}),
-			},
+			TranscriptArtifacts: tracedTranscriptArtifactService{recorder: recorder, now: now},
 		}),
 		Method:         http.MethodPost,
-		Path:           "/v1/tenants/" + tenantID().String() + "/recordings/" + recordingID().String() + "/transcriptions",
+		Path:           "/v1/tenants/" + tenantID().String() + "/recordings/" + recordingID().String() + "/transcripts",
 		Body:           body,
 		Authorization:  "Bearer trace-session-token",
-		ExpectedStatus: http.StatusCreated,
+		ExpectedStatus: http.StatusAccepted,
 	})
 }
 
@@ -1407,230 +1387,32 @@ func (r tracedMembershipRepository) UpdateTenantMembership(ctx context.Context, 
 	return membership, nil
 }
 
-type tracedAIByokTenantService struct {
+type tracedTranscriptArtifactService struct {
 	recorder *Recorder
 	now      func() time.Time
 }
 
-func (s tracedAIByokTenantService) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
-	_ = ctx
-	span := s.recorder.Start("service", "tenants.Service.GetTenant", "load tenant ai provider config for BYOK request", map[string]any{"tenant_id": id.String()})
-	s.recorder.Add("repository", "TenantRepository.GetTenant", "select tenant with redacted ai config", map[string]any{
-		"tenant_id": id.String(),
-		"ai_provider_config": map[string]any{
-			"gateway":       "openrouter",
-			"api_key":       "[redacted]",
-			"default_model": "openai/whisper-1",
-		},
-	})
-	tenant := tenantFixture(s.now)
-	tenant.ID = id
-	tenant.AIProviderConfig = json.RawMessage(`{"gateway":"openrouter","api_key":"sk-trace","default_model":"openai/whisper-1"}`)
-	span.End("tenant service returned tenant with ai config redacted in trace", map[string]any{"tenant": tenantAIConfigFields(tenant)}, nil)
-	return tenant, nil
+func (s tracedTranscriptArtifactService) Request(_ context.Context, input transcripts.RequestInput) (transcripts.Transcript, transcripts.Job, error) {
+	span := s.recorder.Start("service", "transcripts.Service.Request", "validate idempotent artifact request and load recorder-owned source", map[string]any{"tenant_id": input.TenantID.String(), "recording_id": input.RecordingID.String(), "idempotency_key": input.IdempotencyKey, "languages": input.Languages})
+	s.recorder.Add("database", "SELECT recording_transcription_sources", "load committed manifest and track-aware chunk authority", map[string]any{"recording_id": input.RecordingID.String()})
+	s.recorder.Add("database", "BEGIN transcript request", "atomically insert transcript, chunks, and fenced artifact jobs", map[string]any{"idempotency_key": input.IdempotencyKey})
+	transcript := transcripts.Transcript{ID: transcriptArtifactID(), TenantID: input.TenantID, RecordingID: input.RecordingID, RoomID: roomID(), SessionID: roomSessionID(), Status: transcripts.StatusPreparing, Languages: []string{"en"}, Generation: 1, CreatedAt: s.now(), UpdatedAt: s.now()}
+	job := transcripts.Job{ID: transcriptJobID(), TenantID: input.TenantID, RecordingID: input.RecordingID, TranscriptID: transcript.ID, SessionID: transcript.SessionID, ArtifactKind: "transcription_chunk", PayloadSchemaVersion: 1, State: transcripts.JobStatePending, AttemptLimit: 4, CreatedAt: s.now(), UpdatedAt: s.now()}
+	s.recorder.Add("provider", "Lambda Invoke Event", "send loss-tolerant post-commit dispatcher wake hint", map[string]any{"job_id": job.ID.String(), "payload_contains_media": false})
+	span.End("transcript request committed", map[string]any{"transcript": transcriptFields(transcript), "job_id": job.ID.String(), "job_state": job.State}, nil)
+	return transcript, job, nil
 }
 
-func (tracedAIByokTenantService) AvailableRegions(context.Context) ([]regions.Region, error) {
-	return nil, errors.New("available regions is not used by this trace scenario")
-}
-
-func (tracedAIByokTenantService) CreateTenant(context.Context, tenants.CreateTenantInput) (tenants.Tenant, error) {
-	return tenants.Tenant{}, errors.New("create tenant is not used by this trace scenario")
-}
-
-func (tracedAIByokTenantService) ListTenants(context.Context, pagination.PageRequest) (tenants.TenantList, error) {
-	return tenants.TenantList{}, errors.New("list tenants is not used by this trace scenario")
-}
-
-func (tracedAIByokTenantService) UpdateTenant(context.Context, utilities.ID, tenants.UpdateTenantInput) (tenants.Tenant, error) {
-	return tenants.Tenant{}, errors.New("update tenant is not used by this trace scenario")
-}
-
-type tracedRecordingService struct {
-	recorder *Recorder
-	next     recordings.Service
-}
-
-func (s tracedRecordingService) Get(ctx context.Context, tenantID utilities.ID, id utilities.ID) (recordings.Recording, error) {
-	span := s.recorder.Start("service", "recordings.Service.Get", "validate recording ids and load completed recording", map[string]any{
-		"tenant_id":    tenantID.String(),
-		"recording_id": id.String(),
-	})
-	recording, err := s.next.Get(ctx, tenantID, id)
-	span.End("recording service returned domain recording", map[string]any{"recording": recordingFields(recording)}, err)
-	return recording, err
-}
-
-func (tracedRecordingService) Create(context.Context, recordings.CreateInput) (recordings.Recording, error) {
-	return recordings.Recording{}, errors.New("create recording is not used by this trace scenario")
-}
-
-func (tracedRecordingService) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (recordings.RecordingList, error) {
-	return recordings.RecordingList{}, errors.New("list recordings is not used by this trace scenario")
-}
-
-func (tracedRecordingService) Update(context.Context, utilities.ID, utilities.ID, recordings.UpdateInput) (recordings.Recording, error) {
-	return recordings.Recording{}, errors.New("update recording is not used by this trace scenario")
-}
-
-type tracedRecordingRepository struct {
-	recorder *Recorder
-	now      func() time.Time
-}
-
-func (r tracedRecordingRepository) Get(ctx context.Context, tenantID utilities.ID, id utilities.ID) (recordings.Recording, error) {
-	_ = ctx
-	span := r.recorder.Start("repository", "RecordingRepository.Get", "select completed recording by tenant and id", map[string]any{
-		"tenant_id":    tenantID.String(),
-		"recording_id": id.String(),
-	})
-	recording := recordingFixture(r.now)
-	recording.ID = id
-	recording.TenantID = tenantID
-	span.End("map database row to recording", map[string]any{"recording": recordingFields(recording)}, nil)
-	return recording, nil
-}
-
-func (tracedRecordingRepository) Create(context.Context, recordings.CreateInput) (recordings.Recording, error) {
-	return recordings.Recording{}, errors.New("create recording is not used by this trace scenario")
-}
-
-func (tracedRecordingRepository) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (recordings.RecordingList, error) {
-	return recordings.RecordingList{}, errors.New("list recordings is not used by this trace scenario")
-}
-
-func (tracedRecordingRepository) Update(context.Context, utilities.ID, utilities.ID, recordings.UpdateInput) (recordings.Recording, error) {
-	return recordings.Recording{}, errors.New("update recording is not used by this trace scenario")
-}
-
-type tracedRecordingObjectService struct {
-	recorder *Recorder
-}
-
-func (s tracedRecordingObjectService) GetObject(ctx context.Context, key string) (objectstorage.ObjectReader, error) {
-	_ = ctx
-	s.recorder.Add("storage", "objectstorage.Service.GetObject", "stream completed recording object from durable storage", map[string]any{
-		"storage_key":  key,
-		"content_type": "audio/webm",
-		"body":         "[stream]",
-	})
-	return objectstorage.ObjectReader{
-		Object: objectstorage.Object{
-			Key:         key,
-			ContentType: "audio/webm",
-			Size:        42,
-		},
-		Body: io.NopCloser(bytes.NewReader([]byte("trace audio"))),
-	}, nil
-}
-
-type tracedAITranscriptionService struct {
-	recorder *Recorder
-	next     ai.Service
-}
-
-func (s tracedAITranscriptionService) Transcribe(ctx context.Context, input ai.TranscribeInput) (ai.Transcription, error) {
-	span := s.recorder.Start("service", "ai.Service.Transcribe", "validate BYOK config, model, and audio envelope", map[string]any{
-		"input": aiTranscribeInputFields(input),
-	})
-	result, err := s.next.Transcribe(ctx, input)
-	span.End("ai service returned transcription result", map[string]any{"transcription": aiTranscriptionFields(result)}, err)
-	return result, err
-}
-
-type tracedOpenRouterClient struct {
-	recorder *Recorder
-}
-
-func (c tracedOpenRouterClient) Transcribe(ctx context.Context, input ai.TranscribeInput) (ai.Transcription, error) {
-	_ = ctx
-	c.recorder.Add("provider", "POST openrouter /audio/transcriptions", "send redacted transcription request to OpenRouter", map[string]any{
-		"gateway":      input.Config.Gateway,
-		"model":        input.Model,
-		"audio_format": input.AudioFormat,
-		"language":     input.Language,
-		"api_key":      "[redacted]",
-		"audio":        "[streamed recording object]",
-	})
-	return ai.Transcription{
-		Gateway: ai.GatewayOpenRouter,
-		Model:   input.Model,
-		Text:    "Hello from the trace recording.",
-		Usage:   json.RawMessage(`{"input_tokens":12,"output_tokens":3}`),
-	}, nil
-}
-
-func (tracedOpenRouterClient) GenerateText(context.Context, ai.GenerateTextInput) (ai.Generation, error) {
-	return ai.Generation{}, errors.New("generate text is not used by this trace scenario")
-}
-
-func (tracedOpenRouterClient) GenerateObject(context.Context, ai.GenerateObjectInput) (ai.Generation, error) {
-	return ai.Generation{}, errors.New("generate object is not used by this trace scenario")
-}
-
-type tracedTranscriptService struct {
-	recorder *Recorder
-	next     transcripts.Service
-}
-
-func (s tracedTranscriptService) Create(ctx context.Context, input transcripts.CreateInput) (transcripts.Transcript, error) {
-	span := s.recorder.Start("service", "transcripts.Service.Create", "validate completed transcript input", map[string]any{"input": transcriptCreateInputFields(input)})
-	transcript, err := s.next.Create(ctx, input)
-	span.End("transcript service returned created transcript", map[string]any{"transcript": transcriptFields(transcript)}, err)
-	return transcript, err
-}
-
-func (tracedTranscriptService) Get(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
+func (tracedTranscriptArtifactService) Get(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
 	return transcripts.Transcript{}, errors.New("get transcript is not used by this trace scenario")
 }
 
-func (tracedTranscriptService) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (transcripts.TranscriptList, error) {
+func (tracedTranscriptArtifactService) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (transcripts.TranscriptList, error) {
 	return transcripts.TranscriptList{}, errors.New("list transcripts is not used by this trace scenario")
 }
 
-func (tracedTranscriptService) Update(context.Context, utilities.ID, utilities.ID, transcripts.UpdateInput) (transcripts.Transcript, error) {
-	return transcripts.Transcript{}, errors.New("update transcript is not used by this trace scenario")
-}
-
-type tracedTranscriptRepository struct {
-	recorder *Recorder
-	now      func() time.Time
-}
-
-func (r tracedTranscriptRepository) Create(ctx context.Context, input transcripts.CreateInput) (transcripts.Transcript, error) {
-	_ = ctx
-	span := r.recorder.Start("repository", "TranscriptRepository.Create", "insert generated transcript row", map[string]any{"domain_input": transcriptCreateInputFields(input)})
-	r.recorder.Add("database", "INSERT transcriptions RETURNING *", "persist provider transcription result", map[string]any{"params": transcriptCreateInputFields(input)})
-	transcript := transcripts.Transcript{
-		ID:          input.ID,
-		TenantID:    input.TenantID,
-		RecordingID: input.RecordingID,
-		RoomID:      input.RoomID,
-		SessionID:   input.SessionID,
-		Status:      input.Status,
-		Provider:    input.Provider,
-		Model:       input.Model,
-		Languages:   input.Languages,
-		Text:        input.Text,
-		Metadata:    input.Metadata,
-		CompletedAt: input.CompletedAt,
-		CreatedAt:   r.now(),
-		UpdatedAt:   r.now(),
-	}
-	span.End("map database row to transcript", map[string]any{"transcript": transcriptFields(transcript)}, nil)
-	return transcript, nil
-}
-
-func (tracedTranscriptRepository) Get(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
-	return transcripts.Transcript{}, errors.New("get transcript is not used by this trace scenario")
-}
-
-func (tracedTranscriptRepository) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (transcripts.TranscriptList, error) {
-	return transcripts.TranscriptList{}, errors.New("list transcripts is not used by this trace scenario")
-}
-
-func (tracedTranscriptRepository) Update(context.Context, utilities.ID, utilities.ID, transcripts.UpdateInput) (transcripts.Transcript, error) {
-	return transcripts.Transcript{}, errors.New("update transcript is not used by this trace scenario")
+func (tracedTranscriptArtifactService) Delete(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
+	return transcripts.Transcript{}, errors.New("delete transcript is not used by this trace scenario")
 }
 
 type tracedRoomService struct {
@@ -1876,6 +1658,12 @@ func (s tracedObjectStore) CreateDownloadURL(ctx context.Context, input objectst
 	return objectstorage.SignedURL{Method: http.MethodGet, URL: "https://trace.r2.cloudflarestorage.com/chalk-trace/" + input.Key + "?X-Amz-Signature=redacted", SignedAt: s.now(), ExpiresAt: s.now().Add(input.ExpiresIn)}, nil
 }
 
+func (s tracedObjectStore) CreateDeleteURL(ctx context.Context, input objectstorage.CreateDeleteURLInput) (objectstorage.SignedURL, error) {
+	_ = ctx
+	s.recorder.Add("adapter", "r2.Store.CreateDeleteURL", "presign S3-compatible DELETE object request", map[string]any{"input": deleteURLInputFields(input)})
+	return objectstorage.SignedURL{Method: http.MethodDelete, URL: "https://trace.r2.cloudflarestorage.com/chalk-trace/" + input.Key + "?X-Amz-Signature=redacted", SignedAt: s.now(), ExpiresAt: s.now().Add(input.ExpiresIn)}, nil
+}
+
 type tracedMediaPlane struct {
 	recorder *Recorder
 	now      func() time.Time
@@ -2011,6 +1799,14 @@ func recordingID() utilities.ID {
 	return mustID("88888888-8888-4888-8888-888888888888")
 }
 
+func transcriptArtifactID() utilities.ID {
+	return mustID("99999999-9999-4999-8999-999999999999")
+}
+
+func transcriptJobID() utilities.ID {
+	return mustID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+}
+
 func apiKeyID() utilities.ID {
 	return mustID("55555555-5555-4555-8555-555555555555")
 }
@@ -2072,84 +1868,6 @@ func roomSessionFixture(now func() time.Time) rooms.Session {
 		StartedAt:       &startedAt,
 		CreatedAt:       now(),
 		UpdatedAt:       now(),
-	}
-}
-
-func recordingFixture(now func() time.Time) recordings.Recording {
-	return recordings.Recording{
-		ID:              recordingID(),
-		TenantID:        tenantID(),
-		RoomID:          roomID(),
-		SessionID:       roomSessionID(),
-		Status:          recordings.StatusCompleted,
-		StorageProvider: recordings.StorageProviderR2,
-		StorageKey:      stringPtr("tenants/" + tenantID().String() + "/recordings/trace.webm"),
-		Metadata:        json.RawMessage(`{"duration_seconds":42}`),
-		CreatedAt:       now(),
-		UpdatedAt:       now(),
-	}
-}
-
-func tenantAIConfigFields(tenant tenants.Tenant) map[string]any {
-	fields := tenantFields(tenant)
-	fields["ai_provider_config"] = map[string]any{
-		"gateway":       "openrouter",
-		"api_key":       "[redacted]",
-		"default_model": "openai/whisper-1",
-	}
-	return fields
-}
-
-func recordingFields(recording recordings.Recording) map[string]any {
-	return map[string]any{
-		"id":               recording.ID.String(),
-		"tenant_id":        recording.TenantID.String(),
-		"room_id":          recording.RoomID.String(),
-		"session_id":       recording.SessionID.String(),
-		"status":           recording.Status,
-		"storage_provider": recording.StorageProvider,
-		"storage_key":      recording.StorageKey,
-		"metadata":         decodedBody(recording.Metadata),
-	}
-}
-
-func aiTranscribeInputFields(input ai.TranscribeInput) map[string]any {
-	return map[string]any{
-		"config": map[string]any{
-			"gateway":       input.Config.Gateway,
-			"api_key":       "[redacted]",
-			"default_model": input.Config.DefaultModel,
-		},
-		"model":        input.Model,
-		"audio_format": input.AudioFormat,
-		"language":     input.Language,
-		"audio":        "[streamed recording object]",
-	}
-}
-
-func aiTranscriptionFields(transcription ai.Transcription) map[string]any {
-	return map[string]any{
-		"gateway": transcription.Gateway,
-		"model":   transcription.Model,
-		"text":    transcription.Text,
-		"usage":   decodedBody(transcription.Usage),
-	}
-}
-
-func transcriptCreateInputFields(input transcripts.CreateInput) map[string]any {
-	return map[string]any{
-		"id":           input.ID.String(),
-		"tenant_id":    input.TenantID.String(),
-		"recording_id": input.RecordingID.String(),
-		"room_id":      input.RoomID.String(),
-		"session_id":   input.SessionID.String(),
-		"status":       input.Status,
-		"provider":     input.Provider,
-		"model":        input.Model,
-		"languages":    input.Languages,
-		"text":         input.Text,
-		"metadata":     decodedBody(input.Metadata),
-		"completed_at": optionalTraceTime(input.CompletedAt),
 	}
 }
 
@@ -2466,6 +2184,10 @@ func uploadURLInputFields(input objectstorage.CreateUploadURLInput) map[string]a
 }
 
 func downloadURLInputFields(input objectstorage.CreateDownloadURLInput) map[string]any {
+	return map[string]any{"key": input.Key, "expires_in": input.ExpiresIn.String()}
+}
+
+func deleteURLInputFields(input objectstorage.CreateDeleteURLInput) map[string]any {
 	return map[string]any{"key": input.Key, "expires_in": input.ExpiresIn.String()}
 }
 

@@ -31,6 +31,7 @@ type objectClient interface {
 type presignClient interface {
 	PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 	PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignDeleteObject(ctx context.Context, params *s3.DeleteObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
 type Store struct {
@@ -182,6 +183,23 @@ func (s Store) CreateDownloadURL(ctx context.Context, input objectstorage.Create
 		return objectstorage.SignedURL{}, fmt.Errorf("presign r2 download: %w", objectstorage.ErrProviderFailed)
 	}
 
+	return signedURL(request, s.now(), input.ExpiresIn), nil
+}
+
+func (s Store) CreateDeleteURL(ctx context.Context, input objectstorage.CreateDeleteURLInput) (objectstorage.SignedURL, error) {
+	if s.presign == nil {
+		return objectstorage.SignedURL{}, objectstorage.ErrStoreUnavailable
+	}
+	request, err := s.presign.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(input.Key),
+	}, presignExpires(input.ExpiresIn))
+	if err != nil {
+		return objectstorage.SignedURL{}, providerError("presign r2 delete", err)
+	}
+	if request == nil {
+		return objectstorage.SignedURL{}, fmt.Errorf("presign r2 delete: %w", objectstorage.ErrProviderFailed)
+	}
 	return signedURL(request, s.now(), input.ExpiresIn), nil
 }
 

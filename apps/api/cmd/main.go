@@ -10,16 +10,15 @@ import (
 	"syscall"
 	"time"
 
+	lambdawaker "github.com/q9labs/chalk/apps/api/internal/adapters/aws/lambdawaker"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	rtkadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk"
 	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
-	"github.com/q9labs/chalk/apps/api/internal/adapters/openrouter"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
-	"github.com/q9labs/chalk/apps/api/internal/ai"
 	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -111,7 +110,7 @@ func run() error {
 	var googleProvider authentication.GoogleProvider
 	var oauthStates authentication.OAuthStateStore
 	var redisClient *goredis.Client
-	needsRedis := cfg.GoogleOAuth.ClientID != "" || cfg.GoogleOAuth.ClientSecret != "" || cfg.Observability.Environment != config.DefaultEnvironment
+	needsRedis := cfg.GoogleOAuth.ClientID != "" || cfg.GoogleOAuth.ClientSecret != "" || cfg.Transcription.WorkloadAuthSecret != "" || cfg.Observability.Environment != config.DefaultEnvironment
 	if needsRedis {
 		redisClient, err = redisadapter.Open(cfg.Redis.URL)
 		if err != nil {
@@ -164,13 +163,8 @@ func run() error {
 	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
-	transcriptRepository := postgres.NewTranscriptRepository(operationQueries)
+	transcriptRepository := postgres.NewTranscriptRepositoryWithPool(operationQueries, pool)
 	transcriptService := transcripts.NewService(transcriptRepository)
-	openRouterAdapter, err := openrouter.NewAdapter(openrouter.Config{})
-	if err != nil {
-		return fmt.Errorf("configure openrouter: %w", err)
-	}
-	aiService := ai.NewService(openRouterAdapter)
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
 	journeyRepository := postgres.NewJourneyRepository(pool)
@@ -186,6 +180,7 @@ func run() error {
 	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(cfg.CloudflareRealtime)
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService
+	var transcriptionStorage *objectstorage.Service
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
@@ -194,6 +189,7 @@ func run() error {
 		recordingStorage := objectstorage.NewService(store)
 		recordingDownloads = recordingStorage
 		recordingObjects = recordingStorage
+		transcriptionStorage = &recordingStorage
 	}
 	integrationCatalog, err := integrations.DefaultCatalog()
 	if err != nil {
@@ -220,6 +216,41 @@ func run() error {
 	if cfg.Observability.Environment != config.DefaultEnvironment {
 		rateLimitOptions.Limiter = redisadapter.NewRateLimiter(redisClient)
 	}
+	var transcriptArtifacts httpapi.TranscriptArtifactService
+	var transcriptWorker httpapi.TranscriptWorkerService
+	var workloadAuthorizer httpapi.WorkloadAuthorizer
+	var transcriptionAuthority *transcriptionObjectAuthority
+	if cfg.Transcription.WorkloadAuthSecret != "" {
+		if len(cfg.Transcription.WorkloadAuthSecret) < 32 {
+			return fmt.Errorf("%s must contain at least 32 bytes", config.TranscriptionWorkloadAuthSecret)
+		}
+		if redisClient == nil || transcriptionStorage == nil {
+			return errors.New("transcription workload auth requires Redis and R2")
+		}
+		if cfg.Transcription.DispatcherFunction == "" {
+			return fmt.Errorf("%s must be set with %s", config.TranscriptionDispatcherFunction, config.TranscriptionWorkloadAuthSecret)
+		}
+		waker, err := lambdawaker.New(context.Background(), cfg.Transcription.DispatcherFunction, logger)
+		if err != nil {
+			return fmt.Errorf("configure transcription dispatcher wake: %w", err)
+		}
+		transcriptService = transcriptService.WithDispatcherWaker(waker)
+		authority := transcriptionObjectAuthority{storage: *transcriptionStorage}
+		transcriptionAuthority = &authority
+		nonces := redisadapter.NewWorkloadNonceStore(redisClient)
+		authorizer := httpapi.NewHMACWorkloadAuthorizer(httpapi.HMACWorkloadAuthorizerConfig{
+			Secret:      []byte(cfg.Transcription.WorkloadAuthSecret),
+			Environment: cfg.Observability.Environment,
+			ReleaseID:   cfg.Observability.Version,
+			Audience:    cfg.Transcription.ControlAudience,
+			Nonces:      nonces,
+		})
+		transcriptArtifacts = transcriptService
+		transcriptWorker = transcriptService
+		workloadAuthorizer = authorizer
+	} else if cfg.Observability.Environment != config.DefaultEnvironment {
+		return fmt.Errorf("%s must be set outside local environments", config.TranscriptionWorkloadAuthSecret)
+	}
 	routerOptions := httpapi.Options{
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
@@ -245,11 +276,24 @@ func run() error {
 		SessionCookie: httpapi.SessionCookieOptions{
 			Secure: cfg.Observability.Environment != "local",
 		},
-		TenantAuthz:      tenantAuthz,
-		Tenants:          tenantService,
-		AITranscriptions: aiService,
-		Transcripts:      transcriptService,
-		Users:            userService,
+		TenantAuthz: tenantAuthz,
+		Tenants:     tenantService,
+		// Synchronous application-node provider calls are intentionally absent.
+		// Transcription work is claimed and fenced through the internal worker
+		// boundary after the request transaction commits.
+		AITranscriptions:       nil,
+		Transcripts:            transcriptService,
+		TranscriptArtifacts:    transcriptArtifacts,
+		TranscriptWorker:       transcriptWorker,
+		WorkloadAuthorizer:     workloadAuthorizer,
+		ChunkAuthority:         transcriptionAuthority,
+		ManifestAuthority:      transcriptionAuthority,
+		ResultAuthority:        transcriptionAuthority,
+		CleanupWorker:          transcriptService,
+		CleanupDeleteAuthority: transcriptionAuthority,
+		FinalizerWorker:        transcriptService,
+		FinalizerAuthority:     transcriptionAuthority,
+		Users:                  userService,
 	}
 	diagnostics.ApplyHTTP(&routerOptions)
 

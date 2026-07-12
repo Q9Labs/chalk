@@ -62,12 +62,15 @@ const (
 	ComposioTimeoutMS     = "CHALK_COMPOSIO_TIMEOUT_MS"
 	ComposioWebhookSecret = "CHALK_COMPOSIO_WEBHOOK_SECRET"
 
-	R2AccessKeyID      = "CHALK_R2_ACCESS_KEY_ID"
-	R2AccountID        = "CHALK_R2_ACCOUNT_ID"
-	R2Bucket           = "CHALK_R2_BUCKET"
-	R2Endpoint         = "CHALK_R2_ENDPOINT"
-	R2SecretAccessKey  = "CHALK_R2_SECRET_ACCESS_KEY"
-	R2RequestTimeoutMS = "CHALK_R2_REQUEST_TIMEOUT_MS"
+	R2AccessKeyID                   = "CHALK_R2_ACCESS_KEY_ID"
+	R2AccountID                     = "CHALK_R2_ACCOUNT_ID"
+	R2Bucket                        = "CHALK_R2_BUCKET"
+	R2Endpoint                      = "CHALK_R2_ENDPOINT"
+	R2SecretAccessKey               = "CHALK_R2_SECRET_ACCESS_KEY"
+	R2RequestTimeoutMS              = "CHALK_R2_REQUEST_TIMEOUT_MS"
+	TranscriptionWorkloadAuthSecret = "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET"
+	TranscriptionControlAudience    = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
+	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
 
 	ResendAPIKey    = "CHALK_RESEND_API_KEY"
 	ResendTimeoutMS = "CHALK_RESEND_TIMEOUT_MS"
@@ -89,6 +92,7 @@ const (
 	DefaultRequestLogs                        = "off"
 	DefaultRequestSampleRate                  = 0.01
 	DefaultR2RequestTimeoutMS                 = int64(10000)
+	DefaultTranscriptionControlAudience       = "chalk-control-api"
 	DefaultRedisURL                           = "redis://127.0.0.1:6379/0"
 	DefaultResendTimeoutMS                    = int64(10000)
 	DefaultSessionTTLMS                       = int64(30 * 24 * 60 * 60 * 1000)
@@ -149,6 +153,12 @@ type R2Config struct {
 	RequestTimeout  time.Duration
 }
 
+type TranscriptionConfig struct {
+	WorkloadAuthSecret string
+	ControlAudience    string
+	DispatcherFunction string
+}
+
 type AuthConfig struct {
 	EmailVerificationRequired bool
 	OAuthStateTTL             time.Duration
@@ -200,6 +210,7 @@ type Config struct {
 	Redis              RedisConfig
 	Resend             ResendConfig
 	SyncToken          SyncTokenConfig
+	Transcription      TranscriptionConfig
 }
 
 func Load() (Config, error) {
@@ -385,6 +396,11 @@ func Load() (Config, error) {
 			Timeout: resendTimeout,
 		},
 		SyncToken: syncToken,
+		Transcription: TranscriptionConfig{
+			WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
+			ControlAudience:    envOrDefault(TranscriptionControlAudience, DefaultTranscriptionControlAudience),
+			DispatcherFunction: envOrDefault(TranscriptionDispatcherFunction, ""),
+		},
 	}, nil
 }
 

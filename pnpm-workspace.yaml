@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "sdks/typescript/*"
   - "tools/*"
+  - "apps/transcription-dispatcher"
   - "apps/mobile"
   - "apps/web"
   - "infrastructure/uptime-worker"

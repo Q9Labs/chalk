@@ -26,6 +26,34 @@ type ApiKey struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type ArtifactJob struct {
+	ID                   pgtype.UUID        `json:"id"`
+	IdempotencyKey       string             `json:"idempotency_key"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	SessionID            pgtype.UUID        `json:"session_id"`
+	RecordingID          pgtype.UUID        `json:"recording_id"`
+	TranscriptID         pgtype.UUID        `json:"transcript_id"`
+	ChunkID              pgtype.UUID        `json:"chunk_id"`
+	ArtifactKind         string             `json:"artifact_kind"`
+	PayloadSchemaVersion int32              `json:"payload_schema_version"`
+	State                string             `json:"state"`
+	Priority             int32              `json:"priority"`
+	AvailableAt          pgtype.Timestamptz `json:"available_at"`
+	AttemptCount         int32              `json:"attempt_count"`
+	AttemptLimit         int32              `json:"attempt_limit"`
+	LeaseTokenHash       []byte             `json:"lease_token_hash"`
+	LeaseOwner           pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorDetail          pgtype.Text        `json:"error_detail"`
+	JourneyID            pgtype.UUID        `json:"journey_id"`
+	Traceparent          pgtype.Text        `json:"traceparent"`
+	Tracestate           pgtype.Text        `json:"tracestate"`
+	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type AuditLog struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
@@ -144,6 +172,35 @@ type Recording struct {
 	Metadata        []byte             `json:"metadata"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingTranscriptionSource struct {
+	RecordingID         pgtype.UUID        `json:"recording_id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	ManifestKey         string             `json:"manifest_key"`
+	ManifestSha256      []byte             `json:"manifest_sha256"`
+	ManifestSize        int64              `json:"manifest_size"`
+	ManifestContentType string             `json:"manifest_content_type"`
+	SchemaVersion       int32              `json:"schema_version"`
+	CommittedAt         pgtype.Timestamptz `json:"committed_at"`
+}
+
+type RecordingTranscriptionSourceChunk struct {
+	ID             pgtype.UUID `json:"id"`
+	RecordingID    pgtype.UUID `json:"recording_id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	ChunkIndex     int32       `json:"chunk_index"`
+	Generation     int64       `json:"generation"`
+	StartMs        int64       `json:"start_ms"`
+	EndMs          int64       `json:"end_ms"`
+	ParticipantRef pgtype.Text `json:"participant_ref"`
+	TrackEpoch     pgtype.Text `json:"track_epoch"`
+	IdentityKind   string      `json:"identity_kind"`
+	TrackClass     string      `json:"track_class"`
+	StorageKey     string      `json:"storage_key"`
+	Checksum       []byte      `json:"checksum"`
+	Size           int64       `json:"size"`
+	ContentType    string      `json:"content_type"`
 }
 
 type Room struct {
@@ -303,21 +360,115 @@ type TenantSigningKey struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type TranscriptChunk struct {
+	ID             pgtype.UUID        `json:"id"`
+	TranscriptID   pgtype.UUID        `json:"transcript_id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	ChunkIndex     int32              `json:"chunk_index"`
+	Generation     int64              `json:"generation"`
+	StartMs        int64              `json:"start_ms"`
+	EndMs          int64              `json:"end_ms"`
+	ParticipantRef pgtype.Text        `json:"participant_ref"`
+	TrackEpoch     pgtype.Text        `json:"track_epoch"`
+	IdentityKind   string             `json:"identity_kind"`
+	TrackClass     string             `json:"track_class"`
+	StorageKey     string             `json:"storage_key"`
+	ResultKey      string             `json:"result_key"`
+	Checksum       []byte             `json:"checksum"`
+	Size           int64              `json:"size"`
+	ContentType    string             `json:"content_type"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type Transcription struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	RecordingID pgtype.UUID        `json:"recording_id"`
-	RoomID      pgtype.UUID        `json:"room_id"`
-	SessionID   pgtype.UUID        `json:"session_id"`
-	Status      string             `json:"status"`
-	Provider    string             `json:"provider"`
-	Model       string             `json:"model"`
-	Languages   []string           `json:"languages"`
-	Text        pgtype.Text        `json:"text"`
-	Metadata    []byte             `json:"metadata"`
-	CompletedAt pgtype.Timestamptz `json:"completed_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID                        pgtype.UUID        `json:"id"`
+	TenantID                  pgtype.UUID        `json:"tenant_id"`
+	RecordingID               pgtype.UUID        `json:"recording_id"`
+	RoomID                    pgtype.UUID        `json:"room_id"`
+	SessionID                 pgtype.UUID        `json:"session_id"`
+	Status                    string             `json:"status"`
+	Provider                  pgtype.Text        `json:"provider"`
+	Model                     pgtype.Text        `json:"model"`
+	Languages                 []string           `json:"languages"`
+	Metadata                  []byte             `json:"metadata"`
+	CompletedAt               pgtype.Timestamptz `json:"completed_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	ArtifactKey               pgtype.Text        `json:"artifact_key"`
+	ArtifactSha256            []byte             `json:"artifact_sha256"`
+	ArtifactSize              pgtype.Int8        `json:"artifact_size"`
+	ArtifactContentType       pgtype.Text        `json:"artifact_content_type"`
+	SourceManifestKey         pgtype.Text        `json:"source_manifest_key"`
+	SourceManifestSha256      []byte             `json:"source_manifest_sha256"`
+	SourceManifestSize        pgtype.Int8        `json:"source_manifest_size"`
+	SourceManifestContentType pgtype.Text        `json:"source_manifest_content_type"`
+	Generation                int64              `json:"generation"`
+	DeletedAt                 pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type TranscriptionAttempt struct {
+	ID                         pgtype.UUID        `json:"id"`
+	TranscriptID               pgtype.UUID        `json:"transcript_id"`
+	ChunkID                    pgtype.UUID        `json:"chunk_id"`
+	Generation                 int64              `json:"generation"`
+	Attempt                    int32              `json:"attempt"`
+	Provider                   string             `json:"provider"`
+	Model                      string             `json:"model"`
+	ProviderVersion            string             `json:"provider_version"`
+	ExecutionIdentity          pgtype.Text        `json:"execution_identity"`
+	ProviderRequestID          pgtype.Text        `json:"provider_request_id"`
+	MeasuredAudioMs            pgtype.Int8        `json:"measured_audio_ms"`
+	ProviderObservedDurationMs pgtype.Int8        `json:"provider_observed_duration_ms"`
+	State                      string             `json:"state"`
+	BilledAudioSeconds         pgtype.Int4        `json:"billed_audio_seconds"`
+	ErrorCode                  pgtype.Text        `json:"error_code"`
+	ErrorDetail                pgtype.Text        `json:"error_detail"`
+	JourneyID                  pgtype.UUID        `json:"journey_id"`
+	Traceparent                pgtype.Text        `json:"traceparent"`
+	Tracestate                 pgtype.Text        `json:"tracestate"`
+	Quality                    []byte             `json:"quality"`
+	StartedAt                  pgtype.Timestamptz `json:"started_at"`
+	FinishedAt                 pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+}
+
+type TranscriptionChunkResult struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ChunkID            pgtype.UUID        `json:"chunk_id"`
+	Generation         int64              `json:"generation"`
+	AttemptID          pgtype.UUID        `json:"attempt_id"`
+	Provider           string             `json:"provider"`
+	Model              string             `json:"model"`
+	ProviderVersion    string             `json:"provider_version"`
+	ResultKey          string             `json:"result_key"`
+	ResultSha256       []byte             `json:"result_sha256"`
+	ResultSize         int64              `json:"result_size"`
+	ResultContentType  string             `json:"result_content_type"`
+	Language           pgtype.Text        `json:"language"`
+	BilledAudioSeconds pgtype.Int4        `json:"billed_audio_seconds"`
+	Quality            []byte             `json:"quality"`
+	AcceptedAt         pgtype.Timestamptz `json:"accepted_at"`
+}
+
+type TranscriptionCleanupJob struct {
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	TranscriptID       pgtype.UUID        `json:"transcript_id"`
+	ObjectKey          string             `json:"object_key"`
+	ObjectKind         string             `json:"object_kind"`
+	DueAt              pgtype.Timestamptz `json:"due_at"`
+	State              string             `json:"state"`
+	AttemptCount       int32              `json:"attempt_count"`
+	AttemptLimit       int32              `json:"attempt_limit"`
+	LeaseTokenHash     []byte             `json:"lease_token_hash"`
+	LeaseOwner         pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt     pgtype.Timestamptz `json:"lease_expires_at"`
+	ErrorCode          pgtype.Text        `json:"error_code"`
+	ErrorDetail        pgtype.Text        `json:"error_detail"`
+	VerifiedAt         pgtype.Timestamptz `json:"verified_at"`
+	ProviderCopyStatus string             `json:"provider_copy_status"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {

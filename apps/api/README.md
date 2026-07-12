@@ -42,6 +42,23 @@ load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
 Redis-backed rate limiting through `CHALK_REDIS_URL`.
 
+## Transcription artifacts
+
+Asynchronous transcription is enabled only when the API can mount the complete
+worker boundary. Non-local startup requires R2 and Redis plus
+`CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET`,
+`CHALK_TRANSCRIPTION_CONTROL_AUDIENCE`, and
+`CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME`. The HMAC secret must match the
+dispatcher's SSM-managed workload secret; the audience and API release version
+are included in every replay-bound signature. The API uses its AWS workload
+identity only to enqueue a small asynchronous Lambda wake hint. The minute
+dispatcher schedule reconciles lost hints.
+
+Public transcript requests do not accept providers, object keys, queue
+priority, retry budgets, or lifecycle state. Recorder-owned committed source
+metadata must exist before a request is accepted, and normalized transcript
+bytes remain private R2 artifacts exposed through short-lived download URLs.
+
 ## Database
 
 The API uses Postgres with `pgx`, `sqlc`, and `goose`. For local Postgres,

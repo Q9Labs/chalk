@@ -25,7 +25,9 @@
     "scratchpad/sdk-schema-generator-spike/generate-effect-schemas.mjs",
     "scratchpad/sdk-schema-generator-spike/generated/effect-schemas.ts",
     "scripts/codegen/generate-effect-http-api.mjs",
-    "scripts/codegen/generate-effect-schemas.mjs"
+    "scripts/codegen/generate-effect-schemas.mjs",
+    "scripts/transcription-dispatcher/emit-manifest.mjs",
+    "scripts/transcription-dispatcher/source-state.mjs"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignoreDependencies": [
@@ -80,7 +82,8 @@
       "sdks/typescript/client/src/sync/react-native.test.ts",
       "scratchpad/sdk-schema-generator-spike/**",
       "scripts/codegen/generate-effect-http-api.mjs",
-      "scripts/codegen/generate-effect-schemas.mjs"
+      "scripts/codegen/generate-effect-schemas.mjs",
+      "apps/transcription-dispatcher/**"
     ]
   },
   "dynamicallyLoaded": ["sdks/typescript/client/scripts/node-restart-sync-worker.mjs"],
@@ -119,7 +122,8 @@
       "packages/facehash/src/Facehash.tsx",
       "packages/facehash/src/FacehashSceneSvg.tsx",
       "scripts/codegen/generate-effect-http-api.mjs",
-      "scripts/codegen/generate-effect-schemas.mjs"
+      "scripts/codegen/generate-effect-schemas.mjs",
+      "apps/transcription-dispatcher/**"
     ]
   }
 }

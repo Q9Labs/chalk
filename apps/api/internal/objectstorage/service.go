@@ -28,6 +28,7 @@ type Store interface {
 	DeleteObject(ctx context.Context, key string) error
 	CreateUploadURL(ctx context.Context, input CreateUploadURLInput) (SignedURL, error)
 	CreateDownloadURL(ctx context.Context, input CreateDownloadURLInput) (SignedURL, error)
+	CreateDeleteURL(ctx context.Context, input CreateDeleteURLInput) (SignedURL, error)
 }
 
 type Service struct {
@@ -50,6 +51,11 @@ type CreateUploadURLInput struct {
 }
 
 type CreateDownloadURLInput struct {
+	Key       string
+	ExpiresIn time.Duration
+}
+
+type CreateDeleteURLInput struct {
 	Key       string
 	ExpiresIn time.Duration
 }
@@ -137,6 +143,21 @@ func (s Service) CreateDownloadURL(ctx context.Context, input CreateDownloadURLI
 	}
 
 	return s.store.CreateDownloadURL(ctx, input)
+}
+
+func (s Service) CreateDeleteURL(ctx context.Context, input CreateDeleteURLInput) (SignedURL, error) {
+	if s.store == nil {
+		return SignedURL{}, ErrStoreUnavailable
+	}
+	key, err := objectKey(input.Key)
+	if err != nil {
+		return SignedURL{}, ErrInvalidObjectKey
+	}
+	if input.ExpiresIn <= 0 {
+		return SignedURL{}, ErrInvalidURLExpiration
+	}
+	input.Key = key
+	return s.store.CreateDeleteURL(ctx, input)
 }
 
 func normalizePutObjectInput(input *PutObjectInput) error {

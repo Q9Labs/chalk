@@ -475,8 +475,8 @@ values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'completed', 'r2', null, '{"sour
 	}
 
 	_, err = tx.Exec(ctx, `
-insert into transcriptions (id, tenant_id, recording_id, room_id, session_id, status, provider, model, languages, text, metadata, completed_at)
-values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'completed', 'deepgram', 'nova-3', array['en'], 'perf transcript', '{"source":"perf"}'::jsonb, $6)
+insert into transcriptions (id, tenant_id, recording_id, room_id, session_id, status, provider, model, languages, metadata, completed_at)
+values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'complete', 'deepgram', 'nova-3', array['en'], '{"source":"perf"}'::jsonb, $6)
 `, transcriptID, tenantID, recordingID, roomID, sessionID, time.Now())
 	if err != nil {
 		return perfTenant{}, fmt.Errorf("insert perf transcript: %w", err)

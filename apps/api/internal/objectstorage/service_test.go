@@ -96,6 +96,20 @@ func TestServiceCreateDownloadURL(t *testing.T) {
 	}
 }
 
+func TestServiceCreateDeleteURL(t *testing.T) {
+	expiresIn := 5 * time.Minute
+	store := &storeStub{signedURL: objectstorage.SignedURL{URL: "https://storage.test/delete", Method: "DELETE"}}
+	service := objectstorage.NewService(store)
+
+	url, err := service.CreateDeleteURL(context.Background(), objectstorage.CreateDeleteURLInput{Key: " tenants/tenant_123/transcripts/document.json ", ExpiresIn: expiresIn})
+	if err != nil {
+		t.Fatalf("create delete url: %v", err)
+	}
+	if url.Method != "DELETE" || store.deleteURLInput.Key != "tenants/tenant_123/transcripts/document.json" || store.deleteURLInput.ExpiresIn != expiresIn {
+		t.Fatalf("delete authority = %#v, input = %#v", url, store.deleteURLInput)
+	}
+}
+
 func TestServiceRejectsInvalidInput(t *testing.T) {
 	validPut := objectstorage.PutObjectInput{
 		Key:           "tenants/tenant_123/images/avatar.png",
@@ -172,13 +186,14 @@ func TestServiceRejectsInvalidInput(t *testing.T) {
 }
 
 type storeStub struct {
-	putInput      objectstorage.PutObjectInput
-	uploadInput   objectstorage.CreateUploadURLInput
-	downloadInput objectstorage.CreateDownloadURLInput
-	object        objectstorage.Object
-	reader        objectstorage.ObjectReader
-	signedURL     objectstorage.SignedURL
-	err           error
+	putInput       objectstorage.PutObjectInput
+	uploadInput    objectstorage.CreateUploadURLInput
+	downloadInput  objectstorage.CreateDownloadURLInput
+	deleteURLInput objectstorage.CreateDeleteURLInput
+	object         objectstorage.Object
+	reader         objectstorage.ObjectReader
+	signedURL      objectstorage.SignedURL
+	err            error
 }
 
 func (s *storeStub) PutObject(_ context.Context, input objectstorage.PutObjectInput) (objectstorage.Object, error) {
@@ -204,5 +219,10 @@ func (s *storeStub) CreateUploadURL(_ context.Context, input objectstorage.Creat
 
 func (s *storeStub) CreateDownloadURL(_ context.Context, input objectstorage.CreateDownloadURLInput) (objectstorage.SignedURL, error) {
 	s.downloadInput = input
+	return s.signedURL, s.err
+}
+
+func (s *storeStub) CreateDeleteURL(_ context.Context, input objectstorage.CreateDeleteURLInput) (objectstorage.SignedURL, error) {
+	s.deleteURLInput = input
 	return s.signedURL, s.err
 }

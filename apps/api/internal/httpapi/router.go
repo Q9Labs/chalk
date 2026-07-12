@@ -24,34 +24,44 @@ type MeetingCredentialVerifier interface {
 }
 
 type Options struct {
-	CORS               CORSOptions
-	LocalSystemToken   string
-	Middleware         []func(http.Handler) http.Handler
-	Profiler           http.Handler
-	RateLimit          RateLimitOptions
-	Readiness          ReadinessChecker
-	Authentication     AuthenticationService
-	Integrations       IntegrationService
-	Journeys           JourneyService
-	JourneyMetrics     JourneyMetricRecorder
-	LocalTelemetry     bool
-	MeetingCredentials MeetingCredentialVerifier
-	MediaPlane         MediaPlaneResolver
-	Memberships        MembershipService
-	AuditLogs          AuditLogService
-	RecordingDownloads RecordingDownloadService
-	RecordingObjects   RecordingObjectService
-	Recordings         RecordingService
-	Rooms              RoomService
-	SessionLifecycle   SessionLifecycleService
-	SyncTokens         SyncTokenIssuer
-	SyncTokenRefresh   SyncTokenRefreshIssuer
-	SessionCookie      SessionCookieOptions
-	TenantAuthz        TenantAuthorizer
-	Tenants            TenantService
-	AITranscriptions   AITranscriptionService
-	Transcripts        TranscriptService
-	Users              UserService
+	CORS                   CORSOptions
+	LocalSystemToken       string
+	Middleware             []func(http.Handler) http.Handler
+	Profiler               http.Handler
+	RateLimit              RateLimitOptions
+	Readiness              ReadinessChecker
+	Authentication         AuthenticationService
+	Integrations           IntegrationService
+	Journeys               JourneyService
+	JourneyMetrics         JourneyMetricRecorder
+	LocalTelemetry         bool
+	MeetingCredentials     MeetingCredentialVerifier
+	MediaPlane             MediaPlaneResolver
+	Memberships            MembershipService
+	AuditLogs              AuditLogService
+	RecordingDownloads     RecordingDownloadService
+	RecordingObjects       RecordingObjectService
+	Recordings             RecordingService
+	Rooms                  RoomService
+	SessionLifecycle       SessionLifecycleService
+	SyncTokens             SyncTokenIssuer
+	SyncTokenRefresh       SyncTokenRefreshIssuer
+	SessionCookie          SessionCookieOptions
+	TenantAuthz            TenantAuthorizer
+	Tenants                TenantService
+	AITranscriptions       AITranscriptionService
+	Transcripts            TranscriptService
+	TranscriptArtifacts    TranscriptArtifactService
+	TranscriptWorker       TranscriptWorkerService
+	WorkloadAuthorizer     WorkloadAuthorizer
+	ChunkAuthority         ChunkAuthority
+	ManifestAuthority      ManifestAuthority
+	ResultAuthority        ResultAuthority
+	CleanupWorker          CleanupWorkerService
+	CleanupDeleteAuthority CleanupDeleteAuthority
+	FinalizerWorker        TranscriptFinalizerWorkerService
+	FinalizerAuthority     FinalizerAuthority
+	Users                  UserService
 }
 
 func NewRouter(options Options) http.Handler {
@@ -71,6 +81,9 @@ func NewRouter(options Options) http.Handler {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed")
 	})
 
+	mountTranscriptWorkerRoutes(r, options.TranscriptWorker, options.WorkloadAuthorizer, options.ManifestAuthority, options.ChunkAuthority, options.ResultAuthority)
+	mountTranscriptCleanupRoutes(r, options.CleanupWorker, options.WorkloadAuthorizer, options.CleanupDeleteAuthority)
+	mountTranscriptFinalizeRoutes(r, options.FinalizerWorker, options.WorkloadAuthorizer, options.FinalizerAuthority)
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/readyz", handleReady(options.Readiness))
@@ -147,7 +160,11 @@ func mountV1Routes(r chi.Router, options Options) {
 			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
 			mountSessionLifecycleRoutes(r, options.Rooms, options.Tenants, options.SessionLifecycle, options.SyncTokens, options.SyncTokenRefresh, options.MediaPlane, options.TenantAuthz, options.RateLimit)
 			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
-			mountTranscriptRoutes(r, options.Transcripts, options.Recordings, options.RecordingObjects, options.Tenants, options.AITranscriptions, options.TenantAuthz, options.RateLimit)
+			if options.TranscriptArtifacts != nil {
+				mountTranscriptArtifactRoutes(r, options.TranscriptArtifacts, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
+			} else {
+				mountTranscriptRoutes(r, options.Transcripts, options.Recordings, options.RecordingObjects, options.Tenants, options.AITranscriptions, options.TenantAuthz, options.RateLimit)
+			}
 			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)
 		})
 	})

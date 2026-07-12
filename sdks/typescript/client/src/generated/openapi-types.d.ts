@@ -384,23 +384,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcriptions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Transcribe recording */
-    post: operations["transcribeRecording"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts": {
     parameters: {
       query?: never;
@@ -410,8 +393,8 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create transcript */
-    post: operations["createTranscript"];
+    /** Request transcript */
+    post: operations["requestTranscript"];
     delete?: never;
     options?: never;
     head?: never;
@@ -603,11 +586,28 @@ export interface paths {
     get: operations["getTranscript"];
     put?: never;
     post?: never;
+    /** Delete transcript */
+    delete: operations["deleteTranscript"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create transcript download u r l */
+    post: operations["createTranscriptDownloadURL"];
     delete?: never;
     options?: never;
     head?: never;
-    /** Update transcript */
-    patch: operations["updateTranscript"];
+    patch?: never;
     trace?: never;
   };
   "/v1/users": {
@@ -807,25 +807,8 @@ export interface components {
       storage_provider_config?: components["schemas"]["StorageProviderConfig"] | null;
       website?: components["schemas"]["URLString"] | null;
     };
-    CreateTranscriptRequest: {
-      completed_at?: components["schemas"]["DateTimeString"] | null;
-      languages: string[];
-      metadata?:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      model: string;
-      provider: string;
-      room_id: components["schemas"]["RoomId"];
-      session_id: components["schemas"]["RoomSessionId"];
-      /** @enum {string} */
-      status: "pending" | "processing" | "completed" | "failed";
-      text?: string | null;
+    CreateTranscriptDownloadURLRequest: {
+      expires_in_seconds: number;
     };
     CreateUserRequest: {
       email: components["schemas"]["Email"];
@@ -1073,6 +1056,11 @@ export interface components {
     RemoveSessionParticipantRequest: {
       participant_session_generation: number;
     };
+    RequestTranscriptRequest: {
+      idempotency_key: string;
+      language: string;
+      languages: string[];
+    };
     Room: {
       created_at: components["schemas"]["DateTimeString"];
       created_by_user_id: components["schemas"]["UserId"] | null;
@@ -1194,40 +1182,44 @@ export interface components {
       pagination: components["schemas"]["Pagination"];
       tenants: components["schemas"]["Tenant"][];
     };
-    TranscribeRecordingRequest: {
-      language?: string | null;
-      model?: string;
-    };
     Transcript: {
-      completed_at: components["schemas"]["DateTimeString"] | null;
+      artifact_content_type?: string | null;
+      artifact_size?: number | null;
+      completed_at?: components["schemas"]["DateTimeString"] | null;
       created_at: components["schemas"]["DateTimeString"];
+      deleted_at?: components["schemas"]["DateTimeString"] | null;
+      generation: number;
       id: components["schemas"]["TranscriptId"];
       languages: string[];
-      metadata:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      model: string;
-      provider: string;
+      model?: string;
+      provider?: string;
       recording_id: components["schemas"]["RecordingId"];
       room_id: components["schemas"]["RoomId"];
       session_id: components["schemas"]["RoomSessionId"];
       /** @enum {string} */
       status: "pending" | "processing" | "completed" | "failed";
       tenant_id: components["schemas"]["TenantId"];
-      text: string | null;
       updated_at: components["schemas"]["DateTimeString"];
+    };
+    TranscriptDownloadURL: {
+      expires_at: components["schemas"]["DateTimeString"];
+      method: string;
+      signed_at: components["schemas"]["DateTimeString"];
+      signed_headers: {
+        [key: string]: string[];
+      };
+      url: string;
     };
     /** Format: uuid */
     TranscriptId: string;
     TranscriptList: {
       pagination: components["schemas"]["Pagination"];
       transcripts: components["schemas"]["Transcript"][];
+    };
+    TranscriptRequestAcceptedResponse: {
+      job_id: components["schemas"]["UUID"];
+      status: string;
+      transcript: components["schemas"]["Transcript"];
     };
     /** Format: uri */
     URLString: string;
@@ -1299,24 +1291,6 @@ export interface components {
       name?: string;
       storage_provider_config?: components["schemas"]["StorageProviderConfig"] | null;
       website?: components["schemas"]["URLString"] | null;
-    };
-    UpdateTranscriptRequest: {
-      completed_at?: components["schemas"]["DateTimeString"] | null;
-      languages?: string[];
-      metadata?:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      model?: string;
-      provider?: string;
-      /** @enum {string} */
-      status?: "pending" | "processing" | "completed" | "failed";
-      text?: string | null;
     };
     User: {
       created_at: components["schemas"]["DateTimeString"];
@@ -3627,7 +3601,7 @@ export interface operations {
       };
     };
   };
-  transcribeRecording: {
+  requestTranscript: {
     parameters: {
       query?: never;
       header?: never;
@@ -3639,128 +3613,17 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["TranscribeRecordingRequest"];
+        "application/json": components["schemas"]["RequestTranscriptRequest"];
       };
     };
     responses: {
-      /** @description Created */
-      201: {
+      /** @description Accepted */
+      202: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Transcript"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Request Entity Too Large */
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Bad Gateway */
-      502: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  createTranscript: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-        recording_id: components["schemas"]["RecordingId"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateTranscriptRequest"];
-      };
-    };
-    responses: {
-      /** @description Created */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Transcript"];
+          "application/json": components["schemas"]["TranscriptRequestAcceptedResponse"];
         };
       };
       /** @description Bad Request */
@@ -5227,7 +5090,94 @@ export interface operations {
       };
     };
   };
-  updateTranscript: {
+  deleteTranscript: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        transcript_id: components["schemas"]["TranscriptId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createTranscriptDownloadURL: {
     parameters: {
       query?: never;
       header?: never;
@@ -5239,7 +5189,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["UpdateTranscriptRequest"];
+        "application/json": components["schemas"]["CreateTranscriptDownloadURLRequest"];
       };
     };
     responses: {
@@ -5249,7 +5199,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Transcript"];
+          "application/json": components["schemas"]["TranscriptDownloadURL"];
         };
       };
       /** @description Bad Request */
@@ -5288,8 +5238,8 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Request Entity Too Large */
-      413: {
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -5297,12 +5247,9 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Too Many Requests */
-      429: {
+      /** @description Request Entity Too Large */
+      413: {
         headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {

@@ -168,21 +168,10 @@ export const CreateTenantRequestSchema = Schema.Struct({
 });
 export type CreateTenantRequest = typeof CreateTenantRequestSchema.Type;
 
-export const RoomIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomId"));
-export type RoomId = typeof RoomIdSchema.Type;
-
-export const CreateTranscriptRequestSchema = Schema.Struct({
-  completed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1)),
-  metadata: Schema.optional(Schema.Unknown),
-  model: Schema.String.check(Schema.isMinLength(1)),
-  provider: Schema.String.check(Schema.isMinLength(1)),
-  room_id: RoomIdSchema,
-  session_id: RoomSessionIdSchema,
-  status: Schema.Literals(["pending", "processing", "completed", "failed"]),
-  text: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+export const CreateTranscriptDownloadURLRequestSchema = Schema.Struct({
+  expires_in_seconds: Schema.Number,
 });
-export type CreateTranscriptRequest = typeof CreateTranscriptRequestSchema.Type;
+export type CreateTranscriptDownloadURLRequest = typeof CreateTranscriptDownloadURLRequestSchema.Type;
 
 export const CreateUserRequestSchema = Schema.Struct({
   email: EmailSchema,
@@ -343,6 +332,9 @@ export const MembershipListSchema = Schema.Struct({
 });
 export type MembershipList = typeof MembershipListSchema.Type;
 
+export const RoomIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomId"));
+export type RoomId = typeof RoomIdSchema.Type;
+
 export const ParticipantLifecycleSchema = Schema.Struct({
   expires_at: Schema.optional(DateTimeStringSchema),
   lifecycle_intent: Schema.Struct({
@@ -427,6 +419,13 @@ export const RemoveSessionParticipantRequestSchema = Schema.Struct({
   participant_session_generation: Schema.Number,
 });
 export type RemoveSessionParticipantRequest = typeof RemoveSessionParticipantRequestSchema.Type;
+
+export const RequestTranscriptRequestSchema = Schema.Struct({
+  idempotency_key: Schema.String.check(Schema.isMinLength(1)),
+  language: Schema.String.check(Schema.isMinLength(1)),
+  languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1)),
+});
+export type RequestTranscriptRequest = typeof RequestTranscriptRequestSchema.Type;
 
 export const RoomSchema = Schema.Struct({
   created_at: DateTimeStringSchema,
@@ -524,38 +523,50 @@ export const TenantListSchema = Schema.Struct({
 });
 export type TenantList = typeof TenantListSchema.Type;
 
-export const TranscribeRecordingRequestSchema = Schema.Struct({
-  language: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  model: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-});
-export type TranscribeRecordingRequest = typeof TranscribeRecordingRequestSchema.Type;
-
 export const TranscriptIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TranscriptId"));
 export type TranscriptId = typeof TranscriptIdSchema.Type;
 
 export const TranscriptSchema = Schema.Struct({
-  completed_at: Schema.NullOr(DateTimeStringSchema),
+  artifact_content_type: Schema.optional(Schema.NullOr(Schema.String)),
+  artifact_size: Schema.optional(Schema.NullOr(Schema.Number)),
+  completed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   created_at: DateTimeStringSchema,
+  deleted_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  generation: Schema.Number,
   id: TranscriptIdSchema,
   languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1)),
-  metadata: Schema.Unknown,
-  model: Schema.String,
-  provider: Schema.String,
+  model: Schema.optional(Schema.String),
+  provider: Schema.optional(Schema.String),
   recording_id: RecordingIdSchema,
   room_id: RoomIdSchema,
   session_id: RoomSessionIdSchema,
   status: Schema.Literals(["pending", "processing", "completed", "failed"]),
   tenant_id: TenantIdSchema,
-  text: Schema.NullOr(Schema.String),
   updated_at: DateTimeStringSchema,
 });
 export type Transcript = typeof TranscriptSchema.Type;
+
+export const TranscriptDownloadURLSchema = Schema.Struct({
+  expires_at: DateTimeStringSchema,
+  method: Schema.String,
+  signed_at: DateTimeStringSchema,
+  signed_headers: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+  url: Schema.String,
+});
+export type TranscriptDownloadURL = typeof TranscriptDownloadURLSchema.Type;
 
 export const TranscriptListSchema = Schema.Struct({
   pagination: PaginationSchema,
   transcripts: Schema.Array(TranscriptSchema),
 });
 export type TranscriptList = typeof TranscriptListSchema.Type;
+
+export const TranscriptRequestAcceptedResponseSchema = Schema.Struct({
+  job_id: UUIDSchema,
+  status: Schema.String,
+  transcript: TranscriptSchema,
+});
+export type TranscriptRequestAcceptedResponse = typeof TranscriptRequestAcceptedResponseSchema.Type;
 
 export const UpdateMembershipRequestSchema = Schema.Struct({
   role: Schema.Literals(["owner", "admin", "member", "viewer"]),
@@ -597,17 +608,6 @@ export const UpdateTenantRequestSchema = Schema.Struct({
   website: Schema.optional(Schema.NullOr(URLStringSchema)),
 });
 export type UpdateTenantRequest = typeof UpdateTenantRequestSchema.Type;
-
-export const UpdateTranscriptRequestSchema = Schema.Struct({
-  completed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  languages: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1))),
-  metadata: Schema.optional(Schema.Unknown),
-  model: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  provider: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  status: Schema.optional(Schema.Literals(["pending", "processing", "completed", "failed"])),
-  text: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-});
-export type UpdateTranscriptRequest = typeof UpdateTranscriptRequestSchema.Type;
 
 export const UserSchema = Schema.Struct({
   created_at: DateTimeStringSchema,
@@ -789,24 +789,17 @@ export const CreateTenant429ResponseHeadersSchema = Schema.Struct({
 });
 export type CreateTenant429ResponseHeaders = typeof CreateTenant429ResponseHeadersSchema.Type;
 
-export const CreateTranscriptPathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
+export const CreateTranscriptDownloadURLPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
+  transcript_id: TranscriptIdSchema,
 });
-export type CreateTranscriptPathParams = typeof CreateTranscriptPathParamsSchema.Type;
+export type CreateTranscriptDownloadURLPathParams = typeof CreateTranscriptDownloadURLPathParamsSchema.Type;
 
-export const CreateTranscriptRequestBodySchema = CreateTranscriptRequestSchema;
-export type CreateTranscriptRequestBody = typeof CreateTranscriptRequestBodySchema.Type;
+export const CreateTranscriptDownloadURLRequestBodySchema = CreateTranscriptDownloadURLRequestSchema;
+export type CreateTranscriptDownloadURLRequestBody = typeof CreateTranscriptDownloadURLRequestBodySchema.Type;
 
-export const CreateTranscriptResponseSchema = TranscriptSchema;
-export type CreateTranscriptResponse = typeof CreateTranscriptResponseSchema.Type;
-
-export const CreateTranscript429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateTranscript429ResponseHeaders = typeof CreateTranscript429ResponseHeadersSchema.Type;
+export const CreateTranscriptDownloadURLResponseSchema = TranscriptDownloadURLSchema;
+export type CreateTranscriptDownloadURLResponse = typeof CreateTranscriptDownloadURLResponseSchema.Type;
 
 export const CreateUserRequestBodySchema = CreateUserRequestSchema;
 export type CreateUserRequestBody = typeof CreateUserRequestBodySchema.Type;
@@ -820,6 +813,19 @@ export const CreateUser429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type CreateUser429ResponseHeaders = typeof CreateUser429ResponseHeadersSchema.Type;
+
+export const DeleteTranscriptPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+  transcript_id: TranscriptIdSchema,
+});
+export type DeleteTranscriptPathParams = typeof DeleteTranscriptPathParamsSchema.Type;
+
+export const DeleteTranscript429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type DeleteTranscript429ResponseHeaders = typeof DeleteTranscript429ResponseHeadersSchema.Type;
 
 export const DisableIntegrationConnectionPathParamsSchema = Schema.Struct({
   connection_id: UUIDSchema,
@@ -1204,6 +1210,25 @@ export const RemoveSessionParticipant429ResponseHeadersSchema = Schema.Struct({
 });
 export type RemoveSessionParticipant429ResponseHeaders = typeof RemoveSessionParticipant429ResponseHeadersSchema.Type;
 
+export const RequestTranscriptPathParamsSchema = Schema.Struct({
+  recording_id: RecordingIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RequestTranscriptPathParams = typeof RequestTranscriptPathParamsSchema.Type;
+
+export const RequestTranscriptRequestBodySchema = RequestTranscriptRequestSchema;
+export type RequestTranscriptRequestBody = typeof RequestTranscriptRequestBodySchema.Type;
+
+export const RequestTranscriptResponseSchema = TranscriptRequestAcceptedResponseSchema;
+export type RequestTranscriptResponse = typeof RequestTranscriptResponseSchema.Type;
+
+export const RequestTranscript429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RequestTranscript429ResponseHeaders = typeof RequestTranscript429ResponseHeadersSchema.Type;
+
 export const StartGoogleSignIn302ResponseHeadersSchema = Schema.Struct({
   Location: LocationHeaderSchema,
 });
@@ -1233,25 +1258,6 @@ export const StartIntegrationConnection429ResponseHeadersSchema = Schema.Struct(
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type StartIntegrationConnection429ResponseHeaders = typeof StartIntegrationConnection429ResponseHeadersSchema.Type;
-
-export const TranscribeRecordingPathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type TranscribeRecordingPathParams = typeof TranscribeRecordingPathParamsSchema.Type;
-
-export const TranscribeRecordingRequestBodySchema = TranscribeRecordingRequestSchema;
-export type TranscribeRecordingRequestBody = typeof TranscribeRecordingRequestBodySchema.Type;
-
-export const TranscribeRecordingResponseSchema = TranscriptSchema;
-export type TranscribeRecordingResponse = typeof TranscribeRecordingResponseSchema.Type;
-
-export const TranscribeRecording429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type TranscribeRecording429ResponseHeaders = typeof TranscribeRecording429ResponseHeadersSchema.Type;
 
 export const UpdateMembershipPathParamsSchema = Schema.Struct({
   membership_id: MembershipIdSchema,
@@ -1347,101 +1353,6 @@ export const UpdateTenant429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type UpdateTenant429ResponseHeaders = typeof UpdateTenant429ResponseHeadersSchema.Type;
-
-export const UpdateTranscriptPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-  transcript_id: TranscriptIdSchema,
-});
-export type UpdateTranscriptPathParams = typeof UpdateTranscriptPathParamsSchema.Type;
-
-export const UpdateTranscriptRequestBodySchema = UpdateTranscriptRequestSchema;
-export type UpdateTranscriptRequestBody = typeof UpdateTranscriptRequestBodySchema.Type;
-
-export const UpdateTranscriptResponseSchema = TranscriptSchema;
-export type UpdateTranscriptResponse = typeof UpdateTranscriptResponseSchema.Type;
-
-export const UpdateTranscript429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type UpdateTranscript429ResponseHeaders = typeof UpdateTranscript429ResponseHeadersSchema.Type;
-
-export class AiProviderFailedError extends Schema.TaggedErrorClass<AiProviderFailedError>()("AiProviderFailedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_failed"),
-    message: Schema.String,
-  }),
-}) {}
-export const AiProviderFailedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_failed"),
-    message: Schema.String,
-  }),
-});
-export const AiProviderFailedErrorSchema = AiProviderFailedErrorWireSchema.pipe(
-  Schema.decodeTo(AiProviderFailedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderFailedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class AiProviderPaymentRequiredError extends Schema.TaggedErrorClass<AiProviderPaymentRequiredError>()("AiProviderPaymentRequiredError", {
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_payment_required"),
-    message: Schema.String,
-  }),
-}) {}
-export const AiProviderPaymentRequiredErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_payment_required"),
-    message: Schema.String,
-  }),
-});
-export const AiProviderPaymentRequiredErrorSchema = AiProviderPaymentRequiredErrorWireSchema.pipe(
-  Schema.decodeTo(AiProviderPaymentRequiredError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderPaymentRequiredError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class AiProviderRateLimitedError extends Schema.TaggedErrorClass<AiProviderRateLimitedError>()("AiProviderRateLimitedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_rate_limited"),
-    message: Schema.String,
-  }),
-}) {}
-export const AiProviderRateLimitedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_rate_limited"),
-    message: Schema.String,
-  }),
-});
-export const AiProviderRateLimitedErrorSchema = AiProviderRateLimitedErrorWireSchema.pipe(
-  Schema.decodeTo(AiProviderRateLimitedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderRateLimitedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class AiProviderUnauthorizedError extends Schema.TaggedErrorClass<AiProviderUnauthorizedError>()("AiProviderUnauthorizedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_unauthorized"),
-    message: Schema.String,
-  }),
-}) {}
-export const AiProviderUnauthorizedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("ai_provider_unauthorized"),
-    message: Schema.String,
-  }),
-});
-export const AiProviderUnauthorizedErrorSchema = AiProviderUnauthorizedErrorWireSchema.pipe(
-  Schema.decodeTo(AiProviderUnauthorizedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "AiProviderUnauthorizedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
 
 export class EmailAlreadyRegisteredError extends Schema.TaggedErrorClass<EmailAlreadyRegisteredError>()("EmailAlreadyRegisteredError", {
   error: Schema.Struct({
@@ -1667,82 +1578,6 @@ export const InternalErrorWireSchema = Schema.Struct({
 export const InternalErrorSchema = InternalErrorWireSchema.pipe(
   Schema.decodeTo(InternalError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InternalError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidAiAudioError extends Schema.TaggedErrorClass<InvalidAiAudioError>()("InvalidAiAudioError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_audio"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidAiAudioErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_audio"),
-    message: Schema.String,
-  }),
-});
-export const InvalidAiAudioErrorSchema = InvalidAiAudioErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidAiAudioError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiAudioError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidAiConfigError extends Schema.TaggedErrorClass<InvalidAiConfigError>()("InvalidAiConfigError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_config"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidAiConfigErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_config"),
-    message: Schema.String,
-  }),
-});
-export const InvalidAiConfigErrorSchema = InvalidAiConfigErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidAiConfigError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiConfigError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidAiGatewayError extends Schema.TaggedErrorClass<InvalidAiGatewayError>()("InvalidAiGatewayError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_gateway"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidAiGatewayErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_gateway"),
-    message: Schema.String,
-  }),
-});
-export const InvalidAiGatewayErrorSchema = InvalidAiGatewayErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidAiGatewayError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiGatewayError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidAiModelError extends Schema.TaggedErrorClass<InvalidAiModelError>()("InvalidAiModelError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_model"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidAiModelErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_ai_model"),
-    message: Schema.String,
-  }),
-});
-export const InvalidAiModelErrorSchema = InvalidAiModelErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidAiModelError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidAiModelError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2374,25 +2209,6 @@ export const InvalidTenantRegionErrorSchema = InvalidTenantRegionErrorWireSchema
   }),
 );
 
-export class InvalidTranscriptFieldError extends Schema.TaggedErrorClass<InvalidTranscriptFieldError>()("InvalidTranscriptFieldError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_field"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidTranscriptFieldErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_field"),
-    message: Schema.String,
-  }),
-});
-export const InvalidTranscriptFieldErrorSchema = InvalidTranscriptFieldErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidTranscriptFieldError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidTranscriptFieldError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class InvalidTranscriptIdError extends Schema.TaggedErrorClass<InvalidTranscriptIdError>()("InvalidTranscriptIdError", {
   error: Schema.Struct({
     code: Schema.Literal("invalid_transcript_id"),
@@ -2408,82 +2224,6 @@ export const InvalidTranscriptIdErrorWireSchema = Schema.Struct({
 export const InvalidTranscriptIdErrorSchema = InvalidTranscriptIdErrorWireSchema.pipe(
   Schema.decodeTo(InvalidTranscriptIdError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidTranscriptIdError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidTranscriptLanguagesError extends Schema.TaggedErrorClass<InvalidTranscriptLanguagesError>()("InvalidTranscriptLanguagesError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_languages"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidTranscriptLanguagesErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_languages"),
-    message: Schema.String,
-  }),
-});
-export const InvalidTranscriptLanguagesErrorSchema = InvalidTranscriptLanguagesErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidTranscriptLanguagesError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidTranscriptLanguagesError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidTranscriptModelError extends Schema.TaggedErrorClass<InvalidTranscriptModelError>()("InvalidTranscriptModelError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_model"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidTranscriptModelErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_model"),
-    message: Schema.String,
-  }),
-});
-export const InvalidTranscriptModelErrorSchema = InvalidTranscriptModelErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidTranscriptModelError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidTranscriptModelError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidTranscriptProviderError extends Schema.TaggedErrorClass<InvalidTranscriptProviderError>()("InvalidTranscriptProviderError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_provider"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidTranscriptProviderErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_provider"),
-    message: Schema.String,
-  }),
-});
-export const InvalidTranscriptProviderErrorSchema = InvalidTranscriptProviderErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidTranscriptProviderError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidTranscriptProviderError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvalidTranscriptStatusError extends Schema.TaggedErrorClass<InvalidTranscriptStatusError>()("InvalidTranscriptStatusError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_status"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvalidTranscriptStatusErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invalid_transcript_status"),
-    message: Schema.String,
-  }),
-});
-export const InvalidTranscriptStatusErrorSchema = InvalidTranscriptStatusErrorWireSchema.pipe(
-  Schema.decodeTo(InvalidTranscriptStatusError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidTranscriptStatusError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2617,25 +2357,6 @@ export const MediaPlaneUnavailableErrorWireSchema = Schema.Struct({
 export const MediaPlaneUnavailableErrorSchema = MediaPlaneUnavailableErrorWireSchema.pipe(
   Schema.decodeTo(MediaPlaneUnavailableError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "MediaPlaneUnavailableError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class MissingAiCredentialsError extends Schema.TaggedErrorClass<MissingAiCredentialsError>()("MissingAiCredentialsError", {
-  error: Schema.Struct({
-    code: Schema.Literal("missing_ai_credentials"),
-    message: Schema.String,
-  }),
-}) {}
-export const MissingAiCredentialsErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("missing_ai_credentials"),
-    message: Schema.String,
-  }),
-});
-export const MissingAiCredentialsErrorSchema = MissingAiCredentialsErrorWireSchema.pipe(
-  Schema.decodeTo(MissingAiCredentialsError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "MissingAiCredentialsError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2887,6 +2608,25 @@ export const SessionNotActiveErrorSchema = SessionNotActiveErrorWireSchema.pipe(
   }),
 );
 
+export class TranscriptNotReadyError extends Schema.TaggedErrorClass<TranscriptNotReadyError>()("TranscriptNotReadyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("transcript_not_ready"),
+    message: Schema.String,
+  }),
+}) {}
+export const TranscriptNotReadyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("transcript_not_ready"),
+    message: Schema.String,
+  }),
+});
+export const TranscriptNotReadyErrorSchema = TranscriptNotReadyErrorWireSchema.pipe(
+  Schema.decodeTo(TranscriptNotReadyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TranscriptNotReadyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class UnauthenticatedError extends Schema.TaggedErrorClass<UnauthenticatedError>()("UnauthenticatedError", {
   error: Schema.Struct({
     code: Schema.Literal("unauthenticated"),
@@ -3014,29 +2754,24 @@ export const CreateTenantErrorSchema = Schema.Union([
 ]);
 export type CreateTenantError = typeof CreateTenantErrorSchema.Type;
 
-export const CreateTranscriptErrorSchema = Schema.Union([
+export const CreateTranscriptDownloadURLErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   InternalErrorSchema,
-  InvalidRecordingIdErrorSchema,
-  InvalidRequestErrorSchema,
-  InvalidRoomIdErrorSchema,
-  InvalidSessionIdErrorSchema,
   InvalidTenantIdErrorSchema,
-  InvalidTranscriptFieldErrorSchema,
-  InvalidTranscriptLanguagesErrorSchema,
-  InvalidTranscriptModelErrorSchema,
-  InvalidTranscriptProviderErrorSchema,
-  InvalidTranscriptStatusErrorSchema,
+  InvalidUrlExpirationErrorSchema,
   NotFoundErrorSchema,
   PayloadTooLargeErrorSchema,
-  RateLimitedErrorSchema,
   ServiceUnavailableErrorSchema,
+  TranscriptNotReadyErrorSchema,
   UnauthenticatedErrorSchema,
 ]);
-export type CreateTranscriptError = typeof CreateTranscriptErrorSchema.Type;
+export type CreateTranscriptDownloadURLError = typeof CreateTranscriptDownloadURLErrorSchema.Type;
 
 export const CreateUserErrorSchema = Schema.Union([InternalErrorSchema, InvalidRequestErrorSchema, InvalidUserEmailErrorSchema, InvalidUserNameErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type CreateUserError = typeof CreateUserErrorSchema.Type;
+
+export const DeleteTranscriptErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidTenantIdErrorSchema, InvalidTranscriptIdErrorSchema, NotFoundErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type DeleteTranscriptError = typeof DeleteTranscriptErrorSchema.Type;
 
 export const DisableIntegrationConnectionErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -3237,6 +2972,22 @@ export const RemoveSessionParticipantErrorSchema = Schema.Union([
 ]);
 export type RemoveSessionParticipantError = typeof RemoveSessionParticipantErrorSchema.Type;
 
+export const RequestTranscriptErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidRecordingIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidTranscriptIdErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  RecordingNotReadyErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type RequestTranscriptError = typeof RequestTranscriptErrorSchema.Type;
+
 export const StartGoogleSignInErrorSchema = Schema.Union([InternalErrorSchema, OauthNotConfiguredErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
 export type StartGoogleSignInError = typeof StartGoogleSignInErrorSchema.Type;
 
@@ -3256,32 +3007,6 @@ export const StartIntegrationConnectionErrorSchema = Schema.Union([
   UnauthenticatedErrorSchema,
 ]);
 export type StartIntegrationConnectionError = typeof StartIntegrationConnectionErrorSchema.Type;
-
-export const TranscribeRecordingErrorSchema = Schema.Union([
-  AiProviderFailedErrorSchema,
-  AiProviderPaymentRequiredErrorSchema,
-  AiProviderRateLimitedErrorSchema,
-  AiProviderUnauthorizedErrorSchema,
-  ForbiddenErrorSchema,
-  InternalErrorSchema,
-  InvalidAiAudioErrorSchema,
-  InvalidAiConfigErrorSchema,
-  InvalidAiGatewayErrorSchema,
-  InvalidAiModelErrorSchema,
-  InvalidRecordingIdErrorSchema,
-  InvalidRequestErrorSchema,
-  InvalidStorageKeyErrorSchema,
-  InvalidStorageProviderErrorSchema,
-  InvalidTenantIdErrorSchema,
-  MissingAiCredentialsErrorSchema,
-  NotFoundErrorSchema,
-  PayloadTooLargeErrorSchema,
-  RateLimitedErrorSchema,
-  RecordingNotReadyErrorSchema,
-  ServiceUnavailableErrorSchema,
-  UnauthenticatedErrorSchema,
-]);
-export type TranscribeRecordingError = typeof TranscribeRecordingErrorSchema.Type;
 
 export const UpdateMembershipErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -3364,25 +3089,6 @@ export const UpdateTenantErrorSchema = Schema.Union([
 ]);
 export type UpdateTenantError = typeof UpdateTenantErrorSchema.Type;
 
-export const UpdateTranscriptErrorSchema = Schema.Union([
-  ForbiddenErrorSchema,
-  InternalErrorSchema,
-  InvalidRequestErrorSchema,
-  InvalidTenantIdErrorSchema,
-  InvalidTranscriptFieldErrorSchema,
-  InvalidTranscriptIdErrorSchema,
-  InvalidTranscriptLanguagesErrorSchema,
-  InvalidTranscriptModelErrorSchema,
-  InvalidTranscriptProviderErrorSchema,
-  InvalidTranscriptStatusErrorSchema,
-  NotFoundErrorSchema,
-  PayloadTooLargeErrorSchema,
-  RateLimitedErrorSchema,
-  ServiceUnavailableErrorSchema,
-  UnauthenticatedErrorSchema,
-]);
-export type UpdateTranscriptError = typeof UpdateTranscriptErrorSchema.Type;
-
 export const ChalkOperationPolicies = {
   admitSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
@@ -3392,8 +3098,9 @@ export const ChalkOperationPolicies = {
   createRoom: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRoomSession: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  createTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  createTranscriptDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createUser: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   disableIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endRoomSession: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -3404,14 +3111,13 @@ export const ChalkOperationPolicies = {
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   removeSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   startIntegrationConnection: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  transcribeRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRoom: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRoomSession: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  updateTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
 } as const;
 export type ChalkOperationPolicy = (typeof ChalkOperationPolicies)[keyof typeof ChalkOperationPolicies];

@@ -220,6 +220,19 @@ func TestStoreCreateDownloadURL(t *testing.T) {
 	}
 }
 
+func TestStoreCreateDeleteURL(t *testing.T) {
+	presign := &presignClientStub{deleteRequest: &v4.PresignedHTTPRequest{Method: http.MethodDelete, URL: "https://storage.test/delete"}}
+	store := newStore("chalk-media", nil, presign)
+
+	url, err := store.CreateDeleteURL(context.Background(), objectstorage.CreateDeleteURLInput{Key: "tenants/tenant_123/transcripts/document.json", ExpiresIn: 5 * time.Minute})
+	if err != nil {
+		t.Fatalf("create delete url: %v", err)
+	}
+	if url.Method != http.MethodDelete || aws.ToString(presign.deleteInput.Key) != "tenants/tenant_123/transcripts/document.json" {
+		t.Fatalf("delete authority = %#v, key = %q", url, aws.ToString(presign.deleteInput.Key))
+	}
+}
+
 func TestStoreMapsProviderErrors(t *testing.T) {
 	notFound := &smithy.GenericAPIError{Code: "NoSuchKey", Message: "missing"}
 	tests := []struct {
@@ -315,11 +328,13 @@ func (c *objectClientStub) DeleteObject(_ context.Context, params *s3.DeleteObje
 }
 
 type presignClientStub struct {
-	putInput   *s3.PutObjectInput
-	getInput   *s3.GetObjectInput
-	putRequest *v4.PresignedHTTPRequest
-	getRequest *v4.PresignedHTTPRequest
-	err        error
+	putInput      *s3.PutObjectInput
+	getInput      *s3.GetObjectInput
+	deleteInput   *s3.DeleteObjectInput
+	putRequest    *v4.PresignedHTTPRequest
+	getRequest    *v4.PresignedHTTPRequest
+	deleteRequest *v4.PresignedHTTPRequest
+	err           error
 }
 
 func (c *presignClientStub) PresignPutObject(_ context.Context, params *s3.PutObjectInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
@@ -330,4 +345,9 @@ func (c *presignClientStub) PresignPutObject(_ context.Context, params *s3.PutOb
 func (c *presignClientStub) PresignGetObject(_ context.Context, params *s3.GetObjectInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
 	c.getInput = params
 	return c.getRequest, c.err
+}
+
+func (c *presignClientStub) PresignDeleteObject(_ context.Context, params *s3.DeleteObjectInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	c.deleteInput = params
+	return c.deleteRequest, c.err
 }

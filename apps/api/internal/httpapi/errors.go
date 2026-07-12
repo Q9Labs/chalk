@@ -84,6 +84,7 @@ var (
 	apiErrorInvalidTranscriptLanguages = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_languages", Message: "Invalid transcript languages"}
 	apiErrorInvalidTranscriptField     = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_field", Message: "Invalid transcript field"}
 	apiErrorTranscriptNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Transcript not found"}
+	apiErrorTranscriptNotReady         = APIError{Status: http.StatusConflict, Code: "transcript_not_ready", Message: "Transcript artifact is not ready"}
 
 	apiErrorInvalidAIConfig        = APIError{Status: http.StatusBadRequest, Code: "invalid_ai_config", Message: "Invalid AI config"}
 	apiErrorInvalidAIGateway       = APIError{Status: http.StatusBadRequest, Code: "invalid_ai_gateway", Message: "Invalid AI gateway"}

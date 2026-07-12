@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Track-aware asynchronous transcription foundations, including recorder-owned
+  source manifests, fenced PostgreSQL artifact and cleanup jobs, private R2
+  transcript artifacts, DeepInfra and Cloudflare adapters, and a scale-to-zero
+  Lambda dispatcher with deterministic OpenTofu release contracts.
 - API-issued five-minute Ed25519 sync participant tokens with fail-closed
   production verification, overlap key rotation, authenticated refresh, and
   generated SDK contracts.
@@ -67,6 +71,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Replaced synchronous application-node OpenRouter transcription with an
+  API-owned artifact lifecycle and short-lived, job-scoped worker authority.
 - Tightened API and service completion rules around end-to-end observability,
   uptime-monitor registration, and consumer SDK support, while removing stale
   implementation and store-review documentation.

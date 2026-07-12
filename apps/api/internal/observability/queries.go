@@ -361,4 +361,228 @@ func (q operationQuerier) UpdateTenantTranscription(ctx context.Context, arg sql
 	return transcription, err
 }
 
+func (q operationQuerier) AcceptTranscriptionChunkResult(ctx context.Context, arg sqlc.AcceptTranscriptionChunkResultParams) (sqlc.TranscriptionChunkResult, error) {
+	startedAt := time.Now()
+	value, err := q.next.AcceptTranscriptionChunkResult(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "AcceptTranscriptionChunkResult", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CancelArtifactJob(ctx context.Context, arg sqlc.CancelArtifactJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.CancelArtifactJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CancelArtifactJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) ClaimArtifactJob(ctx context.Context, arg sqlc.ClaimArtifactJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.ClaimArtifactJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ClaimArtifactJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CompleteArtifactJob(ctx context.Context, arg sqlc.CompleteArtifactJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.CompleteArtifactJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CompleteArtifactJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CreateArtifactJob(ctx context.Context, arg sqlc.CreateArtifactJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.CreateArtifactJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateArtifactJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CreateTranscriptionFinalizerJobIfReady(ctx context.Context, arg sqlc.CreateTranscriptionFinalizerJobIfReadyParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.CreateTranscriptionFinalizerJobIfReady(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateTranscriptionFinalizerJobIfReady", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) ClaimTranscriptionFinalizerJob(ctx context.Context, arg sqlc.ClaimTranscriptionFinalizerJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.ClaimTranscriptionFinalizerJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ClaimTranscriptionFinalizerJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CreateRequestedTranscription(ctx context.Context, arg sqlc.CreateRequestedTranscriptionParams) (sqlc.Transcription, error) {
+	startedAt := time.Now()
+	value, err := q.next.CreateRequestedTranscription(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateRequestedTranscription", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CreateTranscriptChunk(ctx context.Context, arg sqlc.CreateTranscriptChunkParams) (sqlc.TranscriptChunk, error) {
+	startedAt := time.Now()
+	value, err := q.next.CreateTranscriptChunk(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateTranscriptChunk", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CreateTranscriptionAttempt(ctx context.Context, arg sqlc.CreateTranscriptionAttemptParams) (sqlc.TranscriptionAttempt, error) {
+	startedAt := time.Now()
+	value, err := q.next.CreateTranscriptionAttempt(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateTranscriptionAttempt", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) DeleteTenantTranscription(ctx context.Context, arg sqlc.DeleteTenantTranscriptionParams) (sqlc.Transcription, error) {
+	startedAt := time.Now()
+	value, err := q.next.DeleteTenantTranscription(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "DeleteTenantTranscription", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) FinishTranscriptionAttempt(ctx context.Context, arg sqlc.FinishTranscriptionAttemptParams) (sqlc.TranscriptionAttempt, error) {
+	startedAt := time.Now()
+	value, err := q.next.FinishTranscriptionAttempt(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "FinishTranscriptionAttempt", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) FinalizeTranscription(ctx context.Context, arg sqlc.FinalizeTranscriptionParams) (sqlc.Transcription, error) {
+	startedAt := time.Now()
+	value, err := q.next.FinalizeTranscription(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "FinalizeTranscription", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) GetArtifactJob(ctx context.Context, id pgtype.UUID) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetArtifactJob(ctx, id)
+	LogOperation(ctx, q.logger, "db.query", "GetArtifactJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) GetArtifactJobByIdempotency(ctx context.Context, arg sqlc.GetArtifactJobByIdempotencyParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetArtifactJobByIdempotency(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetArtifactJobByIdempotency", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) GetTenantTranscriptionByRecording(ctx context.Context, arg sqlc.GetTenantTranscriptionByRecordingParams) (sqlc.Transcription, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetTenantTranscriptionByRecording(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetTenantTranscriptionByRecording", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) GetTranscriptionChunkJob(ctx context.Context, transcriptID pgtype.UUID) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetTranscriptionChunkJob(ctx, transcriptID)
+	LogOperation(ctx, q.logger, "db.query", "GetTranscriptionChunkJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) GetTranscriptChunk(ctx context.Context, id pgtype.UUID) (sqlc.TranscriptChunk, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetTranscriptChunk(ctx, id)
+	LogOperation(ctx, q.logger, "db.query", "GetTranscriptChunk", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) GetTranscriptChunkResult(ctx context.Context, arg sqlc.GetTranscriptChunkResultParams) (sqlc.TranscriptionChunkResult, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetTranscriptChunkResult(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetTranscriptChunkResult", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) HeartbeatArtifactJob(ctx context.Context, arg sqlc.HeartbeatArtifactJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.HeartbeatArtifactJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "HeartbeatArtifactJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) ListTranscriptChunks(ctx context.Context, arg sqlc.ListTranscriptChunksParams) ([]sqlc.TranscriptChunk, error) {
+	startedAt := time.Now()
+	value, err := q.next.ListTranscriptChunks(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListTranscriptChunks", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) LockTenantTranscriptionForUpdate(ctx context.Context, arg sqlc.LockTenantTranscriptionForUpdateParams) (sqlc.Transcription, error) {
+	startedAt := time.Now()
+	value, err := q.next.LockTenantTranscriptionForUpdate(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "LockTenantTranscriptionForUpdate", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) MarkTranscriptionTranscribing(ctx context.Context, arg sqlc.MarkTranscriptionTranscribingParams) (sqlc.Transcription, error) {
+	startedAt := time.Now()
+	value, err := q.next.MarkTranscriptionTranscribing(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "MarkTranscriptionTranscribing", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) MarkTranscriptionVerifying(ctx context.Context, arg sqlc.MarkTranscriptionVerifyingParams) (sqlc.Transcription, error) {
+	startedAt := time.Now()
+	value, err := q.next.MarkTranscriptionVerifying(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "MarkTranscriptionVerifying", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) RecoverExpiredArtifactJobs(ctx context.Context, arg sqlc.RecoverExpiredArtifactJobsParams) ([]sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.RecoverExpiredArtifactJobs(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "RecoverExpiredArtifactJobs", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) RequeueArtifactJob(ctx context.Context, arg sqlc.RequeueArtifactJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.RequeueArtifactJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "RequeueArtifactJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) RetryArtifactJob(ctx context.Context, arg sqlc.RetryArtifactJobParams) (sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.RetryArtifactJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "RetryArtifactJob", startedAt, err)
+	return value, err
+}
+
+func (q operationQuerier) GetRecordingTranscriptionSource(ctx context.Context, arg sqlc.GetRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetRecordingTranscriptionSource(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetRecordingTranscriptionSource", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) ListRecordingTranscriptionSourceChunks(ctx context.Context, arg sqlc.ListRecordingTranscriptionSourceChunksParams) ([]sqlc.RecordingTranscriptionSourceChunk, error) {
+	startedAt := time.Now()
+	value, err := q.next.ListRecordingTranscriptionSourceChunks(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListRecordingTranscriptionSourceChunks", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) ReplaceRecordingTranscriptionSourceChunk(ctx context.Context, arg sqlc.ReplaceRecordingTranscriptionSourceChunkParams) (sqlc.RecordingTranscriptionSourceChunk, error) {
+	startedAt := time.Now()
+	value, err := q.next.ReplaceRecordingTranscriptionSourceChunk(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ReplaceRecordingTranscriptionSourceChunk", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) UpsertRecordingTranscriptionSource(ctx context.Context, arg sqlc.UpsertRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error) {
+	startedAt := time.Now()
+	value, err := q.next.UpsertRecordingTranscriptionSource(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "UpsertRecordingTranscriptionSource", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CreateTranscriptionCleanupJob(ctx context.Context, arg sqlc.CreateTranscriptionCleanupJobParams) (sqlc.TranscriptionCleanupJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.CreateTranscriptionCleanupJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CreateTranscriptionCleanupJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) GetTranscriptionCleanupJob(ctx context.Context, id pgtype.UUID) (sqlc.TranscriptionCleanupJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetTranscriptionCleanupJob(ctx, id)
+	LogOperation(ctx, q.logger, "db.query", "GetTranscriptionCleanupJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) ClaimTranscriptionCleanupJob(ctx context.Context, arg sqlc.ClaimTranscriptionCleanupJobParams) (sqlc.TranscriptionCleanupJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.ClaimTranscriptionCleanupJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ClaimTranscriptionCleanupJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) CompleteTranscriptionCleanupJob(ctx context.Context, arg sqlc.CompleteTranscriptionCleanupJobParams) (sqlc.TranscriptionCleanupJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.CompleteTranscriptionCleanupJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "CompleteTranscriptionCleanupJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) RetryTranscriptionCleanupJob(ctx context.Context, arg sqlc.RetryTranscriptionCleanupJobParams) (sqlc.TranscriptionCleanupJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.RetryTranscriptionCleanupJob(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "RetryTranscriptionCleanupJob", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) RecoverExpiredTranscriptionCleanupJobs(ctx context.Context, arg sqlc.RecoverExpiredTranscriptionCleanupJobsParams) ([]sqlc.TranscriptionCleanupJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.RecoverExpiredTranscriptionCleanupJobs(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "RecoverExpiredTranscriptionCleanupJobs", startedAt, err)
+	return value, err
+}
+
 var _ sqlc.Querier = operationQuerier{}

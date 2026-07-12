@@ -3467,185 +3467,9 @@
         }
       }
     },
-    "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcriptions": {
-      "post": {
-        "operationId": "transcribeRecording",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/TenantId"
-            }
-          },
-          {
-            "in": "path",
-            "name": "recording_id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/RecordingId"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TranscribeRecordingRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Transcript"
-                }
-              }
-            },
-            "description": "Created"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request",
-            "x-chalk-error-codes": ["invalid_ai_audio", "invalid_ai_config", "invalid_ai_gateway", "invalid_ai_model", "invalid_recording_id", "invalid_request", "invalid_storage_key", "invalid_storage_provider", "invalid_tenant_id", "missing_ai_credentials", "recording_not_ready"]
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized",
-            "x-chalk-error-codes": ["unauthenticated"]
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden",
-            "x-chalk-error-codes": ["forbidden"]
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found",
-            "x-chalk-error-codes": ["not_found"]
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large",
-            "x-chalk-error-codes": ["payload_too_large"]
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "required": true,
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "required": true,
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "required": true,
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            },
-            "x-chalk-error-codes": ["ai_provider_rate_limited", "rate_limited"]
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error",
-            "x-chalk-error-codes": ["internal_error"]
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Gateway",
-            "x-chalk-error-codes": ["ai_provider_failed", "ai_provider_payment_required", "ai_provider_unauthorized"]
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "x-chalk-error-codes": ["service_unavailable"]
-          }
-        },
-        "security": [
-          {
-            "sessionOrBearer": []
-          }
-        ],
-        "summary": "Transcribe recording",
-        "x-chalk-max-body-bytes": 1048576,
-        "x-chalk-rate-limit": {
-          "limit": 60,
-          "name": "v1.authenticated.write",
-          "window_seconds": 60
-        }
-      }
-    },
     "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts": {
       "post": {
-        "operationId": "createTranscript",
+        "operationId": "requestTranscript",
         "parameters": [
           {
             "in": "path",
@@ -3668,22 +3492,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTranscriptRequest"
+                "$ref": "#/components/schemas/RequestTranscriptRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Transcript"
+                  "$ref": "#/components/schemas/TranscriptRequestAcceptedResponse"
                 }
               }
             },
-            "description": "Created"
+            "description": "Accepted"
           },
           "400": {
             "content": {
@@ -3694,7 +3518,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["invalid_recording_id", "invalid_request", "invalid_room_id", "invalid_session_id", "invalid_tenant_id", "invalid_transcript_field", "invalid_transcript_languages", "invalid_transcript_model", "invalid_transcript_provider", "invalid_transcript_status"]
+            "x-chalk-error-codes": ["invalid_recording_id", "invalid_request", "invalid_tenant_id", "invalid_transcript_id", "recording_not_ready"]
           },
           "401": {
             "content": {
@@ -3799,7 +3623,7 @@
             "sessionOrBearer": []
           }
         ],
-        "summary": "Create transcript",
+        "summary": "Request transcript",
         "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
@@ -5936,6 +5760,140 @@
       }
     },
     "/v1/tenants/{tenant_id}/transcripts/{transcript_id}": {
+      "delete": {
+        "operationId": "deleteTranscript",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transcript_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TranscriptId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_tenant_id", "invalid_transcript_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Delete transcript",
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      },
       "get": {
         "operationId": "getTranscript",
         "parameters": [
@@ -6040,9 +5998,11 @@
           }
         ],
         "summary": "Get transcript"
-      },
-      "patch": {
-        "operationId": "updateTranscript",
+      }
+    },
+    "/v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url": {
+      "post": {
+        "operationId": "createTranscriptDownloadURL",
         "parameters": [
           {
             "in": "path",
@@ -6065,7 +6025,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateTranscriptRequest"
+                "$ref": "#/components/schemas/CreateTranscriptDownloadURLRequest"
               }
             }
           },
@@ -6076,7 +6036,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Transcript"
+                  "$ref": "#/components/schemas/TranscriptDownloadURL"
                 }
               }
             },
@@ -6091,7 +6051,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["invalid_request", "invalid_tenant_id", "invalid_transcript_field", "invalid_transcript_id", "invalid_transcript_languages", "invalid_transcript_model", "invalid_transcript_provider", "invalid_transcript_status"]
+            "x-chalk-error-codes": ["invalid_tenant_id", "invalid_url_expiration"]
           },
           "401": {
             "content": {
@@ -6126,6 +6086,17 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["transcript_not_ready"]
+          },
           "413": {
             "content": {
               "application/json": {
@@ -6136,37 +6107,6 @@
             },
             "description": "Request Entity Too Large",
             "x-chalk-error-codes": ["payload_too_large"]
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "required": true,
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "required": true,
-                "schema": {
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "required": true,
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            },
-            "x-chalk-error-codes": ["rate_limited"]
           },
           "500": {
             "content": {
@@ -6196,7 +6136,7 @@
             "sessionOrBearer": []
           }
         ],
-        "summary": "Update transcript",
+        "summary": "Create transcript download u r l",
         "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
@@ -6885,56 +6825,14 @@
         "required": ["name"],
         "type": "object"
       },
-      "CreateTranscriptRequest": {
+      "CreateTranscriptDownloadURLRequest": {
         "additionalProperties": false,
         "properties": {
-          "completed_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DateTimeString"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "languages": {
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "minItems": 1,
-            "type": "array"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "items": {},
-            "type": ["object", "array", "string", "number", "boolean", "null"]
-          },
-          "model": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "provider": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "room_id": {
-            "$ref": "#/components/schemas/RoomId"
-          },
-          "session_id": {
-            "$ref": "#/components/schemas/RoomSessionId"
-          },
-          "status": {
-            "enum": ["pending", "processing", "completed", "failed"],
-            "type": "string"
-          },
-          "text": {
-            "minLength": 1,
-            "type": ["string", "null"]
+          "expires_in_seconds": {
+            "type": "integer"
           }
         },
-        "required": ["languages", "model", "provider", "room_id", "session_id", "status"],
+        "required": ["expires_in_seconds"],
         "type": "object"
       },
       "CreateUserRequest": {
@@ -7728,6 +7626,29 @@
         "required": ["participant_session_generation"],
         "type": "object"
       },
+      "RequestTranscriptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "language": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "languages": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": ["idempotency_key", "language", "languages"],
+        "type": "object"
+      },
       "Room": {
         "additionalProperties": false,
         "properties": {
@@ -8111,23 +8032,15 @@
         "required": ["pagination", "tenants"],
         "type": "object"
       },
-      "TranscribeRecordingRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "language": {
-            "minLength": 1,
-            "type": ["string", "null"]
-          },
-          "model": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "Transcript": {
         "additionalProperties": false,
         "properties": {
+          "artifact_content_type": {
+            "type": ["string", "null"]
+          },
+          "artifact_size": {
+            "type": ["integer", "null"]
+          },
           "completed_at": {
             "anyOf": [
               {
@@ -8141,6 +8054,19 @@
           "created_at": {
             "$ref": "#/components/schemas/DateTimeString"
           },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation": {
+            "type": "integer"
+          },
           "id": {
             "$ref": "#/components/schemas/TranscriptId"
           },
@@ -8151,11 +8077,6 @@
             },
             "minItems": 1,
             "type": "array"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "items": {},
-            "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "model": {
             "type": "string"
@@ -8179,14 +8100,39 @@
           "tenant_id": {
             "$ref": "#/components/schemas/TenantId"
           },
-          "text": {
-            "type": ["string", "null"]
-          },
           "updated_at": {
             "$ref": "#/components/schemas/DateTimeString"
           }
         },
-        "required": ["completed_at", "created_at", "id", "languages", "metadata", "model", "provider", "recording_id", "room_id", "session_id", "status", "tenant_id", "text", "updated_at"],
+        "required": ["created_at", "generation", "id", "languages", "recording_id", "room_id", "session_id", "status", "tenant_id", "updated_at"],
+        "type": "object"
+      },
+      "TranscriptDownloadURL": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "method": {
+            "type": "string"
+          },
+          "signed_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "signed_headers": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["expires_at", "method", "signed_at", "signed_headers", "url"],
         "type": "object"
       },
       "TranscriptId": {
@@ -8210,6 +8156,22 @@
           }
         },
         "required": ["pagination", "transcripts"],
+        "type": "object"
+      },
+      "TranscriptRequestAcceptedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "status": {
+            "type": "string"
+          },
+          "transcript": {
+            "$ref": "#/components/schemas/Transcript"
+          }
+        },
+        "required": ["job_id", "status", "transcript"],
         "type": "object"
       },
       "URLString": {
@@ -8369,51 +8331,6 @@
                 "type": "null"
               }
             ]
-          }
-        },
-        "type": "object"
-      },
-      "UpdateTranscriptRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "completed_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DateTimeString"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "languages": {
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "minItems": 1,
-            "type": "array"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "items": {},
-            "type": ["object", "array", "string", "number", "boolean", "null"]
-          },
-          "model": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "provider": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "status": {
-            "enum": ["pending", "processing", "completed", "failed"],
-            "type": "string"
-          },
-          "text": {
-            "minLength": 1,
-            "type": ["string", "null"]
           }
         },
         "type": "object"

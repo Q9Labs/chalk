@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 )
 
 func TestRunCreateTenantScenario(t *testing.T) {
@@ -162,30 +163,28 @@ func TestRunRouteRecordingTranscribeScenario(t *testing.T) {
 		t.Fatalf("run scenario: %v", err)
 	}
 
-	if result.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
+	if result.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusAccepted)
 	}
 
 	var body struct {
-		Provider string `json:"provider"`
-		Model    string `json:"model"`
-		Text     string `json:"text"`
+		JobID  string `json:"job_id"`
+		Status string `json:"status"`
 	}
 	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if body.Provider != "openrouter" || body.Model != "openai/whisper-1" || body.Text != "Hello from the trace recording." {
+	if body.JobID != transcriptJobID().String() || body.Status != transcripts.JobStatePending {
 		t.Fatalf("body = %#v", body)
 	}
 
-	assertEvent(t, result.Events, "http", "POST /v1/tenants/"+tenantID().String()+"/recordings/"+recordingID().String()+"/transcriptions")
+	assertEvent(t, result.Events, "http", "POST /v1/tenants/"+tenantID().String()+"/recordings/"+recordingID().String()+"/transcripts")
 	assertEvent(t, result.Events, "auth", "AuthenticateSession")
 	assertEvent(t, result.Events, "repository", "MembershipRepository.GetTenantMembershipForUser")
-	assertEvent(t, result.Events, "repository", "TenantRepository.GetTenant")
-	assertEvent(t, result.Events, "repository", "RecordingRepository.Get")
-	assertEvent(t, result.Events, "service", "ai.Service.Transcribe")
-	assertEvent(t, result.Events, "provider", "POST openrouter /audio/transcriptions")
-	assertEvent(t, result.Events, "database", "INSERT transcriptions RETURNING *")
+	assertEvent(t, result.Events, "service", "transcripts.Service.Request")
+	assertEvent(t, result.Events, "database", "SELECT recording_transcription_sources")
+	assertEvent(t, result.Events, "database", "BEGIN transcript request")
+	assertEvent(t, result.Events, "provider", "Lambda Invoke Event")
 }
 
 func TestRunRouteJourneyEventIntakeScenario(t *testing.T) {
