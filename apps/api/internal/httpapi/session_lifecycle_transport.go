@@ -4,9 +4,24 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func decodeIssueSyncTokenRequest(r *http.Request) (issueSyncTokenEndpointRequest, error) {
+	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(r)
+	if err != nil {
+		return issueSyncTokenEndpointRequest{}, err
+	}
+	participantID, err := routeID(r, "participant_session_id", apiErrorInvalidParticipantID)
+	if err != nil {
+		return issueSyncTokenEndpointRequest{}, err
+	}
+	return issueSyncTokenEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, ParticipantID: participantID}, nil
+}
 
 func decodeAdmitParticipantRequest(r *http.Request) (admitParticipantEndpointRequest, error) {
 	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(r)
@@ -62,6 +77,8 @@ func lifecycleWriteErrors(extra ...APIError) []APIError {
 
 func sessionLifecycleEndpointAPIError(err error) (APIError, bool) {
 	switch {
+	case errors.Is(err, mediaplaneproviders.ErrUnknownProvider), errors.Is(err, mediaplaneproviders.ErrInvalidMode), errors.Is(err, mediaplaneproviders.ErrMissingProviderConfig), errors.Is(err, mediaplaneproviders.ErrInvalidProviderConfig), errors.Is(err, mediaplaneproviders.ErrAdapterUnavailable), errors.Is(err, mediaplane.ErrInvalidProvider), errors.Is(err, mediaplane.ErrInvalidSessionKey), errors.Is(err, mediaplane.ErrInvalidSessionRef), errors.Is(err, mediaplane.ErrInvalidParticipantName), errors.Is(err, mediaplane.ErrInvalidParticipantRef), errors.Is(err, mediaplane.ErrInvalidParticipantPreset), errors.Is(err, mediaplane.ErrPlaneUnavailable), errors.Is(err, mediaplane.ErrUnsupportedOperation), errors.Is(err, mediaplane.ErrSessionNotFound), errors.Is(err, mediaplane.ErrParticipantNotFound), errors.Is(err, mediaplane.ErrProviderUnauthorized), errors.Is(err, mediaplane.ErrProviderRateLimited), errors.Is(err, mediaplane.ErrProviderFailed):
+		return apiErrorMediaPlaneUnavailable, true
 	case errors.Is(err, sessionlifecycle.ErrInvalidTenantID):
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, sessionlifecycle.ErrInvalidRoomID):
@@ -83,6 +100,8 @@ func sessionLifecycleEndpointAPIError(err error) (APIError, bool) {
 	case errors.Is(err, sessionlifecycle.ErrSessionNotActive):
 		return apiErrorSessionNotActive, true
 	case errors.Is(err, sessionlifecycle.ErrParticipantNotFound):
+		return apiErrorParticipantNotFound, true
+	case errors.Is(err, synctokens.ErrSubjectNotFound):
 		return apiErrorParticipantNotFound, true
 	case errors.Is(err, sessionlifecycle.ErrParticipantNotActive):
 		return apiErrorParticipantNotActive, true

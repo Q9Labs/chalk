@@ -143,6 +143,19 @@ func TestRunRouteSessionEndMemberScenario(t *testing.T) {
 	assertEvent(t, result.Events, "database", "COMMIT")
 }
 
+func TestRunRouteSessionSyncTokenScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteSessionSyncTokenScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
+	}
+	assertEvent(t, result.Events, "service", "synctokens.Broker.IssueForParticipant")
+	assertEvent(t, result.Events, "database", "SELECT active sync token subject")
+	assertEvent(t, result.Events, "crypto", "Ed25519 sign JWT")
+}
+
 func TestRunRouteRecordingTranscribeScenario(t *testing.T) {
 	result, err := Run(context.Background(), RouteRecordingTranscribeScenario)
 	if err != nil {
@@ -214,6 +227,9 @@ func TestRunAllRegisteredScenarios(t *testing.T) {
 			}
 			if len(result.Events) == 0 {
 				t.Fatal("expected trace events")
+			}
+			if _, err := json.Marshal(result); err != nil {
+				t.Fatalf("result must marshal for -format json: %v", err)
 			}
 		})
 	}

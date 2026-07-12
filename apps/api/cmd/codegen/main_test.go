@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
@@ -27,6 +28,58 @@ func TestIntegrationSchemasPreserveWireSemantics(t *testing.T) {
 	executeRequired := stringSlice(t, doc.Components.Schemas["ExecuteIntegrationActionRequest"]["required"])
 	if slices.Contains(executeRequired, "arguments") || slices.Contains(executeRequired, "text") {
 		t.Fatalf("text and arguments are alternative optional inputs, required = %v", executeRequired)
+	}
+}
+
+func TestMediaPlaneProviderConfigSchemaIsProviderNeutral(t *testing.T) {
+	doc := generatedDocument()
+	schema := doc.Components.Schemas["MediaPlaneProviderConfig"]
+	if schema["additionalProperties"] != true {
+		t.Fatalf("media plane provider config additionalProperties = %#v, want true", schema["additionalProperties"])
+	}
+	if description, ok := schema["description"].(string); !ok || !strings.Contains(description, "media-plane adapter") || !strings.Contains(description, "redacted") {
+		t.Fatalf("media plane provider config description = %#v, want adapter validation and redaction guidance", schema["description"])
+	}
+
+	properties := mapValue(t, schema["properties"])
+	if len(properties) != 3 {
+		t.Fatalf("media plane provider config properties = %#v, want enabled, provider, and mode only", properties)
+	}
+	for _, name := range []string{"enabled", "provider", "mode"} {
+		if _, ok := properties[name]; !ok {
+			t.Fatalf("media plane provider config missing %s property", name)
+		}
+	}
+
+	provider := mapValue(t, properties["provider"])
+	if provider["type"] != "string" {
+		t.Fatalf("media plane provider type = %#v, want string", provider["type"])
+	}
+	if _, ok := provider["enum"]; ok {
+		t.Fatalf("media plane provider enum = %#v, want no enum", provider["enum"])
+	}
+	if description, ok := provider["description"].(string); !ok || !strings.Contains(description, "cf_sfu") || !strings.Contains(description, "cf_rtk") {
+		t.Fatalf("media plane provider description = %#v, want known provider values", provider["description"])
+	}
+
+	mode := mapValue(t, properties["mode"])
+	if got, want := stringSlice(t, mode["enum"]), []string{"chalk_managed", "tenant_managed"}; !slices.Equal(got, want) {
+		t.Fatalf("media plane mode enum = %v, want %v", got, want)
+	}
+}
+
+func TestParticipantLifecycleIncludesOpaqueMediaPlane(t *testing.T) {
+	doc := generatedDocument()
+	schema := mapValue(t, doc.Components.Schemas["ParticipantLifecycle"])
+	properties := mapValue(t, schema["properties"])
+	mediaPlane := mapValue(t, properties["media_plane"])
+	if !slices.Contains(stringSlice(t, mediaPlane["type"]), "object") || !slices.Contains(stringSlice(t, mediaPlane["type"]), "null") {
+		t.Fatalf("media plane schema = %#v, want optional object", mediaPlane)
+	}
+	mediaProperties := mapValue(t, mediaPlane["properties"])
+	clientPayload := mapValue(t, mediaProperties["client_payload"])
+	if clientPayload["type"] != "object" || clientPayload["additionalProperties"] == nil {
+		t.Fatalf("client payload schema = %#v, want opaque object", clientPayload)
 	}
 }
 

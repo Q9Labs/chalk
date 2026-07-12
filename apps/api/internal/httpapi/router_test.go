@@ -1200,6 +1200,7 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333", body: `{"status":"ended"}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants", body: `{"participant_session_id":"44444444-4444-4444-8444-444444444444","name":"Ada"}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove", body: `{"participant_session_generation":1}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/sync-token"},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/end"},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/recordings", body: `{"status":"ready","storage_provider":"r2"}`},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings"},
@@ -1304,6 +1305,11 @@ func TestRoomSessionRoutesUseSessionPermissions(t *testing.T) {
 			method: http.MethodPost,
 			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove",
 			body:   `{"participant_session_generation":1}`,
+			scope:  authentication.ScopeSessionsWrite,
+		},
+		{
+			method: http.MethodPost,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/sync-token",
 			scope:  authentication.ScopeSessionsWrite,
 		},
 		{

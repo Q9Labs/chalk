@@ -5282,7 +5282,7 @@
               }
             },
             "description": "Service Unavailable",
-            "x-chalk-error-codes": ["service_unavailable"]
+            "x-chalk-error-codes": ["media_plane_unavailable", "service_unavailable"]
           }
         },
         "security": [
@@ -5495,6 +5495,154 @@
         ],
         "summary": "Remove session participant",
         "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token": {
+      "post": {
+        "operationId": "issueSessionParticipantSyncToken",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncToken"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_participant_session_id", "invalid_room_id", "invalid_session_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["participant_not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Issue session participant sync token",
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
@@ -7265,59 +7413,8 @@
       },
       "MediaPlaneProviderConfig": {
         "additionalProperties": true,
+        "description": "Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses.",
         "properties": {
-          "cloudflare": {
-            "additionalProperties": true,
-            "properties": {
-              "account_id": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "api_token": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "rtk": {
-                "additionalProperties": true,
-                "properties": {
-                  "app_id": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "host_preset": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "participant_preset": {
-                    "minLength": 1,
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              },
-              "sfu": {
-                "additionalProperties": true,
-                "properties": {
-                  "app_id": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "app_secret": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "enabled": {
-                    "type": "boolean"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "type": "object"
-          },
           "enabled": {
             "type": "boolean"
           },
@@ -7326,7 +7423,7 @@
             "type": "string"
           },
           "provider": {
-            "enum": ["cf_sfu", "cf_rtk"],
+            "description": "Known values include cf_sfu and cf_rtk.",
             "type": "string"
           }
         },
@@ -7400,6 +7497,9 @@
       "ParticipantLifecycle": {
         "additionalProperties": false,
         "properties": {
+          "expires_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
           "lifecycle_intent": {
             "additionalProperties": false,
             "properties": {
@@ -7435,6 +7535,24 @@
             "required": ["created_at", "id", "intent_name", "participant_session_generation", "participant_session_id", "request_key", "status"],
             "type": "object"
           },
+          "media_plane": {
+            "additionalProperties": false,
+            "properties": {
+              "client_payload": {
+                "additionalProperties": {
+                  "additionalProperties": true,
+                  "items": {},
+                  "type": ["object", "array", "string", "number", "boolean", "null"]
+                },
+                "type": "object"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": ["client_payload", "provider"],
+            "type": ["object", "null"]
+          },
           "participant": {
             "additionalProperties": false,
             "properties": {
@@ -7459,6 +7577,9 @@
             },
             "required": ["generation", "id", "room_id", "session_id", "status", "tenant_id"],
             "type": "object"
+          },
+          "sync_token": {
+            "type": "string"
           }
         },
         "required": ["lifecycle_intent", "participant"],
@@ -7884,6 +8005,19 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "SyncToken": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "sync_token": {
+            "type": "string"
+          }
+        },
+        "required": ["expires_at", "sync_token"],
         "type": "object"
       },
       "Tenant": {

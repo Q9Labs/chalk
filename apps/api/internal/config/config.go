@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -30,6 +32,10 @@ const (
 	AuthEmailVerificationRequired = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
 	AuthOAuthStateTTLMS           = "CHALK_AUTH_OAUTH_STATE_TTL_MS"
 	AuthSessionTTLMS              = "CHALK_AUTH_SESSION_TTL_MS"
+	SyncTokenAudience             = "CHALK_SYNC_TOKEN_AUDIENCE"
+	SyncTokenIssuer               = "CHALK_SYNC_TOKEN_ISSUER"
+	SyncTokenKeyID                = "CHALK_SYNC_TOKEN_KEY_ID"
+	SyncTokenPrivateKey           = "CHALK_SYNC_TOKEN_PRIVATE_KEY"
 
 	DatabaseURL      = "CHALK_DATABASE_URL"
 	DatabaseMaxConns = "CHALK_DATABASE_MAX_CONNS"
@@ -149,6 +155,13 @@ type AuthConfig struct {
 	SessionTTL                time.Duration
 }
 
+type SyncTokenConfig struct {
+	Audience   string
+	Issuer     string
+	KeyID      string
+	PrivateKey ed25519.PrivateKey
+}
+
 type GoogleOAuthConfig struct {
 	ClientID     string
 	ClientSecret string
@@ -186,6 +199,7 @@ type Config struct {
 	R2                 R2Config
 	Redis              RedisConfig
 	Resend             ResendConfig
+	SyncToken          SyncTokenConfig
 }
 
 func Load() (Config, error) {
@@ -297,6 +311,10 @@ func Load() (Config, error) {
 	if environment != DefaultEnvironment && localSystemToken != "" {
 		return Config{}, fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
 	}
+	syncToken, err := loadSyncTokenConfig(environment)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		API: APIConfig{
@@ -366,7 +384,29 @@ func Load() (Config, error) {
 			APIKey:  envOrDefault(ResendAPIKey, ""),
 			Timeout: resendTimeout,
 		},
+		SyncToken: syncToken,
 	}, nil
+}
+
+func loadSyncTokenConfig(environment string) (SyncTokenConfig, error) {
+	config := SyncTokenConfig{
+		Audience: strings.TrimSpace(envOrDefault(SyncTokenAudience, "")),
+		Issuer:   strings.TrimSpace(envOrDefault(SyncTokenIssuer, "")),
+		KeyID:    strings.TrimSpace(envOrDefault(SyncTokenKeyID, "")),
+	}
+	encodedKey := strings.TrimSpace(envOrDefault(SyncTokenPrivateKey, ""))
+	if config.Audience == "" && config.Issuer == "" && config.KeyID == "" && encodedKey == "" && environment != "production" {
+		return config, nil
+	}
+	if config.Audience == "" || config.Issuer == "" || config.KeyID == "" || encodedKey == "" {
+		return SyncTokenConfig{}, fmt.Errorf("%s, %s, %s, and %s must be set together", SyncTokenAudience, SyncTokenIssuer, SyncTokenKeyID, SyncTokenPrivateKey)
+	}
+	key, err := base64.RawURLEncoding.DecodeString(encodedKey)
+	if err != nil || len(key) != ed25519.PrivateKeySize {
+		return SyncTokenConfig{}, fmt.Errorf("%s must be an unpadded base64url Ed25519 private key", SyncTokenPrivateKey)
+	}
+	config.PrivateKey = ed25519.PrivateKey(key)
+	return config, nil
 }
 
 func validateOTLPEndpoint(environment string, endpoint string, insecure bool) error {

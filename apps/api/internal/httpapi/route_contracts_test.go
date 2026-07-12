@@ -73,6 +73,7 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/transcripts"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/transcripts/{transcript_id}"},
@@ -253,6 +254,7 @@ func TestSessionLifecycleRouteContracts(t *testing.T) {
 	}{
 		{"createRoomSession", http.StatusCreated, "CreateRoomSessionRequest", []string{"path:tenant_id", "path:room_id", "header:Idempotency-Key"}},
 		{"admitSessionParticipant", http.StatusCreated, "AdmitSessionParticipantRequest", []string{"path:tenant_id", "path:room_id", "path:session_id", "header:Idempotency-Key"}},
+		{"issueSessionParticipantSyncToken", http.StatusCreated, "", []string{"path:tenant_id", "path:room_id", "path:session_id", "path:participant_session_id"}},
 		{"removeSessionParticipant", http.StatusAccepted, "RemoveSessionParticipantRequest", []string{"path:tenant_id", "path:room_id", "path:session_id", "path:participant_session_id", "header:Idempotency-Key"}},
 		{"endRoomSession", http.StatusAccepted, "", []string{"path:tenant_id", "path:room_id", "path:session_id", "header:Idempotency-Key"}},
 	}

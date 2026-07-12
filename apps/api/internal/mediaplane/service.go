@@ -41,7 +41,8 @@ type Plane interface {
 }
 
 type Service struct {
-	plane Plane
+	plane    Plane
+	provider Provider
 }
 
 type EnsureSessionInput struct {
@@ -99,6 +100,14 @@ type Usage struct {
 
 func NewService(plane Plane) Service {
 	return Service{plane: plane}
+}
+
+func NewServiceForProvider(provider Provider, plane Plane) Service {
+	return Service{plane: plane, provider: provider}
+}
+
+func (s Service) Provider() Provider {
+	return s.provider
 }
 
 func (s Service) EnsureSession(ctx context.Context, input EnsureSessionInput) (Session, error) {

@@ -54,6 +54,19 @@ For the full local backing-service set, including Redis:
 apps/api/scripts/dev-services.sh start
 ```
 
+## Sync participant tokens
+
+Participant admission returns a five-minute Ed25519-signed sync JWT. An
+authenticated tenant member can refresh it with
+`POST /v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token`.
+The refresh path reloads the active participant generation, capabilities, and
+admission intent from Postgres before signing.
+
+Production requires `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`,
+`CHALK_SYNC_TOKEN_KEY_ID`, and `CHALK_SYNC_TOKEN_PRIVATE_KEY`. The private key is
+the unpadded base64url encoding of a 64-byte Ed25519 private key and must be
+supplied through the runtime secret boundary.
+
 ## Runtime Smoke
 
 ```bash

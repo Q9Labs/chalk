@@ -74,6 +74,13 @@ func (q operationQuerier) CreateUser(ctx context.Context, arg sqlc.CreateUserPar
 	return user, err
 }
 
+func (q operationQuerier) GetSyncTokenSubject(ctx context.Context, arg sqlc.GetSyncTokenSubjectParams) (sqlc.GetSyncTokenSubjectRow, error) {
+	startedAt := time.Now()
+	subject, err := q.next.GetSyncTokenSubject(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetSyncTokenSubject", startedAt, err)
+	return subject, err
+}
+
 func (q operationQuerier) CreateMembership(ctx context.Context, arg sqlc.CreateMembershipParams) (sqlc.Membership, error) {
 	startedAt := time.Now()
 	membership, err := q.next.CreateMembership(ctx, arg)

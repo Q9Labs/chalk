@@ -684,38 +684,12 @@ func providerConfigSchemas() map[string]map[string]any {
 	return map[string]map[string]any{
 		"MediaPlaneProviderConfig": {
 			"type":                 "object",
+			"description":          "Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses.",
 			"additionalProperties": true,
 			"properties": map[string]any{
 				"enabled":  map[string]any{"type": "boolean"},
-				"provider": map[string]any{"type": "string", "enum": []string{"cf_sfu", "cf_rtk"}},
+				"provider": map[string]any{"type": "string", "description": "Known values include cf_sfu and cf_rtk."},
 				"mode":     providerModeSchema(),
-				"cloudflare": map[string]any{
-					"type":                 "object",
-					"additionalProperties": true,
-					"properties": map[string]any{
-						"account_id": secretCapableStringSchema(),
-						"api_token":  secretCapableStringSchema(),
-						"rtk": map[string]any{
-							"type":                 "object",
-							"additionalProperties": true,
-							"properties": map[string]any{
-								"enabled":            map[string]any{"type": "boolean"},
-								"app_id":             secretCapableStringSchema(),
-								"host_preset":        nonEmptyStringSchema(),
-								"participant_preset": nonEmptyStringSchema(),
-							},
-						},
-						"sfu": map[string]any{
-							"type":                 "object",
-							"additionalProperties": true,
-							"properties": map[string]any{
-								"enabled":    map[string]any{"type": "boolean"},
-								"app_id":     secretCapableStringSchema(),
-								"app_secret": secretCapableStringSchema(),
-							},
-						},
-					},
-				},
 			},
 		},
 		"AIProviderConfig": {

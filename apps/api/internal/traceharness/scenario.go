@@ -79,6 +79,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteSessionCreateMember(ctx)
 	case RouteSessionEndMemberScenario:
 		return runRouteSessionEndMember(ctx)
+	case RouteSessionSyncTokenScenario:
+		return runRouteSessionSyncToken(ctx)
 	case RouteRecordingTranscribeScenario:
 		return runRouteRecordingTranscribe(ctx)
 	case RouteJourneyEventIntakeScenario:
@@ -174,7 +176,7 @@ func runCreateTenant(ctx context.Context, name string) (ScenarioResult, error) {
 	result := ScenarioResult{
 		Name:       name,
 		StatusCode: response.Code,
-		Body:       json.RawMessage(response.Body.Bytes()),
+		Body:       resultBody(response.Body.Bytes()),
 		Events:     recorder.Events(),
 	}
 	if response.Code != http.StatusCreated {
@@ -253,7 +255,7 @@ func runExecuteIntegrationAction(ctx context.Context) (ScenarioResult, error) {
 	result := ScenarioResult{
 		Name:       ExecuteIntegrationActionScenario,
 		StatusCode: response.Code,
-		Body:       json.RawMessage(response.Body.Bytes()),
+		Body:       resultBody(response.Body.Bytes()),
 		Events:     recorder.Events(),
 	}
 	if response.Code != http.StatusOK {
@@ -724,6 +726,17 @@ func mustDecode(data []byte) any {
 		return string(data)
 	}
 	return value
+}
+
+// resultBody keeps a JSON response verbatim and wraps any other payload
+// (redirect HTML, plain text, empty bodies) as a JSON string so a
+// ScenarioResult always marshals in -format json.
+func resultBody(data []byte) json.RawMessage {
+	if json.Valid(data) {
+		return json.RawMessage(data)
+	}
+	quoted, _ := json.Marshal(string(data))
+	return json.RawMessage(quoted)
 }
 
 var _ httpapi.AuthenticationService = tracedAuthentication{}

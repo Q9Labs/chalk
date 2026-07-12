@@ -27,12 +27,14 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/users"
@@ -146,6 +148,20 @@ func run() error {
 	roomService := rooms.NewService(roomRepository)
 	sessionLifecycleRepository := postgres.NewSessionLifecycleRepository(pool)
 	sessionLifecycleService := sessionlifecycle.NewService(sessionLifecycleRepository)
+	var syncTokenService httpapi.SyncTokenIssuer
+	var syncTokenRefresh httpapi.SyncTokenRefreshIssuer
+	if len(cfg.SyncToken.PrivateKey) > 0 {
+		service, err := synctokens.NewService(synctokens.Config{
+			Issuer: cfg.SyncToken.Issuer, Audience: cfg.SyncToken.Audience,
+			KeyID: cfg.SyncToken.KeyID, PrivateKey: cfg.SyncToken.PrivateKey,
+		})
+		if err != nil {
+			return fmt.Errorf("configure sync token issuer: %w", err)
+		}
+		broker := synctokens.NewBroker(sessionLifecycleRepository, service)
+		syncTokenService = broker
+		syncTokenRefresh = broker
+	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
 	transcriptRepository := postgres.NewTranscriptRepository(operationQueries)
@@ -167,6 +183,7 @@ func run() error {
 		}
 		meetingCredentials = verifier
 	}
+	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(cfg.CloudflareRealtime)
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService
 	if r2Configured(cfg.R2) {
@@ -215,6 +232,7 @@ func run() error {
 		Journeys:           journeyService,
 		LocalTelemetry:     cfg.Observability.Environment == config.DefaultEnvironment,
 		MeetingCredentials: meetingCredentials,
+		MediaPlane:         mediaPlaneRegistry,
 		Memberships:        membershipService,
 		AuditLogs:          auditLogService,
 		RecordingDownloads: recordingDownloads,
@@ -222,6 +240,8 @@ func run() error {
 		Recordings:         recordingService,
 		Rooms:              roomService,
 		SessionLifecycle:   sessionLifecycleService,
+		SyncTokens:         syncTokenService,
+		SyncTokenRefresh:   syncTokenRefresh,
 		SessionCookie: httpapi.SessionCookieOptions{
 			Secure: cfg.Observability.Environment != "local",
 		},

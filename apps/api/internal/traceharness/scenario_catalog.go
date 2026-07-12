@@ -51,6 +51,7 @@ const (
 	RouteRoomCreateMemberScenario       = "route:room-create-member"
 	RouteSessionCreateMemberScenario    = "route:session-create-member"
 	RouteSessionEndMemberScenario       = "route:session-end-member"
+	RouteSessionSyncTokenScenario       = "route:session-sync-token"
 	RouteRecordingTranscribeScenario    = "route:recording-transcribe"
 	RouteJourneyEventIntakeScenario     = "route:telemetry-journey-event-intake"
 
@@ -98,6 +99,7 @@ func ScenarioNames() []string {
 		RouteRoomCreateMemberScenario,
 		RouteSessionCreateMemberScenario,
 		RouteSessionEndMemberScenario,
+		RouteSessionSyncTokenScenario,
 		RouteRecordingTranscribeScenario,
 		RouteJourneyEventIntakeScenario,
 		PolicyTenantSystemAllowScenario,
@@ -836,7 +838,7 @@ func runRouteTrace(ctx context.Context, cfg routeTraceConfig) (ScenarioResult, e
 	result := ScenarioResult{
 		Name:       cfg.Name,
 		StatusCode: response.Code,
-		Body:       json.RawMessage(response.Body.Bytes()),
+		Body:       resultBody(response.Body.Bytes()),
 		Events:     cfg.Recorder.Events(),
 	}
 	if response.Code != cfg.ExpectedStatus {

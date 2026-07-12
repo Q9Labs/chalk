@@ -33,6 +33,7 @@ type Querier interface {
 	GetLoginSessionByTokenHash(ctx context.Context, tokenHash string) (GetLoginSessionByTokenHashRow, error)
 	GetPasswordIdentityByEmail(ctx context.Context, email string) (GetPasswordIdentityByEmailRow, error)
 	GetSessionCreateRequest(ctx context.Context, arg GetSessionCreateRequestParams) (SessionCreateRequest, error)
+	GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubjectParams) (GetSyncTokenSubjectRow, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
 	GetTenantAuditLog(ctx context.Context, arg GetTenantAuditLogParams) (AuditLog, error)
 	GetTenantMembershipForUser(ctx context.Context, arg GetTenantMembershipForUserParams) (Membership, error)

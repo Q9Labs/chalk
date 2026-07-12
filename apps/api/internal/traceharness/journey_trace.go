@@ -58,7 +58,7 @@ func runRouteJourneyEventIntake(ctx context.Context) (ScenarioResult, error) {
 	result := ScenarioResult{
 		Name:       RouteJourneyEventIntakeScenario,
 		StatusCode: response.Code,
-		Body:       json.RawMessage(response.Body.Bytes()),
+		Body:       resultBody(response.Body.Bytes()),
 		Events:     recorder.Events(),
 	}
 	if response.Code != http.StatusAccepted {

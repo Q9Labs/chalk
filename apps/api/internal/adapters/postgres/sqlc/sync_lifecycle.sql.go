@@ -355,6 +355,78 @@ func (q *Queries) GetSessionCreateRequest(ctx context.Context, arg GetSessionCre
 	return i, err
 }
 
+const getSyncTokenSubject = `-- name: GetSyncTokenSubject :one
+select
+    participants.tenant_id,
+    participants.room_id,
+    participants.session_id,
+    participants.id as participant_session_id,
+    participants.generation,
+    participants.name,
+    participants.capabilities,
+    sync_lifecycle_intents.lifecycle_intent_id as admission_lifecycle_intent_id
+from participants
+join room_sessions on
+    room_sessions.tenant_id = participants.tenant_id
+    and room_sessions.room_id = participants.room_id
+    and room_sessions.id = participants.session_id
+join sync_lifecycle_intents on
+    sync_lifecycle_intents.tenant_id = participants.tenant_id
+    and sync_lifecycle_intents.room_id = participants.room_id
+    and sync_lifecycle_intents.session_id = participants.session_id
+    and sync_lifecycle_intents.participant_session_id = participants.id
+    and sync_lifecycle_intents.participant_session_generation = participants.generation
+    and sync_lifecycle_intents.intent_name = 'participant_joined'
+where
+    participants.tenant_id = $1
+    and participants.room_id = $2
+    and participants.session_id = $3
+    and participants.id = $4
+    and participants.status in ('joining', 'active')
+    and room_sessions.status = 'active'
+order by sync_lifecycle_intents.created_at desc
+limit 1
+`
+
+type GetSyncTokenSubjectParams struct {
+	TenantID             pgtype.UUID `json:"tenant_id"`
+	RoomID               pgtype.UUID `json:"room_id"`
+	SessionID            pgtype.UUID `json:"session_id"`
+	ParticipantSessionID pgtype.UUID `json:"participant_session_id"`
+}
+
+type GetSyncTokenSubjectRow struct {
+	TenantID                   pgtype.UUID `json:"tenant_id"`
+	RoomID                     pgtype.UUID `json:"room_id"`
+	SessionID                  pgtype.UUID `json:"session_id"`
+	ParticipantSessionID       pgtype.UUID `json:"participant_session_id"`
+	Generation                 int64       `json:"generation"`
+	Name                       pgtype.Text `json:"name"`
+	Capabilities               []string    `json:"capabilities"`
+	AdmissionLifecycleIntentID pgtype.UUID `json:"admission_lifecycle_intent_id"`
+}
+
+func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubjectParams) (GetSyncTokenSubjectRow, error) {
+	row := q.db.QueryRow(ctx, getSyncTokenSubject,
+		arg.TenantID,
+		arg.RoomID,
+		arg.SessionID,
+		arg.ParticipantSessionID,
+	)
+	var i GetSyncTokenSubjectRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.RoomID,
+		&i.SessionID,
+		&i.ParticipantSessionID,
+		&i.Generation,
+		&i.Name,
+		&i.Capabilities,
+		&i.AdmissionLifecycleIntentID,
+	)
+	return i, err
+}
+
 const lockLifecycleIntentForParticipantTransitionForUpdate = `-- name: LockLifecycleIntentForParticipantTransitionForUpdate :one
 select tenant_id, room_id, session_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_session_id, participant_session_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, created_at, completed_at, next_attempt_at
 from sync_lifecycle_intents

@@ -541,6 +541,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Issue session participant sync token */
+    post: operations["issueSessionParticipantSyncToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings": {
     parameters: {
       query?: never;
@@ -940,33 +957,13 @@ export interface components {
       email: components["schemas"]["Email"];
       password: string;
     };
+    /** @description Provider-specific properties are opaque to this API contract. The server's media-plane adapter for the named provider validates them, and secret values are redacted in API responses. */
     MediaPlaneProviderConfig: {
-      cloudflare?: {
-        account_id?: string;
-        api_token?: string;
-        rtk?: {
-          app_id?: string;
-          enabled?: boolean;
-          host_preset?: string;
-          participant_preset?: string;
-        } & {
-          [key: string]: unknown;
-        };
-        sfu?: {
-          app_id?: string;
-          app_secret?: string;
-          enabled?: boolean;
-        } & {
-          [key: string]: unknown;
-        };
-      } & {
-        [key: string]: unknown;
-      };
       enabled?: boolean;
       /** @enum {string} */
       mode?: "chalk_managed" | "tenant_managed";
-      /** @enum {string} */
-      provider?: "cf_sfu" | "cf_rtk";
+      /** @description Known values include cf_sfu and cf_rtk. */
+      provider?: string;
     } & {
       [key: string]: unknown;
     };
@@ -991,6 +988,7 @@ export interface components {
       page_size: number;
     };
     ParticipantLifecycle: {
+      expires_at?: components["schemas"]["DateTimeString"];
       lifecycle_intent: {
         created_at: components["schemas"]["DateTimeString"];
         id: components["schemas"]["UUID"];
@@ -1000,6 +998,20 @@ export interface components {
         request_key: string;
         status: string;
       };
+      media_plane?: {
+        client_payload: {
+          [key: string]:
+            | {
+                [key: string]: unknown;
+              }
+            | unknown[]
+            | string
+            | number
+            | boolean
+            | null;
+        };
+        provider: string;
+      } | null;
       participant: {
         generation: number;
         id: components["schemas"]["UUID"];
@@ -1008,6 +1020,7 @@ export interface components {
         status: string;
         tenant_id: components["schemas"]["TenantId"];
       };
+      sync_token?: string;
     };
     Recording: {
       created_at: components["schemas"]["DateTimeString"];
@@ -1157,6 +1170,10 @@ export interface components {
       secret_access_key?: string;
     } & {
       [key: string]: unknown;
+    };
+    SyncToken: {
+      expires_at: components["schemas"]["DateTimeString"];
+      sync_token: string;
     };
     Tenant: {
       ai_provider_config: components["schemas"]["AIProviderConfig"] | null;
@@ -4860,6 +4877,88 @@ export interface operations {
       /** @description Internal Server Error */
       500: {
         headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  issueSessionParticipantSyncToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+        participant_session_id: components["schemas"]["RoomSessionId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SyncToken"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {

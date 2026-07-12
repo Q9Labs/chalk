@@ -65,6 +65,7 @@ var (
 	apiErrorParticipantGenerationMismatch = APIError{Status: http.StatusConflict, Code: "participant_generation_mismatch", Message: "Participant session generation does not match"}
 	apiErrorIdempotencyConflict           = APIError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "Idempotency key was already used for another request"}
 	apiErrorLifecycleCapacityExceeded     = APIError{Status: http.StatusConflict, Code: "lifecycle_capacity_exceeded", Message: "Session lifecycle capacity is exhausted"}
+	apiErrorMediaPlaneUnavailable         = APIError{Status: http.StatusServiceUnavailable, Code: "media_plane_unavailable", Message: "Media plane is unavailable"}
 
 	apiErrorInvalidRecordingID        = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_id", Message: "Invalid recording id"}
 	apiErrorInvalidRecordingStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_status", Message: "Invalid recording status"}

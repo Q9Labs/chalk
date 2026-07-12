@@ -1,11 +1,45 @@
 package config_test
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 )
+
+func TestLoadRequiresSyncTokenSigningConfigInProduction(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "production")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), config.SyncTokenAudience) {
+		t.Fatalf("error = %v, want missing sync token config", err)
+	}
+}
+
+func TestLoadAcceptsEd25519SyncTokenSigningConfig(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.SyncTokenAudience, "chalk-sync")
+	t.Setenv(config.SyncTokenIssuer, "https://api.chalk.test")
+	t.Setenv(config.SyncTokenKeyID, "launch-1")
+	t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(privateKey))
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SyncToken.KeyID != "launch-1" || len(cfg.SyncToken.PrivateKey) != ed25519.PrivateKeySize {
+		t.Fatalf("sync token config = %#v", cfg.SyncToken)
+	}
+}
 
 func TestLoadDefaults(t *testing.T) {
 	cfg, err := config.Load()

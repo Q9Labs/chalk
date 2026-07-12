@@ -2,6 +2,8 @@ package httpapi_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -36,9 +39,21 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 	t.Cleanup(func() { cleanupLifecycleHTTPTest(t, pool, tenantID) })
 
 	queries := sqlc.New(pool)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := synctokens.NewService(synctokens.Config{Issuer: "https://api.chalk.test", Audience: "chalk-sync", KeyID: "integration-1", PrivateKey: privateKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycleRepository := postgres.NewSessionLifecycleRepository(pool)
+	tokens := synctokens.NewBroker(lifecycleRepository, signer)
 	options := httpapi.Options{
 		Rooms:            rooms.NewService(postgres.NewRoomRepository(queries)),
-		SessionLifecycle: sessionlifecycle.NewService(postgres.NewSessionLifecycleRepository(pool)),
+		SessionLifecycle: sessionlifecycle.NewService(lifecycleRepository),
+		SyncTokens:       tokens,
+		SyncTokenRefresh: tokens,
 	}
 	createRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", `{"metadata":{"purpose":"integration"}}`)
 	createRequest.Header.Set("Idempotency-Key", "http-create-request-0001")
@@ -85,6 +100,24 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 	admitResponse := requestWithOptionsAndRequest(t, admitRequest, authenticatedOptions(t, options))
 	if admitResponse.Code != http.StatusCreated {
 		t.Fatalf("admit status = %d, want 201; body=%s", admitResponse.Code, admitResponse.Body.String())
+	}
+	var admission struct {
+		SyncToken string `json:"sync_token"`
+	}
+	decodeJSON(t, admitResponse, &admission)
+	if admission.SyncToken == "" {
+		t.Fatal("admission sync token is empty")
+	}
+	refreshResponse := authenticatedRequestWithOptions(t, http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants/"+participantID.String()+"/sync-token", options)
+	if refreshResponse.Code != http.StatusCreated {
+		t.Fatalf("refresh status = %d, want 201; body=%s", refreshResponse.Code, refreshResponse.Body.String())
+	}
+	var refreshed struct {
+		SyncToken string `json:"sync_token"`
+	}
+	decodeJSON(t, refreshResponse, &refreshed)
+	if refreshed.SyncToken == "" || refreshed.SyncToken == admission.SyncToken {
+		t.Fatal("refresh did not issue a distinct sync token")
 	}
 	conflictRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Grace","capabilities":["control"]}`)
 	conflictRequest.Header.Set("Idempotency-Key", "http-admit-request-0001")

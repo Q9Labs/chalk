@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -70,6 +71,47 @@ func runRouteSessionEndMember(ctx context.Context) (ScenarioResult, error) {
 		Headers:        map[string]string{"Idempotency-Key": "session-end-trace-0001"},
 		ExpectedStatus: http.StatusAccepted,
 	})
+}
+
+func runRouteSessionSyncToken(ctx context.Context) (ScenarioResult, error) {
+	now := deterministicClock()
+	recorder := NewRecorder(now)
+	issuer := tracedSyncTokenIssuer{recorder: recorder, now: now}
+
+	return runRouteTrace(ctx, routeTraceConfig{
+		Name:     RouteSessionSyncTokenScenario,
+		Recorder: recorder,
+		Handler: httpapi.NewRouter(httpapi.Options{
+			RateLimit: noRateLimits(now),
+			Authentication: staticAuthentication{
+				recorder: recorder, now: now, principal: userPrincipal(), sessionUser: sessionUserFixture(now),
+			},
+			TenantAuthz: authorization.NewTenantPolicy(tracedMembershipRepository{
+				recorder: recorder, now: now, policyRole: memberships.RoleMember,
+			}),
+			SyncTokenRefresh: issuer,
+		}),
+		Method:         http.MethodPost,
+		Path:           "/v1/tenants/" + tenantID().String() + "/rooms/" + roomID().String() + "/sessions/" + lifecycleSessionID().String() + "/participants/" + participantID().String() + "/sync-token",
+		Authorization:  "Bearer trace-session-token",
+		ExpectedStatus: http.StatusCreated,
+	})
+}
+
+type tracedSyncTokenIssuer struct {
+	recorder *Recorder
+	now      func() time.Time
+}
+
+func (i tracedSyncTokenIssuer) IssueForParticipant(_ context.Context, key synctokens.SubjectKey) (synctokens.Token, error) {
+	span := i.recorder.Start("service", "synctokens.Broker.IssueForParticipant", "load the active participant identity before signing", map[string]any{
+		"tenant_id": key.TenantID.String(), "room_id": key.RoomID.String(), "session_id": key.SessionID.String(), "participant_session_id": key.ParticipantID.String(),
+	})
+	i.recorder.Add("database", "SELECT active sync token subject", "read the stored generation, capabilities, and admission intent", nil)
+	i.recorder.Add("crypto", "Ed25519 sign JWT", "sign bounded identity claims without recording token material", map[string]any{"algorithm": "EdDSA", "key_id": "trace-key"})
+	result := synctokens.Token{Value: "redacted.trace.token", ExpiresAt: i.now().Add(synctokens.Lifetime)}
+	span.End("return short-lived token metadata", map[string]any{"expires_at": result.ExpiresAt.Format(time.RFC3339)}, nil)
+	return result, nil
 }
 
 type tracedSessionLifecycleService struct {
@@ -159,6 +201,10 @@ func lifecycleSessionID() utilities.ID {
 
 func lifecycleIntentID() utilities.ID {
 	return mustID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+}
+
+func participantID() utilities.ID {
+	return mustID("44444444-4444-4444-8444-444444444444")
 }
 
 func shortDigest(digest [32]byte) string {

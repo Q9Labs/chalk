@@ -155,6 +155,38 @@ where
     and id = sqlc.arg(participant_session_id)
 for update;
 
+-- name: GetSyncTokenSubject :one
+select
+    participants.tenant_id,
+    participants.room_id,
+    participants.session_id,
+    participants.id as participant_session_id,
+    participants.generation,
+    participants.name,
+    participants.capabilities,
+    sync_lifecycle_intents.lifecycle_intent_id as admission_lifecycle_intent_id
+from participants
+join room_sessions on
+    room_sessions.tenant_id = participants.tenant_id
+    and room_sessions.room_id = participants.room_id
+    and room_sessions.id = participants.session_id
+join sync_lifecycle_intents on
+    sync_lifecycle_intents.tenant_id = participants.tenant_id
+    and sync_lifecycle_intents.room_id = participants.room_id
+    and sync_lifecycle_intents.session_id = participants.session_id
+    and sync_lifecycle_intents.participant_session_id = participants.id
+    and sync_lifecycle_intents.participant_session_generation = participants.generation
+    and sync_lifecycle_intents.intent_name = 'participant_joined'
+where
+    participants.tenant_id = sqlc.arg(tenant_id)
+    and participants.room_id = sqlc.arg(room_id)
+    and participants.session_id = sqlc.arg(session_id)
+    and participants.id = sqlc.arg(participant_session_id)
+    and participants.status in ('joining', 'active')
+    and room_sessions.status = 'active'
+order by sync_lifecycle_intents.created_at desc
+limit 1;
+
 -- name: ReserveParticipantAdmission :one
 update sync_session_control
 set
