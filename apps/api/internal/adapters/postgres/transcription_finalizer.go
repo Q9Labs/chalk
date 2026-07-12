@@ -77,10 +77,16 @@ func (r TranscriptRepository) CompleteFinalizer(ctx context.Context, input trans
 	if errors.Is(err, pgx.ErrNoRows) || !leaseMatches(job, input.Attempt, input.LeaseOwner, input.LeaseToken, input.Now) {
 		return transcripts.Transcript{}, transcripts.ErrStaleLease
 	}
-	row, err := q.FinalizeTranscription(ctx, sqlc.FinalizeTranscriptionParams{ID: job.TranscriptID, Provider: pgtype.Text{String: input.Provider, Valid: true}, Model: pgtype.Text{String: input.Model, Valid: true}, Languages: input.Languages, ArtifactSha256: input.ArtifactSHA256, ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, ArtifactContentType: pgtype.Text{String: input.ArtifactContentType, Valid: true}})
+	tenantID := utilities.IDFromBytes(job.TenantID.Bytes)
+	transcriptID := utilities.IDFromBytes(job.TranscriptID.Bytes)
+	row, err := q.FinalizeTranscription(ctx, sqlc.FinalizeTranscriptionParams{ID: job.TranscriptID, ArtifactKey: pgtype.Text{String: finalArtifactKey(tenantID, transcriptID, input.Attempt), Valid: true}, Provider: pgtype.Text{String: input.Provider, Valid: true}, Model: pgtype.Text{String: input.Model, Valid: true}, Languages: input.Languages, ArtifactSha256: input.ArtifactSHA256, ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, ArtifactContentType: pgtype.Text{String: input.ArtifactContentType, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return transcripts.Transcript{}, transcripts.ErrStaleLease
 	}
+	if err != nil {
+		return transcripts.Transcript{}, err
+	}
+	jobs, err := q.ListTranscriptionChunkJobs(ctx, job.TranscriptID)
 	if err != nil {
 		return transcripts.Transcript{}, err
 	}
@@ -92,11 +98,13 @@ func (r TranscriptRepository) CompleteFinalizer(ctx context.Context, input trans
 		return transcripts.Transcript{}, err
 	}
 	dueAt := input.Now.Add(time.Hour)
-	for _, chunk := range chunks {
-		if err := enqueueCleanupTx(ctx, q, row, chunk.StorageKey, "temp_chunk", dueAt); err != nil {
+	for _, artifact := range finalizerPreviousCleanupArtifacts(tenantID, transcriptID, input.Attempt) {
+		if err := enqueueCleanupTx(ctx, q, row, artifact.key, artifact.kind, dueAt); err != nil {
 			return transcripts.Transcript{}, err
 		}
-		if err := enqueueCleanupTx(ctx, q, row, chunk.ResultKey, "temp_result", dueAt); err != nil {
+	}
+	for _, artifact := range finalizerCleanupArtifacts(tenantID, transcriptID, chunks, jobs) {
+		if err := enqueueCleanupTx(ctx, q, row, artifact.key, artifact.kind, dueAt); err != nil {
 			return transcripts.Transcript{}, err
 		}
 	}
@@ -115,7 +123,7 @@ func (r TranscriptRepository) FinalizerKey(ctx context.Context, input transcript
 	if err != nil {
 		return "", err
 	}
-	return "tenants/" + utilities.IDFromBytes(transcript.TenantID.Bytes).String() + "/transcripts/" + utilities.IDFromBytes(transcript.ID.Bytes).String() + "/document.json", nil
+	return finalArtifactKey(utilities.IDFromBytes(transcript.TenantID.Bytes), utilities.IDFromBytes(transcript.ID.Bytes), input.Attempt), nil
 }
 
 func (r TranscriptRepository) RetryFinalizer(ctx context.Context, input transcripts.RetryInput) (transcripts.Job, error) {
@@ -123,3 +131,45 @@ func (r TranscriptRepository) RetryFinalizer(ctx context.Context, input transcri
 }
 
 var _ transcripts.FinalizerRepository = TranscriptRepository{}
+
+type finalizerCleanupArtifact struct {
+	key  string
+	kind string
+}
+
+func finalizerPreviousCleanupArtifacts(tenantID, transcriptID utilities.ID, attempt int) []finalizerCleanupArtifact {
+	if attempt <= 1 {
+		return nil
+	}
+	artifacts := make([]finalizerCleanupArtifact, 0, attempt-1)
+	for previousAttempt := 1; previousAttempt < attempt; previousAttempt++ {
+		artifacts = append(artifacts, finalizerCleanupArtifact{
+			key:  finalArtifactKey(tenantID, transcriptID, previousAttempt),
+			kind: "final_artifact",
+		})
+	}
+	return artifacts
+}
+
+// Recorder-owned source chunks are retained by the recording lifecycle. Only
+// dispatcher-generated result artifacts become eligible after finalization.
+func finalizerCleanupArtifacts(tenantID, transcriptID utilities.ID, chunks []sqlc.TranscriptChunk, jobs []sqlc.ArtifactJob) []finalizerCleanupArtifact {
+	chunksByID := make(map[string]sqlc.TranscriptChunk, len(chunks))
+	for _, chunk := range chunks {
+		chunksByID[utilities.IDFromBytes(chunk.ID.Bytes).String()] = chunk
+	}
+	artifacts := make([]finalizerCleanupArtifact, 0, len(jobs))
+	for _, job := range jobs {
+		chunk, ok := chunksByID[utilities.IDFromBytes(job.ChunkID.Bytes).String()]
+		if !ok {
+			continue
+		}
+		for attempt := 1; attempt <= int(job.AttemptCount); attempt++ {
+			artifacts = append(artifacts, finalizerCleanupArtifact{
+				key:  chunkResultKey(tenantID, transcriptID, chunk.Generation, int(chunk.ChunkIndex), attempt),
+				kind: "temp_result",
+			})
+		}
+	}
+	return artifacts
+}

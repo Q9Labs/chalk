@@ -4,6 +4,8 @@ import { loadDispatcherSecrets } from "../src/secrets.js";
 import { loadReleaseConfig } from "../src/config.js";
 import { runNoContentCanary } from "../src/canary.js";
 import { conditionalPutJson, fetchAudioChunk } from "../src/storage.js";
+import { MAX_FINALIZER_CHUNKS } from "../src/finalizer-limits.js";
+import { validateFinalizeAssignment } from "../src/urls.js";
 
 const future = new Date(Date.now() + 300_000).toISOString();
 const env: NodeJS.ProcessEnv = {
@@ -41,6 +43,10 @@ describe("release, storage, and canary gates", () => {
     expect(() => loadReleaseConfig({ ...env, TRANSCRIPTION_PRIVACY_GATE_ACCEPTED: "false" })).toThrow();
   });
 
+  it("requires enough concurrency for every reconciliation queue", () => {
+    expect(() => loadReleaseConfig({ ...env, TRANSCRIPTION_CONCURRENCY: "2" }, { cloudflareAiToken: "cf", workloadAuth: "auth" })).toThrow(/invalid bounded integer configuration/);
+  });
+
   it("loads only explicitly named decrypted SSM values", async () => {
     const send = vi.fn(async (command: { input: { Names: string[]; WithDecryption: true } }) => ({ Parameters: command.input.Names.map((Name) => ({ Name, Value: `${Name}-secret` })) }));
     const values = await loadDispatcherSecrets({ send }, { cloudflareAiToken: "/chalk/test/cf", workloadAuth: "/chalk/test/auth", deepInfraToken: "/chalk/test/di" });
@@ -70,5 +76,32 @@ describe("release, storage, and canary gates", () => {
     const expected = { provider: "cloudflare" as const, model: "@cf/openai/whisper-large-v3-turbo", versionContract: "cf-1" };
     await expect(runNoContentCanary({ expected, probe: async () => ({ schemaVersion: "changed", ...expected }) })).resolves.toMatchObject({ ok: false, disablePrimary: true, reason: "schema_drift" });
     await expect(runNoContentCanary({ expected, probe: async () => ({ schemaVersion: "transcript.v1", ...expected, versionContract: "cf-2" }) })).resolves.toMatchObject({ ok: false, disablePrimary: true, reason: "identity_drift" });
+  });
+
+  it("bounds finalizer assignments at the API contract limit", () => {
+    const chunk = {
+      chunk_id: "chunk",
+      input_url: "https://r2.example/chunk?X-Amz-Expires=900",
+      input_url_expires_at: future,
+      input_content_type: "application/json",
+      input_size_bytes: 1,
+      input_sha256: "a".repeat(64),
+      meeting_start_ms: 0,
+      meeting_end_ms: 1,
+    };
+    const assignment = {
+      job_id: "job",
+      transcript_id: "transcript",
+      session_id: "session",
+      attempt: 1,
+      lease_token: "lease",
+      lease_expires_at: future,
+      chunks: Array.from({ length: MAX_FINALIZER_CHUNKS }, (_, index) => ({ ...chunk, chunk_id: `chunk-${index}` })),
+      output_put_url: "https://r2.example/final?X-Amz-Expires=900",
+      output_put_url_expires_at: future,
+      output_content_type: "application/json",
+    };
+    expect(validateFinalizeAssignment(assignment).chunks).toHaveLength(MAX_FINALIZER_CHUNKS);
+    expect(() => validateFinalizeAssignment({ ...assignment, chunks: [...assignment.chunks, { ...chunk, chunk_id: "too-many" }] })).toThrow(/chunks are invalid/);
   });
 });

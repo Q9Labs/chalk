@@ -91,8 +91,10 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
     const checksumSha256 = createHash("sha256").update(body).digest("hex");
     const uploaded = await conditionalPutJson({ fetch: dependencies.fetch, url: assignment.outputPutUrl, body, checksumSha256 });
     if (uploaded === "already_exists") {
-      logger.warn("finalize_duplicate_result_rejected");
-      return "failed";
+      // The control plane verifies the existing object against this checksum,
+      // size, and content type before accepting completion. That makes a
+      // retry after a successful PUT but transient completion failure safe.
+      logger.warn("finalize_existing_result_verified_by_completion");
     }
     await dependencies.control.completeFinalize?.({
       jobId: assignment.jobId,

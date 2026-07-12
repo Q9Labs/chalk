@@ -45,7 +45,9 @@ The control API boundary assumed by this package is:
   omitted unless a provider exposes an authoritative billing fact.
 
 The API independently verifies the selected result object before its
-compare-and-set completion. Completion does not send a URL or object key.
+compare-and-set completion. Completion does not send a URL or object key. A
+retry after a successful conditional PUT reuses the existing object by
+resubmitting its checksum and letting that same API verification decide.
 
 Final transcript composition is a separate fenced queue. The EventBridge
 payload `{\"source\":\"eventbridge.scheduler\",\"kind\":\"transcription-reconcile\"}`
@@ -57,10 +59,11 @@ document PUT authority. The worker verifies every chunk document, retains
 overlapping source-track cues, sorts deterministically, summarizes
 heterogeneous provider facts as `mixed`, and calls
 `/internal/v1/transcription/finalize/complete` with the final checksum, size,
-content type, provider/model/version summary, and sorted language set. A
-`409` or conditional PUT duplicate is treated as late fenced work. Invalid
-chunk schema/bounds are terminal; bounded download failures use
-`/internal/v1/transcription/finalize/retry`.
+content type, provider/model/version summary, and sorted language set. If a
+prior invocation already uploaded the final object, the worker submits the
+same completion and lets the API verify the existing object before accepting
+it; a `409` is late fenced work. Invalid chunk schema/bounds are terminal;
+bounded download failures use `/internal/v1/transcription/finalize/retry`.
 
 Explicit cleanup events use `source: "cleanup"`; the minute reconciliation
 event also reserves part of its bounded claim budget for cleanup so a steady

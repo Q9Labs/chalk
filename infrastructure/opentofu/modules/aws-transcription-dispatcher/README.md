@@ -9,9 +9,9 @@ version, ZIP SHA-256, SSM parameter ARNs, VPC egress, and alarm destinations.
 The Lambda runs Node.js 22 on arm64 with a bounded timeout, memory, and `/tmp`
 allocation. `timeout_seconds - work_budget_seconds` is a plan-time invariant of
 at least 60 seconds, preserving time for response validation, result upload, and
-lease completion. Reserved concurrency defaults to 50 and is validated never to
-be zero because AWS drops asynchronous events when reserved concurrency is set
-to zero.
+lease completion. Reserved concurrency defaults to 50 and is bounded from 3 to
+50 so the one-minute reconciliation can service transcription, finalization, and
+cleanup queues in one invocation.
 
 The ZIP is selected by S3 bucket, immutable object key, object version, and the
 exact SHA-256 passed as `source_code_hash`; a key containing `latest` or a key

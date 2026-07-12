@@ -120,7 +120,12 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 				}
 				chunks = append(chunks, finalizerChunkResponse{ChunkID: chunk.ID.String(), InputURL: url, InputURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), InputContentType: chunk.ResultContentType, InputSizeBytes: chunk.ResultSize, InputSHA256: hex.EncodeToString(chunk.ResultSHA256), MeetingStartMS: chunk.StartMS, MeetingEndMS: chunk.EndMS})
 			}
-			key := "tenants/" + assignment.Transcript.TenantID.String() + "/transcripts/" + assignment.Transcript.ID.String() + "/document.json"
+			lease := transcripts.LeaseInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: assignment.LeaseToken, Now: now}
+			key, keyErr := service.FinalizerKey(r.Context(), lease)
+			if keyErr != nil {
+				writeWorkerError(w, keyErr)
+				return
+			}
 			outputURL, err := authority.CreateFinalArtifactPUTURL(r.Context(), FinalizerPUTURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: key, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: ttl})
 			if err != nil {
 				writeError(w, http.StatusServiceUnavailable, "workload_authority_unavailable", "Finalizer authority unavailable")

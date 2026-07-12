@@ -27,6 +27,8 @@ type transcriptQuerier interface {
 type transcriptArtifactQuerier interface {
 	GetArtifactJobByIdempotency(context.Context, sqlc.GetArtifactJobByIdempotencyParams) (sqlc.ArtifactJob, error)
 	GetArtifactJob(context.Context, pgtype.UUID) (sqlc.ArtifactJob, error)
+	ListTranscriptionChunkJobs(context.Context, pgtype.UUID) ([]sqlc.ArtifactJob, error)
+	ListTranscriptionFinalizerJobs(context.Context, pgtype.UUID) ([]sqlc.ArtifactJob, error)
 	GetTranscriptionChunkJob(context.Context, pgtype.UUID) (sqlc.ArtifactJob, error)
 	LockTenantTranscriptionForUpdate(context.Context, sqlc.LockTenantTranscriptionForUpdateParams) (sqlc.Transcription, error)
 	MarkTranscriptionTranscribing(context.Context, sqlc.MarkTranscriptionTranscribingParams) (sqlc.Transcription, error)
@@ -216,7 +218,7 @@ func (r TranscriptRepository) Request(ctx context.Context, input transcripts.Req
 	}
 	var firstJob sqlc.ArtifactJob
 	for i, chunk := range input.Chunks {
-		resultKey := fmt.Sprintf("tenants/%s/transcripts/%s/chunks/%d/%d.json", input.TenantID.String(), transcriptID.String(), chunk.Generation, chunk.Index)
+		resultKey := chunkResultKey(input.TenantID, transcriptID, chunk.Generation, chunk.Index, 1)
 		chunkRow, err := q.CreateTranscriptChunk(ctx, sqlc.CreateTranscriptChunkParams{ID: uuid(chunk.ID), TranscriptID: uuid(transcriptID), TenantID: uuid(input.TenantID), ChunkIndex: int32(chunk.Index), Generation: chunk.Generation, StartMs: chunk.StartMS, EndMs: chunk.EndMS, ParticipantRef: text(stringPtr(chunk.ParticipantRef)), TrackEpoch: text(stringPtr(chunk.TrackEpoch)), IdentityKind: chunk.IdentityKind, TrackClass: chunk.TrackClass, StorageKey: chunk.StorageKey, ResultKey: resultKey, Checksum: chunk.Checksum, Size: chunk.Size, ContentType: chunk.ContentType})
 		if err != nil {
 			return transcripts.Transcript{}, transcripts.Job{}, fmt.Errorf("create transcript chunk: %w", err)

@@ -459,10 +459,10 @@ const finalizeTranscription = `-- name: FinalizeTranscription :one
 update transcriptions t
 set status = 'complete',
     provider = $1, model = $2, languages = $3,
-    artifact_key = format('tenants/%s/transcripts/%s/document.json', t.tenant_id, t.id),
-    artifact_sha256 = $4, artifact_size = $5,
-    artifact_content_type = $6, completed_at = now(), updated_at = now()
-where t.id = $7 and t.status in ('preparing', 'transcribing', 'verifying')
+    artifact_key = $4,
+    artifact_sha256 = $5, artifact_size = $6,
+    artifact_content_type = $7, completed_at = now(), updated_at = now()
+where t.id = $8 and t.status in ('preparing', 'transcribing', 'verifying')
   and exists (select 1 from transcript_chunks c where c.transcript_id = t.id)
   and not exists (select 1 from artifact_jobs j where j.transcript_id = t.id and j.artifact_kind = 'transcription_chunk' and j.state <> 'completed')
 returning t.id, t.tenant_id, t.recording_id, t.room_id, t.session_id, t.status, t.provider, t.model, t.languages, t.metadata, t.completed_at, t.updated_at, t.created_at, t.artifact_key, t.artifact_sha256, t.artifact_size, t.artifact_content_type, t.source_manifest_key, t.source_manifest_sha256, t.source_manifest_size, t.source_manifest_content_type, t.generation, t.deleted_at
@@ -472,6 +472,7 @@ type FinalizeTranscriptionParams struct {
 	Provider            pgtype.Text `json:"provider"`
 	Model               pgtype.Text `json:"model"`
 	Languages           []string    `json:"languages"`
+	ArtifactKey         pgtype.Text `json:"artifact_key"`
 	ArtifactSha256      []byte      `json:"artifact_sha256"`
 	ArtifactSize        pgtype.Int8 `json:"artifact_size"`
 	ArtifactContentType pgtype.Text `json:"artifact_content_type"`
@@ -483,6 +484,7 @@ func (q *Queries) FinalizeTranscription(ctx context.Context, arg FinalizeTranscr
 		arg.Provider,
 		arg.Model,
 		arg.Languages,
+		arg.ArtifactKey,
 		arg.ArtifactSha256,
 		arg.ArtifactSize,
 		arg.ArtifactContentType,

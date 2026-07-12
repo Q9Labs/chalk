@@ -1,5 +1,6 @@
 import { AssignmentError } from "./errors.js";
 import type { ChunkAssignment, CleanupAssignment, FinalizeAssignment, FinalizeChunkAssignment, SpeakerTurnManifest, TranscriptionAssignment } from "./types.js";
+import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
 
 function row(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AssignmentError(`${label} is invalid`);
@@ -179,8 +180,9 @@ export function validateCleanupAssignment(value: unknown, configuredMaxTtlMs = 1
   };
 }
 
-export function validateFinalizeAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_000, maxChunks = 50): FinalizeAssignment {
+export function validateFinalizeAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_000, maxChunks = MAX_FINALIZER_CHUNKS): FinalizeAssignment {
   const assignment = row(value, "finalize assignment");
+  if (!Number.isSafeInteger(maxChunks) || maxChunks < 1 || maxChunks > MAX_FINALIZER_CHUNKS) throw new AssignmentError("finalize chunk bound is invalid");
   const chunksRaw = assignment.chunks ?? assignment.chunk_results ?? assignment.results;
   if (!Array.isArray(chunksRaw) || chunksRaw.length === 0 || chunksRaw.length > maxChunks) throw new AssignmentError("finalize chunks are invalid");
   const seenChunkIDs = new Set<string>();

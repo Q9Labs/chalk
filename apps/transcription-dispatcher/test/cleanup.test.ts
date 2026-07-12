@@ -10,7 +10,7 @@ const config: ReleaseConfig = {
   controlApiAudience: "chalk-control-api",
   controlApiBaseUrl: "https://control.example",
   maxBatch: 10,
-  concurrency: 2,
+  concurrency: 3,
   timeoutReserveMs: 60_000,
   privacyGateAccepted: true,
   deepInfra: { enabled: false, model: "openai/whisper-large-v3-turbo" },

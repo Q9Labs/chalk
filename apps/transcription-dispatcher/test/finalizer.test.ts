@@ -157,10 +157,41 @@ describe("final transcript artifact dispatcher", () => {
     const duplicateFetch = vi.fn(async (url: string) => (url.endsWith("/final") ? new Response(null, { status: 412 }) : new Response(new TextEncoder().encode(JSON.stringify(document)), { headers: { "content-type": "application/json" } })));
     const duplicate = await runFinalizeDispatcher({ source: "finalize" }, { getRemainingTimeInMillis: () => 120_000 }, { ...dependencies(control, current, [document], duplicateFetch) });
     expect(duplicate).toMatchObject({ completed: 0, failed: 1 });
+    expect(completeFinalize).toHaveBeenCalledWith(expect.objectContaining({ checksumSha256: expect.any(String) }));
     expect(retryFinalize).not.toHaveBeenCalled();
 
     const late = await runFinalizeDispatcher({ source: "finalize" }, { getRemainingTimeInMillis: () => 120_000 }, { ...dependencies({ ...control, claimFinalize: vi.fn(async () => ({ assignments: [current] })), retryFinalize }, current, [document]) });
     expect(late).toMatchObject({ completed: 0, failed: 1 });
+  });
+
+  it("re-completes an existing final artifact after a transient completion failure", async () => {
+    const document = chunkDocument();
+    const current = assignment([{ id: "a", start: 0, end: 200, document }]);
+    const retryFinalize = vi.fn(async () => undefined);
+    const completeFinalize = vi
+      .fn<ControlApi["completeFinalize"]>()
+      .mockImplementationOnce(async () => {
+        throw new ControlApiError("temporary", 503, true);
+      })
+      .mockImplementation(async () => undefined);
+    const control: ControlApi = { claim: vi.fn(), heartbeat: vi.fn(), retry: vi.fn(), complete: vi.fn(), claimFinalize: vi.fn(async () => ({ assignments: [current] })), completeFinalize, retryFinalize };
+    let finalPutAttempts = 0;
+    const output = vi.fn(async (url: string, init?: RequestInit) => {
+      const chunk = current.chunks.find((candidate) => candidate.inputUrl === url);
+      if (chunk) return new Response(new TextEncoder().encode(JSON.stringify(document)), { headers: { "content-type": "application/json" } });
+      expect(init?.method).toBe("PUT");
+      finalPutAttempts += 1;
+      return new Response(null, { status: finalPutAttempts === 1 ? 201 : 412 });
+    });
+
+    const first = await runFinalizeDispatcher({ source: "finalize" }, { getRemainingTimeInMillis: () => 120_000 }, { ...dependencies(control, current, [document], output) });
+    const second = await runFinalizeDispatcher({ source: "finalize" }, { getRemainingTimeInMillis: () => 120_000 }, { ...dependencies(control, current, [document], output) });
+
+    expect(first).toMatchObject({ completed: 0, failed: 1 });
+    expect(second).toMatchObject({ completed: 1, failed: 0 });
+    expect(finalPutAttempts).toBe(2);
+    expect(completeFinalize).toHaveBeenCalledTimes(2);
+    expect(retryFinalize).toHaveBeenCalledWith(expect.objectContaining({ terminal: false }));
   });
 
   it("retries bounded download failures and terminally rejects invalid bounds", async () => {

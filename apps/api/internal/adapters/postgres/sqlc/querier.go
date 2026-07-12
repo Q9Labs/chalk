@@ -81,6 +81,8 @@ type Querier interface {
 	ListTenantTranscriptions(ctx context.Context, arg ListTenantTranscriptionsParams) ([]Transcription, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]ListTenantsRow, error)
 	ListTranscriptChunks(ctx context.Context, arg ListTranscriptChunksParams) ([]TranscriptChunk, error)
+	ListTranscriptionChunkJobs(ctx context.Context, transcriptID pgtype.UUID) ([]ArtifactJob, error)
+	ListTranscriptionFinalizerJobs(ctx context.Context, transcriptID pgtype.UUID) ([]ArtifactJob, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg LockLifecycleIntentForParticipantTransitionForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error)

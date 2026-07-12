@@ -445,6 +445,18 @@ func (q operationQuerier) GetArtifactJob(ctx context.Context, id pgtype.UUID) (s
 	LogOperation(ctx, q.logger, "db.query", "GetArtifactJob", startedAt, err)
 	return value, err
 }
+func (q operationQuerier) ListTranscriptionChunkJobs(ctx context.Context, transcriptID pgtype.UUID) ([]sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.ListTranscriptionChunkJobs(ctx, transcriptID)
+	LogOperation(ctx, q.logger, "db.query", "ListTranscriptionChunkJobs", startedAt, err)
+	return value, err
+}
+func (q operationQuerier) ListTranscriptionFinalizerJobs(ctx context.Context, transcriptID pgtype.UUID) ([]sqlc.ArtifactJob, error) {
+	startedAt := time.Now()
+	value, err := q.next.ListTranscriptionFinalizerJobs(ctx, transcriptID)
+	LogOperation(ctx, q.logger, "db.query", "ListTranscriptionFinalizerJobs", startedAt, err)
+	return value, err
+}
 func (q operationQuerier) GetArtifactJobByIdempotency(ctx context.Context, arg sqlc.GetArtifactJobByIdempotencyParams) (sqlc.ArtifactJob, error) {
 	startedAt := time.Now()
 	value, err := q.next.GetArtifactJobByIdempotency(ctx, arg)

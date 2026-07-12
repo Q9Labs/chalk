@@ -152,8 +152,10 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     const checksumSha256 = createHash("sha256").update(body).digest("hex");
     const upload = await conditionalPutJson({ fetch: dependencies.fetch, url: assignment.outputPutUrl, body, checksumSha256 });
     if (upload === "already_exists") {
-      logger.warn("dispatcher_duplicate_result_rejected");
-      return "failed";
+      // The control plane verifies the existing object against this checksum,
+      // size, and content type before accepting completion. That makes a
+      // retry after a successful PUT but transient completion failure safe.
+      logger.warn("dispatcher_existing_result_verified_by_completion");
     }
     await dependencies.control.complete({
       jobId: assignment.jobId,

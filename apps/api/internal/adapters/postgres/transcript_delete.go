@@ -30,20 +30,33 @@ func (r TranscriptRepository) Delete(ctx context.Context, tenantID, transcriptID
 		return transcripts.Transcript{}, err
 	}
 	dueAt := time.Now().Add(24 * time.Hour)
-	if row.ArtifactKey.Valid {
+	finalizerJobs, err := q.ListTranscriptionFinalizerJobs(ctx, row.ID)
+	if err != nil {
+		return transcripts.Transcript{}, err
+	}
+	if len(finalizerJobs) == 0 && row.ArtifactKey.Valid {
 		if err := enqueueCleanupTx(ctx, q, row, row.ArtifactKey.String, "final_artifact", dueAt); err != nil {
 			return transcripts.Transcript{}, err
+		}
+	}
+	for _, finalizerJob := range finalizerJobs {
+		for attempt := 1; attempt <= int(finalizerJob.AttemptCount); attempt++ {
+			key := finalArtifactKey(tenantID, transcriptID, attempt)
+			if err := enqueueCleanupTx(ctx, q, row, key, "final_artifact", dueAt); err != nil {
+				return transcripts.Transcript{}, err
+			}
 		}
 	}
 	chunks, err := q.ListTranscriptChunks(ctx, sqlc.ListTranscriptChunksParams{TranscriptID: row.ID, Generation: row.Generation})
 	if err != nil {
 		return transcripts.Transcript{}, err
 	}
-	for _, chunk := range chunks {
-		if err := enqueueCleanupTx(ctx, q, row, chunk.StorageKey, "temp_chunk", dueAt); err != nil {
-			return transcripts.Transcript{}, err
-		}
-		if err := enqueueCleanupTx(ctx, q, row, chunk.ResultKey, "temp_result", dueAt); err != nil {
+	jobs, err := q.ListTranscriptionChunkJobs(ctx, row.ID)
+	if err != nil {
+		return transcripts.Transcript{}, err
+	}
+	for _, artifact := range finalizerCleanupArtifacts(tenantID, transcriptID, chunks, jobs) {
+		if err := enqueueCleanupTx(ctx, q, row, artifact.key, artifact.kind, dueAt); err != nil {
 			return transcripts.Transcript{}, err
 		}
 	}

@@ -1,4 +1,5 @@
 import { ControlApiError } from "./errors.js";
+import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
 import { validateAssignment, validateCleanupAssignment, validateFinalizeAssignment } from "./urls.js";
 import type { ClaimResponse, CleanupAssignment, CompletionInput, ControlApi, FinalizeAssignment, FinalizeCompletionInput, FinalizeClaimResponse, JourneyContext, RetryInput, TranscriptionAssignment } from "./types.js";
 import type { WorkloadSigner } from "./workload-auth.js";
@@ -124,7 +125,7 @@ export class RecorderControlApiClient implements ControlApi {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid finalize claim response", 502);
     const assignments = (value as Record<string, unknown>).assignments;
     if (!Array.isArray(assignments)) throw new ControlApiError("invalid finalize assignments", 502);
-    const validated = assignments.map((assignment) => validateFinalizeAssignment(canonicalFinalizeAssignment(assignment), this.options.maxAssignmentUrlTtlMs, this.options.maxFinalizeChunks ?? 50));
+    const validated = assignments.map((assignment) => validateFinalizeAssignment(canonicalFinalizeAssignment(assignment), this.options.maxAssignmentUrlTtlMs, this.options.maxFinalizeChunks ?? MAX_FINALIZER_CHUNKS));
     return { assignments: validated };
   }
 

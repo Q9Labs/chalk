@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RecorderControlApiClient } from "../src/control-api.js";
 import { runDispatcher } from "../src/dispatcher.js";
 import { HmacWorkloadSigner } from "../src/workload-auth.js";
-import { ProviderError } from "../src/errors.js";
+import { ControlApiError, ProviderError } from "../src/errors.js";
 import type { ControlApi, ReleaseConfig, TranscriptionAssignment, TranscriptionProvider } from "../src/types.js";
 
 const config: ReleaseConfig = {
@@ -12,7 +12,7 @@ const config: ReleaseConfig = {
   controlApiAudience: "chalk-control-api",
   controlApiBaseUrl: "https://control.example",
   maxBatch: 10,
-  concurrency: 2,
+  concurrency: 3,
   timeoutReserveMs: 60_000,
   privacyGateAccepted: true,
   deepInfra: { enabled: false, model: "openai/whisper-large-v3-turbo" },
@@ -71,6 +71,39 @@ describe("dispatcher runtime and control boundary", () => {
     expect(result).toMatchObject({ claimed: 1, completed: 1, failed: 0 });
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ jobId: "job", checksumSha256: expect.any(String), sizeBytes: expect.any(Number), contentType: "application/json" }));
     expect(complete.mock.calls[0]?.[0]).not.toHaveProperty("resultPutUrl");
+  });
+
+  it("re-completes an existing chunk result after a transient completion failure", async () => {
+    const complete = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw new ControlApiError("temporary", 503, true);
+      })
+      .mockImplementation(async () => undefined);
+    const retry = vi.fn(async () => undefined);
+    const control: ControlApi = {
+      claim: vi.fn(async () => ({ assignments: [assignment] })),
+      heartbeat: vi.fn(async () => undefined),
+      retry,
+      complete,
+    };
+    let outputPutAttempts = 0;
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/input")) return new Response(audio, { headers: { "content-type": "audio/mpeg", "content-length": "3" } });
+      if (url.endsWith("/manifest")) return new Response(manifestBytes, { headers: { "content-type": "application/json", "content-length": String(manifestBytes.byteLength) } });
+      expect(init?.method).toBe("PUT");
+      outputPutAttempts += 1;
+      return new Response(null, { status: outputPutAttempts === 1 ? 201 : 412 });
+    });
+
+    const first = await runDispatcher({ source: "wake" }, { getRemainingTimeInMillis: () => 120_000 }, { config, control, fallback: provider, fetch });
+    const second = await runDispatcher({ source: "wake" }, { getRemainingTimeInMillis: () => 120_000 }, { config, control, fallback: provider, fetch });
+
+    expect(first).toMatchObject({ claimed: 1, completed: 0, failed: 1 });
+    expect(second).toMatchObject({ claimed: 1, completed: 1, failed: 0 });
+    expect(outputPutAttempts).toBe(2);
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(retry).toHaveBeenCalledWith(expect.objectContaining({ terminal: false }));
   });
 
   it("does not claim when the Lambda timeout reserve is reached", async () => {

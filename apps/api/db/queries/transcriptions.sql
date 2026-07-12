@@ -103,7 +103,7 @@ returning *;
 update transcriptions t
 set status = 'complete',
     provider = sqlc.arg(provider), model = sqlc.arg(model), languages = sqlc.arg(languages),
-    artifact_key = format('tenants/%s/transcripts/%s/document.json', t.tenant_id, t.id),
+    artifact_key = sqlc.arg(artifact_key),
     artifact_sha256 = sqlc.arg(artifact_sha256), artifact_size = sqlc.arg(artifact_size),
     artifact_content_type = sqlc.arg(artifact_content_type), completed_at = now(), updated_at = now()
 where t.id = sqlc.arg(id) and t.status in ('preparing', 'transcribing', 'verifying')

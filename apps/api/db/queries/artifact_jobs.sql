@@ -36,6 +36,18 @@ where tenant_id = sqlc.arg(tenant_id) and idempotency_key = sqlc.arg(idempotency
 -- name: GetArtifactJob :one
 select * from artifact_jobs where id = sqlc.arg(id);
 
+-- name: ListTranscriptionChunkJobs :many
+select * from artifact_jobs
+where transcript_id = sqlc.arg(transcript_id)
+  and artifact_kind = 'transcription_chunk'
+order by created_at asc, id asc;
+
+-- name: ListTranscriptionFinalizerJobs :many
+select * from artifact_jobs
+where transcript_id = sqlc.arg(transcript_id)
+  and artifact_kind = 'transcription_finalize'
+order by created_at asc, id asc;
+
 -- name: GetTranscriptionChunkJob :one
 select * from artifact_jobs
 where transcript_id = sqlc.arg(transcript_id) and artifact_kind = 'transcription_chunk'
@@ -43,10 +55,47 @@ order by created_at asc, id asc
 limit 1;
 
 -- name: ClaimArtifactJob :one
-with candidate as (
+with expired_terminal as (
+    update artifact_jobs
+    set state = 'dead_letter', error_code = 'lease_expired',
+        error_detail = 'worker lease expired at attempt limit',
+        lease_token_hash = null, lease_owner = null, lease_expires_at = null,
+        terminal_at = now(), updated_at = now()
+    where artifact_kind = 'transcription_chunk' and state = 'leased'
+      and lease_expires_at <= sqlc.arg(now)::timestamptz
+      and attempt_count >= attempt_limit
+    returning *
+), failed as (
+    select id, transcript_id from expired_terminal
+    where transcript_id is not null
+), projection_targets as (
+    select transcript_id, true as terminal
+    from failed
+    group by transcript_id
+), projected as (
+    update transcriptions t
+    set status = 'terminal_failure', updated_at = now()
+    from projection_targets p
+    where t.id = p.transcript_id and t.status not in ('deleted', 'complete')
+    returning t.id
+), cancelled as (
+    update artifact_jobs j
+    set state = 'cancelled', error_code = 'transcript_terminal_failure',
+        error_detail = 'transcription job reached terminal failure',
+        lease_token_hash = null, lease_owner = null, lease_expires_at = null,
+        terminal_at = now(), updated_at = now()
+    where j.transcript_id in (select transcript_id from failed)
+      and j.id not in (select id from failed)
+      and j.state in ('pending', 'retryable', 'leased')
+      and exists (select 1 from projected p where p.id = j.transcript_id)
+), candidate as (
     select id from artifact_jobs
-    where artifact_kind = 'transcription_chunk' and state in ('pending', 'retryable')
-      and available_at <= sqlc.arg(now)::timestamptz
+    where artifact_kind = 'transcription_chunk'
+      and (
+        (state in ('pending', 'retryable') and available_at <= sqlc.arg(now)::timestamptz)
+        or (state = 'leased' and lease_expires_at <= sqlc.arg(now)::timestamptz and attempt_count < attempt_limit)
+      )
+      and not exists (select 1 from expired_terminal e where e.id = artifact_jobs.id)
     order by priority desc, available_at asc, created_at asc, id asc
     for update skip locked
     limit 1
@@ -60,10 +109,47 @@ where jobs.id = candidate.id and jobs.attempt_count < jobs.attempt_limit
 returning jobs.*;
 
 -- name: ClaimTranscriptionFinalizerJob :one
-with candidate as (
+with expired_terminal as (
+    update artifact_jobs
+    set state = 'dead_letter', error_code = 'lease_expired',
+        error_detail = 'finalizer lease expired at attempt limit',
+        lease_token_hash = null, lease_owner = null, lease_expires_at = null,
+        terminal_at = now(), updated_at = now()
+    where artifact_kind = 'transcription_finalize' and state = 'leased'
+      and lease_expires_at <= sqlc.arg(now)::timestamptz
+      and attempt_count >= attempt_limit
+    returning *
+), failed as (
+    select id, transcript_id from expired_terminal
+    where transcript_id is not null
+), projection_targets as (
+    select transcript_id, true as terminal
+    from failed
+    group by transcript_id
+), projected as (
+    update transcriptions t
+    set status = 'terminal_failure', updated_at = now()
+    from projection_targets p
+    where t.id = p.transcript_id and t.status not in ('deleted', 'complete')
+    returning t.id
+), cancelled as (
+    update artifact_jobs j
+    set state = 'cancelled', error_code = 'transcript_terminal_failure',
+        error_detail = 'transcription job reached terminal failure',
+        lease_token_hash = null, lease_owner = null, lease_expires_at = null,
+        terminal_at = now(), updated_at = now()
+    where j.transcript_id in (select transcript_id from failed)
+      and j.id not in (select id from failed)
+      and j.state in ('pending', 'retryable', 'leased')
+      and exists (select 1 from projected p where p.id = j.transcript_id)
+), candidate as (
     select id from artifact_jobs
-    where artifact_kind = 'transcription_finalize' and state in ('pending', 'retryable')
-      and available_at <= sqlc.arg(now)::timestamptz
+    where artifact_kind = 'transcription_finalize'
+      and (
+        (state in ('pending', 'retryable') and available_at <= sqlc.arg(now)::timestamptz)
+        or (state = 'leased' and lease_expires_at <= sqlc.arg(now)::timestamptz and attempt_count < attempt_limit)
+      )
+      and not exists (select 1 from expired_terminal e where e.id = artifact_jobs.id)
     order by priority desc, available_at asc, created_at asc, id asc
     for update skip locked
     limit 1

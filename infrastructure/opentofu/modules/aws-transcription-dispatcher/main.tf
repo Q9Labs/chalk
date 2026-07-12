@@ -184,8 +184,8 @@ resource "aws_lambda_function" "dispatcher" {
     }
 
     precondition {
-      condition     = var.reserved_concurrency > 0
-      error_message = "reserved_concurrency must never be zero because Lambda drops async events when concurrency is disabled."
+      condition     = var.reserved_concurrency >= 3
+      error_message = "reserved_concurrency must be at least 3 so reconciliation can service every durable queue."
     }
 
     precondition {

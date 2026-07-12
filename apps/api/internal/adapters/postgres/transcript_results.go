@@ -29,12 +29,18 @@ func (r TranscriptRepository) ResultKey(ctx context.Context, input transcripts.L
 	if err != nil {
 		return "", err
 	}
-	return chunk.ResultKey, nil
+	return chunkResultKey(
+		utilities.IDFromBytes(job.TenantID.Bytes),
+		utilities.IDFromBytes(job.TranscriptID.Bytes),
+		chunk.Generation,
+		int(chunk.ChunkIndex),
+		input.Attempt,
+	), nil
 }
 
 func (r TranscriptRepository) Finalize(ctx context.Context, input transcripts.FinalizeInput) (transcripts.Transcript, error) {
 	q := r.artifactQueries()
-	row, err := q.FinalizeTranscription(ctx, sqlc.FinalizeTranscriptionParams{ID: uuid(input.TranscriptID), Provider: pgtype.Text{String: input.Provider, Valid: true}, Model: pgtype.Text{String: input.Model, Valid: true}, Languages: input.Languages, ArtifactSha256: input.ArtifactSHA256, ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, ArtifactContentType: pgtype.Text{String: input.ArtifactContentType, Valid: true}})
+	row, err := q.FinalizeTranscription(ctx, sqlc.FinalizeTranscriptionParams{ID: uuid(input.TranscriptID), ArtifactKey: pgtype.Text{String: input.ArtifactKey, Valid: true}, Provider: pgtype.Text{String: input.Provider, Valid: true}, Model: pgtype.Text{String: input.Model, Valid: true}, Languages: input.Languages, ArtifactSha256: input.ArtifactSHA256, ArtifactSize: pgtype.Int8{Int64: input.ArtifactSize, Valid: true}, ArtifactContentType: pgtype.Text{String: input.ArtifactContentType, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return transcripts.Transcript{}, transcripts.ErrInvalidArtifact
 	}
@@ -87,7 +93,14 @@ func (r TranscriptRepository) AcceptResult(ctx context.Context, input transcript
 	if _, err := q.CreateTranscriptionAttempt(ctx, sqlc.CreateTranscriptionAttemptParams{ID: uuid(attemptID), TranscriptID: job.TranscriptID, ChunkID: job.ChunkID, Generation: chunk.Generation, Attempt: int32(input.Attempt), Provider: input.Provider, Model: input.Model, ProviderVersion: input.ProviderVersion, ExecutionIdentity: text(stringPtr(input.ExecutionIdentity)), ProviderRequestID: text(stringPtr(input.ProviderRequestID)), MeasuredAudioMs: pgtype.Int8{Int64: measuredAudioMS, Valid: true}, ProviderObservedDurationMs: int64Value(input.ProviderObservedDurationMS), State: "started", JourneyID: job.JourneyID, Traceparent: job.Traceparent, Tracestate: job.Tracestate, Quality: jsonBytes(input.Quality)}); err != nil {
 		return transcripts.Result{}, err
 	}
-	row, err := q.AcceptTranscriptionChunkResult(ctx, sqlc.AcceptTranscriptionChunkResultParams{ID: uuid(attemptID), ChunkID: job.ChunkID, Generation: chunk.Generation, AttemptID: uuid(attemptID), Provider: input.Provider, Model: input.Model, ProviderVersion: input.ProviderVersion, ResultKey: chunk.ResultKey, ResultSha256: input.ResultSHA256, ResultSize: input.ResultSize, ResultContentType: input.ResultContentType, Language: text(stringPtr(input.Language)), BilledAudioSeconds: pgtype.Int4{Int32: int32(input.BilledAudioSeconds), Valid: input.BilledAudioSeconds > 0}, Quality: jsonBytes(input.Quality)})
+	resultKey := chunkResultKey(
+		utilities.IDFromBytes(job.TenantID.Bytes),
+		utilities.IDFromBytes(job.TranscriptID.Bytes),
+		chunk.Generation,
+		int(chunk.ChunkIndex),
+		input.Attempt,
+	)
+	row, err := q.AcceptTranscriptionChunkResult(ctx, sqlc.AcceptTranscriptionChunkResultParams{ID: uuid(attemptID), ChunkID: job.ChunkID, Generation: chunk.Generation, AttemptID: uuid(attemptID), Provider: input.Provider, Model: input.Model, ProviderVersion: input.ProviderVersion, ResultKey: resultKey, ResultSha256: input.ResultSHA256, ResultSize: input.ResultSize, ResultContentType: input.ResultContentType, Language: text(stringPtr(input.Language)), BilledAudioSeconds: pgtype.Int4{Int32: int32(input.BilledAudioSeconds), Valid: input.BilledAudioSeconds > 0}, Quality: jsonBytes(input.Quality)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return transcripts.Result{}, transcripts.ErrDuplicateResult
 	}

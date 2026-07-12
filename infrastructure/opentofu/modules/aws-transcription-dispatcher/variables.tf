@@ -143,13 +143,13 @@ variable "completion_reserve_seconds" {
 }
 
 variable "reserved_concurrency" {
-  description = "Reserved Lambda concurrency. It is capped at the launch burst and may never be zero."
+  description = "Reserved Lambda concurrency. It is capped at the launch burst and must leave capacity for all reconciliation queues."
   type        = number
   default     = 50
 
   validation {
-    condition     = var.reserved_concurrency >= 1 && var.reserved_concurrency <= 50 && floor(var.reserved_concurrency) == var.reserved_concurrency
-    error_message = "reserved_concurrency must be an integer from 1 through 50; zero is invalid because it drops async events."
+    condition     = var.reserved_concurrency >= 3 && var.reserved_concurrency <= 50 && floor(var.reserved_concurrency) == var.reserved_concurrency
+    error_message = "reserved_concurrency must be an integer from 3 through 50 so reconciliation can service every durable queue."
   }
 }
 

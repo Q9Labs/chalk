@@ -1,4 +1,5 @@
 import { AssignmentError } from "./errors.js";
+import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
 import type { FinalizeChunkAssignment, ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument, ProviderResult } from "./types.js";
 
 const MAX_FINAL_CUES = 100_000;
@@ -23,7 +24,7 @@ interface MergeOptions {
  * retained and explicitly marked as overlap in the final document.
  */
 export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTranscriptDocument {
-  if (options.chunks.length === 0 || options.chunks.length > 50) throw new AssignmentError("finalize chunk count is invalid");
+  if (options.chunks.length === 0 || options.chunks.length > MAX_FINALIZER_CHUNKS) throw new AssignmentError("finalize chunk count is invalid");
   const chunkIDs = new Set<string>();
   for (const result of options.chunks) {
     if (chunkIDs.has(result.assignment.chunkId)) throw new AssignmentError("finalize chunk IDs are duplicated");

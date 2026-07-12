@@ -12,9 +12,22 @@ import (
 )
 
 const claimTranscriptionCleanupJob = `-- name: ClaimTranscriptionCleanupJob :one
-with candidate as (
+with expired_terminal as (
+    update transcription_cleanup_jobs
+    set state = 'dead_letter', error_code = 'lease_expired',
+        error_detail = 'cleanup lease expired at attempt limit',
+        lease_token_hash = null, lease_owner = null, lease_expires_at = null,
+        updated_at = now()
+    where state = 'leased' and lease_expires_at <= $4::timestamptz
+      and attempt_count >= attempt_limit
+    returning id
+), candidate as (
     select id from transcription_cleanup_jobs
-    where state in ('pending', 'retryable') and due_at <= $4::timestamptz
+    where (
+        (state in ('pending', 'retryable') and due_at <= $4::timestamptz)
+        or (state = 'leased' and lease_expires_at <= $4::timestamptz and attempt_count < attempt_limit)
+    )
+      and not exists (select 1 from expired_terminal e where e.id = transcription_cleanup_jobs.id)
     order by due_at asc, created_at asc, id asc
     for update skip locked
     limit 1

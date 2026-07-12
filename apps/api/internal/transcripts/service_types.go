@@ -112,6 +112,7 @@ type ArtifactRepository interface {
 
 type FinalizeInput struct {
 	TranscriptID        utilities.ID
+	ArtifactKey         string
 	Provider            string
 	Model               string
 	Languages           []string

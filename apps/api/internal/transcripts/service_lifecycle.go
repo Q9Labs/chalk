@@ -127,7 +127,7 @@ func (s Service) Finalize(ctx context.Context, input FinalizeInput) (Transcript,
 	if s.artifacts == nil {
 		return Transcript{}, ErrArtifactRepository
 	}
-	if input.TranscriptID.IsZero() || len(input.ArtifactSHA256) != 32 || input.ArtifactSize < 1 || input.ArtifactSize > 524288000 || input.ArtifactContentType != "application/json" {
+	if input.TranscriptID.IsZero() || input.ArtifactKey == "" || len(input.ArtifactSHA256) != 32 || input.ArtifactSize < 1 || input.ArtifactSize > 524288000 || input.ArtifactContentType != "application/json" {
 		return Transcript{}, ErrInvalidArtifact
 	}
 	if input.Provider == "" || len(input.Provider) > 128 || input.Model == "" || len(input.Model) > 256 {

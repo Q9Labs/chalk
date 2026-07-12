@@ -52,6 +52,13 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 		return transcripts.Assignment{}, err
 	}
 	chunkInput := mapChunk(chunk)
+	chunkInput.ResultKey = chunkResultKey(
+		utilities.IDFromBytes(job.TenantID.Bytes),
+		utilities.IDFromBytes(job.TranscriptID.Bytes),
+		chunk.Generation,
+		int(chunk.ChunkIndex),
+		int(job.AttemptCount),
+	)
 	return transcripts.Assignment{Job: mapJob(job), LeaseToken: token, Chunk: &chunkInput, Transcript: mapTranscript(transcript)}, nil
 }
 

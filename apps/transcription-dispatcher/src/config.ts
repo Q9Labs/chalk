@@ -57,7 +57,7 @@ export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
   if (!config.privacyGateAccepted) throw new ConfigError("transcription privacy gate is not accepted");
   if (!config.controlApiBaseUrl.startsWith("https://")) throw new ConfigError("control API must use HTTPS");
   if (config.maxBatch < 3 || config.maxBatch > 50) throw new ConfigError("max batch must be between 3 and 50 so reconciliation cannot starve a durable queue");
-  if (config.concurrency < 1 || config.concurrency > 50) throw new ConfigError("concurrency must be between 1 and 50");
+  if (config.concurrency < 3 || config.concurrency > 50) throw new ConfigError("concurrency must be between 3 and 50 so reconciliation can service every durable queue");
   if (config.timeoutReserveMs < 60_000) throw new ConfigError("timeout reserve must be at least 60 seconds");
   if (config.cloudflare.modelSlug !== CF_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
   if (!config.cloudflare.adapterContractVersion || !/^[A-Za-z0-9._-]+$/.test(config.cloudflare.adapterContractVersion)) {
@@ -82,7 +82,7 @@ export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?
     controlApiAudience: required(env, "CONTROL_API_AUDIENCE"),
     controlApiBaseUrl: httpsUrl(required(env, "CONTROL_API_BASE_URL"), "CONTROL_API_BASE_URL"),
     maxBatch: integer(env, "TRANSCRIPTION_MAX_BATCH", 3, 50),
-    concurrency: integer(env, "TRANSCRIPTION_CONCURRENCY", 1, 50),
+    concurrency: integer(env, "TRANSCRIPTION_CONCURRENCY", 3, 50),
     timeoutReserveMs: integer(env, "TRANSCRIPTION_TIMEOUT_RESERVE_MS", 60_000, 900_000),
     privacyGateAccepted: boolean(env, "TRANSCRIPTION_PRIVACY_GATE_ACCEPTED"),
     deepInfra: {
