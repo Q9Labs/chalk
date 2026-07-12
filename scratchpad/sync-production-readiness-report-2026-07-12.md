@@ -83,7 +83,7 @@ seams, retry/backoff logic, diagnostics, v2 codec, and WebSocket runtime.
 
 | Surface                        | Result                                                                                                                                                                                        |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Canonical sync gate            | 200 tests, zero failures; format, warnings-as-errors compile, and strict Credo passed.                                                                                                        |
+| Canonical sync gate            | 201 tests, zero failures; format, warnings-as-errors compile, and strict Credo passed.                                                                                                        |
 | Canonical API verification     | All Go tests, lifecycle smoke test, `go vet`, and Staticcheck passed. The security phase was outside the authorized scope.                                                                    |
 | Real-Postgres API lifecycle    | `sessionlifecycle`, Postgres adapter, and HTTP integration packages passed against migration `20260712180000`.                                                                                |
 | TypeScript client              | 18 files and 49 tests passed; formatting, type check, lint, and browser build passed.                                                                                                         |
@@ -96,11 +96,21 @@ seams, retry/backoff logic, diagnostics, v2 codec, and WebSocket runtime.
 | Delivery bounds                | A non-reading real TCP peer was disconnected at the live bound while a healthy peer advanced; an unacknowledged recovery frame expired near five seconds while a healthy peer continued.      |
 | Transaction fault matrix       | `none` plus nine transaction checkpoints passed in ten Postgres campaigns; independent replay passed for every artifact.                                                                      |
 | Session-create trace           | The real route returned 201 and traced the bounded transaction, durable request reservation, Session row, control row, and commit.                                                            |
-| Large deterministic model      | 100,000 operations across 16 modeled Sessions, 64 participants, and 128 modeled socket replicas passed and replayed from the complete trace.                                                  |
+| Large deterministic model      | 100,000 operations across 16 modeled Sessions, 64 participants, 128 sockets, two subscriptions per socket, and 4,096 replica recoveries passed and replayed from the complete trace.          |
+| Clean packaged release         | The unique OTP release booted on localhost, passed health, dependency readiness, and metrics probes, then handled SIGTERM and removed its listener.                                           |
 | Launch cardinality query proof | The local fixture populated 500 participants, 250,000 events, and 500,000 receipts and exercised the intended indexes. This is query/cardinality evidence, not a durability or failover run.  |
 
 The 100,000-operation artifact is
-`apps/sync/.artifacts/sync/641004f51588/seed-2026071203-1783804771122-1`.
+`apps/sync/.artifacts/sync/c559ce3aacbb/seed-2026071205-1783816283847-1`.
+Its clean manifest identifies commit `c559ce3aacbb`, its 351,337-line trace
+replayed all 16 Sessions, and the trace SHA-256 is
+`6e049ffd38bac5ff06ba66fa4470946bc5c7797332743c209e261b0f99e2530b`.
+
+The packaged release proof is
+`apps/sync/.artifacts/releases/chalk_sync-0.1.0-c559ce3aacbb-20260712T012737Z`.
+Its clean manifest pins protocol v2 and migration compatibility exactly to
+`20260712180000`.
+
 The integrated Postgres fault artifacts are the ten runs with seeds
 `20260720` through `20260729` under
 `apps/sync/.artifacts/sync/641004f51588/`.

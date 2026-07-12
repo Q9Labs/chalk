@@ -170,3 +170,11 @@
 - Changed verification to audit the complete persisted event stream through bounded recovery pages, retain event and final-head evidence before convergence checks, validate the independent fold against the recovery head and snapshot, and then exercise snapshot/replay replica convergence.
 - Added a deterministic 2,051-event snapshot-boundary regression. The regression and focused artifact suites passed, and an exact 5,000-command boundary campaign passed with an independently passing replay.
 - Re-ran the canonical sync gate against PostgreSQL: formatting, warnings-as-errors compilation, strict Credo, and 201 tests passed with zero failures.
+
+## 2026-07-12 06:29 PKT
+
+- Re-ran the exact clean 100,000-operation campaign after the snapshot-boundary verifier correction. All 16 Sessions, 100,000 decision/retry/conflict groups, 4,096 modeled replica recoveries, exact revision order, stable idempotency, and replica convergence passed.
+- Independently replayed all 351,337 trace lines and reconstructed all 16 Sessions. The clean artifact is `apps/sync/.artifacts/sync/c559ce3aacbb/seed-2026071205-1783816283847-1`; its trace SHA-256 is `6e049ffd38bac5ff06ba66fa4470946bc5c7797332743c209e261b0f99e2530b`.
+- Built the unique clean OTP release `chalk_sync-0.1.0-c559ce3aacbb-20260712T012737Z`. Its manifest pins commit `c559ce3aacbb`, protocol v2, and migration compatibility `20260712180000` with `dirty_worktree=false`.
+- Booted that packaged release against the isolated PostgreSQL 18.3 primary on localhost. Health, dependency-aware readiness, and metrics passed; readiness observed the exact migration, checksums, synchronous commit, writable primary, and zero local WAL lag.
+- Sent SIGTERM to the packaged release and observed a clean exit with the localhost listener removed.
