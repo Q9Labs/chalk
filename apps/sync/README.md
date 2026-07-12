@@ -1,89 +1,97 @@
 # Chalk Sync Server
 
-Elixir/OTP WebSocket sync server — the primary adapter behind the `SyncEngine`
-port (`docs/redesign/north-star.md`). Real-time room state lives here; Postgres
-never sees it.
+Elixir/OTP WebSocket sync server and the primary `SyncEngine` adapter.
+
+Postgres is the sole durable authority for Session control state, ordered
+events, command receipts, participant-session lifecycle, and lifecycle delivery
+intents. Every BEAM process, ETS table, notification, and SDK replica is a
+disposable projection. Redis is absent from the correctness path and may only
+be added later as an optional presence or head-hint accelerator.
 
 ## Commands
 
 ```bash
 mix deps.get
 mix test
-iex -S mix          # dev server on http://localhost:4100
-scripts/gate.sh     # canonical pre-commit gate (format, compile, credo, test)
+iex -S mix
+scripts/gate.sh
+scripts/sync-breaker-v2 --help
 ```
 
-## Interactive sync lab
+Development listens on `http://localhost:4100`. The interactive lab at
+`/dev/lab` exercises the legacy development surface. Production disables that
+surface and protocol v1.
 
-Start the development server with `mix run --no-halt`, then open
-`http://localhost:4100/dev/lab`. The lab starts empty so a session can be
-observed from its first participant. It connects participants to the real
-`/v1/sync` WebSocket and shows shared state, command acknowledgements, raw
-protocol frames, reconnect behavior, and a human-readable server trace.
+## Durable architecture
 
-The production drills exercise bad authentication, malformed frames, duplicate
-commands, cursor fallback, and room-writer loss. The lab labels which behavior
-is real, which behavior is a local approximation, and which production work is
-still missing.
+The v2 command path is:
 
-The lab and its `/dev/traces` stream are enabled only when `dev_tools` is true.
-Development and test enable them; production keeps them disabled and returns
-404 for both surfaces. Trace records are bounded in memory and never include
-participant tokens.
+```text
+WebSocket
+  -> bounded command admission
+  -> node-local Session coordinator
+  -> semantic Postgres transaction
+  -> folded state + exact-next event + stable receipt
+  -> Postgres head notification
+  -> bounded per-socket queue
+  -> SDK canonical replica
+```
 
-## Architecture
+The authority key is `{tenant_id, session_id}`. The Session control row is the
+serialization lock. One transaction returns a committed event and receipt or a
+stable rejected receipt. An uncertain COMMIT is resolved by reading that
+receipt from a fresh writable-primary connection.
 
-The north-star sync invariants, mapped onto OTP:
+`Sessions.Reducer` owns pure state transitions. `Stateholder.Postgres` owns
+production decisions and recovery. `Sessions.Coordinator` caches only local
+heads and subscriptions. PostgreSQL notifications accelerate delivery, while a
+periodic authoritative head read repairs every dropped hint.
 
-| Invariant                            | Implementation                                                                                                   |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| One authoritative writer per room    | `Rooms.RoomServer` — one GenServer per room, started on demand via `Registry`                                    |
-| Stateholder = single source of truth | `Stateholder` port; `Stateholder.Memory` (ETS) now, Redis adapter next                                           |
-| WS nodes are stateless fanout        | `Transport.Socket` owns no authoritative state; room-server loss ⇒ close 1012 ⇒ client reconnects + re-snapshots |
-| Reconnect = snapshot or exact replay | declarative `hello` cursor; writer decides replay vs snapshot                                                    |
+## Lifecycle
 
-Command flow: socket → room server → validate against the pure `Rooms.Room`
-state machine → compare-and-set commit to the stateholder → fan out → ack. A
-commit revision conflict means a second writer exists; the server stops rather
-than corrupt state (correct > fast).
+Session creation writes the product Session and revision-zero control row in
+one synchronous Postgres transaction. Participant admission, explicit removal,
+and Session end are API-generated, idempotent lifecycle intents. The sync
+consumer applies each intent through the same Session control lock. Opening or
+losing a socket never creates a durable join or leave.
 
-`Rooms.Room` is a pure, event-sourced core: commands produce revisioned events
-(`base_revision -> revision`), state advances only by applying events, and
-replaying the log reproduces the state exactly. All process concerns
-(serialization, monitors, fanout) live in the `RoomServer` shell.
+## Protocol v2
 
-## Ports (vendor specifics never leak past these)
+The language-neutral source is `contract/schema/sync-v2.json`; generated
+Elixir and TypeScript bindings are checked by the root codegen gate. V2 has
+strict frame bounds, tenant/Session-scoped identity, stable command IDs,
+digest-checked cursors, snapshot/replay/up-to-date recovery, bounded replay
+pages, retryable dependency outcomes, explicit terminal lifecycle results, and
+cumulative live delivery acknowledgments. A live frame keeps its event, byte,
+and age reservation until the SDK confirms the exact applied revision and
+state digest. Snapshot welcomes and replay pages retain the same reservations
+until an exact `recovery_ack` confirms successful client application, so a slow
+transport cannot hide work beyond the socket bounds.
 
-- `ChalkSync.Stateholder` — durable live-state store. Adapters: `Memory` (ETS,
-  single-node dev/test); Redis is the named next adapter for multi-node.
-- `ChalkSync.Auth.TokenVerifier` — participant-token verification. Adapters:
-  `DevTokenVerifier` (unsigned, dev/test only; prod boot refuses it); the
-  per-tenant signature verifier (north-star constraint 12) is next and will
-  consume the control-plane API's key registry.
+V1 remains only as a local compatibility surface while callers migrate. It is
+disabled by production configuration and is outside the production durability
+claim.
 
-## Wire protocol (v1)
+## Operations
 
-JSON text frames, language-neutral — see `ChalkSync.Protocol` for the full
-shape. Highlights:
+- `/healthz` proves the listener is alive.
+- `/readyz` applies dependency checks and readiness hysteresis.
+- `/metrics` exposes fixed-cardinality aggregate counters.
+- SIGTERM begins bounded drain, rejects new work, resolves accepted decisions,
+  drains socket queues, and closes clients with retryable code 1012.
+- Ended Session history is independently folded and checkpointed before the
+  bounded retention worker deletes eligible rows after seven days.
 
-- `hello` carries the participant token plus declared streams and cursors;
-  the server answers `welcome` in `snapshot` or `replay` mode.
-- Every control event carries `base_revision -> revision` so clients detect
-  drops, duplicates, and reorders.
-- Commands carry client `command_id`s and ack exactly one of
-  `committed | duplicate | rejected` (session-scoped idempotency).
-- Client-issuable commands are whitelisted (`raise_hand`, `lower_hand` today);
-  join/leave are socket-lifecycle driven.
+Production boot refuses Memory, the development verifier, an incompatible
+migration, a non-writable database, and a missing required synchronous standby.
+The exact launch topology and WAL-lag ceiling remain deployment inputs.
 
-Routes: `GET /healthz` (liveness), `GET /readyz` (room registry, supervisor,
-and stateholder readiness), and `GET /v1/sync` (WebSocket).
+## Observability v1 compatibility
 
-## Observability v1
-
-`ChalkSync.Observability` is the only production observability boundary. It
-emits stable `:telemetry` events, correlated Logger metadata, and short
-OpenTelemetry spans. It does not retain a connection-long span. Socket work
-uses root, phase, and terminal events; room-writer work links back to the
+`ChalkSync.Observability` provides the legacy v1 compatibility observability
+boundary. It emits stable `:telemetry` events, correlated Logger metadata, and
+short OpenTelemetry spans. It does not retain a connection-long span. Socket
+work uses root, phase, and terminal events; room-writer work links back to the
 originating socket span after crossing the OTP process boundary.
 
 Set `CHALK_SYNC_OTLP_ENDPOINT` to enable OTLP HTTP/protobuf export. The
@@ -102,8 +110,8 @@ run-queue measurements. Logger events include the journey and, when tracing is
 enabled, the trace and span identifiers. Tokens, room ids, participant ids,
 command ids, and raw revisions are never observability dimensions.
 
-Every client and server protocol frame may carry these optional top-level
-fields without changing v1 frame semantics:
+Legacy v1 client and server protocol frames may carry these optional top-level
+fields without changing frame semantics:
 
 ```json
 {
@@ -116,18 +124,13 @@ fields without changing v1 frame semantics:
 `traceparent` and `tracestate` use W3C Trace Context. HTTP upgrades use the
 same headers plus `x-chalk-journey-id`; browser clients that cannot set upgrade
 headers send the three fields on `hello`. The server forwards valid context on
-its response frames and creates a journey at sync ingress when one is absent.
+its response frames and creates a journey at v1 sync ingress when one is absent.
 
-## What is deliberately not here yet
+## Verification
 
-- **Redis stateholder adapter** — the port is shaped for it (compare-and-set
-  commit + retained event tail); single-node ETS is correct until the second
-  WS node.
-- **Signed token verification** — blocked on the API's per-tenant key
-  registry; prod boot fails without a real verifier configured.
-- **Presence/volatile streams** (cursors, speaking, typing) — protocol has a
-  `stream` field as the seam; volatile streams skip the stateholder entirely.
-- **Capability enforcement per command** — `Claims.capabilities` is carried
-  but not yet consulted; enforcement lands with the capability-bit model.
-- **Schema-generated protocol types** — the shapes in `Protocol` will move to
-  the language-neutral schema source of truth that generates every SDK.
+The deterministic v2 breaker writes replayable artifacts under the ignored
+`apps/sync/.artifacts/` directory. Real-Postgres semantic tests, independent
+multi-node tests, transport bounds, browser/runtime proofs, lifecycle tests,
+failover drills, and the repository gates define the production claim. See
+`scratchpad/sync-production-readiness-spec-2026-07-11.md` for the complete
+acceptance contract.

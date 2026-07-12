@@ -15,6 +15,7 @@
     "sdks/typescript/client/src/generated/openapi-types.d.ts",
     "sdks/typescript/client/src/generated/schemas.ts",
     "sdks/typescript/client/src/generated/sync.ts",
+    "sdks/typescript/client/src/generated/sync-v2.ts",
     "sdks/typescript/react/src/index.ts",
     "sdks/typescript/react/src/components/lazy.tsx",
     "sdks/typescript/react-native/src/**/*.{ts,tsx}",
@@ -74,11 +75,15 @@
       "packages/whiteboard/src/collab/presence.ts",
       "sdks/typescript/react/src/components/full/whiteboard-panel/constants.ts",
       "sdks/typescript/client/src/generated/**",
+      "sdks/typescript/client/scripts/**",
+      "sdks/typescript/client/src/sync/integration.test.ts",
+      "sdks/typescript/client/src/sync/react-native.test.ts",
       "scratchpad/sdk-schema-generator-spike/**",
       "scripts/codegen/generate-effect-http-api.mjs",
       "scripts/codegen/generate-effect-schemas.mjs"
     ]
   },
+  "dynamicallyLoaded": ["sdks/typescript/client/scripts/node-restart-sync-worker.mjs"],
   "health": {
     "ignore": [
       "**/dist/**",
@@ -96,6 +101,8 @@
       "infrastructure/**",
       "sdks/typescript/react/**",
       "sdks/typescript/react-native/**",
+      "sdks/typescript/client/scripts/**",
+      "sdks/typescript/client/src/generated/**",
       "tools/contract-codegen/**",
       "apps/web/src/routes/status.tsx",
       "apps/web/src/components/EdgeDiagnostics.tsx",

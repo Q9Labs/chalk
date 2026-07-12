@@ -6,7 +6,7 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
 
   Token shape:
 
-      base64url(~s({"tenant_id":"t1","room_id":"r1","participant_id":"p1","display_name":"Ada"}))
+      base64url(JSON claims)
   """
 
   @behaviour ChalkSync.Auth.TokenVerifier
@@ -25,6 +25,12 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
          tenant_id: tenant_id,
          room_id: room_id,
          participant_id: participant_id,
+         session_id: Map.get(claims, "session_id"),
+         participant_session_id: Map.get(claims, "participant_session_id"),
+         participant_session_generation: Map.get(claims, "participant_session_generation"),
+         admission_lifecycle_intent_id: Map.get(claims, "admission_lifecycle_intent_id"),
+         issued_at: Map.get(claims, "issued_at"),
+         expires_at: Map.get(claims, "expires_at"),
          display_name: Map.get(claims, "display_name", "Guest"),
          capabilities: Map.get(claims, "capabilities", [])
        }}

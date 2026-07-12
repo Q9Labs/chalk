@@ -93,6 +93,7 @@ type guardedRoomService struct{}
 type roomService struct {
 	guardedRoomService
 	createRoom func(context.Context, rooms.CreateRoomInput) (rooms.Room, error)
+	getSession func(context.Context, utilities.ID, utilities.ID, utilities.ID) (rooms.Session, error)
 }
 
 type guardedRecordingService struct{}
@@ -250,6 +251,13 @@ func (s roomService) CreateRoom(ctx context.Context, input rooms.CreateRoomInput
 		return rooms.Room{}, errors.New("unexpected create room call")
 	}
 	return s.createRoom(ctx, input)
+}
+
+func (s roomService) GetSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
+	if s.getSession == nil {
+		return rooms.Session{}, errors.New("unexpected get room session call")
+	}
+	return s.getSession(ctx, tenantID, roomID, sessionID)
 }
 
 func (guardedRoomService) GetRoom(context.Context, utilities.ID, utilities.ID) (rooms.Room, error) {
@@ -1190,6 +1198,9 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333"},
 		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333", body: `{"status":"ended"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants", body: `{"participant_session_id":"44444444-4444-4444-8444-444444444444","name":"Ada"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove", body: `{"participant_session_generation":1}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/end"},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/recordings", body: `{"status":"ready","storage_provider":"r2"}`},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/recordings/44444444-4444-4444-4444-444444444444"},
@@ -1264,7 +1275,7 @@ func TestRoomSessionRoutesUseSessionPermissions(t *testing.T) {
 		{
 			method: http.MethodPost,
 			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions",
-			body:   `{"status":"active"}`,
+			body:   `{}`,
 			scope:  authentication.ScopeSessionsWrite,
 		},
 		{
@@ -1280,7 +1291,24 @@ func TestRoomSessionRoutesUseSessionPermissions(t *testing.T) {
 		{
 			method: http.MethodPatch,
 			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333",
-			body:   `{"status":"ended"}`,
+			body:   `{"metadata":{"topic":"planning"}}`,
+			scope:  authentication.ScopeSessionsWrite,
+		},
+		{
+			method: http.MethodPost,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants",
+			body:   `{"participant_session_id":"44444444-4444-4444-8444-444444444444","name":"Ada"}`,
+			scope:  authentication.ScopeSessionsWrite,
+		},
+		{
+			method: http.MethodPost,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/participants/44444444-4444-4444-8444-444444444444/remove",
+			body:   `{"participant_session_generation":1}`,
+			scope:  authentication.ScopeSessionsWrite,
+		},
+		{
+			method: http.MethodPost,
+			path:   "/v1/tenants/11111111-1111-1111-1111-111111111111/rooms/22222222-2222-2222-2222-222222222222/sessions/33333333-3333-3333-3333-333333333333/end",
 			scope:  authentication.ScopeSessionsWrite,
 		},
 	}

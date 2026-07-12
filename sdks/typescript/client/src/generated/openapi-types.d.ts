@@ -490,6 +490,57 @@ export interface paths {
     patch: operations["updateRoomSession"];
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** End room session */
+    post: operations["endRoomSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Admit session participant */
+    post: operations["admitSessionParticipant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Remove session participant */
+    post: operations["removeSessionParticipant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings": {
     parameters: {
       query?: never;
@@ -594,6 +645,20 @@ export interface components {
       provider?: "openrouter";
     } & {
       [key: string]: unknown;
+    };
+    AdmitSessionParticipantRequest: {
+      capabilities: string[];
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
+      name: string;
+      participant_session_id: components["schemas"]["RoomSessionId"];
     };
     AuditLog: {
       action: string;
@@ -704,7 +769,6 @@ export interface components {
       status: "active" | "archived" | "ended";
     };
     CreateRoomSessionRequest: {
-      ended_at?: components["schemas"]["DateTimeString"] | null;
       metadata?:
         | {
             [key: string]: unknown;
@@ -715,8 +779,6 @@ export interface components {
         | boolean
         | null;
       started_at?: components["schemas"]["DateTimeString"] | null;
-      /** @enum {string} */
-      status: "pending" | "active" | "ended" | "failed";
     };
     CreateTenantRequest: {
       ai_provider_config?: components["schemas"]["AIProviderConfig"] | null;
@@ -928,6 +990,25 @@ export interface components {
       next_cursor: string | null;
       page_size: number;
     };
+    ParticipantLifecycle: {
+      lifecycle_intent: {
+        created_at: components["schemas"]["DateTimeString"];
+        id: components["schemas"]["UUID"];
+        intent_name: string;
+        participant_session_generation: number | null;
+        participant_session_id: components["schemas"]["RoomSessionId"] | null;
+        request_key: string;
+        status: string;
+      };
+      participant: {
+        generation: number;
+        id: components["schemas"]["UUID"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+        status: string;
+        tenant_id: components["schemas"]["TenantId"];
+      };
+    };
     Recording: {
       created_at: components["schemas"]["DateTimeString"];
       id: components["schemas"]["RecordingId"];
@@ -975,6 +1056,9 @@ export interface components {
       email: components["schemas"]["Email"];
       name: string;
       password: string;
+    };
+    RemoveSessionParticipantRequest: {
+      participant_session_generation: number;
     };
     Room: {
       created_at: components["schemas"]["DateTimeString"];
@@ -1038,6 +1122,19 @@ export interface components {
     RoomSessionList: {
       pagination: components["schemas"]["Pagination"];
       sessions: components["schemas"]["RoomSession"][];
+    };
+    SessionEnd: {
+      lifecycle_intent: {
+        created_at: components["schemas"]["DateTimeString"];
+        id: components["schemas"]["UUID"];
+        intent_name: string;
+        participant_session_generation: number | null;
+        participant_session_id: components["schemas"]["RoomSessionId"] | null;
+        request_key: string;
+        status: string;
+      };
+      session_id: components["schemas"]["RoomSessionId"];
+      status: string;
     };
     StartIntegrationConnectionRequest: {
       account_alias?: string | null;
@@ -1165,7 +1262,6 @@ export interface components {
       status?: "active" | "archived" | "ended";
     };
     UpdateRoomSessionRequest: {
-      ended_at?: components["schemas"]["DateTimeString"] | null;
       metadata?:
         | {
             [key: string]: unknown;
@@ -1176,8 +1272,6 @@ export interface components {
         | boolean
         | null;
       started_at?: components["schemas"]["DateTimeString"] | null;
-      /** @enum {string} */
-      status?: "pending" | "active" | "ended" | "failed";
     };
     UpdateTenantRequest: {
       ai_provider_config?: components["schemas"]["AIProviderConfig"] | null;
@@ -4162,7 +4256,9 @@ export interface operations {
   createRoomSession: {
     parameters: {
       query?: never;
-      header?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
       path: {
         tenant_id: components["schemas"]["TenantId"];
         room_id: components["schemas"]["RoomId"];
@@ -4213,6 +4309,15 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -4394,6 +4499,336 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  endRoomSession: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SessionEnd"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  admitSessionParticipant: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdmitSessionParticipantRequest"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ParticipantLifecycle"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  removeSessionParticipant: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+        participant_session_id: components["schemas"]["RoomSessionId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RemoveSessionParticipantRequest"];
+      };
+    };
+    responses: {
+      /** @description Accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ParticipantLifecycle"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

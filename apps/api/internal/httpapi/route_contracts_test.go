@@ -70,6 +70,9 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}"},
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/transcripts"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/transcripts/{transcript_id}"},
@@ -235,6 +238,53 @@ func TestIntegrationRouteContracts(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestSessionLifecycleRouteContracts(t *testing.T) {
+	contracts := make(map[string]httpapi.APIRouteContract)
+	for _, contract := range httpapi.PreviewRouteContracts() {
+		contracts[contract.OperationID] = contract
+	}
+	tests := []struct {
+		operationID string
+		status      int
+		body        string
+		parameters  []string
+	}{
+		{"createRoomSession", http.StatusCreated, "CreateRoomSessionRequest", []string{"path:tenant_id", "path:room_id", "header:Idempotency-Key"}},
+		{"admitSessionParticipant", http.StatusCreated, "AdmitSessionParticipantRequest", []string{"path:tenant_id", "path:room_id", "path:session_id", "header:Idempotency-Key"}},
+		{"removeSessionParticipant", http.StatusAccepted, "RemoveSessionParticipantRequest", []string{"path:tenant_id", "path:room_id", "path:session_id", "path:participant_session_id", "header:Idempotency-Key"}},
+		{"endRoomSession", http.StatusAccepted, "", []string{"path:tenant_id", "path:room_id", "path:session_id", "header:Idempotency-Key"}},
+	}
+	for _, test := range tests {
+		contract, ok := contracts[test.operationID]
+		if !ok {
+			t.Fatalf("missing %s contract", test.operationID)
+		}
+		if contract.Responses[0].Status != test.status || contract.RateLimit.Name != ratelimit.PolicyNameAuthenticatedWrite {
+			t.Fatalf("%s status/rate limit = %d/%q", test.operationID, contract.Responses[0].Status, contract.RateLimit.Name)
+		}
+		if test.body == "" {
+			if contract.Request != nil {
+				t.Fatalf("%s unexpectedly has request body", test.operationID)
+			}
+		} else if contract.Request == nil || contract.Request.Name != test.body {
+			t.Fatalf("%s request body = %#v, want %s", test.operationID, contract.Request, test.body)
+		}
+		if got := contractParameterNames(contract); !sameStrings(got, test.parameters) {
+			t.Fatalf("%s parameters = %v, want %v", test.operationID, got, test.parameters)
+		}
+	}
+	createContract := contracts["createRoomSession"]
+	for _, parameter := range createContract.Parameters {
+		if parameter.Name == "Idempotency-Key" {
+			if parameter.Pattern != `^[A-Za-z0-9_-]+$` || parameter.MinLength != 16 || parameter.MaxLength != 128 {
+				t.Fatalf("create idempotency key contract = %#v", parameter)
+			}
+			return
+		}
+	}
+	t.Fatal("createRoomSession does not declare Idempotency-Key")
 }
 
 type expectedRoute struct {

@@ -42,6 +42,7 @@ type Options struct {
 	RecordingObjects   RecordingObjectService
 	Recordings         RecordingService
 	Rooms              RoomService
+	SessionLifecycle   SessionLifecycleService
 	SessionCookie      SessionCookieOptions
 	TenantAuthz        TenantAuthorizer
 	Tenants            TenantService
@@ -141,6 +142,7 @@ func mountV1Routes(r chi.Router, options Options) {
 			mountUserRoutes(r, options.Users, options.RateLimit)
 			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
 			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
+			mountSessionLifecycleRoutes(r, options.Rooms, options.SessionLifecycle, options.TenantAuthz, options.RateLimit)
 			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
 			mountTranscriptRoutes(r, options.Transcripts, options.Recordings, options.RecordingObjects, options.Tenants, options.AITranscriptions, options.TenantAuthz, options.RateLimit)
 			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)

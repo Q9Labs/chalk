@@ -195,14 +195,10 @@ func (r RoomRepository) UpdateSession(ctx context.Context, tenantID utilities.ID
 		TenantID:     uuid(tenantID),
 		RoomID:       uuid(roomID),
 		ID:           uuid(sessionID),
-		StatusSet:    input.Status.Set,
-		Status:       requiredText(input.Status),
 		MetadataSet:  input.Metadata.Set,
 		Metadata:     jsonBytes(input.Metadata.Value),
 		StartedAtSet: input.StartedAt.Set,
 		StartedAt:    timestamptz(input.StartedAt.Value),
-		EndedAtSet:   input.EndedAt.Set,
-		EndedAt:      timestamptz(input.EndedAt.Value),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return rooms.Session{}, rooms.ErrSessionNotFound

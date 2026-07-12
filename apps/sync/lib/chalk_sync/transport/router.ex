@@ -10,6 +10,9 @@ defmodule ChalkSync.Transport.Router do
   plug(:dispatch)
 
   alias ChalkSync.DevTools
+  alias ChalkSync.Operations
+  alias ChalkSync.Operations.Metrics
+  alias ChalkSync.Operations.Readiness
 
   get "/healthz" do
     conn
@@ -18,22 +21,37 @@ defmodule ChalkSync.Transport.Router do
   end
 
   get "/readyz" do
-    status = if ChalkSync.Observability.ready?(), do: 200, else: 503
-    body = if status == 200, do: %{"status" => "ready"}, else: %{"status" => "not_ready"}
+    health = Readiness.health()
+    status = if Readiness.ready?(), do: 200, else: 503
+    send_json(conn, status, health)
+  end
 
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, JSON.encode!(body))
+  get "/metrics" do
+    send_json(conn, 200, Metrics.snapshot())
   end
 
   get "/v1/sync" do
-    observability_context = ChalkSync.Observability.context(conn.req_headers)
+    if Application.fetch_env!(:chalk_sync, :enable_v1) and Operations.accepting_connections?() do
+      observability_context = ChalkSync.Observability.context(conn.req_headers)
 
-    conn
-    |> WebSockAdapter.upgrade(ChalkSync.Transport.Socket, %{observability: observability_context},
-      timeout: 60_000
-    )
-    |> halt()
+      conn
+      |> WebSockAdapter.upgrade(ChalkSync.Transport.Socket, %{observability: observability_context},
+        timeout: 60_000
+      )
+      |> halt()
+    else
+      not_found(conn)
+    end
+  end
+
+  get "/v2/sync" do
+    if Operations.accepting_connections?() do
+      conn
+      |> WebSockAdapter.upgrade(ChalkSync.Transport.SocketV2, [], timeout: 60_000)
+      |> halt()
+    else
+      send_json(conn, 503, %{"error" => "server_draining"})
+    end
   end
 
   get "/dev/lab" do

@@ -1,0 +1,303 @@
+-- name: ReserveSessionCreateRequest :one
+insert into session_create_requests (
+    tenant_id,
+    room_id,
+    request_key,
+    request_fingerprint,
+    session_id
+) values (
+    sqlc.arg(tenant_id),
+    sqlc.arg(room_id),
+    sqlc.arg(request_key),
+    sqlc.arg(request_fingerprint),
+    sqlc.arg(session_id)
+)
+on conflict (tenant_id, room_id, request_key) do nothing
+returning *;
+
+-- name: GetSessionCreateRequest :one
+select *
+from session_create_requests
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and request_key = sqlc.arg(request_key);
+
+-- name: CreateLifecycleRoomSession :one
+insert into room_sessions (
+    id,
+    status,
+    metadata,
+    room_id,
+    tenant_id,
+    created_by_user_id,
+    started_at
+) select
+    sqlc.arg(id),
+    'active',
+    sqlc.narg(metadata),
+    rooms.id,
+    rooms.tenant_id,
+    sqlc.narg(created_by_user_id),
+    sqlc.narg(started_at)
+from rooms
+where
+    rooms.tenant_id = sqlc.arg(tenant_id)
+    and rooms.id = sqlc.arg(room_id)
+returning *;
+
+-- name: CreateSyncSessionControl :one
+insert into sync_session_control (
+    tenant_id,
+    room_id,
+    session_id,
+    control_revision,
+    folded_state,
+    state_schema_version,
+    state_digest,
+    snapshot_bytes,
+    snapshot_reserved_bytes,
+    participant_event_count,
+    participant_event_bytes,
+    lifecycle_event_count,
+    lifecycle_event_bytes,
+    lifecycle_reserved_events,
+    lifecycle_reserved_bytes,
+    lifecycle_intent_count,
+    lifecycle_intent_bytes,
+    lifecycle_reserved_intents,
+    lifecycle_reserved_intent_bytes,
+    receipt_count,
+    receipt_bytes
+) values (
+    sqlc.arg(tenant_id),
+    sqlc.arg(room_id),
+    sqlc.arg(session_id),
+    0,
+    sqlc.arg(folded_state),
+    sqlc.arg(state_schema_version),
+    sqlc.arg(state_digest),
+    sqlc.arg(snapshot_bytes),
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    16384,
+    0,
+    0,
+    1,
+    16384,
+    0,
+    0
+)
+returning *;
+
+-- name: LockSyncSessionControlForUpdate :one
+select *
+from sync_session_control
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+for update;
+
+-- name: LockLifecycleRoomSessionForUpdate :one
+select *
+from room_sessions
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and id = sqlc.arg(session_id)
+for update;
+
+-- name: LockLifecycleIntentForRequestForUpdate :one
+select *
+from sync_lifecycle_intents
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+    and intent_name = sqlc.arg(intent_name)
+    and request_key = sqlc.arg(request_key)
+for update;
+
+-- name: LockLifecycleIntentForParticipantTransitionForUpdate :one
+select *
+from sync_lifecycle_intents
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+    and intent_name = sqlc.arg(intent_name)
+    and participant_session_id = sqlc.arg(participant_session_id)
+    and participant_session_generation = sqlc.arg(participant_session_generation)
+for update;
+
+-- name: LockSessionEndLifecycleIntentForUpdate :one
+select *
+from sync_lifecycle_intents
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+    and intent_name = 'session_ended'
+for update;
+
+-- name: LockLifecycleParticipantForUpdate :one
+select *
+from participants
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+    and id = sqlc.arg(participant_session_id)
+for update;
+
+-- name: ReserveParticipantAdmission :one
+update sync_session_control
+set
+    snapshot_reserved_bytes = snapshot_reserved_bytes + sqlc.arg(snapshot_reservation_bytes),
+    lifecycle_reserved_events = lifecycle_reserved_events + 2,
+    lifecycle_reserved_bytes = lifecycle_reserved_bytes + 2 * sqlc.arg(reservation_bytes)::bigint,
+    lifecycle_intent_count = lifecycle_intent_count + 1,
+    lifecycle_intent_bytes = lifecycle_intent_bytes + sqlc.arg(intent_payload_bytes),
+    lifecycle_reserved_intents = lifecycle_reserved_intents + 1,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + sqlc.arg(reservation_bytes)::bigint,
+    updated_at = now()
+where
+    sync_session_control.tenant_id = sqlc.arg(tenant_id)
+    and sync_session_control.room_id = sqlc.arg(room_id)
+    and sync_session_control.session_id = sqlc.arg(session_id)
+    and sync_session_control.snapshot_bytes + sync_session_control.snapshot_reserved_bytes + sqlc.arg(snapshot_reservation_bytes) <= 1048576
+    and sync_session_control.lifecycle_event_count + sync_session_control.lifecycle_reserved_events + 2 <= 2048
+    and sync_session_control.lifecycle_event_bytes + sync_session_control.lifecycle_reserved_bytes + 2 * sqlc.arg(reservation_bytes)::bigint <= 33554432
+    and sync_session_control.lifecycle_intent_count + sync_session_control.lifecycle_reserved_intents + 2 <= 2048
+    and sync_session_control.lifecycle_intent_bytes + sync_session_control.lifecycle_reserved_intent_bytes + sqlc.arg(intent_payload_bytes) + sqlc.arg(reservation_bytes)::bigint <= 33554432
+    and (
+        select count(*)
+        from participants
+        where
+            participants.tenant_id = sync_session_control.tenant_id
+            and participants.room_id = sync_session_control.room_id
+            and participants.session_id = sync_session_control.session_id
+            and participants.status in ('joining', 'active', 'leaving')
+    ) < sqlc.arg(max_active_participants)::bigint
+returning *;
+
+-- name: ReserveParticipantRemoval :one
+update sync_session_control
+set
+    lifecycle_intent_count = lifecycle_intent_count + 1,
+    lifecycle_intent_bytes = lifecycle_intent_bytes + sqlc.arg(intent_payload_bytes),
+    lifecycle_reserved_intents = lifecycle_reserved_intents - 1,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes - sqlc.arg(reservation_bytes),
+    updated_at = now()
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+    and lifecycle_reserved_intents >= 1
+    and lifecycle_reserved_intent_bytes >= sqlc.arg(reservation_bytes)
+    and lifecycle_intent_count + lifecycle_reserved_intents <= 2048
+    and lifecycle_intent_bytes + lifecycle_reserved_intent_bytes + sqlc.arg(intent_payload_bytes) - sqlc.arg(reservation_bytes) <= 33554432
+returning *;
+
+-- name: ReserveSessionEnd :one
+update sync_session_control
+set
+    lifecycle_intent_count = lifecycle_intent_count + 1,
+    lifecycle_intent_bytes = lifecycle_intent_bytes + sqlc.arg(intent_payload_bytes),
+    lifecycle_reserved_intents = lifecycle_reserved_intents - 1,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes - sqlc.arg(reservation_bytes),
+    updated_at = now()
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+    and lifecycle_reserved_intents >= 1
+    and lifecycle_reserved_intent_bytes >= sqlc.arg(reservation_bytes)
+    and lifecycle_intent_count + lifecycle_reserved_intents <= 2048
+    and lifecycle_intent_bytes + lifecycle_reserved_intent_bytes + sqlc.arg(intent_payload_bytes) - sqlc.arg(reservation_bytes) <= 33554432
+returning *;
+
+-- name: CreateLifecycleParticipant :one
+insert into participants (
+    id,
+    name,
+    metadata,
+    capabilities,
+    tenant_id,
+    room_id,
+    session_id,
+    user_id,
+    generation,
+    status
+) values (
+    sqlc.arg(id),
+    sqlc.narg(name),
+    sqlc.narg(metadata),
+    sqlc.arg(capabilities),
+    sqlc.arg(tenant_id),
+    sqlc.arg(room_id),
+    sqlc.arg(session_id),
+    sqlc.narg(user_id),
+    1,
+    'joining'
+)
+returning *;
+
+-- name: CreateLifecycleIntent :one
+insert into sync_lifecycle_intents (
+    tenant_id,
+    room_id,
+    session_id,
+    lifecycle_intent_id,
+    request_key,
+    request_fingerprint,
+    intent_name,
+    participant_session_id,
+    participant_session_generation,
+    payload,
+    status
+) values (
+    sqlc.arg(tenant_id),
+    sqlc.arg(room_id),
+    sqlc.arg(session_id),
+    sqlc.arg(lifecycle_intent_id),
+    sqlc.arg(request_key),
+    sqlc.arg(request_fingerprint),
+    sqlc.arg(intent_name),
+    sqlc.narg(participant_session_id),
+    sqlc.narg(participant_session_generation),
+    sqlc.arg(payload),
+    'pending'
+)
+returning *;
+
+-- name: MarkLifecycleParticipantLeaving :one
+update participants
+set
+    status = 'leaving',
+    updated_at = now()
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and session_id = sqlc.arg(session_id)
+    and id = sqlc.arg(participant_session_id)
+    and generation = sqlc.arg(participant_session_generation)
+    and status = 'active'
+returning *;
+
+-- name: MarkLifecycleSessionEnding :one
+update room_sessions
+set
+    status = 'ending',
+    updated_at = now()
+where
+    tenant_id = sqlc.arg(tenant_id)
+    and room_id = sqlc.arg(room_id)
+    and id = sqlc.arg(session_id)
+    and status = 'active'
+returning *;

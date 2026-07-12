@@ -106,6 +106,8 @@ Registered scenarios:
 - `route:membership-list-viewer`
 - `route:membership-update-owner`
 - `route:room-create-member`
+- `route:session-create-member`
+- `route:session-end-member`
 - `route:recording-transcribe`
 - `route:telemetry-journey-event-intake`
 - `policy:tenant-system-allow`

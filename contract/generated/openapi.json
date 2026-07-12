@@ -4477,6 +4477,17 @@
             "schema": {
               "$ref": "#/components/schemas/RoomId"
             }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -4509,7 +4520,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["invalid_request", "invalid_room_field", "invalid_room_id", "invalid_session_status", "invalid_tenant_id"]
+            "x-chalk-error-codes": ["invalid_idempotency_key", "invalid_request", "invalid_room_field", "invalid_room_id", "invalid_tenant_id"]
           },
           "401": {
             "content": {
@@ -4543,6 +4554,17 @@
             },
             "description": "Not Found",
             "x-chalk-error-codes": ["not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["idempotency_conflict"]
           },
           "413": {
             "content": {
@@ -4901,6 +4923,577 @@
           }
         ],
         "summary": "Update room session",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end": {
+      "post": {
+        "operationId": "endRoomSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionEnd"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_idempotency_key", "invalid_room_id", "invalid_session_id", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["idempotency_conflict", "lifecycle_capacity_exceeded", "session_not_active"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "End room session",
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants": {
+      "post": {
+        "operationId": "admitSessionParticipant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmitSessionParticipantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantLifecycle"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_idempotency_key", "invalid_participant_session_id", "invalid_request", "invalid_room_id", "invalid_session_id", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["idempotency_conflict", "lifecycle_capacity_exceeded", "session_not_active"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Admit session participant",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove": {
+      "post": {
+        "operationId": "removeSessionParticipant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveSessionParticipantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantLifecycle"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_idempotency_key", "invalid_participant_session_id", "invalid_request", "invalid_room_id", "invalid_session_id", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["not_found", "participant_not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["idempotency_conflict", "lifecycle_capacity_exceeded", "participant_generation_mismatch", "participant_not_active", "session_not_active"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Remove session participant",
         "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
@@ -5821,6 +6414,31 @@
         },
         "type": "object"
       },
+      "AdmitSessionParticipantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "items": {},
+            "type": ["object", "array", "string", "number", "boolean", "null"]
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "participant_session_id": {
+            "$ref": "#/components/schemas/RoomSessionId"
+          }
+        },
+        "required": ["capabilities", "name", "participant_session_id"],
+        "type": "object"
+      },
       "AuditLog": {
         "additionalProperties": false,
         "properties": {
@@ -6038,16 +6656,6 @@
       "CreateRoomSessionRequest": {
         "additionalProperties": false,
         "properties": {
-          "ended_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DateTimeString"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "metadata": {
             "additionalProperties": true,
             "items": {},
@@ -6062,13 +6670,8 @@
                 "type": "null"
               }
             ]
-          },
-          "status": {
-            "enum": ["pending", "active", "ended", "failed"],
-            "type": "string"
           }
         },
-        "required": ["status"],
         "type": "object"
       },
       "CreateTenantRequest": {
@@ -6794,6 +7397,73 @@
         "required": ["has_more", "next_cursor", "page_size"],
         "type": "object"
       },
+      "ParticipantLifecycle": {
+        "additionalProperties": false,
+        "properties": {
+          "lifecycle_intent": {
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "intent_name": {
+                "type": "string"
+              },
+              "participant_session_generation": {
+                "type": ["integer", "null"]
+              },
+              "participant_session_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RoomSessionId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "request_key": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": ["created_at", "id", "intent_name", "participant_session_generation", "participant_session_id", "request_key", "status"],
+            "type": "object"
+          },
+          "participant": {
+            "additionalProperties": false,
+            "properties": {
+              "generation": {
+                "type": "integer"
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "room_id": {
+                "$ref": "#/components/schemas/RoomId"
+              },
+              "session_id": {
+                "$ref": "#/components/schemas/RoomSessionId"
+              },
+              "status": {
+                "type": "string"
+              },
+              "tenant_id": {
+                "$ref": "#/components/schemas/TenantId"
+              }
+            },
+            "required": ["generation", "id", "room_id", "session_id", "status", "tenant_id"],
+            "type": "object"
+          }
+        },
+        "required": ["lifecycle_intent", "participant"],
+        "type": "object"
+      },
       "Recording": {
         "additionalProperties": false,
         "properties": {
@@ -6925,6 +7595,16 @@
           }
         },
         "required": ["email", "name", "password"],
+        "type": "object"
+      },
+      "RemoveSessionParticipantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "participant_session_generation": {
+            "type": "integer"
+          }
+        },
+        "required": ["participant_session_generation"],
         "type": "object"
       },
       "Room": {
@@ -7084,6 +7764,54 @@
           }
         },
         "required": ["pagination", "sessions"],
+        "type": "object"
+      },
+      "SessionEnd": {
+        "additionalProperties": false,
+        "properties": {
+          "lifecycle_intent": {
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "intent_name": {
+                "type": "string"
+              },
+              "participant_session_generation": {
+                "type": ["integer", "null"]
+              },
+              "participant_session_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RoomSessionId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "request_key": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": ["created_at", "id", "intent_name", "participant_session_generation", "participant_session_id", "request_key", "status"],
+            "type": "object"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/RoomSessionId"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": ["lifecycle_intent", "session_id", "status"],
         "type": "object"
       },
       "StartIntegrationConnectionRequest": {
@@ -7431,16 +8159,6 @@
       "UpdateRoomSessionRequest": {
         "additionalProperties": false,
         "properties": {
-          "ended_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DateTimeString"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "metadata": {
             "additionalProperties": true,
             "items": {},
@@ -7455,10 +8173,6 @@
                 "type": "null"
               }
             ]
-          },
-          "status": {
-            "enum": ["pending", "active", "ended", "failed"],
-            "type": "string"
           }
         },
         "type": "object"

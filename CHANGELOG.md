@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Protocol-v2 durable sync control with PostgreSQL authority, stable command
+  receipts, exact revision folding, acknowledged bounded recovery and live
+  delivery, multi-node repair, production readiness/drain telemetry, and
+  browser plus React Native client persistence adapters.
 - Test-only sync breaker harness with deterministic model histories, real
   WebSocket campaigns, controlled writer faults, replay-ready JSONL traces, and
   failure-first Markdown reports.
@@ -57,6 +61,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Made sync-breaker snapshot-boundary verification audit the complete persisted
+  event stream in bounded pages and retain event/head evidence before replica
+  convergence checks.
+- Made Session creation, participant admission and removal, and Session end
+  share the sync authority boundary through atomic lifecycle transactions with
+  durable request-key idempotency.
 - Upgraded the web app build stack to Vite 8.1, including compatible React,
   TanStack Start, Nitro, and Cloudflare Vite plugins plus native Vite tsconfig
   path resolution.

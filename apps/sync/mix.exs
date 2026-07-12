@@ -14,7 +14,7 @@ defmodule ChalkSync.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:crypto, :logger],
       mod: {ChalkSync.Application, []}
     ]
   end
@@ -25,6 +25,8 @@ defmodule ChalkSync.MixProject do
   defp deps do
     [
       {:bandit, "~> 1.6"},
+      {:postgrex, "~> 0.22.3"},
+      {:telemetry, "~> 1.3"},
       {:websock_adapter, "~> 0.5"},
       {:opentelemetry_api, "~> 1.5"},
       {:opentelemetry, "~> 1.7"},

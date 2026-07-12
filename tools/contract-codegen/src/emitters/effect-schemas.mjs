@@ -272,6 +272,7 @@ function collectOperationSchemas(document) {
       const schemas = [];
       const pathParameters = parameterSchema(operation.parameters, "path");
       const queryParameters = parameterSchema(operation.parameters, "query");
+      const requestHeaders = parameterSchema(operation.parameters, "header");
       const requestBody = operation.requestBody?.content?.["application/json"]?.schema;
       const responseBody = successResponseSchema(operation.responses);
 
@@ -280,6 +281,9 @@ function collectOperationSchemas(document) {
       }
       if (queryParameters) {
         schemas.push({ name: `${operationName}QueryParams`, schema: queryParameters });
+      }
+      if (requestHeaders) {
+        schemas.push({ name: `${operationName}RequestHeaders`, schema: requestHeaders });
       }
       if (requestBody) {
         schemas.push({ name: `${operationName}RequestBody`, schema: requestBody });

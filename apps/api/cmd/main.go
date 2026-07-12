@@ -32,6 +32,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
+	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/users"
@@ -143,6 +144,8 @@ func run() error {
 	membershipService := memberships.NewService(membershipRepository)
 	roomRepository := postgres.NewRoomRepository(operationQueries)
 	roomService := rooms.NewService(roomRepository)
+	sessionLifecycleRepository := postgres.NewSessionLifecycleRepository(pool)
+	sessionLifecycleService := sessionlifecycle.NewService(sessionLifecycleRepository)
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
 	transcriptRepository := postgres.NewTranscriptRepository(operationQueries)
@@ -218,6 +221,7 @@ func run() error {
 		RecordingObjects:   recordingObjects,
 		Recordings:         recordingService,
 		Rooms:              roomService,
+		SessionLifecycle:   sessionLifecycleService,
 		SessionCookie: httpapi.SessionCookieOptions{
 			Secure: cfg.Observability.Environment != "local",
 		},

@@ -59,6 +59,7 @@ function collectOperations(document) {
         errors: errorResponses(operation.responses),
         hasPathParams: hasParameters(operation.parameters, "path"),
         hasQueryParams: hasParameters(operation.parameters, "query"),
+        hasRequestHeaders: hasParameters(operation.parameters, "header"),
         hasRequestBody: Boolean(operation.requestBody?.content?.["application/json"]?.schema),
       });
     }
@@ -93,6 +94,9 @@ function renderEndpoint(operation) {
   }
   if (operation.hasQueryParams) {
     options.push(`  query: S.${operation.operationName}QueryParamsSchema`);
+  }
+  if (operation.hasRequestHeaders) {
+    options.push(`  headers: S.${operation.operationName}RequestHeadersSchema`);
   }
   if (operation.hasRequestBody) {
     options.push(`  payload: S.${operation.operationName}RequestBodySchema`);

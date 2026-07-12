@@ -15,12 +15,33 @@ defmodule ChalkSync.Transport.SocketTest do
     assert port > 0
   end
 
-  test "readyz confirms the sync writer dependencies", %{port: port} do
+  test "readyz refuses the development in-memory authority", %{port: port} do
     conn = Plug.Test.conn(:get, "/readyz")
     conn = Router.call(conn, [])
 
+    assert conn.status == 503
+    assert %{"status" => status, "draining" => false} = JSON.decode!(conn.resp_body)
+    assert status in ["initializing", "unready"]
+    assert port > 0
+  end
+
+  test "metrics exposes bounded aggregate resources", %{port: port} do
+    conn = Plug.Test.conn(:get, "/metrics")
+    conn = Router.call(conn, [])
+
     assert conn.status == 200
-    assert JSON.decode!(conn.resp_body) == %{"status" => "ready"}
+
+    assert %{
+             "metrics" => metrics,
+             "resources" => %{
+               "admitted_commands" => admitted,
+               "local_session_coordinators" => coordinators
+             }
+           } = JSON.decode!(conn.resp_body)
+
+    assert is_map(metrics)
+    assert is_integer(admitted)
+    assert is_integer(coordinators)
     assert port > 0
   end
 
@@ -47,9 +68,12 @@ defmodule ChalkSync.Transport.SocketTest do
     {:ok, trace_client} = Client.connect(port, "/dev/traces")
     {:json, %{"type" => "history"}, trace_client} = Client.recv(trace_client)
 
+    room_id = unique_room_id()
     {:ok, sync_client} = Client.connect(port)
+    sync_client = Client.send_json(sync_client, hello(room_id, "p1", "Trace Participant"))
+    {:json, %{"type" => "welcome"}, sync_client} = Client.recv(sync_client)
 
-    assert_trace_action(trace_client, "connected")
+    assert_trace_event(trace_client, "participant_joined", %{"room_id" => room_id})
     assert %Client{} = sync_client
   end
 
@@ -316,19 +340,29 @@ defmodule ChalkSync.Transport.SocketTest do
     })
   end
 
-  defp assert_trace_action(client, action, attempts \\ 10)
-
-  defp assert_trace_action(_client, action, 0) do
-    flunk("trace action #{inspect(action)} was not received")
+  defp assert_trace_event(client, action, expected_details) do
+    deadline = System.monotonic_time(:millisecond) + 2_000
+    assert_trace_event_until(client, action, expected_details, deadline)
   end
 
-  defp assert_trace_action(client, action, attempts) do
-    case Client.recv(client) do
-      {:json, %{"type" => "trace", "event" => %{"action" => ^action}}, _client} ->
-        :ok
+  defp assert_trace_event_until(client, action, expected_details, deadline) do
+    timeout = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    case Client.recv(client, timeout) do
+      {:json, %{"type" => "trace", "event" => event}, client} ->
+        if event["action"] == action and
+             Map.take(event["details"], Map.keys(expected_details)) ==
+               expected_details do
+          :ok
+        else
+          assert_trace_event_until(client, action, expected_details, deadline)
+        end
 
       {:json, _message, client} ->
-        assert_trace_action(client, action, attempts - 1)
+        assert_trace_event_until(client, action, expected_details, deadline)
+
+      {:error, :timeout} ->
+        flunk("trace event #{inspect(action)} with #{inspect(expected_details)} was not received")
 
       other ->
         flunk("unexpected trace response: #{inspect(other)}")

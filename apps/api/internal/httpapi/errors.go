@@ -46,17 +46,25 @@ var (
 	apiErrorInvalidMembershipRole = APIError{Status: http.StatusBadRequest, Code: "invalid_membership_role", Message: "Invalid membership role"}
 	apiErrorMembershipNotFound    = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Membership not found"}
 
-	apiErrorInvalidRoomID        = APIError{Status: http.StatusBadRequest, Code: "invalid_room_id", Message: "Invalid room id"}
-	apiErrorInvalidSessionID     = APIError{Status: http.StatusBadRequest, Code: "invalid_session_id", Message: "Invalid session id"}
-	apiErrorInvalidRoomName      = APIError{Status: http.StatusBadRequest, Code: "invalid_room_name", Message: "Invalid room name"}
-	apiErrorInvalidRoomSlug      = APIError{Status: http.StatusBadRequest, Code: "invalid_room_slug", Message: "Invalid room slug"}
-	apiErrorInvalidRoomStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_room_status", Message: "Invalid room status"}
-	apiErrorInvalidMediaPlane    = APIError{Status: http.StatusBadRequest, Code: "invalid_media_plane", Message: "Invalid media plane"}
-	apiErrorInvalidSessionStatus = APIError{Status: http.StatusBadRequest, Code: "invalid_session_status", Message: "Invalid session status"}
-	apiErrorInvalidRoomField     = APIError{Status: http.StatusBadRequest, Code: "invalid_room_field", Message: "Invalid room field"}
-	apiErrorRoomSlugAlreadyUsed  = APIError{Status: http.StatusConflict, Code: "room_slug_already_used", Message: "Room slug already used"}
-	apiErrorRoomNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Room not found"}
-	apiErrorSessionNotFound      = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Room session not found"}
+	apiErrorInvalidRoomID                 = APIError{Status: http.StatusBadRequest, Code: "invalid_room_id", Message: "Invalid room id"}
+	apiErrorInvalidSessionID              = APIError{Status: http.StatusBadRequest, Code: "invalid_session_id", Message: "Invalid session id"}
+	apiErrorInvalidRoomName               = APIError{Status: http.StatusBadRequest, Code: "invalid_room_name", Message: "Invalid room name"}
+	apiErrorInvalidRoomSlug               = APIError{Status: http.StatusBadRequest, Code: "invalid_room_slug", Message: "Invalid room slug"}
+	apiErrorInvalidRoomStatus             = APIError{Status: http.StatusBadRequest, Code: "invalid_room_status", Message: "Invalid room status"}
+	apiErrorInvalidMediaPlane             = APIError{Status: http.StatusBadRequest, Code: "invalid_media_plane", Message: "Invalid media plane"}
+	apiErrorInvalidSessionStatus          = APIError{Status: http.StatusBadRequest, Code: "invalid_session_status", Message: "Invalid session status"}
+	apiErrorInvalidRoomField              = APIError{Status: http.StatusBadRequest, Code: "invalid_room_field", Message: "Invalid room field"}
+	apiErrorRoomSlugAlreadyUsed           = APIError{Status: http.StatusConflict, Code: "room_slug_already_used", Message: "Room slug already used"}
+	apiErrorRoomNotFound                  = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Room not found"}
+	apiErrorSessionNotFound               = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Room session not found"}
+	apiErrorInvalidParticipantID          = APIError{Status: http.StatusBadRequest, Code: "invalid_participant_session_id", Message: "Invalid participant session id"}
+	apiErrorInvalidRequestKey             = APIError{Status: http.StatusBadRequest, Code: "invalid_idempotency_key", Message: "Idempotency-Key must contain 16 to 128 ASCII letters, digits, underscores, or hyphens"}
+	apiErrorSessionNotActive              = APIError{Status: http.StatusConflict, Code: "session_not_active", Message: "Room session is not active"}
+	apiErrorParticipantNotFound           = APIError{Status: http.StatusNotFound, Code: "participant_not_found", Message: "Participant session not found"}
+	apiErrorParticipantNotActive          = APIError{Status: http.StatusConflict, Code: "participant_not_active", Message: "Participant session is not active"}
+	apiErrorParticipantGenerationMismatch = APIError{Status: http.StatusConflict, Code: "participant_generation_mismatch", Message: "Participant session generation does not match"}
+	apiErrorIdempotencyConflict           = APIError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "Idempotency key was already used for another request"}
+	apiErrorLifecycleCapacityExceeded     = APIError{Status: http.StatusConflict, Code: "lifecycle_capacity_exceeded", Message: "Session lifecycle capacity is exhausted"}
 
 	apiErrorInvalidRecordingID        = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_id", Message: "Invalid recording id"}
 	apiErrorInvalidRecordingStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_status", Message: "Invalid recording status"}

@@ -14,7 +14,9 @@ defmodule ChalkSync.ServerCase do
   end
 
   setup do
-    pid = start_supervised!({Bandit, plug: ChalkSync.Transport.Router, port: 0})
+    pid =
+      start_supervised!({Bandit, plug: ChalkSync.Transport.Router, ip: {127, 0, 0, 1}, port: 0})
+
     {:ok, {_ip, port}} = ThousandIsland.listener_info(pid)
     %{port: port}
   end

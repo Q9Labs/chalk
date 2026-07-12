@@ -127,6 +127,10 @@ type Participant struct {
 	UserID       pgtype.UUID        `json:"user_id"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Generation   int64              `json:"generation"`
+	Status       string             `json:"status"`
+	JoinedAt     pgtype.Timestamptz `json:"joined_at"`
+	LeftAt       pgtype.Timestamptz `json:"left_at"`
 }
 
 type Recording struct {
@@ -167,6 +171,107 @@ type RoomSession struct {
 	EndedAt         pgtype.Timestamptz `json:"ended_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type SessionCreateRequest struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	RoomID             pgtype.UUID        `json:"room_id"`
+	RequestKey         string             `json:"request_key"`
+	RequestFingerprint []byte             `json:"request_fingerprint"`
+	SessionID          pgtype.UUID        `json:"session_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncCommandReceipt struct {
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	SessionID            pgtype.UUID        `json:"session_id"`
+	ParticipantSessionID pgtype.UUID        `json:"participant_session_id"`
+	SubmittedGeneration  int64              `json:"submitted_generation"`
+	CommandID            string             `json:"command_id"`
+	RequestFingerprint   []byte             `json:"request_fingerprint"`
+	CommandName          string             `json:"command_name"`
+	Outcome              string             `json:"outcome"`
+	RejectionReason      pgtype.Text        `json:"rejection_reason"`
+	EventID              pgtype.UUID        `json:"event_id"`
+	ResultingRevision    pgtype.Int8        `json:"resulting_revision"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncControlEvent struct {
+	TenantID                  pgtype.UUID        `json:"tenant_id"`
+	RoomID                    pgtype.UUID        `json:"room_id"`
+	SessionID                 pgtype.UUID        `json:"session_id"`
+	EventID                   pgtype.UUID        `json:"event_id"`
+	BaseRevision              int64              `json:"base_revision"`
+	Revision                  int64              `json:"revision"`
+	EventName                 string             `json:"event_name"`
+	Payload                   []byte             `json:"payload"`
+	ActorParticipantSessionID pgtype.UUID        `json:"actor_participant_session_id"`
+	ActorGeneration           pgtype.Int8        `json:"actor_generation"`
+	CommandID                 pgtype.Text        `json:"command_id"`
+	LifecycleIntentID         pgtype.UUID        `json:"lifecycle_intent_id"`
+	EventSchemaVersion        int32              `json:"event_schema_version"`
+	ResultingStateDigest      []byte             `json:"resulting_state_digest"`
+	EncodedBytes              int32              `json:"encoded_bytes"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncLifecycleIntent struct {
+	TenantID                     pgtype.UUID        `json:"tenant_id"`
+	RoomID                       pgtype.UUID        `json:"room_id"`
+	SessionID                    pgtype.UUID        `json:"session_id"`
+	LifecycleIntentID            pgtype.UUID        `json:"lifecycle_intent_id"`
+	RequestKey                   string             `json:"request_key"`
+	RequestFingerprint           []byte             `json:"request_fingerprint"`
+	IntentName                   string             `json:"intent_name"`
+	ParticipantSessionID         pgtype.UUID        `json:"participant_session_id"`
+	ParticipantSessionGeneration pgtype.Int8        `json:"participant_session_generation"`
+	Payload                      []byte             `json:"payload"`
+	Status                       string             `json:"status"`
+	TerminalReason               pgtype.Text        `json:"terminal_reason"`
+	AppliedEventID               pgtype.UUID        `json:"applied_event_id"`
+	AppliedRevision              pgtype.Int8        `json:"applied_revision"`
+	AttemptCount                 int32              `json:"attempt_count"`
+	LastErrorCode                pgtype.Text        `json:"last_error_code"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
+	NextAttemptAt                pgtype.Timestamptz `json:"next_attempt_at"`
+}
+
+type SyncSessionControl struct {
+	TenantID                             pgtype.UUID        `json:"tenant_id"`
+	RoomID                               pgtype.UUID        `json:"room_id"`
+	SessionID                            pgtype.UUID        `json:"session_id"`
+	ControlRevision                      int64              `json:"control_revision"`
+	FoldedState                          []byte             `json:"folded_state"`
+	StateSchemaVersion                   int32              `json:"state_schema_version"`
+	StateDigest                          []byte             `json:"state_digest"`
+	SnapshotBytes                        int64              `json:"snapshot_bytes"`
+	SnapshotReservedBytes                int64              `json:"snapshot_reserved_bytes"`
+	ParticipantEventCount                int64              `json:"participant_event_count"`
+	ParticipantEventBytes                int64              `json:"participant_event_bytes"`
+	LifecycleEventCount                  int64              `json:"lifecycle_event_count"`
+	LifecycleEventBytes                  int64              `json:"lifecycle_event_bytes"`
+	LifecycleReservedEvents              int64              `json:"lifecycle_reserved_events"`
+	LifecycleReservedBytes               int64              `json:"lifecycle_reserved_bytes"`
+	LifecycleIntentCount                 int64              `json:"lifecycle_intent_count"`
+	LifecycleIntentBytes                 int64              `json:"lifecycle_intent_bytes"`
+	LifecycleReservedIntents             int64              `json:"lifecycle_reserved_intents"`
+	LifecycleReservedIntentBytes         int64              `json:"lifecycle_reserved_intent_bytes"`
+	ReceiptCount                         int64              `json:"receipt_count"`
+	ReceiptBytes                         int64              `json:"receipt_bytes"`
+	CreatedAt                            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                            pgtype.Timestamptz `json:"updated_at"`
+	RetentionCheckpointRevision          pgtype.Int8        `json:"retention_checkpoint_revision"`
+	RetentionCheckpointStateDigest       []byte             `json:"retention_checkpoint_state_digest"`
+	RetentionCheckpointEventCount        pgtype.Int8        `json:"retention_checkpoint_event_count"`
+	RetentionCleanedAt                   pgtype.Timestamptz `json:"retention_cleaned_at"`
+	RetentionDeletedEventRows            int64              `json:"retention_deleted_event_rows"`
+	RetentionDeletedEventBytes           int64              `json:"retention_deleted_event_bytes"`
+	RetentionDeletedReceiptRows          int64              `json:"retention_deleted_receipt_rows"`
+	RetentionDeletedReceiptBytes         int64              `json:"retention_deleted_receipt_bytes"`
+	RetentionDeletedLifecycleIntentRows  int64              `json:"retention_deleted_lifecycle_intent_rows"`
+	RetentionDeletedLifecycleIntentBytes int64              `json:"retention_deleted_lifecycle_intent_bytes"`
 }
 
 type Tenant struct {

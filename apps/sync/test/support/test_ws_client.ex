@@ -14,8 +14,15 @@ defmodule ChalkSync.TestWSClient do
 
   @timeout 2_000
 
-  def connect(port, path \\ "/v1/sync", headers \\ []) do
-    {:ok, conn} = HTTP.connect(:http, "127.0.0.1", port)
+  def connect(port, path \\ "/v1/sync", options \\ []) do
+    {transport_options, headers} =
+      if Keyword.keyword?(options) and Keyword.has_key?(options, :transport_opts) do
+        {options, []}
+      else
+        {[], options}
+      end
+
+    {:ok, conn} = HTTP.connect(:http, "127.0.0.1", port, transport_options)
     {:ok, conn, ref} = WebSocket.upgrade(:ws, conn, path, headers)
 
     with {:ok, conn, status, headers} <- await_upgrade(conn, ref, %{headers: []}),
@@ -26,6 +33,32 @@ defmodule ChalkSync.TestWSClient do
 
   def send_json(%__MODULE__{} = client, map) do
     send_frame(client, {:text, JSON.encode!(map)})
+  end
+
+  @doc "Acknowledges a snapshot welcome or fully applied replay page on the real v2 wire."
+  def acknowledge_recovery(
+        %__MODULE__{} = client,
+        %{"type" => "welcome", "mode" => "snapshot"} = frame
+      ) do
+    send_recovery_ack(client, frame["recovery_id"], frame["head"])
+  end
+
+  def acknowledge_recovery(%__MODULE__{} = client, %{"type" => "replay_page"} = frame) do
+    last = List.last(frame["events"])
+
+    send_recovery_ack(client, frame["recovery_id"], %{
+      "revision" => frame["last_revision"],
+      "state_digest" => last["resulting_state_digest"]
+    })
+  end
+
+  defp send_recovery_ack(client, recovery_id, head) do
+    send_json(client, %{
+      "type" => "recovery_ack",
+      "recovery_id" => recovery_id,
+      "revision" => head["revision"],
+      "state_digest" => head["state_digest"]
+    })
   end
 
   @doc "Initiates a graceful WebSocket close handshake."

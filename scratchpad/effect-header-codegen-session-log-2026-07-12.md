@@ -1,0 +1,4 @@
+2026-07-12T03:46:31+0500 | Started Effect SDK request-header codegen audit; scoped to generic OpenAPI header support and generated SDK verification.
+2026-07-12T03:49:48+0500 | Implemented generic request-header schemas and endpoint inputs. Canonical SDK generation is blocked by unrelated Go compile error: apps/api/internal/sessionlifecycle/validation.go:207 undefined: strconv.
+2026-07-12T03:50:00+0500 | Paused regeneration after the shared OpenAPI input became transiently incomplete during another agent's edit; no partial artifacts emitted.
+2026-07-12T03:54:00+0500 | Canonical SDK generation, generated-artifact check, focused Effect codegen tests, codegen lint, client typecheck, and client build passed. The required reviewer could not initialize because its managed sandbox denied PATH-alias creation.

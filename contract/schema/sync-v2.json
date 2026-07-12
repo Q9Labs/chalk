@@ -1,0 +1,408 @@
+{
+  "$schema": "chalk.sync.v2",
+  "version": 2,
+  "protocol": {
+    "field": "protocol",
+    "value": 2,
+    "transport": "websocket-json-text",
+    "route": "/v2/sync"
+  },
+  "directions": {
+    "clientToServer": "client-to-server",
+    "serverToClient": "server-to-client"
+  },
+  "limits": {
+    "decodedInboundFrameBytes": 65536,
+    "tokenBytes": 8192,
+    "commandIdMinBytes": 16,
+    "commandIdMaxBytes": 64,
+    "decodedCommandPayloadBytes": 16384,
+    "encodedLiveEventBytes": 32768,
+    "replayPageMaxEvents": 128,
+    "replayPageEncodedBytes": 262144,
+    "completeReplayMaxEvents": 2048,
+    "completeReplayEncodedBytes": 2097152,
+    "snapshotEncodedBytes": 1048576,
+    "protocolErrorDetailBytes": 1024
+  },
+  "stateDigest": {
+    "algorithm": "sha256",
+    "prefix": "chalk-sync-state-v2",
+    "versionEncoding": "uint32-big-endian",
+    "projectionEncoding": "rfc8785-json",
+    "wireEncoding": "hex-lowercase"
+  },
+  "phases": [
+    {
+      "id": "awaiting_hello",
+      "accepts": ["hello", "ping"],
+      "hello": {
+        "transitionsTo": "recovering",
+        "deadlineMs": 5000
+      }
+    },
+    {
+      "id": "recovering",
+      "accepts": ["recovery_ack", "ping"],
+      "recoveryComplete": {
+        "transitionsTo": "live"
+      }
+    },
+    {
+      "id": "live",
+      "accepts": ["command", "delivery_ack", "ping"],
+      "heartbeat": {
+        "intervalMs": 20000,
+        "missedDeadlinesBeforeClose": 2
+      }
+    },
+    {
+      "id": "terminal",
+      "transitionsTo": "closed"
+    },
+    {
+      "id": "draining",
+      "transitionsTo": "closed"
+    }
+  ],
+  "controlCursor": {
+    "revision": {
+      "kind": "integer",
+      "minimum": 0
+    },
+    "stateSchemaVersion": {
+      "kind": "integer",
+      "minimum": 1
+    },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "snapshot": {
+    "controlRevision": {
+      "kind": "integer",
+      "minimum": 0
+    },
+    "stateSchemaVersion": {
+      "kind": "integer",
+      "minimum": 1
+    },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "kind": "string",
+      "enum": ["active", "ended"]
+    },
+    "participants": {
+      "kind": "array",
+      "maxItems": 500,
+      "items": {
+        "participantSessionId": {
+          "kind": "string",
+          "minBytes": 36,
+          "maxBytes": 36,
+          "format": "uuid"
+        },
+        "displayName": {
+          "kind": "string",
+          "maxBytes": 256
+        },
+        "handRaised": {
+          "kind": "boolean"
+        }
+      }
+    }
+  },
+  "hello": {
+    "direction": "client-to-server",
+    "type": "hello",
+    "token": {
+      "kind": "string",
+      "maxBytes": 8192
+    },
+    "streams": {
+      "control": {
+        "cursor": "controlCursor",
+        "nullable": true
+      }
+    }
+  },
+  "deliveryAck": {
+    "direction": "client-to-server",
+    "type": "delivery_ack",
+    "stream": "control",
+    "revision": {
+      "kind": "integer",
+      "minimum": 1
+    },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "recoveryAck": {
+    "direction": "client-to-server",
+    "type": "recovery_ack",
+    "recoveryId": {
+      "kind": "string",
+      "minBytes": 36,
+      "maxBytes": 36,
+      "format": "uuid"
+    },
+    "revision": {
+      "kind": "integer",
+      "minimum": 0
+    },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "welcome": {
+    "direction": "server-to-client",
+    "type": "welcome",
+    "participantSessionId": {
+      "kind": "string",
+      "minBytes": 36,
+      "maxBytes": 36,
+      "format": "uuid"
+    },
+    "participantSessionGeneration": {
+      "kind": "integer",
+      "minimum": 1
+    },
+    "recoveryId": {
+      "kind": "string",
+      "minBytes": 36,
+      "maxBytes": 36,
+      "format": "uuid"
+    },
+    "head": "controlCursor",
+    "modes": [
+      {
+        "id": "snapshot",
+        "snapshot": "snapshot"
+      },
+      {
+        "id": "replay"
+      },
+      {
+        "id": "up_to_date"
+      },
+      {
+        "id": "terminal",
+        "reason": "terminalReason"
+      }
+    ]
+  },
+  "replayPage": {
+    "direction": "server-to-client",
+    "type": "replay_page",
+    "recoveryId": "uuid",
+    "firstRevision": {
+      "kind": "integer",
+      "minimum": 1
+    },
+    "lastRevision": {
+      "kind": "integer",
+      "minimum": 1
+    },
+    "events": "event",
+    "maxEvents": 128,
+    "maxEncodedBytes": 262144
+  },
+  "recoveryComplete": {
+    "direction": "server-to-client",
+    "type": "recovery_complete",
+    "recoveryId": "uuid",
+    "head": "controlCursor"
+  },
+  "commands": [
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "raise_hand",
+      "commandId": "commandId",
+      "payload": {}
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "lower_hand",
+      "commandId": "commandId",
+      "payload": {}
+    }
+  ],
+  "events": [
+    {
+      "direction": "server-to-client",
+      "type": "event",
+      "stream": "control",
+      "name": "participant_joined",
+      "origin": "lifecycle",
+      "payload": {
+        "displayName": {
+          "kind": "string",
+          "maxBytes": 256
+        },
+        "participantSessionId": "uuid"
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "type": "event",
+      "stream": "control",
+      "name": "participant_left",
+      "origin": "lifecycle",
+      "payload": {
+        "participantSessionId": "uuid"
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "type": "event",
+      "stream": "control",
+      "name": "session_ended",
+      "origin": "lifecycle",
+      "payload": {}
+    },
+    {
+      "direction": "server-to-client",
+      "type": "event",
+      "stream": "control",
+      "name": "hand_raised",
+      "origin": "command",
+      "payload": {
+        "participantSessionId": "uuid"
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "type": "event",
+      "stream": "control",
+      "name": "hand_lowered",
+      "origin": "command",
+      "payload": {
+        "participantSessionId": "uuid"
+      }
+    }
+  ],
+  "acks": [
+    {
+      "type": "ack",
+      "result": "committed",
+      "commandId": "commandId",
+      "eventId": "uuid",
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      }
+    },
+    {
+      "type": "ack",
+      "result": "duplicate",
+      "commandId": "commandId",
+      "eventId": "uuid",
+      "revision": {
+        "kind": "integer",
+        "minimum": 1
+      }
+    },
+    {
+      "type": "ack",
+      "result": "rejected",
+      "commandId": "commandId",
+      "reason": "rejectionReason"
+    }
+  ],
+  "terminal": {
+    "reasons": ["session_ended", "participant_inactive", "stale_participant_generation"]
+  },
+  "rejectionReasons": ["session_ended", "participant_inactive", "stale_participant_generation", "capability_denied", "invalid_state", "command_id_conflict"],
+  "retryableError": {
+    "direction": "server-to-client",
+    "type": "retryable_error",
+    "commandId": "commandId",
+    "codes": ["overloaded", "server_draining", "dependency_unavailable", "decision_unavailable"]
+  },
+  "error": {
+    "direction": "server-to-client",
+    "type": "error",
+    "code": ["protocol_error", "invalid_frame", "unsupported_protocol"],
+    "detail": {
+      "kind": "string",
+      "maxBytes": 1024
+    }
+  },
+  "ping": {
+    "direction": "client-to-server",
+    "type": "ping"
+  },
+  "pong": {
+    "direction": "server-to-client",
+    "type": "pong"
+  },
+  "continuity": {
+    "cursor": {
+      "field": "streams.control.cursor",
+      "resume": "events_after_cursor_when_digest_matches",
+      "stream": "control"
+    },
+    "events": {
+      "baseRevisionField": "base_revision",
+      "revisionField": "revision",
+      "rule": "revision_equals_base_revision_plus_one",
+      "stream": "control"
+    },
+    "snapshotFallback": {
+      "when": ["cursor_missing", "cursor_future", "cursor_malformed", "cursor_expired", "cursor_unavailable", "cursor_same_revision_digest_mismatch"],
+      "welcomeMode": "snapshot"
+    },
+    "replay": {
+      "pageAcknowledgement": "recovery_ack",
+      "pageCompletion": "recovery_complete_after_acknowledged_head",
+      "liveEventsAfter": "recovery_complete",
+      "maxEvents": 2048,
+      "maxEncodedBytes": 2097152
+    }
+  },
+  "idempotency": {
+    "key": "command_id",
+    "outcomes": ["committed", "duplicate", "rejected"],
+    "scope": "participant_session",
+    "duplicate": "reuses_original_event_id_and_revision"
+  },
+  "closeCodes": [
+    {
+      "code": 1000,
+      "connection": "closed",
+      "reasons": ["terminal recovery drained"]
+    },
+    {
+      "code": 1008,
+      "connection": "closed",
+      "reasons": ["invalid token", "policy violation"]
+    },
+    {
+      "code": 1009,
+      "connection": "closed",
+      "reasons": ["malformed frame", "oversized frame"]
+    },
+    {
+      "code": 1012,
+      "connection": "closed",
+      "reasons": ["service restart", "server draining"]
+    }
+  ]
+}

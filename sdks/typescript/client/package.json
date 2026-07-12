@@ -49,12 +49,18 @@
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
     "dev": "tsup ./src/index.ts ./src/telemetry/index.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
     "test": "pnpm exec vitest run",
+    "test:sync-browser": "pnpm run build && node ./scripts/real-browser-sync.mjs",
+    "test:sync-node-restart": "pnpm run build && node ./scripts/real-node-restart-sync.mjs",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "effect": "4.0.0-beta.94"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "playwright": "^1.57.0"
   },
   "engines": {
     "node": ">=22"

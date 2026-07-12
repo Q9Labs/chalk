@@ -117,9 +117,10 @@ The proof contract includes:
 - Three representative HTTP operations covering path/query parameters,
   authentication, request bodies, body limits, rate limits, success headers,
   response variants, and stable errors.
-- Sync protocol version 1 frames for `hello`, snapshot/replay `welcome`, typed
-  commands, typed events, acknowledgement outcomes, protocol errors, `ping`,
-  and `pong`.
+- Frozen sync protocol version 1 compatibility frames and production protocol
+  version 2 frames for tenant/Session-scoped `hello`, snapshot/paged-replay/
+  up-to-date recovery, typed commands and events, durable acknowledgement
+  outcomes, terminal lifecycle results, protocol errors, `ping`, and `pong`.
 - Durable stream cursor and revision-chain semantics.
 
 Both frontends must produce byte-identical canonical IR for the representative
@@ -264,8 +265,9 @@ without coupling it to the TypeScript meeting SDK.
   route descriptors participate in mounting, or a conformance test proves the
   live Chi route inventory and operation metadata equal the contract. It is
   removed only after complete route and semantic parity.
-- `apps/sync/lib/chalk_sync/protocol.ex` consumes generated contract bindings
-  while room state-machine behavior remains hand-written.
+- `apps/sync/lib/chalk_sync/protocol.ex` preserves generated v1 compatibility;
+  `apps/sync/lib/chalk_sync/protocol_v2.ex` consumes the generated v2 binding
+  while Session state-machine behavior remains hand-written.
 
 Moves preserve history and avoid unrelated refactors. Generated moves and
 semantic regeneration remain reviewable as separate changes within the final
@@ -321,8 +323,8 @@ The implementation is complete when all of the following are observed:
   error family.
 - A generated HTTP client performs an authenticated request against a local API
   route and decodes its response.
-- A generated sync client completes hello/welcome, command/ack, and event flow
-  against the local Elixir sync engine.
+- The packaged v2 sync client completes hello/recovery, command/ack, event, and
+  reconnect flow against the local Elixir sync engine and Postgres authority.
 - Go and Elixir service tests prove generated bindings match runtime wire
   behavior.
 - Empty-project package installation proves the default client does not install
