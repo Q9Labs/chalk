@@ -56,6 +56,7 @@ type transcriptArtifactQuerier interface {
 
 type transcriptSourceQuerier interface {
 	UpsertRecordingTranscriptionSource(context.Context, sqlc.UpsertRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error)
+	DeleteRecordingTranscriptionSourceChunks(context.Context, pgtype.UUID) error
 	ReplaceRecordingTranscriptionSourceChunk(context.Context, sqlc.ReplaceRecordingTranscriptionSourceChunkParams) (sqlc.RecordingTranscriptionSourceChunk, error)
 	GetRecordingTranscriptionSource(context.Context, sqlc.GetRecordingTranscriptionSourceParams) (sqlc.RecordingTranscriptionSource, error)
 	ListRecordingTranscriptionSourceChunks(context.Context, sqlc.ListRecordingTranscriptionSourceChunksParams) ([]sqlc.RecordingTranscriptionSourceChunk, error)

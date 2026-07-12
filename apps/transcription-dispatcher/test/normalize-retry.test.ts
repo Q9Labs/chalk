@@ -89,6 +89,29 @@ describe("normalization and fallback", () => {
     expect(document.cues[0]?.text).toBe("one two");
   });
 
+  it("preserves segments with mixed provider word coverage", () => {
+    const document = normalizeTranscriptChunk({
+      jobId: "job",
+      sessionId: "session",
+      meetingStartMs: 0,
+      meetingEndMs: 1_000,
+      manifest: { schemaVersion: "manifest.v1", turns: [{ startMs: 0, endMs: 1_000, identity: { kind: "unknown" }, trackClass: "unknown", overlap: false }] },
+      provider: {
+        ...result,
+        text: "first second",
+        segments: [
+          { startSeconds: 0, endSeconds: 0.4, text: "first" },
+          { startSeconds: 0.5, endSeconds: 1, text: "second" },
+        ],
+        words: [{ startSeconds: 0, endSeconds: 0.4, word: "first" }],
+      },
+      attempt: 1,
+      measuredAudioMs: 1_000,
+    });
+    expect(document.cues.map((cue) => cue.text)).toEqual(["first", "second"]);
+    expect(document.cues[1]).toMatchObject({ startMs: 500, endMs: 1_000, text: "second" });
+  });
+
   it("falls back sequentially after bounded primary retry without racing", async () => {
     const calls: string[] = [];
     const primary: TranscriptionProvider = {

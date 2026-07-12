@@ -29,6 +29,9 @@ func (r TranscriptRepository) SeedSource(ctx context.Context, input transcripts.
 	if _, err := q.UpsertRecordingTranscriptionSource(ctx, sqlc.UpsertRecordingTranscriptionSourceParams{RecordingID: uuid(input.RecordingID), TenantID: uuid(input.TenantID), ManifestKey: input.ManifestKey, ManifestSha256: input.ManifestSHA256, ManifestSize: input.ManifestSize, ManifestContentType: input.ManifestContentType, SchemaVersion: 1, CommittedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}); err != nil {
 		return err
 	}
+	if err := q.DeleteRecordingTranscriptionSourceChunks(ctx, uuid(input.RecordingID)); err != nil {
+		return err
+	}
 	for _, chunk := range input.Chunks {
 		if chunk.IdentityKind == "" {
 			chunk.IdentityKind = "unknown"

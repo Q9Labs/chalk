@@ -59,6 +59,20 @@ func TestTranscriptionLifecycleSQLFencesReadinessAndTerminalProjection(t *testin
 	}
 }
 
+func TestSourceSeedSQLReplacesTheCompleteChunkSet(t *testing.T) {
+	contents, err := os.ReadFile("../../../db/queries/transcription_sources.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := string(contents)
+	if !strings.Contains(query, "-- name: DeleteRecordingTranscriptionSourceChunks :exec") {
+		t.Fatal("source seeding must delete the prior chunk set in the same transaction")
+	}
+	if !strings.Contains(query, "delete from recording_transcription_source_chunks\nwhere recording_id = $1") {
+		t.Fatal("source chunk replacement must remove every generation for the recording")
+	}
+}
+
 func querySection(contents, name string) string {
 	start := strings.Index(contents, "-- name: "+name+" ")
 	if start < 0 {

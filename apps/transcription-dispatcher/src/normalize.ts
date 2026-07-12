@@ -26,14 +26,7 @@ export function normalizeTranscriptChunk(input: {
     if (input.provider.words && input.provider.words.length > 0) {
       return cuesFromWords(segment, startMs, endMs, authoritative, allMatches, input);
     }
-    if (authoritative.length > 1) throw new AssignmentError("segment crosses multiple source track epochs");
-    const turn = authoritative[0];
-    if (!turn) {
-      if (input.sourceIdentity && input.sourceIdentity.kind !== "unknown") throw new AssignmentError("segment has no unambiguous source turn");
-      return [cueForSegment(segment.text, startMs, endMs, undefined, false, segment.confidence, input)];
-    }
-    const overlap = turn.overlap || allMatches.some((other) => other !== turn && overlaps(other, turn));
-    return [cueForSegment(segment.text, Math.max(startMs, turn.startMs), Math.min(endMs, turn.endMs), turn, overlap, segment.confidence, input)];
+    return cuesFromSegment(segment, startMs, endMs, authoritative, allMatches, input);
   });
   return {
     schemaVersion: "transcript.v1",
@@ -64,7 +57,7 @@ function cuesFromWords(segment: ProviderResult["segments"][number], segmentStart
     if (previous && identityEquals(previous.turn?.identity, turn?.identity) && previous.turn?.trackClass === turn?.trackClass) previous.words.push(word);
     else groups.push({ turn, words: [word] });
   }
-  if (groups.length === 0) return [];
+  if (groups.length === 0) return cuesFromSegment(segment, segmentStartMs, segmentEndMs, authoritative, allMatches, input);
   return groups.map((group) => {
     const first = group.words[0];
     const last = group.words.at(-1);
@@ -78,6 +71,17 @@ function cuesFromWords(segment: ProviderResult["segments"][number], segmentStart
     const overlap = Boolean(authoritativeTurn && (authoritativeTurn.overlap || allMatches.some((other) => other !== authoritativeTurn && overlaps(other, authoritativeTurn))));
     return cueForSegment(group.words.map((word) => word.word).join(" "), startMs, endMs, cueTurn, overlap, first.confidence, input);
   });
+}
+
+function cuesFromSegment(segment: ProviderResult["segments"][number], segmentStartMs: number, segmentEndMs: number, authoritative: SpeakerTurn[], allMatches: SpeakerTurn[], input: Parameters<typeof normalizeTranscriptChunk>[0]): NormalizedCue[] {
+  if (authoritative.length > 1) throw new AssignmentError("segment crosses multiple source track epochs");
+  const turn = authoritative[0];
+  if (!turn) {
+    if (input.sourceIdentity && input.sourceIdentity.kind !== "unknown") throw new AssignmentError("segment has no unambiguous source turn");
+    return [cueForSegment(segment.text, segmentStartMs, segmentEndMs, undefined, false, segment.confidence, input)];
+  }
+  const overlap = turn.overlap || allMatches.some((other) => other !== turn && overlaps(other, turn));
+  return [cueForSegment(segment.text, Math.max(segmentStartMs, turn.startMs), Math.min(segmentEndMs, turn.endMs), turn, overlap, segment.confidence, input)];
 }
 
 function isAuthoritativeTurn(turn: SpeakerTurn, identity: ManifestIdentity | undefined, trackClass: TrackClass | undefined): boolean {

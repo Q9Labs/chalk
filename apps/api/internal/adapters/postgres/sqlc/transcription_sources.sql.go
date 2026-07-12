@@ -11,6 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteRecordingTranscriptionSourceChunks = `-- name: DeleteRecordingTranscriptionSourceChunks :exec
+delete from recording_transcription_source_chunks
+where recording_id = $1
+`
+
+func (q *Queries) DeleteRecordingTranscriptionSourceChunks(ctx context.Context, recordingID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRecordingTranscriptionSourceChunks, recordingID)
+	return err
+}
+
 const getRecordingTranscriptionSource = `-- name: GetRecordingTranscriptionSource :one
 select recording_id, tenant_id, manifest_key, manifest_sha256, manifest_size, manifest_content_type, schema_version, committed_at from recording_transcription_sources where recording_id = $1 and tenant_id = $2
 `

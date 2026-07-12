@@ -548,6 +548,12 @@ func (q operationQuerier) ListRecordingTranscriptionSourceChunks(ctx context.Con
 	LogOperation(ctx, q.logger, "db.query", "ListRecordingTranscriptionSourceChunks", startedAt, err)
 	return value, err
 }
+func (q operationQuerier) DeleteRecordingTranscriptionSourceChunks(ctx context.Context, recordingID pgtype.UUID) error {
+	startedAt := time.Now()
+	err := q.next.DeleteRecordingTranscriptionSourceChunks(ctx, recordingID)
+	LogOperation(ctx, q.logger, "db.query", "DeleteRecordingTranscriptionSourceChunks", startedAt, err)
+	return err
+}
 func (q operationQuerier) ReplaceRecordingTranscriptionSourceChunk(ctx context.Context, arg sqlc.ReplaceRecordingTranscriptionSourceChunkParams) (sqlc.RecordingTranscriptionSourceChunk, error) {
 	startedAt := time.Now()
 	value, err := q.next.ReplaceRecordingTranscriptionSourceChunk(ctx, arg)

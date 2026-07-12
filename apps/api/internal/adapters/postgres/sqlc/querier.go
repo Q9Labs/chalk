@@ -40,6 +40,7 @@ type Querier interface {
 	CreateTranscriptionCleanupJob(ctx context.Context, arg CreateTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	CreateTranscriptionFinalizerJobIfReady(ctx context.Context, arg CreateTranscriptionFinalizerJobIfReadyParams) (ArtifactJob, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteRecordingTranscriptionSourceChunks(ctx context.Context, recordingID pgtype.UUID) error
 	DeleteTenantTranscription(ctx context.Context, arg DeleteTenantTranscriptionParams) (Transcription, error)
 	FinalizeTranscription(ctx context.Context, arg FinalizeTranscriptionParams) (Transcription, error)
 	FinishTranscriptionAttempt(ctx context.Context, arg FinishTranscriptionAttemptParams) (TranscriptionAttempt, error)

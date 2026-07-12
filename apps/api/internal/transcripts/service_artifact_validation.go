@@ -9,6 +9,12 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+const (
+	maxTranscriptionChunks       = 4096
+	maxArtifactJobKeyLength      = 128
+	maxRequestIdempotencyKeySize = maxArtifactJobKeyLength - len("-4095")
+)
+
 func prepareRequestInput(input *RequestInput) error {
 	if input.TenantID.IsZero() {
 		return ErrInvalidTenantID
@@ -17,7 +23,7 @@ func prepareRequestInput(input *RequestInput) error {
 		return ErrInvalidRecordingID
 	}
 	key, err := utilities.RequiredString(input.IdempotencyKey)
-	if err != nil || len(key) > 128 {
+	if err != nil || len(key) > maxRequestIdempotencyKeySize {
 		return ErrInvalidIdempotencyKey
 	}
 	for _, char := range key {
@@ -35,7 +41,7 @@ func prepareRequestInput(input *RequestInput) error {
 	if input.ManifestContentType != "application/json" {
 		return ErrInvalidManifest
 	}
-	if len(input.Chunks) == 0 || len(input.Chunks) > 4096 {
+	if len(input.Chunks) == 0 || len(input.Chunks) > maxTranscriptionChunks {
 		return ErrInvalidChunk
 	}
 	// Queue priority and retry budget are release policy, never tenant input.

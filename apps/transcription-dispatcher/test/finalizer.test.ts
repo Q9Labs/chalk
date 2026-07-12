@@ -146,6 +146,63 @@ describe("final transcript artifact dispatcher", () => {
     expect(completeFinalize).toHaveBeenCalledWith(expect.objectContaining({ provider: "mixed", model: "mixed", versionContract: "mixed" }));
   });
 
+  it("marks nested cross-chunk overlaps without overmarking same-chunk cues", () => {
+    const first = chunkDocument({
+      cues: [
+        { startMs: 0, endMs: 100, identity: { kind: "unknown" }, trackClass: "unknown", text: "long", overlap: false, provider: "cloudflare", model: "model", versionContract: "cf-1", attempt: 1 },
+        { startMs: 10, endMs: 20, identity: { kind: "unknown" }, trackClass: "unknown", text: "inner", overlap: false, provider: "cloudflare", model: "model", versionContract: "cf-1", attempt: 1 },
+      ],
+    });
+    const second = chunkDocument({
+      cues: [{ startMs: 30, endMs: 40, identity: { kind: "unknown" }, trackClass: "unknown", text: "later", overlap: false, provider: "cloudflare", model: "model", versionContract: "cf-1", attempt: 1 }],
+    });
+    const current = assignment([
+      { id: "a", start: 0, end: 100, document: first },
+      { id: "b", start: 0, end: 100, document: second },
+    ]);
+    const merged = mergeTranscriptDocuments({
+      jobId: current.jobId,
+      sessionId: current.sessionId,
+      attempt: current.attempt,
+      chunks: current.chunks.map((chunk, index) => ({ assignment: chunk, document: index === 0 ? first : second })),
+    });
+    expect(Object.fromEntries(merged.cues.map((cue) => [cue.text, cue.overlap]))).toEqual({ long: true, inner: false, later: true });
+  });
+
+  it("marks a large high-overlap merge in bounded time", () => {
+    const count = 6_000;
+    const cues = (prefix: string) =>
+      Array.from({ length: count }, (_, index) => ({
+        startMs: index,
+        endMs: index + 10_000,
+        identity: { kind: "unknown" as const },
+        trackClass: "unknown" as const,
+        text: `${prefix}-${index}`,
+        overlap: false,
+        provider: "cloudflare" as const,
+        model: "model",
+        versionContract: "cf-1",
+        attempt: 1,
+      }));
+    const first = chunkDocument({ cues: cues("first"), measuredAudioMs: 20_000 });
+    const second = chunkDocument({ cues: cues("second"), measuredAudioMs: 20_000 });
+    const current = assignment([
+      { id: "a", start: 0, end: 20_000, document: first },
+      { id: "b", start: 0, end: 20_000, document: second },
+    ]);
+    const started = performance.now();
+    const merged = mergeTranscriptDocuments({
+      jobId: current.jobId,
+      sessionId: current.sessionId,
+      attempt: current.attempt,
+      chunks: current.chunks.map((chunk, index) => ({ assignment: chunk, document: index === 0 ? first : second })),
+    });
+    const elapsedMs = performance.now() - started;
+    expect(merged.cues).toHaveLength(count * 2);
+    expect(merged.cues.every((cue) => cue.overlap)).toBe(true);
+    expect(elapsedMs).toBeLessThan(2_000);
+  }, 10_000);
+
   it("treats a conditional-put duplicate and a stale completion as safe late work", async () => {
     const document = chunkDocument();
     const current = assignment([{ id: "a", start: 0, end: 200, document }]);

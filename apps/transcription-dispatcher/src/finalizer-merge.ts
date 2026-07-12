@@ -77,18 +77,7 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
   if (!sessionId || providers.size === 0 || models.size === 0 || versionContracts.size === 0) throw new AssignmentError("finalize metadata is incomplete");
   if (cues.length > MAX_FINAL_CUES) throw new AssignmentError("finalize cue bound exceeded");
   cues.sort(compareCues);
-  for (let index = 0; index < cues.length; index += 1) {
-    const current = cues[index];
-    if (!current) continue;
-    for (let previousIndex = index - 1; previousIndex >= 0; previousIndex -= 1) {
-      const previous = cues[previousIndex];
-      if (!previous || previous.endMs <= current.startMs) break;
-      if (previous.chunkId !== current.chunkId) {
-        previous.overlap = true;
-        current.overlap = true;
-      }
-    }
-  }
+  markCrossChunkOverlaps(cues);
   const outputQuality =
     quality.segmentCount > 0 || quality.wordCount > 0 || quality.hasConfidence
       ? {
@@ -112,6 +101,86 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
     ...(hasProviderObservedDuration ? { providerObservedDurationMs } : {}),
     ...(outputQuality === undefined ? {} : { quality: outputQuality }),
   };
+}
+
+interface OverlapCandidate {
+  chunkId: string;
+  endMs: number;
+}
+
+interface OverlapSummary {
+  first?: OverlapCandidate;
+  second?: OverlapCandidate;
+}
+
+function markCrossChunkOverlaps(cues: Array<NormalizedCue & { readonly chunkId: string }>): void {
+  if (cues.length < 2) return;
+  const starts = [...new Set(cues.map((cue) => cue.startMs))].sort((left, right) => left - right);
+  const leafSummaries = new Map<number, OverlapSummary>();
+  for (const cue of cues) {
+    const existing = leafSummaries.get(cue.startMs);
+    leafSummaries.set(cue.startMs, mergeOverlapSummaries(existing, { first: { chunkId: cue.chunkId, endMs: cue.endMs } }));
+  }
+  const treeSize = nextPowerOfTwo(starts.length);
+  const tree: Array<OverlapSummary | undefined> = Array.from({ length: treeSize * 2 });
+  for (let index = 0; index < starts.length; index += 1) tree[treeSize + index] = leafSummaries.get(starts[index] as number);
+  for (let index = treeSize - 1; index > 0; index -= 1) tree[index] = mergeOverlapSummaries(tree[index * 2], tree[index * 2 + 1]);
+
+  for (const cue of cues) {
+    const count = lowerBound(starts, cue.endMs);
+    if (count === 0) continue;
+    const summary = queryOverlapPrefix(tree, treeSize, count);
+    const foreign = summary.first?.chunkId === cue.chunkId ? summary.second : summary.first;
+    if (foreign && foreign.endMs > cue.startMs) cue.overlap = true;
+  }
+}
+
+function mergeOverlapSummaries(left?: OverlapSummary, right?: OverlapSummary): OverlapSummary {
+  const candidates: OverlapCandidate[] = [];
+  for (const candidate of [left?.first, left?.second, right?.first, right?.second]) {
+    if (!candidate) continue;
+    const existing = candidates.find((entry) => entry.chunkId === candidate.chunkId);
+    if (existing) {
+      if (candidate.endMs > existing.endMs) existing.endMs = candidate.endMs;
+    } else {
+      candidates.push({ ...candidate });
+    }
+  }
+  candidates.sort((candidate, other) => other.endMs - candidate.endMs || candidate.chunkId.localeCompare(other.chunkId));
+  return {
+    ...(candidates[0] === undefined ? {} : { first: candidates[0] }),
+    ...(candidates[1] === undefined ? {} : { second: candidates[1] }),
+  };
+}
+
+function queryOverlapPrefix(tree: Array<OverlapSummary | undefined>, treeSize: number, count: number): OverlapSummary {
+  let left = treeSize;
+  let right = treeSize + count;
+  let result: OverlapSummary | undefined;
+  while (left < right) {
+    if (left % 2 === 1) result = mergeOverlapSummaries(result, tree[left++]);
+    if (right % 2 === 1) result = mergeOverlapSummaries(result, tree[--right]);
+    left = Math.floor(left / 2);
+    right = Math.floor(right / 2);
+  }
+  return result ?? {};
+}
+
+function lowerBound(values: readonly number[], target: number): number {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if ((values[middle] as number) < target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+function nextPowerOfTwo(value: number): number {
+  let result = 1;
+  while (result < value) result *= 2;
+  return result;
 }
 
 function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: FinalizeChunkAssignment, expectedSessionId: string | undefined, maxCues: number, maxTextChars: number): NormalizedTranscriptDocument {

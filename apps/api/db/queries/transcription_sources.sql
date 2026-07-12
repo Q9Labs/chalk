@@ -26,6 +26,10 @@ on conflict (recording_id, generation, chunk_index) do update set
     checksum = excluded.checksum, size = excluded.size, content_type = excluded.content_type
 returning *;
 
+-- name: DeleteRecordingTranscriptionSourceChunks :exec
+delete from recording_transcription_source_chunks
+where recording_id = $1;
+
 -- name: GetRecordingTranscriptionSource :one
 select * from recording_transcription_sources where recording_id = $1 and tenant_id = $2;
 

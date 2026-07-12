@@ -100,6 +100,10 @@ type guardedRecordingService struct{}
 
 type guardedRecordingDownloadService struct{}
 
+type recordingDownloadService struct {
+	create func(context.Context, objectstorage.CreateDownloadURLInput) (objectstorage.SignedURL, error)
+}
+
 type guardedRecordingObjectService struct{}
 
 type guardedTranscriptService struct{}
@@ -117,6 +121,10 @@ type recordingService struct {
 
 type transcriptService struct {
 	create func(context.Context, transcripts.CreateInput) (transcripts.Transcript, error)
+}
+
+type transcriptArtifactService struct {
+	get func(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error)
 }
 
 type aiTranscriptionService struct {
@@ -308,6 +316,13 @@ func (guardedRecordingDownloadService) CreateDownloadURL(context.Context, object
 	return objectstorage.SignedURL{}, errors.New("unexpected create download url call")
 }
 
+func (s recordingDownloadService) CreateDownloadURL(ctx context.Context, input objectstorage.CreateDownloadURLInput) (objectstorage.SignedURL, error) {
+	if s.create == nil {
+		return objectstorage.SignedURL{}, errors.New("unexpected create download url call")
+	}
+	return s.create(ctx, input)
+}
+
 func (guardedRecordingObjectService) GetObject(context.Context, string) (objectstorage.ObjectReader, error) {
 	return objectstorage.ObjectReader{}, errors.New("unexpected get object call")
 }
@@ -380,6 +395,25 @@ func (s transcriptService) List(context.Context, utilities.ID, utilities.ID, pag
 
 func (s transcriptService) Update(context.Context, utilities.ID, utilities.ID, transcripts.UpdateInput) (transcripts.Transcript, error) {
 	return transcripts.Transcript{}, errors.New("unexpected update transcript call")
+}
+
+func (s transcriptArtifactService) Request(context.Context, transcripts.RequestInput) (transcripts.Transcript, transcripts.Job, error) {
+	return transcripts.Transcript{}, transcripts.Job{}, errors.New("unexpected request transcript call")
+}
+
+func (s transcriptArtifactService) Get(ctx context.Context, tenantID, transcriptID utilities.ID) (transcripts.Transcript, error) {
+	if s.get == nil {
+		return transcripts.Transcript{}, errors.New("unexpected get transcript artifact call")
+	}
+	return s.get(ctx, tenantID, transcriptID)
+}
+
+func (transcriptArtifactService) List(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (transcripts.TranscriptList, error) {
+	return transcripts.TranscriptList{}, errors.New("unexpected list transcript artifact call")
+}
+
+func (transcriptArtifactService) Delete(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
+	return transcripts.Transcript{}, errors.New("unexpected delete transcript artifact call")
 }
 
 func (guardedAITranscriptionService) Transcribe(context.Context, ai.TranscribeInput) (ai.Transcription, error) {
@@ -1657,6 +1691,41 @@ func TestCreateRecordingDownloadURLRejectsUnsupportedProvider(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
 	}
 	assertErrorCode(t, res, "invalid_storage_provider")
+}
+
+func TestCreateTranscriptDownloadURLMapsInvalidExpiration(t *testing.T) {
+	const tenantID = "11111111-1111-1111-1111-111111111111"
+	const transcriptID = "55555555-5555-4555-8555-555555555555"
+	artifactKey := "tenants/" + tenantID + "/transcripts/" + transcriptID + "/attempts/1/document.json"
+
+	res := authenticatedRequestWithOptionsAndBody(
+		t,
+		http.MethodPost,
+		"/v1/tenants/"+tenantID+"/transcripts/"+transcriptID+"/download-url",
+		`{"expires_in_seconds":300}`,
+		httpapi.Options{
+			TranscriptArtifacts: transcriptArtifactService{
+				get: func(context.Context, utilities.ID, utilities.ID) (transcripts.Transcript, error) {
+					return transcripts.Transcript{
+						ID:          mustTenantID(t, transcriptID),
+						TenantID:    mustTenantID(t, tenantID),
+						Status:      transcripts.StatusComplete,
+						ArtifactKey: &artifactKey,
+					}, nil
+				},
+			},
+			RecordingDownloads: recordingDownloadService{
+				create: func(context.Context, objectstorage.CreateDownloadURLInput) (objectstorage.SignedURL, error) {
+					return objectstorage.SignedURL{}, objectstorage.ErrInvalidURLExpiration
+				},
+			},
+		},
+	)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusBadRequest)
+	}
+	assertErrorCode(t, res, "invalid_url_expiration")
 }
 
 func TestCreateRecordingDownloadURLRejectsForeignStorageKey(t *testing.T) {
