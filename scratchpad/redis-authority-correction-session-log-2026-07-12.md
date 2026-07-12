@@ -13,3 +13,5 @@
 
 ## 2026-07-12 15:41:00 PKT
 - The full Sync gate stopped at `mix format --check-formatted` because unrelated `apps/sync/lib/chalk_sync/transport/router.ex` lines 38–40 are unformatted. The scoped format check and authority-claim scan remain clean.
+
+- Kept the infrastructure spec in commit 79a5f778 as authorized. Corrected the pre-existing router formatting blocker; apps/sync/scripts/gate.sh passed (234 tests, 0 failures, 30 skipped). Committed formatting fix.

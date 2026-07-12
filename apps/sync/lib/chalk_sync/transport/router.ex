@@ -35,7 +35,9 @@ defmodule ChalkSync.Transport.Router do
       observability_context = ChalkSync.Observability.context(conn.req_headers)
 
       conn
-      |> WebSockAdapter.upgrade(ChalkSync.Transport.Socket, %{observability: observability_context},
+      |> WebSockAdapter.upgrade(
+        ChalkSync.Transport.Socket,
+        %{observability: observability_context},
         timeout: 60_000
       )
       |> halt()
