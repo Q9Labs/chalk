@@ -1,6 +1,7 @@
 import type { ActiveReaction, InteractionState, ReactionEmoji } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UseInteractionsReturn {
   isHandRaised: boolean;
@@ -16,9 +17,7 @@ export interface UseInteractionsReturn {
 export function useInteractions(): UseInteractionsReturn {
   const session = useSession();
   const { interactions } = session;
-  const [state, setState] = useState<InteractionState>(() => interactions.getState());
-
-  useEffect(() => interactions.subscribe(setState), [interactions]);
+  const state = useManagerState<InteractionState>(interactions);
 
   const raiseHand = useCallback(() => interactions.raiseHand(), [interactions]);
   const lowerHand = useCallback(() => interactions.lowerHand(), [interactions]);
@@ -29,13 +28,13 @@ export function useInteractions(): UseInteractionsReturn {
     () => ({
       isHandRaised: state.isHandRaised,
       raisedHands: state.raisedHands,
-      raisedHandCount: interactions.raisedHandCount,
+      raisedHandCount: state.raisedHandCount,
       activeReactions: state.activeReactions,
       raiseHand,
       lowerHand,
       toggleHand,
       sendReaction,
     }),
-    [state, interactions, raiseHand, lowerHand, toggleHand, sendReaction],
+    [state, raiseHand, lowerHand, toggleHand, sendReaction],
   );
 }

@@ -1,6 +1,7 @@
-import type { WhiteboardCursor, WhiteboardSnapshot, WhiteboardState, WhiteboardUpdate } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { WhiteboardCursor, WhiteboardSnapshot, WhiteboardUpdate } from "../internal/core";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { createWhiteboardStore } from "./whiteboard-store";
 
 export interface UseWhiteboardReturn {
   isOpen: boolean;
@@ -25,13 +26,9 @@ export interface UseWhiteboardReturn {
 export function useWhiteboard(): UseWhiteboardReturn {
   const session = useSession();
   const { whiteboard } = session;
-  const [state, setState] = useState<WhiteboardState>(() => whiteboard.getState());
-  const [latestUpdate, setLatestUpdate] = useState<WhiteboardUpdate | null>(null);
-  const [latestSnapshot, setLatestSnapshot] = useState<WhiteboardSnapshot | null>(null);
-
-  useEffect(() => whiteboard.subscribe(setState), [whiteboard]);
-  useEffect(() => whiteboard.on("update", (update: WhiteboardUpdate) => setLatestUpdate(update)), [whiteboard]);
-  useEffect(() => whiteboard.on("snapshot", (snapshot: WhiteboardSnapshot) => setLatestSnapshot(snapshot)), [whiteboard]);
+  const store = useMemo(() => createWhiteboardStore(whiteboard), [whiteboard]);
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const { state, latestUpdate, latestSnapshot } = snapshot;
 
   const open = useCallback(() => whiteboard.open(), [whiteboard]);
   const close = useCallback(() => whiteboard.close(), [whiteboard]);

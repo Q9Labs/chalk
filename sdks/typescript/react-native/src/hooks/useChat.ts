@@ -1,6 +1,7 @@
 import type { ChatMessage, ChatState, ReactionEmoji } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UseChatReturn {
   messages: readonly ChatMessage[];
@@ -17,9 +18,7 @@ export interface UseChatReturn {
 export function useChat(): UseChatReturn {
   const session = useSession();
   const { chat } = session;
-  const [state, setState] = useState<ChatState>(() => chat.getState());
-
-  useEffect(() => chat.subscribe(setState), [chat]);
+  const state = useManagerState<ChatState>(chat);
 
   const sendMessage = useCallback((content: string) => chat.sendMessage(content), [chat]);
   const reactToMessage = useCallback((messageId: string, emoji: ReactionEmoji) => chat.reactToMessage(messageId, emoji), [chat]);

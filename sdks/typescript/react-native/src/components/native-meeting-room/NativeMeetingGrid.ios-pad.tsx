@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { FlatList, StyleSheet, Text, View, useWindowDimensions, LayoutAnimation, type DimensionValue } from "react-native";
 import { Theme } from "../../ui/theme";
 import { NativeMediaView } from "../NativeMediaView";
@@ -44,16 +44,23 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
     tileHeight = 180; // Stable minimum height for scrolling state
   }
 
-  useEffect(() => {
-    LayoutAnimation.configureNext({
-      duration: 250,
-      update: { type: LayoutAnimation.Types.spring, springDamping: 0.8 },
-    });
-  }, [count]);
+  const configureLayoutAnimation = useCallback(
+    (node: View | null) => {
+      if (node === null) {
+        return;
+      }
+
+      LayoutAnimation.configureNext({
+        duration: 250,
+        update: { type: LayoutAnimation.Types.spring, springDamping: 0.8 },
+      });
+    },
+    [count],
+  );
 
   if (count === 0) {
     return (
-      <View style={styles.emptyState}>
+      <View ref={configureLayoutAnimation} style={styles.emptyState}>
         <Text style={styles.emptyEyebrow}>Meeting ready</Text>
         <Text style={styles.emptyTitle}>You're the first one here</Text>
         <Text style={styles.emptyCopy}>Invite others to join the space.</Text>
@@ -63,15 +70,15 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
 
   if (count === 3) {
     return (
-      <View style={styles.meshContainer}>
+      <View ref={configureLayoutAnimation} style={styles.meshContainer}>
         <View style={styles.meshContentFlat}>
           <View style={styles.trioTop}>
-            {participants.slice(0, 2).map((p, i) => (
-              <ParticipantTile key={`${p.id}-${i}`} participant={p} width={(containerWidth - GAP) / 2} height="100%" />
+            {participants.slice(0, 2).map((participant) => (
+              <ParticipantTile key={participant.id} participant={participant} width={(containerWidth - GAP) / 2} height="100%" />
             ))}
           </View>
           <View style={styles.trioBottom}>
-            <ParticipantTile key={`${participants[2]!.id}-2`} participant={participants[2]!} width={containerWidth} height="100%" />
+            <ParticipantTile participant={participants[2]!} width={containerWidth} height="100%" />
           </View>
         </View>
       </View>
@@ -79,7 +86,7 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
   }
 
   return (
-    <View style={styles.meshContainer}>
+    <View ref={configureLayoutAnimation} style={styles.meshContainer}>
       <FlatList
         data={participants}
         numColumns={layout.cols}
@@ -88,8 +95,8 @@ export function NativeMeetingGridIosPad({ participants }: NativeMeetingGridProps
         contentContainerStyle={[styles.meshContent, !isScrollEnabled && { flex: 1, justifyContent: "center" }]}
         columnWrapperStyle={layout.cols > 1 ? styles.meshRow : undefined}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item: participant, index }) => <ParticipantTile key={`${participant.id}-${index}`} participant={participant} width={tileWidth} height={tileHeight} />}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        renderItem={({ item: participant }) => <ParticipantTile participant={participant} width={tileWidth} height={tileHeight} />}
+        keyExtractor={(participant) => participant.id}
       />
     </View>
   );

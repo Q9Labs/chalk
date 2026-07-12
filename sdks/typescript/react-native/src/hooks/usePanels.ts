@@ -1,6 +1,7 @@
 import type { PanelType, UIState } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UsePanelsReturn {
   activePanel: PanelType;
@@ -15,9 +16,7 @@ export interface UsePanelsReturn {
 export function usePanels(): UsePanelsReturn {
   const session = useSession();
   const { ui } = session;
-  const [state, setState] = useState<UIState>(() => ui.getState());
-
-  useEffect(() => ui.subscribe(setState), [ui]);
+  const state = useManagerState<UIState>(ui);
 
   const openPanel = useCallback((panel: PanelType) => ui.openPanel(panel), [ui]);
   const closePanel = useCallback(() => ui.closePanel(), [ui]);

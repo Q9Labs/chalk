@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import { AppState, NativeModules, Platform } from "react-native";
 import { shouldAutoReadClipboard } from "./runtime";
+import { createClipboardTextStore, type ClipboardTextStore } from "./clipboard-store";
 
 export interface NativeClipboardReader {
   hasStringAsync(): Promise<boolean>;
@@ -13,67 +14,23 @@ export interface UseClipboardInviteSuggestionOptions {
 }
 
 export function useClipboardInviteSuggestion(currentInput: string, { clipboard, getSuggestion }: UseClipboardInviteSuggestionOptions): string | null {
-  const [clipboardText, setClipboardText] = useState<string | null>(null);
+  const runtimeInfo: unknown = NativeModules.ChalkRuntimeInfo;
+  const isIosSimulator = typeof runtimeInfo === "object" && runtimeInfo !== null && "isSimulator" in runtimeInfo && runtimeInfo.isSimulator === true;
+  const shouldReadClipboard = shouldAutoReadClipboard({
+    platform: Platform.OS,
+    isSimulator: isIosSimulator,
+  });
+  const clipboardStoreRef = useRef<ClipboardTextStore | null>(null);
+  const currentStore = clipboardStoreRef.current;
+  const clipboardStore =
+    currentStore !== null && currentStore.clipboard === clipboard && currentStore.shouldReadClipboard === shouldReadClipboard
+      ? currentStore
+      : (clipboardStoreRef.current = createClipboardTextStore({
+          clipboard,
+          shouldReadClipboard,
+          subscribeToAppState: (listener) => AppState.addEventListener("change", listener),
+        }));
+  const clipboardText = useSyncExternalStore(clipboardStore.subscribe, clipboardStore.getSnapshot, clipboardStore.getSnapshot);
 
-  useEffect(() => {
-    let isMounted = true;
-    const isIosSimulator = (NativeModules.ChalkRuntimeInfo as { isSimulator?: boolean } | undefined)?.isSimulator === true;
-    const shouldReadClipboard = shouldAutoReadClipboard({
-      platform: Platform.OS,
-      isSimulator: isIosSimulator,
-    });
-
-    const refreshClipboardText = async () => {
-      if (!shouldReadClipboard) {
-        if (isMounted) {
-          setClipboardText(null);
-        }
-        return;
-      }
-
-      try {
-        const hasString = await clipboard.hasStringAsync();
-        if (!isMounted) {
-          return;
-        }
-
-        if (!hasString) {
-          setClipboardText(null);
-          return;
-        }
-
-        const nextClipboardText = await clipboard.getStringAsync();
-        if (!isMounted) {
-          return;
-        }
-
-        setClipboardText(nextClipboardText || null);
-      } catch {
-        if (isMounted) {
-          setClipboardText(null);
-        }
-      }
-    };
-
-    void refreshClipboardText();
-
-    if (!shouldReadClipboard) {
-      return () => {
-        isMounted = false;
-      };
-    }
-
-    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") {
-        void refreshClipboardText();
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      appStateSubscription.remove();
-    };
-  }, [clipboard]);
-
-  return useMemo(() => getSuggestion(clipboardText, currentInput), [clipboardText, currentInput, getSuggestion]);
+  return getSuggestion(clipboardText, currentInput);
 }

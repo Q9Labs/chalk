@@ -14,30 +14,33 @@ import { NativeFaceAvatar } from "./NativeFaceAvatar";
 import { hasNativeRtcVideoView, NativeRtcVideoView } from "./NativeRtcVideoView";
 import type { NativePreJoinLobbyProps } from "./NativePreJoinLobby";
 import { useNativePreJoinLobbyController } from "./native-prejoin/useNativePreJoinLobbyController";
-import { useEffect, useMemo, useRef } from "react";
+import { createAnimationRefController, type AnimationRefCallback } from "./native-animation-controller";
+import { useMemo, useRef } from "react";
 
 export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false, onCancel, ...props }: NativePreJoinLobbyProps): React.JSX.Element {
   const controller = useNativePreJoinLobbyController({ ...props, joinDisabled });
   const canRenderPreview = hasNativeRtcVideoView();
   const entryAnim = useRef(new Animated.Value(0)).current;
   const islandAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.stagger(300, [
-      Animated.spring(entryAnim, {
-        toValue: 1,
-        tension: 20,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-      Animated.spring(islandAnim, {
-        toValue: 1,
-        tension: 25,
-        friction: 9,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [entryAnim, islandAnim]);
+  const animationRef = useRef<AnimationRefCallback<unknown> | null>(null);
+  const attachEntryAnimation =
+    animationRef.current ??
+    (animationRef.current = createAnimationRefController<unknown>(() => [
+      Animated.stagger(300, [
+        Animated.spring(entryAnim, {
+          toValue: 1,
+          tension: 20,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.spring(islandAnim, {
+          toValue: 1,
+          tension: 25,
+          friction: 9,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]));
 
   const canJoin = controller.displayName.trim().length > 0 && !joinDisabled && !controller.isSubmitting;
   const avatarColors = useMemo(() => getParticipantAvatarRecipe(controller.displayName || "guest").colors, [controller.displayName]);
@@ -62,7 +65,7 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
       <View style={styles.hudLayer}>
         {/* Top HUD */}
         <View style={styles.topHud}>
-          <Pressable onPress={onCancel} style={({ pressed }) => [styles.backPuck, pressed && styles.pressed]}>
+          <Pressable accessibilityLabel="Cancel and leave lobby" accessibilityRole="button" onPress={onCancel} style={({ pressed }) => [styles.backPuck, pressed && styles.pressed]}>
             <HugeiconsIcon icon={ArrowLeft01Icon} size={22} color="white" />
           </Pressable>
           <View style={styles.roomInfo}>
@@ -77,6 +80,7 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
 
         {/* Bottom HUD */}
         <Animated.View
+          ref={attachEntryAnimation}
           style={[
             styles.bottomHud,
             {
@@ -89,10 +93,24 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
           <View style={styles.launchPad}>
             {/* Media Controls Integrated */}
             <View style={styles.mediaGroup}>
-              <Pressable disabled={controller.simulatorMediaDisabled} onPress={controller.toggleAudio} style={({ pressed }) => [styles.mediaToggle, !controller.audioEnabled && styles.toggleOff, pressed && styles.pressed]}>
+              <Pressable
+                accessibilityLabel={controller.audioEnabled ? "Mute microphone" : "Unmute microphone"}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: controller.simulatorMediaDisabled, selected: controller.audioEnabled }}
+                disabled={controller.simulatorMediaDisabled}
+                onPress={controller.toggleAudio}
+                style={({ pressed }) => [styles.mediaToggle, !controller.audioEnabled && styles.toggleOff, pressed && styles.pressed]}
+              >
                 <HugeiconsIcon icon={controller.audioEnabled ? Mic01Icon : MicOff01Icon} size={22} color="white" />
               </Pressable>
-              <Pressable disabled={controller.simulatorMediaDisabled} onPress={controller.toggleVideo} style={({ pressed }) => [styles.mediaToggle, !controller.videoEnabled && styles.toggleOff, pressed && styles.pressed]}>
+              <Pressable
+                accessibilityLabel={controller.videoEnabled ? "Turn camera off" : "Turn camera on"}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: controller.simulatorMediaDisabled, selected: controller.videoEnabled }}
+                disabled={controller.simulatorMediaDisabled}
+                onPress={controller.toggleVideo}
+                style={({ pressed }) => [styles.mediaToggle, !controller.videoEnabled && styles.toggleOff, pressed && styles.pressed]}
+              >
                 <HugeiconsIcon icon={controller.videoEnabled ? Video01Icon : VideoOffIcon} size={22} color="white" />
               </Pressable>
             </View>
@@ -102,6 +120,7 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
             {/* Identity Field */}
             <View style={[styles.identityArea, controller.isInputFocused && styles.identityAreaFocused]}>
               <TextInput
+                accessibilityLabel="Your name"
                 onChangeText={controller.setDisplayName}
                 onFocus={() => controller.setInputFocused(true)}
                 onBlur={() => controller.setInputFocused(false)}
@@ -114,13 +133,16 @@ export function NativePreJoinLobbyIosPad({ roomName, error, joinDisabled = false
                 onSubmitEditing={controller.handleJoin}
               />
               {controller.displayName.length > 0 && (
-                <Pressable onPress={() => controller.setDisplayName("")} style={styles.clearAction}>
+                <Pressable accessibilityLabel="Clear name" accessibilityRole="button" onPress={() => controller.setDisplayName("")} style={styles.clearAction}>
                   <HugeiconsIcon icon={CancelCircleIcon} size={18} color="rgba(255,255,255,0.4)" />
                 </Pressable>
               )}
             </View>
 
             <Pressable
+              accessibilityLabel="Join meeting"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canJoin }}
               disabled={!canJoin}
               onPress={controller.handleJoin}
               style={({ pressed }) => [

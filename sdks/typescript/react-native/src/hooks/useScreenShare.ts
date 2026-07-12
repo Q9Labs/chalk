@@ -1,6 +1,7 @@
 import type { ScreenShareOptions, ScreenShareState } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UseScreenShareReturn {
   isActive: boolean;
@@ -17,29 +18,27 @@ export interface UseScreenShareReturn {
 export function useScreenShare(): UseScreenShareReturn {
   const session = useSession();
   const { screenShare } = session;
-  const [state, setState] = useState<ScreenShareState>(() => screenShare.getState());
-
-  useEffect(() => screenShare.subscribe(setState), [screenShare]);
+  const state = useManagerState<ScreenShareState>(screenShare);
 
   const start = useCallback((options?: ScreenShareOptions) => screenShare.start(options), [screenShare]);
   const stop = useCallback(() => screenShare.stop(), [screenShare]);
   const toggle = useCallback(
     async (options?: ScreenShareOptions) => {
-      if (screenShare.isLocalSharing) {
+      if (state.isLocalSharing) {
         await screenShare.stop();
         return false;
       }
 
       return screenShare.start(options);
     },
-    [screenShare],
+    [screenShare, state.isLocalSharing],
   );
 
   return useMemo(
     () => ({
       isActive: state.isActive,
       isStarting: state.isStarting,
-      isLocalSharing: screenShare.isLocalSharing,
+      isLocalSharing: state.isLocalSharing,
       sharerParticipantId: state.sharerParticipantId,
       videoTrack: state.videoTrack,
       audioTrack: state.audioTrack,
@@ -47,6 +46,6 @@ export function useScreenShare(): UseScreenShareReturn {
       stop,
       toggle,
     }),
-    [state, screenShare, start, stop, toggle],
+    [state, start, stop, toggle],
   );
 }

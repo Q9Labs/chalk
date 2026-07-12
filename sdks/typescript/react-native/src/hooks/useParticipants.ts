@@ -1,6 +1,7 @@
 import type { ParticipantState } from "../internal/core";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 type RoomParticipant = ParticipantState["participants"][number];
 
@@ -17,9 +18,7 @@ export interface UseParticipantsReturn {
 export function useParticipants(): UseParticipantsReturn {
   const session = useSession();
   const { participants: manager } = session;
-  const [state, setState] = useState<ParticipantState>(() => manager.getState());
-
-  useEffect(() => manager.subscribe(setState), [manager]);
+  const state = useManagerState<ParticipantState>(manager);
 
   const getParticipant = useMemo(() => (id: string) => manager.getParticipant(id), [manager]);
   const updateDisplayName = useMemo(() => (name: string) => session.updateOwnDisplayName(name), [session]);

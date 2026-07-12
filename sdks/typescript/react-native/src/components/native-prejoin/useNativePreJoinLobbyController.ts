@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { usePreJoinPreview } from "../../hooks/usePreJoinPreview";
 import { isIosSimulator } from "../../utils/ios-simulator";
-import type { NativeJoinSettings, NativePreJoinLobbyProps } from "../NativePreJoinLobby";
+import type { NativePreJoinLobbyProps } from "../NativePreJoinLobby";
+import { NativePreJoinLobbyControllerStore } from "./native-prejoin-lobby-controller-store";
 
 export interface UseNativePreJoinLobbyControllerResult {
   displayName: string;
@@ -28,71 +29,39 @@ export function useNativePreJoinLobbyController({
   onJoin,
 }: Pick<NativePreJoinLobbyProps, "role" | "userName" | "initialAudioEnabled" | "initialVideoEnabled" | "joinDisabled" | "onJoin">): UseNativePreJoinLobbyControllerResult {
   const simulatorMediaDisabled = isIosSimulator();
-  const [displayName, setDisplayName] = useState(userName);
-  const [audioEnabled, setAudioEnabled] = useState(initialAudioEnabled && !simulatorMediaDisabled);
-  const [videoEnabled, setVideoEnabled] = useState(initialVideoEnabled && !simulatorMediaDisabled);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isInputFocused, setInputFocused] = useState(false);
-  const submitLatchRef = useRef(false);
-  const { previewError, previewStream } = usePreJoinPreview(videoEnabled);
-
-  useEffect(() => {
-    if (simulatorMediaDisabled) {
-      setAudioEnabled(false);
-      setVideoEnabled(false);
-    }
-  }, [simulatorMediaDisabled]);
-
-  useEffect(() => {
-    if (!joinDisabled) {
-      submitLatchRef.current = false;
-      setIsSubmitting(false);
-    }
-  }, [joinDisabled]);
-
-  const toggleAudio = () => {
-    if (simulatorMediaDisabled) {
-      return;
-    }
-    setAudioEnabled((current) => !current);
-  };
-
-  const toggleVideo = () => {
-    if (simulatorMediaDisabled) {
-      return;
-    }
-    setVideoEnabled((current) => !current);
-  };
-
-  const handleJoin = () => {
-    if (joinDisabled || isSubmitting || submitLatchRef.current) {
-      return;
-    }
-
-    submitLatchRef.current = true;
-    setIsSubmitting(true);
-
-    const settings: NativeJoinSettings = {
-      displayName,
-      audioEnabled,
-      videoEnabled,
-    };
-    onJoin(settings);
-  };
+  const store = useMemo(
+    () =>
+      new NativePreJoinLobbyControllerStore({
+        displayName: userName,
+        initialAudioEnabled,
+        initialVideoEnabled,
+        simulatorMediaDisabled,
+        joinDisabled,
+        onJoin,
+      }),
+    [],
+  );
+  store.update({
+    simulatorMediaDisabled,
+    joinDisabled,
+    onJoin,
+  });
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const { previewError, previewStream } = usePreJoinPreview(snapshot.videoEnabled);
 
   return {
-    displayName,
-    audioEnabled,
-    videoEnabled,
-    isSubmitting,
-    isInputFocused,
+    displayName: snapshot.displayName,
+    audioEnabled: snapshot.audioEnabled,
+    videoEnabled: snapshot.videoEnabled,
+    isSubmitting: snapshot.isSubmitting,
+    isInputFocused: snapshot.isInputFocused,
     previewError,
     previewStream,
     simulatorMediaDisabled,
-    setDisplayName,
-    setInputFocused,
-    toggleAudio,
-    toggleVideo,
-    handleJoin,
+    setDisplayName: store.setDisplayName,
+    setInputFocused: store.setInputFocused,
+    toggleAudio: store.toggleAudio,
+    toggleVideo: store.toggleVideo,
+    handleJoin: store.handleJoin,
   };
 }

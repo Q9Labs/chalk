@@ -1,6 +1,7 @@
 import type { MediaDevice, MediaState } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UseDevicesReturn {
   devices: readonly MediaDevice[];
@@ -21,10 +22,8 @@ export interface UseDevicesReturn {
 export function useDevices(): UseDevicesReturn {
   const session = useSession();
   const { media } = session;
-  const [state, setState] = useState<MediaState>(() => media.getState());
+  const state = useManagerState<MediaState>(media);
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => media.subscribe(setState), [media]);
 
   const selectCamera = useCallback((deviceId: string) => media.selectCamera(deviceId), [media]);
   const selectMicrophone = useCallback((deviceId: string) => media.selectMicrophone(deviceId), [media]);
@@ -42,9 +41,9 @@ export function useDevices(): UseDevicesReturn {
   return useMemo(
     () => ({
       devices: state.devices,
-      cameras: media.cameras,
-      microphones: media.microphones,
-      speakers: media.speakers,
+      cameras: state.cameras,
+      microphones: state.microphones,
+      speakers: state.speakers,
       selectedCamera: state.selectedCamera,
       selectedMicrophone: state.selectedMicrophone,
       selectedSpeaker: state.selectedSpeaker,
@@ -55,6 +54,6 @@ export function useDevices(): UseDevicesReturn {
       refreshDevices,
       undoDeviceChange,
     }),
-    [state, media, isLoading, selectCamera, selectMicrophone, selectSpeaker, refreshDevices, undoDeviceChange],
+    [state, isLoading, selectCamera, selectMicrophone, selectSpeaker, refreshDevices, undoDeviceChange],
   );
 }

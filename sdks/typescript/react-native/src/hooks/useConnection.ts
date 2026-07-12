@@ -1,6 +1,7 @@
 import type { JoinOptions, LeaveOptions, RoomState } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UseConnectionReturn {
   status: RoomState["status"];
@@ -15,9 +16,7 @@ export interface UseConnectionReturn {
 export function useConnection(): UseConnectionReturn {
   const session = useSession();
   const { room } = session;
-  const [state, setState] = useState<RoomState>(() => room.getState());
-
-  useEffect(() => room.subscribe(setState), [room]);
+  const state = useManagerState<RoomState>(room);
 
   const join = useCallback(async (roomId: string, options: JoinOptions) => session.join(roomId, options), [session]);
 

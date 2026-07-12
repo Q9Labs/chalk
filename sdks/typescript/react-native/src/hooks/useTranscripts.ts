@@ -1,7 +1,8 @@
 import type { Transcript } from "../internal/core";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useSession } from "../context/chalk-native-provider";
 import { useConnection } from "./useConnection";
+import { createTranscriptStore, type TranscriptRoom } from "./transcript-store";
 
 export interface UseTranscriptsReturn {
   transcripts: Transcript[];
@@ -12,40 +13,19 @@ export interface UseTranscriptsReturn {
 export function useTranscripts(): UseTranscriptsReturn {
   const session = useSession();
   const { isConnected } = useConnection();
-  const [transcripts, setTranscripts] = useState<Transcript[]>([]);
-  const [isAvailable, setIsAvailable] = useState(false);
-
-  useEffect(() => {
-    const room = session.room.getRoom();
-    if (!room || !isConnected) {
-      return;
-    }
-
-    const existing = room.transcripts;
-    if (existing.length > 0) {
-      setTranscripts(existing);
-      setIsAvailable(true);
-    }
-
-    const handleTranscript = (transcript: Transcript) => {
-      setIsAvailable(true);
-      setTranscripts((previous) => [...previous, transcript]);
-    };
-
-    room.on("transcript", handleTranscript);
-    return () => {
-      room.off("transcript", handleTranscript);
-    };
-  }, [session, isConnected]);
+  const room: TranscriptRoom | null = session.room.getRoom() ?? null;
+  const store = useMemo(() => createTranscriptStore(), [session]);
+  store.setSource(room, isConnected);
+  const subscribe = useCallback((listener: () => void) => store.subscribeToSource(listener, room, isConnected), [store, room, isConnected]);
+  const { transcripts, isAvailable } = useSyncExternalStore(subscribe, store.getSnapshot, store.getSnapshot);
+  const clearTranscripts = useCallback(() => store.clear(), [store]);
 
   return useMemo(
     () => ({
       transcripts,
       isAvailable,
-      clearTranscripts: () => {
-        setTranscripts([]);
-      },
+      clearTranscripts,
     }),
-    [transcripts, isAvailable],
+    [transcripts, isAvailable, clearTranscripts],
   );
 }

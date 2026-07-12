@@ -1,34 +1,24 @@
-import { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { useRef } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../ui/theme";
 import type { NativeJoiningLoadingScreenProps } from "./NativeJoiningLoadingScreen";
 import { ChalkLogoElements } from "./ChalkLogoElements";
+import { createNativeJoiningLoadingAnimation, type NativeJoiningLoadingAnimation } from "./native-joining-loading-animation";
 
 export function NativeJoiningLoadingScreenIosPhone({ message = "Preparing meeting..." }: NativeJoiningLoadingScreenProps): React.JSX.Element {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    // Subtle Pulse: Organic breathing
-    Animated.loop(Animated.sequence([Animated.timing(pulseAnim, { toValue: 1.1, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }), Animated.timing(pulseAnim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true })])).start();
-
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim, pulseAnim]);
+  const animationRef = useRef<NativeJoiningLoadingAnimation | null>(null);
+  const animation = animationRef.current ?? (animationRef.current = createNativeJoiningLoadingAnimation());
 
   return (
     <View style={styles.screen}>
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+      <Animated.View ref={animation.ref} style={[styles.content, { opacity: animation.fadeAnim }]}>
         <View style={styles.illustrationFrame}>
           <Animated.View
             style={[
               styles.glow,
               {
-                transform: [{ scale: pulseAnim }],
-                opacity: pulseAnim.interpolate({ inputRange: [1, 1.1], outputRange: [0.12, 0.18] }),
+                transform: [{ scale: animation.pulseAnim }],
+                opacity: animation.pulseAnim.interpolate({ inputRange: [1, 1.1], outputRange: [0.12, 0.18] }),
               },
             ]}
           />

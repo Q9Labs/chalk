@@ -1,5 +1,4 @@
-import type { ReactionEmoji } from "../../internal/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { Alert, type AlertButton, Share } from "react-native";
 import { useChalkSession, useSession } from "../../context/chalk-native-provider";
 import { useChat } from "../../hooks/useChat";
@@ -18,11 +17,12 @@ import { buildChalkInviteLink } from "../../utils/build-chalk-invite-link";
 import { isIosSimulator } from "../../utils/ios-simulator";
 import type { NativeMeetingRoomProps } from "../NativeMeetingRoom";
 import { buildNativeMeetingRoomDiagnosticsSnapshot, type NativeMeetingRoomDiagnosticsSnapshot } from "./diagnostics";
+import { NativeMeetingRoomControllerStore } from "./native-meeting-room-controller-store";
 import { resolveNativeScreenShareAvailability } from "./screen-share-availability";
-import type { NativeMeetingPanelName, RoomParticipant } from "./types";
+import type { NativeMeetingPanelName } from "./types";
 import { useNativeMeetingRoomDerived } from "./useNativeMeetingRoomDerived";
 
-const isDevRuntime = () => (globalThis as { __DEV__?: boolean }).__DEV__ === true;
+const isDevRuntime = () => typeof __DEV__ !== "undefined" && __DEV__ === true;
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -107,28 +107,17 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   const panels = usePanels();
   const whiteboard = useWhiteboard();
   const derived = useNativeMeetingRoomDerived({
-    participants: participants.participants as readonly RoomParticipant[],
-    localParticipant: participants.localParticipant as RoomParticipant | null,
+    participants: participants.participants,
+    localParticipant: participants.localParticipant,
     screenShare,
     isWhiteboardOpen: whiteboard.isOpen,
   });
 
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const [chatDraft, setChatDraft] = useState("");
-  const [localPanel, setLocalPanel] = useState<NativeMeetingPanelName | null>(null);
-  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [secondsElapsed, setSecondsElapsed] = useState(0);
-  const lastDiagnosticsSignatureRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSecondsElapsed((current) => current + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const store = useMemo(() => new NativeMeetingRoomControllerStore(), []);
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
   const isHost = (participants.localParticipant?.role ?? "participant") === "host";
-  const panel = localPanel ?? (panels.activePanel as NativeMeetingPanelName | null);
+  const panel = snapshot.localPanel ?? panels.activePanel;
   const selfName = participants.localParticipant?.displayName || "Guest";
   const isMuted = !media.isAudioEnabled;
   const isCameraOff = !media.isVideoEnabled;
@@ -178,25 +167,12 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
     [canChat, canHandRaise, canParticipants, canRecording, canReactions, canSettings, canTranscripts, canWhiteboard, chat.unreadCount, isHost, participants.participantCount, raisedHandCount, screenShare.isActive, screenShare.isLocalSharing, screenShare.sharerParticipantId, screenShareAvailability],
   );
 
-  useEffect(() => {
-    if (panel === "chat") {
-      chat.markAsRead();
-    }
-  }, [chat.markAsRead, panel]);
-
-  useEffect(() => {
-    if (!onDiagnosticsChange) {
-      return;
-    }
-
-    const nextSignature = JSON.stringify(roomDiagnostics);
-    if (lastDiagnosticsSignatureRef.current === nextSignature) {
-      return;
-    }
-
-    lastDiagnosticsSignatureRef.current = nextSignature;
-    onDiagnosticsChange(roomDiagnostics);
-  }, [onDiagnosticsChange, roomDiagnostics]);
+  store.sync({
+    panel,
+    markChatAsRead: chat.markAsRead,
+    diagnostics: roomDiagnostics,
+    onDiagnosticsChange,
+  });
 
   const runAsync = useCallback(async (action: () => void | Promise<unknown>) => {
     try {
@@ -225,23 +201,23 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
 
   const openPanel = useCallback(
     (nextPanel: NativeMeetingPanelName) => {
-      setActionsOpen(false);
+      store.setActionsOpen(false);
       if (nextPanel === "transcripts") {
         panels.closePanel();
-        setLocalPanel("transcripts");
+        store.setLocalPanel("transcripts");
         return;
       }
 
-      setLocalPanel(null);
+      store.setLocalPanel(null);
       panels.openPanel(nextPanel);
     },
-    [panels],
+    [panels, store],
   );
 
   const closePanel = useCallback(() => {
-    setLocalPanel(null);
+    store.setLocalPanel(null);
     panels.closePanel();
-  }, [panels]);
+  }, [panels, store]);
 
   const handleInviteParticipants = useCallback(() => {
     void runAsync(async () => {
@@ -270,11 +246,11 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
     handRaised,
     raisedHandCount,
     activeReactions,
-    secondsElapsed,
-    formattedDuration: formatDuration(secondsElapsed),
-    actionsOpen,
-    reactionPickerOpen,
-    chatDraft,
+    secondsElapsed: snapshot.secondsElapsed,
+    formattedDuration: formatDuration(snapshot.secondsElapsed),
+    actionsOpen: snapshot.actionsOpen,
+    reactionPickerOpen: snapshot.reactionPickerOpen,
+    chatDraft: snapshot.chatDraft,
     participantCount: participants.participantCount,
     canChat,
     canParticipants,
@@ -297,9 +273,9 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
     panels,
     whiteboard,
     derived,
-    setActionsOpen,
-    setReactionPickerOpen,
-    setChatDraft,
+    setActionsOpen: store.setActionsOpen,
+    setReactionPickerOpen: store.setReactionPickerOpen,
+    setChatDraft: store.setChatDraft,
     handleLeave,
     openPanel,
     closePanel,
@@ -358,14 +334,14 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       if (!canReactions) {
         return;
       }
-      interactions.sendReaction(emoji as ReactionEmoji);
+      interactions.sendReaction(emoji);
     },
     sendChatMessage: () => {
-      if (!chatDraft.trim()) {
+      if (!snapshot.chatDraft.trim()) {
         return;
       }
-      chat.sendMessage(chatDraft.trim());
-      setChatDraft("");
+      chat.sendMessage(snapshot.chatDraft.trim());
+      store.setChatDraft("");
     },
     refreshDevices: () => {
       void runAsync(devices.refreshDevices);

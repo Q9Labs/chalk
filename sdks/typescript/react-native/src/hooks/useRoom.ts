@@ -1,6 +1,7 @@
 import type { RoomState } from "../internal/core";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UseRoomReturn {
   roomId: string | null;
@@ -14,9 +15,7 @@ export interface UseRoomReturn {
 export function useRoom(): UseRoomReturn {
   const session = useSession();
   const { room } = session;
-  const [state, setState] = useState<RoomState>(() => room.getState());
-
-  useEffect(() => room.subscribe(setState), [room]);
+  const state = useManagerState<RoomState>(room);
 
   return useMemo(
     () => ({

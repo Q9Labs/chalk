@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { FlatList, StyleSheet, Text, View, useWindowDimensions, type DimensionValue } from "react-native";
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Theme } from "../../ui/theme";
 import { NativeMediaView } from "../NativeMediaView";
 import type { RoomParticipant } from "./types";
+import { createNativeMeetingPageStore, type NativeMeetingPageStore } from "./native-meeting-page-store";
+import { nativeMeetingGridKey } from "./native-meeting-grid-keys";
 
 export interface NativeMeetingGridProps {
   participants: readonly RoomParticipant[];
@@ -27,7 +29,8 @@ function buildWideParticipantRows(participants: readonly RoomParticipant[], colu
 export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMeetingGridProps): React.JSX.Element {
   const { width, height } = useWindowDimensions();
   const isTablet = width >= 768;
-  const [activePage, setActivePage] = useState(0);
+  const pageStoreRef = useRef<NativeMeetingPageStore | null>(null);
+  const pageStore = pageStoreRef.current ?? (pageStoreRef.current = createNativeMeetingPageStore());
 
   const finalPages = useMemo(() => {
     if (!isTablet) {
@@ -42,13 +45,21 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
     return pages;
   }, [gridPages, isTablet, participants]);
 
-  useEffect(() => {
-    setActivePage((currentPage) => Math.min(currentPage, Math.max(0, finalPages.length - 1)));
-  }, [finalPages.length]);
+  const requestedPage = useSyncExternalStore(pageStore.subscribe, pageStore.getSnapshot, pageStore.getSnapshot);
+  const activePage = Math.min(requestedPage, Math.max(0, finalPages.length - 1));
+  const activePageKey = nativeMeetingGridKey("indicator", finalPages[activePage] ?? []);
+  const clampPageRef = useCallback(
+    (node: View | null) => {
+      if (node !== null) {
+        pageStore.clampToPageCount(finalPages.length);
+      }
+    },
+    [finalPages.length, pageStore],
+  );
 
   if (participants.length === 0) {
     return (
-      <View style={styles.emptyState}>
+      <View ref={clampPageRef} style={styles.emptyState}>
         <Text style={styles.emptyEyebrow}>Meeting ready</Text>
         <Text style={styles.emptyTitle}>You're the first one here</Text>
         <Text style={styles.emptyCopy}>Others will appear when they join. Invite someone to get started.</Text>
@@ -58,7 +69,7 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
 
   if (participants.length === 1) {
     return (
-      <View style={styles.singleTile}>
+      <View ref={clampPageRef} style={styles.singleTile}>
         <ParticipantTile participant={participants[0]!} />
       </View>
     );
@@ -67,9 +78,9 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
   if (!isTablet && participants.length <= 4) {
     if (participants.length === 2) {
       return (
-        <View style={styles.compactTwoUp}>
-          {participants.map((participant, index) => (
-            <ParticipantTile key={`${participant.id}-${index}`} participant={participant} />
+        <View ref={clampPageRef} style={styles.compactTwoUp}>
+          {participants.map((participant) => (
+            <ParticipantTile key={participant.id} participant={participant} />
           ))}
         </View>
       );
@@ -77,7 +88,7 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
 
     if (participants.length === 3) {
       return (
-        <View style={styles.compactThree}>
+        <View ref={clampPageRef} style={styles.compactThree}>
           <View style={styles.compactThreeTop}>
             <ParticipantTile participant={participants[0]!} />
           </View>
@@ -91,7 +102,7 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
 
     if (participants.length === 4) {
       return (
-        <View style={styles.compactFour}>
+        <View ref={clampPageRef} style={styles.compactFour}>
           <View style={styles.gridRow}>
             <ParticipantTile participant={participants[0]!} />
             <ParticipantTile participant={participants[1]!} />
@@ -106,14 +117,14 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
   }
 
   return (
-    <View style={styles.pagedContainer}>
+    <View ref={clampPageRef} style={styles.pagedContainer}>
       <FlatList
         data={finalPages}
         horizontal
-        keyExtractor={(_, index) => `page-${index + 1}`}
+        keyExtractor={(page) => nativeMeetingGridKey("page", page)}
         onMomentumScrollEnd={(event) => {
           const measuredPageWidth = Math.max(1, event.nativeEvent.layoutMeasurement.width);
-          setActivePage(Math.round(event.nativeEvent.contentOffset.x / measuredPageWidth));
+          pageStore.setPage(Math.round(event.nativeEvent.contentOffset.x / measuredPageWidth));
         }}
         pagingEnabled
         snapToInterval={width}
@@ -131,12 +142,12 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
           return (
             <View style={[styles.page, { width }]}>
               <View style={styles.gridContainer}>
-                {rows.map((row, rowIndex) => (
-                  <View key={`row-${rowIndex}`} style={styles.gridRow}>
-                    {row.map((participant, columnIndex) => (
-                      <ParticipantTile key={`${participant.id}-${columnIndex}`} participant={participant} />
+                {rows.map((row) => (
+                  <View key={nativeMeetingGridKey("row", row)} style={styles.gridRow}>
+                    {row.map((participant) => (
+                      <ParticipantTile key={participant.id} participant={participant} />
                     ))}
-                    {row.length < columns && Array.from({ length: columns - row.length }).map((_, index) => <View key={`filler-${index}`} style={[styles.gridTile, { backgroundColor: "transparent" }]} />)}
+                    {row.length < columns && Array.from({ length: columns - row.length }, (_, fillerSlot) => fillerSlot + row.length).map((slot) => <View key={nativeMeetingGridKey(`filler-${slot}`, row)} style={[styles.gridTile, { backgroundColor: "transparent" }]} />)}
                   </View>
                 ))}
                 {isTablet && rows.length < (width > height ? 2 : 3) ? <View style={{ flex: (width > height ? 2 : 3) - rows.length }} /> : null}
@@ -148,8 +159,8 @@ export function NativeMeetingGridIosPhone({ participants, gridPages }: NativeMee
 
       {finalPages.length > 1 ? (
         <View style={styles.pageIndicators}>
-          {finalPages.map((_, index) => (
-            <View key={`indicator-${index + 1}`} style={[styles.pageIndicator, index === activePage && styles.pageIndicatorActive]} />
+          {finalPages.map((page) => (
+            <View key={nativeMeetingGridKey("indicator", page)} style={[styles.pageIndicator, nativeMeetingGridKey("indicator", page) === activePageKey && styles.pageIndicatorActive]} />
           ))}
         </View>
       ) : null}

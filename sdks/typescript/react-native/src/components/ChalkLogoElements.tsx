@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { Animated } from "react-native";
 import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
+import { createAnimationRefController, type AnimationRefCallback } from "./native-animation-controller";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -15,44 +16,36 @@ export function ChalkLogoElements({ size = 64 }: ChalkLogoElementsProps): React.
   const particle3 = useRef(new Animated.Value(0)).current;
   const arcProgress = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    const createParticleAnimation = (animation: Animated.Value, delay: number) =>
-      Animated.loop(
+  const animationRef = useRef<AnimationRefCallback<unknown> | null>(null);
+  const attachAnimations =
+    animationRef.current ??
+    (animationRef.current = createAnimationRefController<unknown>(() => {
+      const createParticleAnimation = (animation: Animated.Value, delay: number) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(animation, {
+              toValue: 1,
+              duration: 2500,
+              useNativeDriver: true,
+            }),
+          ]),
+        );
+
+      const particleAnimations = [createParticleAnimation(particle1, 0), createParticleAnimation(particle2, 800), createParticleAnimation(particle3, 1600)];
+      const arcAnimation = Animated.loop(
         Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(animation, {
+          Animated.timing(arcProgress, {
             toValue: 1,
-            duration: 2500,
+            duration: 3500,
             useNativeDriver: true,
           }),
+          Animated.delay(2500),
         ]),
       );
 
-    const arcAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(arcProgress, {
-          toValue: 1,
-          duration: 3500,
-          useNativeDriver: true,
-        }),
-        Animated.delay(2500),
-      ]),
-    );
-
-    const particleAnimations = [createParticleAnimation(particle1, 0), createParticleAnimation(particle2, 800), createParticleAnimation(particle3, 1600)];
-
-    for (const animation of particleAnimations) {
-      animation.start();
-    }
-    arcAnimation.start();
-
-    return () => {
-      for (const animation of particleAnimations) {
-        animation.stop();
-      }
-      arcAnimation.stop();
-    };
-  }, [arcProgress, particle1, particle2, particle3]);
+      return [...particleAnimations, arcAnimation];
+    }));
 
   const createParticleProps = (animation: Animated.Value, xOffset: number) => ({
     opacity: animation.interpolate({
@@ -76,7 +69,7 @@ export function ChalkLogoElements({ size = 64 }: ChalkLogoElementsProps): React.
   });
 
   return (
-    <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <Svg ref={attachAnimations} width={size} height={size} viewBox="0 0 64 64" fill="none">
       <AnimatedPath
         d="M 12 16 Q 32 -2 52 16"
         stroke="#7EC8E3"

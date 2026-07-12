@@ -1,6 +1,7 @@
 import type { MediaDevice, MediaState, VideoBackgroundEffect } from "../internal/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSession } from "../context/chalk-native-provider";
+import { useManagerState } from "./external-store";
 
 export interface UseMediaReturn {
   isVideoEnabled: boolean;
@@ -31,9 +32,7 @@ export interface UseMediaReturn {
 export function useMedia(): UseMediaReturn {
   const session = useSession();
   const { media } = session;
-  const [state, setState] = useState<MediaState>(() => media.getState());
-
-  useEffect(() => media.subscribe(setState), [media]);
+  const state = useManagerState<MediaState>(media);
 
   const toggleVideo = useCallback(() => media.toggleVideo(), [media]);
   const toggleAudio = useCallback(() => media.toggleAudio(), [media]);
