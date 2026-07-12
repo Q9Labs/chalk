@@ -1,346 +1,339 @@
-import { describe, expect, it, vi } from "vitest";
-import { NORMAL_FLUSH_DELAY_MS, TelemetryDelivery } from "./delivery";
-import { createJourneyIntakeExporter, encodedByteLength, journeyIntakeBody, MAX_KEEPALIVE_BODY_BYTES, TelemetryExportError, type TelemetryExporter } from "./exporter";
-import type { TelemetryStorage } from "./storage";
+import { Effect } from "effect";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { NORMAL_FLUSH_DELAY_MS, type TelemetryDeliveryEffectService } from "./delivery";
+import { encodedByteLength, journeyIntakeBody, MAX_KEEPALIVE_BODY_BYTES, TelemetryExportError } from "./exporter";
+import { makeDeliveryHarness, makeScriptedExporter, makeScriptedStorage, type DeliveryHarness } from "./test-support";
 import type { TelemetryEvent } from "./types";
 
-describe("TelemetryDelivery", () => {
-  it("batches normal events emitted across event-loop turns", async () => {
-    vi.useFakeTimers();
-    try {
-      const exporter = vi.fn().mockResolvedValue({ accepted_count: 2, duplicate_count: 0 });
-      const delivery = normalBatchDelivery(exporter);
+const harnesses: DeliveryHarness[] = [];
 
-      delivery.enqueue(event("first"));
-      await vi.advanceTimersByTimeAsync(0);
-      delivery.enqueue(event("second"));
-      await vi.advanceTimersByTimeAsync(NORMAL_FLUSH_DELAY_MS - 1);
+afterEach(async () => {
+  await Promise.all(harnesses.splice(0).map((harness) => harness.dispose()));
+});
 
-      expect(exporter).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(1);
+describe("TelemetryDeliveryService", () => {
+  it("batches normal events emitted across event-loop turns with TestClock", async () => {
+    const exporter = makeScriptedExporter();
+    const harness = deliveryHarness(exporter);
+    await harness.ready();
 
-      expect(exporter).toHaveBeenCalledOnce();
-      expect(exporter.mock.calls[0]?.[0].map((item) => item.event_id)).toEqual(["first", "second"]);
-    } finally {
-      vi.useRealTimers();
-    }
+    await enqueue(harness.delivery, event("first"));
+    await harness.settle();
+    await enqueue(harness.delivery, event("second"));
+    await harness.adjust(NORMAL_FLUSH_DELAY_MS - 1);
+
+    expect(exporter.calls).toEqual([]);
+    await harness.adjust(1);
+
+    expect(exporter.calls.map(exportedIds)).toEqual([["first", "second"]]);
   });
 
-  it("flushes a full normal batch without waiting for the batching window", async () => {
-    vi.useFakeTimers();
-    try {
-      const exporter = vi.fn().mockResolvedValue({ accepted_count: 3, duplicate_count: 0 });
-      const delivery = normalBatchDelivery(exporter);
+  it("flushes a full normal batch without advancing TestClock", async () => {
+    const exporter = makeScriptedExporter();
+    const harness = deliveryHarness(exporter);
+    await harness.ready();
 
-      delivery.enqueue(event("first"));
-      delivery.enqueue(event("second"));
-      delivery.enqueue(event("third"));
-      await vi.advanceTimersByTimeAsync(0);
+    await enqueue(harness.delivery, event("first"));
+    await enqueue(harness.delivery, event("second"));
+    const flushNow = harness.delivery.enqueueUnsafe(event("third"));
+    await harness.run(flushNow ? harness.delivery.flush() : harness.delivery.persist());
 
-      expect(exporter).toHaveBeenCalledOnce();
-      expect(exporter.mock.calls[0]?.[0].map((item) => item.event_id)).toEqual(["first", "second", "third"]);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(exporter.calls.map(exportedIds)).toEqual([["first", "second", "third"]]);
   });
 
-  it("flushes explicitly without waiting for the normal batching window", async () => {
-    await withPendingNormalEvent(async (delivery, exporter) => {
-      await delivery.flush();
-      await vi.advanceTimersByTimeAsync(NORMAL_FLUSH_DELAY_MS);
+  it("flushes explicitly without advancing the normal batching window", async () => {
+    const exporter = makeScriptedExporter();
+    const harness = deliveryHarness(exporter);
+    await harness.ready();
+    await enqueue(harness.delivery, event("first"));
 
-      expect(exporter).toHaveBeenCalledOnce();
-      expect(exporter.mock.calls[0]?.[0].map((item) => item.event_id)).toEqual(["first"]);
-    });
+    await harness.run(harness.delivery.flush());
+    await harness.adjust(NORMAL_FLUSH_DELAY_MS);
+
+    expect(exporter.calls.map(exportedIds)).toEqual([["first"]]);
   });
 
-  it("cancels a pending normal batch when disposed", async () => {
-    await withPendingNormalEvent(async (delivery, exporter) => {
-      delivery.dispose();
-      await vi.advanceTimersByTimeAsync(NORMAL_FLUSH_DELAY_MS);
+  it("cancels a pending normal batch when the service is disposed", async () => {
+    const exporter = makeScriptedExporter();
+    const harness = deliveryHarness(exporter);
+    await harness.ready();
+    await enqueue(harness.delivery, event("first"));
 
-      expect(exporter).not.toHaveBeenCalled();
-    });
+    await harness.run(harness.delivery.dispose());
+    await harness.adjust(NORMAL_FLUSH_DELAY_MS);
+
+    expect(exporter.calls).toEqual([]);
   });
 
   it("keeps the newest events and signals dropped work", async () => {
     const onDrop = vi.fn();
-    const delivery = new TelemetryDelivery({ batchSize: 2, enabled: true, maxQueueSize: 1, maxTimelineEntries: 2, onDrop, retryDelayMs: 100 });
-    delivery.enqueue(event("first"));
-    delivery.enqueue(event("second"));
-    await Promise.resolve();
+    const harness = deliveryHarness(makeScriptedExporter(), { maxQueueSize: 1, onDrop });
+    await harness.ready();
 
-    expect(delivery.getPendingEvents().map((item) => item.event_id)).toEqual(["second"]);
-    expect(delivery.getHealth()).toMatchObject({ droppedEvents: 1, queueDepth: 1 });
-    expect(onDrop).toHaveBeenCalledOnce();
+    await enqueue(harness.delivery, event("first"));
+    await enqueue(harness.delivery, event("second"));
+
+    expect(harness.delivery.getPendingEventsUnsafe().map((item) => item.event_id)).toEqual(["second"]);
+    expect(harness.delivery.getHealthUnsafe()).toMatchObject({ droppedEvents: 1, queueDepth: 1 });
+    expect(onDrop).toHaveBeenCalledWith([expect.objectContaining({ event_id: "first" })]);
   });
 
   it("does not evict an in-flight batch or discard newer events after export", async () => {
-    let releaseFirstExport: (() => void) | undefined;
-    const firstExport = new Promise<void>((resolve) => {
-      releaseFirstExport = resolve;
-    });
-    const exported: string[][] = [];
-    const exporter = vi.fn(async (batch: readonly { event_id: string }[]) => {
-      exported.push(batch.map((item) => item.event_id));
-      if (exported.length === 1) await firstExport;
-    });
+    const exporter = makeScriptedExporter();
+    const releaseFirstExport = exporter.waitNext();
     const onDrop = vi.fn();
-    const delivery = new TelemetryDelivery({ batchSize: 2, enabled: true, exporter, maxQueueSize: 3, maxTimelineEntries: 4, onDrop, retryDelayMs: 100 });
-    delivery.enqueue(event("first"));
-    delivery.enqueue(event("second"));
-    delivery.enqueue(event("third"));
-    await vi.waitFor(() => expect(exporter).toHaveBeenCalledOnce());
+    const harness = deliveryHarness(exporter, { batchSize: 2, maxQueueSize: 3, onDrop });
+    await harness.ready();
 
-    delivery.enqueue(event("fourth"));
-    expect(delivery.getPendingEvents().map((item) => item.event_id)).toEqual(["first", "second", "fourth"]);
-    releaseFirstExport?.();
-    await delivery.flush();
+    await enqueue(harness.delivery, event("first"));
+    await enqueue(harness.delivery, event("second"));
+    const activeFlush = harness.run(harness.delivery.flush());
+    await harness.settle();
+    await enqueue(harness.delivery, event("third"));
+    await enqueue(harness.delivery, event("fourth"));
 
-    expect(exported).toEqual([["first", "second"], ["fourth"]]);
-    expect(delivery.getPendingEvents()).toEqual([]);
-    expect(delivery.getHealth()).toMatchObject({ droppedEvents: 1, exportedEvents: 3, queueDepth: 0 });
+    expect(harness.delivery.getPendingEventsUnsafe().map((item) => item.event_id)).toEqual(["first", "second", "fourth"]);
+    releaseFirstExport();
+    await activeFlush;
+    await harness.run(harness.delivery.flush());
+
+    expect(exporter.calls.map(exportedIds)).toEqual([["first", "second"], ["fourth"]]);
+    expect(harness.delivery.getPendingEventsUnsafe()).toEqual([]);
+    expect(harness.delivery.getHealthUnsafe()).toMatchObject({ droppedEvents: 1, exportedEvents: 3, queueDepth: 0 });
     expect(onDrop).toHaveBeenCalledWith([expect.objectContaining({ event_id: "third" })]);
   });
 
   it("merges restored events before the first persistence write", async () => {
-    let releaseLoad: ((events: readonly TelemetryEvent[]) => void) | undefined;
-    const load = new Promise<readonly TelemetryEvent[]>((resolve) => {
-      releaseLoad = resolve;
-    });
-    const save = vi.fn(async () => undefined);
-    const storage: TelemetryStorage = { load: () => load, save };
-    const delivery = new TelemetryDelivery({ batchSize: 2, enabled: true, maxQueueSize: 3, maxTimelineEntries: 4, retryDelayMs: 100, storage });
+    const storage = makeScriptedStorage({ waitForLoad: true });
+    const harness = deliveryHarness(makeScriptedExporter(), {}, storage);
 
-    delivery.enqueue(event("new"));
-    releaseLoad?.([event("restored")]);
-    await delivery.flush();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await enqueue(harness.delivery, event("new"));
+    storage.resolveLoad([event("restored")]);
+    await harness.ready();
 
-    expect(save.mock.calls[0]?.[0].map((item) => item.event_id)).toEqual(["restored", "new"]);
-    expect(delivery.getPendingEvents().map((item) => item.event_id)).toEqual(["restored", "new"]);
+    expect(storage.saves[0]?.map((item) => item.event_id)).toEqual(["restored", "new"]);
+    expect(harness.delivery.getPendingEventsUnsafe().map((item) => item.event_id)).toEqual(["restored", "new"]);
   });
 
-  it("delivers restored and concurrent parent-child events in correlation-compatible requests", async () => {
-    let restore: ((events: readonly TelemetryEvent[]) => void) | undefined;
-    const storage: TelemetryStorage = {
-      load: () => new Promise<readonly TelemetryEvent[]>((resolve) => (restore = resolve)),
-      save: async () => undefined,
-    };
-    const fetchMock = vi.fn(async () => Response.json({ accepted_count: 1, duplicate_count: 0 }, { status: 202 }));
-    const exporter = createJourneyIntakeExporter({ baseUrl: "https://api.chalk.test", fetch: fetchMock as typeof fetch });
-    const delivery = new TelemetryDelivery({ batchSize: 3, enabled: true, exporter, maxQueueSize: 8, maxTimelineEntries: 8, retryDelayMs: 100, storage });
+  it("delivers restored and concurrent parent-child events in correlation-compatible batches", async () => {
+    const exporter = makeScriptedExporter();
+    const storage = makeScriptedStorage({ waitForLoad: true });
+    const harness = deliveryHarness(exporter, { batchSize: 8, maxQueueSize: 8, maxTimelineEntries: 8 }, storage);
     const parent = journeyContext("00000000-0000-4000-8000-000000000001", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
     const child = journeyContext("00000000-0000-4000-8000-000000000002", "00-4bf92f3577b34da6a3ce929d0e0e4736-0af7651916cd43dd-01");
 
-    delivery.enqueue(eventWithContext("concurrent-parent", parent));
-    delivery.enqueue(eventWithContext("concurrent-child", child));
-    restore?.([eventWithContext("restored-parent", parent), eventWithContext("restored-child", child)]);
-    await delivery.flush();
+    await enqueue(harness.delivery, eventWithContext("concurrent-parent", parent));
+    await enqueue(harness.delivery, eventWithContext("concurrent-child", child));
+    storage.resolveLoad([eventWithContext("restored-parent", parent), eventWithContext("restored-child", child)]);
+    await harness.ready();
+    await harness.run(harness.delivery.flush());
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(requestContext(fetchMock.mock.calls[0]?.[1])).toEqual(parent);
-    expect(requestEvents(fetchMock.mock.calls[0]?.[1])).toEqual(["restored-parent", "concurrent-parent"]);
-    expect(requestContext(fetchMock.mock.calls[1]?.[1])).toEqual(child);
-    expect(requestEvents(fetchMock.mock.calls[1]?.[1])).toEqual(["restored-child", "concurrent-child"]);
+    expect(exporter.calls.map(exportedIds)).toEqual([
+      ["restored-parent", "concurrent-parent"],
+      ["restored-child", "concurrent-child"],
+    ]);
+    expect(exporter.calls.map((call) => call.events[0]?.journey_id)).toEqual([parent.journeyId, child.journeyId]);
+    expect(exporter.calls.map((call) => call.events[0]?.traceparent)).toEqual([parent.traceparent, child.traceparent]);
   });
 
   it("reports restored events discarded by the queue bound", async () => {
     const onDrop = vi.fn();
-    const storage: TelemetryStorage = {
-      load: async () => [event("oldest"), event("older"), event("newest")],
-      save: async () => undefined,
-    };
-    const delivery = new TelemetryDelivery({ batchSize: 2, enabled: true, maxQueueSize: 2, maxTimelineEntries: 4, onDrop, retryDelayMs: 100, storage });
+    const storage = makeScriptedStorage({ load: [event("oldest"), event("older"), event("newest")] });
+    const harness = deliveryHarness(makeScriptedExporter(), { maxQueueSize: 2, onDrop }, storage);
+    await harness.ready();
 
-    await delivery.flush();
-    await vi.waitFor(() => expect(onDrop).toHaveBeenCalledOnce());
-
-    expect(delivery.getPendingEvents().map((item) => item.event_id)).toEqual(["older", "newest"]);
-    expect(delivery.getHealth()).toMatchObject({ droppedEvents: 1, queueDepth: 2, status: "idle" });
+    expect(harness.delivery.getPendingEventsUnsafe().map((item) => item.event_id)).toEqual(["older", "newest"]);
+    expect(harness.delivery.getHealthUnsafe()).toMatchObject({ droppedEvents: 1, queueDepth: 2, status: "idle" });
     expect(onDrop).toHaveBeenCalledWith([expect.objectContaining({ event_id: "oldest" })]);
   });
 
   it("discards a permanently rejected batch and continues with newer events", async () => {
-    const exporter = vi.fn().mockRejectedValueOnce(new TelemetryExportError(400)).mockResolvedValueOnce({ accepted_count: 1, duplicate_count: 0 });
+    const exporter = makeScriptedExporter();
+    exporter.failNext(new TelemetryExportError(400), false);
     const onDrop = vi.fn();
-    const delivery = new TelemetryDelivery({ batchSize: 1, enabled: true, exporter, maxQueueSize: 3, maxTimelineEntries: 4, onDrop, retryDelayMs: 100 });
-    delivery.enqueue(event("invalid"));
-    delivery.enqueue(event("valid"));
+    const harness = deliveryHarness(exporter, { batchSize: 1, onDrop });
+    await harness.ready();
+    await enqueue(harness.delivery, event("invalid"));
+    await enqueue(harness.delivery, event("valid"));
 
-    await delivery.flush();
+    await harness.run(harness.delivery.flush());
 
-    expect(exporter).toHaveBeenCalledTimes(2);
-    expect(delivery.getPendingEvents()).toEqual([]);
-    expect(delivery.getHealth()).toMatchObject({ droppedEvents: 1, exportedEvents: 1, failedBatches: 1, queueDepth: 0 });
+    expect(exporter.calls.map(exportedIds)).toEqual([["invalid"], ["valid"]]);
+    expect(harness.delivery.getPendingEventsUnsafe()).toEqual([]);
+    expect(harness.delivery.getHealthUnsafe()).toMatchObject({ droppedEvents: 1, exportedEvents: 1, failedBatches: 1, queueDepth: 0 });
     expect(onDrop).toHaveBeenCalledWith([expect.objectContaining({ event_id: "invalid" })]);
   });
 
   it("does not schedule another export when disposed during a failed batch", async () => {
-    vi.useFakeTimers();
-    let rejectExport: ((error: Error) => void) | undefined;
-    let markExportStarted: (() => void) | undefined;
-    const exportStarted = new Promise<void>((resolve) => {
-      markExportStarted = resolve;
-    });
-    const exporter = vi.fn(
-      () =>
-        new Promise<void>((_resolve, reject) => {
-          rejectExport = reject;
-          markExportStarted?.();
-        }),
-    );
-    const delivery = new TelemetryDelivery({ batchSize: 1, enabled: true, exporter, maxQueueSize: 3, maxTimelineEntries: 4, retryDelayMs: 10 });
+    const exporter = makeScriptedExporter();
+    const releaseFailure = exporter.waitNext({ cause: new TelemetryExportError(503), retriable: true });
+    const harness = deliveryHarness(exporter, { batchSize: 1, retryDelayMs: 10 });
+    await harness.ready();
+    await enqueue(harness.delivery, event("slow-failure"));
 
-    delivery.enqueue(event("slow-failure"));
-    const activeFlush = delivery.flush();
-    await exportStarted;
-    expect(exporter).toHaveBeenCalledOnce();
-    delivery.dispose();
-    rejectExport?.(new TelemetryExportError(503));
+    const activeFlush = harness.run(harness.delivery.flush());
+    await harness.settle();
+    await harness.run(harness.delivery.dispose());
+    releaseFailure();
     await activeFlush;
-    await vi.advanceTimersByTimeAsync(100);
+    await harness.adjust(100);
 
-    expect(exporter).toHaveBeenCalledOnce();
-    expect(delivery.getPendingEvents().map((item) => item.event_id)).toEqual(["slow-failure"]);
-    vi.useRealTimers();
+    expect(exporter.calls.map(exportedIds)).toEqual([["slow-failure"]]);
+    expect(harness.delivery.getPendingEventsUnsafe().map((item) => item.event_id)).toEqual(["slow-failure"]);
   });
 
-  it("holds newly enqueued events until a scheduled retry is due", async () => {
-    vi.useFakeTimers();
-    const exporter = vi.fn().mockRejectedValueOnce(new TelemetryExportError(503)).mockResolvedValue({ accepted_count: 2, duplicate_count: 0 });
-    const delivery = new TelemetryDelivery({ batchSize: 2, enabled: true, exporter, maxQueueSize: 3, maxTimelineEntries: 4, retryDelayMs: 100 });
+  it("holds newly enqueued events until a TestClock-scheduled retry is due", async () => {
+    const exporter = makeScriptedExporter();
+    exporter.failNext(new TelemetryExportError(503), true);
+    const harness = deliveryHarness(exporter, { batchSize: 2, retryDelayMs: 100 });
+    await harness.ready();
+    await enqueue(harness.delivery, event("first"));
 
-    delivery.enqueue(event("first"));
-    await delivery.flush();
-    delivery.enqueue(event("second"));
-    await Promise.resolve();
+    await harness.run(harness.delivery.flush());
+    await enqueue(harness.delivery, event("second"));
+    await harness.adjust(99);
 
-    expect(exporter).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(99);
-    expect(exporter).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(exporter).toHaveBeenCalledTimes(2);
-    expect(delivery.getPendingEvents()).toEqual([]);
-    vi.useRealTimers();
+    expect(exporter.calls.map(exportedIds)).toEqual([["first"]]);
+    await harness.adjust(1);
+
+    expect(exporter.calls.map(exportedIds)).toEqual([["first"], ["first", "second"]]);
+    expect(harness.delivery.getPendingEventsUnsafe()).toEqual([]);
   });
 
   it("prioritizes the newest terminal event in a standalone keepalive batch", async () => {
-    const exporter = vi.fn().mockRejectedValueOnce(new TelemetryExportError(503)).mockResolvedValue({ accepted_count: 1, duplicate_count: 0 });
-    const delivery = new TelemetryDelivery({ batchSize: 1, enabled: true, exporter, maxQueueSize: 4, maxTimelineEntries: 4, retryDelayMs: 10_000 });
-    delivery.enqueue(event("oldest"));
-    delivery.enqueue(event("middle"));
-    await delivery.flush();
-    delivery.enqueue(terminalEvent("terminal"));
+    const exporter = makeScriptedExporter();
+    exporter.failNext(new TelemetryExportError(503), true);
+    const harness = deliveryHarness(exporter, { batchSize: 1, retryDelayMs: 10_000 });
+    await harness.ready();
+    await enqueue(harness.delivery, event("oldest"));
+    await enqueue(harness.delivery, event("middle"));
+    await harness.run(harness.delivery.flush());
+    await enqueue(harness.delivery, terminalEvent("terminal"));
 
-    await delivery.flush({ keepalive: true });
+    await harness.run(harness.delivery.flush({ keepalive: true }));
 
-    expect(exporter.mock.calls[1]).toEqual([[expect.objectContaining({ event_id: "terminal", name: "journey.terminal" })], { keepalive: true }]);
+    expect(exporter.calls[1]).toMatchObject({ events: [expect.objectContaining({ event_id: "terminal", name: "journey.terminal" })], options: { keepalive: true } });
   });
 
   it("keeps the newest child terminal prioritized without mixing its parent context", async () => {
-    const exporter = vi.fn().mockRejectedValueOnce(new TelemetryExportError(503)).mockResolvedValue({ accepted_count: 2, duplicate_count: 0 });
-    const delivery = new TelemetryDelivery({ batchSize: 4, enabled: true, exporter, maxQueueSize: 8, maxTimelineEntries: 8, retryDelayMs: 10_000 });
+    const exporter = makeScriptedExporter();
+    exporter.failNext(new TelemetryExportError(503), true);
+    const harness = deliveryHarness(exporter, { batchSize: 4, maxQueueSize: 8, maxTimelineEntries: 8, retryDelayMs: 10_000 });
+    await harness.ready();
     const parent = journeyContext("00000000-0000-4000-8000-000000000001", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
     const child = journeyContext("00000000-0000-4000-8000-000000000002", "00-4bf92f3577b34da6a3ce929d0e0e4736-0af7651916cd43dd-01");
-    delivery.enqueue(eventWithContext("parent-start", parent));
-    delivery.enqueue(eventWithContext("child-start", child));
-    delivery.enqueue(eventWithContext("parent-phase", parent));
-    delivery.enqueue({ ...eventWithContext("child-terminal", child), name: "journey.terminal", phase: "terminal", state: "succeeded" });
+    await enqueue(harness.delivery, eventWithContext("parent-start", parent));
+    await enqueue(harness.delivery, eventWithContext("child-start", child));
+    await enqueue(harness.delivery, eventWithContext("parent-phase", parent));
+    await enqueue(harness.delivery, { ...eventWithContext("child-terminal", child), name: "journey.terminal", phase: "terminal", state: "succeeded" });
 
-    await delivery.flush();
-    await delivery.flush({ keepalive: true });
+    await harness.run(harness.delivery.flush());
+    await harness.run(harness.delivery.flush({ keepalive: true }));
 
-    expect(exporter.mock.calls[1]).toEqual([[expect.objectContaining({ event_id: "child-start", journey_id: child.journeyId }), expect.objectContaining({ event_id: "child-terminal", journey_id: child.journeyId, name: "journey.terminal" })], { keepalive: true }]);
+    expect(exporter.calls[1]).toMatchObject({
+      events: [expect.objectContaining({ event_id: "child-start", journey_id: child.journeyId }), expect.objectContaining({ event_id: "child-terminal", journey_id: child.journeyId, name: "journey.terminal" })],
+      options: { keepalive: true },
+    });
   });
 
   it("reserves a keepalive batch while a normal batch completes", async () => {
-    let releaseNormal: (() => void) | undefined;
-    let releaseKeepalive: (() => void) | undefined;
-    const exporter = vi.fn((batch: readonly { event_id: string }[], options?: { keepalive?: boolean }) => {
-      if (options?.keepalive) return new Promise<void>((resolve) => (releaseKeepalive = resolve));
-      return new Promise<void>((resolve) => (releaseNormal = resolve));
-    });
-    const delivery = new TelemetryDelivery({ batchSize: 1, enabled: true, exporter, maxQueueSize: 4, maxTimelineEntries: 4, retryDelayMs: 100 });
-    delivery.enqueue(event("normal"));
-    await vi.waitFor(() => expect(exporter).toHaveBeenCalledOnce());
-    delivery.enqueue(terminalEvent("terminal"));
-    const keepalive = delivery.flush({ keepalive: true });
-    await vi.waitFor(() => expect(exporter).toHaveBeenCalledTimes(2));
+    const exporter = makeScriptedExporter();
+    const releaseNormal = exporter.waitNext();
+    const releaseKeepalive = exporter.waitNext();
+    const harness = deliveryHarness(exporter, { batchSize: 1 });
+    await harness.ready();
+    await enqueue(harness.delivery, event("normal"));
 
-    releaseNormal?.();
-    await Promise.resolve();
-    expect(exporter).toHaveBeenCalledTimes(2);
-    releaseKeepalive?.();
-    await keepalive;
+    const normalFlush = harness.run(harness.delivery.flush());
+    await harness.settle();
+    await enqueue(harness.delivery, terminalEvent("terminal"));
+    const keepaliveFlush = harness.run(harness.delivery.flush({ keepalive: true }));
+    await harness.settle();
+    releaseNormal();
+    await normalFlush;
 
-    expect(exporter.mock.calls.map(([batch]) => batch.map((item: { event_id: string }) => item.event_id))).toEqual([["normal"], ["terminal"]]);
-    expect(delivery.getHealth()).toMatchObject({ exportedEvents: 2, queueDepth: 0 });
+    expect(exporter.calls.map(exportedIds)).toEqual([["normal"], ["terminal"]]);
+    releaseKeepalive();
+    await keepaliveFlush;
+    expect(harness.delivery.getHealthUnsafe()).toMatchObject({ exportedEvents: 2, queueDepth: 0 });
   });
 
   it("re-sends an active normal batch with stable IDs during a keepalive flush", async () => {
-    let releaseNormal: (() => void) | undefined;
-    const exporter = vi.fn(async (batch: readonly { event_id: string }[], options?: { keepalive?: boolean }) => {
-      if (!options?.keepalive) await new Promise<void>((resolve) => (releaseNormal = resolve));
-      return { accepted_count: batch.length, duplicate_count: 0 };
-    });
-    const delivery = new TelemetryDelivery({ batchSize: 1, enabled: true, exporter, maxQueueSize: 4, maxTimelineEntries: 4, retryDelayMs: 100 });
-    delivery.enqueue(event("in-flight"));
-    await vi.waitFor(() => expect(exporter).toHaveBeenCalledOnce());
+    const exporter = makeScriptedExporter();
+    const releaseNormal = exporter.waitNext();
+    const harness = deliveryHarness(exporter, { batchSize: 1 });
+    await harness.ready();
+    await enqueue(harness.delivery, event("in-flight"));
 
-    await delivery.flush({ keepalive: true });
+    const normalFlush = harness.run(harness.delivery.flush());
+    await harness.settle();
+    await harness.run(harness.delivery.flush({ keepalive: true }));
 
-    expect(exporter.mock.calls.map(([batch, options]) => [batch.map((item) => item.event_id), options])).toEqual([
+    expect(exporter.calls.map((call) => [exportedIds(call), call.options])).toEqual([
       [["in-flight"], undefined],
       [["in-flight"], { keepalive: true }],
     ]);
-    expect(delivery.getPendingEvents()).toEqual([]);
-    expect(delivery.getHealth()).toMatchObject({ exportedEvents: 1, queueDepth: 0 });
+    expect(harness.delivery.getPendingEventsUnsafe()).toEqual([]);
+    expect(harness.delivery.getHealthUnsafe()).toMatchObject({ exportedEvents: 1, queueDepth: 0 });
 
-    releaseNormal?.();
-    await delivery.flush();
-
-    expect(delivery.getHealth()).toMatchObject({ exportedEvents: 1, queueDepth: 0 });
+    releaseNormal();
+    await normalFlush;
+    await harness.run(harness.delivery.flush());
+    expect(harness.delivery.getHealthUnsafe()).toMatchObject({ exportedEvents: 1, queueDepth: 0 });
   });
 
   it("dispatches a terminal batch while an earlier keepalive request is active", async () => {
-    let releaseFirstKeepalive: (() => void) | undefined;
-    const exporter = vi
-      .fn()
-      .mockRejectedValueOnce(new TelemetryExportError(503))
-      .mockImplementationOnce(() => new Promise<void>((resolve) => (releaseFirstKeepalive = resolve)))
-      .mockResolvedValue({ accepted_count: 1, duplicate_count: 0 });
-    const delivery = new TelemetryDelivery({ batchSize: 1, enabled: true, exporter, maxQueueSize: 4, maxTimelineEntries: 4, retryDelayMs: 10_000 });
-    delivery.enqueue(event("hidden-page"));
-    await delivery.flush();
-    const hiddenFlush = delivery.flush({ keepalive: true });
-    await vi.waitFor(() => expect(exporter).toHaveBeenCalledTimes(2));
+    const exporter = makeScriptedExporter();
+    exporter.failNext(new TelemetryExportError(503), true);
+    const releaseFirstKeepalive = exporter.waitNext();
+    const harness = deliveryHarness(exporter, { batchSize: 1, retryDelayMs: 10_000 });
+    await harness.ready();
+    await enqueue(harness.delivery, event("hidden-page"));
+    await harness.run(harness.delivery.flush());
 
-    delivery.enqueue(terminalEvent("pagehide-terminal"));
-    await delivery.flush({ keepalive: true });
+    const hiddenFlush = harness.run(harness.delivery.flush({ keepalive: true }));
+    await harness.settle();
+    await enqueue(harness.delivery, terminalEvent("pagehide-terminal"));
+    await harness.run(harness.delivery.flush({ keepalive: true }));
 
-    expect(exporter).toHaveBeenCalledTimes(3);
-    expect(exporter.mock.calls[2]).toEqual([[expect.objectContaining({ event_id: "pagehide-terminal", name: "journey.terminal" })], { keepalive: true }]);
-    releaseFirstKeepalive?.();
+    expect(exporter.calls.map(exportedIds)).toEqual([["hidden-page"], ["hidden-page"], ["pagehide-terminal"]]);
+    expect(exporter.calls[2]).toMatchObject({ options: { keepalive: true }, events: [expect.objectContaining({ name: "journey.terminal" })] });
+    releaseFirstKeepalive();
     await hiddenFlush;
-    expect(delivery.getPendingEvents()).toEqual([]);
+    expect(harness.delivery.getPendingEventsUnsafe()).toEqual([]);
   });
 
   it("keeps an attribute-heavy unload batch below the browser keepalive quota", async () => {
-    const exporter = vi.fn().mockRejectedValueOnce(new TelemetryExportError(503)).mockResolvedValue({ accepted_count: 1, duplicate_count: 0 });
-    const delivery = new TelemetryDelivery({ batchSize: 25, enabled: true, exporter, maxQueueSize: 30, maxTimelineEntries: 30, retryDelayMs: 10_000 });
-    for (let index = 0; index < 24; index += 1) delivery.enqueue(heavyEvent(`heavy-${index}`));
-    await delivery.flush();
-    delivery.enqueue(terminalEvent("terminal"));
+    const exporter = makeScriptedExporter();
+    exporter.failNext(new TelemetryExportError(503), true);
+    const harness = deliveryHarness(exporter, { batchSize: 25, maxQueueSize: 30, maxTimelineEntries: 30, retryDelayMs: 10_000 });
+    await harness.ready();
+    for (let index = 0; index < 24; index += 1) await enqueue(harness.delivery, heavyEvent(`heavy-${index}`));
+    await harness.run(harness.delivery.flush());
+    await enqueue(harness.delivery, terminalEvent("terminal"));
 
-    await delivery.flush({ keepalive: true });
+    await harness.run(harness.delivery.flush({ keepalive: true }));
 
-    const [batch, options] = exporter.mock.calls[1] ?? [];
-    expect(options).toEqual({ keepalive: true });
+    const batch = exporter.calls[1]?.events ?? [];
+    expect(exporter.calls[1]?.options).toEqual({ keepalive: true });
     expect(batch.at(-1)).toMatchObject({ event_id: "terminal", name: "journey.terminal" });
     expect(encodedByteLength(journeyIntakeBody(batch))).toBeLessThanOrEqual(MAX_KEEPALIVE_BODY_BYTES);
   });
 });
+
+function deliveryHarness(exporter: ReturnType<typeof makeScriptedExporter>, overrides: Partial<Parameters<typeof makeDeliveryHarness>[0]> = {}, storage = makeScriptedStorage()): DeliveryHarness {
+  const harness = makeDeliveryHarness({ batchSize: 3, enabled: true, maxQueueSize: 3, maxTimelineEntries: 3, retryDelayMs: 100, ...overrides }, exporter, storage);
+  harnesses.push(harness);
+  return harness;
+}
+
+function enqueue(delivery: TelemetryDeliveryEffectService, item: TelemetryEvent): Promise<void> {
+  return Effect.runPromise(delivery.enqueue(item));
+}
+
+function exportedIds(call: { readonly events: readonly { readonly event_id: string }[] }): string[] {
+  return call.events.map((item) => item.event_id);
+}
 
 function event(eventId: string): TelemetryEvent {
   return {
@@ -359,19 +352,11 @@ function event(eventId: string): TelemetryEvent {
 }
 
 function terminalEvent(eventId: string): TelemetryEvent {
-  return {
-    ...event(eventId),
-    name: "journey.terminal",
-    phase: "terminal",
-    state: "succeeded",
-  };
+  return { ...event(eventId), name: "journey.terminal", phase: "terminal", state: "succeeded" };
 }
 
 function heavyEvent(eventId: string): TelemetryEvent {
-  return {
-    ...event(eventId),
-    attributes: Object.fromEntries(Array.from({ length: 24 }, (_, index) => [`attribute_${index}`, "x".repeat(256)])),
-  };
+  return { ...event(eventId), attributes: Object.fromEntries(Array.from({ length: 24 }, (_, index) => [`attribute_${index}`, "x".repeat(256)])) };
 }
 
 function eventWithContext(eventId: string, context: ReturnType<typeof journeyContext>): TelemetryEvent {
@@ -380,41 +365,4 @@ function eventWithContext(eventId: string, context: ReturnType<typeof journeyCon
 
 function journeyContext(journeyId: string, traceparent: string) {
   return { journeyId, traceparent, tracestate: "chalk=local" };
-}
-
-function requestContext(request: RequestInit | undefined) {
-  const headers = new Headers(request?.headers);
-  return Object.fromEntries(
-    [
-      ["journeyId", "x-chalk-journey-id"],
-      ["traceparent", "traceparent"],
-      ["tracestate", "tracestate"],
-    ].map(([key, header]) => [key, headers.get(header)]),
-  );
-}
-
-function requestEvents(request: RequestInit | undefined): string[] {
-  return JSON.parse(String(request?.body)).events.map((item: { event_id: string }) => item.event_id);
-}
-
-function normalBatchDelivery(exporter: TelemetryExporter): TelemetryDelivery {
-  return new TelemetryDelivery({ batchSize: 3, enabled: true, exporter, maxQueueSize: 3, maxTimelineEntries: 3, retryDelayMs: 100 });
-}
-
-async function withFakeTimers(test: () => Promise<void>): Promise<void> {
-  vi.useFakeTimers();
-  try {
-    await test();
-  } finally {
-    vi.useRealTimers();
-  }
-}
-
-async function withPendingNormalEvent(test: (delivery: TelemetryDelivery, exporter: ReturnType<typeof vi.fn>) => Promise<void>): Promise<void> {
-  await withFakeTimers(async () => {
-    const exporter = vi.fn().mockResolvedValue({ accepted_count: 1, duplicate_count: 0 });
-    const delivery = normalBatchDelivery(exporter);
-    delivery.enqueue(event("first"));
-    await test(delivery, exporter);
-  });
 }

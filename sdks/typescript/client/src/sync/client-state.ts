@@ -1,5 +1,4 @@
-import { canonicalJsonBytes, computeStateDigest } from "./canonical";
-import type { CanonicalJson } from "./canonical";
+import { canonicalJsonBytesFromUnknown, computeStateDigest } from "./canonical";
 import { emptyControlState, isValidControlState, optimisticControlState, reduceControlEvent } from "./reducer";
 import type { CanonicalReplica, ControlEvent, ControlState, PendingCommand, SnapshotRecovery, SyncCommand } from "./types";
 
@@ -34,7 +33,7 @@ export async function reduceCanonicalEvent(canonical: CanonicalReplica, event: C
 }
 
 export function pendingCommandBytes(commandId: string, command: SyncCommand): number {
-  return canonicalJsonBytes({ command_id: commandId, name: command.name, payload: (command.payload ?? {}) as CanonicalJson }).byteLength;
+  return canonicalJsonBytesFromUnknown({ command_id: commandId, name: command.name, payload: command.payload ?? {} }).byteLength;
 }
 
 export function copyState(state: ControlState): ControlState {

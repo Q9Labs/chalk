@@ -3,6 +3,9 @@ import { ClientFrameSchema as GeneratedClientFrameSchema, ServerFrameSchema as G
 import type { SyncProtocolCodec } from "./protocol";
 import type { ClientFrame, ControlEvent, ServerFrame, SnapshotRecovery, SyncHead, WelcomeFrame } from "./types";
 
+type GeneratedWelcome = Extract<GeneratedServerFrame, { readonly type: "welcome" }>;
+type GeneratedHead = GeneratedWelcome["head"];
+
 export const syncV2ProtocolCodec: SyncProtocolCodec = {
   encodeClient(frame) {
     const generated = Schema.decodeUnknownSync(GeneratedClientFrameSchema)(toGeneratedClientFrame(frame));
@@ -14,126 +17,69 @@ export const syncV2ProtocolCodec: SyncProtocolCodec = {
   },
 };
 
-type ClientFrameEncoders = {
-  readonly [Type in ClientFrame["type"]]: (frame: Extract<ClientFrame, { readonly type: Type }>) => unknown;
-};
-
-const clientFrameEncoders = {
-  hello: toGeneratedHello,
-  command: toGeneratedCommand,
-  delivery_ack: toGeneratedDeliveryAck,
-  recovery_ack: toGeneratedRecoveryAck,
-  ping: toGeneratedPing,
-} satisfies ClientFrameEncoders;
-
 function toGeneratedClientFrame(frame: ClientFrame): unknown {
-  return clientFrameEncoders[frame.type](frame as never);
+  switch (frame.type) {
+    case "hello":
+      return {
+        type: "hello",
+        protocol: frame.protocol,
+        token: frame.token,
+        streams: {
+          control: {
+            cursor:
+              frame.streams.control.cursor === null
+                ? null
+                : {
+                    revision: frame.streams.control.cursor.revision,
+                    state_schema_version: frame.streams.control.cursor.stateSchemaVersion,
+                    state_digest: frame.streams.control.cursor.stateDigest,
+                  },
+          },
+        },
+      };
+    case "command":
+      return { type: "command", command_id: frame.commandId, name: frame.name, payload: frame.payload ?? {} };
+    case "delivery_ack":
+      return { type: "delivery_ack", stream: frame.stream, revision: frame.revision, state_digest: frame.stateDigest };
+    case "recovery_ack":
+      return { type: "recovery_ack", recovery_id: frame.recoveryId, revision: frame.revision, state_digest: frame.stateDigest };
+    case "ping":
+      return { type: "ping" };
+  }
 }
-
-function toGeneratedHello(frame: Extract<ClientFrame, { readonly type: "hello" }>): unknown {
-  return {
-    type: "hello",
-    protocol: frame.protocol,
-    token: frame.token,
-    streams: {
-      control: {
-        cursor: frame.streams.control.cursor === null ? null : toGeneratedHead(frame.streams.control.cursor),
-      },
-    },
-  };
-}
-
-function toGeneratedCommand(frame: Extract<ClientFrame, { readonly type: "command" }>): unknown {
-  return { type: "command", command_id: frame.commandId, name: frame.name, payload: frame.payload ?? {} };
-}
-
-function toGeneratedDeliveryAck(frame: Extract<ClientFrame, { readonly type: "delivery_ack" }>): unknown {
-  return { type: "delivery_ack", stream: frame.stream, revision: frame.revision, state_digest: frame.stateDigest };
-}
-
-function toGeneratedRecoveryAck(frame: Extract<ClientFrame, { readonly type: "recovery_ack" }>): unknown {
-  return { type: "recovery_ack", recovery_id: frame.recoveryId, revision: frame.revision, state_digest: frame.stateDigest };
-}
-
-function toGeneratedPing(_: Extract<ClientFrame, { readonly type: "ping" }>): unknown {
-  return { type: "ping" };
-}
-
-type ServerFrameDecoders = {
-  readonly [Type in GeneratedServerFrame["type"]]: (frame: Extract<GeneratedServerFrame, { readonly type: Type }>) => ServerFrame;
-};
-
-const serverFrameDecoders = {
-  welcome: fromGeneratedWelcome,
-  replay_page: fromGeneratedReplayPage,
-  recovery_complete: fromGeneratedRecoveryComplete,
-  event: fromGeneratedEventFrame,
-  ack: fromGeneratedAck,
-  retryable_error: fromGeneratedRetryableError,
-  error: fromGeneratedError,
-  pong: fromGeneratedPong,
-} satisfies ServerFrameDecoders;
 
 function fromGeneratedServerFrame(frame: GeneratedServerFrame): ServerFrame {
-  return serverFrameDecoders[frame.type](frame as never);
-}
-
-function fromGeneratedReplayPage(frame: Extract<GeneratedServerFrame, { readonly type: "replay_page" }>): ServerFrame {
-  return {
-    type: "replay_page",
-    recoveryId: frame.recovery_id,
-    firstRevision: frame.first_revision,
-    lastRevision: frame.last_revision,
-    events: frame.events.map(fromGeneratedEvent),
-  };
-}
-
-function fromGeneratedRecoveryComplete(frame: Extract<GeneratedServerFrame, { readonly type: "recovery_complete" }>): ServerFrame {
-  return { type: "recovery_complete", recoveryId: frame.recovery_id, head: fromGeneratedHead(frame.head) };
-}
-
-function fromGeneratedEventFrame(frame: Extract<GeneratedServerFrame, { readonly type: "event" }>): ServerFrame {
-  return { type: "event", ...fromGeneratedEvent(frame) };
-}
-
-function fromGeneratedAck(frame: Extract<GeneratedServerFrame, { readonly type: "ack" }>): ServerFrame {
-  if (frame.result === "rejected") {
-    return { type: "ack", commandId: frame.command_id, result: "rejected", reason: frame.reason };
+  switch (frame.type) {
+    case "welcome":
+      return fromGeneratedWelcome(frame);
+    case "replay_page":
+      return {
+        type: "replay_page",
+        recoveryId: frame.recovery_id,
+        firstRevision: frame.first_revision,
+        lastRevision: frame.last_revision,
+        events: frame.events.map(fromGeneratedEvent),
+      };
+    case "recovery_complete":
+      return { type: "recovery_complete", recoveryId: frame.recovery_id, head: fromGeneratedHead(frame.head) };
+    case "event":
+      return { type: "event", ...fromGeneratedEvent(frame) };
+    case "ack":
+      if (frame.result === "rejected") {
+        return { type: "ack", commandId: frame.command_id, result: "rejected", reason: frame.reason };
+      }
+      return { type: "ack", commandId: frame.command_id, result: frame.result, eventId: frame.event_id, revision: frame.revision };
+    case "retryable_error":
+      return { type: "retryable_error", commandId: frame.command_id, code: frame.code };
+    case "error":
+      return { type: "error", code: frame.code };
+    case "pong":
+      return { type: "pong" };
   }
-  return { type: "ack", commandId: frame.command_id, result: frame.result, eventId: frame.event_id, revision: frame.revision };
 }
-
-function fromGeneratedRetryableError(frame: Extract<GeneratedServerFrame, { readonly type: "retryable_error" }>): ServerFrame {
-  return { type: "retryable_error", commandId: frame.command_id, code: frame.code };
-}
-
-function fromGeneratedError(frame: Extract<GeneratedServerFrame, { readonly type: "error" }>): ServerFrame {
-  return { type: "error", code: frame.code };
-}
-
-function fromGeneratedPong(_: Extract<GeneratedServerFrame, { readonly type: "pong" }>): ServerFrame {
-  return { type: "pong" };
-}
-
-type GeneratedWelcome = Extract<GeneratedServerFrame, { readonly type: "welcome" }>;
-
-type WelcomeModeDecoders = {
-  readonly [Mode in GeneratedWelcome["mode"]]: (frame: Extract<GeneratedWelcome, { readonly mode: Mode }>) => WelcomeFrame;
-};
-
-const welcomeModeDecoders = {
-  snapshot: fromGeneratedSnapshotWelcome,
-  replay: fromGeneratedReplayWelcome,
-  up_to_date: fromGeneratedUpToDateWelcome,
-  terminal: fromGeneratedTerminalWelcome,
-} satisfies WelcomeModeDecoders;
 
 function fromGeneratedWelcome(frame: GeneratedWelcome): WelcomeFrame {
-  return welcomeModeDecoders[frame.mode](frame as never);
-}
-
-function fromGeneratedWelcomeBase(frame: GeneratedWelcome) {
-  return {
+  const welcome = {
     type: "welcome" as const,
     protocol: frame.protocol,
     participantSessionId: frame.participant_session_id,
@@ -141,22 +87,17 @@ function fromGeneratedWelcomeBase(frame: GeneratedWelcome) {
     recoveryId: frame.recovery_id,
     head: fromGeneratedHead(frame.head),
   };
-}
 
-function fromGeneratedSnapshotWelcome(frame: Extract<GeneratedWelcome, { readonly mode: "snapshot" }>): WelcomeFrame {
-  return { ...fromGeneratedWelcomeBase(frame), mode: "snapshot", snapshot: fromGeneratedSnapshot(frame.snapshot) };
-}
-
-function fromGeneratedReplayWelcome(frame: Extract<GeneratedWelcome, { readonly mode: "replay" }>): WelcomeFrame {
-  return { ...fromGeneratedWelcomeBase(frame), mode: "replay" };
-}
-
-function fromGeneratedUpToDateWelcome(frame: Extract<GeneratedWelcome, { readonly mode: "up_to_date" }>): WelcomeFrame {
-  return { ...fromGeneratedWelcomeBase(frame), mode: "up_to_date" };
-}
-
-function fromGeneratedTerminalWelcome(frame: Extract<GeneratedWelcome, { readonly mode: "terminal" }>): WelcomeFrame {
-  return { ...fromGeneratedWelcomeBase(frame), mode: "terminal", terminalReason: frame.reason };
+  switch (frame.mode) {
+    case "snapshot":
+      return { ...welcome, mode: "snapshot", snapshot: fromGeneratedSnapshot(frame.snapshot) };
+    case "replay":
+      return { ...welcome, mode: "replay" };
+    case "up_to_date":
+      return { ...welcome, mode: "up_to_date" };
+    case "terminal":
+      return { ...welcome, mode: "terminal", terminalReason: frame.reason };
+  }
 }
 
 function fromGeneratedSnapshot(snapshot: GeneratedSnapshot): SnapshotRecovery {
@@ -175,67 +116,43 @@ function fromGeneratedSnapshot(snapshot: GeneratedSnapshot): SnapshotRecovery {
   };
 }
 
-type GeneratedEventDecoders = {
-  readonly [Name in GeneratedEventFrame["name"]]: (frame: Extract<GeneratedEventFrame, { readonly name: Name }>) => ControlEvent;
-};
-
-const generatedEventDecoders = {
-  participant_joined: fromGeneratedParticipantJoined,
-  participant_left: fromGeneratedParticipantLeft,
-  session_ended: fromGeneratedSessionEnded,
-  hand_raised: fromGeneratedHandEvent,
-  hand_lowered: fromGeneratedHandEvent,
-} satisfies GeneratedEventDecoders;
-
 function fromGeneratedEvent(frame: GeneratedEventFrame): ControlEvent {
-  return generatedEventDecoders[frame.name](frame as never);
-}
-
-function fromGeneratedEventBase(frame: GeneratedEventFrame) {
-  return {
+  const event = {
     eventId: frame.event_id,
     baseRevision: frame.base_revision,
     revision: frame.revision,
     stateSchemaVersion: frame.schema_version,
     resultingStateDigest: frame.resulting_state_digest,
   };
+
+  switch (frame.name) {
+    case "participant_joined":
+      return {
+        ...event,
+        name: frame.name,
+        lifecycleIntentId: frame.lifecycle_intent_id,
+        payload: { participantSessionId: frame.payload.participant_session_id, displayName: frame.payload.display_name },
+      };
+    case "participant_left":
+      return {
+        ...event,
+        name: frame.name,
+        lifecycleIntentId: frame.lifecycle_intent_id,
+        payload: { participantSessionId: frame.payload.participant_session_id },
+      };
+    case "session_ended":
+      return { ...event, name: frame.name, lifecycleIntentId: frame.lifecycle_intent_id, payload: {} };
+    case "hand_raised":
+    case "hand_lowered":
+      return {
+        ...event,
+        name: frame.name,
+        commandId: frame.command_id,
+        payload: { participantSessionId: frame.payload.participant_session_id },
+      };
+  }
 }
 
-function fromGeneratedParticipantJoined(frame: Extract<GeneratedEventFrame, { readonly name: "participant_joined" }>): ControlEvent {
-  return {
-    ...fromGeneratedEventBase(frame),
-    name: frame.name,
-    lifecycleIntentId: frame.lifecycle_intent_id,
-    payload: { participantSessionId: frame.payload.participant_session_id, displayName: frame.payload.display_name },
-  };
-}
-
-function fromGeneratedParticipantLeft(frame: Extract<GeneratedEventFrame, { readonly name: "participant_left" }>): ControlEvent {
-  return {
-    ...fromGeneratedEventBase(frame),
-    name: frame.name,
-    lifecycleIntentId: frame.lifecycle_intent_id,
-    payload: { participantSessionId: frame.payload.participant_session_id },
-  };
-}
-
-function fromGeneratedSessionEnded(frame: Extract<GeneratedEventFrame, { readonly name: "session_ended" }>): ControlEvent {
-  return { ...fromGeneratedEventBase(frame), name: frame.name, lifecycleIntentId: frame.lifecycle_intent_id, payload: {} };
-}
-
-function fromGeneratedHandEvent(frame: Extract<GeneratedEventFrame, { readonly name: "hand_raised" | "hand_lowered" }>): ControlEvent {
-  return {
-    ...fromGeneratedEventBase(frame),
-    name: frame.name,
-    commandId: frame.command_id,
-    payload: { participantSessionId: frame.payload.participant_session_id },
-  };
-}
-
-function fromGeneratedHead(head: { readonly revision: number; readonly state_schema_version: number; readonly state_digest: string }): SyncHead {
+function fromGeneratedHead(head: GeneratedHead): SyncHead {
   return { revision: head.revision, stateSchemaVersion: head.state_schema_version, stateDigest: head.state_digest };
-}
-
-function toGeneratedHead(head: SyncHead): { readonly revision: number; readonly state_schema_version: number; readonly state_digest: string } {
-  return { revision: head.revision, state_schema_version: head.stateSchemaVersion, state_digest: head.stateDigest };
 }

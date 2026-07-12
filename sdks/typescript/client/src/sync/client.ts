@@ -1,16 +1,26 @@
+import { Clock, Context, Effect, Fiber, Layer, ManagedRuntime, Queue, Random, Schedule, SubscriptionRef, type Scope } from "effect";
 import { reduceConnection, retryDelay, type SyncBackoffOptions } from "./connection";
 import { copyReplica, optimisticSnapshotState, pendingCommandBytes, reduceCanonicalEvent, restoreSnapshot } from "./client-state";
+import { canonicalIncludesRevision, canonicalRevision, helloFrame, requireCanonical, requireReducedCanonical, requireRestoredCanonical, requireSnapshot, sameAcknowledgement } from "./client-frame-helpers";
 import { SyncDiagnosticBuffer, type SyncDiagnostics } from "./diagnostics";
 import { SyncCapacityError, SyncCommandValidationError, SyncPersistenceError } from "./errors";
 import { InMemoryPendingCommandStore, type PendingCommandStore } from "./persistence";
+import { comparePending, copyPending, isCommandId, isStoredPending, MAX_PENDING_COMMANDS, pendingLimitsFrom, validateCommand, validateLimits, type PendingCommandLimits } from "./pending-command-validation";
 import { beginRecovery, acceptReplayPage, completeRecovery, MAX_INBOUND_SERVER_FRAME_BYTES, type RecoveryPlan, RecoveryValidationError } from "./recovery";
 import type { SyncProtocolCodec } from "./protocol";
 import type {
   AckFrame,
   CanonicalReplica,
   ClientFrame,
+  CommittedAck,
   ControlEvent,
+  EventFrame,
   PendingCommand,
+  RejectedAck,
+  RecoveryCompleteFrame,
+  ReplayPageFrame,
+  RetryableErrorFrame,
+  ServerErrorFrame,
   ServerFrame,
   SyncClock,
   SyncCommand,
@@ -27,13 +37,8 @@ import type {
 } from "./types";
 
 const encoder = new TextEncoder();
-const MAX_PENDING_COMMANDS = 256;
-const MAX_PENDING_BYTES = 1024 * 1024;
-const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_FAILURES = 32;
 const HEARTBEAT_MS = 20_000;
-
-type SyncClientLimits = Required<NonNullable<SyncClientOptions["limits"]>>;
 
 const lifecycleSignals: Record<SyncLifecycleEvent, readonly ["online" | "active", boolean]> = {
   online: ["online", true],
@@ -61,27 +66,115 @@ export type SyncClientOptions = {
   };
 };
 
-export class SyncClient {
+type InboundFrame = {
+  readonly data: unknown;
+  readonly socket: SyncSocket;
+};
+
+export type SyncEngineEffectService = {
+  readonly snapshotRef: SubscriptionRef.SubscriptionRef<SyncSnapshot>;
+  readonly getDiagnostics: () => SyncDiagnostics;
+  readonly getSnapshot: () => SyncSnapshot;
+  readonly refresh: () => Effect.Effect<void>;
+  readonly send: (command: SyncCommand) => Effect.Effect<string, SyncCapacityError | SyncCommandValidationError | SyncPersistenceError>;
+  readonly start: () => Effect.Effect<void, Error>;
+  readonly stop: () => Effect.Effect<void>;
+  readonly subscribe: (listener: (snapshot: SyncSnapshot) => void) => () => void;
+};
+
+export type SyncTransportCapability = Pick<SyncClientOptions, "token" | "url" | "webSocket">;
+export type SyncTimeCapability = Pick<SyncClientOptions, "clock" | "ids" | "random">;
+export type SyncPolicyCapability = Pick<SyncClientOptions, "backoff" | "diagnosticsCapacity" | "limits">;
+
+export class SyncTransportService extends Context.Service<SyncTransportService, SyncTransportCapability>()("@chalk/sync/Transport") {}
+export class SyncPendingStoreService extends Context.Service<SyncPendingStoreService, PendingCommandStore>()("@chalk/sync/PendingStore") {}
+export class SyncTimeService extends Context.Service<SyncTimeService, Required<SyncTimeCapability>>()("@chalk/sync/Time") {}
+export class SyncLifecycleService extends Context.Service<SyncLifecycleService, SyncLifecycle | undefined>()("@chalk/sync/Lifecycle") {}
+export class SyncCodecService extends Context.Service<SyncCodecService, SyncProtocolCodec>()("@chalk/sync/Codec") {}
+export class SyncPolicyService extends Context.Service<SyncPolicyService, SyncPolicyCapability>()("@chalk/sync/Policy") {}
+
+export const makeSyncTransportLayer = (options: SyncTransportCapability) => Layer.succeed(SyncTransportService, options);
+export const makeSyncPendingStoreLayer = (store?: PendingCommandStore) => Layer.succeed(SyncPendingStoreService, store ?? new InMemoryPendingCommandStore());
+export const makeSyncLifecycleLayer = (lifecycle?: SyncLifecycle) => Layer.succeed(SyncLifecycleService, lifecycle);
+export const makeSyncCodecLayer = (codec: SyncProtocolCodec) => Layer.succeed(SyncCodecService, codec);
+export const makeSyncPolicyLayer = (options: SyncPolicyCapability) => Layer.succeed(SyncPolicyService, options);
+
+/** Uses Effect Clock and Random defaults while preserving public capability overrides. */
+export const makeSyncTimeLayer = (options: SyncTimeCapability) =>
+  Layer.effect(
+    SyncTimeService,
+    Effect.gen(function* () {
+      const clock = yield* Clock.Clock;
+      const random = yield* Random.Random;
+      return {
+        clock: options.clock ?? effectClock(clock),
+        ids: options.ids ?? effectIds(random),
+        random: options.random ?? (() => random.nextDoubleUnsafe()),
+      };
+    }),
+  );
+
+/** Effect-native sync engine service. The compatibility client below owns its runtime. */
+export class SyncEngineService extends Context.Service<SyncEngineService, SyncEngineEffectService>()("@chalk/sync/SyncEngine") {}
+
+/** Builds a scoped sync engine using the existing public option capabilities. */
+export const makeSyncEngineLayer = (options: SyncClientOptions) =>
+  makeSyncEngineLayerFromServices().pipe(Layer.provideMerge([makeSyncTransportLayer(options), makeSyncPendingStoreLayer(options.pendingStore), makeSyncTimeLayer(options), makeSyncLifecycleLayer(options.lifecycle), makeSyncCodecLayer(options.codec), makeSyncPolicyLayer(options)]));
+
+/** Builds the engine from individually replaceable capability layers. */
+export const makeSyncEngineLayerFromServices = () =>
+  Layer.effect(
+    SyncEngineService,
+    Effect.gen(function* () {
+      const transport = yield* Effect.service(SyncTransportService);
+      const pendingStore = yield* Effect.service(SyncPendingStoreService);
+      const time = yield* Effect.service(SyncTimeService);
+      const lifecycle = yield* Effect.service(SyncLifecycleService);
+      const codec = yield* Effect.service(SyncCodecService);
+      const policy = yield* Effect.service(SyncPolicyService);
+      return yield* makeSyncEngineService({ ...transport, ...time, ...policy, codec, lifecycle, pendingStore });
+    }),
+  );
+
+export function makeSyncEngineService(options: SyncClientOptions): Effect.Effect<SyncEngineEffectService, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const inbound = yield* Queue.unbounded<InboundFrame>();
+    const engine = new SyncEngine(options, inbound);
+    const snapshotRef = yield* SubscriptionRef.make(engine.getSnapshot());
+    engine.attachSnapshotRef(snapshotRef);
+    yield* Queue.take(inbound).pipe(
+      Effect.flatMap((frame) => Effect.promise(() => engine.handleInbound(frame.socket, frame.data)).pipe(Effect.catch(() => Effect.sync(() => engine.protocolFailure("inbound_failure"))))),
+      Effect.forever,
+      Effect.forkScoped({ startImmediately: true }),
+    );
+    yield* Effect.addFinalizer(() => Effect.sync(() => engine.dispose()));
+    return engine.effectService(snapshotRef);
+  });
+}
+
+class SyncEngine {
   readonly #store: PendingCommandStore;
   readonly #clock: SyncClock;
   readonly #random: SyncRandom;
   readonly #ids: SyncIdGenerator;
   readonly #codec: SyncProtocolCodec;
   readonly #diagnostics: SyncDiagnosticBuffer;
-  readonly #limits: SyncClientLimits;
+  readonly #limits: PendingCommandLimits;
   readonly #backoff: SyncBackoffOptions;
   readonly #listeners = new Set<(snapshot: SyncSnapshot) => void>();
   readonly #pending = new Map<string, PendingCommand>();
-  readonly #acknowledged = new Map<string, Extract<AckFrame, { readonly result: "committed" | "duplicate" }>>();
-  readonly #settled = new Map<string, Extract<AckFrame, { readonly result: "committed" | "duplicate" }>>();
+  readonly #acknowledged = new Map<string, CommittedAck>();
+  readonly #settled = new Map<string, CommittedAck>();
   readonly #failures: SyncCommandFailure[] = [];
   readonly #lifecycle?: SyncLifecycle;
   #connection: SyncConnectionState = { phase: "idle" };
   #canonical: CanonicalReplica | null = null;
   #participantSessionId: string | null = null;
   #socket: SyncSocket | null = null;
-  #socketGeneration = 0;
   #recovery: RecoveryPlan | null = null;
+  #connectionFiber: Fiber.Fiber<void, never> | undefined;
+  #retryFiber: Fiber.Fiber<void, never> | undefined;
+  #heartbeatFiber: Fiber.Fiber<unknown, never> | undefined;
   #retryTimer: unknown;
   #heartbeatTimer: unknown;
   #unsubscribeLifecycle: (() => void) | undefined;
@@ -94,19 +187,46 @@ export class SyncClient {
   #startGeneration = 0;
   #reservedPendingCommands = 0;
   #reservedPendingBytes = 0;
-  #inbound = Promise.resolve();
+  readonly #inbound: Queue.Queue<InboundFrame>;
+  #snapshotRef: SubscriptionRef.SubscriptionRef<SyncSnapshot> | undefined;
 
-  constructor(readonly options: SyncClientOptions) {
-    this.#store = pendingStoreFrom(options);
-    this.#clock = clockFrom(options);
-    this.#random = randomFrom(options);
-    this.#ids = idGeneratorFrom(options);
+  constructor(
+    readonly options: SyncClientOptions,
+    inbound: Queue.Queue<InboundFrame>,
+  ) {
+    this.#inbound = inbound;
+    this.#store = options.pendingStore ?? new InMemoryPendingCommandStore();
+    this.#clock = options.clock ?? effectClock(Effect.runSync(Clock.Clock));
+    this.#random = options.random ?? (() => Effect.runSync(Random.Random).nextDoubleUnsafe());
+    this.#ids = options.ids ?? effectIds(Effect.runSync(Random.Random));
     this.#codec = options.codec;
     this.#diagnostics = new SyncDiagnosticBuffer(options.diagnosticsCapacity);
-    this.#limits = pendingLimitsFrom(options);
+    this.#limits = pendingLimitsFrom(options.limits);
     this.#backoff = options.backoff ?? {};
     this.#lifecycle = options.lifecycle;
     validateLimits(this.#limits);
+  }
+
+  attachSnapshotRef(snapshotRef: SubscriptionRef.SubscriptionRef<SyncSnapshot>): void {
+    this.#snapshotRef = snapshotRef;
+  }
+
+  effectService(snapshotRef: SubscriptionRef.SubscriptionRef<SyncSnapshot>): SyncEngineEffectService {
+    return {
+      snapshotRef,
+      getDiagnostics: () => this.getDiagnostics(),
+      getSnapshot: () => this.getSnapshot(),
+      refresh: () => Effect.sync(() => this.refresh()),
+      send: (command) => Effect.promise(() => this.send(command)),
+      start: () => Effect.promise(() => this.start()),
+      stop: () => Effect.sync(() => this.stop()),
+      subscribe: (listener) => this.subscribe(listener),
+    };
+  }
+
+  dispose(): void {
+    this.stop();
+    Effect.runSync(Queue.shutdown(this.#inbound));
   }
 
   async start(): Promise<void> {
@@ -114,40 +234,24 @@ export class SyncClient {
       return;
     }
     const startGeneration = ++this.#startGeneration;
-    this.#beginStart();
-    await this.#loadPendingForStart(startGeneration);
-    if (this.#isCurrentStart(startGeneration)) {
-      this.#finishStart();
-    }
-  }
-
-  async #loadPendingForStart(startGeneration: number): Promise<void> {
-    try {
-      await this.#loadPending();
-    } catch {
-      if (this.#isCurrentStart(startGeneration)) {
-        this.#started = false;
-      }
-      throw new Error("unable to load pending sync commands");
-    }
-  }
-
-  #beginStart(): void {
     this.#started = true;
     if (this.#connection.phase === "stopped" && this.#connection.reason === "stopped") {
       this.#connection = { phase: "idle" };
     }
-  }
-
-  #finishStart(): void {
-    this.#unsubscribeLifecycle = this.#lifecycle?.subscribe((event) => this.#onLifecycle(event));
-    if (this.#transportAvailable) {
-      this.#connect();
+    try {
+      await this.#loadPending();
+    } catch {
+      if (this.#started && this.#startGeneration === startGeneration) {
+        this.#started = false;
+      }
+      throw new Error("unable to load pending sync commands");
     }
-  }
-
-  #isCurrentStart(startGeneration: number): boolean {
-    return this.#started && this.#startGeneration === startGeneration;
+    if (this.#started && this.#startGeneration === startGeneration) {
+      this.#unsubscribeLifecycle = this.#lifecycle?.subscribe((event) => this.#onLifecycle(event));
+      if (this.#transportAvailable) {
+        this.#connect();
+      }
+    }
   }
 
   stop(): void {
@@ -166,27 +270,16 @@ export class SyncClient {
   }
 
   refresh(): void {
-    if (!this.#canRefresh()) {
+    if (!this.#started || this.#connection.phase === "ended" || (this.#connection.phase === "stopped" && this.#connection.reason !== "rejoin_required")) {
       return;
     }
     this.#trace("connection", "refresh_requested", {});
-    if (this.#resumeAfterRejoin()) {
+    if (this.#connection.phase === "stopped") {
+      this.#connection = { phase: "idle" };
+      this.#connect();
       return;
     }
     this.#scheduleRetry("refresh", 0);
-  }
-
-  #canRefresh(): boolean {
-    return this.#started && this.#connection.phase !== "ended" && (this.#connection.phase !== "stopped" || this.#connection.reason === "rejoin_required");
-  }
-
-  #resumeAfterRejoin(): boolean {
-    if (this.#connection.phase !== "stopped") {
-      return false;
-    }
-    this.#connection = { phase: "idle" };
-    this.#connect();
-    return true;
   }
 
   async send(command: SyncCommand): Promise<string> {
@@ -272,13 +365,12 @@ export class SyncClient {
     this.#clearRetryTimer();
     this.#connection = reduceConnection(this.#connection, { type: "start" });
     this.#emit();
-    const generation = ++this.#socketGeneration;
     try {
       const socket = this.options.webSocket.connect(this.options.url);
       this.#socket = socket;
-      socket.onopen = () => void this.#onSocketOpen(generation);
-      socket.onmessage = (event) => this.#enqueueInbound(generation, event.data);
-      socket.onclose = (event) => this.#onSocketClose(generation, event.code);
+      socket.onopen = () => this.#onSocketOpen(socket);
+      socket.onmessage = (event) => this.#enqueueInbound(socket, event.data);
+      socket.onclose = (event) => this.#onSocketClose(socket, event.code);
       socket.onerror = () => this.#scheduleRetry("socket_error");
     } catch {
       this.#scheduleRetry("connect_failed");
@@ -295,26 +387,28 @@ export class SyncClient {
     return this.#connection.phase !== "ended" && this.#connection.phase !== "stopped";
   }
 
-  async #onSocketOpen(generation: number): Promise<void> {
-    if (!this.#isCurrentSocket(generation)) {
+  #onSocketOpen(socket: SyncSocket): void {
+    if (!this.#isCurrentSocket(socket)) {
       return;
     }
     this.#connection = reduceConnection(this.#connection, { type: "socket_open" });
     this.#emit();
-    await this.#authenticateSocket(generation);
+    this.#authenticateSocket(socket);
   }
 
-  async #authenticateSocket(generation: number): Promise<void> {
-    try {
-      const token = await this.options.token();
-      this.#finishAuthentication(generation, token);
-    } catch {
-      this.#scheduleRetry("authentication_failed");
-    }
+  #authenticateSocket(socket: SyncSocket): void {
+    this.#clearConnectionFiber();
+    this.#connectionFiber = Effect.runFork(
+      Effect.promise(() => this.options.token()).pipe(
+        Effect.tap((token) => Effect.sync(() => this.#finishAuthentication(socket, token))),
+        Effect.catch(() => Effect.sync(() => this.#scheduleRetry("authentication_failed"))),
+        Effect.asVoid,
+      ),
+    );
   }
 
-  #finishAuthentication(generation: number, token: string): void {
-    if (!this.#isCurrentSocket(generation)) {
+  #finishAuthentication(socket: SyncSocket, token: string): void {
+    if (!this.#isCurrentSocket(socket)) {
       return;
     }
     this.#sendFrame(helloFrame(token, this.#canonical));
@@ -323,12 +417,12 @@ export class SyncClient {
     this.#emit();
   }
 
-  #enqueueInbound(generation: number, data: unknown): void {
-    this.#inbound = this.#inbound.then(() => this.#handleInbound(generation, data)).catch(() => this.#protocolFailure("inbound_failure"));
+  #enqueueInbound(socket: SyncSocket, data: unknown): void {
+    Queue.offerUnsafe(this.#inbound, { socket, data });
   }
 
-  async #handleInbound(generation: number, data: unknown): Promise<void> {
-    if (!this.#isCurrentSocket(generation)) {
+  async handleInbound(socket: SyncSocket, data: unknown): Promise<void> {
+    if (!this.#isCurrentSocket(socket)) {
       return;
     }
     if (typeof data !== "string" || encoder.encode(data).byteLength > MAX_INBOUND_SERVER_FRAME_BYTES) {
@@ -340,25 +434,36 @@ export class SyncClient {
   }
 
   async #handleFrame(frame: ServerFrame): Promise<void> {
-    const handlers: Record<ServerFrame["type"], () => Promise<void>> = {
-      welcome: () => this.#handleWelcome(frame as WelcomeFrame),
-      replay_page: () => this.#handleReplayPage(frame as Extract<ServerFrame, { readonly type: "replay_page" }>),
-      recovery_complete: () => this.#handleRecoveryComplete(frame as Extract<ServerFrame, { readonly type: "recovery_complete" }>),
-      event: () => this.#handleLiveEvent(frame as Extract<ServerFrame, { readonly type: "event" }>),
-      ack: () => this.#handleAck(frame as AckFrame),
-      retryable_error: () => this.#handleRetryableError(frame as Extract<ServerFrame, { readonly type: "retryable_error" }>),
-      error: () => this.#handleServerError(frame as Extract<ServerFrame, { readonly type: "error" }>),
-      pong: async () => undefined,
-    };
-    const handler = handlers[frame.type];
-    if (!handler) {
-      this.#protocolFailure("unknown_server_frame");
-      return;
+    switch (frame.type) {
+      case "welcome":
+        await this.#handleWelcome(frame);
+        return;
+      case "replay_page":
+        await this.#handleReplayPage(frame);
+        return;
+      case "recovery_complete":
+        await this.#handleRecoveryComplete(frame);
+        return;
+      case "event":
+        await this.#handleLiveEvent(frame);
+        return;
+      case "ack":
+        await this.#handleAck(frame);
+        return;
+      case "retryable_error":
+        await this.#handleRetryableError(frame);
+        return;
+      case "error":
+        await this.#handleServerError(frame);
+        return;
+      case "pong":
+        return;
+      default:
+        this.#protocolFailure("unknown_server_frame");
     }
-    await handler();
   }
 
-  async #handleLiveEvent(frame: Extract<ServerFrame, { readonly type: "event" }>): Promise<void> {
+  async #handleLiveEvent(frame: EventFrame): Promise<void> {
     if (this.#connection.phase !== "live") {
       this.#protocolFailure("event_before_live");
       return;
@@ -366,11 +471,11 @@ export class SyncClient {
     await this.#applyEvent(frame, true);
   }
 
-  async #handleRetryableError(frame: Extract<ServerFrame, { readonly type: "retryable_error" }>): Promise<void> {
+  async #handleRetryableError(frame: RetryableErrorFrame): Promise<void> {
     this.#trace("command", "retryable_error", { code: frame.code, pending: this.#pending.size });
   }
 
-  async #handleServerError(frame: Extract<ServerFrame, { readonly type: "error" }>): Promise<void> {
+  async #handleServerError(frame: ServerErrorFrame): Promise<void> {
     this.#protocolFailure(`server_${frame.code}`);
   }
 
@@ -420,7 +525,7 @@ export class SyncClient {
     this.#canonical = requireRestoredCanonical(restored);
   }
 
-  async #handleReplayPage(frame: Extract<ServerFrame, { readonly type: "replay_page" }>): Promise<void> {
+  async #handleReplayPage(frame: ReplayPageFrame): Promise<void> {
     if (!this.#recovery) {
       this.#protocolFailure("unexpected_replay_page");
       return;
@@ -436,7 +541,7 @@ export class SyncClient {
     }
   }
 
-  async #handleRecoveryComplete(frame: Extract<ServerFrame, { readonly type: "recovery_complete" }>): Promise<void> {
+  async #handleRecoveryComplete(frame: RecoveryCompleteFrame): Promise<void> {
     if (!this.#recovery || !this.#canonical) {
       this.#protocolFailure("unexpected_recovery_complete");
       return;
@@ -470,7 +575,9 @@ export class SyncClient {
       throw new RecoveryValidationError("duplicate event does not match the canonical head");
     }
     await this.#reconcileEvent(event);
-    this.#acknowledgeIfRequested(acknowledgeDelivery);
+    if (acknowledgeDelivery) {
+      this.#acknowledgeLiveDelivery();
+    }
     this.#emit();
   }
 
@@ -488,18 +595,14 @@ export class SyncClient {
   async #commitEvent(event: ControlEvent, canonical: CanonicalReplica, acknowledgeDelivery: boolean): Promise<void> {
     this.#canonical = canonical;
     await this.#reconcileEvent(event);
-    this.#acknowledgeIfRequested(acknowledgeDelivery);
+    if (acknowledgeDelivery) {
+      this.#acknowledgeLiveDelivery();
+    }
     if (canonical.state.status === "ended") {
       this.#connection = reduceConnection(this.#connection, { type: "ended" });
       this.#closeSocket(1000, "session ended");
     }
     this.#emit();
-  }
-
-  #acknowledgeIfRequested(acknowledgeDelivery: boolean): void {
-    if (acknowledgeDelivery) {
-      this.#acknowledgeLiveDelivery();
-    }
   }
 
   #acknowledgeLiveDelivery(): void {
@@ -531,18 +634,14 @@ export class SyncClient {
     }
     const acknowledgement = this.#acknowledged.get(event.commandId);
     if (acknowledgement) {
-      this.#assertAcknowledgementMatchesEvent(acknowledgement, event);
+      if (!sameAcknowledgement(acknowledgement, event)) {
+        throw new RecoveryValidationError("ACK and event disagree about a command result");
+      }
       await this.#settleEventCommand(event);
       return;
     }
     if (this.#pending.has(event.commandId)) {
       await this.#settleEventCommand(event);
-    }
-  }
-
-  #assertAcknowledgementMatchesEvent(acknowledgement: Extract<AckFrame, { readonly result: "committed" | "duplicate" }>, event: ControlEvent): void {
-    if (!sameAcknowledgement(acknowledgement, event)) {
-      throw new RecoveryValidationError("ACK and event disagree about a command result");
     }
   }
 
@@ -563,7 +662,7 @@ export class SyncClient {
     await this.#handleCommittedAck(frame);
   }
 
-  async #handleRejectedAck(frame: Extract<AckFrame, { readonly result: "rejected" }>): Promise<void> {
+  async #handleRejectedAck(frame: RejectedAck): Promise<void> {
     if (!this.#pending.has(frame.commandId)) {
       return;
     }
@@ -573,7 +672,7 @@ export class SyncClient {
     this.#emit();
   }
 
-  async #handleCommittedAck(frame: Extract<AckFrame, { readonly result: "committed" | "duplicate" }>): Promise<void> {
+  async #handleCommittedAck(frame: CommittedAck): Promise<void> {
     const settled = this.#settled.get(frame.commandId);
     if (settled) {
       if (this.#validateSettledAck(settled, frame)) {
@@ -589,7 +688,7 @@ export class SyncClient {
     await this.#applyPendingAcknowledgement(frame);
   }
 
-  async #applyPendingAcknowledgement(frame: Extract<AckFrame, { readonly result: "committed" | "duplicate" }>): Promise<void> {
+  async #applyPendingAcknowledgement(frame: CommittedAck): Promise<void> {
     if (!canonicalIncludesRevision(this.#canonical, frame.revision)) {
       this.#rememberAcknowledgement(frame);
       return;
@@ -600,7 +699,7 @@ export class SyncClient {
     this.#emit();
   }
 
-  #validateSettledAck(settled: Extract<AckFrame, { readonly result: "committed" | "duplicate" }>, frame: Extract<AckFrame, { readonly result: "committed" | "duplicate" }>): boolean {
+  #validateSettledAck(settled: CommittedAck, frame: CommittedAck): boolean {
     if (settled.eventId !== frame.eventId || settled.revision !== frame.revision) {
       this.#recoverFromValidation(new RecoveryValidationError("ACK conflicts with a settled command"));
       return false;
@@ -608,7 +707,7 @@ export class SyncClient {
     return true;
   }
 
-  #rememberAcknowledgement(frame: Extract<AckFrame, { readonly result: "committed" | "duplicate" }>): void {
+  #rememberAcknowledgement(frame: CommittedAck): void {
     const existing = this.#acknowledged.get(frame.commandId);
     if (existing && !sameAcknowledgement(existing, frame)) {
       this.#recoverFromValidation(new RecoveryValidationError("conflicting ACK for a command"));
@@ -711,7 +810,11 @@ export class SyncClient {
 
   #onLifecycle(event: SyncLifecycleEvent): void {
     const [signal, value] = lifecycleSignals[event];
-    this.#setLifecycleSignal(signal, value);
+    if (signal === "online") {
+      this.#online = value;
+    } else {
+      this.#active = value;
+    }
     const wasAvailable = this.#transportAvailable;
     this.#transportAvailable = this.#online && this.#active;
     if (!this.#transportAvailable) {
@@ -732,16 +835,8 @@ export class SyncClient {
     }
   }
 
-  #setLifecycleSignal(signal: "online" | "active", value: boolean): void {
-    if (signal === "online") {
-      this.#online = value;
-      return;
-    }
-    this.#active = value;
-  }
-
-  #onSocketClose(generation: number, code: number): void {
-    if (generation !== this.#socketGeneration) {
+  #onSocketClose(socket: SyncSocket, code: number): void {
+    if (socket !== this.#socket) {
       return;
     }
     this.#socket = null;
@@ -759,13 +854,17 @@ export class SyncClient {
       return;
     }
     this.#closeSocket(1012, "reconnecting");
-    const attempt = this.#retryAttempt();
+    const attempt = "attempt" in this.#connection ? Math.max(1, this.#connection.attempt) : 1;
     const delay = retryDelay(this.#connection, this.#random, this.#backoff, delayOverride);
     this.#connection = reduceConnection(this.#connection, { type: "retry", retryAt: this.#clock.now() + delay });
     this.#trace("connection", reason, { attempt, delay });
     this.#emit();
     this.#clearRetryTimer();
-    this.#retryTimer = this.#clock.setTimeout(() => this.#connect(), delay);
+    if (this.options.clock) {
+      this.#retryTimer = this.#clock.setTimeout(() => this.#connect(), delay);
+    } else {
+      this.#retryFiber = Effect.runFork(Effect.sleep(delay).pipe(Effect.andThen(Effect.sync(() => this.#connect()))));
+    }
   }
 
   #canScheduleRetry(): boolean {
@@ -778,14 +877,14 @@ export class SyncClient {
     return this.#connection.phase !== "ended" && this.#connection.phase !== "stopped";
   }
 
-  #retryAttempt(): number {
-    return "attempt" in this.#connection ? Math.max(1, this.#connection.attempt) : 1;
-  }
-
   #recoverFromValidation(error: unknown): void {
     const code = error instanceof RecoveryValidationError ? "recovery_validation_failed" : "recovery_failed";
     this.#trace("recovery", code, {});
     this.#scheduleRetry(code, 0);
+  }
+
+  protocolFailure(code: string): void {
+    this.#protocolFailure(code);
   }
 
   #protocolFailure(code: string): void {
@@ -805,23 +904,27 @@ export class SyncClient {
 
   #startHeartbeat(): void {
     this.#clearHeartbeatTimer();
-    this.#heartbeatTimer = this.#clock.setTimeout(() => {
-      if (this.#connection.phase === "live") {
-        this.#sendFrame({ type: "ping" });
-        this.#startHeartbeat();
-      }
-    }, HEARTBEAT_MS);
+    if (this.options.clock) {
+      this.#heartbeatTimer = this.#clock.setTimeout(() => {
+        if (this.#connection.phase === "live") {
+          this.#sendFrame({ type: "ping" });
+          this.#startHeartbeat();
+        }
+      }, HEARTBEAT_MS);
+    } else {
+      this.#heartbeatFiber = Effect.runFork(Effect.sleep(HEARTBEAT_MS).pipe(Effect.andThen(Effect.sync(() => this.#sendFrame({ type: "ping" }))), Effect.repeat(Schedule.spaced(HEARTBEAT_MS))));
+    }
   }
 
   #closeSocket(code: number, reason: string): void {
     const socket = this.#socket;
     this.#socket = null;
-    this.#socketGeneration += 1;
+    this.#clearConnectionFiber();
     socket?.close(code, reason);
   }
 
-  #isCurrentSocket(generation: number): boolean {
-    return this.#started && generation === this.#socketGeneration && this.#socket !== null;
+  #isCurrentSocket(socket: SyncSocket): boolean {
+    return this.#started && this.#socket === socket;
   }
 
   #pendingBytes(): number {
@@ -835,7 +938,7 @@ export class SyncClient {
     this.#failures.push(failure);
   }
 
-  #recordSettled(commandId: string, acknowledgement: Extract<AckFrame, { readonly result: "committed" | "duplicate" }>): void {
+  #recordSettled(commandId: string, acknowledgement: CommittedAck): void {
     if (this.#settled.size === MAX_PENDING_COMMANDS) {
       const oldest = this.#settled.keys().next().value;
       if (oldest) {
@@ -850,11 +953,23 @@ export class SyncClient {
   }
 
   #clearTimers(): void {
+    this.#clearConnectionFiber();
     this.#clearRetryTimer();
     this.#clearHeartbeatTimer();
   }
 
+  #clearConnectionFiber(): void {
+    if (this.#connectionFiber) {
+      this.#connectionFiber.interruptUnsafe();
+      this.#connectionFiber = undefined;
+    }
+  }
+
   #clearRetryTimer(): void {
+    if (this.#retryFiber) {
+      this.#retryFiber.interruptUnsafe();
+      this.#retryFiber = undefined;
+    }
     if (this.#retryTimer !== undefined) {
       this.#clock.clearTimeout(this.#retryTimer);
       this.#retryTimer = undefined;
@@ -862,6 +977,10 @@ export class SyncClient {
   }
 
   #clearHeartbeatTimer(): void {
+    if (this.#heartbeatFiber) {
+      this.#heartbeatFiber.interruptUnsafe();
+      this.#heartbeatFiber = undefined;
+    }
     if (this.#heartbeatTimer !== undefined) {
       this.#clock.clearTimeout(this.#heartbeatTimer);
       this.#heartbeatTimer = undefined;
@@ -870,167 +989,67 @@ export class SyncClient {
 
   #emit(): void {
     const snapshot = this.getSnapshot();
+    if (this.#snapshotRef) {
+      Effect.runSync(SubscriptionRef.set(this.#snapshotRef, snapshot));
+    }
     for (const listener of this.#listeners) {
       listener(snapshot);
     }
   }
 }
 
-const systemClock: SyncClock = {
-  now: () => Date.now(),
-  setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
-  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
-};
+/**
+ * Promise-and-synchronous compatibility facade. It deliberately owns the
+ * runtime so applications never need to import Effect to use SyncClient.
+ */
+export class SyncClient {
+  readonly #engine: SyncEngineEffectService;
+  readonly #runtime: ManagedRuntime.ManagedRuntime<SyncEngineService, never>;
 
-const browserIds: SyncIdGenerator = {
-  next: () => globalThis.crypto.randomUUID(),
-};
-
-function pendingStoreFrom(options: SyncClientOptions): PendingCommandStore {
-  return options.pendingStore ?? new InMemoryPendingCommandStore();
-}
-
-function clockFrom(options: SyncClientOptions): SyncClock {
-  return options.clock ?? systemClock;
-}
-
-function randomFrom(options: SyncClientOptions): SyncRandom {
-  return options.random ?? Math.random;
-}
-
-function idGeneratorFrom(options: SyncClientOptions): SyncIdGenerator {
-  return options.ids ?? browserIds;
-}
-
-function pendingLimitsFrom(options: SyncClientOptions): SyncClientLimits {
-  const limits = options.limits;
-  if (!limits) {
-    return defaultPendingLimits();
+  constructor(readonly options: SyncClientOptions) {
+    this.#runtime = ManagedRuntime.make(makeSyncEngineLayer(options));
+    this.#engine = this.#runtime.runSync(Effect.service(SyncEngineService));
   }
+
+  start(): Promise<void> {
+    return this.#runtime.runPromise(this.#engine.start());
+  }
+
+  stop(): void {
+    this.#runtime.runSync(this.#engine.stop());
+  }
+
+  refresh(): void {
+    this.#runtime.runSync(this.#engine.refresh());
+  }
+
+  send(command: SyncCommand): Promise<string> {
+    return this.#runtime.runPromise(this.#engine.send(command));
+  }
+
+  getSnapshot(): SyncSnapshot {
+    return this.#engine.getSnapshot();
+  }
+
+  subscribe(listener: (snapshot: SyncSnapshot) => void): () => void {
+    return this.#engine.subscribe(listener);
+  }
+
+  getDiagnostics(): SyncDiagnostics {
+    return this.#engine.getDiagnostics();
+  }
+}
+
+function effectClock(clock: Clock.Clock): SyncClock {
   return {
-    maxPendingCommands: limitOrDefault(limits.maxPendingCommands, MAX_PENDING_COMMANDS),
-    maxPendingBytes: limitOrDefault(limits.maxPendingBytes, MAX_PENDING_BYTES),
-    maxPendingAgeMs: limitOrDefault(limits.maxPendingAgeMs, MAX_PENDING_AGE_MS),
+    now: () => clock.currentTimeMillisUnsafe(),
+    setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
+    clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
   };
 }
 
-function defaultPendingLimits(): SyncClientLimits {
-  return { maxPendingCommands: MAX_PENDING_COMMANDS, maxPendingBytes: MAX_PENDING_BYTES, maxPendingAgeMs: MAX_PENDING_AGE_MS };
-}
-
-function limitOrDefault(value: number | undefined, fallback: number): number {
-  return value ?? fallback;
-}
-
-function validateLimits(limits: SyncClientLimits): void {
-  if (![limits.maxPendingCommands, limits.maxPendingBytes, limits.maxPendingAgeMs].every(isPositiveInteger)) {
-    throw new RangeError("pending command limits must be positive");
-  }
-}
-
-function validateCommand(command: SyncCommand): void {
-  if (!isSupportedCommand(command)) {
-    throw new SyncCommandValidationError("unsupported sync command");
-  }
-  try {
-    pendingCommandBytes("validation-command-id", command);
-  } catch {
-    throw new SyncCommandValidationError("command payload must be canonical JSON");
-  }
-}
-
-function isSupportedCommand(command: SyncCommand): boolean {
-  if (command.name !== "raise_hand" && command.name !== "lower_hand") {
-    return false;
-  }
-  return isEmptyCommandPayload(command.payload);
-}
-
-function isEmptyCommandPayload(payload: SyncCommand["payload"]): boolean {
-  if (!payload) {
-    return true;
-  }
-  if (!isRecord(payload)) {
-    return false;
-  }
-  return Object.keys(payload).length === 0;
-}
-
-function isCommandId(value: string): boolean {
-  return /^[A-Za-z0-9_-]{16,64}$/.test(value);
-}
-
-function isPositiveInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 1;
-}
-
-function isStoredPending(value: PendingCommand): boolean {
-  return isCommandId(value.commandId) && Number.isFinite(value.createdAt) && Number.isInteger(value.bytes) && value.bytes > 0;
-}
-
-function isRecord(value: object): boolean {
-  return Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null;
-}
-
-function comparePending(left: PendingCommand, right: PendingCommand): number {
-  return left.createdAt - right.createdAt || (left.commandId < right.commandId ? -1 : left.commandId > right.commandId ? 1 : 0);
-}
-
-function headOf(replica: CanonicalReplica): { readonly revision: number; readonly stateSchemaVersion: number; readonly stateDigest: string } {
-  return { revision: replica.revision, stateSchemaVersion: replica.stateSchemaVersion, stateDigest: replica.stateDigest };
-}
-
-function copyPending(pending: PendingCommand): PendingCommand {
-  return { ...pending, command: { ...pending.command, ...(pending.command.payload ? { payload: { ...pending.command.payload } } : {}) } };
-}
-
-function helloFrame(token: string, canonical: CanonicalReplica | null): ClientFrame {
-  const cursor = canonical ? headOf(canonical) : null;
-  return { type: "hello", protocol: 2, token, streams: { control: { cursor } } };
-}
-
-function canonicalRevision(canonical: CanonicalReplica | null): number {
-  return canonical ? canonical.revision : -1;
-}
-
-function requireSnapshot(frame: WelcomeFrame): NonNullable<WelcomeFrame["snapshot"]> {
-  if (!frame.snapshot) {
-    throw new RecoveryValidationError("snapshot welcome has no snapshot");
-  }
-  return frame.snapshot;
-}
-
-function requireRestoredCanonical(restored: Awaited<ReturnType<typeof restoreSnapshot>>): CanonicalReplica {
-  if (restored.ok) {
-    return restored.canonical;
-  }
-  if (restored.error === "invalid_state") {
-    throw new RecoveryValidationError("snapshot contains an invalid durable state");
-  }
-  throw new RecoveryValidationError("snapshot digest does not match its state");
-}
-
-function requireCanonical(canonical: CanonicalReplica | null): CanonicalReplica {
-  if (!canonical) {
-    throw new RecoveryValidationError("received an event without a canonical replica");
-  }
-  return canonical;
-}
-
-function requireReducedCanonical(reduced: Awaited<ReturnType<typeof reduceCanonicalEvent>>): CanonicalReplica {
-  if (reduced.ok) {
-    return reduced.canonical;
-  }
-  if (reduced.error === "reducer") {
-    throw new RecoveryValidationError(`control reducer rejected event: ${reduced.reducerError}`);
-  }
-  throw new RecoveryValidationError("event digest does not match reduced state");
-}
-
-function canonicalIncludesRevision(canonical: CanonicalReplica | null, revision: number): boolean {
-  return canonical !== null && canonical.revision >= revision;
-}
-
-function sameAcknowledgement(left: Pick<Extract<AckFrame, { readonly result: "committed" | "duplicate" }>, "eventId" | "revision">, right: Pick<ControlEvent | Extract<AckFrame, { readonly result: "committed" | "duplicate" }>, "eventId" | "revision">): boolean {
-  return left.eventId === right.eventId && left.revision === right.revision;
+function effectIds(random: { readonly nextIntUnsafe: () => number }): SyncIdGenerator {
+  return {
+    next: () => Array.from({ length: 4 }, () => (random.nextIntUnsafe() >>> 0).toString(36).padStart(7, "0").slice(-7)).join(""),
+  };
 }

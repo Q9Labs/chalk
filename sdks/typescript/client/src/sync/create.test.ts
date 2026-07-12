@@ -4,7 +4,7 @@ import { createSyncClient } from "./create";
 import { SyncCommandValidationError } from "./index";
 import { InMemoryPendingCommandStore } from "./persistence";
 import { syncV2ProtocolCodec } from "./v2-codec";
-import { TestSockets } from "./__tests__/runtime";
+import { makeScriptedTransport } from "./test-support";
 
 describe("createSyncClient", () => {
   it("requires an explicit persistence scope unless the caller supplies a store", () => {
@@ -12,7 +12,7 @@ describe("createSyncClient", () => {
       url: "ws://sync.test/v2/sync",
       token: async () => "token",
       codec: syncV2ProtocolCodec,
-      webSocket: new TestSockets(),
+      webSocket: makeScriptedTransport().webSocket,
       lifecycle: { subscribe: () => () => {} },
     };
 

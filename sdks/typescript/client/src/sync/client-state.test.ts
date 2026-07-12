@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeStateDigest } from "./canonical";
 import { reduceCanonicalEvent, restoreSnapshot } from "./client-state";
-import { event, participantSessionId, stateSchemaVersion } from "./__tests__/runtime";
+import { event, participantSessionId, stateSchemaVersion } from "./test-support";
 import type { CanonicalReplica, ControlState } from "./types";
 
 describe("client state", () => {

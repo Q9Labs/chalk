@@ -1,5 +1,4 @@
-import { canonicalJsonBytes } from "./canonical";
-import type { CanonicalJson } from "./canonical";
+import { canonicalJsonBytesFromUnknown } from "./canonical";
 import { SyncProtocolLimits } from "../generated/sync-v2";
 import type { CanonicalReplica, RecoveryCompleteFrame, ReplayPageFrame, SyncHead, WelcomeFrame } from "./types";
 
@@ -90,7 +89,7 @@ function snapshotRecovery(frame: WelcomeFrame): RecoveryPlan {
   if (encodedBytes(snapshot.state) > RECOVERY_LIMITS.maxSnapshotBytes) {
     throw new RecoveryValidationError("snapshot exceeds the maximum encoded size");
   }
-  return recoveryPlan(frame, frame.head.revision + 1);
+  return recoveryPlan(frame, "snapshot", frame.head.revision + 1);
 }
 
 function upToDateRecovery(frame: WelcomeFrame, replica: CanonicalReplica | null): RecoveryPlan {
@@ -100,7 +99,7 @@ function upToDateRecovery(frame: WelcomeFrame, replica: CanonicalReplica | null)
   if (!sameHead(replica, frame.head)) {
     throw new RecoveryValidationError("up-to-date recovery requires an identical local head");
   }
-  return recoveryPlan(frame, frame.head.revision + 1);
+  return recoveryPlan(frame, "up_to_date", frame.head.revision + 1);
 }
 
 function replayRecovery(frame: WelcomeFrame, replica: CanonicalReplica | null): RecoveryPlan {
@@ -110,11 +109,11 @@ function replayRecovery(frame: WelcomeFrame, replica: CanonicalReplica | null): 
   if (replica.revision >= frame.head.revision) {
     throw new RecoveryValidationError("replay recovery requires an older local revision");
   }
-  return recoveryPlan(frame, replica.revision + 1);
+  return recoveryPlan(frame, "replay", replica.revision + 1);
 }
 
-function recoveryPlan(frame: WelcomeFrame, nextRevision: number): RecoveryPlan {
-  return { recoveryId: frame.recoveryId, mode: frame.mode as ActiveRecoveryMode, head: frame.head, nextRevision, replayEventCount: 0, replayBytes: 0 };
+function recoveryPlan(frame: WelcomeFrame, mode: ActiveRecoveryMode, nextRevision: number): RecoveryPlan {
+  return { recoveryId: frame.recoveryId, mode, head: frame.head, nextRevision, replayEventCount: 0, replayBytes: 0 };
 }
 
 function assertReplayPage(plan: RecoveryPlan, page: ReplayPageFrame): void {
@@ -182,7 +181,7 @@ function encodedEventBytes(events: readonly ReplayPageFrame["events"][number][])
 }
 
 function encodedBytes(value: unknown): number {
-  return canonicalJsonBytes(value as CanonicalJson).byteLength;
+  return canonicalJsonBytesFromUnknown(value).byteLength;
 }
 
 function assertHead(head: SyncHead): void {

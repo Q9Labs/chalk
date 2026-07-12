@@ -37,7 +37,11 @@ export function canonicalJson(value: CanonicalJson): string {
 }
 
 export function canonicalJsonBytes(value: CanonicalJson): Uint8Array {
-  return encoder.encode(canonicalJson(value));
+  return canonicalJsonBytesFromUnknown(value);
+}
+
+export function canonicalJsonBytesFromUnknown(value: unknown): Uint8Array {
+  return encoder.encode(serialize(value));
 }
 
 export async function computeStateDigest(state: ControlState, revision: number, stateSchemaVersion: number): Promise<string> {
@@ -51,8 +55,7 @@ export async function computeStateDigest(state: ControlState, revision: number, 
     throw new Error("Web Crypto SHA-256 is unavailable");
   }
 
-  const input = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const digest = await cryptoApi.subtle.digest("SHA-256", input);
+  const digest = await cryptoApi.subtle.digest("SHA-256", new Uint8Array(bytes));
   return toHex(new Uint8Array(digest));
 }
 
@@ -68,7 +71,7 @@ function serialize(value: unknown): string {
     return `[${value.map(serialize).join(",")}]`;
   }
   if (typeof value === "object") {
-    return serializeObject(value as { readonly [key: string]: unknown });
+    return serializeObject(value);
   }
   return serializeScalar(value);
 }
@@ -98,14 +101,14 @@ function serializeNumber(value: number): string {
   return JSON.stringify(value);
 }
 
-function serializeObject(value: { readonly [key: string]: unknown }): string {
+function serializeObject(value: object): string {
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError("canonical JSON only supports plain objects");
   }
 
   const keys = Object.keys(value).sort(compareUnicodeCodeUnits);
-  return `{${keys.map((key) => `${serialize(key)}:${serialize(value[key])}`).join(",")}}`;
+  return `{${keys.map((key) => `${serialize(key)}:${serialize(Reflect.get(value, key))}`).join(",")}}`;
 }
 
 function compareUnicodeCodeUnits(left: string, right: string): number {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyControlState, isValidControlState, optimisticControlState, reduceControlEvent } from "./reducer";
-import { event, participantSessionId, stateSchemaVersion } from "./__tests__/runtime";
+import { event, participantSessionId, stateSchemaVersion } from "./test-support";
 import type { CanonicalReplica } from "./types";
 
 function initialReplica(): CanonicalReplica {

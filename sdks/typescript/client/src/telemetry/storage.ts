@@ -11,12 +11,12 @@ export interface TelemetryKeyValueStorage {
   setItem(key: string, value: string): Promise<void>;
 }
 
-interface RuntimeTelemetryStorageState {
+type RuntimeTelemetryStorageState = {
   readonly adoptedQueues: Map<string, string>;
   readonly knownEventIds: Set<string>;
   readonly retainedEvents: Map<string, TelemetryEvent>;
   loaded: boolean;
-}
+};
 
 export function createMemoryTelemetryStorage(initialEvents: readonly TelemetryEvent[] = []): TelemetryStorage {
   let events = [...initialEvents];
@@ -40,8 +40,7 @@ export function createKeyValueTelemetryStorage(storage: TelemetryKeyValueStorage
         return [];
       }
 
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? (parsed as TelemetryEvent[]) : [];
+      return telemetryEvents(JSON.parse(value));
     },
     async save(events) {
       await storage.setItem(key, JSON.stringify(events));
@@ -108,22 +107,21 @@ function createRuntimeTelemetryStorageState(): RuntimeTelemetryStorageState {
 }
 
 function loadRuntimeQueue(storage: Storage, keyPrefix: string, ownKey: string, state: RuntimeTelemetryStorageState): TelemetryEvent[] {
-  const recovered = adoptQueues(storage, keyPrefix, ownKey, state.adoptedQueues);
+  const recovered = readAndAdoptQueues(
+    storage,
+    storageKeys(storage).filter((storageKey) => storageKey !== ownKey && isRuntimeTelemetryKey(storageKey, keyPrefix)),
+    state.adoptedQueues,
+  );
   markKnownEvents(state, recovered);
   state.loaded = true;
   return recovered;
 }
 
 function saveRuntimeQueue(storage: Storage, keyPrefix: string, ownKey: string, state: RuntimeTelemetryStorageState, events: readonly TelemetryEvent[]): void {
-  ensureRuntimeQueueLoaded(storage, keyPrefix, ownKey, state);
+  if (!state.loaded) loadRuntimeQueue(storage, keyPrefix, ownKey, state);
   const currentEvents = trackCurrentEvents(state, events);
   retainUnseenAdoptedEvents(state, currentEvents, recoverAdoptedQueues(storage, state.adoptedQueues));
   persistRuntimeQueue(storage, ownKey, state, currentEvents);
-}
-
-function ensureRuntimeQueueLoaded(storage: Storage, keyPrefix: string, ownKey: string, state: RuntimeTelemetryStorageState): void {
-  if (state.loaded) return;
-  loadRuntimeQueue(storage, keyPrefix, ownKey, state);
 }
 
 function trackCurrentEvents(state: RuntimeTelemetryStorageState, events: readonly TelemetryEvent[]): TelemetryEvent[] {
@@ -150,14 +148,6 @@ function persistRuntimeQueue(storage: Storage, ownKey: string, state: RuntimeTel
   const persistedEvents = dedupeEvents([...currentEvents, ...state.retainedEvents.values()]);
   storage.setItem(ownKey, JSON.stringify(persistedEvents));
   removeAdoptedQueues(storage, state.adoptedQueues);
-}
-
-function adoptQueues(storage: Storage, keyPrefix: string, ownKey: string, adoptedQueues: Map<string, string>): TelemetryEvent[] {
-  return readAndAdoptQueues(storage, runtimeQueueKeys(storage, keyPrefix, ownKey), adoptedQueues);
-}
-
-function runtimeQueueKeys(storage: Storage, keyPrefix: string, ownKey: string): string[] {
-  return storageKeys(storage).filter((key) => key !== ownKey && isRuntimeTelemetryKey(key, keyPrefix));
 }
 
 function readAndAdoptQueues(storage: Storage, keys: readonly string[], adoptedQueues: Map<string, string>): TelemetryEvent[] {
@@ -218,11 +208,35 @@ function isRuntimeTelemetryKey(key: string, keyPrefix: string): boolean {
 
 function parseEvents(value: string): TelemetryEvent[] | undefined {
   try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? (parsed as TelemetryEvent[]) : [];
+    return telemetryEvents(JSON.parse(value));
   } catch {
     return undefined;
   }
+}
+
+function telemetryEvents(value: unknown): TelemetryEvent[] {
+  return Array.isArray(value) ? value.filter(isTelemetryEvent) : [];
+}
+
+function isTelemetryEvent(value: unknown): value is TelemetryEvent {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.event_id === "string" &&
+    typeof value.first_observed_layer === "string" &&
+    typeof value.journey_id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.occurred_at === "string" &&
+    typeof value.origin_kind === "string" &&
+    typeof value.phase === "string" &&
+    typeof value.sequence === "number" &&
+    typeof value.state === "string" &&
+    typeof value.upstream_visibility === "string" &&
+    value.version === 1
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function dedupeEvents(events: Iterable<TelemetryEvent>): TelemetryEvent[] {

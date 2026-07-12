@@ -1,17 +1,17 @@
 import type { JourneyIntakeEvent, JourneyIntakeResponse, TelemetryEvent } from "./types";
 
-export interface JourneyIntakeExporterOptions {
+export type JourneyIntakeExporterOptions = {
   readonly baseUrl: string | URL;
   readonly credentials?: RequestCredentials;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>> | (() => Readonly<Record<string, string>> | Promise<Readonly<Record<string, string>>>);
   readonly path?: string;
-}
+};
 
-export interface TelemetryExportOptions {
+export type TelemetryExportOptions = {
   /** Keeps a browser request eligible to complete while the page is unloading. */
   readonly keepalive?: boolean;
-}
+};
 
 /** Reserves headroom below the browser's 64 KiB aggregate quota for a concurrent terminal event. */
 export const MAX_KEEPALIVE_BODY_BYTES = 48 * 1024;
@@ -68,7 +68,7 @@ function eventBatches(events: readonly JourneyIntakeEvent[]): JourneyIntakeEvent
       batch = [event];
       continue;
     }
-    if (batch.length === MAX_JOURNEY_INTAKE_EVENTS_PER_BATCH || !journeyIntakeBodyFits([...batch, event])) {
+    if (batch.length === MAX_JOURNEY_INTAKE_EVENTS_PER_BATCH || encodedByteLength(journeyIntakeBody([...batch, event])) > MAX_JOURNEY_INTAKE_BATCH_BODY_BYTES) {
       batches.push(batch);
       batch = [event];
       continue;
@@ -80,17 +80,13 @@ function eventBatches(events: readonly JourneyIntakeEvent[]): JourneyIntakeEvent
   return batches;
 }
 
-function journeyIntakeBodyFits(events: readonly JourneyIntakeEvent[]): boolean {
-  return encodedByteLength(journeyIntakeBody(events)) <= MAX_JOURNEY_INTAKE_BATCH_BODY_BYTES;
-}
-
 async function exportJourneyIntakeBatch(events: readonly JourneyIntakeEvent[], exportOptions: TelemetryExportOptions | undefined, endpoint: string, fetchImplementation: typeof globalThis.fetch, options: JourneyIntakeExporterOptions): Promise<JourneyIntakeResponse> {
   const body = journeyIntakeBody(events);
   assertKeepaliveBodySize(body, exportOptions);
-  const headers = await resolveExporterHeaders(options.headers);
+  const headers = await (typeof options.headers === "function" ? options.headers() : options.headers);
   const response = await fetchImplementation(endpoint, journeyIntakeRequest(events, body, headers, options.credentials, exportOptions));
   if (!response.ok) throw new TelemetryExportError(response.status);
-  return intakeResponse(await response.json().catch(emptyIntakeResponse), events.length);
+  return intakeResponse(await response.json().catch(() => ({})), events.length);
 }
 
 function assertKeepaliveBodySize(body: string, options: TelemetryExportOptions | undefined): void {
@@ -121,10 +117,6 @@ export function toJourneyIntakeEvent(event: TelemetryEvent): JourneyIntakeEvent 
   return intakeEvent;
 }
 
-async function resolveExporterHeaders(headers: JourneyIntakeExporterOptions["headers"]): Promise<Readonly<Record<string, string>> | undefined> {
-  return typeof headers === "function" ? headers() : headers;
-}
-
 function journeyIntakeHeaders(events: readonly JourneyIntakeEvent[]): Record<string, string> {
   const firstEvent = events[0];
   if (!firstEvent) return {};
@@ -132,8 +124,7 @@ function journeyIntakeHeaders(events: readonly JourneyIntakeEvent[]): Record<str
   const headers: Record<string, string> = {
     "x-chalk-journey-id": firstEvent.journey_id,
   };
-  const traceparent = eventTraceparent(firstEvent);
-  if (traceparent) headers.traceparent = traceparent;
+  if (firstEvent.traceparent) headers.traceparent = firstEvent.traceparent;
   if (firstEvent.tracestate) headers.tracestate = firstEvent.tracestate;
   return headers;
 }
@@ -152,29 +143,22 @@ export function sharesJourneyContext(left: Pick<JourneyIntakeEvent, "journey_id"
   return left.journey_id === right.journey_id && left.traceparent === right.traceparent && left.tracestate === right.tracestate;
 }
 
-function emptyIntakeResponse(): Partial<JourneyIntakeResponse> {
-  return {};
-}
-
 function intakeResponse(body: unknown, eventCount: number): JourneyIntakeResponse {
-  const candidate = body as Partial<JourneyIntakeResponse>;
+  const candidate = isRecord(body) ? body : {};
   return {
-    accepted_count: candidate.accepted_count ?? eventCount,
-    duplicate_count: candidate.duplicate_count ?? 0,
+    accepted_count: typeof candidate.accepted_count === "number" ? candidate.accepted_count : eventCount,
+    duplicate_count: typeof candidate.duplicate_count === "number" ? candidate.duplicate_count : 0,
   };
 }
 
-function eventTraceparent(event: JourneyIntakeEvent): string | undefined {
-  return event.traceparent;
-}
-
-function apiJourneyIntakeEvent(event: JourneyIntakeEvent): Omit<JourneyIntakeEvent, "traceparent" | "tracestate"> {
-  const { traceparent: _traceparent, tracestate: _tracestate, ...apiEvent } = event;
-  return apiEvent;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export function journeyIntakeBody(events: readonly JourneyIntakeEvent[]): string {
-  return JSON.stringify({ events: events.map(apiJourneyIntakeEvent) });
+  return JSON.stringify({
+    events: events.map(({ traceparent: _traceparent, tracestate: _tracestate, ...event }) => event),
+  });
 }
 
 export function encodedByteLength(value: string): number {

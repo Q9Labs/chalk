@@ -142,6 +142,10 @@ export type EventFrame = ControlEvent & { readonly type: "event" };
 
 export type AckFrame = { readonly type: "ack"; readonly commandId: string; readonly result: "committed" | "duplicate"; readonly eventId: string; readonly revision: number } | { readonly type: "ack"; readonly commandId: string; readonly result: "rejected"; readonly reason: TerminalRejectionReason };
 
+export type CommittedAck = Extract<AckFrame, { readonly result: "committed" | "duplicate" }>;
+
+export type RejectedAck = Extract<AckFrame, { readonly result: "rejected" }>;
+
 export type RetryableErrorFrame = {
   readonly type: "retryable_error";
   readonly commandId: string;
@@ -154,6 +158,8 @@ export type ProtocolErrorFrame = {
 };
 
 export type ServerFrame = WelcomeFrame | ReplayPageFrame | RecoveryCompleteFrame | EventFrame | AckFrame | RetryableErrorFrame | ProtocolErrorFrame | { readonly type: "pong" };
+
+export type ServerErrorFrame = Extract<ServerFrame, { readonly type: "error" }>;
 
 export type ClientFrame =
   | {

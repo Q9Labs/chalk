@@ -74,16 +74,8 @@ function recovered(state: SyncConnectionState): SyncConnectionState {
 }
 
 function retry(state: SyncConnectionState, event: ConnectionEvent): SyncConnectionState {
-  if (!canRetry(state) || event.type !== "retry") {
+  if (!retryablePhases.has(state.phase) || event.type !== "retry") {
     return state;
   }
-  return { phase: "backoff", attempt: retryAttempt(state), retryAt: event.retryAt };
-}
-
-function canRetry(state: SyncConnectionState): boolean {
-  return retryablePhases.has(state.phase);
-}
-
-function retryAttempt(state: SyncConnectionState): number {
-  return "attempt" in state ? Math.max(1, state.attempt + 1) : 1;
+  return { phase: "backoff", attempt: "attempt" in state ? Math.max(1, state.attempt + 1) : 1, retryAt: event.retryAt };
 }

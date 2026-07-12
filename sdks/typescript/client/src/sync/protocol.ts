@@ -12,11 +12,11 @@ export const jsonSyncProtocolCodec: SyncProtocolCodec = {
   decodeServer(wire) {
     const value: unknown = JSON.parse(wire);
     assertServerFrame(value);
-    return value as ServerFrame;
+    return value;
   },
 };
 
-function assertServerFrame(value: unknown): asserts value is Record<"type", string> {
+function assertServerFrame(value: unknown): asserts value is ServerFrame {
   if (!isObject(value)) {
     throw new TypeError("server frame is missing its type");
   }

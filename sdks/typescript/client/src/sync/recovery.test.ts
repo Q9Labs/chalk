@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { canonicalJsonBytes, computeStateDigest } from "./canonical";
 import { acceptReplayPage, beginRecovery, completeRecovery, RECOVERY_LIMITS, RecoveryValidationError } from "./recovery";
-import { event, participantSessionId, stateSchemaVersion } from "./__tests__/runtime";
+import { event, participantSessionId, stateSchemaVersion } from "./test-support";
 import type { CanonicalReplica, ControlState, ReplayPageFrame, WelcomeFrame } from "./types";
 
 describe("recovery validation", () => {

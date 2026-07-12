@@ -123,11 +123,13 @@ export type ReactNativeWebSocketConstructor = new (url: string) => ReactNativeWe
 export function createReactNativeWebSocketFactory(WebSocketConstructor?: ReactNativeWebSocketConstructor): SyncWebSocketFactory {
   return {
     connect(url) {
-      const Constructor = WebSocketConstructor ?? (globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor | undefined);
-      if (!Constructor) {
+      if (WebSocketConstructor) {
+        return new ReactNativeSyncSocket(new WebSocketConstructor(url));
+      }
+      if (!globalThis.WebSocket) {
         throw new SyncReactNativeCapabilityError("WebSocket");
       }
-      return new ReactNativeSyncSocket(new Constructor(url));
+      return new BrowserFallbackSyncSocket(new globalThis.WebSocket(url));
     },
   };
 }
@@ -183,6 +185,30 @@ class ReactNativeSyncSocket implements SyncSocket {
     this.#socket.onmessage = (event) => this.onmessage?.({ data: event.data });
     this.#socket.onclose = (event) => this.onclose?.({ code: typeof event.code === "number" ? event.code : 1006 });
     this.#socket.onerror = () => this.onerror?.();
+  }
+
+  send(data: string): void {
+    this.#socket.send(data);
+  }
+
+  close(code?: number, reason?: string): void {
+    this.#socket.close(code, reason);
+  }
+}
+
+class BrowserFallbackSyncSocket implements SyncSocket {
+  readonly #socket: WebSocket;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { readonly data: unknown }) => void) | null = null;
+  onclose: ((event: { readonly code: number }) => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  constructor(socket: WebSocket) {
+    this.#socket = socket;
+    this.#socket.addEventListener("open", () => this.onopen?.());
+    this.#socket.addEventListener("message", (event) => this.onmessage?.({ data: event.data }));
+    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code }));
+    this.#socket.addEventListener("error", () => this.onerror?.());
   }
 
   send(data: string): void {

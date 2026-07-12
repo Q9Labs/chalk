@@ -1,8 +1,9 @@
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { normalizeTelemetryAttributes } from "./attributes";
-import { TelemetryDelivery, type TelemetryExporterHealth, type TelemetryTimelineEntry } from "./delivery";
+import { TelemetryDeliveryService, makeTelemetryDeliveryLayer, type TelemetryDeliveryEffectService, type TelemetryExporterHealth, type TelemetryTimelineEntry } from "./delivery";
 import { createJourneyIntakeExporter, MAX_JOURNEY_INTAKE_EVENTS_PER_BATCH, type TelemetryExporter, type TelemetryExportOptions } from "./exporter";
 import { TelemetryJourney, type StartJourneyOptions } from "./journey";
-import { createUuid } from "./random";
+import { TelemetryEventSourceService, makeTelemetryEventSourceLayer, type TelemetryEventSource } from "./random";
 import type { TelemetryStorage } from "./storage";
 import { createTraceContext, traceContextFromJourney } from "./trace";
 import { TELEMETRY_EVENT_VERSION, type JourneyTelemetryContext, type TelemetryEvent, type TelemetryEventDraft } from "./types";
@@ -18,7 +19,7 @@ const DEFAULT_QUEUE_SIZE = 500;
 const DEFAULT_TIMELINE_SIZE = 100;
 const DEFAULT_RETRY_DELAY_MS = 2_000;
 
-export interface TelemetryClientOptions {
+export type TelemetryClientOptions = {
   /** Telemetry remains inert until a first-party surface explicitly sets this to true. */
   readonly enabled?: boolean;
   readonly baseUrl?: string | URL;
@@ -34,18 +35,22 @@ export interface TelemetryClientOptions {
   readonly onDrop?: (droppedEvents: readonly TelemetryEvent[]) => void;
   readonly retryDelayMs?: number;
   readonly storage?: TelemetryStorage;
-}
+};
+
+const journeyIdentifierPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class TelemetryClient {
   readonly enabled: boolean;
-  private readonly delivery: TelemetryDelivery;
-  private readonly now: () => Date;
+  readonly #delivery: TelemetryDeliveryEffectService;
+  readonly #eventSource: TelemetryEventSource;
+  readonly #ready: Promise<void>;
+  readonly #runtime: ManagedRuntime.ManagedRuntime<TelemetryDeliveryService | TelemetryEventSourceService, never>;
+  #disposePromise: Promise<void> | undefined;
 
   constructor(options: TelemetryClientOptions = {}) {
-    const { enabled = false, now = () => new Date() } = options;
+    const { enabled = false } = options;
     this.enabled = enabled;
-    this.now = now;
-    this.delivery = new TelemetryDelivery({
+    const deliveryOptions = {
       batchSize: Math.min(positiveInteger(options.maxBatchSize, DEFAULT_BATCH_SIZE), MAX_JOURNEY_INTAKE_EVENTS_PER_BATCH),
       enabled,
       exporter: resolveExporter(options),
@@ -54,67 +59,80 @@ export class TelemetryClient {
       onDrop: options.onDrop,
       retryDelayMs: positiveInteger(options.retryDelayMs, DEFAULT_RETRY_DELAY_MS),
       storage: options.storage,
-    });
+    };
+    this.#runtime = ManagedRuntime.make(Layer.mergeAll(makeTelemetryDeliveryLayer(deliveryOptions), makeTelemetryEventSourceLayer(options.now)));
+    this.#delivery = this.#runtime.runSync(Effect.service(TelemetryDeliveryService));
+    this.#eventSource = this.#runtime.runSync(Effect.service(TelemetryEventSourceService));
+    this.#ready = this.#runtime.runPromiseExit(this.#delivery.awaitReady()).then(() => undefined);
   }
 
   startJourney(options: StartJourneyOptions): TelemetryJourney {
-    const parentContext = telemetryParentContext(options.parent);
-    const trace = journeyTrace(options, parentContext);
-    const journeyId = journeyIdentifier(options.journeyId);
-    const journey = new TelemetryJourney(this, journeyContext(journeyId, trace, parentContext));
-    const parentEventId = linkParentJourney(options.parent, journey.context);
+    const parentContext = options.parent?.context;
+    const trace = createTraceContext(parentContext?.traceparent ?? options.traceparent, parentContext?.tracestate ?? options.tracestate);
+    const journeyId = options.journeyId && validJourneyIdentifier(options.journeyId) ? options.journeyId.toLowerCase() : this.#eventSource.createUuid();
+    const journey = new TelemetryJourney(this, {
+      journeyId,
+      rootJourneyId: parentContext?.rootJourneyId ?? journeyId,
+      traceparent: trace.traceparent,
+      ...(trace.tracestate ? { tracestate: trace.tracestate } : {}),
+    });
+    const parentEventId = options.parent?.linkChild(journey.context);
     journey.start(options.kind, options.attributes, parentEventId);
     return journey;
   }
 
   getExporterHealth(): TelemetryExporterHealth {
-    return this.delivery.getHealth();
+    return this.#delivery.getHealthUnsafe();
   }
 
   getTimeline(): readonly TelemetryTimelineEntry[] {
-    return this.delivery.getTimeline();
+    return this.#delivery.getTimelineUnsafe();
   }
 
   getPendingEvents(): readonly TelemetryEvent[] {
-    return this.delivery.getPendingEvents();
+    return this.#delivery.getPendingEventsUnsafe();
   }
 
   subscribeExporterHealth(listener: (health: TelemetryExporterHealth) => void): () => void {
-    return this.delivery.subscribe(listener);
+    return this.#delivery.subscribe(listener);
   }
 
-  flush(options?: TelemetryExportOptions): Promise<void> {
-    return this.delivery.flush(options);
+  async flush(options?: TelemetryExportOptions): Promise<void> {
+    if (this.#disposePromise) return this.#disposePromise;
+    await this.#ready;
+    if (this.#disposePromise) return this.#disposePromise;
+    await this.#runtime.runPromise(this.#delivery.flush(options));
   }
 
   dispose(): void {
-    this.delivery.dispose();
+    if (this.#disposePromise) return;
+    Effect.runSync(this.#delivery.dispose());
+    this.#disposePromise = this.#runtime.dispose();
   }
 
   /** Internal for TelemetryJourney. Event construction remains synchronous and never waits for storage or network I/O. */
   emit(context: JourneyTelemetryContext, sequence: number, draft: TelemetryEventDraft): TelemetryEvent {
     const trace = traceContextFromJourney(context);
-    const event: Record<string, unknown> = {
+    const { attributes: draftAttributes, ...eventDraft } = draft;
+    const attributes = normalizeTelemetryAttributes(draftAttributes);
+    const event: TelemetryEvent = {
+      ...eventDraft,
       version: TELEMETRY_EVENT_VERSION,
-      event_id: createUuid(),
+      event_id: this.#eventSource.createUuid(),
       journey_id: context.journeyId,
       sequence,
-      occurred_at: this.now().toISOString(),
-      name: draft.name,
-      phase: draft.phase,
-      state: draft.state,
-      origin_kind: draft.origin_kind,
-      first_observed_layer: draft.first_observed_layer || draft.origin_kind,
-      upstream_visibility: draft.upstream_visibility || "local",
+      occurred_at: this.#eventSource.now().toISOString(),
+      first_observed_layer: eventDraft.first_observed_layer || eventDraft.origin_kind,
+      upstream_visibility: eventDraft.upstream_visibility || "local",
       trace_id: trace.traceId,
       span_id: trace.spanId,
       traceparent: context.traceparent,
+      ...(context.tracestate ? { tracestate: context.tracestate } : {}),
+      ...(attributes ? { attributes } : {}),
     };
-    assignDefined(event, "tracestate", context.tracestate);
-    assignDefined(event, "parent_event_id", draft.parent_event_id);
-    assignDefined(event, "attributes", normalizeTelemetryAttributes(draft.attributes));
-    this.delivery.enqueue(event as unknown as TelemetryEvent);
-    return event as unknown as TelemetryEvent;
+    const flushNow = this.#delivery.enqueueUnsafe(event);
+    void this.#runtime.runPromiseExit(flushNow ? this.#delivery.flush() : this.#delivery.persist());
+    return event;
   }
 }
 
@@ -128,40 +146,10 @@ function resolveExporter(options: TelemetryClientOptions): TelemetryExporter | u
   return createJourneyIntakeExporter({ baseUrl: options.baseUrl, credentials: options.credentials, fetch: options.fetch, path: options.exporterPath });
 }
 
-function journeyContext(journeyId: string, trace: ReturnType<typeof createTraceContext>, parent: JourneyTelemetryContext | undefined): JourneyTelemetryContext {
-  const context: Record<string, string> = {
-    journeyId,
-    rootJourneyId: parent?.rootJourneyId ?? journeyId,
-    traceparent: trace.traceparent,
-  };
-  assignDefined(context, "tracestate", trace.tracestate);
-  return context as unknown as JourneyTelemetryContext;
-}
-
-function telemetryParentContext(parent: TelemetryJourney | undefined): JourneyTelemetryContext | undefined {
-  return parent ? parent.context : undefined;
-}
-
-function journeyTrace(options: StartJourneyOptions, parent: JourneyTelemetryContext | undefined) {
-  return createTraceContext(parent ? parent.traceparent : options.traceparent, parent ? parent.tracestate : options.tracestate);
-}
-
-function journeyIdentifier(requested: string | undefined): string {
-  return requested && validJourneyIdentifier(requested) ? requested.toLowerCase() : createUuid();
-}
-
 function validJourneyIdentifier(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) && value.replaceAll("0", "").replaceAll("-", "") !== "";
-}
-
-function linkParentJourney(parent: TelemetryJourney | undefined, child: JourneyTelemetryContext): string | undefined {
-  return parent ? parent.linkChild(child) : undefined;
+  return journeyIdentifierPattern.test(value) && value.replaceAll("0", "").replaceAll("-", "") !== "";
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
-}
-
-function assignDefined(target: object, key: string, value: unknown): void {
-  if (value !== undefined) (target as Record<string, unknown>)[key] = value;
 }

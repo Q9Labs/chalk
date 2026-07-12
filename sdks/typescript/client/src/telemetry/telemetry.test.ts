@@ -1,7 +1,9 @@
+import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createJourneyIntakeExporter, createTelemetryClient, type TelemetryClient } from "./client";
 import { createMemoryTelemetryStorage } from "./storage";
 import { withSyncTelemetryCorrelation } from "./sync";
+import { makeDeferredFacadeExporter } from "./test-support";
 import type { JourneyIntakeEvent } from "./types";
 
 const clients: TelemetryClient[] = [];
@@ -114,7 +116,7 @@ describe("TelemetryClient", () => {
     journey.terminal("failed", { code: "network_unavailable" });
 
     await telemetry.flush();
-    await Promise.resolve();
+    await Effect.runPromise(Effect.yieldNow);
 
     expect(telemetry.getExporterHealth()).toMatchObject({ failedBatches: 1, status: "degraded" });
     expect((await storage.load()).map((event) => event.event_id)).toEqual(telemetry.getPendingEvents().map((event) => event.event_id));
@@ -138,7 +140,7 @@ describe("TelemetryClient", () => {
     journey.phase("authentication");
     journey.phase("signaling");
 
-    await Promise.resolve();
+    await Effect.runPromise(Effect.yieldNow);
 
     expect(telemetry.getPendingEvents().map((event) => event.sequence)).toEqual([2, 3]);
     expect(telemetry.getExporterHealth()).toMatchObject({ droppedEvents: 1, queueDepth: 2 });
@@ -146,24 +148,20 @@ describe("TelemetryClient", () => {
   });
 
   it("does not wait for a slow exporter on the meeting path", async () => {
-    let resolveExport: (() => void) | undefined;
-    const exporter = vi.fn(
-      () =>
-        new Promise<{ accepted_count: number; duplicate_count: number }>((resolve) => {
-          resolveExport = () => resolve({ accepted_count: 1, duplicate_count: 0 });
-        }),
-    );
-    const telemetry = createClient({ exporter });
+    const exporter = makeDeferredFacadeExporter();
+    const blockedExport = exporter.holdNext();
+    const telemetry = createClient({ exporter: exporter.exporter });
     const journey = telemetry.startJourney({ kind: "meeting.join" });
+
+    const activeFlush = telemetry.flush();
+    await blockedExport.started();
 
     const terminal = journey.terminal("cancelled");
     expect(terminal.sequence).toBe(2);
     expect(telemetry.getPendingEvents()).toHaveLength(2);
 
-    await vi.waitFor(() => {
-      expect(exporter).toHaveBeenCalledTimes(1);
-    });
-    resolveExport?.();
+    blockedExport.release();
+    await activeFlush;
     await telemetry.flush();
     expect(telemetry.getPendingEvents()).toHaveLength(0);
   });
@@ -248,25 +246,20 @@ describe("TelemetryClient", () => {
   });
 
   it("re-sends the in-flight journey and terminal event with keepalive", async () => {
-    let finishInitialExport: (() => void) | undefined;
-    const exporter = vi.fn((events, options?: { keepalive?: boolean }) => {
-      if (!options?.keepalive) {
-        return new Promise<{ accepted_count: number; duplicate_count: number }>((resolve) => {
-          finishInitialExport = () => resolve({ accepted_count: 1, duplicate_count: 0 });
-        });
-      }
-      return Promise.resolve({ accepted_count: events.length, duplicate_count: 0 });
-    });
-    const telemetry = createClient({ exporter });
+    const exporter = makeDeferredFacadeExporter();
+    const blockedExport = exporter.holdNext();
+    const telemetry = createClient({ exporter: exporter.exporter });
     const journey = telemetry.startJourney({ kind: "web.application" });
 
-    await vi.waitFor(() => expect(exporter).toHaveBeenCalledOnce());
+    const activeFlush = telemetry.flush();
+    await blockedExport.started();
     journey.terminal("succeeded", { result: "page_closed" });
     await telemetry.flush({ keepalive: true });
 
-    expect(exporter.mock.calls[1]).toEqual([[expect.objectContaining({ name: "journey.started" }), expect.objectContaining({ name: "journey.terminal" })], { keepalive: true }]);
+    expect(exporter.calls[1]).toMatchObject({ events: [expect.objectContaining({ name: "journey.started" }), expect.objectContaining({ name: "journey.terminal" })], options: { keepalive: true } });
 
-    finishInitialExport?.();
-    await vi.waitFor(() => expect(telemetry.getPendingEvents()).toHaveLength(0));
+    blockedExport.release();
+    await activeFlush;
+    expect(telemetry.getPendingEvents()).toHaveLength(0);
   });
 });

@@ -8,7 +8,7 @@ export type JourneyState = "started" | "in_progress" | "succeeded" | "failed" | 
 export type TelemetryOriginKind = "client" | "diagnostic" | "http" | "rtc" | "sync";
 export type TelemetryUpstreamVisibility = "local" | "propagated";
 
-export interface TelemetryEventBase {
+export type TelemetryEventBase = {
   readonly version: typeof TELEMETRY_EVENT_VERSION;
   readonly event_id: string;
   readonly journey_id: string;
@@ -25,7 +25,7 @@ export interface TelemetryEventBase {
   readonly traceparent?: string;
   readonly tracestate?: string;
   readonly attributes?: TelemetryAttributes;
-}
+};
 
 export type JourneyStartedEvent = TelemetryEventBase & {
   readonly name: "journey.started";
@@ -81,25 +81,24 @@ export type TelemetryEvent = DiagnosticTimelineTelemetryEvent | HttpRequestTelem
 
 export type TelemetryEventName = TelemetryEvent["name"];
 
-export interface TelemetryEventDraft {
-  readonly name: TelemetryEventName;
-  readonly phase: JourneyPhase;
-  readonly state: JourneyState;
-  readonly origin_kind: TelemetryOriginKind;
-  readonly first_observed_layer?: TelemetryOriginKind;
-  readonly upstream_visibility?: TelemetryUpstreamVisibility;
-  readonly parent_event_id?: string;
-  readonly attributes?: TelemetryAttributes;
-}
+type TelemetryEventDraftFor<TEvent extends TelemetryEvent> = TEvent extends TelemetryEvent
+  ? Pick<TEvent, "name" | "origin_kind" | "phase" | "state"> & {
+      readonly first_observed_layer?: TelemetryOriginKind;
+      readonly upstream_visibility?: TelemetryUpstreamVisibility;
+      readonly attributes?: TelemetryAttributes;
+    } & (TEvent extends { readonly parent_event_id: string } ? Pick<TEvent, "parent_event_id"> : { readonly parent_event_id?: string })
+  : never;
 
-export interface JourneyTelemetryContext {
+export type TelemetryEventDraft = TelemetryEventDraftFor<TelemetryEvent>;
+
+export type JourneyTelemetryContext = {
   readonly journeyId: string;
   readonly rootJourneyId: string;
   readonly traceparent: string;
   readonly tracestate?: string;
-}
+};
 
-export interface JourneyIntakeEvent {
+export type JourneyIntakeEvent = {
   readonly event_id: string;
   readonly journey_id: string;
   readonly sequence: number;
@@ -116,9 +115,9 @@ export interface JourneyIntakeEvent {
   readonly traceparent?: string;
   readonly tracestate?: string;
   readonly attributes?: TelemetryAttributes;
-}
+};
 
-export interface JourneyIntakeResponse {
+export type JourneyIntakeResponse = {
   readonly accepted_count: number;
   readonly duplicate_count: number;
-}
+};

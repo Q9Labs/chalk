@@ -5,34 +5,34 @@ export const CHALK_JOURNEY_ID_HEADER = "x-chalk-journey-id";
 export const TRACEPARENT_HEADER = "traceparent";
 export const TRACESTATE_HEADER = "tracestate";
 
-export interface TraceContext {
+export type TraceContext = {
   readonly traceId: string;
   readonly spanId: string;
   readonly traceFlags: string;
   readonly traceparent: string;
   readonly tracestate?: string;
-}
+};
+
+type ParsedTraceparent = Omit<TraceContext, "traceparent" | "tracestate">;
 
 const traceparentPattern = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i;
 
 export function createTraceContext(parentTraceparent?: string, tracestate?: string): TraceContext {
   const parent = parseTraceparent(parentTraceparent);
-  const traceId = parentTraceID(parent);
+  const traceId = parent?.traceId ?? randomHex(16);
   const spanId = randomHex(8);
-  const traceFlags = parentTraceFlags(parent);
+  const traceFlags = parent?.traceFlags ?? "01";
 
-  return attachTracestate(
-    {
-      traceId,
-      spanId,
-      traceFlags,
-      traceparent: `00-${traceId}-${spanId}-${traceFlags}`,
-    },
-    tracestate,
-  );
+  return {
+    traceId,
+    spanId,
+    traceFlags,
+    traceparent: `00-${traceId}-${spanId}-${traceFlags}`,
+    ...(tracestate ? { tracestate } : {}),
+  };
 }
 
-export function parseTraceparent(value: string | undefined): Omit<TraceContext, "traceparent" | "tracestate"> | undefined {
+export function parseTraceparent(value: string | undefined): ParsedTraceparent | undefined {
   if (!value) {
     return undefined;
   }
@@ -40,27 +40,26 @@ export function parseTraceparent(value: string | undefined): Omit<TraceContext, 
   return parseTraceparentMatch(traceparentPattern.exec(value));
 }
 
-function parseTraceparentMatch(match: RegExpExecArray | null): Omit<TraceContext, "traceparent" | "tracestate"> | undefined {
+function parseTraceparentMatch(match: RegExpExecArray | null): ParsedTraceparent | undefined {
   if (!match) return undefined;
-  const [, traceId, spanId, traceFlags] = match;
-  if (/^0+$/.test(traceId!) || /^0+$/.test(spanId!)) return undefined;
+  const traceId = match[1];
+  const spanId = match[2];
+  const traceFlags = match[3];
+  if (!traceId || !spanId || !traceFlags || /^0+$/.test(traceId) || /^0+$/.test(spanId)) return undefined;
 
   return {
-    traceId: traceId!.toLowerCase(),
-    spanId: spanId!.toLowerCase(),
-    traceFlags: traceFlags!.toLowerCase(),
+    traceId: traceId.toLowerCase(),
+    spanId: spanId.toLowerCase(),
+    traceFlags: traceFlags.toLowerCase(),
   };
 }
 
 export function journeyHeaders(context: JourneyTelemetryContext): Record<string, string> {
-  return attachTracestate(
-    {
-      [CHALK_JOURNEY_ID_HEADER]: context.journeyId,
-      [TRACEPARENT_HEADER]: context.traceparent,
-    },
-    context.tracestate,
-    TRACESTATE_HEADER,
-  );
+  return {
+    [CHALK_JOURNEY_ID_HEADER]: context.journeyId,
+    [TRACEPARENT_HEADER]: context.traceparent,
+    ...(context.tracestate ? { [TRACESTATE_HEADER]: context.tracestate } : {}),
+  };
 }
 
 export function traceContextFromJourney(context: JourneyTelemetryContext): TraceContext {
@@ -69,24 +68,9 @@ export function traceContextFromJourney(context: JourneyTelemetryContext): Trace
     return createTraceContext(undefined, context.tracestate);
   }
 
-  return attachTracestate(
-    {
-      ...parsed,
-      traceparent: context.traceparent,
-    },
-    context.tracestate,
-  );
-}
-
-function parentTraceID(parent: ReturnType<typeof parseTraceparent>): string {
-  return parent ? parent.traceId : randomHex(16);
-}
-
-function parentTraceFlags(parent: ReturnType<typeof parseTraceparent>): string {
-  return parent ? parent.traceFlags : "01";
-}
-
-function attachTracestate<T extends Record<string, string>>(target: T, tracestate: string | undefined, key = "tracestate"): T {
-  if (tracestate) (target as Record<string, string>)[key] = tracestate;
-  return target;
+  return {
+    ...parsed,
+    traceparent: context.traceparent,
+    ...(context.tracestate ? { tracestate: context.tracestate } : {}),
+  };
 }

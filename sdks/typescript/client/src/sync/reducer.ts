@@ -37,11 +37,10 @@ export function optimisticControlState(canonical: ControlState, participantSessi
 }
 
 export function isValidControlState(state: ControlState): boolean {
-  const candidate = asRecord(state);
-  if (!candidate) {
+  if (!asRecord(state)) {
     return false;
   }
-  return validControlStateRecord(candidate);
+  return validControlStateRecord(state);
 }
 
 function validControlStateRecord(candidate: Record<string, unknown>): boolean {
@@ -115,29 +114,24 @@ function optimisticHandState(command: SyncCommand): boolean {
 }
 
 type StateResult = { readonly ok: true; readonly state: ControlState } | { readonly ok: false; readonly error: ControlReducerError };
-type StateReducer<Event extends ControlEvent = ControlEvent> = (state: ControlState, event: Event) => StateResult;
-type HandEvent = Extract<ControlEvent, { readonly name: "hand_raised" | "hand_lowered" }>;
-type StateReducers = {
-  readonly participant_joined: StateReducer<Extract<ControlEvent, { readonly name: "participant_joined" }>>;
-  readonly participant_left: StateReducer<Extract<ControlEvent, { readonly name: "participant_left" }>>;
-  readonly hand_raised: StateReducer<HandEvent>;
-  readonly hand_lowered: StateReducer<HandEvent>;
-  readonly session_ended: StateReducer<Extract<ControlEvent, { readonly name: "session_ended" }>>;
-};
-
-const stateReducers = {
-  participant_joined: addParticipant,
-  participant_left: (state, event) => removeParticipant(state, event.payload.participantSessionId),
-  hand_raised: (state, event) => setHandRaised(state, event.payload.participantSessionId, true),
-  hand_lowered: (state, event) => setHandRaised(state, event.payload.participantSessionId, false),
-  session_ended: endSession,
-} satisfies StateReducers;
+type ParticipantJoinedEvent = Extract<ControlEvent, { readonly name: "participant_joined" }>;
 
 function reduceState(state: ControlState, event: ControlEvent): StateResult {
-  return stateReducers[event.name](state, event as never);
+  switch (event.name) {
+    case "participant_joined":
+      return addParticipant(state, event);
+    case "participant_left":
+      return removeParticipant(state, event.payload.participantSessionId);
+    case "hand_raised":
+      return setHandRaised(state, event.payload.participantSessionId, true);
+    case "hand_lowered":
+      return setHandRaised(state, event.payload.participantSessionId, false);
+    case "session_ended":
+      return endSession();
+  }
 }
 
-function addParticipant(state: ControlState, event: Extract<ControlEvent, { readonly name: "participant_joined" }>): StateResult {
+function addParticipant(state: ControlState, event: ParticipantJoinedEvent): StateResult {
   const { participantSessionId, displayName } = event.payload;
   if (!isParticipantId(participantSessionId)) {
     return { ok: false, error: "invalid_payload" };
@@ -200,11 +194,10 @@ function isDisplayName(value: string): boolean {
 }
 
 function isValidEvent(event: ControlEvent): boolean {
-  const candidate = asRecord(event);
-  if (!candidate) {
+  if (!asRecord(event)) {
     return false;
   }
-  return validEventRecord(candidate);
+  return validEventRecord(event);
 }
 
 function validEventRecord(candidate: Record<string, unknown>): boolean {
@@ -215,8 +208,8 @@ function validEventRecord(candidate: Record<string, unknown>): boolean {
   return hasValidEventPayload(candidate.name, candidate.payload);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+function asRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
 }
 
 function isControlStatus(value: unknown): value is ControlState["status"] {
@@ -224,15 +217,14 @@ function isControlStatus(value: unknown): value is ControlState["status"] {
 }
 
 function validParticipantId(value: unknown): string | null {
-  const participant = asRecord(value);
-  if (!participant) {
+  if (!asRecord(value)) {
     return null;
   }
-  const participantId = extractParticipantId(participant);
+  const participantId = extractParticipantId(value);
   if (!participantId) {
     return null;
   }
-  return hasValidParticipantDetails(participant) ? participantId : null;
+  return hasValidParticipantDetails(value) ? participantId : null;
 }
 
 function extractParticipantId(participant: Record<string, unknown>): string | null {
@@ -290,11 +282,10 @@ const payloadValidators: Record<string, (payload: Record<string, unknown>) => bo
 };
 
 function hasValidEventPayload(name: unknown, value: unknown): boolean {
-  const payload = asRecord(value);
-  if (!payload || typeof name !== "string") {
+  if (!asRecord(value) || typeof name !== "string") {
     return false;
   }
-  return validateKnownPayload(name, payload);
+  return validateKnownPayload(name, value);
 }
 
 function validateKnownPayload(name: string, payload: Record<string, unknown>): boolean {
