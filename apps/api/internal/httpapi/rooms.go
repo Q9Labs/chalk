@@ -101,17 +101,13 @@ type updateRoomRequest struct {
 }
 
 type createRoomSessionRequest struct {
-	Status    string                 `json:"status"`
 	Metadata  utilities.OptionalJSON `json:"metadata"`
 	StartedAt *time.Time             `json:"started_at"`
-	EndedAt   *time.Time             `json:"ended_at"`
 }
 
 type updateRoomSessionRequest struct {
-	Status    utilities.OptionalString `json:"status"`
-	Metadata  utilities.OptionalJSON   `json:"metadata"`
-	StartedAt optionalTimeRequest      `json:"started_at"`
-	EndedAt   optionalTimeRequest      `json:"ended_at"`
+	Metadata  utilities.OptionalJSON `json:"metadata"`
+	StartedAt optionalTimeRequest    `json:"started_at"`
 }
 
 type createRoomEndpointRequest struct {
@@ -136,9 +132,10 @@ type updateRoomEndpointRequest struct {
 }
 
 type createRoomSessionEndpointRequest struct {
-	TenantID utilities.ID
-	RoomID   utilities.ID
-	Body     createRoomSessionRequest
+	TenantID   utilities.ID
+	RoomID     utilities.ID
+	RequestKey string
+	Body       createRoomSessionRequest
 }
 
 type listRoomSessionsRequest struct {
@@ -192,7 +189,6 @@ func roomEndpoints(service RoomService, authorizer TenantAuthorizer) []RouteEndp
 		listRoomsEndpoint(service, authorizer),
 		getRoomEndpoint(service, authorizer),
 		updateRoomEndpoint(service, authorizer),
-		createRoomSessionEndpoint(service, authorizer),
 		listRoomSessionsEndpoint(service, authorizer),
 		getRoomSessionEndpoint(service, authorizer),
 		updateRoomSessionEndpoint(service, authorizer),
@@ -288,30 +284,6 @@ func updateRoomEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoi
 		RequestBody("UpdateRoomRequest", updateRoomRequest{}).
 		Responds(http.StatusOK, "Room", roomResponse{}).
 		Errors(roomWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorRoomSlugAlreadyUsed, apiErrorRoomNotFound, apiErrorRateLimited)...).
-		MapErrors(roomEndpointAPIError)
-}
-
-func createRoomSessionEndpoint(service RoomService, authorizer TenantAuthorizer) Endpoint[createRoomSessionEndpointRequest, roomSessionResponse] {
-	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions", "/tenants/{tenant_id}/rooms/{room_id}/sessions", "createRoomSession", decodeCreateRoomSessionRequest, func(ctx context.Context, request createRoomSessionEndpointRequest) (roomSessionResponse, error) {
-		if service == nil {
-			return roomSessionResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
-			return roomSessionResponse{}, err
-		}
-
-		session, err := service.CreateSession(ctx, request.Body.toCreateInput(request.TenantID, request.RoomID, createdByUserID(ctx)))
-		if err != nil {
-			return roomSessionResponse{}, err
-		}
-		return newRoomSessionResponse(session), nil
-	}).
-		Auth(APIAuthSessionOrBearer).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), roomIDParameter()).
-		RequestBody("CreateRoomSessionRequest", createRoomSessionRequest{}).
-		Responds(http.StatusCreated, "RoomSession", roomSessionResponse{}).
-		Errors(roomWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionStatus, apiErrorInvalidRoomField, apiErrorRoomNotFound, apiErrorRateLimited)...).
 		MapErrors(roomEndpointAPIError)
 }
 
@@ -436,7 +408,7 @@ func decodeCreateRoomSessionRequest(r *http.Request) (createRoomSessionEndpointR
 	if err != nil {
 		return createRoomSessionEndpointRequest{}, err
 	}
-	return createRoomSessionEndpointRequest{TenantID: tenantID, RoomID: roomID, Body: body}, nil
+	return createRoomSessionEndpointRequest{TenantID: tenantID, RoomID: roomID, RequestKey: r.Header.Get(idempotencyKeyHeader), Body: body}, nil
 }
 
 func decodeListRoomSessionsRequest(r *http.Request) (listRoomSessionsRequest, error) {
@@ -636,29 +608,12 @@ func (r updateRoomRequest) toUpdateInput() rooms.UpdateRoomInput {
 	}
 }
 
-func (r createRoomSessionRequest) toCreateInput(tenantID utilities.ID, roomID utilities.ID, userID utilities.ID) rooms.CreateSessionInput {
-	return rooms.CreateSessionInput{
-		Status:          r.Status,
-		Metadata:        r.Metadata.Value,
-		RoomID:          roomID,
-		TenantID:        tenantID,
-		CreatedByUserID: userID,
-		StartedAt:       r.StartedAt,
-		EndedAt:         r.EndedAt,
-	}
-}
-
 func (r updateRoomSessionRequest) toUpdateInput() rooms.UpdateSessionInput {
 	return rooms.UpdateSessionInput{
-		Status:   r.Status,
 		Metadata: r.Metadata,
 		StartedAt: rooms.OptionalTime{
 			Set:   r.StartedAt.Set,
 			Value: r.StartedAt.Value,
-		},
-		EndedAt: rooms.OptionalTime{
-			Set:   r.EndedAt.Set,
-			Value: r.EndedAt.Value,
 		},
 	}
 }

@@ -310,9 +310,8 @@ func prepareCreateSessionInput(input *CreateSessionInput) error {
 func prepareUpdateSessionInput(input *UpdateSessionInput) error {
 	var err error
 
-	input.Status, err = optionalStatus(input.Status, sessionStatus, ErrInvalidSessionStatus)
-	if err != nil {
-		return err
+	if input.Status.Set || input.EndedAt.Set {
+		return ErrInvalidSessionStatus
 	}
 	input.Metadata, err = utilities.OptionalNullableJSON(input.Metadata)
 	if err != nil {

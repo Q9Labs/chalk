@@ -43,6 +43,32 @@ defmodule ChalkSync.ScriptedStateholder do
     GenServer.call(__MODULE__, {:events_since, room_id, cursor})
   end
 
+  @impl ChalkSync.Stateholder
+  def decide_command(_identity, _command), do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def resolve_receipt(_identity, _command), do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def recover(_session, _cursor), do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def recover_session(session, cursor), do: recover(session, cursor)
+
+  @impl ChalkSync.Stateholder
+  def recovery_page(_session, _after_revision, _through_revision),
+    do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def apply_lifecycle_intent(_session, _intent_id),
+    do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def record_lifecycle_failure(_session, _intent_id, _reason), do: :ok
+
+  @impl ChalkSync.Stateholder
+  def pending_lifecycle_intents(_limit), do: {:ok, []}
+
   @impl GenServer
   def init(_opts) do
     {:ok, initial_state()}

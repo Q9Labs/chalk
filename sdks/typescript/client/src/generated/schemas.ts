@@ -20,6 +20,17 @@ export const AIProviderConfigSchema = Schema.StructWithRest(
 );
 export type AIProviderConfig = typeof AIProviderConfigSchema.Type;
 
+export const RoomSessionIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomSessionId"));
+export type RoomSessionId = typeof RoomSessionIdSchema.Type;
+
+export const AdmitSessionParticipantRequestSchema = Schema.Struct({
+  capabilities: Schema.Array(Schema.String),
+  metadata: Schema.optional(Schema.Unknown),
+  name: Schema.String.check(Schema.isMinLength(1)),
+  participant_session_id: RoomSessionIdSchema,
+});
+export type AdmitSessionParticipantRequest = typeof AdmitSessionParticipantRequestSchema.Type;
+
 export const UserIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UserId"));
 export type UserId = typeof UserIdSchema.Type;
 
@@ -116,10 +127,8 @@ export const CreateRoomRequestSchema = Schema.Struct({
 export type CreateRoomRequest = typeof CreateRoomRequestSchema.Type;
 
 export const CreateRoomSessionRequestSchema = Schema.Struct({
-  ended_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   metadata: Schema.optional(Schema.Unknown),
   started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  status: Schema.Literals(["pending", "active", "ended", "failed"]),
 });
 export type CreateRoomSessionRequest = typeof CreateRoomSessionRequestSchema.Type;
 
@@ -191,9 +200,6 @@ export type CreateTenantRequest = typeof CreateTenantRequestSchema.Type;
 
 export const RoomIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomId"));
 export type RoomId = typeof RoomIdSchema.Type;
-
-export const RoomSessionIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomSessionId"));
-export type RoomSessionId = typeof RoomSessionIdSchema.Type;
 
 export const CreateTranscriptRequestSchema = Schema.Struct({
   completed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
@@ -338,6 +344,27 @@ export const MembershipListSchema = Schema.Struct({
 });
 export type MembershipList = typeof MembershipListSchema.Type;
 
+export const ParticipantLifecycleSchema = Schema.Struct({
+  lifecycle_intent: Schema.Struct({
+    created_at: DateTimeStringSchema,
+    id: UUIDSchema,
+    intent_name: Schema.String,
+    participant_session_generation: Schema.NullOr(Schema.Number),
+    participant_session_id: Schema.NullOr(RoomSessionIdSchema),
+    request_key: Schema.String,
+    status: Schema.String,
+  }),
+  participant: Schema.Struct({
+    generation: Schema.Number,
+    id: UUIDSchema,
+    room_id: RoomIdSchema,
+    session_id: RoomSessionIdSchema,
+    status: Schema.String,
+    tenant_id: TenantIdSchema,
+  }),
+});
+export type ParticipantLifecycle = typeof ParticipantLifecycleSchema.Type;
+
 export const RecordingIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId"));
 export type RecordingId = typeof RecordingIdSchema.Type;
 
@@ -387,6 +414,11 @@ export const RegisterRequestSchema = Schema.Struct({
 });
 export type RegisterRequest = typeof RegisterRequestSchema.Type;
 
+export const RemoveSessionParticipantRequestSchema = Schema.Struct({
+  participant_session_generation: Schema.Number,
+});
+export type RemoveSessionParticipantRequest = typeof RemoveSessionParticipantRequestSchema.Type;
+
 export const RoomSchema = Schema.Struct({
   created_at: DateTimeStringSchema,
   created_by_user_id: Schema.NullOr(UserIdSchema),
@@ -427,6 +459,21 @@ export const RoomSessionListSchema = Schema.Struct({
   sessions: Schema.Array(RoomSessionSchema),
 });
 export type RoomSessionList = typeof RoomSessionListSchema.Type;
+
+export const SessionEndSchema = Schema.Struct({
+  lifecycle_intent: Schema.Struct({
+    created_at: DateTimeStringSchema,
+    id: UUIDSchema,
+    intent_name: Schema.String,
+    participant_session_generation: Schema.NullOr(Schema.Number),
+    participant_session_id: Schema.NullOr(RoomSessionIdSchema),
+    request_key: Schema.String,
+    status: Schema.String,
+  }),
+  session_id: RoomSessionIdSchema,
+  status: Schema.String,
+});
+export type SessionEnd = typeof SessionEndSchema.Type;
 
 export const StartIntegrationConnectionRequestSchema = Schema.Struct({
   account_alias: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
@@ -519,10 +566,8 @@ export const UpdateRoomRequestSchema = Schema.Struct({
 export type UpdateRoomRequest = typeof UpdateRoomRequestSchema.Type;
 
 export const UpdateRoomSessionRequestSchema = Schema.Struct({
-  ended_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   metadata: Schema.optional(Schema.Unknown),
   started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  status: Schema.optional(Schema.Literals(["pending", "active", "ended", "failed"])),
 });
 export type UpdateRoomSessionRequest = typeof UpdateRoomSessionRequestSchema.Type;
 
@@ -575,6 +620,31 @@ export type RateLimitRemainingHeader = typeof RateLimitRemainingHeaderSchema.Typ
 
 export const RetryAfterHeaderSchema = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
 export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
+
+export const AdmitSessionParticipantPathParamsSchema = Schema.Struct({
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type AdmitSessionParticipantPathParams = typeof AdmitSessionParticipantPathParamsSchema.Type;
+
+export const AdmitSessionParticipantRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type AdmitSessionParticipantRequestHeaders = typeof AdmitSessionParticipantRequestHeadersSchema.Type;
+
+export const AdmitSessionParticipantRequestBodySchema = AdmitSessionParticipantRequestSchema;
+export type AdmitSessionParticipantRequestBody = typeof AdmitSessionParticipantRequestBodySchema.Type;
+
+export const AdmitSessionParticipantResponseSchema = ParticipantLifecycleSchema;
+export type AdmitSessionParticipantResponse = typeof AdmitSessionParticipantResponseSchema.Type;
+
+export const AdmitSessionParticipant429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type AdmitSessionParticipant429ResponseHeaders = typeof AdmitSessionParticipant429ResponseHeadersSchema.Type;
 
 export const CompleteGoogleSignInQueryParamsSchema = Schema.Struct({
   code: Schema.String,
@@ -673,6 +743,11 @@ export const CreateRoomSessionPathParamsSchema = Schema.Struct({
 });
 export type CreateRoomSessionPathParams = typeof CreateRoomSessionPathParamsSchema.Type;
 
+export const CreateRoomSessionRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type CreateRoomSessionRequestHeaders = typeof CreateRoomSessionRequestHeadersSchema.Type;
+
 export const CreateRoomSessionRequestBodySchema = CreateRoomSessionRequestSchema;
 export type CreateRoomSessionRequestBody = typeof CreateRoomSessionRequestBodySchema.Type;
 
@@ -751,6 +826,28 @@ export const DisableIntegrationConnection429ResponseHeadersSchema = Schema.Struc
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type DisableIntegrationConnection429ResponseHeaders = typeof DisableIntegrationConnection429ResponseHeadersSchema.Type;
+
+export const EndRoomSessionPathParamsSchema = Schema.Struct({
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type EndRoomSessionPathParams = typeof EndRoomSessionPathParamsSchema.Type;
+
+export const EndRoomSessionRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type EndRoomSessionRequestHeaders = typeof EndRoomSessionRequestHeadersSchema.Type;
+
+export const EndRoomSessionResponseSchema = SessionEndSchema;
+export type EndRoomSessionResponse = typeof EndRoomSessionResponseSchema.Type;
+
+export const EndRoomSession429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type EndRoomSession429ResponseHeaders = typeof EndRoomSession429ResponseHeadersSchema.Type;
 
 export const ExecuteIntegrationActionPathParamsSchema = Schema.Struct({
   connection_id: UUIDSchema,
@@ -1029,6 +1126,32 @@ export const Register429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type Register429ResponseHeaders = typeof Register429ResponseHeadersSchema.Type;
+
+export const RemoveSessionParticipantPathParamsSchema = Schema.Struct({
+  participant_session_id: RoomSessionIdSchema,
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RemoveSessionParticipantPathParams = typeof RemoveSessionParticipantPathParamsSchema.Type;
+
+export const RemoveSessionParticipantRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type RemoveSessionParticipantRequestHeaders = typeof RemoveSessionParticipantRequestHeadersSchema.Type;
+
+export const RemoveSessionParticipantRequestBodySchema = RemoveSessionParticipantRequestSchema;
+export type RemoveSessionParticipantRequestBody = typeof RemoveSessionParticipantRequestBodySchema.Type;
+
+export const RemoveSessionParticipantResponseSchema = ParticipantLifecycleSchema;
+export type RemoveSessionParticipantResponse = typeof RemoveSessionParticipantResponseSchema.Type;
+
+export const RemoveSessionParticipant429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RemoveSessionParticipant429ResponseHeaders = typeof RemoveSessionParticipant429ResponseHeadersSchema.Type;
 
 export const StartGoogleSignIn302ResponseHeadersSchema = Schema.Struct({
   Location: LocationHeaderSchema,
@@ -1322,6 +1445,25 @@ export const ForbiddenErrorWireSchema = Schema.Struct({
 export const ForbiddenErrorSchema = ForbiddenErrorWireSchema.pipe(
   Schema.decodeTo(ForbiddenError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "ForbiddenError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class IdempotencyConflictError extends Schema.TaggedErrorClass<IdempotencyConflictError>()("IdempotencyConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdempotencyConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_conflict"),
+    message: Schema.String,
+  }),
+});
+export const IdempotencyConflictErrorSchema = IdempotencyConflictErrorWireSchema.pipe(
+  Schema.decodeTo(IdempotencyConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdempotencyConflictError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -1649,6 +1791,25 @@ export const InvalidEmailErrorSchema = InvalidEmailErrorWireSchema.pipe(
   }),
 );
 
+export class InvalidIdempotencyKeyError extends Schema.TaggedErrorClass<InvalidIdempotencyKeyError>()("InvalidIdempotencyKeyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_idempotency_key"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidIdempotencyKeyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_idempotency_key"),
+    message: Schema.String,
+  }),
+});
+export const InvalidIdempotencyKeyErrorSchema = InvalidIdempotencyKeyErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidIdempotencyKeyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidIdempotencyKeyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class InvalidIntegrationActionError extends Schema.TaggedErrorClass<InvalidIntegrationActionError>()("InvalidIntegrationActionError", {
   error: Schema.Struct({
     code: Schema.Literal("invalid_integration_action"),
@@ -1835,6 +1996,25 @@ export const InvalidPageSizeErrorWireSchema = Schema.Struct({
 export const InvalidPageSizeErrorSchema = InvalidPageSizeErrorWireSchema.pipe(
   Schema.decodeTo(InvalidPageSizeError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidPageSizeError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidParticipantSessionIdError extends Schema.TaggedErrorClass<InvalidParticipantSessionIdError>()("InvalidParticipantSessionIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_participant_session_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidParticipantSessionIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_participant_session_id"),
+    message: Schema.String,
+  }),
+});
+export const InvalidParticipantSessionIdErrorSchema = InvalidParticipantSessionIdErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidParticipantSessionIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidParticipantSessionIdError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2314,6 +2494,25 @@ export const InvalidUserNameErrorSchema = InvalidUserNameErrorWireSchema.pipe(
   }),
 );
 
+export class LifecycleCapacityExceededError extends Schema.TaggedErrorClass<LifecycleCapacityExceededError>()("LifecycleCapacityExceededError", {
+  error: Schema.Struct({
+    code: Schema.Literal("lifecycle_capacity_exceeded"),
+    message: Schema.String,
+  }),
+}) {}
+export const LifecycleCapacityExceededErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("lifecycle_capacity_exceeded"),
+    message: Schema.String,
+  }),
+});
+export const LifecycleCapacityExceededErrorSchema = LifecycleCapacityExceededErrorWireSchema.pipe(
+  Schema.decodeTo(LifecycleCapacityExceededError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "LifecycleCapacityExceededError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class MissingAiCredentialsError extends Schema.TaggedErrorClass<MissingAiCredentialsError>()("MissingAiCredentialsError", {
   error: Schema.Struct({
     code: Schema.Literal("missing_ai_credentials"),
@@ -2405,6 +2604,63 @@ export const OauthNotConfiguredErrorWireSchema = Schema.Struct({
 export const OauthNotConfiguredErrorSchema = OauthNotConfiguredErrorWireSchema.pipe(
   Schema.decodeTo(OauthNotConfiguredError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "OauthNotConfiguredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ParticipantGenerationMismatchError extends Schema.TaggedErrorClass<ParticipantGenerationMismatchError>()("ParticipantGenerationMismatchError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant_generation_mismatch"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantGenerationMismatchErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant_generation_mismatch"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantGenerationMismatchErrorSchema = ParticipantGenerationMismatchErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantGenerationMismatchError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantGenerationMismatchError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ParticipantNotActiveError extends Schema.TaggedErrorClass<ParticipantNotActiveError>()("ParticipantNotActiveError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant_not_active"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantNotActiveErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant_not_active"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantNotActiveErrorSchema = ParticipantNotActiveErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantNotActiveError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantNotActiveError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ParticipantNotFoundError extends Schema.TaggedErrorClass<ParticipantNotFoundError>()("ParticipantNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant_not_found"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantNotFoundErrorSchema = ParticipantNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantNotFoundError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2504,6 +2760,25 @@ export const ServiceUnavailableErrorSchema = ServiceUnavailableErrorWireSchema.p
   }),
 );
 
+export class SessionNotActiveError extends Schema.TaggedErrorClass<SessionNotActiveError>()("SessionNotActiveError", {
+  error: Schema.Struct({
+    code: Schema.Literal("session_not_active"),
+    message: Schema.String,
+  }),
+}) {}
+export const SessionNotActiveErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("session_not_active"),
+    message: Schema.String,
+  }),
+});
+export const SessionNotActiveErrorSchema = SessionNotActiveErrorWireSchema.pipe(
+  Schema.decodeTo(SessionNotActiveError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SessionNotActiveError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class UnauthenticatedError extends Schema.TaggedErrorClass<UnauthenticatedError>()("UnauthenticatedError", {
   error: Schema.Struct({
     code: Schema.Literal("unauthenticated"),
@@ -2522,6 +2797,26 @@ export const UnauthenticatedErrorSchema = UnauthenticatedErrorWireSchema.pipe(
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
+
+export const AdmitSessionParticipantErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyConflictErrorSchema,
+  InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  LifecycleCapacityExceededErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SessionNotActiveErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type AdmitSessionParticipantError = typeof AdmitSessionParticipantErrorSchema.Type;
 
 export const CompleteGoogleSignInErrorSchema = Schema.Union([InternalErrorSchema, InvalidOauthStateErrorSchema, OauthEmailConflictErrorSchema, OauthEmailNotVerifiedErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
 export type CompleteGoogleSignInError = typeof CompleteGoogleSignInErrorSchema.Type;
@@ -2582,11 +2877,12 @@ export type CreateRoomError = typeof CreateRoomErrorSchema.Type;
 
 export const CreateRoomSessionErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
+  IdempotencyConflictErrorSchema,
   InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
   InvalidRequestErrorSchema,
   InvalidRoomFieldErrorSchema,
   InvalidRoomIdErrorSchema,
-  InvalidSessionStatusErrorSchema,
   InvalidTenantIdErrorSchema,
   NotFoundErrorSchema,
   PayloadTooLargeErrorSchema,
@@ -2648,6 +2944,23 @@ export const DisableIntegrationConnectionErrorSchema = Schema.Union([
   UnauthenticatedErrorSchema,
 ]);
 export type DisableIntegrationConnectionError = typeof DisableIntegrationConnectionErrorSchema.Type;
+
+export const EndRoomSessionErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyConflictErrorSchema,
+  InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  LifecycleCapacityExceededErrorSchema,
+  NotFoundErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SessionNotActiveErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type EndRoomSessionError = typeof EndRoomSessionErrorSchema.Type;
 
 export const ExecuteIntegrationActionErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -2776,6 +3089,29 @@ export const RegisterErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
 ]);
 export type RegisterError = typeof RegisterErrorSchema.Type;
+
+export const RemoveSessionParticipantErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyConflictErrorSchema,
+  InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  LifecycleCapacityExceededErrorSchema,
+  NotFoundErrorSchema,
+  ParticipantGenerationMismatchErrorSchema,
+  ParticipantNotActiveErrorSchema,
+  ParticipantNotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SessionNotActiveErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type RemoveSessionParticipantError = typeof RemoveSessionParticipantErrorSchema.Type;
 
 export const StartGoogleSignInErrorSchema = Schema.Union([InternalErrorSchema, OauthNotConfiguredErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
 export type StartGoogleSignInError = typeof StartGoogleSignInErrorSchema.Type;
@@ -2924,6 +3260,7 @@ export const UpdateTranscriptErrorSchema = Schema.Union([
 export type UpdateTranscriptError = typeof UpdateTranscriptErrorSchema.Type;
 
 export const ChalkOperationPolicies = {
+  admitSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -2934,11 +3271,13 @@ export const ChalkOperationPolicies = {
   createTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createUser: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   disableIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  endRoomSession: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getMe: { rateLimit: { limit: 100, policy: "auth.me", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
+  removeSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   startIntegrationConnection: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   transcribeRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

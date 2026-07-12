@@ -49,6 +49,8 @@ const (
 	RouteMembershipListViewerScenario   = "route:membership-list-viewer"
 	RouteMembershipUpdateOwnerScenario  = "route:membership-update-owner"
 	RouteRoomCreateMemberScenario       = "route:room-create-member"
+	RouteSessionCreateMemberScenario    = "route:session-create-member"
+	RouteSessionEndMemberScenario       = "route:session-end-member"
 	RouteRecordingTranscribeScenario    = "route:recording-transcribe"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
@@ -93,6 +95,8 @@ func ScenarioNames() []string {
 		RouteMembershipListViewerScenario,
 		RouteMembershipUpdateOwnerScenario,
 		RouteRoomCreateMemberScenario,
+		RouteSessionCreateMemberScenario,
+		RouteSessionEndMemberScenario,
 		RouteRecordingTranscribeScenario,
 		PolicyTenantSystemAllowScenario,
 		PolicyTenantAPIKeyScopeScenario,
@@ -775,6 +779,7 @@ type routeTraceConfig struct {
 	Body           json.RawMessage
 	DisplayBody    json.RawMessage
 	Authorization  string
+	Headers        map[string]string
 	RemoteAddr     string
 	ExpectedStatus int
 }
@@ -805,6 +810,9 @@ func runRouteTrace(ctx context.Context, cfg routeTraceConfig) (ScenarioResult, e
 	}
 	if cfg.Authorization != "" {
 		request.Header.Set("Authorization", cfg.Authorization)
+	}
+	for name, value := range cfg.Headers {
+		request.Header.Set(name, value)
 	}
 	if cfg.RemoteAddr != "" {
 		request.RemoteAddr = cfg.RemoteAddr
@@ -2185,6 +2193,9 @@ func tracedHeaders(r *http.Request) map[string]string {
 	}
 	if value := r.Header.Get("Content-Type"); value != "" {
 		headers["content-type"] = value
+	}
+	if value := r.Header.Get("Idempotency-Key"); value != "" {
+		headers["idempotency-key"] = value
 	}
 	return headers
 }

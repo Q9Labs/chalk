@@ -10,6 +10,9 @@ defmodule ChalkSync.Transport.Router do
   plug(:dispatch)
 
   alias ChalkSync.DevTools
+  alias ChalkSync.Operations
+  alias ChalkSync.Operations.Metrics
+  alias ChalkSync.Operations.Readiness
 
   get "/healthz" do
     conn
@@ -17,10 +20,34 @@ defmodule ChalkSync.Transport.Router do
     |> send_resp(200, JSON.encode!(%{"status" => "ok"}))
   end
 
+  get "/readyz" do
+    health = Readiness.health()
+    status = if Readiness.ready?(), do: 200, else: 503
+    send_json(conn, status, health)
+  end
+
+  get "/metrics" do
+    send_json(conn, 200, Metrics.snapshot())
+  end
+
   get "/v1/sync" do
-    conn
-    |> WebSockAdapter.upgrade(ChalkSync.Transport.Socket, [], timeout: 60_000)
-    |> halt()
+    if Application.fetch_env!(:chalk_sync, :enable_v1) and Operations.accepting_connections?() do
+      conn
+      |> WebSockAdapter.upgrade(ChalkSync.Transport.Socket, [], timeout: 60_000)
+      |> halt()
+    else
+      not_found(conn)
+    end
+  end
+
+  get "/v2/sync" do
+    if Operations.accepting_connections?() do
+      conn
+      |> WebSockAdapter.upgrade(ChalkSync.Transport.SocketV2, [], timeout: 60_000)
+      |> halt()
+    else
+      send_json(conn, 503, %{"error" => "server_draining"})
+    end
   end
 
   get "/dev/lab" do

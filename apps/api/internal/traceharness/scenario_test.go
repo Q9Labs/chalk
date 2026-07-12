@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 )
 
 func TestRunCreateTenantScenario(t *testing.T) {
@@ -80,6 +82,65 @@ func TestRunRouteRoomCreateMemberScenario(t *testing.T) {
 	assertEvent(t, result.Events, "service", "rooms.Service.CreateRoom")
 	assertEvent(t, result.Events, "repository", "RoomRepository.CreateRoom")
 	assertEvent(t, result.Events, "database", "INSERT rooms RETURNING *")
+}
+
+func TestRunRouteSessionCreateMemberScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteSessionCreateMemberScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
+	}
+
+	var body struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.ID == "" || body.Status != sessionlifecycle.SessionStatusActive {
+		t.Fatalf("body = %#v", body)
+	}
+
+	assertEvent(t, result.Events, "service", "sessionlifecycle.Service.CreateSession")
+	assertEvent(t, result.Events, "repository", "SessionLifecycleRepository.CreateSession")
+	assertEvent(t, result.Events, "database", "INSERT session_create_requests")
+	assertEvent(t, result.Events, "database", "INSERT room_sessions")
+	assertEvent(t, result.Events, "database", "INSERT sync_session_control")
+	assertEvent(t, result.Events, "database", "COMMIT")
+}
+
+func TestRunRouteSessionEndMemberScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteSessionEndMemberScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusAccepted)
+	}
+
+	var body struct {
+		Status string `json:"status"`
+		Intent struct {
+			RequestKey string `json:"request_key"`
+			Status     string `json:"status"`
+		} `json:"lifecycle_intent"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Status != "ending" || body.Intent.RequestKey != "session-end-trace-0001" || body.Intent.Status != "pending" {
+		t.Fatalf("body = %#v", body)
+	}
+
+	assertEvent(t, result.Events, "service", "sessionlifecycle.Service.RequestSessionEnd")
+	assertEvent(t, result.Events, "repository", "SessionLifecycleRepository.RequestSessionEnd")
+	assertEvent(t, result.Events, "database", "SET LOCAL synchronous_commit = on")
+	assertEvent(t, result.Events, "database", "INSERT sync_lifecycle_intents")
+	assertEvent(t, result.Events, "database", "UPDATE room_sessions SET status = ending")
+	assertEvent(t, result.Events, "database", "COMMIT")
 }
 
 func TestRunRouteRecordingTranscribeScenario(t *testing.T) {

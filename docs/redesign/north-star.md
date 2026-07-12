@@ -55,10 +55,10 @@ Non-goal for the rebuild: preserve today's tables, route shapes, Terraform modul
 
 ## Constraints — the lines we don't cross (this is what stops drift)
 
-1. **Self-host is a v1 requirement — in two tiers.** _v1 (app-tier self-host):_ the customer self-hosts the **app tier** (API + WS sync + Redis + Postgres) and embeds the SDK; media still flows through CF SFU via the MediaPlane adapter. _Later (full self-host):_ Cloudflare-free, including the media plane (DigitalOcean SFU adapter). Either way the portable core depends on **nothing proprietary** — the durable store is **standard Postgres**, no vendor-specific DB features. _Don't block v1 launch waiting on the fully-self-hosted media tier._
-2. **Swappable applies to BOTH planes — two ports.** **MediaPlane** (primary: `CloudflareMediaPlaneAdapter`, CF SFU direct; later: DigitalOcean self-hosted SFU) and **SyncEngine** (primary: custom WebSocket sync + Redis; later: `DurableObjectSyncAdapter`). Vendor specifics live in adapters — **never the foundation**. Stack details: `scratchpad/chalk-architecture-decision-2026-06-16.md`.
+1. **Self-host is a v1 requirement — in two tiers.** _v1 (app-tier self-host):_ the customer self-hosts the **app tier** (API + WS sync + Postgres) and embeds the SDK; media still flows through CF SFU via the MediaPlane adapter. Redis is an optional accelerator, never a required authority. _Later (full self-host):_ Cloudflare-free, including the media plane (DigitalOcean SFU adapter). Either way the portable core depends on **nothing proprietary** — the durable store is **standard Postgres**, no vendor-specific DB features. _Don't block v1 launch waiting on the fully-self-hosted media tier._
+2. **Swappable applies to BOTH planes — two ports.** **MediaPlane** (primary: `CloudflareMediaPlaneAdapter`, CF SFU direct; later: DigitalOcean self-hosted SFU) and **SyncEngine** (primary: custom WebSocket sync + Postgres; later: `DurableObjectSyncAdapter`). Vendor specifics live in adapters — **never the foundation**. Stack details: `scratchpad/chalk-architecture-decision-2026-06-16.md`.
 3. **No provider details in core tables.** Rooms / sessions / participants store only opaque provider refs + a provider enum + provider metadata. Cloudflare IDs never sit in core columns.
-4. **Real-time state never touches Postgres.** Presence, active-speaker, track up/down live in the coordination plane. Postgres holds durable facts only.
+4. **Durable sync facts live in Postgres; volatile signals do not.** Ordered control state, receipts, and lifecycle intent are durable facts. Presence, active-speaker, cursor, and track telemetry live only in the coordination plane.
 5. **Token-asserted external identity is the primitive.** The embedding customer signs a token asserting _who / which room / what grants_. Native Chalk accounts are **additive** (the dashboard/host path), not the center of gravity.
 6. **Anonymous-first joining.** A joiner needs no account. Authentication is an _upgrade_, never a gate.
 7. **One tenancy root.** A single entity = the customer / deployment (and the billing + isolation boundary). Not "org AND tenant." Team / workspace grouping is optional, additive, and works the same for every tenant.
@@ -118,10 +118,10 @@ Internal names: **Tenant** (the root) and **User** (the person). "Org / account 
 
 ## Sync correctness (value #2, made concrete)
 
-- **Stateholder = single source of truth** (Redis or an equivalent fast store): atomic per-room writes + a change stream.
-- **WS nodes are stateless fanout.** A connection is _sticky_ to its node, but the node owns no authoritative state (only a rebuildable projection). **Node loss = client reconnects + re-snapshots; zero authoritative state lost.**
-- **One authoritative writer per room** — live-state mutations are serialized per room (no split-brain). A room's connections may scatter across many nodes; only the _write authority_ is single.
-- **Reconnect = full snapshot from the stateholder, then resume.**
+- **Postgres is the single durable authority.** A semantic transaction locks one tenant-scoped Session control row and atomically writes the exact-next event, folded state, and stable command receipt.
+- **WS nodes are disposable fanout.** A connection is sticky to its node, while coordinators and queues remain rebuildable projections. Node loss causes reconnect and authoritative recovery with zero acknowledged state loss.
+- **Postgres serializes each Session.** Connections and commands may reach any node; no application writer lease or cluster-wide process identity exists.
+- **Reconnect is digest-checked snapshot, bounded replay, or up-to-date recovery.** PostgreSQL notifications are hints and periodic head reads repair every missed hint.
 
 ---
 

@@ -13,6 +13,9 @@
 # Temporary files, for example, from tests.
 /tmp/
 
+# Local sync breaker traces can be large and are machine-specific.
+/.artifacts/
+
 # If the VM crashes, it generates a dump, let's ignore it too.
 erl_crash.dump
 
@@ -21,4 +24,3 @@ erl_crash.dump
 
 # Ignore package tarball (built via "mix hex.build").
 chalk_sync-*.tar
-

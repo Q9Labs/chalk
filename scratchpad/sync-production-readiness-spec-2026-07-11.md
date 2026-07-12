@@ -2,10 +2,12 @@
 
 <!-- cspell:words backpressure bytea coalescible discoverably erpc goldens idempotently libcluster PITR Postgrex replayable transactionally unclustered unpartitioned -->
 
-**Status:** Proposed implementation specification
-**Date:** 2026-07-11
+**Status:** Implemented locally; production acceptance blocked
+**Date:** 2026-07-12
 **Applies to:** `apps/sync`, the sync contract, the TypeScript client runtime,
 the API lifecycle boundary, database migrations, and the sync stress harness
+**Evidence report:**
+[`sync-production-readiness-report-2026-07-12.md`](sync-production-readiness-report-2026-07-12.md)
 
 ## Decision
 
@@ -50,44 +52,40 @@ coordination, recovery, fanout, presence, and transport.
 
 ## Current-state verdict
 
-The current engine is a valuable prototype and is not production-ready. Its
-pure reducer, Stateholder seam, snapshot/replay behavior, protocol schema,
-generated types, WebSocket transport, and breaker harness are worth retaining.
-The harness has also shown that the basic model can converge for 100,000 pure
-operations and that the real wire path works in several fault-free recovery
-cases.
+The durable core is locally robust. The production release is not ready.
 
-Six deterministic correctness failures currently block launch:
+The implementation now has a Session-scoped Postgres authority, atomic control
+decisions and lifecycle intents, durable receipts, an exact-next reducer,
+protocol v2, bounded paged recovery and live delivery, a production TypeScript
+runtime, dependency-aware operations, retention, and deterministic failure
+artifacts. Redis is absent from the correctness path. Two independent local
+BEAM nodes, real Chromium, a restarted Node client, slow TCP peers, and a real
+local PostgreSQL 18.3 primary have exercised the principal paths.
 
-1. A writer restart loses committed and rejected command outcomes.
-2. The 256-entry local outcome cache forgets old command IDs and permits an old
-   request to be decided again.
-3. A durable commit can succeed while the caller receives `rejected: retry`,
-   leaving the committed outcome undiscoverable.
-4. Revision-conflict recovery can leave an empty writer process alive.
-5. A non-reading subscriber grows its mailbox without a bound.
-6. The reducer accepts a supplied event whose revision is not exactly next.
+The six deterministic failures that motivated the overhaul are corrected:
 
-The overhaul must also close these code-proven gaps:
+1. committed and rejected outcomes survive process and connection-set restart;
+2. durable receipts preserve old command outcomes beyond the former 256-entry
+   cache;
+3. uncertain commits resolve through the receipt on the writable primary;
+4. revision conflicts do not leave an authoritative empty writer;
+5. live and recovery frames remain reserved inside bounded queues until the
+   client confirms the exact applied revision and digest;
+6. supplied events must be exactly next in the reducer and database.
 
-- durable authority is currently keyed by `room_id`, so separate Sessions can
-  collide;
-- tokens and runtime routing lack participant-session identity and generation;
-- production can boot with the in-memory Stateholder;
-- socket loss currently creates a durable participant-leave event;
-- the reducer and v1 generated validator disagree about revision contiguity;
-- stable terminal rejections exist only in process memory;
-- replay frames, inbound work, outbound delivery, payloads, and mailboxes are
-  not comprehensively bounded;
-- a stale process heap participates in authoritative validation;
-- the TypeScript package has generated frame shapes but no production sync
-  runtime;
-- multi-node, real-Postgres, API lifecycle, real-browser, slow-TCP, and database
-  failover paths remain unproved.
+Production acceptance remains blocked by four missing proofs or integrations:
 
-Every item above remains traceable to an executable release gate. Detector
-tests that merely demonstrate the old failure do not satisfy the gate; they
-must assert the corrected behavior and pass.
+- no production token issuer/verifier adapter is wired into the release;
+- the available database has no synchronous standby, promotion, or isolated
+  point-in-time restore surface;
+- the launch envelope is unapproved, so the required 60-minute load and
+  eight-hour soak have no authoritative rates and have not run;
+- the v2 migration deliberately refuses populated legacy Session data, and no
+  approved backfill or verified-empty production target exists.
+
+The evidence report records every local pass, the saved failed campaign, and
+the exact production blockers. No local test substitutes for the missing
+database topology, deployment integration, or launch envelope.
 
 ## Product boundary
 
@@ -844,7 +842,13 @@ command_id or lifecycle_intent_id
 ```
 
 The origin fields are mutually exclusive. Clients accept ACK and event in
-either order and reconcile them by command ID and event ID.
+either order and reconcile them by command ID and event ID. After applying a
+live event and verifying its resulting digest, the SDK sends a cumulative
+`delivery_ack` containing the control stream, revision, and state digest.
+After successfully installing a snapshot or fully reducing and verifying a
+replay page, the SDK sends an exact `recovery_ack` containing the recovery ID,
+applied revision, and state digest. Recovery frames do not produce live
+delivery acknowledgments.
 
 ### Limits and close behavior
 
@@ -905,12 +909,13 @@ Recovery follows this sequence:
    completion frames and proceeds directly to bounded drain and close.
 5. For replay, fetch immutable pages with `revision > cursor AND revision <= H`
    on transport demand. Only the next query cursor and range remain in memory;
-   a page is fetched and enqueued only after the prior page drains. Retention
-   forbids deletion of these rows during active recovery.
-6. After the snapshot, final replay page, or up-to-date welcome is successfully
-   reserved, enqueue `recovery_complete(H)` and set `enqueued_revision = H`.
-   Hints accumulated during recovery remain only in `target_head` until this
-   point.
+   a page is fetched and enqueued only after an exact `recovery_ack` releases
+   the prior page. Retention forbids deletion of these rows during active
+   recovery.
+6. After the snapshot or final replay page is acknowledged, or after an
+   up-to-date welcome is handed to transport, enqueue `recovery_complete(H)`
+   and set `enqueued_revision = H`. Hints accumulated during recovery remain
+   only in `target_head` until this point.
 7. For an active result, read the exact contiguous suffix
    `(enqueued_revision, target_head]`, enqueue each revision once, and advance
    `enqueued_revision` only after a successful queue reservation. A terminal
@@ -961,15 +966,19 @@ any terminal receipt is promised. Admission capacity is always released in an
 Each socket owns a bounded ETS-backed outbound queue. Producers write payloads
 to that queue and send at most one coalesced wake-up signal. They never send one
 mailbox message per event. The socket pulls frames while the transport is
-writable and hands at most one frame at a time to the WebSocket implementation,
-so a hidden transport buffer cannot bypass the queue bounds.
+writable and hands at most one frame at a time to the WebSocket implementation.
+That handoff marks the frame in flight while retaining its event, byte, and age
+reservation. Only a cumulative `delivery_ack` for an exact sent revision and
+state digest releases a retained live prefix. An exact `recovery_ack` releases
+only its snapshot welcome or replay page after client application. Kernel and
+WebSocket buffers therefore cannot bypass the queue bounds.
 
 The queue closes only the slow socket when any limit is exceeded:
 
-- 256 queued control events;
-- 1 MiB encoded queued bytes;
+- 256 queued or transport-in-flight control events;
+- 1 MiB encoded queued or transport-in-flight bytes;
 - five seconds since the oldest queued event;
-- five replay pages awaiting transport.
+- five replay pages queued or awaiting application acknowledgement.
 
 The close is retryable and includes the last successfully delivered revision
 when safe. Recovery resumes from Postgres. Other sockets and command commits
@@ -1001,6 +1010,7 @@ It provides:
 - stable command IDs across every resend;
 - exact-next event application, cross-language state-digest verification,
   duplicate suppression, and gap recovery;
+- cumulative delivery acknowledgment after each live event is applied;
 - ACK/event reconciliation in either order;
 - snapshot replacement followed by deterministic pending-overlay reapplication;
 - terminal rejection rollback and a typed user-visible failure;

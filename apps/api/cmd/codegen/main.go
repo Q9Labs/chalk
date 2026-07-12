@@ -253,7 +253,17 @@ func (g *generator) parameterSchema(parameter httpapi.APIParameterContract) map[
 		}
 	}
 
-	return map[string]any{"type": parameter.Type}
+	schema := map[string]any{"type": parameter.Type}
+	if parameter.Pattern != "" {
+		schema["pattern"] = parameter.Pattern
+	}
+	if parameter.MinLength > 0 {
+		schema["minLength"] = parameter.MinLength
+	}
+	if parameter.MaxLength > 0 {
+		schema["maxLength"] = parameter.MaxLength
+	}
+	return schema
 }
 
 func groupErrors(errors []httpapi.APIError) map[int][]httpapi.APIError {

@@ -1,18 +1,24 @@
 # Chalk Sync
 
-Elixir/OTP WebSocket sync server, the primary `SyncEngine` adapter. One
-authoritative writer per room (`Rooms.RoomServer`), pure event-sourced room core,
-`Stateholder` and `Auth.TokenVerifier` ports with vendor/dev specifics in
-adapters, language-neutral JSON protocol in `ChalkSync.Protocol`. Real-time
-state never touches Postgres.
+Elixir/OTP WebSocket sync server and primary `SyncEngine` adapter. Postgres is
+the sole durable authority for Session control state, exact event history,
+command receipts, and lifecycle intents. Node-local coordinators, ETS queues,
+notifications, presence, and SDK replicas are disposable. Redis is optional
+acceleration only.
 
 ## Working Here
 
-- Always read `README.md` before touching sync code — it holds the invariants
-  this server must preserve.
-- Run the gate before committing: `scripts/gate.sh`.
-- Commit once the gate passes; stage only your scope (`git add -p`).
-- After committing, run an auto code review of the commit (`codex review
---commit <sha>`) per `~/.codex/auto-code-review.md` OR let the post-commit hook
-  run it automatically. It is slow — wait for it to exit and relay its findings.
-- Debrief Hasan on the change per `~/.codex/debrief.md`.
+- Always read `README.md` before touching sync code.
+- Preserve the tenant-and-Session authority key and semantic Stateholder
+  transaction boundary.
+- Durable lifecycle comes only from API intents. Socket loss is volatile
+  presence and never a durable participant leave.
+- Protocol v2 and its generated contract are the production surface. V1 stays
+  disabled in production.
+- Keep every frame, queue, task set, replay, diagnostic buffer, and retained
+  database set explicitly bounded.
+- Run `scripts/gate.sh` before committing.
+- Commit only after the gate passes and stage only the intended paths with
+  `git add -p`.
+- Run the required automated review after a nontrivial implementation and
+  debrief Hasan using `~/.codex/debrief.md` when requested.

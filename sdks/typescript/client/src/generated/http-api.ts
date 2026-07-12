@@ -98,6 +98,63 @@ const authGroup = HttpApiGroup.make("auth")
     }),
   );
 
+const defaultGroup = HttpApiGroup.make("default")
+  .add(
+    HttpApiEndpoint.post("admitSessionParticipant", "/v1/tenants/:tenant_id/rooms/:room_id/sessions/:session_id/participants", {
+      params: S.AdmitSessionParticipantPathParamsSchema,
+      headers: S.AdmitSessionParticipantRequestHeadersSchema,
+      payload: S.AdmitSessionParticipantRequestBodySchema,
+      success: S.AdmitSessionParticipantResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.InvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidParticipantSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRoomIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.IdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.LifecycleCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.SessionNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("removeSessionParticipant", "/v1/tenants/:tenant_id/rooms/:room_id/sessions/:session_id/participants/:participant_session_id/remove", {
+      params: S.RemoveSessionParticipantPathParamsSchema,
+      headers: S.RemoveSessionParticipantRequestHeadersSchema,
+      payload: S.RemoveSessionParticipantRequestBodySchema,
+      success: S.RemoveSessionParticipantResponseSchema.pipe(HttpApiSchema.status(202)),
+      error: [
+        S.InvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidParticipantSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRoomIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.IdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.LifecycleCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ParticipantNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.SessionNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  );
+
 const integrationsGroup = HttpApiGroup.make("integrations")
   .add(
     HttpApiEndpoint.delete("disableIntegrationConnection", "/v1/tenants/:tenant_id/integrations/connections/:connection_id", {
@@ -521,18 +578,42 @@ const roomSessionsGroup = HttpApiGroup.make("roomSessions")
   .add(
     HttpApiEndpoint.post("createRoomSession", "/v1/tenants/:tenant_id/rooms/:room_id/sessions", {
       params: S.CreateRoomSessionPathParamsSchema,
+      headers: S.CreateRoomSessionRequestHeadersSchema,
       payload: S.CreateRoomSessionRequestBodySchema,
       success: S.CreateRoomSessionResponseSchema.pipe(HttpApiSchema.status(201)),
       error: [
+        S.InvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidRoomFieldErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidRoomIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.InvalidSessionStatusErrorSchema.pipe(HttpApiSchema.status(400)),
         S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.IdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("endRoomSession", "/v1/tenants/:tenant_id/rooms/:room_id/sessions/:session_id/end", {
+      params: S.EndRoomSessionPathParamsSchema,
+      headers: S.EndRoomSessionRequestHeadersSchema,
+      success: S.EndRoomSessionResponseSchema.pipe(HttpApiSchema.status(202)),
+      error: [
+        S.InvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRoomIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.IdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.LifecycleCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.SessionNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -792,4 +873,17 @@ const usersGroup = HttpApiGroup.make("users")
     }),
   );
 
-export class ChalkApi extends HttpApi.make("ChalkApi").add(auditLogsGroup).add(authGroup).add(integrationsGroup).add(meGroup).add(membershipsGroup).add(recordingsGroup).add(regionsGroup).add(roomsGroup).add(roomSessionsGroup).add(tenantsGroup).add(transcriptsGroup).add(usersGroup) {}
+export class ChalkApi extends HttpApi.make("ChalkApi")
+  .add(auditLogsGroup)
+  .add(authGroup)
+  .add(defaultGroup)
+  .add(integrationsGroup)
+  .add(meGroup)
+  .add(membershipsGroup)
+  .add(recordingsGroup)
+  .add(regionsGroup)
+  .add(roomsGroup)
+  .add(roomSessionsGroup)
+  .add(tenantsGroup)
+  .add(transcriptsGroup)
+  .add(usersGroup) {}

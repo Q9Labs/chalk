@@ -1,0 +1,181 @@
+{
+  "client_frames": [
+    {
+      "type": "hello",
+      "protocol": 2,
+      "token": "signed-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        }
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-000000001",
+      "name": "raise_hand",
+      "payload": {}
+    },
+    {
+      "type": "delivery_ack",
+      "stream": "control",
+      "revision": 7,
+      "state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0"
+    },
+    {
+      "type": "recovery_ack",
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "revision": 0,
+      "state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0"
+    },
+    {
+      "type": "ping"
+    }
+  ],
+  "server_frames": [
+    {
+      "type": "welcome",
+      "protocol": 2,
+      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_session_generation": 1,
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 7,
+        "state_schema_version": 1,
+        "state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0"
+      },
+      "mode": "snapshot",
+      "snapshot": {
+        "control_revision": 7,
+        "state_schema_version": 1,
+        "state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0",
+        "status": "active",
+        "participants": [
+          {
+            "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+            "display_name": "Ada",
+            "hand_raised": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "welcome",
+      "protocol": 2,
+      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_session_generation": 1,
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 7,
+        "state_schema_version": 1,
+        "state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0"
+      },
+      "mode": "replay"
+    },
+    {
+      "type": "replay_page",
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "first_revision": 6,
+      "last_revision": 7,
+      "events": [
+        {
+          "type": "event",
+          "stream": "control",
+          "name": "hand_raised",
+          "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+          "base_revision": 5,
+          "revision": 6,
+          "schema_version": 1,
+          "resulting_state_digest": "fdd69b9ef5b51c7ac247278b2efc85b8877c0a2b5b330e70eb79919bad061482",
+          "payload": {
+            "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"
+          },
+          "command_id": "command-000000001"
+        },
+        {
+          "type": "event",
+          "stream": "control",
+          "name": "hand_lowered",
+          "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24",
+          "base_revision": 6,
+          "revision": 7,
+          "schema_version": 1,
+          "resulting_state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0",
+          "payload": {
+            "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"
+          },
+          "command_id": "command-000000002"
+        }
+      ]
+    },
+    {
+      "type": "recovery_complete",
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 7,
+        "state_schema_version": 1,
+        "state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0"
+      }
+    },
+    {
+      "type": "welcome",
+      "protocol": 2,
+      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_session_generation": 1,
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 7,
+        "state_schema_version": 1,
+        "state_digest": "36804e780d74bf38fae994db6008816a84e98c873253dce10657c96ee94f22f0"
+      },
+      "mode": "up_to_date"
+    },
+    {
+      "type": "welcome",
+      "protocol": 2,
+      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_session_generation": 1,
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 9,
+        "state_schema_version": 1,
+        "state_digest": "f9e60991c6265740f55ae762505e464999901be25b87cb72a4c7389644a70264"
+      },
+      "mode": "terminal",
+      "reason": "session_ended"
+    },
+    {
+      "type": "ack",
+      "command_id": "command-000000001",
+      "result": "committed",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      "revision": 6
+    },
+    {
+      "type": "ack",
+      "command_id": "command-000000001",
+      "result": "duplicate",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      "revision": 6
+    },
+    {
+      "type": "ack",
+      "command_id": "command-000000002",
+      "result": "rejected",
+      "reason": "invalid_state"
+    },
+    {
+      "type": "retryable_error",
+      "command_id": "command-000000002",
+      "code": "overloaded"
+    },
+    {
+      "type": "error",
+      "code": "protocol_error",
+      "detail": "malformed control cursor"
+    },
+    {
+      "type": "pong"
+    }
+  ]
+}

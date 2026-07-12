@@ -26,10 +26,13 @@ type APIResponseContract struct {
 }
 
 type APIParameterContract struct {
-	Name     string
-	In       string
-	Type     string
-	Required bool
+	Name      string
+	In        string
+	Type      string
+	Required  bool
+	Pattern   string
+	MinLength int
+	MaxLength int
 }
 
 type APIRouteContract struct {
@@ -54,6 +57,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, userEndpoints(nil)...)
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
 	endpoints = append(endpoints, roomEndpoints(nil, nil)...)
+	endpoints = append(endpoints, sessionLifecycleEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptEndpoints(nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
