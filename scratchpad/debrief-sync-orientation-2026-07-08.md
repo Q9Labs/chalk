@@ -34,7 +34,7 @@ one of them:
 | Invariant                                 | Where it lives                                                                                                         |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | One authoritative writer per room         | `Rooms.RoomServer` — one GenServer per room, started on demand via `Registry`                                          |
-| Stateholder is the single source of truth | `Stateholder` port; ETS adapter today, Redis next                                                                      |
+| PostgreSQL is the durable source of truth | `Stateholder` port; PostgreSQL stores control state, ordered events, receipts, and lifecycle intents                    |
 | WebSocket nodes are stateless fanout      | `Transport.Socket` holds no authoritative state; if the room server dies it closes with 1012 and the client reconnects |
 | Reconnect is snapshot _or_ exact replay   | The `hello` cursor is declarative; the writer decides which                                                            |
 

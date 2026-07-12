@@ -917,8 +917,8 @@
                 <td><code>Rooms.RoomServer</code> — one GenServer per room, started on demand via <code>Registry</code></td>
               </tr>
               <tr>
-                <td>Stateholder is the single source of truth</td>
-                <td><code>Stateholder</code> port; ETS adapter today, Redis next</td>
+                <td>PostgreSQL is the durable source of truth</td>
+                <td><code>Stateholder</code> port; PostgreSQL stores control state, ordered events, receipts, and lifecycle intents</td>
               </tr>
               <tr>
                 <td>WebSocket nodes are stateless fanout</td>
@@ -1031,10 +1031,10 @@
           <div class="finding minor">
             <div class="f-head">
               <span class="f-sev">Minor</span>
-              <span class="f-title"><code>Stateholder.Memory</code> is single-node only</span>
+              <span class="f-title"><code>Stateholder.Memory</code> is development- and test-only</span>
               <span class="f-cost">not urgent, just finite</span>
             </div>
-            <p>ETS is correct for dev and test, and stays correct right up until the second WebSocket node. The port shape already anticipates the Redis adapter — compare-and-set commit plus a retained event tail — so this is a fill-in, not a redesign.</p>
+            <p>ETS supports development and tests. PostgreSQL is the production authority for Session control state, ordered events, command receipts, and lifecycle intents, so Redis can only accelerate rebuildable delivery paths.</p>
             <div class="jumps">
               <a class="jump" data-file="lib/chalk_sync/stateholder.ex" data-line="19"><span>the port shape</span><span class="ln">:19</span></a>
               <a class="jump" data-file="lib/chalk_sync/stateholder/memory.ex" data-line="67"><span>serialized commit</span><span class="ln">:67</span></a>
