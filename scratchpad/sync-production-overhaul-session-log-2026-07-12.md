@@ -161,3 +161,12 @@
 - The TypeScript client completed 49 tests across 18 files. The full workspace test and coverage tasks completed successfully, and Fallow reported no changed-file findings with an A health score of 90.
 - Package publishing checks reported only advisory repository URL and Node engine suggestions; package type-resolution checks reported no problems.
 - Updated the production-readiness report with all eight functional defects found by the two final reviews and their verified dispositions. No further review cycle will run.
+
+## 2026-07-12 05:30 PKT
+
+- The clean 100,000-operation campaign failed at final verification with `revision_order_or_convergence=:snapshot`. Preserved the complete 300,002-line artifact under commit `f2a8e61f` and streamed every record before changing code.
+- The complete trace contained 100,000 valid decision/retry/conflict groups, contiguous committed revisions for all 16 Sessions, stable duplicate outcomes, correct command-ID conflicts, and no malformed record. Every Session crossed 3,000 committed revisions.
+- Located the defect in the breaker verifier. Revision-zero recovery correctly selected a snapshot after the bounded 2,048-event replay limit, while the verifier required replay mode and stopped before comparing any snapshot field. Failed artifacts from that path also lacked event and final-head records, so independent replay reported `:missing_final_head`.
+- Changed verification to audit the complete persisted event stream through bounded recovery pages, retain event and final-head evidence before convergence checks, validate the independent fold against the recovery head and snapshot, and then exercise snapshot/replay replica convergence.
+- Added a deterministic 2,051-event snapshot-boundary regression. The regression and focused artifact suites passed, and an exact 5,000-command boundary campaign passed with an independently passing replay.
+- Re-ran the canonical sync gate against PostgreSQL: formatting, warnings-as-errors compilation, strict Credo, and 201 tests passed with zero failures.

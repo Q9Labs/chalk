@@ -57,6 +57,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Made sync-breaker snapshot-boundary verification audit the complete persisted
+  event stream in bounded pages and retain event/head evidence before replica
+  convergence checks.
 - Made Session creation, participant admission and removal, and Session end
   share the sync authority boundary through atomic lifecycle transactions with
   durable request-key idempotency.

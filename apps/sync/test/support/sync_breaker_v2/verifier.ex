@@ -43,29 +43,51 @@ defmodule ChalkSync.SyncBreakerV2.Verifier do
   defp verify_fixture(config, adapter, fixture, trace) do
     initial_cursor = cursor(Replica.new())
 
-    with {:ok, replay} <- recover(adapter, fixture.session, initial_cursor),
-         :replay <- replay.mode,
-         {:ok, replay_events} <- recovery_events(adapter, fixture.session, replay),
-         replay = %{replay | events: replay_events},
-         {:ok, replica, event_frames} <- replay_events(replay_events, fixture.session.session_id),
-         :ok <- match_head(replica, replay.head),
-         {:ok, snapshot} <- recover(adapter, fixture.session, nil),
-         :ok <- match_snapshot(replica, snapshot.snapshot),
-         :ok <- converge_replicas(config, adapter, fixture.session, replay, replica) do
-      final_head = %{
-        "kind" => "final_head",
-        "session_id" => fixture.session.session_id,
-        "revision" => replay.head.revision,
-        "state_digest" => Base.encode16(replay.head.digest, case: :lower)
-      }
-
-      {:ok, trace ++ event_frames ++ [final_head],
-       %{session: fixture.session.session_id, revision: replay.head.revision}}
+    with {:ok, recovery} <- recover(adapter, fixture.session, initial_cursor),
+         {:ok, audit} <- audit_fixture(adapter, fixture.session, recovery.head) do
+      verify_audit(config, adapter, fixture.session, audit, trace)
     else
-      {:ok, %{mode: mode}} -> {:error, "expected replay from revision zero, got #{mode}", trace}
-      {:error, reason} -> {:error, inspect(reason), trace}
-      reason -> {:error, inspect(reason), trace}
+      {:error, reason} -> fixture_error(fixture.session, :audit, reason, trace)
+      reason -> fixture_error(fixture.session, :audit, reason, trace)
     end
+  end
+
+  defp audit_fixture(adapter, session, head) do
+    with {:ok, events} <- fetch_recovery_events(adapter, session, 0, head.revision, []),
+         {:ok, replica, event_frames} <- replay_events(events, session.session_id) do
+      {:ok, %{events: events, event_frames: event_frames, head: head, replica: replica}}
+    end
+  end
+
+  defp verify_audit(config, adapter, session, audit, trace) do
+    next_trace = trace ++ audit.event_frames ++ [final_head_trace(session, audit.head)]
+    recovery_history = %{events: audit.events, head: audit.head}
+
+    with :ok <- match_head(audit.replica, audit.head),
+         {:ok, snapshot} <- recover(adapter, session, nil),
+         :snapshot <- snapshot.mode,
+         :ok <- match_head(audit.replica, snapshot.head),
+         :ok <- match_snapshot(audit.replica, snapshot.snapshot),
+         :ok <- converge_replicas(config, adapter, session, recovery_history, audit.replica) do
+      {:ok, next_trace, %{session: session.session_id, revision: audit.head.revision}}
+    else
+      {:error, reason} -> fixture_error(session, :verification, reason, next_trace)
+      reason -> fixture_error(session, :verification, reason, next_trace)
+    end
+  end
+
+  defp final_head_trace(session, head) do
+    %{
+      "kind" => "final_head",
+      "session_id" => session.session_id,
+      "revision" => head.revision,
+      "state_digest" => Base.encode16(head.digest, case: :lower)
+    }
+  end
+
+  defp fixture_error(session, stage, reason, trace) do
+    detail = "session #{session.session_id} #{stage}: #{inspect(reason)}"
+    {:error, detail, trace}
   end
 
   defp verify_next_fixture(config, adapter, fixture, {:ok, trace, metrics}) do
