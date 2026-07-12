@@ -1,16 +1,14 @@
+import type { ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 import { ChalkSession, type ChalkIncident, type ConferenceClientConfig, type IncidentReporter, type JoinOptions } from "../internal/core";
-import { RealtimeKitProvider as RTKProvider } from "@cloudflare/realtimekit-react-native";
-import type { ComponentProps, ReactNode } from "react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { createNativeTelemetry, type NativeTelemetry, type NativeTelemetryJourney } from "../telemetry";
-import { createOwnedNativeRealtimeKitLoader, importReactNativeRealtimeKit, type OwnedNativeRealtimeKitLoader } from "../runtime/realtimekit-loader";
+import type { MediaPlaneAdapter } from "../media/media-plane-port";
+import { realtimeKitMediaPlaneAdapter, type NativeRealtimeKitMeeting } from "../media/realtimekit";
 import { trackNativeTokenProvider } from "../runtime/transport-correlation";
+import { createNativeTelemetry, type NativeTelemetry, type NativeTelemetryJourney } from "../telemetry";
 import { getWideEventsMemoDependencies } from "../utils/wide-events-config";
-import { resolveNativeRealtimeKitMeeting } from "./native-realtimekit-meeting-lifecycle";
+import { NativeProviderSessionStore, type NativeProviderSessionSubscription } from "./native-provider-session-store";
 
-type NativeRealtimeKitMeeting = ComponentProps<typeof RTKProvider>["value"];
-
-export interface ChalkNativeProviderProps {
+export interface ChalkNativeProviderProps<TMeeting = NativeRealtimeKitMeeting> {
   children: ReactNode;
   apiUrl: string;
   wsUrl?: string;
@@ -27,9 +25,10 @@ export interface ChalkNativeProviderProps {
   incidentReporter?: IncidentReporter;
   incidentMaxBreadcrumbs?: number;
   telemetry?: NativeTelemetryJourney;
+  mediaPlane?: MediaPlaneAdapter<TMeeting>;
 }
 
-interface ChalkNativeContextValue {
+interface ChalkNativeContextValue<TMeeting = NativeRealtimeKitMeeting> {
   session: ChalkSession;
   join: (roomId: string, options: JoinOptions) => Promise<void>;
   leave: () => Promise<void>;
@@ -39,20 +38,44 @@ interface ChalkNativeContextValue {
   muteParticipant: (participantId: string) => void;
   unmuteParticipant: (participantId: string) => void;
   isConnected: boolean;
-  rtkMeeting: NativeRealtimeKitMeeting | null;
+  rtkMeeting: TMeeting | null;
   telemetry: NativeTelemetry | undefined;
 }
 
-const ChalkNativeContext = createContext<ChalkNativeContextValue | null>(null);
+const ChalkNativeContext = createContext<ChalkNativeContextValue<unknown> | null>(null);
 
-export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvider, apiKey, roomId, userName, debug, demoMode, wideEvents, incident, onIncident, incidentReporter, incidentMaxBreadcrumbs, telemetry: telemetryJourney }: ChalkNativeProviderProps): React.JSX.Element {
-  const [isConnected, setIsConnected] = useState(false);
-  const [rtkMeeting, setRtkMeeting] = useState<NativeRealtimeKitMeeting | null>(null);
+export function ChalkNativeProvider<TMeeting = NativeRealtimeKitMeeting>({ mediaPlane, ...props }: ChalkNativeProviderProps<TMeeting>): React.JSX.Element {
+  if (mediaPlane) return <ConfiguredChalkNativeProvider {...props} mediaPlane={mediaPlane} />;
+  return <ConfiguredChalkNativeProvider {...props} mediaPlane={realtimeKitMediaPlaneAdapter} />;
+}
+
+interface ConfiguredChalkNativeProviderProps<TMeeting> extends Omit<ChalkNativeProviderProps<TMeeting>, "mediaPlane"> {
+  readonly mediaPlane: MediaPlaneAdapter<TMeeting>;
+}
+
+function ConfiguredChalkNativeProvider<TMeeting>({
+  children,
+  apiUrl,
+  wsUrl,
+  token,
+  tokenProvider,
+  apiKey,
+  roomId,
+  userName,
+  debug,
+  demoMode,
+  wideEvents,
+  incident,
+  onIncident,
+  incidentReporter,
+  incidentMaxBreadcrumbs,
+  telemetry: telemetryJourney,
+  mediaPlane,
+}: ConfiguredChalkNativeProviderProps<TMeeting>): React.JSX.Element {
   const [wideEventsEnabled, wideEventsIncludeDebugInfo, wideEventsHandler] = getWideEventsMemoDependencies(wideEvents);
   const telemetry = useMemo(() => (telemetryJourney ? createNativeTelemetry(telemetryJourney) : undefined), [telemetryJourney]);
-  const realtimeKitLoader = useMemo(() => (telemetry ? createOwnedNativeRealtimeKitLoader(telemetry.observePeerConnection) : importReactNativeRealtimeKit), [telemetry]);
+  const loader = useMemo(() => mediaPlane.createLoader(telemetry?.observePeerConnection ?? (() => undefined)), [mediaPlane, telemetry]);
   const trackedTokenProvider = useMemo(() => trackNativeTokenProvider(tokenProvider), [tokenProvider]);
-
   const resolvedIncidentConfig = useMemo(
     (): Parameters<ChalkSession["configureIncident"]>[0] => ({
       ...(incident ?? {}),
@@ -62,152 +85,45 @@ export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvi
     }),
     [incident, onIncident, incidentReporter, incidentMaxBreadcrumbs],
   );
-
   const resolvedWideEvents = useMemo(() => {
-    if (!wideEvents) {
-      return undefined;
-    }
-
+    if (!wideEvents) return undefined;
     return {
       enabled: wideEventsEnabled,
       includeDebugInfo: wideEventsIncludeDebugInfo,
       handler: wideEventsHandler ?? undefined,
     } satisfies ConferenceClientConfig["wideEvents"];
   }, [wideEvents, wideEventsEnabled, wideEventsIncludeDebugInfo, wideEventsHandler]);
-
-  const session = useMemo(() => {
-    return new ChalkSession({
-      apiUrl,
-      wsUrl,
-      token,
-      tokenProvider: trackedTokenProvider.provider,
-      dynamicTransportCredentials: trackedTokenProvider.credentials,
-      apiKey,
-      debug,
-      demoMode,
-      telemetry: telemetry?.session,
-      wideEvents: resolvedWideEvents,
-      realtimeKitLoader,
-    });
-  }, [apiUrl, wsUrl, token, trackedTokenProvider, apiKey, debug, demoMode, resolvedWideEvents, telemetry, realtimeKitLoader]);
-
-  useEffect(
-    () => () => {
-      session.dispose();
-    },
-    [session],
+  const session = useMemo(
+    () =>
+      new ChalkSession({
+        apiUrl,
+        wsUrl,
+        token,
+        tokenProvider: trackedTokenProvider.provider,
+        dynamicTransportCredentials: trackedTokenProvider.credentials,
+        apiKey,
+        debug,
+        demoMode,
+        telemetry: telemetry?.session,
+        wideEvents: resolvedWideEvents,
+        realtimeKitLoader: loader,
+      }),
+    [apiUrl, wsUrl, token, trackedTokenProvider, apiKey, debug, demoMode, telemetry, resolvedWideEvents, loader],
   );
+  const store = useMemo(() => new NativeProviderSessionStore(session, mediaPlane, loader, telemetry), [session, mediaPlane, loader, telemetry]);
+  const subscription = useMemo<NativeProviderSessionSubscription>(() => ({ incident: resolvedIncidentConfig, roomId, userName }), [resolvedIncidentConfig, roomId, userName]);
+  const subscribe = useCallback((listener: () => void) => store.subscribe(listener, subscription), [store, subscription]);
+  const snapshot = useSyncExternalStore(subscribe, store.getSnapshot, store.getSnapshot);
 
-  useEffect(
-    () => () => {
-      if (telemetry) (realtimeKitLoader as OwnedNativeRealtimeKitLoader).dispose();
-    },
-    [realtimeKitLoader, telemetry],
-  );
-
-  useEffect(() => {
-    session.configureIncident(resolvedIncidentConfig);
-  }, [session, resolvedIncidentConfig]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void session.preloadRealtimeKit().catch((error) => {
-      if (cancelled) {
-        return;
-      }
-
-      console.warn("Failed to preload React Native RealtimeKit runtime", error);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
-
-  useEffect(() => {
-    const unsubConnected = session.on("connected", () => {
-      telemetry?.recordSyncFrame({ direction: "server_to_client", frameType: "transport.connected" });
-      setIsConnected(true);
-      const room = session.room.getRoom();
-      setRtkMeeting((currentMeeting) =>
-        resolveNativeRealtimeKitMeeting({
-          currentMeeting,
-          nextMeeting: (room?.rtkMeeting as NativeRealtimeKitMeeting | undefined) ?? null,
-          reason: "connected",
-        }),
-      );
-    });
-
-    const unsubDisconnected = session.on("disconnected", () => {
-      telemetry?.recordSyncFrame({ direction: "server_to_client", frameType: "transport.disconnected" });
-      setIsConnected(false);
-      setRtkMeeting((currentMeeting) =>
-        resolveNativeRealtimeKitMeeting({
-          currentMeeting,
-          nextMeeting: null,
-          reason: "disconnected",
-        }),
-      );
-    });
-
-    return () => {
-      unsubConnected();
-      unsubDisconnected();
-    };
-  }, [session, telemetry]);
-
-  useEffect(() => {
-    if (!roomId || !userName || isConnected) {
-      return;
-    }
-
-    session.join(roomId, { userName }).catch(() => {
-      // Auto-join failure is handled by consuming UI.
-    });
-  }, [roomId, userName, isConnected, session]);
-
-  useEffect(() => {
-    const room = session.room.getRoom();
-    if (room?.status === "connected") {
-      setIsConnected(true);
-      setRtkMeeting((room.rtkMeeting as NativeRealtimeKitMeeting | undefined) ?? null);
-    }
-  }, [session]);
-
-  const join = useCallback(
-    async (joinRoomId: string, options: JoinOptions) => {
-      await session.join(joinRoomId, options);
-    },
-    [session],
-  );
-
-  const leave = useCallback(async () => {
-    await session.leave();
-  }, [session]);
-
+  const join = useCallback(async (joinRoomId: string, options: JoinOptions) => session.join(joinRoomId, options), [session]);
+  const leave = useCallback(async () => session.leave(), [session]);
   const createSession = useCallback(async (name?: string) => session.createSession(name), [session]);
-
   const endSession = useCallback(async (endRoomId: string) => session.endSession(endRoomId), [session]);
-
   const removeParticipant = useCallback(async (participantId: string) => session.removeParticipant(participantId), [session]);
-
-  const muteParticipant = useCallback(
-    (participantId: string) => {
-      session.muteParticipant(participantId);
-    },
-    [session],
-  );
-
-  const unmuteParticipant = useCallback(
-    (participantId: string) => {
-      session.unmuteParticipant(participantId);
-    },
-    [session],
-  );
-
-  const value = useMemo(
-    (): ChalkNativeContextValue => ({
+  const muteParticipant = useCallback((participantId: string) => session.muteParticipant(participantId), [session]);
+  const unmuteParticipant = useCallback((participantId: string) => session.unmuteParticipant(participantId), [session]);
+  const value = useMemo<ChalkNativeContextValue<TMeeting>>(
+    () => ({
       session,
       join,
       leave,
@@ -216,34 +132,28 @@ export function ChalkNativeProvider({ children, apiUrl, wsUrl, token, tokenProvi
       removeParticipant,
       muteParticipant,
       unmuteParticipant,
-      isConnected,
-      rtkMeeting,
+      isConnected: snapshot.isConnected,
+      rtkMeeting: snapshot.meeting ?? null,
       telemetry,
     }),
-    [session, join, leave, createSession, endSession, removeParticipant, muteParticipant, unmuteParticipant, isConnected, rtkMeeting, telemetry],
+    [session, join, leave, createSession, endSession, removeParticipant, muteParticipant, unmuteParticipant, snapshot, telemetry],
   );
-
   const content = <ChalkNativeContext.Provider value={value}>{children}</ChalkNativeContext.Provider>;
 
-  if (rtkMeeting) {
-    return <RTKProvider value={rtkMeeting}>{content}</RTKProvider>;
-  }
-
-  return content;
+  if (!snapshot.meeting) return content;
+  const MeetingProvider = mediaPlane.MeetingProvider;
+  return <MeetingProvider meeting={snapshot.meeting}>{content}</MeetingProvider>;
 }
 
 export function useSession(): ChalkSession {
   const context = useContext(ChalkNativeContext);
-  if (!context) {
-    throw new Error("useSession must be used within ChalkNativeProvider");
-  }
+  if (!context) throw new Error("useSession must be used within ChalkNativeProvider");
   return context.session;
 }
 
-export function useChalkSession(): ChalkNativeContextValue {
+export function useChalkSession(): ChalkNativeContextValue;
+export function useChalkSession(): ChalkNativeContextValue<unknown> {
   const context = useContext(ChalkNativeContext);
-  if (!context) {
-    throw new Error("useChalkSession must be used within ChalkNativeProvider");
-  }
+  if (!context) throw new Error("useChalkSession must be used within ChalkNativeProvider");
   return context;
 }

@@ -45,5 +45,7 @@ export { useWhiteboard } from "./hooks/useWhiteboard";
 export type { UseWhiteboardReturn } from "./hooks/useWhiteboard";
 export type { NativePlatformVariant } from "./platform/native-platform";
 export { resolveNativePlatformVariant } from "./platform/native-platform";
-export { importReactNativeRealtimeKit } from "./runtime/realtimekit-loader";
+export type { MediaPlaneAdapter, MediaPlaneLoader, MediaPlaneObserver, MediaPlanePort, MeetingProviderProps, MeetingTransitionReason, ResolveMeetingInput } from "./media/media-plane-port";
+export { importReactNativeRealtimeKit, realtimeKitMediaPlaneAdapter } from "./media/realtimekit";
+export type { NativeRealtimeKitMeeting } from "./media/realtimekit";
 export { Theme } from "./ui/theme";

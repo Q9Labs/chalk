@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { ParticipantState } from "../../internal/core";
+import { createNativeMediaStream } from "../../media/realtimekit/native-webrtc";
 import type { NativeMeetingMultitaskingConfig } from "../../native/meeting-multitasking.android";
 import type { ResolvedNativeMeetingLayout } from "../../utils/native-meeting-layout";
 import { resolveNativeMeetingMultitaskingSource } from "./meeting-multitasking-source";
@@ -27,8 +28,7 @@ function buildStreamURL(track: MediaStreamTrack | null): string | null {
   }
 
   try {
-    const { MediaStream } = require("@cloudflare/react-native-webrtc") as typeof import("@cloudflare/react-native-webrtc");
-    return new MediaStream([track as never]).toURL();
+    return createNativeMediaStream(track).toURL();
   } catch {
     return null;
   }

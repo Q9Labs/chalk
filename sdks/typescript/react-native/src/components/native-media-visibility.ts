@@ -1,5 +1,5 @@
 import type { Participant } from "../internal/core";
-import type { MediaStreamTrack as NativeMediaStreamTrack } from "@cloudflare/react-native-webrtc";
+import type { NativeMediaStreamTrack } from "../media/realtimekit/native-webrtc";
 
 export function shouldRenderNativeMediaTrack({ participant, track, mediaKind = "camera" }: { participant: Participant | null; track: MediaStreamTrack | NativeMediaStreamTrack | null | undefined; mediaKind?: "camera" | "screen-share" }): boolean {
   if (!track) {

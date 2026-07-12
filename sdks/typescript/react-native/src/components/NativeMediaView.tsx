@@ -1,5 +1,5 @@
-import { MediaStream, type MediaStreamTrack as NativeMediaStreamTrack } from "@cloudflare/react-native-webrtc";
 import type { Participant } from "../internal/core";
+import { createNativeMediaStream, type NativeMediaStreamTrack } from "../media/realtimekit/native-webrtc";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Theme } from "../ui/theme";
@@ -27,7 +27,7 @@ export function NativeMediaView({ participant, track, mediaKind = "camera", labe
       return null;
     }
 
-    return new MediaStream([track as NativeMediaStreamTrack]);
+    return createNativeMediaStream(track);
   }, [shouldRenderVideo, track]);
 
   const name = participant?.displayName?.trim() || label || "Participant";

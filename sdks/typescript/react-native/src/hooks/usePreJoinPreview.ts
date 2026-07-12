@@ -1,4 +1,4 @@
-import { mediaDevices, type MediaStream as NativeMediaStream } from "@cloudflare/react-native-webrtc";
+import { mediaDevices, type NativeMediaStream } from "../media/realtimekit/native-webrtc";
 import { useEffect, useRef, useState } from "react";
 import { getIosSimulatorVideoMessage, isIosSimulator } from "../utils/ios-simulator";
 

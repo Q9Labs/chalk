@@ -1,5 +1,4 @@
-import type { ComponentType } from "react";
-import { RTCView } from "@cloudflare/react-native-webrtc";
+import { RTCView } from "../media/realtimekit/native-webrtc";
 import { canRenderNativeRtcVideoView, type NativeRtcVideoViewProps } from "./native-rtc-video-view-availability";
 
 export function hasNativeRtcVideoView(): boolean {
@@ -11,6 +10,6 @@ export function NativeRtcVideoView(props: NativeRtcVideoViewProps): React.JSX.El
     return null;
   }
 
-  const PreviewVideo = RTCView as unknown as ComponentType<NativeRtcVideoViewProps>;
-  return <PreviewVideo {...props} />;
+  const NativeRtcView = RTCView;
+  return <NativeRtcView {...props} />;
 }
