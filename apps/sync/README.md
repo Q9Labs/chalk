@@ -86,6 +86,12 @@ Production boot refuses Memory, the development verifier, an incompatible
 migration, a non-writable database, and a missing required synchronous standby.
 The exact launch topology and WAL-lag ceiling remain deployment inputs.
 
+Production protocol-v2 admission verifies API-issued Ed25519 JWTs locally. Set
+`CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`, and
+`CHALK_SYNC_TOKEN_PUBLIC_KEYS`; the last value is a JSON object mapping each
+accepted `kid` to an unpadded base64url 32-byte Ed25519 public key. Rotation
+renders both public keys before the API begins signing with the new `kid`.
+
 ## Observability v1 compatibility
 
 `ChalkSync.Observability` provides the legacy v1 compatibility observability
@@ -129,8 +135,11 @@ its response frames and creates a journey at v1 sync ingress when one is absent.
 ## Verification
 
 The deterministic v2 breaker writes replayable artifacts under the ignored
-`apps/sync/.artifacts/` directory. Real-Postgres semantic tests, independent
-multi-node tests, transport bounds, browser/runtime proofs, lifecycle tests,
-failover drills, and the repository gates define the production claim. See
-`scratchpad/sync-production-readiness-spec-2026-07-11.md` for the complete
+`apps/sync/.artifacts/` directory. The external
+[`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md)
+controls only local or staging process and provider drills around that breaker.
+Real-Postgres semantic tests, independent multi-node tests, transport bounds,
+browser/runtime proofs, lifecycle tests, failure schedules, and the repository
+gates define the production claim. See
+`scratchpad/sync-remaining-readiness-spec-2026-07-12.md` for the remaining
 acceptance contract.

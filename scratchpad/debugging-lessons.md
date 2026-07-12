@@ -51,3 +51,46 @@ Durable incident memory:
 - queue/worker systems need terminal failure semantics and observable retries
 - public status or incident systems should avoid leaking implementation detail
   while still providing useful customer-facing updates
+
+## Monitor Contract Drift
+
+An uptime worker can remain present, tested, and deployable while no longer
+observing the rebuilt system. Verify every configured probe path, expected
+status, and ingest endpoint against the current application router after route
+or architecture resets. Exercise the complete probe-to-ingest-to-alert loop;
+unit tests against mocked legacy endpoints do not prove active monitoring.
+
+## Provider Visibility Ceilings
+
+End-to-end observability cannot turn provider-owned internals into observed
+facts. Mark evidence as observed, derived, inferred, unknown, stale, or
+intentionally excluded. Correlate provider API outcomes with evidence from both
+clients and synthetic probes, and keep unknown visible in dashboards. A green
+panel without evidence confidence can conceal the exact blind spot operators
+need to understand.
+
+## Sampling Must Preserve The Journey
+
+Sampling detailed spans or client diagnostics can erase the only evidence that
+an otherwise healthy operation happened. Retain a lightweight root-to-terminal
+journey skeleton for every meaningful managed operation. Sample expensive
+detail after the skeleton is stored, and treat a missing phase or terminal
+event as a queryable failure instead of silently dropping the journey.
+
+## Journeys Begin At The First Observable Cause
+
+Operational journeys do not always begin in a UI. Record the root type, first
+observed layer, and whether upstream visibility is complete, external, or
+unknown. Follow every downstream branch to an explicit terminal state. This
+keeps provider callbacks, scheduled work, recovery loops, and monitor events
+fully diagnosable without manufacturing a causal history outside the system's
+evidence boundary.
+
+## A Dashboard Is Not A Journey Ledger
+
+A single visualization surface does not guarantee a complete operational
+record. If clients, gateways, or collectors may drop data, a promise to retain
+every journey requires an explicit delivery contract, durable acceptance point,
+idempotent event identity, deduplication, late-event handling, and backfill.
+Grafana can remain the cockpit while a separate durable record preserves the
+journey skeleton through telemetry-backend outages.

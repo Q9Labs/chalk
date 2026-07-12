@@ -1,0 +1,4 @@
+2026-07-12 05:38:43 PKT Started investigation of Excalidraw support and portability for Chalk mobile.
+2026-07-12 05:39:24 PKT Found RN whiteboard transport/state already implemented; native meeting stages render NativeWhiteboardPlaceholder. Recommended embedded offline Expo DOM/WebView renderer rather than native Excalidraw rewrite, with an explicit serialized bridge and throttled scene/pointer events.
+2026-07-12 05:42:20 PKT Grounded native feasibility: platform WebViews and secure message bridges are documented, but no upstream Excalidraw native SDK/support claim or Chalk device proof exists. Correct status is feasible architecture requiring a device spike, not confirmed support.
+2026-07-12 05:52:00 PKT Stored the minimal Chalk-owned mobile whiteboard thesis in docs/chalk-mobile-whiteboard/README.md.

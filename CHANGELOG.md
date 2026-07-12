@@ -14,6 +14,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- API-issued five-minute Ed25519 sync participant tokens with fail-closed
+  production verification, overlap key rotation, authenticated refresh, and
+  generated SDK contracts.
+- Public-safe release-topology failure scheduling with validated deterministic
+  schedules, local/staging execution safeguards, and sanitized evidence
+  bundles.
 - Protocol-v2 durable sync control with PostgreSQL authority, stable command
   receipts, exact revision folding, acknowledged bounded recovery and live
   delivery, multi-node repair, production readiness/drain telemetry, and

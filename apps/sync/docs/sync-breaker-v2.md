@@ -73,6 +73,9 @@ apps/sync/scripts/sync-breaker-v2 replay apps/sync/.artifacts/sync/<git-sha>/<ru
 ```
 
 The current local adapter campaign accepts a local Postgres topology and no
-notification or restart schedule. Those dimensions are intentionally rejected
-until the multi-node coordinator and notification fault surfaces exist, so the
-harness never reports unsupported operational proof as passing.
+notification or restart schedule. Those dimensions remain intentionally
+rejected in the breaker, so the harness never reports unsupported operational
+proof as passing. The external
+[release-topology failure scheduler](./release-topology-failure-scheduler.md)
+owns the separately versioned provider and process controls, records their
+transitions, and invokes the breaker as the canonical invariant verifier.

@@ -16,7 +16,7 @@ Six months in and on our second iteration.
 
 ## Cost Model
 
-See [`scratchpad/chalk-media-cost-model-2026-06-15.md`](./scratchpad/chalk-media-cost-model-2026-06-15.md) for the parametric media cost model, or open [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html) in a browser for the live calculator.
+See [`scratchpad/chalk-infra-cost-model-2026-07-12.md`](./scratchpad/chalk-infra-cost-model-2026-07-12.md) for the cost model, dated prices, and parametric planning formulas, or open [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html) in a browser for the live calculator.
 
 ## License
 

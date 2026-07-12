@@ -1,6 +1,7 @@
 ---
 name: chalk-incident-status
-description: Use when working on Chalk incident or status tooling in source code or local development, including public-safe status UI, tests, CI boundaries, and reusable debugging notes.
+description: Use when working on Chalk incident or status tooling in source code or local development, including public-safe status UI, tests, CI boundaries, and reusable debugging notes
+disable-model-invocation: true
 ---
 
 # Chalk Incident Status

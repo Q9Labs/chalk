@@ -1,14 +1,35 @@
 # Chalk Infrastructure Readiness Spec
 
-Status: Ratified for implementation handoff, including the recorder capacity
-and track-aware transcription amendments. The launch target is 20 simultaneous
+Status: Ratified for implementation handoff. The launch target is 20 simultaneous
 recorded meetings through reservation-aware native capture, asynchronous
 composite rendering, DeepInfra transcription, and Cloudflare ASR fallback. This
-document does not authorize provider mutation or production access.
+document does not by itself authorize provider mutation; mutation authority
+comes from the active execution handoff and the approval contract, including
+Hasan's 2026-07-12 standing approval for initial production creation and the
+first promotion.
 
 Owner: Hasan Shoaib
 
 Last reviewed: 2026-07-12
+
+## Document Map
+
+This file is the shared architecture authority: decisions, contracts,
+topology, and gates. Companion documents hold isolated implementation detail
+and the execution strategy; a worker reads this file plus the companions its
+task names:
+
+| Companion | File |
+| --------- | ---- |
+| Execution strategy: spikes, lanes, milestones, handoff | `scratchpad/chalk-infra-execution-strategy-2026-07-12.md` |
+| Recorder and artifact pipeline | `scratchpad/chalk-recorder-pipeline-spec-2026-07-12.md` |
+| Track-aware transcription | `scratchpad/chalk-transcription-spec-2026-07-12.md` |
+| Observability, uptime, and status | `scratchpad/chalk-observability-uptime-spec-2026-07-12.md` |
+| Cost model, dated prices, and parametric planning model | `scratchpad/chalk-infra-cost-model-2026-07-12.md` |
+
+The settled decisions, canonical terms, non-goals, source-of-truth rules, and
+anti-slop rules in this file bind every companion, and companions carry the
+same ratified authority as this file.
 
 ## Outcome
 
@@ -36,8 +57,9 @@ The first deployment is deliberately lean:
 - DigitalOcean provider automation uses environment-scoped, expiring API tokens
   with custom resource scopes; recorder workers never receive those tokens.
 - OpenTofu declares infrastructure and stores encrypted, locked remote state.
-- Staging is the default destination. Production creation and every production
-  promotion require Hasan's explicit approval.
+- Staging is the default destination. Hasan's standing approval of 2026-07-12
+  covers initial production creation and the first release promotion; every
+  later production action requires his explicit per-action approval.
 
 Infrastructure readiness does not imply product go-live readiness. The current
 Elixir sync service, recorder, artifact pipeline, and parts of the release and
@@ -63,35 +85,36 @@ The managed Chalk deployment optimizes for:
 
 ## Settled Decisions
 
-| Concern           | Decision                                                                                                       |
-| ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| Primary region    | Singapore for app and live capture; approved temporary composite rendering in DigitalOcean TOR1                |
-| Compute           | EC2 app tier; DigitalOcean CPU-Optimized capture and RTX 4000 GPU rendering, both scale-to-zero                |
-| App topology      | One application node per environment; recorder compute remains isolated                                        |
-| Recording         | Native selective capture in SGP1; 20-meeting admission ceiling; asynchronous 720p30 stage-view render in TOR1  |
-| Database          | Separate staging and production PlanetScale PostgreSQL databases in AWS Singapore                              |
-| Public ingress    | Cloudflare Tunnel with outbound-only origin connections                                                        |
-| Web               | Static SPA on Cloudflare Pages                                                                                 |
-| Media             | Direct Cloudflare Realtime SFU through CloudflareMediaPlaneAdapter                                             |
-| Transcription     | Track-aware speaker attribution; DeepInfra Whisper large-v3-turbo primary; Cloudflare Workers AI fallback      |
-| Object storage    | Cloudflare R2; preserved resources are adopted safely                                                          |
-| Environments      | Always-on production; persistent staging configuration with app compute scaled to zero; local development      |
-| Promotion         | Staging is default; production requires Hasan's explicit approval                                              |
-| Rollback          | Exact deployment approval pre-authorizes return only to its named prior stable manifest                        |
-| Staging fidelity  | Same release topology with explicit scale-to-zero and non-HA database exceptions plus temporary rehearsals     |
-| Service domains   | api.chalkmeet.com and sync.chalkmeet.com; no q9labs.ai compatibility aliases                                   |
-| IaC               | OpenTofu as the only CLI allowed to write these states                                                         |
-| Images            | Public, digest-addressed, multi-architecture images in GHCR                                                    |
-| Sync state        | PostgreSQL; node-local state and Redis are disposable accelerators                                               |
-| Web configuration | One immutable SPA code artifact plus separately digested environment runtime config                            |
-| Artifact jobs     | PostgreSQL-only leased jobs with retry and dead-letter states                                                  |
-| Recovery          | Balanced launch targets: 2-minute process, 10-minute rollback, 15-minute node, 5-minute PostgreSQL RPO         |
-| Telemetry backend | Separate company-controlled Grafana Cloud Free accounts and stacks, gated on provider permission; 14 days      |
-| Monitoring        | Independent component services per environment on Workers Paid with one operations surface per environment     |
-| Public status     | Dedicated Cloudflare Pages, Worker, and private R2 path; external probes and paging expose Cloudflare loss     |
-| Recorder starts   | Scheduled reservations prewarm capacity; an unscheduled recorded meeting waits for capture acknowledgement     |
-| Recorder budget   | Fixed platform stays below $200; recording, media, storage, and transcription usage is metered separately      |
-| Later options     | AWS recorder fallback, DigitalOceanMediaPlaneAdapter, DurableObjectSyncAdapter, Redis acceleration, and multi-region |
+| Concern           | Decision                                                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Primary region    | Singapore for app and live capture; approved temporary composite rendering in DigitalOcean TOR1                                     |
+| Compute           | EC2 app tier; DigitalOcean CPU-Optimized capture and RTX 4000 GPU rendering, both scale-to-zero                                     |
+| App topology      | One application node per environment; recorder compute remains isolated                                                             |
+| Recording         | Native selective capture in SGP1; 20-meeting admission ceiling; asynchronous 720p30 stage-view render in TOR1                       |
+| Database          | Separate staging and production PlanetScale PostgreSQL databases in AWS Singapore                                                   |
+| Public ingress    | Cloudflare Tunnel with outbound-only origin connections                                                                             |
+| Web               | Static SPA on Cloudflare Pages                                                                                                      |
+| Media             | Direct Cloudflare Realtime SFU through CloudflareMediaPlaneAdapter                                                                  |
+| Transcription     | Track-aware speaker attribution; DeepInfra Whisper large-v3-turbo primary; Cloudflare Workers AI fallback                           |
+| Object storage    | Cloudflare R2; preserved resources are adopted safely                                                                               |
+| Environments      | Always-on production; persistent staging configuration with app compute scaled to zero; local development                           |
+| Promotion         | Staging is default; initial production creation and first promotion run under Hasan's 2026-07-12 standing approval, later actions per-action |
+| Rollback          | Exact deployment approval pre-authorizes return only to its named prior stable manifest                                             |
+| Staging fidelity  | Same release topology with explicit scale-to-zero and non-HA database exceptions plus temporary rehearsals                          |
+| Service domains   | api.chalkmeet.com and sync.chalkmeet.com; no q9labs.ai compatibility aliases                                                        |
+| IaC               | OpenTofu as the only CLI allowed to write these states                                                                              |
+| Images            | Public, digest-addressed, multi-architecture images in GHCR                                                                         |
+| Sync state        | PostgreSQL; node-local state and Redis are disposable accelerators                                                                  |
+| Web configuration | One immutable SPA code artifact plus separately digested environment runtime config                                                 |
+| Artifact jobs     | PostgreSQL-only leased jobs with retry and dead-letter states                                                                       |
+| Recovery          | Balanced launch targets: 2-minute process, 10-minute rollback, 15-minute node, 5-minute PostgreSQL RPO                              |
+| Telemetry backend | Separate company-controlled Grafana Cloud Free accounts and stacks, gated on provider permission; 14 days                           |
+| Monitoring        | Independent component services per environment on Workers Paid with one operations surface and operator email route per environment |
+| Public status     | Dedicated Cloudflare Pages, Worker, and private R2 path; external probes and paging expose Cloudflare loss                          |
+| App runtime       | Rootless Podman containers supervised by systemd Quadlet; host watchdog remains outside the containers                              |
+| Recorder starts   | Scheduled reservations prewarm capacity; an unscheduled recorded meeting waits for capture acknowledgement                          |
+| Recorder budget   | Fixed platform stays below $200; recording, media, storage, and transcription usage is metered separately                           |
+| Later options     | AWS recorder fallback, DigitalOceanMediaPlaneAdapter, DurableObjectSyncAdapter, Redis acceleration, and multi-region                |
 
 PostgreSQL is the sole durable Sync authority. It stores Session control state,
 the exact ordered event history, command receipts, and lifecycle intents.
@@ -194,8 +217,8 @@ not count opaque shared provider fleets.
 | Production serving; staging dormant; no recording work |           1 |       0 |      0 |                     4 |                  5 |
 | Production and staging active; no recording work       |           2 |       0 |      0 |                     4 |                  6 |
 | Production at 20 live captures; no render overlap      |           1 |       6 |      0 |                     4 |                 11 |
-| Production expected capture/render overlap             |           1 |       6 |      7 |                     4 |                 18 |
-| Production fallback capture/render overlap             |           1 |      11 |     10 |                     4 |                 26 |
+| Production target-density capture with render burst             |           1 |       6 |      7 |                     4 |                 18 |
+| Production fallback-density capture with render burst             |           1 |      11 |     10 |                     4 |                 26 |
 | Staging expected 20-way proof plus HA, production idle |           2 |       6 |      7 |                     7 |                 22 |
 | Staging fallback 20-way proof plus HA, production idle |           2 |      11 |     10 |                     7 |                 30 |
 
@@ -239,27 +262,27 @@ prevents old and new app nodes from overlapping.
 
 ## Source-of-truth Rules
 
-| Data or control                                               | Source of truth                                                  | Derived or runtime copies                                    |
-| ------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
-| Tenant, membership, room lifecycle, auth, and audit metadata  | PostgreSQL                                                       | API caches, SDK state, and web projections                   |
-| Session control state, revisions, ordered events, receipts, and lifecycle intents | PostgreSQL                                         | Node-local coordinators, Redis acceleration, and connected client projections |
-| Connection presence, socket state, and transient fanout       | Current sync processes and clients                               | Metrics and bounded diagnostics                              |
-| Recording and transcript lifecycle and authorization metadata | PostgreSQL                                                       | Worker leases, provider status, and reconciliation views     |
-| Recording and normalized transcript document bytes            | R2                                                               | Worker temporary objects, CDN cache, and signed URLs         |
-| Speaker-turn identity and timing                              | Committed R2 speaker-turn manifest                               | Normalized transcript cues and searchable projections        |
-| Transcription provider policy                                 | Versioned environment configuration in the release manifest      | Dispatcher cache and per-attempt provider facts              |
-| Capture-bundle envelope keys                                  | Environment AWS KMS recording KEK plus wrapped DEK in PostgreSQL | Plaintext DEK in current job-process memory only             |
-| Durable operational journey skeleton                          | PostgreSQL `observability_journey_events`                        | Grafana journey views and correlated telemetry queries       |
-| Metrics, traces, logs, and profiles                           | Selected environment telemetry backend                           | Dashboards, alerts, and bounded local exporter queues        |
-| Signed component-monitor results                              | Selected environment monitoring/status store                     | Alerts, status projection, and SLO reports                   |
-| Infrastructure desired state                                  | Reviewed OpenTofu configuration                                  | Provider control planes                                      |
-| Infrastructure object identity and generated provider secrets | Encrypted remote OpenTofu state                                  | SSM runtime parameters and approved escrow                   |
-| Human-managed provider/bootstrap credentials                  | 1Password                                                        | Short-lived CI environment or local process only             |
-| AWS app runtime secrets                                       | AWS SSM SecureString paths scoped per environment                | Root-readable environment files rendered at deploy or boot   |
-| Recorder runtime identity                                     | Recorder control plane and signed bootstrap exchange             | Short-lived worker certificate and job-scoped signed R2 URLs |
-| Release identity and state                                    | Immutable manifest plus environment release ledger               | Running service, Pages, and database deployment projections  |
-| Database schema                                               | Versioned SQL migrations and immutable checksums                 | schema.sql remains a checked snapshot                        |
-| Environment promotion evidence                                | GitHub deployment record and verification artifact               | Dashboard annotations and session log summary                |
+| Data or control                                                                   | Source of truth                                                  | Derived or runtime copies                                                     |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Tenant, membership, room lifecycle, auth, and audit metadata                      | PostgreSQL                                                       | API caches, SDK state, and web projections                                    |
+| Session control state, revisions, ordered events, receipts, and lifecycle intents | PostgreSQL                                                       | Node-local coordinators, Redis acceleration, and connected client projections |
+| Connection presence, socket state, and transient fanout                           | Current sync processes and clients                               | Metrics and bounded diagnostics                                               |
+| Recording and transcript lifecycle and authorization metadata                     | PostgreSQL                                                       | Worker leases, provider status, and reconciliation views                      |
+| Recording and normalized transcript document bytes                                | R2                                                               | Worker temporary objects, CDN cache, and signed URLs                          |
+| Speaker-turn identity and timing                                                  | Committed R2 speaker-turn manifest                               | Normalized transcript cues and searchable projections                         |
+| Transcription provider policy                                                     | Versioned environment configuration in the release manifest      | Dispatcher cache and per-attempt provider facts                               |
+| Capture-bundle envelope keys                                                      | Environment AWS KMS recording KEK plus wrapped DEK in PostgreSQL | Plaintext DEK in current job-process memory only                              |
+| Durable operational journey skeleton                                              | PostgreSQL `observability_journey_events`                        | Grafana journey views and correlated telemetry queries                        |
+| Metrics, traces, logs, and profiles                                               | Selected environment telemetry backend                           | Dashboards, alerts, and bounded local exporter queues                         |
+| Signed component-monitor results                                                  | Selected environment monitoring/status store                     | Alerts, status projection, and SLO reports                                    |
+| Infrastructure desired state                                                      | Reviewed OpenTofu configuration                                  | Provider control planes                                                       |
+| Infrastructure object identity and generated provider secrets                     | Encrypted remote OpenTofu state                                  | SSM runtime parameters and approved escrow                                    |
+| Human-managed provider/bootstrap credentials                                      | 1Password                                                        | Short-lived CI environment or local process only                              |
+| AWS app runtime secrets                                                           | AWS SSM SecureString paths scoped per environment                | Root-readable environment files rendered at deploy or boot                    |
+| Recorder runtime identity                                                         | Recorder control plane and signed bootstrap exchange             | Short-lived worker certificate and job-scoped signed R2 URLs                  |
+| Release identity and state                                                        | Immutable manifest plus environment release ledger               | Running service, Pages, and database deployment projections                   |
+| Database schema                                                                   | Versioned SQL migrations and immutable checksums                 | schema.sql remains a checked snapshot                                         |
+| Environment promotion evidence                                                    | GitHub deployment record and verification artifact               | Dashboard annotations and session log summary                                 |
 
 The Stateholder contract uses PostgreSQL transactions as the durable decision
 boundary. Recovery reads rebuild a coordinator from the Session control row and
@@ -376,10 +399,12 @@ state without:
 3. a successful staging deployment of the same release manifest and web code,
    with a compatible environment-configuration schema;
 4. fresh staging verification evidence;
-5. Hasan's explicit approval in the active thread and the protected GitHub
-   production environment.
+5. the required production approval — the 2026-07-12 standing approval for the
+   initial creation and first promotion, or Hasan's explicit per-action
+   approval afterward — and the protected GitHub production environment.
 
-Approval for one action does not authorize later production actions.
+After the first promotion, approval for one action does not authorize later
+production actions.
 
 ### Preview deployments
 
@@ -540,6 +565,28 @@ ledger, renders environment configuration from SSM, verifies artifact
 signatures and digests, starts the supervised runtime, and enters service only
 after local and external readiness pass. A replacement node must reach that
 state without a human repairing it.
+
+The canonical boot state machine is:
+
+1. boot the pinned machine image and verify the expected instance identity;
+2. read the last verified stable manifest from the environment release ledger;
+3. fetch environment configuration and secret references from SSM;
+4. pull every OCI image by digest and verify its signature, issuer, provenance,
+   architecture, and release identity;
+5. render root-owned runtime configuration without writing secret values to the
+   image, journal, or release ledger;
+6. start dependency and application Quadlet units in their declared order;
+7. pass local liveness, dependency-aware readiness, release, and ownership
+   checks;
+8. activate the environment Tunnel routes only after the local gate passes;
+9. publish the authenticated environment-health signal; and
+10. pass external API, sync, and terminal-room verification before the node is
+    considered ready.
+
+Failure at any step is terminal for that boot attempt. The node remains out of
+service, records a redacted reason, alerts, and enters the bounded replacement
+policy rather than falling back to an older image tag or partially starting the
+release.
 
 EC2 reachability alone is not application health. Each environment therefore
 has an explicit health authority:
@@ -816,6 +863,22 @@ Production migrations follow expand-and-contract:
 - a failed migration leaves a visible terminal deployment state and is
   reconciled before retry. Automatic down migrations are prohibited.
 
+The launch migration defaults are a 5-second lock timeout, a 15-minute
+statement timeout for bounded DDL, and a 30-minute workflow deadline. A
+migration that cannot fit those limits must be split or present separately
+reviewed limits and impact in the exact release approval. The migrator reserves
+the measured operator and recovery connection budget before starting and stops
+when PlanetScale reports an availability, storage, replication, or connection
+saturation condition. Backfills run outside the DDL transaction in resumable
+batches whose size, rate, pause threshold, progress cursor, and maximum runtime
+are recorded in the release manifest after staging measurement. A threshold
+breach fails the deployment and alerts; it never silently raises a limit.
+
+Only the exact approved production workflow may authorize a forward repair.
+The release ledger remains terminally failed until the schema facts, migration
+ledger, running release, and recovery action reconcile. No later deployment may
+overwrite or bypass that state.
+
 The promotion preview includes the exact migrator image digest, ordered
 migration IDs and checksums, estimated lock/write impact, backup or restore
 point, compatibility range, and recovery procedure.
@@ -869,440 +932,15 @@ production until the complete 20-meeting artifact gate passes in staging.
 Transcription is a third isolated artifact stage with scale-to-zero dispatch,
 separate credentials, and its own provider fallback and terminal state.
 
-### Admission and reservation
-
-The production admission ceiling is 20 simultaneous captured meetings within a
-100-participant global launch profile. A recorded meeting may reserve one to
-ten participants. The qualification mix represents Hasan's expected traffic:
-20 three-person meetings normally, plus a stress shape of five ten-person
-meetings and fifteen three-person meetings, or 95 participants across all 20.
-A meeting above ten participants or a system load above the qualified global
-participant ceiling is rejected or admitted without recording according to an
-explicit product policy.
-
-The launch recording duration limit is 120 minutes. A scheduled reservation
-declares a shorter or equal maximum; an unscheduled recording reserves the full
-120 minutes before its meeting opens. Extending a shorter reservation must
-atomically reserve its additional capture time, render-deadline capacity, and
-usage exposure, and can never extend beyond 120 minutes. The recorder warns at
-ten and two minutes before the limit, stops capture visibly at the limit, and
-lets the meeting continue unrecorded. The 20-ending-together render proof is
-therefore bounded at 40 output-hours.
-
-Scheduled recording reservations prewarm capture nodes five minutes before the
-meeting and require the requested slots to be ready two minutes before start.
-An accepted reservation consumes its meeting, participant, bitrate, duration,
-render, and tenant usage allocations for the bounded window. No-show capacity
-drains after ten minutes. An unscheduled
-recorded meeting holds its opening until a capture process acknowledges its
-lease; the initial maximum wait is 120 seconds and is replaced by the measured
-cold-start bound if staging proves a lower value. Expiry fails visibly as
-`recording_capacity_unavailable`. The meeting never starts under a promise that
-its missing opening minutes were recorded, and it never silently falls back to
-client-side capture.
-
-Capture placement reserves meetings, participant/audio tracks, and input
-bitrate together. The initial two-vCPU node target is four meetings, 40
-participants, and 16 Mbps of captured media; the permitted fallback is two
-meetings, 20 participants, and 8 Mbps. The scaler uses the maximum need across
-all three dimensions:
-
-    desired_capture_nodes = max(
-      ceil(meetings / meetings_per_node),
-      ceil(participants / participants_per_node),
-      ceil(input_mbps / input_mbps_per_node)
-    ) + ready_spare
-
-`ready_spare` is one while work is reserved or active and zero otherwise. The
-controller clamps active leases to 20 meetings and 100 participants. At the
-target density, either qualified 20-room profile uses five active nodes plus one
-ready spare. At the fallback density, it uses ten active nodes plus one spare.
-A lower proven density, a provider quota below eleven nodes, or a cold-start
-miss blocks production recording enablement. Each meeting runs in its own
-supervised process or container with its own lease and job authority, so one
-process failure does not terminate sibling captures.
-
-### Native selective capture
-
-The capture pool uses DigitalOcean SGP1 CPU-Optimized 2-vCPU/4-GiB Droplets and
-a native WebRTC implementation such as Pion. It does not run Chromium, decode
-video for layout, or encode the final composite. It subscribes only to the
-tracks needed to reproduce the selected stage view:
-
-- every audible Opus track within the qualified participant bound;
-- the current screen share at the legibility-qualified layer;
-- the active speaker at the qualified stage layer when no screen share is
-  dominant, or at a bounded secondary layer while screen share is dominant;
-- low simulcast layers for a deterministic strip of at most six participants;
-- active-speaker, screen-share, mute, join, leave, track, and layout events on
-  one monotonic timeline.
-
-Each job pins a versioned layout policy. Screen share wins the primary stage;
-simultaneous shares use stable start-time and participant-ID tie-breaking.
-Without screen share, a bounded RTP audio-level window and hysteresis select the
-active speaker. The strip excludes the primary stage and orders remaining
-participants by join time then opaque participant ID. Labels use the
-authorization-time display-name snapshot. The event timeline records every
-decision so render retry cannot produce a different composition.
-
-The same timeline records the authenticated owner, track class, and active
-intervals for every audible audio track. Capture never infers identity from a
-voiceprint. RTP audio levels, a deterministic VAD policy, mute state, and
-track/join/leave events produce candidate speech intervals and explicit overlap
-intervals. Track replacement and reconnection create a new track epoch tied to
-the same authorized participant only when the control plane proves that
-mapping.
-
-The capture target is 3 Mbps and the initial admission budget is 4 Mbps per
-recorded meeting, including audio. Layer selection degrades thumbnails before
-screen-share legibility. Staging must prove the budget across the supported
-participant shapes; an unqualified shape cannot consume an unbounded set of
-tracks. This contract intentionally does not promise an arbitrary post-meeting
-gallery edit because tracks outside the selected stage view are not retained.
-
-Each capture process writes one independently verifiable, versioned capture
-bundle every 10–15 seconds. A bundle contains codec-native encoded track
-fragments plus the corresponding timeline slice; it is not a pre-rendered
-video. Track-set changes may close a bundle early. Every object uses a random
-tenant-scoped temporary key, sequence number, monotonic and media timestamps,
-codec and layer facts, byte size, cryptographic checksum, and attempt fencing.
-A committed bundle is never overwritten.
-
-Capture-worker loss preserves every committed bundle. A fenced replacement
-rejoins the SFU, requests fresh keyframes, and resumes under a new attempt. The
-manifest records the observed gap instead of fabricating continuity. The
-recovery clock includes detection, fencing, replacement assignment, media
-rejoin, first decodable keyframe, first new bundle, and manifest reconciliation.
-
-### Asynchronous composite rendering
-
-Capture completion queues a separate render job. The primary render pool uses
-scale-to-zero DigitalOcean TOR1 RTX 4000 GPU Droplets and native
-GStreamer/FFmpeg processing with hardware decode and encode. Chromium and the
-web meeting UI are not part of the artifact path. The renderer follows the
-recorded timeline and produces one deterministic stage artifact with screen
-share priority, active speaker, a strip of at most six participants, stable
-name labels, and mixed audio.
-
-The launch output contract is MP4 with H.264 video and AAC-LC audio, 1280x720 at
-30 frames per second, a 2 Mbps video target with a 3 Mbps maximum, 128 kbps
-audio, seekable metadata, and a verified playable duration. Source frames are
-never invented to conceal a capture gap. The final artifact must become
-authorized and committed within 30 minutes after capture ends. A missed
-deadline remains visible, keeps the capture bundles for retry, and pages the
-artifact owner.
-
-The same render attempt decodes the retained Opus tracks once and emits an
-immutable speaker-turn manifest plus bounded transcription-ready mono 16-kHz
-MP3 chunks. A non-overlapping speech interval is emitted once from its owning
-track. Each overlapping interval is emitted once per audible participant so no
-speaker is discarded. Deterministic leading/trailing context, silence handling,
-maximum request duration, source checksums, and the mapping from chunk-local
-time to meeting time are versioned in the manifest. The renderer neither sends
-audio to an ASR provider nor multiplies every participant track across the full
-meeting duration.
-
-Render admission uses an earliest-deadline, discrete bin-packing simulation.
-Each recording is one non-preemptive job. Its qualified service time includes
-input opening and transfer, media processing at the measured real-time factor,
-container finalization, and measured per-job overhead. The controller finds the
-smallest node count at or below ten for which every job can be assigned to one
-node and every node's assigned service time fits within the remaining
-input-and-render sub-budget. Aggregate output-hours division is not an
-admission algorithm because it hides rounding at the job boundary.
-
-The 30-minute deadline reserves at most three minutes for node readiness and
-queue assignment, 20 minutes for input transfer and first-pass rendering, four
-minutes for upload, media verification, and authorization, and three minutes
-for bounded recovery. For the 20-two-hour ending burst, a 20x media-processing
-factor gives a six-minute base service time and requires at least seven nodes
-when three qualified jobs fit per node. The minimum 15x factor gives an
-eight-minute base service time; ten nodes are required, and staging must prove
-that two jobs including all measured overhead fit within 20 minutes on every
-node. The expected pool is one or two GPU nodes for staggered work. OpenTofu and
-the scaler permit at most ten. A factor below 15x, a qualified two-hour job over
-ten minutes, a sub-budget miss, or exhausted recovery reserve fails
-qualification rather than borrowing verification time. Production recording
-admission closes before the discrete schedule can miss the deadline. A provider
-capacity failure preserves the encrypted inputs and blocks new recording
-admission; it does not silently substitute an unqualified renderer or affect
-live unrecorded meetings.
-
-TOR1 is an approved, render-only data-processing region. Before leaving
-Singapore, every capture bundle is envelope-encrypted with an independent
-per-recording data key and authenticated metadata. The control API distributes
-the plaintext key only over the job-scoped mTLS channel; workers receive no KMS
-credential. A renderer decrypts into memory, uses no persistent media cache,
-uploads through job-scoped URLs, clears key material, and destroys the Droplet
-after its bounded drain. Normal capture-bundle deletion completes within one
-hour of verified finalization; a 24-hour lifecycle rule is the orphan safety
-net. Logs, snapshots, images, crash dumps, and telemetry contain no media or
-plaintext key material.
-
-A missed 30-minute objective may retry only while its inputs and wrapped data
-key remain inside the bounded temporary window. By 23 hours after capture
-completion, reconciliation must either commit the artifact or enter a terminal
-render failure and schedule the bundles and wrapped key for deletion. No retry
-or operator hold extends raw-media retention beyond the 24-hour lifecycle.
-
-### Track-aware transcription and speaker attribution
-
-The launch transcript uses authenticated SFU track ownership as its speaker
-authority. This is track-aware attribution, not acoustic diarization: the
-system already knows which authorized participant published each isolated
-audio track. The normalized transcript maps provider timing through the
-speaker-turn manifest and adds the authorization-time display-name snapshot
-locally. DeepInfra and Cloudflare receive only opaque job/chunk IDs and audio;
-they receive no display name, tenant identifier, email address, room title, or
-customer-supplied object URL.
-
-One physical microphone or mixed input published as one SFU track remains one
-speaker device in the transcript. Chalk does not claim it can distinguish
-multiple humans behind that track. A future acoustic
-`PyannoteDiarizationAdapter` may be qualified for imported mixed recordings or
-shared-microphone recovery, but it is not in the launch path and cannot replace
-authenticated track identity when that identity exists.
-
-Screen-share or system audio retains its authenticated track class and is
-labeled as shared audio, not silently assigned to the participant's microphone
-identity. A participant track without provable ownership remains an explicit
-unknown track and cannot borrow the current active-speaker label.
-
-Transcription sits behind a provider-neutral `TranscriptionProvider` port:
-
-| Role     | Provider and model                             | Runtime policy                                                                |
-| -------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
-| Primary  | DeepInfra `openai/whisper-large-v3-turbo`      | Default service tier; exact release-approved model version; standard API only |
-| Fallback | Cloudflare `@cf/openai/whisper-large-v3-turbo` | Release-qualified model contract; activated only after the circuit breaker    |
-
-The environment-scoped transcription dispatcher is scale-to-zero AWS Lambda,
-not an application-node process or a dedicated always-on node. It claims a
-fenced PostgreSQL job through the recorder control API, fetches only the
-attempt's bounded private R2 chunks through short-lived job authority, invokes
-the configured adapter synchronously, validates the response, normalizes it,
-and uploads the result through a conditional job-scoped URL. It receives no
-PlanetScale credential, recorder provider token, bucket-wide R2 credential, or
-infrastructure mutation authority. Its signed, digest-addressed release
-artifact and environment configuration are part of the same Chalk release.
-
-After the database transaction commits a transcript job, the control API sends
-an asynchronous Lambda wake-up hint. A one-minute EventBridge reconciliation
-schedule wakes pending work if that hint is lost. Neither trigger owns job
-state: duplicate or missing invocations are safe because only the control API's
-compare-and-set lease grants work. One invocation claims a bounded batch, stops
-claiming before its timeout reserve, and lets leases expire for anything it did
-not conditionally commit. Chunk duration and provider timeouts must leave at
-least 60 seconds for response validation, result upload, and lease completion
-inside the configured Lambda timeout.
-
-DeepInfra is the default because its listed 2026-07-12 price for Whisper
-large-v3-turbo is $0.00020 per audio minute, versus Cloudflare's listed
-$0.00051. Production enablement is nevertheless gated on all of the following:
-
-- vendor DPA, subprocessor, processing-location, request-logging, deletion, and
-  incident terms are accepted for recorded meeting audio;
-- an environment-isolated token, spending limit, rotation procedure, revocation
-  drill, and least-privilege egress policy are in place;
-- the exact DeepInfra model version is pinned, execution identity is observable,
-  and its segment/word timing, languages, file bounds, error taxonomy, and
-  normalized output pass the conformance corpus;
-- quota and load proof cover the launch burst below an internal concurrency cap
-  of 50, leaving headroom under DeepInfra's documented 200 concurrent requests
-  per model; and
-- measured quality and total billed audio remain inside the ratified quality
-  and cost gates.
-
-The deterministic staging corpus covers the launch languages, accents, short
-turns, long monologues, silence, background noise, reconnects, crosstalk, and
-the qualified room shapes. DeepInfra may become primary only when every adapter
-conforms to the same normalized schema, non-overlap speaker-time attribution
-error is at most 2 percent, every labeled overlap interval is retained and
-flagged, and its word-error rate is no more than two absolute percentage points
-worse than Cloudflare's result in any ratified language/noise bucket. A failed
-bucket makes Cloudflare active until a new model/version passes; it is not
-hidden by an aggregate average.
-
-DeepInfra documents that standard inference inputs and outputs are normally
-memory-only, but reserves limited request-content logging for debugging or
-security. Chalk therefore uses only direct standard request/response inference;
-the DeepInfra bulk API and provider webhooks are prohibited at launch. If the
-privacy gate is not accepted, DeepInfra cannot be enabled in that environment
-and Cloudflare becomes the active provider without changing the transcript
-contract.
-
-There is no request racing or dual-success billing. The dispatcher retries
-DeepInfra only for classified retryable failures with bounded exponential
-backoff and jitter, then opens a circuit and submits that fenced chunk to
-Cloudflare. A conditional commit accepts exactly one provider result per chunk;
-late or duplicate results cannot overwrite it. Every normalized cue records
-meeting-relative start/end, opaque participant and track epoch, locally joined
-display-name snapshot, text, language, overlap state, provider, model, pinned
-DeepInfra version or release-qualified Cloudflare contract version, attempt,
-and available quality metadata. Provider/model/version-contract and billed
-audio are observable per attempt.
-
-Cloudflare exposes the model slug but no ASR model-version pin in its published
-contract. The release therefore records that slug, the adapter/schema version,
-the last passing corpus digest, and the provider response identity when
-available. A daily no-content canary and changelog watcher disable fallback on
-schema or quality drift. DeepInfra's documented automatic deprecation forwarding
-is also treated as a model change: an unobservable or mismatched execution
-identity fails the primary gate instead of accepting the replacement silently.
-
-Temporary transcription chunks stay private in R2. Raw provider responses
-exist only in Lambda memory until normalization and are never stored as objects
-or logs. Chunks are deleted within one hour after the normalized transcript is
-committed; a 24-hour lifecycle rule removes orphans. Provider failure never
-invalidates a committed recording. Transcription retries or falls back
-independently and eventually reaches a visible terminal transcript outcome.
-
-### Worker identity and reconciliation
-
-Both worker roles:
-
-- receive an immutable job ID, tenant ID, session ID, attempt number, expected
-  artifact class, and short-lived authorization;
-- receive no PlanetScale credential, infrastructure-control credential, or
-  reusable R2 object credential;
-- poll and report through the authenticated recorder control API, which owns
-  PostgreSQL lease transitions on the worker's behalf;
-- use method-, size-, expiry-, and key-scoped R2 URLs;
-- report heartbeat, progress, terminal outcome, and measured resource use;
-- cannot choose the final object owner or overwrite a committed artifact;
-- clean up partial objects and media sessions after failure;
-- cannot make API or sync unavailable when they crash or saturate.
-
-An accepted capture job receives a rolling 30-minute autonomy envelope: its
-fenced capture epoch, SFU session authority, and conditional-create presigned
-URLs for the next bounded bundle keys. Renewal begins when 22 minutes remain
-and must complete before 20 minutes remain; failure at that boundary stops
-admission and further replenishment. An outage can therefore begin at any point
-after a successful renewal and still leave at least 20 minutes of authority for
-the 15-minute app-node replacement objective and five minutes of reconciliation
-headroom. The envelope grants at most 30 minutes of forward authority and no
-reusable bucket credential. During recorder-control API or app-node loss, an
-assigned worker keeps its existing media session and uploads only within that
-envelope; it accepts no new job or changed layout policy. If authority expires
-first, it closes the current bundle, stops capture, and later reports
-`capture_authority_expired` with the exact gap.
-
-A render assignment receives all input URLs, one conditional final-output URL,
-and key authority for its bounded attempt before work starts, so control-plane
-loss does not corrupt an in-flight render. After recovery, the control API
-reconciles immutable object facts and the capture epoch before extending a
-lease or issuing a replacement. It never overlaps attempts until the prior node
-certificate is revoked or provider inventory proves the node terminated.
-Billing settlement uses accepted reservations, provider node time, immutable
-objects, and reconciled terminal outcomes, so a missing heartbeat cannot erase
-cost or create duplicate billable work.
-
-DigitalOcean Droplets use immutable rebuilds, outbound-only workload traffic,
-per-node health, bounded scaling, and stateless roots. Routine deploys never use
-SSH. Because Droplets do not use AWS workload identity, each pool uses a
-one-time, five-minute bootstrap assertion created outside OpenTofu state. The
-assertion is bound to environment, role, release, intended Droplet, region, and
-boot generation; the control plane verifies live DigitalOcean inventory before
-issuing a short-lived node certificate, consumes the assertion once, and
-revokes the certificate when the node leaves the pool. Each job subprocess then
-receives narrower job authority.
-
-DigitalOcean API tokens never reach a worker. Capture and render scalers use
-separate environment- and role-scoped tokens with only the Droplet, firewall,
-tag, image, action, and inventory scopes they require. Tokens have explicit
-expiry, rotation overlap, and last-used monitoring. Policy enforces the
-20-meeting admission ceiling, the staging-qualified capture-node bound, the
-ten-render-node ceiling, and the 21-node global recorder-compute cap across
-environments. A bounded external reconciler compares reservations, desired
-capacity, provider inventory, node certificates, job processes, leases, render
-deadlines, and the usage ledger. Scaler failure preserves active nodes and
-closes new admission rather than affecting live meetings.
-
-### Considered recording methods
-
-The selected split pipeline is deliberate:
-
-- Browser-based live composition reproduces the product UI closely, but a
-  comparable room-composite worker commonly needs about four dedicated CPUs.
-  Twenty concurrent jobs would make the browser fleet the dominant fixed and
-  burst cost.
-- Native live composition removes Chromium but still decodes, lays out, mixes,
-  and encodes every meeting in real time. It couples capture survival to render
-  load and cannot batch post-meeting work.
-- Cloudflare RealtimeKit managed recording is outside the direct-SFU adapter
-  contract. Its published composite export price is $0.010 per minute, or $600
-  for 1,000 recorded hours, before participant usage.
-- Client-side MediaRecorder capture cannot satisfy the artifact contract across
-  tab closure, sleep, mobile backgrounding, weak uplinks, and host departure.
-- Full-duration transcription of every participant track would turn a
-  three-person one-hour meeting into roughly three billable audio hours. The
-  selected speaker-turn manifest transcribes each non-overlapping interval once
-  and duplicates only actual overlap plus bounded context.
-- Acoustic diarization guesses speaker boundaries from a mixed waveform even
-  though Chalk already has authenticated isolated tracks. It remains a future
-  adapter for shared microphones and imported mixed media, not a paid launch
-  stage for ordinary SFU recordings.
-- A self-hosted SFU packet tap can eventually remove the extra managed-SFU
-  subscriber path. It remains the named `DigitalOceanMediaPlaneAdapter` option,
-  evaluated when three trailing months of Cloudflare media and recorder egress
-  exceed the dated cost of a redundant Singapore SFU plus its operational
-  reserve. It is a media-plane migration, not a recorder-only optimization.
-
-The durable recording state machine is:
-
-    requested -> reserved -> capture_leased -> capturing_segmented
-      -> capture_complete -> render_queued -> rendering -> verifying -> committed
-      -> retryable_failure | terminal_failure | deleted
-
-The committed recording owns an independent transcript child state:
-
-    not_requested -> preparing -> transcribing -> verifying -> complete
-      -> retryable_failure | terminal_failure | deleted
-
-Transitions use compare-and-set database updates keyed by immutable job and
-attempt IDs. Bundle verification checks sequence, object existence, size,
-checksum, content type, encryption metadata, decodable keyframe boundaries, and
-timestamp continuity. Finalization verifies the complete capture manifest and
-rendered-media facts before an idempotent final-key transition marks the
-artifact committed. Lease expiry makes abandoned work reconcilable. A periodic
-reconciler detects expired leases, missing or overlapping bundles, orphaned
-temporary objects, database/object mismatches, expired provider attempts, and work
-stranded beyond its retry budget. A transcript failure never changes a
-committed recording's availability or integrity state.
-
-Transcription consumes only the committed speaker-turn manifest and its
-temporary audio chunks. Provider responses are normalized in memory; normalized
-transcript document bytes use the final private R2 path. PostgreSQL owns
-lifecycle, authorization, object keys, checksums, sizes, language, per-chunk
-provider/model/version/attempt facts, billed audio, and terminal outcome. The
-job model provides retry, backoff, lease expiry, deduplication, conditional
-single-result commit, terminal failure, dead-letter inspection, and
-reconciliation. No launch provider callback or webhook is trusted or required.
-
-### PostgreSQL artifact jobs
-
-Recording and transcription use PostgreSQL-only leased job tables. Creating an
-artifact or transition that requires work inserts its job in the same database
-transaction, so there is no database-to-queue dual-write. No SQS or external
-broker is introduced. The launch infrastructure includes the bounded recorder
-fleet and scale-to-zero Lambda transcription dispatcher after their staging
-gates pass.
-
-Each job stores an immutable ID and idempotency key, tenant/session/artifact
-references, payload schema version, state, priority, `available_at`, attempt
-count and limit, lease token/owner/expiry, bounded error code and redacted
-detail, and created/updated/terminal timestamps. Large media, transcript bodies,
-credentials, and unbounded provider payloads never live in the job row.
-
-The recorder control API claims jobs in a short transaction with `FOR UPDATE
-SKIP LOCKED`, commits the lease, and returns one job-scoped assignment to an
-authenticated ready recorder worker or transcription dispatcher. Work happens
-outside the transaction and the executor never connects to PostgreSQL.
-Heartbeat, completion, retry, cancellation, and lease recovery enter through
-the control API and use compare-and-set on the attempt and lease token. Polling
-is jittered and bounded; the API's dispatcher pool remains inside the
-PlanetScale connection budget. Exhausted work enters a terminal dead-letter
-state with an audited operator requeue action. A reconciler recovers expired
-leases and detects terminal artifacts with missing or extra work.
+The full pipeline contract — admission and reservation, native selective
+capture, asynchronous composite rendering, worker identity and
+reconciliation, considered alternatives, the recording state machines, and
+PostgreSQL artifact jobs — is specified in
+`scratchpad/chalk-recorder-pipeline-spec-2026-07-12.md`. Track-aware
+transcription and speaker attribution is specified in
+`scratchpad/chalk-transcription-spec-2026-07-12.md`. Both companions are
+bound by this file's settled decisions, admission ceilings, R2 and KMS
+storage contract, and anti-slop rules.
 
 ## OpenTofu Layout and State
 
@@ -1328,7 +966,7 @@ State boundaries:
 | bootstrap  | S3 state bucket, KMS key, native lockfile support, GitHub OIDC provider and base roles                            | Manual, rare, explicit          |
 | foundation | Shared Pages/asset resources, protected adoption, global CI configuration that belongs in IaC                     | Protected workflow              |
 | staging    | All staging AWS, DigitalOcean, Cloudflare, PlanetScale, Grafana, release-ledger, and environment configuration    | Default trusted apply path      |
-| production | All production AWS, DigitalOcean, Cloudflare, PlanetScale, Grafana, release-ledger, and environment configuration | Manual plan plus Hasan approval |
+| production | All production AWS, DigitalOcean, Cloudflare, PlanetScale, Grafana, release-ledger, and environment configuration | Recorded plan; 2026-07-12 standing approval for initial creation, then manual Hasan approval |
 
 Remote state uses:
 
@@ -1448,6 +1086,22 @@ Host and container policy requires:
 - separate capture and render network/provider identities because their media,
   cross-region R2, and GPU access are broader than the app node's.
 
+Application nodes run the OCI images with rootless Podman supervised by systemd
+Quadlet. Quadlet definitions are versioned release inputs and pin image digests,
+users, mounts, networks, resources, dependencies, restart limits, and graceful
+shutdown behavior. systemd owns boot ordering and bounded per-service restart;
+the independent host watchdog owns sustained-unhealthy detection and node
+replacement. The Podman API socket is disabled unless a separately reviewed
+host-only operation requires it, and it is never mounted into an application
+container.
+
+The pinned host image records the supported Podman and systemd versions. Image
+pull, signature verification, stale-image garbage collection, journal
+retention, log forwarding, host patching, and emergency runtime replacement are
+automated and exercised in staging. Local development may use Podman or a
+Docker-compatible OCI workflow, but the production supervisor and behavior are
+systemd Quadlet rather than Compose.
+
 The capture image must support linux/amd64 and linux/arm64. The render image is
 linux/amd64 while the selected NVIDIA runtime requires it; the manifest records
 that explicit hardware-bound exception and pins the driver, CUDA, Video Codec
@@ -1531,21 +1185,29 @@ After the canonical repository gate passes:
 
 ### Production promotion
 
+Approval contract: Hasan's standing approval, granted 2026-07-12, satisfies
+the production approvals in this section for exactly two actions — the
+initial database-container bootstrap manifest and the first production
+plan-apply-and-promotion. Each action still emits its full approval payload;
+under the standing approval that payload is recorded in the execution ledger
+immediately before execution instead of pausing for review. Every later
+production action requires Hasan's explicit per-action approval.
+
 The first production database container uses a two-approval bootstrap because
 the selected PlanetScale provider can read but cannot create that container.
 Before any mutation, automation emits a signed action manifest containing the
 organization and target environment, expected absent state or exact adopted
 database ID, database name digest, PostgreSQL kind, Singapore region, API
 operation, idempotency key, workflow and script digests, projected cost, and a
-no-delete policy. Hasan's first explicit approval authorizes only that manifest.
+no-delete policy. The first required approval authorizes only that manifest.
 The workflow creates or adopts the container, verifies the immutable ID, kind,
 region, and manifest-declared branch/default state, records redacted evidence,
 and stops. A
 different observed resource fails closed. The workflow then produces a fresh
 OpenTofu plan against that fixed ID; applying the plan and promoting a release
-requires a second explicit approval.
+requires the second required approval.
 
-Production promotion starts only after explicit approval. It accepts the exact
+Production promotion starts only after its required approval. It accepts the exact
 staging release manifest, not a branch name or mutable tag.
 
 The approval request binds and shows:
@@ -1617,15 +1279,15 @@ The first baseline does not claim zero-downtime sync deploys.
 
 The balanced launch recovery objectives are:
 
-| Recovery path                         | Launch objective                                                      |
-| ------------------------------------- | --------------------------------------------------------------------- |
-| API or sync process restart           | RTO at or below 2 minutes                                             |
-| Stateholder recovery                  | No acknowledged-outcome loss; RTO at or below 2 minutes                |
-| Verified application release rollback | RTO at or below 10 minutes                                             |
+| Recovery path                         | Launch objective                                                        |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| API or sync process restart           | RTO at or below 2 minutes                                               |
+| Stateholder recovery                  | No acknowledged-outcome loss; RTO at or below 2 minutes                 |
+| Verified application release rollback | RTO at or below 10 minutes                                              |
 | Full app-node replacement             | RTO at or below 15 minutes; durable Sync state recovers from PostgreSQL |
-| PlanetScale PostgreSQL PITR           | RPO at or below 5 minutes; RTO at or below 2 hours                    |
-| Single capture-node replacement       | First decodable resumed bundle within 45 seconds; any gap is explicit |
-| Composite artifact finalization       | Verified final artifact within 30 minutes after capture completion    |
+| PlanetScale PostgreSQL PITR           | RPO at or below 5 minutes; RTO at or below 2 hours                      |
+| Single capture-node replacement       | First decodable resumed bundle within 45 seconds; any gap is explicit   |
+| Composite artifact finalization       | Verified final artifact within 30 minutes after capture completion      |
 
 The RTO clocks are testable and do not hide execution time:
 
@@ -1680,25 +1342,25 @@ Launch uses the following ratified data-class matrix. Retention starts at the
 terminal event for a session, artifact, job, or incident unless the row says
 otherwise.
 
-| Data class                                | Authority                             | Launch retention and deletion                                                                                                                                                                                                                                                                                                                                                                   | Backup and recovery contract                                                                                                                                                       |
-| ----------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tenant, user, membership, and identity    | PostgreSQL                            | Tenant lifetime. Valid user deletion removes identity/auth and pseudonymizes retained participant history within 24 hours. Valid tenant deletion purges all tenant-scoped active rows within 24 hours.                                                                                                                                                                                          | Included two-day PITR; PostgreSQL RPO at most 5 minutes and RTO at most 2 hours.                                                                                                   |
-| Sessions, keys, and integrations          | PostgreSQL plus selected provider     | Active until expiry/revocation. Credentials revoke immediately; inactive metadata expires in 30 days while its minimal audit event follows the 90-day audit policy. Provider revocation and deletion complete within 24 hours.                                                                                                                                                                  | PostgreSQL PITR covers metadata for two days; secret values are never restored as active after revocation.                                                                         |
-| Rooms, meeting sessions, and participants | PostgreSQL                            | Tenant lifetime. Reusable rooms remain until explicit or tenant deletion. User deletion removes direct identity while preserving pseudonymous meeting history.                                                                                                                                                                                                                                  | Included two-day PITR; the standard PostgreSQL RPO/RTO applies.                                                                                                                    |
-| Session control state, events, receipts, and lifecycle intents | PostgreSQL                  | Retention follows the governed Session lifecycle and retention checkpoints. Redis holds only bounded rebuildable acceleration data.                                                                                                                                                                                                                             | PostgreSQL recovery covers acknowledged outcomes; process and node recovery meet the measured Sync RTO.                                                                            |
-| Recording and transcript metadata         | PostgreSQL                            | Tenant-configurable 1–365 days, default 30 days. Hard delete overrides retention and removes active metadata within 24 hours.                                                                                                                                                                                                                                                                   | Included two-day PITR; tombstones replay before restored data can be served.                                                                                                       |
-| Final recording and transcript bytes      | Private R2                            | Tenant-configurable 1–365 days, default 30 days. Authorization revokes immediately and object deletion verifies within 24 hours.                                                                                                                                                                                                                                                                | R2-only. A verified write uses R2 durability; accidental, malicious, or authorized deletion has no restore path.                                                                   |
-| Temporary artifact objects and jobs       | R2 plus PostgreSQL                    | Encrypted capture bundles delete normally within one hour of verified finalization and expire within 24 hours; render retry terminalizes by hour 23; transcription chunks delete within one hour of transcript commit and expire within 24 hours; raw provider responses are memory-only; incomplete multipart uploads within seven days; terminal job and dead-letter evidence within 90 days. | Reconciliation rebuilds job state from PostgreSQL/object facts. Capture bundles and transcription inputs survive only their bounded retries and have no backup or restore promise. |
-| Tenant audit events                       | PostgreSQL                            | 90 days. No content or reusable secret. User deletion pseudonymizes the actor while preserving the security event until expiry.                                                                                                                                                                                                                                                                 | Included two-day PITR; PostgreSQL RPO/RTO applies.                                                                                                                                 |
-| Operational journey events                | PostgreSQL                            | 90 days. Tenant/data-class attributed, operator-only, bounded, and content-free.                                                                                                                                                                                                                                                                                                                | Included two-day PITR; PostgreSQL RPO/RTO applies.                                                                                                                                 |
-| Metrics                                   | Environment Grafana Cloud Free stack  | 14 days; only low-cardinality operational dimensions and opaque correlation identifiers.                                                                                                                                                                                                                                                                                                        | Managed backend. Loss beyond the bounded exporter queue is accepted and alerted; pipeline RTO target 4 hours.                                                                      |
-| Logs, traces, and profiles                | Environment Grafana Cloud Free stack  | 14 days. No message/media content, email, credential, raw customer identifier, or unrestricted attributes.                                                                                                                                                                                                                                                                                      | Managed backend. Loss beyond the bounded exporter queue is accepted and alerted; pipeline RTO target 4 hours.                                                                      |
-| Monitor results and public incidents      | Private status R2 bucket              | Current projection until replaced; signed results and public-safe incident/audit objects expire after 90 days.                                                                                                                                                                                                                                                                                  | Rebuilt from surviving probes and incident objects; RPO one check interval and RTO at most 30 minutes.                                                                             |
-| PlanetScale backups and WAL               | PlanetScale in the database region    | Included backups every 12 hours, WAL, and PITR retained for two days. Deleted data leaves Chalk's customer-restorable window at expiry; provider terms govern physical media.                                                                                                                                                                                                                   | Restore to an isolated branch, replay tombstones, verify, then promote; RPO at most 5 minutes and RTO at most 2 hours.                                                             |
-| OpenTofu state and state-key material     | Versioned encrypted S3 plus 1Password | Current state for environment lifetime; superseded encrypted versions for 90 days; key versions retained at least as long.                                                                                                                                                                                                                                                                      | RPO is the last successful state write; RTO at most 1 hour through an observed decrypt-and-restore drill.                                                                          |
-| Release manifests and environment ledger  | GHCR plus DynamoDB                    | Signed manifests are public and retained indefinitely; environment ledger lives for the environment plus 90 days.                                                                                                                                                                                                                                                                               | DynamoDB PITR/backups retain 35 days; ledger RPO at most 5 minutes and RTO at most 2 hours.                                                                                        |
-| Staging activation and rehearsal records  | DynamoDB                              | Current controller record plus 90 days of redacted lease, cleanup, heartbeat, and cost evidence. No customer or meeting content.                                                                                                                                                                                                                                                                | DynamoDB PITR retains 35 days; conditional reconciliation rebuilds current state from provider facts.                                                                              |
-| CI plans, logs, and deployment evidence   | GitHub plus approved evidence store   | 90 days for redacted plans/logs/evidence; immutable release identity remains in the manifest and ledger.                                                                                                                                                                                                                                                                                        | Reproducible from signed manifests where possible; no customer content or secret values are permitted.                                                                             |
+| Data class                                                     | Authority                             | Launch retention and deletion                                                                                                                                                                                                                                                                                                                                                                   | Backup and recovery contract                                                                                                                                                       |
+| -------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tenant, user, membership, and identity                         | PostgreSQL                            | Tenant lifetime. Valid user deletion removes identity/auth and pseudonymizes retained participant history within 24 hours. Valid tenant deletion purges all tenant-scoped active rows within 24 hours.                                                                                                                                                                                          | Included two-day PITR; PostgreSQL RPO at most 5 minutes and RTO at most 2 hours.                                                                                                   |
+| Sessions, keys, and integrations                               | PostgreSQL plus selected provider     | Active until expiry/revocation. Credentials revoke immediately; inactive metadata expires in 30 days while its minimal audit event follows the 90-day audit policy. Provider revocation and deletion complete within 24 hours.                                                                                                                                                                  | PostgreSQL PITR covers metadata for two days; secret values are never restored as active after revocation.                                                                         |
+| Rooms, meeting sessions, and participants                      | PostgreSQL                            | Tenant lifetime. Reusable rooms remain until explicit or tenant deletion. User deletion removes direct identity while preserving pseudonymous meeting history.                                                                                                                                                                                                                                  | Included two-day PITR; the standard PostgreSQL RPO/RTO applies.                                                                                                                    |
+| Session control state, events, receipts, and lifecycle intents | PostgreSQL                            | Retention follows the governed Session lifecycle and retention checkpoints. Redis holds only bounded rebuildable acceleration data.                                                                                                                                                                                                                                                             | PostgreSQL recovery covers acknowledged outcomes; process and node recovery meet the measured Sync RTO.                                                                            |
+| Recording and transcript metadata                              | PostgreSQL                            | Tenant-configurable 1–365 days, default 30 days. Hard delete overrides retention and removes active metadata within 24 hours.                                                                                                                                                                                                                                                                   | Included two-day PITR; tombstones replay before restored data can be served.                                                                                                       |
+| Final recording and transcript bytes                           | Private R2                            | Tenant-configurable 1–365 days, default 30 days. Authorization revokes immediately and object deletion verifies within 24 hours.                                                                                                                                                                                                                                                                | R2-only. A verified write uses R2 durability; accidental, malicious, or authorized deletion has no restore path.                                                                   |
+| Temporary artifact objects and jobs                            | R2 plus PostgreSQL                    | Encrypted capture bundles delete normally within one hour of verified finalization and expire within 24 hours; render retry terminalizes by hour 23; transcription chunks delete within one hour of transcript commit and expire within 24 hours; raw provider responses are memory-only; incomplete multipart uploads within seven days; terminal job and dead-letter evidence within 90 days. | Reconciliation rebuilds job state from PostgreSQL/object facts. Capture bundles and transcription inputs survive only their bounded retries and have no backup or restore promise. |
+| Tenant audit events                                            | PostgreSQL                            | 90 days. No content or reusable secret. User deletion pseudonymizes the actor while preserving the security event until expiry.                                                                                                                                                                                                                                                                 | Included two-day PITR; PostgreSQL RPO/RTO applies.                                                                                                                                 |
+| Operational journey events                                     | PostgreSQL                            | 90 days. Tenant/data-class attributed, operator-only, bounded, and content-free.                                                                                                                                                                                                                                                                                                                | Included two-day PITR; PostgreSQL RPO/RTO applies.                                                                                                                                 |
+| Metrics                                                        | Environment Grafana Cloud Free stack  | 14 days; only low-cardinality operational dimensions and opaque correlation identifiers.                                                                                                                                                                                                                                                                                                        | Managed backend. Loss beyond the bounded exporter queue is accepted and alerted; pipeline RTO target 4 hours.                                                                      |
+| Logs, traces, and profiles                                     | Environment Grafana Cloud Free stack  | 14 days. No message/media content, email, credential, raw customer identifier, or unrestricted attributes.                                                                                                                                                                                                                                                                                      | Managed backend. Loss beyond the bounded exporter queue is accepted and alerted; pipeline RTO target 4 hours.                                                                      |
+| Monitor results and public incidents                           | Private status R2 bucket              | Current projection until replaced; signed results and public-safe incident/audit objects expire after 90 days.                                                                                                                                                                                                                                                                                  | Rebuilt from surviving probes and incident objects; RPO one check interval and RTO at most 30 minutes.                                                                             |
+| PlanetScale backups and WAL                                    | PlanetScale in the database region    | Included backups every 12 hours, WAL, and PITR retained for two days. Deleted data leaves Chalk's customer-restorable window at expiry; provider terms govern physical media.                                                                                                                                                                                                                   | Restore to an isolated branch, replay tombstones, verify, then promote; RPO at most 5 minutes and RTO at most 2 hours.                                                             |
+| OpenTofu state and state-key material                          | Versioned encrypted S3 plus 1Password | Current state for environment lifetime; superseded encrypted versions for 90 days; key versions retained at least as long.                                                                                                                                                                                                                                                                      | RPO is the last successful state write; RTO at most 1 hour through an observed decrypt-and-restore drill.                                                                          |
+| Release manifests and environment ledger                       | GHCR plus DynamoDB                    | Signed manifests are public and retained indefinitely; environment ledger lives for the environment plus 90 days.                                                                                                                                                                                                                                                                               | DynamoDB PITR/backups retain 35 days; ledger RPO at most 5 minutes and RTO at most 2 hours.                                                                                        |
+| Staging activation and rehearsal records                       | DynamoDB                              | Current controller record plus 90 days of redacted lease, cleanup, heartbeat, and cost evidence. No customer or meeting content.                                                                                                                                                                                                                                                                | DynamoDB PITR retains 35 days; conditional reconciliation rebuilds current state from provider facts.                                                                              |
+| CI plans, logs, and deployment evidence                        | GitHub plus approved evidence store   | 90 days for redacted plans/logs/evidence; immutable release identity remains in the manifest and ledger.                                                                                                                                                                                                                                                                                        | Reproducible from signed manifests where possible; no customer content or secret values are permitted.                                                                             |
 
 Telemetry retention is 14 days at launch because both environments use Grafana
 Cloud Free. Increasing it is a reviewed plan, cost, and privacy change; no
@@ -1743,456 +1405,42 @@ telemetry recovery evidence.
 
 ## Observability and Operations Boundary
 
-The observability lane supplies the application telemetry contract and its local
-end-to-end proof. It standardizes a stable `journey_id`, W3C trace context,
-client/API/sync/RTC/monitor/webhook signals, the durable PostgreSQL
-`observability_journey_events` ledger, OpenTelemetry export, and a reproducible
-Grafana operations surface across metrics, traces, logs, profiles, and journey
-events. The same reviewed definitions create one surface in each environment
-account. Its telemetry-pipeline canary emits and reads back metric, trace, and
-log paths; the application gates verify the durable journey ledger.
+The observability lane supplies the application telemetry contract: a stable
+`journey_id`, W3C trace context, the durable PostgreSQL
+`observability_journey_events` ledger, OpenTelemetry export, and a
+reproducible Grafana operations surface per environment. Staging and
+production use separate company-controlled Grafana Cloud Free accounts,
+independently scheduled component uptime services, signed monitor results,
+and a dedicated public status path on `status.chalkmeet.com`; email through
+Grafana Alerting is the launch notification route.
 
-The checked-in `grafana/otel-lgtm` stack is development and verification
-infrastructure. It must not run on an application node or be promoted as a
-production backend. Production credentials, collector routing, backend choice,
-retention, volume limits, alerts, and notification delivery belong to this
-infrastructure lane.
-
-| Boundary                    | Application and observability ownership                       | Infrastructure ownership                                                     |
-| --------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Signal creation             | Semantic fields, `journey_id`, spans, metrics, logs, profiles | Release/environment/resource attributes and cardinality budgets              |
-| Durable operational events  | Journey-ledger schema and writes                              | Database role, migration gate, retention, backup, and deletion policy        |
-| Signal transport            | Bounded OTLP exporters and application backpressure behavior  | Collector deployment, credentials, egress, queues, sampling, and drop alerts |
-| Operational interpretation  | Journey and subsystem semantics                               | Backend, dashboards, recording rules, SLO reports, and deploy annotations    |
-| Availability verification   | Safe canary APIs and deterministic expected outcomes          | Schedules, runners, synthetic identities, isolation, alerting, and drills    |
-| Public incident information | Public-safe component vocabulary                              | Sanitized status projection, incident controls, hosting, and freshness       |
-
-One Grafana surface per environment is that environment's correlation boundary.
-It is not the uptime failure boundary. Production and staging use independently
-scheduled component services so one broken monitor, credential, deployment, or
-fallback buffer cannot mark unrelated components healthy or suppress their
-checks. Operators switch between equivalent staging and production surfaces;
-the Free accounts do not provide a cross-account federated view.
-
-| Uptime service      | Required outcome                                                                                              | Suitable probe path                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Web edge            | DNS, TLS, Pages shell, runtime-config schema/digest, asset, and live release identity                         | External HTTP plus a lightweight browser navigation                 |
-| API control plane   | Liveness and a safe authenticated create/read/delete canary with full journey correlation                     | External scripted HTTP using a dedicated synthetic tenant           |
-| Sync realtime       | TLS/WebSocket upgrade, signed auth, join, heartbeat, snapshot revision, and bounded reconnect                 | External scripted WebSocket client                                  |
-| Media               | Two clients publish and receive a playable remote track with transport and provider attribution               | Scheduled real-browser/WebRTC runner outside the app node           |
-| Artifacts           | A canary recording/transcript reaches its terminal state and its object is authorized and cleaned             | Launch-required recorder/browser workflow                           |
-| Telemetry pipeline  | Metric, trace, log, and journey-ledger paths are fresh and queryable; enabled profiles have a freshness check | The observability canary plus application ledger and profile checks |
-| Status and alerting | Component projection, monitor heartbeats, and notification delivery remain fresh                              | External status check plus a synthetic alert-delivery drill         |
-
-Common probe libraries and result schemas are encouraged. Each service retains
-its own schedule, deployment identity, minimum credentials, timeout budget,
-last-success heartbeat, fallback buffer, and alert labels. Staging and
-production instances never share synthetic users, secrets, state, targets, or
-deployment permissions. A dependency map correlates shared failures such as
-DNS, Tunnel, database, SFU, or telemetry-backend outages while preserving every
-component result. Aggregate state cannot be green when a required component or
-its monitor heartbeat is failed or stale.
-
-Telemetry ingestion is isolated by an environment trust boundary, not by a
-caller-supplied label. Staging and production use separate company-controlled
-Grafana Cloud accounts and Free stacks. Account- and stack-scoped credentials
-derive and overwrite environment and monitor identity and reject
-cross-environment labels. No organization access policy, service account,
-synthetic identity, recovery factor, or automation token spans the accounts.
-One environment can never write another environment's telemetry, alerts,
-journey records, or status.
-
-Shared probe releases roll out to staging, then one production component, then
-the remaining production components. Result schemas remain backward compatible
-across the rollout window, and each service pins its own verified version. A bad
-shared library or ingestion schema must turn affected monitor state to unknown
-or stale rather than leaving the last green result current.
-
-The selected launch topology uses an external managed synthetic provider as
-the primary black-box path outside both Cloudflare and the Chalk AWS account.
-Small Cloudflare Worker services provide a second vantage for protocols they can
-exercise faithfully. Web, API, sync, and status Workers are separate services
-per environment and share only tested library code. Chalk uses Workers Paid so
-all eight minimum services own independent Cron Triggers; the design never packs
-component checks back into one scheduled handler to avoid the plan fee. Media
-and artifact checks use a real-browser runner because an HTTP-only Worker cannot
-prove a remote WebRTC outcome. The selected runner must prove two coordinated
-clients, fake or controlled media input, a playable remote track, cleanup, and
-its actual billed execution unit before its cadence or cost is accepted. At
-least one paging route remains usable during a Cloudflare account or app-node
-failure.
-
-Grafana Cloud is the selected managed telemetry and external-synthetic backend
-because it accepts the branch's OTLP contract and avoids operating Tempo, Loki,
-Prometheus, Pyroscope, and Grafana on new compute. Chalk uses two
-company-controlled Free accounts, each with one stack: one for staging and one
-for production. Both keep 14 days of metrics, logs, traces, and profiles and
-have independent users, MFA, recovery material, access policies, quotas, alerts,
-and synthetic allowances. Dashboard, alert, and recording-rule definitions are
-promoted from staging to production as reviewed code, while their state and
-credentials remain separate.
-
-Grafana's public documentation states that each Free account is limited to one
-stack but does not expressly confirm or forbid one company owning separate Free
-accounts for isolated environments. Before either account becomes an
-infrastructure dependency, the provisioning gate records Grafana's then-current
-terms or written confirmation that this arrangement is permitted. Permission is
-a hard dependency. If the arrangement is not permitted, Phase 0 blocks and this
-spec returns to discussion for a newly ratified telemetry backend. No workflow
-shares production credentials, combines the environments, weakens staging
-parity, or upgrades to Pro automatically.
-
-The existing uptime Worker is not deploy-ready. It combines all checks into one
-HTTP-only schedule, uses pre-canonical targets, depends on an ingest route that
-does not exist in the current application, and shares one run summary and
-fallback stream. The current status route is also blank. The implementation
-replaces this contract with the component services above and proves signed
-result ingestion, replay, freshness, and independent failure before staging can
-pass.
-
-Every monitor result uses a bounded signed envelope containing the credential-
-derived monitor ID, environment, component, unique result ID, issued and expiry
-times, target release, payload digest, outcome, and check timing. Ingestion
-rejects oversized, expired, future-dated, duplicate, revoked, cross-environment,
-and unauthorized-component envelopes. Signing-key rotation overlaps only for a
-bounded window; revocation, delayed replay, duplicate delivery, and fallback
-replay are staging tests.
-
-The public status projection reads a sanitized monitoring store rather than the
-product API or raw telemetry backend. It exposes component state, incident
-state, last successful check time, and planned maintenance without customer,
-credential, internal-host, or raw-error data. Manual incident changes require
-strong authentication, an audit event, and expiry. The status renderer and data
-path survive an app-node or API outage, and an external check detects stale
-status data.
-
-The selected public path uses `status.chalkmeet.com` on a dedicated Cloudflare
-Pages project, a dedicated status Worker, and a private status R2 bucket. The
-Worker owns signed-result ingestion and manual incident mutation; the bucket
-holds only the sanitized current projection and append-only public-safe incident
-audit objects. This path survives a product Pages deploy, API outage, and
-app-node loss. Its DNS, ingestion, store, mutation, and renderer share the
-accepted Cloudflare failure domain. During a Cloudflare-wide outage the public
-status page may be unreachable. External Grafana probes and a non-Cloudflare
-paging destination remain the operator signal and explicitly report the shared
-provider failure.
-
-Initial component state and freshness budgets are:
-
-| Component class                  | Production check budget                           | Public and alert transition                                                                              |
-| -------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Web, API, sync, and status       | Every 5 minutes; result within 30 seconds         | One explicit failure is degraded; two are outage; missing heartbeat after 7 minutes is unknown/stale     |
-| Media                            | Every 15 minutes; result within 3 minutes         | One explicit failure is degraded; two are outage; missing heartbeat after 20 minutes is unknown/stale    |
-| Artifacts                        | Daily and after every relevant deploy             | One failed terminal workflow is degraded; two are outage; no result within 26 hours is unknown/stale     |
-| Metric, trace, and log pipelines | Canary every minute; each path fresh in 5 minutes | A stale path is degraded immediately and outage after 10 minutes; healthy sibling signals cannot mask it |
-
-Staging uses the same state machine with lower-cost cadence where noted in the
-dated cost sheet. `Operational` requires two consecutive successes. `Degraded`
-means a target explicitly failed once or only one external location failed.
-`Outage` means the target explicitly failed its confirmation threshold.
-`Unknown` means the monitor, ingestion, or projection heartbeat is stale, so
-the last green result is no longer evidence. Planned maintenance is separate
-and expires automatically. Recovery requires two consecutive successes. An
-accepted monitor result reaches alert evaluation and the public projection
-within 2 minutes; status data shows its observed time and freshness.
-
-`Dormant` is available only to staging. It is valid only while a signed
-activation record says desired capacity is zero, cleanup is complete, and its
-short-lived dormant assertion is still current. The target checks remain
-scheduled during that state and report `Dormant` only after validating the
-lease generation, controller heartbeat, cleanup state, assertion expiry, and
-target absence. An unexpected target response, stale controller, cleanup
-failure, or expired assertion changes the environment to unknown and alerts on
-lease drift. Activation clears `Dormant` before readiness evaluation begins.
-
-Staging drills disable each component monitor, the Cloudflare-hosted probe path,
-the external path, the telemetry backend, and an alert destination separately.
-The drill also injects a shared-library and result-schema regression across
-multiple monitors. It proves monitoring-of-monitoring, bounded replay, component
-attribution, fail-unknown behavior, expected public-status unavailability during
-a Cloudflare-wide failure, and external delivery through the surviving route.
-
-The observability lane's 99.95 percent availability target remains a candidate,
-not a launch commitment. A single-node topology and reconnecting deploys must
-first demonstrate that planned and unplanned interruption fits the ratified
-error budget. Reports separate edge, API, sync, media, artifacts, telemetry, and
-status availability rather than averaging them into a healthy-looking number.
+The complete contract — ownership boundaries, component uptime services,
+monitor-result envelopes, account isolation, status projection, notification
+severities, freshness budgets, drills, and readiness dependencies — is
+specified in `scratchpad/chalk-observability-uptime-spec-2026-07-12.md`.
 
 ## Cost Contract
 
 Before any staging or production apply, CI produces a dated monthly estimate
-using current provider prices and measured resource choices.
+using current provider prices and measured resource choices. The ratified
+guardrails, summarized here with normative detail in the cost model: the
+production-plus-shared-foundation fixed forecast warns above $110/month;
+dormant and fixed staging warns above $15/month; the combined fixed forecast
+has a $200/month hard ceiling; an automatic staging plan adding more than
+$10/month over its last approved forecast pauses for Hasan's explicit
+approval, except that the 2026-07-12 standing approval covers initial
+build-out staging deltas up to the ratified staging warning and combined
+ceiling; every production plan remains approval-only, with the initial
+creation and first promotion approved by that same standing approval. The
+fixed ceiling is a
+platform-idle control, never an all-in bill: recording, media, storage, and
+transcription usage is metered separately and requires a funded allocation
+before admission.
 
-The estimate separates:
-
-- EC2, EBS, public IPv4, backup, and AWS data transfer;
-- PlanetScale staging and production compute, storage, backups, and egress;
-- Cloudflare zone plan, Pages, Tunnel, R2 operations/storage, SFU egress, and
-  observability/logging add-ons;
-- GHCR storage and transfer if charged;
-- recorder fixed/active compute and transfer;
-- telemetry, incident delivery, and third-party provider costs;
-- staging baseline and production baseline;
-- fixed minimum, expected, high, and provider-price uncertainty;
-- variable cost per meeting minute, recorded minute, transcription minute,
-  stored GiB-month, 1,000 API calls, and peak concurrent room;
-- taxes and credits as separate lines rather than hidden assumptions;
-- usage-driven costs at expected 50, 80, and 100 percent of the ratified launch
-  workload.
-
-Known current fact: Cloudflare Tunnel adds zero direct subscription dollars for
-public application publishing. It may avoid a static Elastic IP, but it does
-not erase the AWS outbound/public-address or node-capacity cost.
-
-Cloudflare's limits checked on 2026-07-11 allow 100 Workers but only five Cron
-Triggers per account on Workers Free. The minimum web, API, sync, and status
-services across staging and production need eight schedules. Workers Paid has a
-$5 monthly account minimum, 250 Cron Triggers, and usage allowances. The cost
-model includes the $5 plan; it never assumes eight free triggers.
-
-The first dated catalog hypothesis uses 730 hours per month and prices checked
-on 2026-07-11 and 2026-07-12. AWS's live Price List reports Singapore Linux
-on-demand rates of $0.0212/hour for `t4g.small`, $0.0424/hour for
-`t4g.medium`, $0.005/hour for an in-use public IPv4 address, and $0.096 per
-gp3 GB-month. T4g Unlimited surplus CPU is $0.04 per vCPU-hour in every AWS
-region. AWS supplies a shared 100 GB monthly Internet-egress allowance; its live
-Price List reports $0.12/GB for the first 10 TB from Singapore after that
-allowance. PlanetScale's Singapore price sheet reports $5/month for non-HA PS-5
-and $47/month for HA PS-10, each with the first 10 GB included. A
-customer-managed AWS KMS key starts at $1/month. Its first and second key
-material rotations each add another $1/month. The baseline uses five current
-keys for state, environments, and recording envelopes; retaining two rotations
-for each can raise their fixed line from $5 to $15 before request charges.
-
-The selected recorder prices were checked on 2026-07-12. DigitalOcean's SGP1
-CPU-Optimized 2-vCPU/4-GiB Droplet costs $0.0625/hour, capped at $42/month, and
-includes 4,000 GiB of full-month outbound transfer. The TOR1 RTX 4000 GPU
-Droplet costs $0.76/hour and includes 10 TB of full-month outbound transfer.
-Droplets are billed per second with a 60-second or $0.01 minimum, and transfer
-allowance accrues in proportion to active time. Inbound transfer is free and
-outbound beyond the pooled allowance is $0.01/GiB. The GPU plan is a
-contracted/provider-quota dependency and is unavailable in SGP1; Phase 0 must
-prove TOR1 access and a ten-node burst quota without creating production
-capacity.
-
-The selected transcription prices were checked on 2026-07-12. DeepInfra lists
-`openai/whisper-large-v3-turbo` at $0.00020 per audio minute. Cloudflare lists
-`@cf/openai/whisper-large-v3-turbo` at $0.00051 per audio minute. Each forecast
-uses provider-reported billed audio by successful and failed attempt, not
-meeting duration alone. The billed input is unique non-overlapping speaker-turn
-audio plus actual overlapping speakers, deterministic boundary context, and
-retry audio. Full-duration participant-track multiplication is prohibited.
-
-Recorder usage is modeled as four separate paths:
-
-1. Cloudflare Realtime SFU to capture is inbound and free at DigitalOcean.
-   Cloudflare charges $0.05/GB for data it sends after the account's shared
-   1,000 GB monthly SFU/TURN allowance. A 3–4 Mbps selective input is about
-   1.35–1.8 GB, or $0.0675–$0.09, per recorded hour when fully billable.
-2. Capture to R2 uploads the same encrypted encoded media without transcoding.
-   At the target four-meeting density, 3–4 Mbps per meeting fits approximately
-   within the CPU Droplet's time-accrued transfer allowance. The dated forecast
-   still charges observed overage and never assumes unused pooled transfer.
-3. R2 to TOR1 is free R2 egress and free DigitalOcean ingress. Final upload from
-   TOR1 to R2 consumes the GPU pool's time-accrued allowance. At 2 Mbps output,
-   minor overage is possible when one node renders far faster than real time and
-   is charged from observed bytes rather than rounded away.
-4. R2 Standard stores about 0.9 GB per 2-Mbps recorded hour. One hour retained
-   for a full month costs about $0.0135 before the 10-GB storage allowance.
-   Ten-to-fifteen-second capture creates 240–360 Class A object writes per hour;
-   the first million monthly Class A operations are included, then the
-   published $4.50/million rate is about $0.0011–$0.0016 per recorded hour.
-
-At 1,000 recorded meeting-hours per month, before transcription and ordinary
-participant SFU/TURN traffic, the pre-benchmark recorder envelope is:
-
-| Usage line                                  | Sustained full-load lower bound | Minimum-qualified lower bound |
-| ------------------------------------------- | ------------------------------: | ----------------------------: |
-| SGP1 capture compute, including N+1         |             $18.75 at four/node |            $34.38 at two/node |
-| TOR1 render compute                         |         $38.00 at 20x real time |       $50.67 at 15x real time |
-| Recorder-specific Cloudflare SFU egress     |         $17.50 after 1 TB at 3M |     $90.00 fully billed at 4M |
-| Final R2 storage at 30-day steady retention |                          $13.50 |                        $13.50 |
-| R2 operations and DigitalOcean overage      |                           $0–$2 |                         $0–$5 |
-| Recorder-only usage subtotal                |                   about $88–$90 |                    about $194 |
-
-The capture rows assume 1,000 meeting-hours packed continuously into 20 active
-meetings: 50 wall-clock hours on six target-density nodes or eleven fallback
-nodes. They include the ready spare but remain lower bounds. Partial bins,
-five-minute prewarm, ten-minute no-shows, early endings, worker replacement,
-render boot, and retries can increase node-hours materially. Every expected and
-high forecast therefore replays the actual reservation time series through the
-placement and render-deadline algorithms; it never divides aggregate hours by
-density alone.
-
-A renderer below 15x is unqualified for the ending-together deadline under the
-ten-node ceiling. These figures expose why a browser-per-meeting fleet is
-excluded and why the GPU throughput benchmark is a release gate. They also show
-that the $200 fixed-platform ceiling cannot be represented as a $200 all-in
-bill at this usage. The fixed baseline plus these recorder lower bounds is about
-$188–$294 before normal participant media and transcription. Normal participant
-media can consume the shared Cloudflare allowance before the recorder, and
-transcription remains its own usage line.
-
-Every dated forecast uses observed input by track and simulcast layer, render
-factor, output bitrate, capture-bundle count, retries, retained bytes, playback
-reads, normal participant SFU/TURN egress, and transcription-provider usage.
-Cloudflare's shared free allowance is never assigned entirely to recorder
-traffic in the expected or high case.
-
-The current 2,000-one-hour-meeting planning case is 2,000 recorded room-hours,
-or 120,000 base transcription minutes, with three participants on average,
-stage-oriented 720p media, 30-day artifact retention, reservation-aware capture
-packing, and no permanent recorder node. It is a budget forecast, not proven
-capacity or a new fixed-resource ceiling:
-
-| Monthly line                                       | Planning range | Load-bearing assumption                                       |
-| -------------------------------------------------- | -------------: | ------------------------------------------------------------- |
-| Fixed platform and dormant staging                 |        $100.48 | Current lean fixed topology                                   |
-| SGP1 capture compute and bounded transfer          |       $60–$125 | Reservation packing, prewarm, N+1, and replacement overhead   |
-| TOR1 render compute and bounded transfer           |       $80–$115 | 15–20x GPU factor, boot, verification, and bounded retry      |
-| Cloudflare SFU/TURN, including recorder subscriber |      $140–$300 | Three-person average and measured subscribed video bitrate    |
-| R2 storage and operations                          |        $30–$40 | 30-day steady retention, capture bundles, reads, and cleanup  |
-| DeepInfra transcription and Lambda dispatch        |        $25–$40 | $24 base ASR plus measured overlap, context, retries, and AWS |
-| Expected all-in total                              |      $435–$720 | Before taxes, credits, unusual TURN use, and provider changes |
-
-The internal planning envelope is $850/month and the conservative external
-estimate is $1,000/month until staging replaces these ranges with measured
-time-series data. A full-month switch of all 120,000 base minutes from
-DeepInfra to Cloudflare adds about $37.20; with a 20-percent overlap, context,
-and retry allowance it adds about $44.64. That fallback remains inside the
-envelope, but the forecast must recompute it from actual billed minutes.
-
-The pre-benchmark fixed and hourly split is:
-
-| Scope                | Candidate line                                               | Monthly or hourly hypothesis |
-| -------------------- | ------------------------------------------------------------ | ---------------------------- |
-| Shared foundation    | Workers Paid account minimum                                 | $5.00/month                  |
-| Shared foundation    | Current state customer-managed KMS key                       | $1.00/month                  |
-| Shared foundation    | Serverless controller, ledger, and log reserve               | $1.00/month                  |
-| Production           | One `t4g.medium` for 730 hours                               | $30.95/month                 |
-| Production           | One in-use public IPv4 address for 730 hours                 | $3.65/month                  |
-| Production           | 30 GB gp3 root-volume pricing hypothesis                     | $2.88/month                  |
-| Production           | Current environment customer-managed KMS key                 | $1.00/month                  |
-| Production           | Recording envelope key-encryption key                        | $1.00/month                  |
-| Production           | PlanetScale Singapore HA PS-10                               | $47.00/month                 |
-| Dormant staging      | PlanetScale Singapore non-HA PS-5                            | $5.00/month                  |
-| Dormant staging      | Current environment customer-managed KMS key                 | $1.00/month                  |
-| Dormant staging      | Recording envelope key-encryption key                        | $1.00/month                  |
-| Active staging       | `t4g.small`, public IPv4, and prorated 30 GB gp3 root volume | $0.0301/hour                 |
-| Active capture node  | DigitalOcean SGP1 CPU-Optimized, 2 vCPU/4 GiB                | $0.0625/hour                 |
-| Active render node   | DigitalOcean TOR1 RTX 4000 GPU                               | $0.76/hour                   |
-| Burstable compute    | T4g Unlimited surplus CPU above earned baseline              | $0.04/vCPU-hour              |
-| Each rotated KMS key | First and second retained rotations                          | +$1.00/month each            |
-
-Before recorder compute, production plus its shared foundation is about
-$93.48/month. Keeping staging configured but dormant brings that subtotal to
-about $100.48/month. An example 88-hour staging-app month adds about $2.65.
-These totals assume no chargeable T4g surplus CPU; the capacity result must add
-its measured 24-hour-equivalent cost.
-
-The $1 serverless reserve covers the five-minute lease controller, EventBridge
-schedule, on-demand activation and release records, and bounded CloudWatch logs
-until a dated calculator quote replaces it; the dormant controller cadence is
-about 8,640 invocations in a 30-day month. Usage beyond that reserve is a
-visible variance.
-
-Recorder compute has no idle floor, so the normal fixed combined baseline
-remains about $100.48. An example 88-hour staging-app month adds about $2.65.
-Capture and render tests appear in a separate usage ledger at their actual
-node-seconds, transfer, SFU, R2, and retry cost; a scale test never disguises
-that spend as a permanent fixed resource.
-
-These figures are hypotheses, not an apply quote: the measured root size,
-DigitalOcean worker classes and app-node classes may change. S3 state, transfer,
-Cloudflare usage, R2, SFU, GHCR, telemetry volume, browser/media runner compute,
-paging, transcription, taxes, and credits remain separate measured lines. Any
-enabled but unpriced resource blocks apply rather than disappearing inside the
-rounded baseline.
-
-Grafana's published pricing checked on 2026-07-12 gives each selected Free
-account a $0 platform fee, one stack, 14-day retention for metrics, logs,
-traces, and profiles, three active users, 10,000 active metric series, 50 GB
-each of logs, traces, and profiles per month, 100,000 synthetic API-test
-executions, and 10,000 browser-test executions per month. Each execution is
-billed against its account allowance per probe location and runtime minute
-rounded up. Frequency, locations, retries, duration, and every scripted test
-remain explicit capacity inputs.
-
-Free has no paid overage path. A forecast that exceeds either account's
-allowances blocks production promotion and requires volume reduction or a
-separately approved plan change. The automation never treats the second Free
-account as pooled capacity and never upgrades to Pro automatically. The known
-monitoring subscription floor is therefore $5/month for Workers Paid. The
-non-Cloudflare paging destination and real-browser runner remain pending cost
-lines.
-
-The initial synthetic budget is a sizing hypothesis, not a provider promise.
-The pre-proof execution sheet is:
-
-| Uptime service      | Billed path and one-minute hypothesis       | Staging hypothesis                           | Production hypothesis                         | Required measurement before forecast                  |
-| ------------------- | ------------------------------------------- | -------------------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
-| Web edge            | Grafana API test plus separate browser test | 1 API location every 15 minutes: 2,880/month | 2 API locations every 5 minutes: 17,280/month | Browser cadence, duration, locations, and retries     |
-| API control plane   | Grafana scripted API test                   | 1 location every 15 minutes: 2,880/month     | 2 locations every 5 minutes: 17,280/month     | Transaction duration, cleanup, and retries            |
-| Sync realtime       | Grafana scripted WebSocket test             | 1 location every 15 minutes: 2,880/month     | 2 locations every 5 minutes: 17,280/month     | Script support, duration, reconnect, and retries      |
-| Status and alerting | Grafana API/status test                     | 1 location every 15 minutes: 2,880/month     | 2 locations every 5 minutes: 17,280/month     | Full-path drill and notification-provider usage       |
-| Media               | Selected real-browser runner                | Every 30 minutes                             | Every 15 minutes                              | Coordinated-client billing, runtime, compute, cleanup |
-| Artifacts           | Recorder/browser runner                     | Daily and after deploy                       | Daily                                         | Recorder time, transcript cost, storage, and cleanup  |
-| Telemetry pipeline  | Managed backend canary, outside synthetics  | Every minute                                 | Every minute                                  | Signal bytes, series, queries, retention, and alerts  |
-
-Using Grafana's 43,200-minute monthly formula, the four production API-class
-rows total about 69,120 executions in the production account. The four staging
-rows remain at 11,520 executions while staging is dormant because they switch
-to lease, controller, status, and target-absence assertions. Each remains below
-its own 100,000-account allowance before retries and drills. Active-only media,
-artifact, and application-telemetry tests are separate; the managed-backend
-canary remains active every minute. The totals exclude browser tests, media,
-artifacts, fallback replay checks, and telemetry ingestion. A two-minute billed
-browser execution consumes twice the one-minute estimate, and a coordinated
-two-client test may consume more than one browser execution. The final sheet
-uses both the provider formula and a 31-day maximum, with one row per test,
-location, retry policy, execution duration, coordinated client, and non-Grafana
-runner resource.
-
-Each Grafana account forecast also includes metric active series and data points
-per minute, log/trace/profile GB ingested, frontend sessions, active users,
-query/SLO features, notification delivery, and telemetry egress. Staging records
-each measured input before production is activated. A forecast outside a Free
-allowance blocks promotion until signal volume is reduced or Hasan approves a
-different backend plan; production coverage is never weakened silently.
-
-Launch cost guardrails are stated before taxes and credits:
-
-- production plus shared fixed foundation warns above $110/month;
-- dormant and fixed staging resources warn above $15/month, excluding
-  production, shared foundation, and explicitly metered activation work;
-- the combined staging, production, and shared fixed-resource forecast has a
-  $200/month hard ceiling;
-- an automatic staging plan that adds more than $10/month relative to its last
-  approved forecast pauses for Hasan's explicit cost approval;
-- every production plan remains approval-only regardless of its amount.
-
-The normal selected baseline is about $93.48 for production plus shared
-foundation and $7 for dormant staging, or $100.48 combined. Capture, render,
-SFU, R2, transcription, active staging, and other work that scales with actual
-use belongs to a separate usage forecast and ledger. At 1,000 recorded hours,
-the recorder-only sustained-load lower bound adds about $88–$194 before normal
-participant media and transcription. The fixed $200 ceiling is therefore a
-platform-idle control and is never described as an all-in monthly bill.
-
-Every recording reservation atomically reserves estimated concurrency, render
-deadline capacity, tenant minutes, and dollar exposure from its usage budget.
-The estimate settles to measured cost after finalization. Production has zero
-unfunded recording quota: a tenant or internal program must have an approved
-allocation before admission. Usage alerts fire at 50, 80, and 100 percent of
-both tenant and global exposure. Reaching the limit closes new and unaccepted
-admission; it never terminates an active capture or abandons an already accepted
-reservation. Pricing or quota changes do not alter the infrastructure ceiling.
-
-A warning emits a visible plan annotation and cost alert but does not by itself
-authorize or block an otherwise valid staging apply. The hard ceiling, an
-unpriced enabled resource, or a staging delta above $10 blocks apply. A hard
-ceiling is a planned fixed-resource control rather than a provider billing cap.
-A staging activation always retains its expiry and scale-to-zero behavior.
+The full cost model — dated price sheets, recorder usage envelopes, the
+1,000- and 2,000-hour planning cases, synthetic-monitoring execution budgets,
+and usage-ledger controls — is specified in
+`scratchpad/chalk-infra-cost-model-2026-07-12.md`.
 
 ## Application Readiness Dependencies
 
@@ -2248,308 +1496,46 @@ Before the domain cutover:
   legal-hold contracts;
 - clients prove Cloudflare WebSocket reconnect and session restoration.
 
-### Recorder and transcription
+### Recorder, transcription, and observability
 
-Before staging can pass or production can be planned:
+Recorder and transcription launch readiness dependencies are specified in
+`scratchpad/chalk-recorder-pipeline-spec-2026-07-12.md` and
+`scratchpad/chalk-transcription-spec-2026-07-12.md`; observability, uptime,
+and status dependencies in
+`scratchpad/chalk-observability-uptime-spec-2026-07-12.md`. Staging cannot
+pass while any of them is unmet.
 
-- the capture and render images, auth, reservation, job, artifact, cleanup, and
-  resource contracts exist;
-- zero-idle scaling, scheduled prewarm, unscheduled start hold, 20-meeting
-  and 100-participant admission, ten-participant room bound, 120-minute limit,
-  capture density, N+1 replacement, ten-node render ceiling, one-time
-  bootstrap, certificate revocation, and provider reconciliation pass;
-- PostgreSQL job leasing, retry, dead-letter, reconciliation, and connection
-  budgets are tested;
-- the recorder control API owns every database transition and workers prove
-  they have no PlanetScale or infrastructure-control credential;
-- selective track capture, the stage-layout timeline, 10–15-second encrypted
-  bundle upload, fencing, replacement resume, gap attribution, manifest
-  finalization, and orphan cleanup pass under worker and node loss;
-- authenticated track ownership, versioned VAD/turn/overlap derivation, the
-  speaker-turn manifest, and chunk-to-meeting timestamp mapping pass without
-  acoustic identity inference or full-duration participant-track billing;
-- the native GPU renderer produces the ratified 720p30 H.264/AAC stage artifact
-  within 30 minutes across the maximum ending-together workload;
-- application-layer bundle encryption, memory-only TOR1 decryption, per-job key
-  handling, normal one-hour deletion, and 24-hour orphan expiry pass;
-- R2 upload/finalization and PostgreSQL transitions are idempotent;
-- normalized transcript document bytes move to R2; the current
-  `transcriptions.text` column cannot remain the production content authority;
-- the provider-neutral transcription port, DeepInfra primary adapter,
-  Cloudflare fallback adapter, scale-to-zero Lambda dispatcher, exact model
-  version, fenced single-result commit, and provider/model/version audit facts
-  exist;
-- DeepInfra's privacy/commercial gate, environment token isolation, spending
-  alerts, quota/concurrency proof, conformance corpus, quality thresholds, and
-  fallback circuit breaker pass before it becomes the production default;
-- workers use job-scoped upload authority and never hold reusable R2 object
-  credentials;
-- recording and transcript delete endpoints revoke access, tombstone metadata,
-  delete R2 bytes and provider copies, and verify completion within 24 hours;
-- retry, dead-letter, reconciliation, duplicate/late-response rejection, and
-  forced Cloudflare fallback pass without provider racing or webhooks;
-- retention, erasure, orphan cleanup, and restore-tombstone behavior pass;
-- a full composite-recording-to-transcript staging canary reaches terminal
-  state on the selected production capture and render providers and classes,
-  then the same corpus passes with DeepInfra disabled and Cloudflare active.
+## Execution
 
-### Observability, uptime, and status
-
-Before staging can pass:
-
-- the observability lane is merged and its repository gate remains green;
-- the `observability_journey_events` migration is applied and verified through
-  the same migration ledger as every other schema change;
-- production journey intake has tenant/data-class attribution, operator-only
-  read authorization, ratified retention/erasure, and an isolated connection
-  budget; the current unattributed v1 intake cannot be enabled by configuration
-  alone;
-- web, client SDK, API, sync, monitor, and webhook telemetry carries the same
-  release, environment, and journey contract without unbounded cardinality;
-- deployment configuration points OTLP exporters at the selected managed
-  collector path and never at the local proof stack;
-- staging and production Grafana accounts, stacks, recovery material, and
-  backend credentials enforce distinct write tenants and server-derived
-  environment identity;
-- every component uptime service has a deterministic canary, dedicated
-  synthetic identity where needed, cleanup behavior, and an owner;
-- signed monitor result ingestion and fallback replay work without depending on
-  the monitored application API;
-- the public status projection implements the public-safe component contract;
-- telemetry sampling, retention, notification routes, and volume ceilings are
-  configured and tested for staging.
-
-## Execution Handoff Contract
-
-This spec is ready for a fresh implementation worker. Work begins at Phase 0
-and advances in order; a later phase never inherits an unmet earlier gate.
-Verification gates, benchmarks, provider inventory, and exact prices are
-execution work rather than invitations to redesign the settled architecture.
-
-The active execution handoff must name:
-
-- the permitted phase range and whether it includes staging provider writes;
-- the exact private AWS account/profile, Cloudflare account and zone,
-  DigitalOcean team/project, SGP1 capture and TOR1 GPU quota, environment- and
-  role-scoped automation-token references, PlanetScale organization, Grafana
-  account owners, DeepInfra account and environment-token references,
-  Cloudflare Workers AI account/token references, GitHub environments, and
-  1Password vault to bind during inventory;
-- the company-controlled non-Cloudflare notification destination;
-- whether the worker stops at a reviewed staging plan or continues through a
-  verified staging apply.
-
-These bindings stay in the active private execution context or `.private/`, not
-in this public spec. If a required binding is absent, the worker may continue
-local implementation and read-only discovery but stops before the affected
-provider write. The worker tests Grafana k6 browser support first for the
-two-client media proof; an observed capability or allowance failure returns to
-Hasan with evidence and priced alternatives rather than selecting another paid
-runner silently.
-
-No handoff wording authorizes production creation. Production retains the
-two-approval database bootstrap, fresh OpenTofu plan, exact release approval,
-and live-verification gates defined below.
-
-## Implementation Phases
-
-### Phase 0 — Record ratification and inventory
-
-- record the ratified spec revision and the active implementation scope;
-- approve a read-only inventory of existing provider resources;
-- identify preserved R2 buckets and any reusable state backend without writing
-  identifiers into the public repo;
-- produce the first dated cost estimate;
-- map every runtime variable and secret owner;
-- verify that Grafana permits the two company-controlled Free accounts, prove
-  their separate recovery and quota boundaries, and block for a newly ratified
-  backend if it does not;
-- verify Workers Paid account limits, the Cloudflare status path, and the
-  non-Cloudflare notification route;
-- verify DigitalOcean SGP1 CPU and TOR1 RTX 4000 availability, contracted GPU
-  access, a team burst quota of at least twenty-one nodes, the eleven-capture
-  and ten-render role limits for either active environment, and API creation limits
-  without creating production capacity;
-- verify the DeepInfra model/version catalog, environment account boundary,
-  200-request quota, price, spending controls, DPA, subprocessors,
-  processing-location and logging terms, plus the Cloudflare Workers AI
-  fallback price, quota, and token boundary; no customer audio is sent during
-  inventory;
-- encode the ratified DigitalOcean capture/render bindings, the $110 production
-  fixed warning, $15 staging fixed warning, $200 combined fixed ceiling, and
-  separate recording usage ledger in plan and policy checks;
-- encode the ratified data-class retention, RPO/RTO, absent legal hold, and
-  deletion propagation in configuration, tests, and public policy text.
-
-Gate: the ratified spec revision is recorded, and the active execution thread
-explicitly names its permitted phases and provider-write scope.
-
-### Phase 1 — Packaging and local runtime
-
-- add production API, sync, recorder-capture, and recorder-render images;
-- add the local production-shaped runtime definition;
-- run optional bounded Redis acceleration alongside PostgreSQL Sync authority;
-- implement the static SPA runtime-config contract and PostgreSQL job leasing;
-- implement recording reservations, usage holds, the recorder control API,
-  native selective capture, encrypted capture bundles, the layout timeline,
-  fenced resume, native GPU composition, speaker-turn and overlap manifests,
-  transcription chunks, provider-neutral ASR adapters, normalized transcript
-  storage, and a deterministic multi-track multilingual media corpus;
-- integrate the observability lane and prove its local telemetry pipeline and
-  journey ledger from a clean host;
-- add health, shutdown, resource, configuration, and image tests;
-- prove both supported architectures;
-- close the application blockers needed to boot staging.
-
-Gate: a clean local host can build, start, migrate, exercise API, WebSocket, and
-segmented recorder flows, stop, and restart the complete runtime.
-
-### Phase 2 — OpenTofu bootstrap and foundation
-
-- implement remote encrypted state and native locking;
-- implement GitHub OIDC and protected environment roles;
-- implement modules, policy checks, and cost checks;
-- declare only shared PlanetScale organization prerequisites; create no
-  environment database container in foundation;
-- declare/import protected Cloudflare resources;
-- configure GHCR release publishing and signature verification;
-- declare the managed telemetry integration, environment-specific collector
-  credentials, component uptime services, and status projection infrastructure;
-- implement the external EventBridge/Lambda staging lease controller,
-  conditional activation record, heartbeat, drift alerts, and bounded cleanup;
-- implement separate DigitalOcean SGP1 capture and TOR1 render modules,
-  one-time role-bound identity bootstrap, reservation-aware zero-idle scalers,
-  20-meeting/ten-render-node bounds, worker and lease reconciliation, encrypted
-  bundle lifecycle, and fixed-versus-usage cost controls;
-- implement the scale-to-zero AWS transcription Lambda module, private
-  digest-addressed release artifacts, environment-scoped SSM credentials,
-  bounded concurrency, primary/fallback policy, temporary-object lifecycle,
-  and per-attempt cost telemetry;
-- implement isolated environment release ledgers and conditional-transition
-  tests.
-
-Gate: clean plans, state recovery proof, protected-resource no-delete proof, and
-no production apply.
-
-### Phase 3 — Staging
-
-- idempotently create or adopt the staging PlanetScale database container, then
-  create its persistent non-HA branch, roles, backup policy, and configuration;
-- create the persistent staging Pages, Tunnel, R2, SFU app, SSM configuration,
-  Grafana account integration, and monitoring;
-- activate the app node through a bounded lease and prove automatic expiry,
-  drain, scale-to-zero, root-volume deletion, and honest `Dormant` status;
-- create an isolated leased HA database rehearsal branch, prove restore and
-  failover with the same release, return to PS-5, and prove role revocation and
-  branch deletion even after an injected cleanup failure;
-- deploy the exact release manifest;
-- run migrations and full end-to-end verification;
-- activate staging capture and render capacity and prove reservation prewarm,
-  unscheduled start hold, selective bundle capture, worker/node-loss resume,
-  native composite rendering, speaker-turn manifest finalization, track-aware
-  transcription, authorization, retention, erasure, reconciliation, and
-  cleanup;
-- run the ratified multilingual/noise/overlap corpus through the pinned
-  DeepInfra and Cloudflare models, prove normalized-schema parity, timing and
-  speaker-attribution thresholds, opaque provider payloads, DeepInfra's
-  50-request internal cap, 429/backoff behavior, conditional single-result
-  commit, forced circuit-breaker fallback, and no full-track minute
-  multiplication;
-- prove 20 simultaneous native captures using the real direct-SFU path, first at
-  the four-room/40-participant/16-Mbps per-node target and then at the
-  two-room/20-participant/8-Mbps fallback when required; exercise both 20
-  three-person rooms and the five-ten-person-plus-fifteen-three-person stress
-  mix; record CPU, memory, packet loss, keyframe latency, bandwidth, object
-  rate, and the effect of losing one full node while the N+1 spare accepts its
-  jobs;
-- render a deterministic corpus representing 20 two-hour meetings ending
-  together and prove the ten-node ceiling commits every 720p30 artifact within
-  every deadline sub-budget with a per-node factor of at least 15x and a
-  qualified service time at or below ten minutes per two-hour job; record node
-  readiness, queue, input, render, upload, verification, recovery reserve, GPU
-  decode/encode utilization, CPU, memory, local bytes, output quality, retries,
-  and teardown;
-- prove envelope encryption before cross-region processing, memory-only
-  plaintext handling, job-key revocation, normal one-hour bundle deletion, and
-  24-hour orphan cleanup;
-- replace the app node during active capture and render work; prove the
-  30-minute autonomy envelope and 20-minute minimum authority at failure onset,
-  conditional uploads, no overlapping attempt,
-  post-recovery object/lease reconciliation, explicit authority-expiry outcome,
-  and complete usage settlement;
-- benchmark cold scale-out, spare recovery, SFU ingress, both DigitalOcean
-  transfer pools, R2 operations/storage, and cost per recorded minute at 50,
-  80, and 100 percent of the launch workload;
-- replace the 2,000-hour planning range with an observed reservation replay and
-  provider-billed-minute forecast, including a full-month Cloudflare fallback;
-- prove every component probe, telemetry signal path, public status projection,
-  and alert route independently;
-- replace the app node from scratch;
-- reactivate from zero and prove the stable release reconstructs without manual
-  repair or prior-node state;
-- exercise deploy rollback, partial-release recovery, Stateholder recovery,
-  health-triggered replacement, and secret rotation;
-- prove a full node loss recovers acknowledged Sync outcomes from PostgreSQL
-  without relying on node-local or Redis state;
-- disable each monitoring path and prove the independent path alerts.
-
-Gate: staging passes every defined functional, failure, recovery, security,
-observability, and cost check.
-
-### Phase 4 — Production plan
-
-- when the production PlanetScale database container does not yet exist,
-  produce its signed bootstrap action manifest and request approval for that
-  action alone;
-- after the approved bootstrap records the immutable database ID, return to
-  this phase and produce a fresh production OpenTofu plan;
-- produce the production OpenTofu plan and release promotion preview;
-- show the cost delta, data lifecycle matrix, recovery objectives, migration,
-  rollback, recorder capacity, fixed platform forecast, separately funded usage
-  allocation, per-minute cost, pinned transcription provider/model/version,
-  fallback exposure, and live checks;
-- confirm the exact target and proposed release manifest.
-
-Gate: Hasan explicitly approves the exact production action.
-
-### Phase 5 — Production creation and promotion
-
-- if this is the first approved database-bootstrap action, idempotently create
-  or adopt only the production PlanetScale database container, verify and
-  record its immutable ID, stop, and return to Phase 4;
-- apply the approved production plan;
-- create the protected HA branch, roles, backup policy, and configuration only
-  through that second approved plan;
-- promote the exact staging release;
-- run live schema, revision, API, sync, Pages, DNS, TLS, two-client meeting, and
-  bounded synthetic recording verification, then verify artifact cleanup;
-- record evidence and stop.
-
-Gate: the intended live revision completes the user flow, and the approved
-recorder fleet produces and cleans up the synthetic artifact. Infrastructure
-code, green unit tests, or provider dashboards alone do not pass.
+The execution handoff contract, de-risk spikes, lane and milestone plan,
+execution checklist, and execution ledger convention live in
+`scratchpad/chalk-infra-execution-strategy-2026-07-12.md`. Production
+retains the two-approval database bootstrap, fresh OpenTofu plan, exact
+release approval, and live-verification gates defined in this file and the
+execution strategy; the 2026-07-12 standing approval satisfies those
+approvals for the initial creation and first promotion only.
 
 ## Verification Matrix
 
-| Area               | Required proof                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| IaC                | Format, validate, lint, policy/security scan, provider lock, redacted plan, idempotent second plan            |
-| State              | Concurrent lock rejection, encrypted state, earlier-version recovery, least-privilege state access            |
-| Protected adoption | Existing R2 plan has no delete/replacement; live object/header/hash checks pass                               |
-| Compute            | Fresh boot, health authority, wedged service, measured headroom, lease expiry, controller-driven replacement  |
-| Secrets            | No log leakage, least-privilege reads, rotation, revoked old credential, fresh-node boot                      |
-| Database           | Checksums/lock/timeouts, migrate, backup/restore, HA failover, PS-5 return, rehearsal leak cleanup            |
-| Journey ledger     | Attribution, auth, bounds, pool isolation, retention, erasure, overload, and failed-PostgreSQL behavior       |
+| Area               | Required proof                                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| IaC                | Format, validate, lint, policy/security scan, provider lock, redacted plan, idempotent second plan             |
+| State              | Concurrent lock rejection, encrypted state, earlier-version recovery, least-privilege state access             |
+| Protected adoption | Existing R2 plan has no delete/replacement; live object/header/hash checks pass                                |
+| Compute            | Fresh boot, health authority, wedged service, measured headroom, lease expiry, controller-driven replacement   |
+| Secrets            | No log leakage, least-privilege reads, rotation, revoked old credential, fresh-node boot                       |
+| Database           | Checksums/lock/timeouts, migrate, backup/restore, HA failover, PS-5 return, rehearsal leak cleanup             |
+| Journey ledger     | Attribution, auth, bounds, pool isolation, retention, erasure, overload, and failed-PostgreSQL behavior        |
 | Stateholder        | PostgreSQL recovery, exact ordered history, receipts, lifecycle intents, Redis-absent correctness, and RPO/RTO |
-| Tunnel             | Normal routing, no direct origin, cloudflared restart, client IP/rate-limit correctness                       |
-| Web                | Exact code/config digests, SPA fallback, assets, CSP/CORS, canonical origins, live build identity             |
-| Sync               | Signed auth, two clients, heartbeat, reconnect, replay/snapshot, graceful deploy, load and soak               |
-| Media              | Direct SFU publish/subscribe, remote playable outcome, failure classification, usage visibility               |
-| Release            | Ledger CAS, partial failures, exact approval inputs, rollback, stable live revision proof                     |
-| Recorder           | Reservation, 20-way capture, density/N+1 loss, encrypted bundles, 30-minute GPU render, erasure, usage cost   |
-| Transcription      | Track attribution, overlap, schema/quality corpus, pinned DeepInfra, forced Cloudflare fallback, billed audio |
-| Monitoring         | Component and lease heartbeats, external/Cloudflare failures, replay, alerts, status, pipeline canary         |
-| Cost               | Dated fixed/usage ranges, 1,000/2,000-hour cases, quotas, uncertainty, alerts, ceiling, expected apply delta  |
+| Tunnel             | Normal routing, no direct origin, cloudflared restart, client IP/rate-limit correctness                        |
+| Web                | Exact code/config digests, SPA fallback, assets, CSP/CORS, canonical origins, live build identity              |
+| Sync               | Signed auth, two clients, heartbeat, reconnect, replay/snapshot, graceful deploy, load and soak                |
+| Media              | Direct SFU publish/subscribe, remote playable outcome, failure classification, usage visibility                |
+| Release            | Ledger CAS, partial failures, exact approval inputs, rollback, stable live revision proof                      |
+| Recorder           | Reservation, 20-way capture, density/N+1 loss, encrypted bundles, 30-minute GPU render, erasure, usage cost    |
+| Transcription      | Track attribution, overlap, schema/quality corpus, pinned DeepInfra, forced Cloudflare fallback, billed audio  |
+| Monitoring         | Component and lease heartbeats, external/Cloudflare failures, replay, alerts, status, pipeline canary          |
+| Cost               | Dated fixed/usage ranges, 1,000/2,000-hour cases, quotas, uncertainty, alerts, ceiling, expected apply delta   |
 
 ## Anti-slop Rules
 
@@ -2660,7 +1646,7 @@ Infrastructure readiness is done when:
 - the exact production plan, cost, policies, artifacts, and approval payload are
   ready without mutating production.
 
-Production activation is a separate done state. After explicit approval, the
+Production activation is a separate done state. After its required approval, the
 approved production revision must be live and verified end to end before that
 state is done.
 
@@ -2678,7 +1664,6 @@ Until every applicable item has observed evidence, status is not done.
   `docs/observability.md`
 - Local-only observability proof stack:
   `infrastructure/observability/README.md`
-
 - Cloudflare Tunnel overview:
   https://developers.cloudflare.com/tunnel/
 - Cloudflare published applications and Access-plan requirement:
@@ -2729,24 +1714,8 @@ Until every applicable item has observed evidence, status is not done.
   https://developers.cloudflare.com/realtime/sfu/pricing/
 - Cloudflare Realtime SFU session and track API:
   https://developers.cloudflare.com/realtime/sfu/sessions-tracks/
-- Cloudflare RealtimeKit recording guide:
-  https://developers.cloudflare.com/realtime/realtimekit/recording-guide/
-- Cloudflare RealtimeKit pricing:
-  https://developers.cloudflare.com/realtime/realtimekit/pricing/
-- Cloudflare Workers AI Whisper large-v3-turbo contract and pricing:
-  https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/
 - Cloudflare SFU provider resource:
   https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/resources/calls_sfu_app
-- DeepInfra Whisper large-v3-turbo contract and pricing:
-  https://deepinfra.com/openai/whisper-large-v3-turbo
-- DeepInfra OpenAI-compatible audio transcription API:
-  https://docs.deepinfra.com/api-reference/audio/openai-audio-transcriptions
-- DeepInfra standard-inference privacy and logging behavior:
-  https://docs.deepinfra.com/account/data-privacy
-- DeepInfra default concurrency and 429 behavior:
-  https://docs.deepinfra.com/account/rate-limits
-- DeepInfra model version and deprecation behavior:
-  https://docs.deepinfra.com/models
 - PlanetScale regions:
   https://planetscale.com/docs/plans/regions
 - PlanetScale Singapore generated price sheet:
@@ -2771,28 +1740,6 @@ Until every applicable item has observed evidence, status is not done.
   https://planetscale.com/docs/api/reference/create_branch
 - PlanetScale Terraform provider:
   https://planetscale.com/docs/terraform
-- PostgreSQL `SKIP LOCKED` queue behavior:
-  https://www.postgresql.org/docs/18/sql-select.html
-- Grafana Cloud pricing and included telemetry/synthetic allowances:
-  https://grafana.com/pricing/
-- Grafana Cloud Free and paid stack-count limits:
-  https://grafana.com/docs/grafana-cloud/security-and-account-management/cloud-stacks/stack-pricing-tiers/
-- Grafana Cloud staging and production stack guidance:
-  https://grafana.com/docs/grafana-cloud/security-and-account-management/cloud-stacks/stack-architecture-guidance/
-- Grafana Cloud stack-scoped access policies:
-  https://grafana.com/docs/grafana-cloud/security-and-account-management/authentication-and-permissions/access-policies/
-- Grafana Cloud governing agreement for Free-service validation:
-  https://grafana.com/legal/msa/
-- Grafana Cloud OTLP ingestion:
-  https://grafana.com/docs/grafana-cloud/send-data/otlp/otlp-format-considerations/
-- Grafana Synthetic Monitoring protocols and public probes:
-  https://grafana.com/docs/grafana-cloud/testing/synthetic-monitoring/introduction/
-- Grafana k6 WebSocket testing:
-  https://grafana.com/docs/k6/latest/using-k6/protocols/websockets/
-- Grafana k6 browser checks:
-  https://grafana.com/docs/grafana-cloud/testing/synthetic-monitoring/create-checks/checks/k6-browser/
-- Grafana alert grouping and notification policies:
-  https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/
 - AWS GitHub-compatible OIDC federation:
   https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_oidc.html
 - AWS EC2 on-demand pricing:
@@ -2821,38 +1768,6 @@ Until every applicable item has observed evidence, status is not done.
   https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html
 - AWS DynamoDB point-in-time recovery:
   https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Point-in-time-recovery.html
-- DigitalOcean Droplet pricing:
-  https://www.digitalocean.com/pricing/droplets
-- DigitalOcean detailed CPU and GPU Droplet pricing and billing:
-  https://docs.digitalocean.com/products/droplets/details/pricing/
-- DigitalOcean GPU specifications and transfer allowances:
-  https://docs.digitalocean.com/products/droplets/details/features/
-- DigitalOcean Droplet bandwidth billing:
-  https://docs.digitalocean.com/platform/billing/bandwidth/
-- DigitalOcean regional availability:
-  https://docs.digitalocean.com/platform/regional-availability/
-- DigitalOcean team resource limits:
-  https://docs.digitalocean.com/platform/resource-limits/
-- DigitalOcean scoped and expiring API tokens:
-  https://docs.digitalocean.com/reference/api/create-personal-access-token/
-- DigitalOcean Droplet autoscale-pool behavior:
-  https://docs.digitalocean.com/products/droplets/concepts/autoscale-pools/
-- Pion native WebRTC implementation and RTP/codec support:
-  https://github.com/pion/webrtc
-- Pyannote acoustic speaker-diarization toolkit, future mixed-audio adapter:
-  https://github.com/pyannote/pyannote-audio
-- FFmpeg stream copy and transcoding behavior:
-  https://ffmpeg.org/ffmpeg.html
-- FFmpeg segment muxer behavior:
-  https://ffmpeg.org/ffmpeg-formats.html
-- GStreamer compositor:
-  https://gstreamer.freedesktop.org/documentation/compositor/index.html
-- NVIDIA Video Codec SDK encode performance and session behavior:
-  https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/nvenc-application-note/index.html
-- LiveKit comparable self-hosted composite and track egress requirements:
-  https://docs.livekit.io/transport/self-hosting/egress/
-- LiveKit comparable SFU benchmark methodology:
-  https://docs.livekit.io/transport/self-hosting/benchmark
 - AWS ElastiCache replication and durability:
   https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Replication.html
 - AWS EC2 instance metadata controls:

@@ -100,7 +100,7 @@ Internal names: **Tenant** (the root) and **User** (the person). "Org / account 
 
 **Capabilities:** `publishAudio/Video/Screen` · `subscribe` · `sendChat` · `react` · `raiseHand` · `muteOthers` · `removeParticipant` · `admitFromLobby` · `lockRoom` · `endMeeting` · `manageRecording` · `promoteDemote` · `grantDraw`.
 
-**Decided for v1:** **lobby / waiting room** (adds a `pending → admitted` participant state); **screen-share open to all, restrictable** by host/tenant; a **no-account guest can be host** (caps come from the token, not identity); **host succession** — host leaves → auto-promote a co-host, else the longest-present participant; a meeting never dies on host-drop.
+**Decided for v1:** **lobby / waiting room** (adds a `pending → admitted` participant state); **screen-share open to all, restrictable** by host/tenant; a **no-account guest can be host** (caps come from the token, not identity); **host succession is a Session policy** with two modes: `require_transfer` rejects the sole host's explicit leave until they transfer host authority or end the Session, while `promote_cohost` atomically promotes the longest-tenured active co-host, using Participant ID as the deterministic tie-breaker, and falls back to `require_transfer` when no co-host is active. A disconnect is presence loss rather than an explicit leave, so it never transfers host authority or ends the meeting.
 
 ---
 

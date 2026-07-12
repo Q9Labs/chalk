@@ -1,6 +1,6 @@
 # @q9labsai/chalk-client
 
-Chalk Core is the shared promise behind every Chalk meeting. It should make a
+Chalk Client is the shared promise behind every Chalk meeting. It should make a
 room feel easy to enter, calm to stay in, and trustworthy to leave.
 
 This spec replaces the previous package. It is intentionally written in plain
@@ -9,7 +9,7 @@ experience rather than from old habits.
 
 ## Purpose
 
-Chalk Core should give every Chalk surface the same understanding of a meeting:
+Chalk Client should give every Chalk surface the same understanding of a meeting:
 who is here, what is happening, what each person can do, and how the room should
 recover when something goes wrong.
 
@@ -53,7 +53,7 @@ quiet enough not to distract.
 
 ## Communication
 
-Chalk Core should support the common ways people communicate during a meeting:
+Chalk Client should support the common ways people communicate during a meeting:
 voice, camera, chat, reactions, raised hands, transcripts, and shared visual
 work.
 
@@ -75,7 +75,7 @@ interruptions and should avoid surprising jumps, duplication, or missing pieces.
 
 ## Trust And Control
 
-Chalk Core should treat trust as part of the meeting experience. Roles,
+Chalk Client should treat trust as part of the meeting experience. Roles,
 permissions, recording, moderation, and room endings should be clear to everyone
 affected by them.
 
@@ -111,7 +111,7 @@ customer identifiers, or anything that would make a participant less safe.
 
 ## Boundaries
 
-Chalk Core should describe shared meeting behavior. It should not define the
+Chalk Client should describe shared meeting behavior. It should not define the
 visual style of each app, own platform-specific interface choices, or turn demos
 into the source of product truth.
 
@@ -142,7 +142,7 @@ owned behavior in the right package or no behavior at all.
 
 ## Core-Owned Behaviors
 
-Chalk Core should own the behaviors that make every surface agree on how a
+Chalk Client should own the behaviors that make every surface agree on how a
 meeting begins, who may enter, and what happens when access changes.
 
 Core should own invitation understanding. A Chalk invite should mean the same
@@ -178,7 +178,7 @@ identity.
 
 ## Done Means
 
-The next version of Chalk Core is ready when a person can:
+The next version of Chalk Client is ready when a person can:
 
 - create or receive a room invitation with confidence
 - join with clear microphone and camera intent
