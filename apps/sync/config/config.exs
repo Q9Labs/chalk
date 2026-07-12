@@ -14,6 +14,9 @@ config :chalk_sync,
   require_synchronous_standby: false,
   stateholder: ChalkSync.Stateholder.Memory,
   token_verifier: ChalkSync.Auth.DevTokenVerifier,
+  token_audience: nil,
+  token_issuer: nil,
+  token_public_keys: %{},
   observability: [enabled: false, runtime_health_interval_ms: 30_000]
 
 config :opentelemetry, traces_exporter: :none

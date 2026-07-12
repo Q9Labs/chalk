@@ -2,10 +2,9 @@ defmodule ChalkSync.Auth.TokenVerifier do
   @moduledoc """
   Port for participant-token verification.
 
-  Production adapter (next): verify tenant-signed tokens against per-tenant,
-  rotatable public keys (north-star constraint 12 — Chalk never accepts
-  client-asserted identity without a valid signature). The key registry comes
-  from the control-plane API.
+  Production uses API-issued Ed25519 tokens and an environment-scoped,
+  overlap-rotatable public keyset. Chalk never accepts client-asserted identity
+  without a valid signature.
   """
 
   alias ChalkSync.Auth.Claims

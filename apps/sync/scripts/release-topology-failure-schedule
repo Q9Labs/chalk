@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export CHALK_FAILURE_ORCHESTRATOR_CALLER_DIRECTORY="$PWD"
+cd "$(dirname "$0")/.."
+exec env MIX_ENV=test mix run --no-start scripts/release_topology_failure_schedule.exs -- "$@"

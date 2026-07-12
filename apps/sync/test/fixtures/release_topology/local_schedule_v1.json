@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "name": "local_topology",
+  "environment": "local",
+  "topology": {
+    "release_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "configuration_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "topology_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "protocol_version": 2
+  },
+  "topology_check": {
+    "argv": ["local_control", "topology"],
+    "timeout_ms": 1000,
+    "expect": "confirmed"
+  },
+  "breaker": {
+    "argv": ["breaker_control"],
+    "timeout_ms": 1000
+  },
+  "events": [
+    {
+      "id": "sync_replacement",
+      "trigger": "accepted_work",
+      "duration_ms": 100,
+      "expected_readiness": "draining_then_ready",
+      "expected_client_outcome": "reconnect_and_converge",
+      "recovery_deadline_ms": 5000,
+      "invariants": ["stable_idempotency", "replica_convergence"],
+      "trigger_check": {
+        "argv": ["local_control", "trigger"],
+        "timeout_ms": 1000,
+        "expect": "confirmed"
+      },
+      "inject": {
+        "argv": ["local_control", "inject"],
+        "timeout_ms": 1000,
+        "expect": "injected"
+      },
+      "observe": {
+        "argv": ["local_control", "observe"],
+        "timeout_ms": 1000,
+        "expect": "confirmed"
+      },
+      "telemetry": {
+        "argv": ["local_control", "telemetry"],
+        "timeout_ms": 1000,
+        "expect": "available"
+      },
+      "cleanup": {
+        "argv": ["local_control", "cleanup"],
+        "timeout_ms": 1000,
+        "expect": "cleaned"
+      }
+    }
+  ]
+}

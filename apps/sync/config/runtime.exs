@@ -47,15 +47,45 @@ if config_env() == :prod do
     if local_proof? do
       ChalkSync.Auth.DevTokenVerifier
     else
-      System.get_env("CHALK_SYNC_TOKEN_VERIFIER") ||
-        raise "CHALK_SYNC_TOKEN_VERIFIER must be set in prod"
+      ChalkSync.Auth.JWTTokenVerifier
     end
 
-  if verifier == "ChalkSync.Auth.DevTokenVerifier" do
-    raise "CHALK_SYNC_TOKEN_VERIFIER cannot use the development verifier in prod"
-  end
+  token_config =
+    if local_proof? do
+      []
+    else
+      issuer =
+        System.get_env("CHALK_SYNC_TOKEN_ISSUER") ||
+          raise "CHALK_SYNC_TOKEN_ISSUER must be set in prod"
 
-  verifier = if is_binary(verifier), do: Module.concat([verifier]), else: verifier
+      audience =
+        System.get_env("CHALK_SYNC_TOKEN_AUDIENCE") ||
+          raise "CHALK_SYNC_TOKEN_AUDIENCE must be set in prod"
+
+      encoded_keys =
+        System.get_env("CHALK_SYNC_TOKEN_PUBLIC_KEYS") ||
+          raise "CHALK_SYNC_TOKEN_PUBLIC_KEYS must be set in prod"
+
+      public_keys =
+        case JSON.decode(encoded_keys) do
+          {:ok, keys} when is_map(keys) and map_size(keys) > 0 ->
+            Map.new(keys, fn
+              {key_id, encoded_key} when is_binary(key_id) and is_binary(encoded_key) ->
+                case Base.url_decode64(encoded_key, padding: false) do
+                  {:ok, key} when byte_size(key) == 32 -> {key_id, key}
+                  _ -> raise "CHALK_SYNC_TOKEN_PUBLIC_KEYS contains an invalid Ed25519 key"
+                end
+
+              _ ->
+                raise "CHALK_SYNC_TOKEN_PUBLIC_KEYS must map key ids to base64url keys"
+            end)
+
+          _ ->
+            raise "CHALK_SYNC_TOKEN_PUBLIC_KEYS must be a non-empty JSON object"
+        end
+
+      [token_issuer: issuer, token_audience: audience, token_public_keys: public_keys]
+    end
 
   max_wal_lag_bytes =
     System.get_env("CHALK_SYNC_MAX_WAL_LAG_BYTES")
@@ -77,6 +107,8 @@ if config_env() == :prod do
     require_production_auth: not local_proof?,
     require_synchronous_standby: not local_proof?,
     token_verifier: verifier
+
+  config :chalk_sync, token_config
 end
 
 if endpoint = System.get_env("CHALK_SYNC_OTLP_ENDPOINT") do

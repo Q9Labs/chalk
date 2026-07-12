@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chalk.dev/schemas/sync/release-topology-failure-schedule-v1.json",
+  "title": "Chalk Sync release-topology failure schedule v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "environment", "topology", "topology_check", "breaker", "events"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "name": { "$ref": "#/$defs/identifier" },
+    "environment": { "enum": ["local", "staging"] },
+    "topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_artifact_sha256", "configuration_sha256", "topology_sha256", "protocol_version"],
+      "properties": {
+        "release_artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" },
+        "topology_sha256": { "$ref": "#/$defs/sha256" },
+        "protocol_version": { "type": "integer", "minimum": 1, "maximum": 99 }
+      }
+    },
+    "topology_check": {
+      "allOf": [
+        { "$ref": "#/$defs/action" },
+        { "properties": { "expect": { "const": "confirmed" } } }
+      ]
+    },
+    "breaker": { "$ref": "#/$defs/breaker" },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "items": { "$ref": "#/$defs/event" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "breaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "timeout_ms"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/argv" },
+        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 28800000 }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "timeout_ms", "expect"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/argv" },
+        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 28800000 },
+        "expect": { "type": "string", "enum": ["confirmed", "injected", "available", "cleaned"] }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "trigger", "duration_ms", "expected_readiness", "expected_client_outcome", "recovery_deadline_ms", "invariants", "trigger_check", "inject", "observe", "telemetry", "cleanup"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "trigger": { "$ref": "#/$defs/identifier" },
+        "duration_ms": { "type": "integer", "minimum": 1, "maximum": 900000 },
+        "expected_readiness": { "$ref": "#/$defs/identifier" },
+        "expected_client_outcome": { "$ref": "#/$defs/identifier" },
+        "recovery_deadline_ms": { "type": "integer", "minimum": 1, "maximum": 1800000 },
+        "invariants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "trigger_check": {
+          "allOf": [
+            { "$ref": "#/$defs/action" },
+            { "properties": { "expect": { "const": "confirmed" } } }
+          ]
+        },
+        "inject": {
+          "allOf": [
+            { "$ref": "#/$defs/action" },
+            { "properties": { "expect": { "const": "injected" } } }
+          ]
+        },
+        "observe": {
+          "allOf": [
+            { "$ref": "#/$defs/action" },
+            { "properties": { "expect": { "const": "confirmed" } } }
+          ]
+        },
+        "telemetry": {
+          "allOf": [
+            { "$ref": "#/$defs/action" },
+            { "properties": { "expect": { "const": "available" } } }
+          ]
+        },
+        "cleanup": {
+          "allOf": [
+            { "$ref": "#/$defs/action" },
+            { "properties": { "expect": { "const": "cleaned" } } }
+          ]
+        }
+      }
+    }
+  }
+}
