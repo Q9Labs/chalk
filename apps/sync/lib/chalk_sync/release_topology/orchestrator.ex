@@ -136,7 +136,17 @@ defmodule ChalkSync.ReleaseTopology.Orchestrator do
   end
 
   defp run_event(state, event) do
+    run_event_steps(state, event)
+  rescue
+    _error ->
+      state = cleanup_after_exception(state, event)
+      state = transition(state, event["id"], "event", "failed", %{})
+      {state, :error, "event #{event["id"]} did not produce complete evidence"}
+  end
+
+  defp run_event_steps(state, event) do
     state = %{state | event_started_at: System.monotonic_time(:millisecond)}
+    deadline = state.event_started_at + event["recovery_deadline_ms"]
     state = transition(state, event["id"], "event", "scheduled", event_metadata(event))
     {state, trigger_status} = run_action(state, event, "trigger_check")
 
@@ -145,9 +155,9 @@ defmodule ChalkSync.ReleaseTopology.Orchestrator do
         {state, inject_status} = run_action(state, event, "inject")
 
         if inject_status == :ok do
-          Process.sleep(event["duration_ms"])
-          {state, observe_status} = run_action(state, event, "observe")
-          {state, telemetry_status} = run_action(state, event, "telemetry")
+          Process.sleep(min(event["duration_ms"], remaining_ms(deadline)))
+          {state, observe_status} = run_action_until(state, event, "observe", deadline)
+          {state, telemetry_status} = run_action_until(state, event, "telemetry", deadline)
           {state, %{inject: inject_status, observe: observe_status, telemetry: telemetry_status}}
         else
           state = skip_action(state, event, "observe")
@@ -161,7 +171,7 @@ defmodule ChalkSync.ReleaseTopology.Orchestrator do
         {state, %{inject: :error, observe: :error, telemetry: :error}}
       end
 
-    {state, cleanup_status} = run_action(state, event, "cleanup")
+    {state, cleanup_status} = run_action_until(state, event, "cleanup", deadline)
     deadline_ok? = event_within_recovery_deadline?(state, event)
 
     if trigger_status == :ok and
@@ -172,6 +182,32 @@ defmodule ChalkSync.ReleaseTopology.Orchestrator do
       status = if deadline_ok?, do: "failed", else: "deadline_exceeded"
       state = transition(state, event["id"], "event", status, %{})
       {state, :error, "event #{event["id"]} did not produce complete evidence"}
+    end
+  end
+
+  defp run_action_until(state, event, action_name, deadline) do
+    action = Map.update!(event[action_name], "timeout_ms", &min(&1, remaining_ms(deadline)))
+    run_action(state, Map.put(event, action_name, action), action_name)
+  end
+
+  defp remaining_ms(deadline), do: max(deadline - System.monotonic_time(:millisecond), 1)
+
+  defp cleanup_after_exception(state, event) do
+    injected? =
+      Enum.any?(state.transitions, fn transition ->
+        transition["event_id"] == event["id"] and transition["phase"] == "inject" and
+          transition["status"] == "completed"
+      end)
+
+    if injected? do
+      try do
+        {state, _status} = run_action(state, event, "cleanup")
+        state
+      rescue
+        _error -> state
+      end
+    else
+      state
     end
   end
 

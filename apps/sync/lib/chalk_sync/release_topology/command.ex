@@ -38,7 +38,7 @@ defmodule ChalkSync.ReleaseTopology.Command do
        {:args, Enum.map(arguments, &String.to_charlist/1)}
      ])}
   rescue
-    ArgumentError -> {:error, "command could not be started"}
+    _error -> {:error, "command could not be started"}
   end
 
   defp collect(port, started_at, deadline, chunks, output_bytes) do
