@@ -46,6 +46,10 @@ const (
 	ScopeIntegrationsRead   Scope = "integrations:read"
 	ScopeIntegrationsWrite  Scope = "integrations:write"
 	ScopeIntegrationsDelete Scope = "integrations:delete"
+
+	ScopeWebhooksRead   Scope = "webhooks:read"
+	ScopeWebhooksWrite  Scope = "webhooks:write"
+	ScopeWebhooksDelete Scope = "webhooks:delete"
 )
 
 // AllScopes is explicit by design: API keys must be granted concrete scopes,
@@ -82,6 +86,9 @@ var AllScopes = []Scope{
 	ScopeIntegrationsRead,
 	ScopeIntegrationsWrite,
 	ScopeIntegrationsDelete,
+	ScopeWebhooksRead,
+	ScopeWebhooksWrite,
+	ScopeWebhooksDelete,
 }
 
 func ValidScope(scope Scope) bool {

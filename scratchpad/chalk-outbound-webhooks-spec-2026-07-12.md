@@ -51,7 +51,7 @@ second source of truth.
 
 ## Settled product decisions
 
-- Delivery is at least once while its Endpoint Revision remains eligible. A
+- Delivery is at least once while its Target Revision remains eligible. A
   consumer can receive the same Event more than once and must deduplicate by
   `id`; Chalk does not claim exactly-once delivery. Explicit Endpoint disable,
   destination replacement, deletion, Event erasure, or retention expiry can
@@ -82,9 +82,14 @@ second source of truth.
 ## Canonical language
 
 A **Webhook Endpoint** is one tenant-owned receiver identity, its enabled state,
-and its signing-secret versions. Each destination or subscription change
-creates an immutable **Endpoint Revision** containing the encrypted URL, API
-version, and selected Event types.
+its public configuration revision, and its signing-secret versions. The
+configuration revision is the `If-Match` value and increments on every
+successful PATCH. Each destination, API-version, or subscription change
+separately creates an immutable **Target Revision** containing the encrypted
+URL, API version, and selected Event types. Name-only and enabled-state changes
+do not create a Target Revision. Destroying obsolete encrypted URL material is
+the sole permitted mutation to a retained Target Revision; its redacted audit
+shape and identity remain immutable.
 
 A **Webhook Event** is an immutable, API-versioned tenant-scoped fact created
 from one authoritative database transition. Its ID, type, occurrence time, API
@@ -93,7 +98,7 @@ must be erased, Chalk destroys the body and cancels delivery rather than
 rewriting the Event under the same ID.
 
 A **Webhook Delivery** is the obligation to send one Event to one immutable
-Endpoint Revision that was enabled and subscribed when the Event occurred.
+Target Revision that was enabled and subscribed when the Event occurred.
 Ordinary retries cannot drift to a later URL or subscription. Disabling or
 deleting an Endpoint cancels its pending Deliveries and prevents new ones.
 
@@ -115,23 +120,23 @@ producer never performs outbound HTTP.
 
 ## Version 1 event catalog and rollout
 
-| Event type | Rollout | Emission boundary | `data.object.status` |
-| --- | --- | --- | --- |
-| `room.created` | Core launch | A reusable Room is committed for the first time. | `active` or `archived` |
-| `room.updated` | Core launch | One or more public Room fields change without an archive-state transition. No-op writes emit nothing. | `active` or `archived` |
-| `room.archived` | Core launch | A Room commits an `active` to `archived` transition. | `archived` |
-| `room.restored` | Core launch | A Room commits an `archived` to `active` transition. | `active` |
-| `session.started` | Core launch | A new Session occurrence commits in `active` state with `started_at`. | `active` |
-| `session.ended` | Core launch | The Session's authoritative lifecycle transaction reaches `ended`, not merely `ending` or a requested provider shutdown. | `ended` |
-| `participant.joined` | Core launch | The lifecycle intent is durably applied and the Participant becomes `active`. Admission requests, `joining`, and reconnects emit nothing. | `active` |
-| `participant.left` | Core launch | The lifecycle intent is durably applied and the Participant becomes `left`. Disconnect and reconnect do not imply Leave. | `left` |
-| `recording.started` | Artifact expansion | Capture has durably entered its active capture state. A request, reservation, or pending row is not sufficient. | `started` |
-| `recording.completed` | Artifact expansion | The final Recording artifact is verified, committed, authorized, and fetchable. | `completed` |
-| `recording.failed` | Artifact expansion | Recording reaches terminal failure after its retry budget; retryable failures emit nothing. | `failed` |
-| `transcript.started` | Artifact expansion | Transcription work has durably begun against a committed Recording input. | `started` |
-| `transcript.completed` | Artifact expansion | The normalized Transcript document is verified, committed, authorized, and fetchable. | `completed` |
-| `transcript.failed` | Artifact expansion | Transcription reaches terminal failure after retry and fallback are exhausted. | `failed` |
-| `endpoint.test` | Core launch, synthetic | An authorized caller requests a test for one Endpoint. It is synthetic and has no product resource. | n/a |
+| Event type             | Rollout                | Emission boundary                                                                                                                         | `data.object.status`   |
+| ---------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `room.created`         | Core launch            | A reusable Room is committed for the first time.                                                                                          | `active` or `archived` |
+| `room.updated`         | Core launch            | One or more public Room fields change without an archive-state transition. No-op writes emit nothing.                                     | `active` or `archived` |
+| `room.archived`        | Core launch            | A Room commits an `active` to `archived` transition.                                                                                      | `archived`             |
+| `room.restored`        | Core launch            | A Room commits an `archived` to `active` transition.                                                                                      | `active`               |
+| `session.started`      | Core launch            | A new Session occurrence commits in `active` state with `started_at`.                                                                     | `active`               |
+| `session.ended`        | Core launch            | The Session's authoritative lifecycle transaction reaches `ended`, not merely `ending` or a requested provider shutdown.                  | `ended`                |
+| `participant.joined`   | Core launch            | The lifecycle intent is durably applied and the Participant becomes `active`. Admission requests, `joining`, and reconnects emit nothing. | `active`               |
+| `participant.left`     | Core launch            | The lifecycle intent is durably applied and the Participant becomes `left`. Disconnect and reconnect do not imply Leave.                  | `left`                 |
+| `recording.started`    | Artifact expansion     | Capture has durably entered its active capture state. A request, reservation, or pending row is not sufficient.                           | `started`              |
+| `recording.completed`  | Artifact expansion     | The final Recording artifact is verified, committed, authorized, and fetchable.                                                           | `completed`            |
+| `recording.failed`     | Artifact expansion     | Recording reaches terminal failure after its retry budget; retryable failures emit nothing.                                               | `failed`               |
+| `transcript.started`   | Artifact expansion     | Transcription work has durably begun against a committed Recording input.                                                                 | `started`              |
+| `transcript.completed` | Artifact expansion     | The normalized Transcript document is verified, committed, authorized, and fetchable.                                                     | `completed`            |
+| `transcript.failed`    | Artifact expansion     | Transcription reaches terminal failure after retry and fallback are exhausted.                                                            | `failed`               |
+| `endpoint.test`        | Core launch, synthetic | An authorized caller requests a test for one Endpoint. It is synthetic and has no product resource.                                       | n/a                    |
 
 Endpoint create and patch reject reserved artifact types with
 `409 webhook_event_type_unavailable` until the environment records the matching
@@ -181,7 +186,7 @@ stored bytes. Go and Elixir share golden byte fixtures for every Event type;
 neither dispatcher nor redelivery parses and reserializes a body.
 
 The launch webhook API version is the integer `1`, pinned on each immutable
-Endpoint Revision. A sequential integer fits this contract better than a date:
+Target Revision. A sequential integer fits this contract better than a date:
 Chalk already has the `/v1` transport boundary, there is one launch webhook
 schema, and consumers need to compare or select a discrete schema generation
 rather than infer compatibility from a calendar. Adding an optional field is
@@ -193,7 +198,7 @@ Endpoints pinned to that version. Its semantic transition uniqueness key
 includes the API version. An Event retains its version and exact body during
 redelivery; changing an Endpoint's version affects only future Events.
 
-All Endpoint, Endpoint Revision, Event, Delivery, and Attempt IDs are UUIDv4
+All Endpoint, Target Revision, Event, Delivery, and Attempt IDs are UUIDv4
 strings, matching Chalk's existing public ID parser, PostgreSQL types, and SDK
 schemas. Timestamps are truncated, never rounded, to UTC RFC 3339 millisecond
 precision before the snapshot and `occurred_at` are serialized. Optional absent
@@ -384,7 +389,12 @@ The signed bytes are exactly:
 
 Secrets contain 32 random bytes and are returned as `whsec_` plus base64. The
 HMAC key is the decoded 32 bytes, not the printable prefixed form. Secrets are
-encrypted at rest with the environment KMS key and are never logged or returned
+encrypted at rest with a versioned, process-injected AES-256-GCM keyring that
+binds ciphertext to its tenant and resource identity as associated data. This
+is the local and staging implementation, not independent key custody.
+Production enablement remains blocked until a KMS-backed envelope provider owns
+wrapping, rotation, re-encryption, and retirement without exposing the complete
+decryptable keyring to the API process. Secrets are never logged or returned
 after creation or rotation. Consumers verify against the raw request body,
 compare signatures in constant time, reject attempt timestamps outside a
 five-minute tolerance, and deduplicate the Event ID in durable storage before
@@ -414,32 +424,12 @@ generated TypeScript Event types and validators. SDK code does not hand-copy
 the body union. The public surface is:
 
 ```ts
-type ChalkWebhookEvent =
-  | RoomWebhookEvent
-  | SessionWebhookEvent
-  | ParticipantWebhookEvent
-  | RecordingWebhookEvent
-  | TranscriptWebhookEvent
-  | EndpointTestWebhookEvent
-  | UnknownWebhookEvent;
+type ChalkWebhookEvent = RoomWebhookEvent | SessionWebhookEvent | ParticipantWebhookEvent | RecordingWebhookEvent | TranscriptWebhookEvent | EndpointTestWebhookEvent | UnknownWebhookEvent;
 
-function verifyWebhook(input: {
-  rawBody: Uint8Array;
-  headers: Headers | Record<string, string | string[] | undefined>;
-  secrets: readonly string[];
-  toleranceSeconds?: number;
-  now?: () => Date;
-}): Promise<ChalkWebhookEvent>;
+function verifyWebhook(input: { rawBody: Uint8Array; headers: Headers | Record<string, string | string[] | undefined>; secrets: readonly string[]; toleranceSeconds?: number; now?: () => Date }): Promise<ChalkWebhookEvent>;
 
 interface WebhookInbox {
-  acquire(input: {
-    eventId: string;
-    leaseMilliseconds: number;
-  }): Promise<
-    | { state: "acquired"; token: string }
-    | { state: "completed" }
-    | { state: "busy"; retryAfterSeconds: number }
-  >;
+  acquire(input: { eventId: string; leaseMilliseconds: number }): Promise<{ state: "acquired"; token: string } | { state: "completed" } | { state: "busy"; retryAfterSeconds: number }>;
   complete(input: { eventId: string; token: string }): Promise<void>;
   release(input: { eventId: string; token: string }): Promise<void>;
 }
@@ -478,9 +468,12 @@ The Processor executes this fixed order:
 2. Ask the durable inbox to acquire a bounded lease for the Event ID.
 3. A completed Event returns `200` without invoking the handler. A busy lease
    returns `503` plus bounded `Retry-After` so Chalk retries later.
-4. An acquired known Event invokes its typed handler. Success durably marks the
-   inbox completed before returning `200`; failure releases the lease and
-   returns or throws a typed `500` result so Chalk retries.
+4. An acquired known Event requires and invokes its typed handler. A missing
+   handler releases the lease and returns a safe `500` result with the stable
+   `handler_missing` code; it never marks the Event completed. Handler success
+   durably marks the inbox completed before returning `200`; handler failure
+   releases the lease and returns a safe `500` result with `handler_failed` so
+   Chalk retries.
 5. An authenticated unknown Event defaults to an acknowledged `200` with an
    `ignored` result, as forward-compatible consumers must ignore unknown Event
    names. A supplied `onUnknownEvent` may observe it without turning it into a
@@ -516,8 +509,7 @@ customer HTTP response boundary.
 
 ## Endpoint and egress safety
 
-Launch Endpoints must use HTTPS with a publicly trusted certificate and port
-443. Userinfo, fragments, IP-literal hosts, wildcard hosts, and URLs containing
+Launch Endpoints must use HTTPS with a publicly trusted certificate and port 443. Userinfo, fragments, IP-literal hosts, wildcard hosts, and URLs containing
 credentials are rejected. Query strings are allowed because some receivers use
 opaque routing tokens, but Chalk redacts them from logs, metrics, traces, audit
 details, and list responses.
@@ -564,7 +556,7 @@ The Delivery state machine is:
 pending -> delivering -> succeeded
                      -> retry_wait -> delivering
                      -> exhausted
-pending | retry_wait -> canceled
+pending | retry_wait | delivering -> canceled
 exhausted | succeeded -> manual redelivery creates a new pending Delivery
 ```
 
@@ -589,18 +581,18 @@ TypeScript SDK. Add explicit `webhooks:read`, `webhooks:write`, and
 `webhooks:delete` API-key scopes. Tenant users need at least Admin role because
 Endpoint URLs and signing secrets can move tenant data outside Chalk.
 
-| Method and path | Behavior |
-| --- | --- |
-| `POST /v1/tenants/{tenant_id}/webhook-endpoints` | Create an Endpoint and return its secret once. Requires `Idempotency-Key`. |
-| `GET /v1/tenants/{tenant_id}/webhook-endpoints` | List redacted Endpoints. |
-| `GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}` | Read one redacted Endpoint. |
-| `PATCH /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}` | Change name, URL, enabled state, API version, or subscribed Event types. Requires `If-Match` and `Idempotency-Key`. |
-| `DELETE /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}` | Soft-delete the Endpoint, revoke secrets, and cancel pending Deliveries. Requires `If-Match` and `Idempotency-Key`. |
-| `POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret` | Return a new secret once and begin rotation overlap. Requires `Idempotency-Key`. |
-| `POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test` | Create an `endpoint.test` Delivery. Requires `Idempotency-Key`. |
-| `GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries` | List Deliveries, filterable by state and Event type. |
-| `GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}` | Read the Event body and bounded Attempt history. Secrets remain redacted. |
-| `POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver` | Create a new Delivery for the stored Event body. Requires `Idempotency-Key`. |
+| Method and path                                                                                   | Behavior                                                                                                            |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/tenants/{tenant_id}/webhook-endpoints`                                                  | Create an Endpoint and return its secret once. Requires `Idempotency-Key`.                                          |
+| `GET /v1/tenants/{tenant_id}/webhook-endpoints`                                                   | List redacted Endpoints.                                                                                            |
+| `GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}`                                     | Read one redacted Endpoint.                                                                                         |
+| `PATCH /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}`                                   | Change name, URL, enabled state, API version, or subscribed Event types. Requires `If-Match` and `Idempotency-Key`. |
+| `DELETE /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}`                                  | Soft-delete the Endpoint, revoke secrets, and cancel pending Deliveries. Requires `If-Match` and `Idempotency-Key`. |
+| `POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret`                      | Return a new secret once and begin rotation overlap. Requires `Idempotency-Key`.                                    |
+| `POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test`                               | Create an `endpoint.test` Delivery. Requires `Idempotency-Key`.                                                     |
+| `GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries`                          | List Deliveries, filterable by state and Event type.                                                                |
+| `GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}`            | Read the Event body and bounded Attempt history. Secrets remain redacted.                                           |
+| `POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver` | Create a new Delivery for the stored Event body. Requires `Idempotency-Key`.                                        |
 
 Create request and response:
 
@@ -610,12 +602,7 @@ Create request and response:
   "url": "https://hooks.example.com/chalk",
   "enabled": true,
   "api_version": 1,
-  "event_types": [
-    "session.started",
-    "session.ended",
-    "participant.joined",
-    "participant.left"
-  ]
+  "event_types": ["session.started", "session.ended", "participant.joined", "participant.left"]
 }
 ```
 
@@ -649,15 +636,18 @@ for every field. The caller sends the last observed integer revision as
 `If-Match: "1"`; success increments `revision` and returns the Endpoint shape
 without a secret. A mismatch returns `412 webhook_endpoint_revision_conflict`.
 This prevents two Admins from silently overwriting destination or subscription
-changes. DELETE uses the same `If-Match` rule so a stale client cannot delete an
-Endpoint after an unseen configuration change.
+changes. This public value is the Endpoint configuration revision. A URL,
+API-version, or Event-type change also creates the next immutable Target
+Revision; a name-only or enabled-state change leaves the current Target
+Revision unchanged. DELETE uses the same `If-Match` rule so a stale client
+cannot delete an Endpoint after an unseen configuration change.
 
 Endpoint lists return:
 
 ```json
 {
   "webhook_endpoints": [],
-  "page": {"next_cursor": null}
+  "page": { "next_cursor": null }
 }
 ```
 
@@ -706,16 +696,16 @@ Test and manual-redelivery success return `201` with:
 `endpoint.test` bypasses Event subscription selection but requires an enabled,
 non-deleted Endpoint and uses normal Event, Delivery, Attempt, signature, retry,
 inspection, and retention behavior. Manual redelivery requires a retained and
-readable Event, an enabled non-deleted current Endpoint Revision, and an
-original Delivery in `succeeded` or `exhausted`. The current revision must still
+readable Event, an enabled non-deleted current Target Revision, and an original
+Delivery in `succeeded` or `exhausted`. The current Target Revision must still
 select that Event type and API version; otherwise the request returns
 `409 webhook_delivery_not_redeliverable`. One idempotency key can create only
 one child Delivery. A successful request preserves the Event ID and exact body
-but returns the current target revision explicitly.
+but returns the current Target Revision explicitly.
 
 Secret rotation accepts
 `{"revoke_previous_immediately":false}` and returns `200` with Endpoint ID,
-current revision, the new one-time `secret`, and nullable
+current configuration revision, the new one-time `secret`, and nullable
 `previous_secret_expires_at`. Delete returns `204` with no body. Create returns
 `201`; get, list, patch, rotate, and delivery detail return `200`; test and
 redelivery return `201`.
@@ -742,17 +732,24 @@ a lost HTTP response from permanently losing the only usable secret. A replay
 after expiry returns `idempotency_key_expired`; the caller must fetch the
 Endpoint and rotate its secret.
 
+Every management `Idempotency-Key` is 16–128 characters from
+`[A-Za-z0-9_-]`, scoped by tenant and operation, and bound to the normalized
+request hash. Reuse with different input returns `idempotency_key_conflict`;
+the key never becomes a cross-operation alias.
+
 ## Persistence and source-of-truth rules
 
-PostgreSQL adds six tenant-scoped durable records:
+PostgreSQL adds seven tenant-scoped durable records:
 
 - `webhook_tenant_state` has one row per enabled tenant and is the serialization
   lock for Event fanout and Endpoint mutation.
 - `webhook_endpoints` owns the receiver identity, name, enabled/deleted state,
-  current revision number, encrypted current and previous secret versions,
-  rotation expiry, creator, and timestamps.
-- `webhook_endpoint_revisions` owns an immutable revision number, encrypted URL,
-  redacted display URL, API version, selected Event types, and creation time.
+  public configuration revision, current Target Revision number, encrypted
+  current and previous secret versions, rotation expiry, creator, and
+  timestamps.
+- `webhook_endpoint_revisions` owns an immutable Target Revision number,
+  encrypted URL, redacted display URL, API version, selected Event types, and
+  creation time.
 - `webhook_events` owns the immutable Event ID, tenant, Event name, API version,
   occurrence time, exact serialized body bytes, SHA-256 body hash,
   bounded semantic transition key, resource type and ID, optional linked User
@@ -766,12 +763,16 @@ PostgreSQL adds six tenant-scoped durable records:
   journey branch Event IDs, manual redelivery ancestry, and timestamps.
 - `webhook_delivery_attempts` owns the bounded diagnostic result for each
   network attempt plus its linked trace and span IDs.
+- `webhook_idempotency_records` owns the bounded request hash, encrypted exact
+  success response, resource linkage, and 24-hour expiry needed to replay
+  management writes safely, including one-time secret responses.
 
-Every table has a unique `(tenant_id, id)` key. Composite foreign keys enforce
-tenant identity from Endpoint Revision to Endpoint, Delivery to Endpoint
-Revision and Event, Attempt to Delivery, and a manual redelivery to its parent.
-Every claim, cleanup, inspection, cancellation, and redelivery query predicates
-on `tenant_id`; HTTP authorization is not the only isolation boundary.
+Every ID-bearing webhook table has a unique `(tenant_id, id)` key. Composite
+foreign keys enforce tenant identity from Target Revision to Endpoint,
+Endpoint to its current Target Revision, Delivery to Target Revision and Event,
+Attempt to Delivery, and a manual redelivery to its parent. Every claim,
+cleanup, inspection, cancellation, and redelivery query predicates on
+`tenant_id`; HTTP authorization is not the only isolation boundary.
 
 Every authoritative producer uses one PostgreSQL transaction to mutate the
 resource, insert one immutable Event with its final payload per distinct
@@ -783,7 +784,8 @@ creation.
 
 Before reading the matching subscription set, every producer locks the
 tenant's `webhook_tenant_state` row. Endpoint create, enable, disable, delete,
-URL/API-version/subscription patch, and revision creation lock the same row, so
+URL/API-version/subscription patch, and Target Revision creation lock the same
+row, so
 each change is unambiguously before or after fanout under PostgreSQL `READ
 COMMITTED`. Producers acquire their domain locks first and the webhook tenant
 lock last; Endpoint operations never acquire Room, Session, Participant,
@@ -796,16 +798,21 @@ and then locks it; tenant creation may provision the row eagerly as an
 optimization. Concurrent first creates use the tenant-key uniqueness constraint
 and retry the lock acquisition without creating two state rows.
 
-The matching subscription and destination revision are captured at occurrence
-time. Enabling a new Endpoint does not backfill older Events. Disabling or
-deleting an Endpoint synchronously cancels pending or retry-wait Deliveries.
-A URL, API-version, or subscription patch creates a new Endpoint Revision and
-cancels pending work for the old revision; it cannot redirect retained tenant
-data to a new receiver. Name-only changes do not create a revision. Secret
-rotation may sign pending work with current plus eligible previous keys because
-it changes authentication, not the destination. Manual redelivery is the only
-path for a retained older Event and always targets the current enabled Endpoint
-Revision, which the response identifies.
+The matching subscription and Target Revision are captured at occurrence time.
+Enabling a new Endpoint does not backfill older Events. Disabling an Endpoint
+synchronously cancels or fences pending, retry-wait, and delivering work but
+retains the current encrypted URL for a later re-enable. Deleting an Endpoint
+also destroys every retained Target Revision's URL ciphertext. A URL,
+API-version, or subscription patch creates a new Target Revision, cancels or
+fences every nonterminal Delivery for the old Target Revision, and destroys the
+old URL ciphertext; it cannot redirect retained tenant data to a new receiver.
+An HTTP request already in flight cannot be recalled, but its fenced lease can
+neither commit success nor become retryable. Name-only changes do not create a
+Target Revision. Secret rotation may sign pending work with current plus
+eligible previous keys because it changes authentication, not the destination.
+Manual redelivery is the only path for a retained older Event and always
+targets the current enabled Target Revision, which the response identifies as
+`endpoint_revision`.
 
 `session.started` is produced by the API Session-creation transaction.
 `participant.joined`, `participant.left`, and `session.ended` are inserted by
@@ -849,8 +856,9 @@ Events, Deliveries, and Attempts are retained for 30 days after Event
 occurrence. Manual redelivery is allowed during that window. A daily bounded
 cleanup job deletes expired Attempt rows, then Deliveries, then Events when no
 retained Delivery refers to them. Endpoint deletion immediately revokes its
-secret and cancels work, but retains its redacted configuration and delivery
-history until the same 30-day window expires so an Admin can investigate.
+secret, destroys every encrypted destination URL, and cancels or fences work,
+but retains its redacted configuration and delivery history until the same
+30-day window expires so an Admin can investigate.
 
 Tenant deletion removes all Endpoint, Event, Delivery, Attempt, encrypted URL,
 and secret material inside the tenant-deletion SLA. User deletion
@@ -861,8 +869,12 @@ bytes within 24 hours, mark each Event `erased`, retain only its body hash and
 content-free facts, cancel pending Deliveries, and reject future automatic or
 manual delivery. It never substitutes new signed bytes under an existing Event
 ID. Restore reconciliation reapplies the erasure tombstone before delivery
-claims can resume. Prior content-free Attempt audit remains available until
-normal expiry.
+claims can resume. Phase 1 provides the atomic erasure and delivery-fencing
+repository primitive, but the current public user-deletion orchestrator does
+not call it and no durable external tombstone or restore reconciler exists.
+Those integrations are production prerequisites rather than behavior inferred
+from the repository primitive. Prior content-free Attempt audit remains
+available until normal expiry.
 
 PostgreSQL backup and PITR policy covers this state, but restore reconciliation
 must never reactivate revoked secrets, deleted Endpoints, canceled Deliveries,
@@ -934,7 +946,11 @@ wait, conditional result commit, and retry scheduling without recording URL or
 payload content. Audit logs record Endpoint create/update/disable/delete,
 secret rotation, test, and manual redelivery with actor and outcome. They never
 record the URL query, secret, raw payload, Participant name, Transcript text,
-or receiver response.
+or receiver response. Action audit begins only after authentication and route
+decoding establish trusted tenant, resource, and action identity. Malformed
+JSON, path, and precondition requests rejected before that boundary remain
+bounded request telemetry; they never inject untrusted identifiers into durable
+operator audit history.
 
 Readiness distinguishes the management API, event persistence, and dispatcher.
 A dispatcher backlog or external receiver outage alerts independently and does
@@ -980,31 +996,47 @@ OpenRouter route are never accepted as that proof.
 ## Implementation checklist
 
 - [ ] **Phase 1 — Contract and durable core.** Add the versioned Event schemas, webhook scopes,
-   endpoint contracts, migrations, SQL queries, domain service, encrypted
-   secrets/URLs, semantic transition keys, and PostgreSQL leased delivery
-   state. Wire Room and Session creation in the API transactions, and wire
-   Participant and Session-end production into the Sync transaction that
-   applies lifecycle intents. Keep API and Sync migration compatibility.
+      endpoint contracts, migrations, SQL queries, domain service, encrypted
+      secrets/URLs, semantic transition keys, and PostgreSQL leased delivery
+      state. Wire Room and Session creation in the API transactions, and wire
+      Participant and Session-end production into the Sync transaction that
+      applies lifecycle intents. Keep API and Sync migration compatibility.
 - [ ] **Phase 2 — Dispatcher and customer operations.** Add SSRF-safe delivery, Standard
-   Webhooks signing, retries, lease recovery, delivery inspection, tests,
-   secret rotation, manual redelivery, cleanup, complete journey skeletons,
-   linked traces, metrics, audit logs, canary coverage, and the Execution Trace
-   Harness scenario.
+      Webhooks signing, retries, lease recovery, delivery inspection, tests,
+      secret rotation, manual redelivery, cleanup, complete journey skeletons,
+      linked traces, metrics, audit logs, canary coverage, and the Execution Trace
+      Harness scenario.
 - [ ] **Phase 3 — Generated clients and core documentation.** Regenerate OpenAPI, Effect schemas,
-   generated `HttpApi`, and TypeScript client artifacts. Generate the version 1
-   receiver Event union and validators, add the server-only `./webhooks` and
-   `./webhooks/test` subpaths, implement verification, typed processing, inbox
-   coordination, safe responses and diagnostics, and publish raw-body recipes
-   for supported server runtimes. Document artifact Event types as reserved and
-   unavailable. Demo apps remain thin and do not own delivery behavior.
+      generated `HttpApi`, and TypeScript client artifacts. Generate the version 1
+      receiver Event union and validators, add the server-only `./webhooks` and
+      `./webhooks/test` subpaths, implement verification, typed processing, inbox
+      coordination, safe responses and diagnostics, and publish raw-body recipes
+      for supported server runtimes. Document artifact Event types as reserved and
+      unavailable. Demo apps remain thin and do not own delivery behavior.
+- [ ] **External prerequisite — Public v3 lifecycle provisioning.** Make the public admission
+      path establish exactly one authoritative Session Host and route public
+      lifecycle state, including its host-exit policy and role capabilities, and
+      route public Leave and end actions through the accepted v3
+      external-operation path. Until this companion work lands, the local
+      all-core webhook proof may use a tenant/Room/Session-scoped disposable
+      database fixture to seed one pending Participant as Host and replace the
+      incomplete legacy control row with an empty schema-v3 snapshot derived
+      from authoritative Session configuration. It must use the canonical v3
+      encoder and digest, require exactly one affected row for each repair,
+      disclose both repairs, and cannot count as public core-launch proof.
+- [ ] **Production hardening prerequisite — Independent key and erasure authority.** Replace the
+      process-injected keyring with KMS-backed envelope encryption, connect the
+      atomic webhook-erasure primitive to the user-deletion orchestrator, and
+      add durable external tombstones plus restore reconciliation before any
+      production enablement.
 - [ ] **External prerequisite — Production artifact pipelines.** Complete and independently
-   verify the recorder and transcription companion specs. This checkbox belongs
-   to those projects and does not block the core webhook launch.
+      verify the recorder and transcription companion specs. This checkbox belongs
+      to those projects and does not block the core webhook launch.
 - [ ] **Phase 4 — Artifact Event expansion.** After the external prerequisite is checked,
-   wire guarded Recording and Transcript started/completed/failed transitions,
-   enable their subscription capabilities, regenerate contracts and docs, and
-   pass artifact-to-receiver journey canaries. Never emit from the current
-   generic PATCH or synchronous prototype path.
+      wire guarded Recording and Transcript started/completed/failed transitions,
+      enable their subscription capabilities, regenerate contracts and docs, and
+      pass artifact-to-receiver journey canaries. Never emit from the current
+      generic PATCH or synchronous prototype path.
 
 ## Execution orchestration
 
@@ -1030,11 +1062,12 @@ splits without overlapping file ownership:
 
 All three implementation lanes use the general-purpose agent role with
 `gpt-5.6-sol` and `high` reasoning, explicitly configured on every spawn with
-`service_tier="standard"` and `fork_turns="none"`. The typed worker role is not
-used because it is fixed to a different model. The critique uses the advisor
-role with `gpt-5.6-sol` at `high`, also explicitly configured with
-`service_tier="standard"`; it advises only and never edits or executes
-implementation work.
+`fork_turns="none"`. The `service_tier` override is omitted so the orchestrator
+uses its platform default; literal `standard` and `default` overrides are not
+accepted for this model. The typed worker role is not used because it is fixed
+to a different model. The critique uses the advisor role with `gpt-5.6-sol` at
+`high` and the same default-tier behavior; it advises only and never edits or
+executes implementation work.
 Workers do not spawn agents, run `codex review`, commit, or cross their assigned
 file boundaries. Follow-up fixes return to the agent that already owns the lane.
 
@@ -1057,7 +1090,8 @@ Focused automated tests must prove:
 - resource mutation, Event insert, and Delivery fanout commit or roll back
   together under injected failures and concurrent Endpoint changes;
 - the stored raw body matches the documented schemas and signature test vectors
-  byte for byte, including Unicode names and dual-secret rotation;
+  byte for byte, including Unicode, quotes, backslashes, HTML-sensitive
+  characters, and dual-secret rotation;
 - duplicate worker claims, lease expiry, response-loss injection, API process
   restart, and database failover produce at-least-once behavior without losing
   or corrupting Events;
@@ -1080,7 +1114,8 @@ Focused automated tests must prove:
   unsupported versions, and invalid typed bodies fail with the documented safe
   errors;
 - Processor tests prove typed handler narrowing, completed duplicate
-  acknowledgement, busy-lease retry, handler-failure release, crash-and-lease
+  acknowledgement, busy-lease retry, missing-handler and handler-failure
+  release without completion, crash-and-lease
   recovery, unknown-Event acknowledgement, 30-day inbox retention, and the
   unavoidable duplicate window between customer side effect and inbox
   completion;
@@ -1128,6 +1163,14 @@ environment:
   pass, generated contract drift is zero, the Execution Trace Harness captures
   the full path, and the changelog and public receiver documentation describe
   the shipped contract.
+
+The deterministic disposable-database bootstrap fixture described in the
+lifecycle prerequisite may prove webhook delivery after valid v3 authority
+exists, but it does not satisfy the public authoritative-transition statement.
+Core launch remains not done until the public v3 provisioning prerequisite and
+every canonical gate above pass. Production readiness additionally requires the
+independent key and erasure prerequisite; neither prerequisite is implied by
+checking Phases 1–3.
 
 Artifact Event expansion is separately done when the external artifact-pipeline
 prerequisite and Phase 4 are checked, every reserved type becomes selectable,

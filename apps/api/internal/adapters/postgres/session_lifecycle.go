@@ -25,7 +25,7 @@ func NewSessionLifecycleRepository(transactor sessionLifecycleTransactor) Sessio
 	return SessionLifecycleRepository{transactor: transactor}
 }
 
-func (r SessionLifecycleRepository) transaction(ctx context.Context, work func(*sqlc.Queries) error) error {
+func (r SessionLifecycleRepository) transaction(ctx context.Context, work func(*sqlc.Queries, pgx.Tx) error) error {
 	tx, err := r.transactor.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("begin lifecycle transaction: %w", err)
@@ -48,7 +48,7 @@ func (r SessionLifecycleRepository) transaction(ctx context.Context, work func(*
 		return sessionlifecycle.ErrSynchronousCommit
 	}
 
-	if err := work(sqlc.New(tx)); err != nil {
+	if err := work(sqlc.New(tx), tx); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -256,6 +256,15 @@ func (g *generator) parameterSchema(parameter httpapi.APIParameterContract) map[
 	}
 
 	schema := map[string]any{"type": parameter.Type}
+	if parameter.ItemsType != "" {
+		items := map[string]any{"type": parameter.ItemsType}
+		if len(parameter.Enum) > 0 {
+			items["enum"] = parameter.Enum
+		}
+		schema["items"] = items
+	} else if len(parameter.Enum) > 0 {
+		schema["enum"] = parameter.Enum
+	}
 	if parameter.Pattern != "" {
 		schema["pattern"] = parameter.Pattern
 	}

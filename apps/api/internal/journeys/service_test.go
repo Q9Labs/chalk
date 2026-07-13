@@ -225,6 +225,30 @@ func TestNonTerminalSuccessDoesNotSetTerminalState(t *testing.T) {
 	}
 }
 
+func TestWebhookBranchTerminalDoesNotTerminateMultiEndpointJourney(t *testing.T) {
+	branch := fixtureEvent(2)
+	branch.Name = "webhook.delivery.attempt_succeeded"
+	branch.Phase = "terminal"
+	branch.State = "succeeded"
+	other := fixtureEvent(3)
+	other.Name = "webhook.delivery.queued"
+	other.Phase = "webhook"
+	other.State = "queued"
+	if journeys.IsTerminalEvent(branch) {
+		t.Fatal("one Endpoint branch terminated the aggregate journey while another Delivery remained queued")
+	}
+	if journeys.IsTerminalEvent(other) {
+		t.Fatal("queued webhook branch was terminal")
+	}
+	aggregate := fixtureEvent(4)
+	aggregate.Name = "room.create.completed"
+	aggregate.Phase = "terminal"
+	aggregate.State = "succeeded"
+	if !journeys.IsTerminalEvent(aggregate) {
+		t.Fatal("aggregate terminal event was not recognized")
+	}
+}
+
 func fixtureEvent(sequence int64) journeys.Event {
 	return journeys.Event{
 		EventID:            mustID("11111111-1111-4111-8111-111111111111"),

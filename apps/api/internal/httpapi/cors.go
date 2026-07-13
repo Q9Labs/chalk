@@ -25,7 +25,7 @@ func allowCORS(options CORSOptions) func(http.Handler) http.Handler {
 				headers := w.Header()
 				headers.Set("Access-Control-Allow-Origin", allowedOrigin)
 				headers.Set("Access-Control-Allow-Methods", "DELETE, GET, POST, PATCH, OPTIONS")
-				headers.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Traceparent, Tracestate, X-Chalk-Journey-ID")
+				headers.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Traceparent, Tracestate, X-Chalk-Journey-ID")
 				headers.Set("Access-Control-Expose-Headers", "Traceparent, Tracestate, X-Chalk-Journey-ID")
 				if allowedOrigin != "*" {
 					headers.Set("Access-Control-Allow-Credentials", "true")

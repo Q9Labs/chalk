@@ -44,6 +44,11 @@ var (
 		Limit:  60,
 		Window: time.Minute,
 	}
+	webhookReadRateLimit = ratelimit.Policy{
+		Name:   ratelimit.PolicyNameWebhookRead,
+		Limit:  300,
+		Window: time.Minute,
+	}
 	telemetryIntakeRateLimit = ratelimit.Policy{
 		Name:   ratelimit.PolicyNameTelemetryIntake,
 		Limit:  600,

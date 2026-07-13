@@ -1169,10 +1169,12 @@ func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	if !strings.Contains(res.Header().Get("Access-Control-Allow-Methods"), http.MethodDelete) {
 		t.Fatalf("allow methods = %q, want DELETE", res.Header().Get("Access-Control-Allow-Methods"))
 	}
-	for _, header := range []string{"Traceparent", "Tracestate", "X-Chalk-Journey-ID"} {
+	for _, header := range []string{"Idempotency-Key", "Traceparent", "Tracestate", "X-Chalk-Journey-ID"} {
 		if !strings.Contains(res.Header().Get("Access-Control-Allow-Headers"), header) {
 			t.Fatalf("allow headers = %q, want %s", res.Header().Get("Access-Control-Allow-Headers"), header)
 		}
+	}
+	for _, header := range []string{"Traceparent", "Tracestate", "X-Chalk-Journey-ID"} {
 		if !strings.Contains(res.Header().Get("Access-Control-Expose-Headers"), header) {
 			t.Fatalf("expose headers = %q, want %s", res.Header().Get("Access-Control-Expose-Headers"), header)
 		}

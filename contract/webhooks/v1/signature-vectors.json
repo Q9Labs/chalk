@@ -1,0 +1,19 @@
+{
+  "algorithm": "Standard Webhooks HMAC-SHA256",
+  "webhook_id": "00000000-0000-4000-8000-000000000007",
+  "webhook_timestamp": "1783879500",
+  "body_utf8": "{\"id\":\"00000000-0000-4000-8000-000000000007\",\"event\":\"participant.joined\",\"api_version\":1,\"occurred_at\":\"2026-07-12T18:05:00.000Z\",\"tenant_id\":\"10000000-0000-4000-8000-000000000001\",\"data\":{\"object\":{\"id\":\"40000000-0000-4000-8000-000000000001\",\"user_id\":\"50000000-0000-4000-8000-000000000001\",\"room_id\":\"20000000-0000-4000-8000-000000000001\",\"session_id\":\"30000000-0000-4000-8000-000000000001\",\"name\":\"Ada – <&> \\\"東京\\\" \\\\\",\"status\":\"active\",\"joined_at\":\"2026-07-12T18:05:00.000Z\",\"left_at\":null}}}",
+  "secrets": [
+    {
+      "name": "current",
+      "value": "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "signature": "v1,3u8NBo64L5GzXWyUp/U1fTvjB9jgHOQ480crHrAtHFI="
+    },
+    {
+      "name": "previous",
+      "value": "whsec_ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+      "signature": "v1,ooHLrhCScotO/vQvRfsKKebRvp2FUNoAJfNS3bV0bwg="
+    }
+  ],
+  "overlap_header": "v1,3u8NBo64L5GzXWyUp/U1fTvjB9jgHOQ480crHrAtHFI= v1,ooHLrhCScotO/vQvRfsKKebRvp2FUNoAJfNS3bV0bwg="
+}

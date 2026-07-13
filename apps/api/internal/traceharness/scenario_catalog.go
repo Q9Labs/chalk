@@ -114,6 +114,7 @@ func ScenarioNames() []string {
 		EdgeUnauthenticatedRouteScenario,
 		EdgeForbiddenTenantRouteScenario,
 		EdgeInvalidRouteIDScenario,
+		WebhookDeliveryAttemptScenario,
 	}
 }
 

@@ -111,7 +111,11 @@ await send("/v1/logs", {
 
 await waitFor("Grafana dashboard", async () => {
   const response = await fetch("http://127.0.0.1:3000/api/dashboards/uid/chalk-observability-v1");
-  return response.ok;
+  if (!response.ok) return false;
+  const body = await response.json();
+  const panels = new Set(body.dashboard?.panels?.map((panel) => panel.id));
+  const variables = new Set(body.dashboard?.templating?.list?.map((variable) => variable.name));
+  return [8, 9, 10, 11, 12, 13].every((id) => panels.has(id)) && variables.has("journey_id");
 });
 
 await waitFor("Grafana alert rules", async () => {
@@ -128,11 +132,24 @@ await waitFor("Grafana alert rules", async () => {
     ["chalk-pipeline-trace-stale", "traces"],
     ["chalk-pipeline-log-stale", "logs"],
   ];
+  const expectedWebhookRules = [
+    ["chalk-webhook-oldest-eligible", "chalk_webhook_delivery_oldest_eligible_age_seconds"],
+    ["chalk-webhook-first-attempt-p99", "chalk_webhook_delivery_first_attempt_latency_seconds_bucket"],
+    ["chalk-webhook-exhausted", "chalk_webhook_deliveries_terminal_total"],
+    ["chalk-webhook-lease-churn", "chalk_webhook_delivery_lease_expiries_total"],
+    ["chalk-webhook-journey-branch-stuck", "chalk_webhook_journey_oldest_unterminated_branch_age_seconds"],
+    ["chalk-webhook-cleanup-stale", "chalk_webhook_cleanup_last_success_age_seconds"],
+    ["chalk-webhook-canary-missing", "chalk_webhook_canary_last_success_unixtime"],
+  ];
   return (
     ["chalk-collector-refused", "chalk-ledger-failures"].every((uid) => rulesByUid.has(uid)) &&
     expectedCanaryRules.every(([uid, signal]) => {
       const rule = rulesByUid.get(uid);
       return rule?.data?.[0]?.datasourceUid === "prometheus" && rule.data[0].model?.expr?.includes(`signal="${signal}"`);
+    }) &&
+    expectedWebhookRules.every(([uid, metric]) => {
+      const rule = rulesByUid.get(uid);
+      return rule?.data?.[0]?.datasourceUid === "prometheus" && rule.data[0].model?.expr?.includes(metric);
     })
   );
 });
@@ -146,7 +163,7 @@ await waitFor("Tempo trace", async () => {
   const response = await fetch(`http://127.0.0.1:3200/api/search?q=${query}`);
   if (!response.ok) return false;
   const body = await response.json();
-  return body.traces?.some((trace) => trace.traceID === traceId) ?? false;
+  return body.traces?.some((trace) => trace.traceID?.padStart(32, "0") === traceId) ?? false;
 });
 
 await waitFor("Prometheus metric", async () => {
@@ -165,7 +182,20 @@ console.log(
   JSON.stringify(
     {
       dashboard: "chalk-observability-v1",
-      alert_rules: ["chalk-collector-refused", "chalk-ledger-failures", "chalk-pipeline-stale", "chalk-pipeline-trace-stale", "chalk-pipeline-log-stale"],
+      alert_rules: [
+        "chalk-collector-refused",
+        "chalk-ledger-failures",
+        "chalk-pipeline-stale",
+        "chalk-pipeline-trace-stale",
+        "chalk-pipeline-log-stale",
+        "chalk-webhook-oldest-eligible",
+        "chalk-webhook-first-attempt-p99",
+        "chalk-webhook-exhausted",
+        "chalk-webhook-lease-churn",
+        "chalk-webhook-journey-branch-stuck",
+        "chalk-webhook-cleanup-stale",
+        "chalk-webhook-canary-missing",
+      ],
       service: serviceName,
       trace_id: traceId,
       result: "passed",

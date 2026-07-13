@@ -441,6 +441,7 @@ func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	t.Setenv(config.APILogFormat, "text")
 	t.Setenv(config.APILogLevel, "debug")
 	t.Setenv(config.APIOTLPEndpoint, "https://otel.chalk.test:4318")
@@ -542,6 +543,7 @@ func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -549,6 +551,65 @@ func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	}
 	if cfg.Database.URL != "postgres://db.internal/chalk?sslmode=verify-full" {
 		t.Fatalf("database url = %q, want configured tls url", cfg.Database.URL)
+	}
+}
+
+func TestLoadRejectsMissingWebhookEncryptionKeyOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.WebhookEncryptionKey, "")
+	t.Setenv(config.WebhookEncryptionKeyring, "")
+	t.Setenv(config.WebhookEncryptionCurrentVersion, "")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), config.WebhookEncryptionKey) {
+		t.Fatalf("error = %v, want missing webhook encryption key", err)
+	}
+}
+
+func TestLoadWebhookEncryptionKeyring(t *testing.T) {
+	first := make([]byte, 32)
+	second := make([]byte, 32)
+	second[0] = 1
+	t.Setenv(config.WebhookEncryptionKeyring, "1:"+base64.StdEncoding.EncodeToString(first)+",2:"+base64.StdEncoding.EncodeToString(second))
+	t.Setenv(config.WebhookEncryptionCurrentVersion, "2")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Webhooks.CurrentKeyVersion != 2 {
+		t.Fatalf("current key version = %d, want 2", cfg.Webhooks.CurrentKeyVersion)
+	}
+	if len(cfg.Webhooks.EncryptionKeys) != 2 || cfg.Webhooks.EncryptionKeys[1][0] != 0 || cfg.Webhooks.EncryptionKeys[2][0] != 1 {
+		t.Fatalf("encryption keys = %#v", cfg.Webhooks.EncryptionKeys)
+	}
+	if cfg.Webhooks.EncryptionKey[0] != 1 {
+		t.Fatal("legacy current key alias does not point to current key")
+	}
+}
+
+func TestLoadRejectsInvalidWebhookEncryptionKeyrings(t *testing.T) {
+	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	tests := []struct {
+		name    string
+		keyring string
+		current string
+	}{
+		{name: "missing current", keyring: "1:" + key, current: "2"},
+		{name: "duplicate version", keyring: "1:" + key + ",1:" + key, current: "1"},
+		{name: "zero version", keyring: "0:" + key, current: "1"},
+		{name: "malformed key", keyring: "1:not-base64", current: "1"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(config.WebhookEncryptionKeyring, test.keyring)
+			t.Setenv(config.WebhookEncryptionCurrentVersion, test.current)
+			if _, err := config.Load(); err == nil {
+				t.Fatal("load config succeeded, want error")
+			}
+		})
 	}
 }
 

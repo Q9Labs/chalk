@@ -37,6 +37,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/users"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -143,7 +145,7 @@ func run() error {
 	userService := users.NewService(userRepository)
 	membershipRepository := postgres.NewMembershipRepository(operationQueries)
 	membershipService := memberships.NewService(membershipRepository)
-	roomRepository := postgres.NewRoomRepository(operationQueries)
+	roomRepository := postgres.NewRoomRepository(operationQueries, pool)
 	roomService := rooms.NewService(roomRepository)
 	sessionLifecycleRepository := postgres.NewSessionLifecycleRepository(pool)
 	sessionLifecycleService := sessionlifecycle.NewService(sessionLifecycleRepository)
@@ -210,6 +212,12 @@ func run() error {
 		integrationProvider = provider
 	}
 	integrationService := integrations.NewService(integrationRepository, integrationProvider, integrationCatalog)
+	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)
+	if err != nil {
+		return fmt.Errorf("configure webhook encryption: %w", err)
+	}
+	webhookRepository := postgres.NewWebhookRepository(pool, webhookProtector)
+	webhookService := webhooks.NewService(webhookRepository, webhookProtector)
 	tenantAuthz := authorization.NewTenantPolicy(membershipRepository)
 	rateLimitOptions := httpapi.DefaultRateLimitOptions()
 	rateLimitOptions.ClientIP.TrustedProxyCIDRs = cfg.API.TrustedProxyCIDRs
@@ -294,6 +302,7 @@ func run() error {
 		FinalizerWorker:        transcriptService,
 		FinalizerAuthority:     transcriptionAuthority,
 		Users:                  userService,
+		Webhooks:               webhookService,
 	}
 	diagnostics.ApplyHTTP(&routerOptions)
 
@@ -311,6 +320,13 @@ func run() error {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	dispatcherOwner, err := utilities.NewID()
+	if err != nil {
+		return fmt.Errorf("create webhook dispatcher owner: %w", err)
+	}
+	dispatcher := webhooks.NewDispatcher(postgres.NewWebhookDispatchRepository(pool), webhookProtector, webhooks.NewDeliveryClient(nil), dispatcherOwner.String())
+	dispatcherErr := make(chan error, 1)
+	go func() { dispatcherErr <- dispatcher.Run(signalCtx) }()
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -326,9 +342,14 @@ func run() error {
 		serverErr <- nil
 	}()
 
+	var runErr error
 	select {
 	case err := <-serverErr:
-		return err
+		runErr = err
+		stop()
+	case err := <-dispatcherErr:
+		runErr = err
+		stop()
 	case <-signalCtx.Done():
 		stop()
 	}
@@ -347,6 +368,9 @@ func run() error {
 		"event", "api.shutdown_complete",
 		"duration_ms", float64(time.Since(shutdownStartedAt).Microseconds())/1000,
 	)
+	if runErr != nil {
+		return runErr
+	}
 	return <-serverErr
 }
 

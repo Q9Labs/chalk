@@ -1,0 +1,833 @@
+// Generated from contract/webhooks/v1/event.schema.json. Do not edit.
+export const webhookEventSchemaV1 = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://chalk.dev/contracts/webhooks/v1/event.schema.json",
+  title: "Chalk webhook Event version 1",
+  type: "object",
+  required: ["id", "event", "api_version", "occurred_at", "tenant_id", "data"],
+  properties: {
+    id: {
+      $ref: "#/$defs/uuid",
+    },
+    event: {
+      type: "string",
+    },
+    api_version: {
+      const: 1,
+    },
+    occurred_at: {
+      $ref: "#/$defs/timestamp",
+    },
+    tenant_id: {
+      $ref: "#/$defs/uuid",
+    },
+    data: {
+      type: "object",
+    },
+  },
+  additionalProperties: true,
+  oneOf: [
+    {
+      $ref: "#/$defs/roomCreated",
+    },
+    {
+      $ref: "#/$defs/roomUpdated",
+    },
+    {
+      $ref: "#/$defs/roomArchived",
+    },
+    {
+      $ref: "#/$defs/roomRestored",
+    },
+    {
+      $ref: "#/$defs/sessionStarted",
+    },
+    {
+      $ref: "#/$defs/sessionEnded",
+    },
+    {
+      $ref: "#/$defs/participantJoined",
+    },
+    {
+      $ref: "#/$defs/participantLeft",
+    },
+    {
+      $ref: "#/$defs/recordingStarted",
+    },
+    {
+      $ref: "#/$defs/recordingCompleted",
+    },
+    {
+      $ref: "#/$defs/recordingFailed",
+    },
+    {
+      $ref: "#/$defs/transcriptStarted",
+    },
+    {
+      $ref: "#/$defs/transcriptCompleted",
+    },
+    {
+      $ref: "#/$defs/transcriptFailed",
+    },
+    {
+      $ref: "#/$defs/endpointTest",
+    },
+  ],
+  $defs: {
+    uuid: {
+      type: "string",
+      format: "uuid",
+      pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    },
+    timestamp: {
+      type: "string",
+      format: "date-time",
+      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+    },
+    nullableTimestamp: {
+      oneOf: [
+        {
+          $ref: "#/$defs/timestamp",
+        },
+        {
+          type: "null",
+        },
+      ],
+    },
+    nullableUUID: {
+      oneOf: [
+        {
+          $ref: "#/$defs/uuid",
+        },
+        {
+          type: "null",
+        },
+      ],
+    },
+    failure: {
+      oneOf: [
+        {
+          type: "null",
+        },
+        {
+          type: "object",
+          required: ["code"],
+          properties: {
+            code: {
+              type: "string",
+              minLength: 1,
+              maxLength: 96,
+            },
+          },
+          additionalProperties: true,
+        },
+      ],
+    },
+    roomObject: {
+      type: "object",
+      required: ["id", "name", "slug", "status", "media_plane", "created_at", "updated_at"],
+      properties: {
+        id: {
+          $ref: "#/$defs/uuid",
+        },
+        name: {
+          type: "string",
+        },
+        slug: {
+          type: "string",
+        },
+        status: {
+          enum: ["active", "archived"],
+        },
+        media_plane: {
+          type: "string",
+        },
+        created_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        updated_at: {
+          $ref: "#/$defs/timestamp",
+        },
+      },
+      additionalProperties: true,
+    },
+    sessionObject: {
+      type: "object",
+      required: ["id", "room_id", "status", "started_at", "ended_at", "created_at", "updated_at"],
+      properties: {
+        id: {
+          $ref: "#/$defs/uuid",
+        },
+        room_id: {
+          $ref: "#/$defs/uuid",
+        },
+        status: {
+          enum: ["active", "ended"],
+        },
+        started_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        ended_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+        created_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        updated_at: {
+          $ref: "#/$defs/timestamp",
+        },
+      },
+      additionalProperties: true,
+    },
+    participantObject: {
+      type: "object",
+      required: ["id", "user_id", "room_id", "session_id", "name", "status", "joined_at", "left_at"],
+      properties: {
+        id: {
+          $ref: "#/$defs/uuid",
+        },
+        user_id: {
+          $ref: "#/$defs/nullableUUID",
+        },
+        room_id: {
+          $ref: "#/$defs/uuid",
+        },
+        session_id: {
+          $ref: "#/$defs/uuid",
+        },
+        name: {
+          type: ["string", "null"],
+        },
+        status: {
+          enum: ["active", "left"],
+        },
+        joined_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        left_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+      },
+      additionalProperties: true,
+    },
+    recordingObject: {
+      type: "object",
+      required: ["id", "room_id", "session_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      properties: {
+        id: {
+          $ref: "#/$defs/uuid",
+        },
+        room_id: {
+          $ref: "#/$defs/uuid",
+        },
+        session_id: {
+          $ref: "#/$defs/uuid",
+        },
+        status: {
+          enum: ["started", "completed", "failed"],
+        },
+        started_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        completed_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+        failed_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+        failure: {
+          $ref: "#/$defs/failure",
+        },
+        created_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        updated_at: {
+          $ref: "#/$defs/timestamp",
+        },
+      },
+      additionalProperties: true,
+    },
+    transcriptObject: {
+      type: "object",
+      required: ["id", "recording_id", "room_id", "session_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      properties: {
+        id: {
+          $ref: "#/$defs/uuid",
+        },
+        recording_id: {
+          $ref: "#/$defs/uuid",
+        },
+        room_id: {
+          $ref: "#/$defs/uuid",
+        },
+        session_id: {
+          $ref: "#/$defs/uuid",
+        },
+        status: {
+          enum: ["started", "completed", "failed"],
+        },
+        languages: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          uniqueItems: true,
+        },
+        started_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        completed_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+        failed_at: {
+          $ref: "#/$defs/nullableTimestamp",
+        },
+        failure: {
+          $ref: "#/$defs/failure",
+        },
+        created_at: {
+          $ref: "#/$defs/timestamp",
+        },
+        updated_at: {
+          $ref: "#/$defs/timestamp",
+        },
+      },
+      additionalProperties: true,
+    },
+    roomData: {
+      type: "object",
+      required: ["object"],
+      properties: {
+        object: {
+          $ref: "#/$defs/roomObject",
+        },
+      },
+      additionalProperties: true,
+    },
+    roomUpdatedData: {
+      type: "object",
+      required: ["object", "changed_fields"],
+      properties: {
+        object: {
+          $ref: "#/$defs/roomObject",
+        },
+        changed_fields: {
+          type: "array",
+          minItems: 1,
+          uniqueItems: true,
+          items: {
+            enum: ["media_plane", "metadata", "name", "recurring_policy", "slug"],
+          },
+        },
+      },
+      additionalProperties: true,
+    },
+    sessionData: {
+      type: "object",
+      required: ["object"],
+      properties: {
+        object: {
+          $ref: "#/$defs/sessionObject",
+        },
+      },
+      additionalProperties: true,
+    },
+    participantData: {
+      type: "object",
+      required: ["object"],
+      properties: {
+        object: {
+          $ref: "#/$defs/participantObject",
+        },
+      },
+      additionalProperties: true,
+    },
+    recordingData: {
+      type: "object",
+      required: ["object"],
+      properties: {
+        object: {
+          $ref: "#/$defs/recordingObject",
+        },
+      },
+      additionalProperties: true,
+    },
+    transcriptData: {
+      type: "object",
+      required: ["object"],
+      properties: {
+        object: {
+          $ref: "#/$defs/transcriptObject",
+        },
+      },
+      additionalProperties: true,
+    },
+    roomCreated: {
+      $ref: "#/$defs/roomCreatedShape",
+    },
+    roomCreatedShape: {
+      properties: {
+        event: {
+          const: "room.created",
+        },
+        data: {
+          $ref: "#/$defs/roomData",
+        },
+      },
+    },
+    roomUpdated: {
+      properties: {
+        event: {
+          const: "room.updated",
+        },
+        data: {
+          $ref: "#/$defs/roomUpdatedData",
+        },
+      },
+    },
+    roomArchived: {
+      properties: {
+        event: {
+          const: "room.archived",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/roomData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "archived",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    roomRestored: {
+      properties: {
+        event: {
+          const: "room.restored",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/roomData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "active",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    sessionStarted: {
+      properties: {
+        event: {
+          const: "session.started",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/sessionData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "active",
+                    },
+                    ended_at: {
+                      type: "null",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    sessionEnded: {
+      properties: {
+        event: {
+          const: "session.ended",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/sessionData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "ended",
+                    },
+                    ended_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    participantJoined: {
+      properties: {
+        event: {
+          const: "participant.joined",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/participantData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "active",
+                    },
+                    left_at: {
+                      type: "null",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    participantLeft: {
+      properties: {
+        event: {
+          const: "participant.left",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/participantData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "left",
+                    },
+                    left_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    recordingStarted: {
+      properties: {
+        event: {
+          const: "recording.started",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/recordingData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "started",
+                    },
+                    completed_at: {
+                      type: "null",
+                    },
+                    failed_at: {
+                      type: "null",
+                    },
+                    failure: {
+                      type: "null",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    recordingCompleted: {
+      properties: {
+        event: {
+          const: "recording.completed",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/recordingData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "completed",
+                    },
+                    completed_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                    failed_at: {
+                      type: "null",
+                    },
+                    failure: {
+                      type: "null",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    recordingFailed: {
+      properties: {
+        event: {
+          const: "recording.failed",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/recordingData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "failed",
+                    },
+                    completed_at: {
+                      type: "null",
+                    },
+                    failed_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                    failure: {
+                      type: "object",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    transcriptStarted: {
+      properties: {
+        event: {
+          const: "transcript.started",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/transcriptData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "started",
+                    },
+                    completed_at: {
+                      type: "null",
+                    },
+                    failed_at: {
+                      type: "null",
+                    },
+                    failure: {
+                      type: "null",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    transcriptCompleted: {
+      properties: {
+        event: {
+          const: "transcript.completed",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/transcriptData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "completed",
+                    },
+                    completed_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                    failed_at: {
+                      type: "null",
+                    },
+                    failure: {
+                      type: "null",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    transcriptFailed: {
+      properties: {
+        event: {
+          const: "transcript.failed",
+        },
+        data: {
+          allOf: [
+            {
+              $ref: "#/$defs/transcriptData",
+            },
+            {
+              properties: {
+                object: {
+                  properties: {
+                    status: {
+                      const: "failed",
+                    },
+                    completed_at: {
+                      type: "null",
+                    },
+                    failed_at: {
+                      $ref: "#/$defs/timestamp",
+                    },
+                    failure: {
+                      type: "object",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    endpointTest: {
+      properties: {
+        event: {
+          const: "endpoint.test",
+        },
+        data: {
+          type: "object",
+          required: ["object"],
+          properties: {
+            object: {
+              type: "object",
+              required: ["endpoint_id"],
+              properties: {
+                endpoint_id: {
+                  $ref: "#/$defs/uuid",
+                },
+              },
+              additionalProperties: true,
+            },
+          },
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+} as const;
+
+export const knownWebhookEventNamesV1 = [
+  "room.created",
+  "room.updated",
+  "room.archived",
+  "room.restored",
+  "session.started",
+  "session.ended",
+  "participant.joined",
+  "participant.left",
+  "recording.started",
+  "recording.completed",
+  "recording.failed",
+  "transcript.started",
+  "transcript.completed",
+  "transcript.failed",
+  "endpoint.test",
+] as const;
+export type KnownWebhookEventNameV1 = (typeof knownWebhookEventNamesV1)[number];
+
+type JsonObject = Readonly<Record<string, unknown>>;
+type Defs = typeof webhookEventSchemaV1.$defs;
+type RefName<Ref extends string> = Ref extends `#/$defs/${infer Name}` ? Name : never;
+type ResolveRef<Ref extends string> = RefName<Ref> extends keyof Defs ? SchemaType<Defs[RefName<Ref>]> : unknown;
+type RequiredKeys<Schema> = Schema extends { readonly required: readonly (infer Key extends string)[] } ? Key : never;
+type PropertiesType<Schema extends { readonly properties: Readonly<Record<string, unknown>> }> = { readonly [Key in keyof Schema["properties"] as Key extends RequiredKeys<Schema> ? Key : never]-?: SchemaType<Schema["properties"][Key]> } & {
+  readonly [Key in keyof Schema["properties"] as Key extends RequiredKeys<Schema> ? never : Key]?: SchemaType<Schema["properties"][Key]>;
+} & JsonObject;
+type TypeName<Value> = Value extends "string" ? string : Value extends "number" | "integer" ? number : Value extends "boolean" ? boolean : Value extends "null" ? null : Value extends "array" ? readonly unknown[] : Value extends "object" ? JsonObject : unknown;
+type TypeNames<Values> = Values extends readonly (infer Value)[] ? TypeName<Value> : TypeName<Values>;
+type SchemaBase<Schema> = Schema extends { readonly $ref: infer Ref extends string }
+  ? ResolveRef<Ref>
+  : Schema extends { readonly const: infer Value }
+    ? Value
+    : Schema extends { readonly enum: readonly (infer Value)[] }
+      ? Value
+      : Schema extends { readonly properties: Readonly<Record<string, unknown>> }
+        ? PropertiesType<Schema>
+        : Schema extends { readonly type: "array"; readonly items: infer Item }
+          ? readonly SchemaType<Item>[]
+          : Schema extends { readonly type: infer Type }
+            ? TypeNames<Type>
+            : unknown;
+type SchemaBranches<Schema> = Schema extends { readonly oneOf: readonly (infer Branch)[] } ? SchemaType<Branch> : unknown;
+type SchemaAllOf<Schema> = Schema extends { readonly allOf: readonly [infer First, ...infer Rest] } ? SchemaType<First> & SchemaAllOf<{ readonly allOf: Rest }> : unknown;
+export type SchemaType<Schema> = SchemaBase<Schema> & SchemaBranches<Schema> & SchemaAllOf<Schema>;
+
+export type KnownWebhookEventV1 = SchemaType<typeof webhookEventSchemaV1>;
+export type RoomWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `room.${string}` }>;
+export type SessionWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `session.${string}` }>;
+export type ParticipantWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `participant.${string}` }>;
+export type RecordingWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `recording.${string}` }>;
+export type TranscriptWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: `transcript.${string}` }>;
+export type EndpointTestWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: "endpoint.test" }>;

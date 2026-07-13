@@ -11,12 +11,14 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
 
 func (r SessionLifecycleRepository) CreateSession(ctx context.Context, input sessionlifecycle.CreateSessionInput) (sessionlifecycle.Session, error) {
 	var result sessionlifecycle.Session
+	var commitMetric webhookCommitMetric
 
-	err := r.transaction(ctx, func(queries *sqlc.Queries) error {
+	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
 		request, err := queries.ReserveSessionCreateRequest(ctx, sqlc.ReserveSessionCreateRequestParams{
 			TenantID:           uuid(input.TenantID),
 			RoomID:             uuid(input.RoomID),
@@ -74,6 +76,17 @@ func (r SessionLifecycleRepository) CreateSession(ctx context.Context, input ses
 		}); err != nil {
 			return fmt.Errorf("create lifecycle control: %w", err)
 		}
+		snapshot := webhooks.SessionSnapshot{ID: input.ID.String(), RoomID: input.RoomID.String(), Status: session.Status, StartedAt: nullableTimestamp(session.StartedAt), EndedAt: nullableTimestamp(session.EndedAt), CreatedAt: timestamp(session.CreatedAt), UpdatedAt: timestamp(session.UpdatedAt)}
+		occurredAt := timestamp(session.CreatedAt)
+		if session.StartedAt.Valid {
+			occurredAt = timestamp(session.StartedAt)
+		}
+		commitMetric, err = fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: input.TenantID, EventName: "session.started", SemanticKey: "session:" + input.ID.String() + ":started", ResourceType: "session", ResourceID: input.ID, OccurredAt: occurredAt, Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+			return webhooks.EncodeSessionEvent(metadata, snapshot)
+		}})
+		if err != nil {
+			return fmt.Errorf("produce session.started webhook: %w", err)
+		}
 
 		result = mapLifecycleSession(session)
 		return nil
@@ -82,17 +95,17 @@ func (r SessionLifecycleRepository) CreateSession(ctx context.Context, input ses
 		return sessionlifecycle.Session{}, err
 	}
 
+	commitMetric.Record(ctx)
 	return result, nil
 }
 
 func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input sessionlifecycle.AdmitParticipantInput) (sessionlifecycle.Admission, error) {
 	var result sessionlifecycle.Admission
 
-	err := r.transaction(ctx, func(queries *sqlc.Queries) error {
 		if err := lockLifecycleControl(ctx, queries, input.TenantID, input.RoomID, input.SessionID); err != nil {
+	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
 			return err
 		}
-
 		intent, err := queries.LockLifecycleIntentForRequestForUpdate(ctx, lifecycleIntentRequestParams(input, sessionlifecycle.IntentParticipantJoined))
 		if err == nil {
 			return resolveAdmissionRetry(ctx, queries, input, intent, &result)

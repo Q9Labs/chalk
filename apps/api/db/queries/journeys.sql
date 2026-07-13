@@ -60,6 +60,7 @@ from observability_journey_events
 where
     journey_id = sqlc.arg(journey_id)
     and phase = 'terminal'
-    and state in ('completed', 'succeeded', 'failed', 'cancelled', 'canceled')
+    and state in ('completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'exhausted', 'erased')
+    and name not like 'webhook.delivery.%'
 order by sequence desc, occurred_at desc, event_id desc
 limit 1;

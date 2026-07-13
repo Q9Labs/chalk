@@ -65,6 +65,16 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}"},
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/rooms/{room_id}"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}"},
+		{http.MethodPatch, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}"},
+		{http.MethodDelete, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}"},
@@ -121,6 +131,117 @@ func TestPreviewRouteContracts(t *testing.T) {
 	if len(seenOperations) != len(expected) {
 		t.Fatalf("expected %d route contracts, got %d", len(expected), len(seenOperations))
 	}
+}
+
+func TestWebhookRouteContracts(t *testing.T) {
+	contracts := make(map[string]httpapi.APIRouteContract)
+	for _, contract := range httpapi.PreviewRouteContracts() {
+		contracts[contract.OperationID] = contract
+	}
+
+	tests := []struct {
+		operationID string
+		status      int
+		request     string
+		response    string
+		parameters  []string
+	}{
+		{"createWebhookEndpoint", http.StatusCreated, "CreateWebhookEndpointRequest", "WebhookEndpointWithSecret", []string{"path:tenant_id", "header:Idempotency-Key"}},
+		{"listWebhookEndpoints", http.StatusOK, "", "WebhookEndpointList", []string{"path:tenant_id", "query:page_size", "query:cursor"}},
+		{"getWebhookEndpoint", http.StatusOK, "", "WebhookEndpoint", []string{"path:tenant_id", "path:endpoint_id"}},
+		{"updateWebhookEndpoint", http.StatusOK, "UpdateWebhookEndpointRequest", "WebhookEndpoint", []string{"path:tenant_id", "path:endpoint_id", "header:If-Match", "header:Idempotency-Key"}},
+		{"deleteWebhookEndpoint", http.StatusNoContent, "", "", []string{"path:tenant_id", "path:endpoint_id", "header:If-Match", "header:Idempotency-Key"}},
+		{"rotateWebhookEndpointSecret", http.StatusOK, "RotateWebhookSecretRequest", "RotateWebhookSecretResponse", []string{"path:tenant_id", "path:endpoint_id", "header:Idempotency-Key"}},
+		{"testWebhookEndpoint", http.StatusCreated, "", "WebhookDeliveryCreated", []string{"path:tenant_id", "path:endpoint_id", "header:Idempotency-Key"}},
+		{"listWebhookDeliveries", http.StatusOK, "", "WebhookDeliveryList", []string{"path:tenant_id", "path:endpoint_id", "query:state", "query:event_type", "query:page_size", "query:cursor"}},
+		{"getWebhookDelivery", http.StatusOK, "", "WebhookDeliveryDetail", []string{"path:tenant_id", "path:endpoint_id", "path:delivery_id"}},
+		{"redeliverWebhookDelivery", http.StatusCreated, "", "WebhookDeliveryCreated", []string{"path:tenant_id", "path:endpoint_id", "path:delivery_id", "header:Idempotency-Key"}},
+	}
+	for _, test := range tests {
+		t.Run(test.operationID, func(t *testing.T) {
+			contract, ok := contracts[test.operationID]
+			if !ok {
+				t.Fatal("missing route contract")
+			}
+			if contract.Auth != httpapi.APIAuthSessionOrBearer {
+				t.Fatalf("auth = %q", contract.Auth)
+			}
+			readOperation := test.operationID == "listWebhookEndpoints" || test.operationID == "getWebhookEndpoint" || test.operationID == "listWebhookDeliveries" || test.operationID == "getWebhookDelivery"
+			wantPolicy := ratelimit.PolicyNameAuthenticatedWrite
+			wantLimit := 60
+			if readOperation {
+				wantPolicy = ratelimit.PolicyNameWebhookRead
+				wantLimit = 300
+			}
+			if contract.RateLimit.Name != wantPolicy || contract.RateLimit.Limit != wantLimit || contract.RateLimit.Window != time.Minute {
+				t.Fatalf("rate limit = %#v, want %s/%d per minute", contract.RateLimit, wantPolicy, wantLimit)
+			}
+			if !contractHasErrorCode(contract, "rate_limited") {
+				t.Fatal("route does not declare rate_limited")
+			}
+			if contract.Request == nil && test.request != "" || contract.Request != nil && contract.Request.Name != test.request {
+				t.Fatalf("request schema = %#v, want %q", contract.Request, test.request)
+			}
+			response := responseForStatus(contract, test.status)
+			if response == nil {
+				t.Fatalf("missing %d response", test.status)
+			}
+			if response.Schema == nil && test.response != "" || response.Schema != nil && response.Schema.Name != test.response {
+				t.Fatalf("response schema = %#v, want %q", response.Schema, test.response)
+			}
+			if got := parameterNames(contract.Parameters); !equalStrings(got, test.parameters) {
+				t.Fatalf("parameters = %#v, want %#v", got, test.parameters)
+			}
+		})
+	}
+
+	list := contracts["listWebhookDeliveries"]
+	state := parameterByName(list.Parameters, "state")
+	if state == nil || state.Type != "array" || state.ItemsType != "string" || !equalStrings(state.Enum, []string{"pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"}) {
+		t.Fatalf("state parameter = %#v", state)
+	}
+	eventType := parameterByName(list.Parameters, "event_type")
+	if eventType == nil || eventType.Type != "array" || eventType.ItemsType != "string" || len(eventType.Enum) != 15 {
+		t.Fatalf("event_type parameter = %#v", eventType)
+	}
+}
+
+func responseForStatus(contract httpapi.APIRouteContract, status int) *httpapi.APIResponseContract {
+	for index := range contract.Responses {
+		if contract.Responses[index].Status == status {
+			return &contract.Responses[index]
+		}
+	}
+	return nil
+}
+
+func parameterNames(parameters []httpapi.APIParameterContract) []string {
+	result := make([]string, 0, len(parameters))
+	for _, parameter := range parameters {
+		result = append(result, parameter.In+":"+parameter.Name)
+	}
+	return result
+}
+
+func parameterByName(parameters []httpapi.APIParameterContract, name string) *httpapi.APIParameterContract {
+	for index := range parameters {
+		if parameters[index].Name == name {
+			return &parameters[index]
+		}
+	}
+	return nil
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestIntegrationRouteContracts(t *testing.T) {

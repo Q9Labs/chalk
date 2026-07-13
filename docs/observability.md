@@ -12,7 +12,7 @@ flowchart LR
     Browser["Web client"]
     Mobile["Mobile client"]
     Monitor["Synthetic monitor or scheduled job"]
-    Webhook["Cloudflare webhook or callback"]
+    ProviderCallback["Cloudflare webhook or callback"]
   end
 
   subgraph Chalk["Chalk-controlled request and media path"]
@@ -20,6 +20,7 @@ flowchart LR
     Edge["API edge: request, auth, rate limit"]
     Control["Go control plane: rooms, tokens, provider adapter"]
     Sync["Elixir sync: WebSocket, protocol, room state, OTP"]
+    Dispatcher["Go webhook dispatcher"]
     Media["Browser or native WebRTC engine"]
     DB[("Postgres journey ledger")]
     Redis[("Redis state and limits")]
@@ -28,6 +29,10 @@ flowchart LR
   subgraph Provider["Cloudflare"]
     SFU["Realtime SFU: provider-exposed telemetry"]
     RTK["RealtimeKit: provider-exposed telemetry"]
+  end
+
+  subgraph Customer["Customer-controlled dependency"]
+    Receiver["Outbound webhook receiver"]
   end
 
   subgraph Signals["Single operational surface"]
@@ -41,10 +46,11 @@ flowchart LR
   Browser --> SDK
   Mobile --> SDK
   Monitor --> Edge
-  Webhook --> Edge
+  ProviderCallback --> Edge
   SDK --> Edge --> Control
   SDK <--> Sync
   Control --> DB
+  DB --> Dispatcher --> Receiver
   Control --> Redis
   SDK --> Media
   Control --> SFU
@@ -56,6 +62,7 @@ flowchart LR
   Edge -. OTLP .-> OTel
   Control -. OTLP .-> OTel
   Sync -. OTLP .-> OTel
+  Dispatcher -. OTLP .-> OTel
   SFU -. "analytics, logs, webhooks" .-> OTel
   RTK -. "analytics, logs, webhooks" .-> OTel
   SDK -. "idempotent journey events through API" .-> DB
@@ -85,6 +92,17 @@ callback.
 The terminal journey result is derived from the highest ordered terminal event.
 Late retries and lower sequence numbers cannot rewrite the final result.
 
+Outbound webhooks continue the same internal journey without exposing its
+identifier to the receiver. The authoritative Room or Session transaction, or
+the Sync transaction that applies a Participant or Session-end fact, stores the
+producing journey and trace reference with the immutable webhook Event. It also
+appends one queued branch per Delivery. Each Attempt starts a fresh client trace
+linked to the producer and terminates its durable branch as succeeded,
+exhausted, canceled, or erased. `endpoint.test` and manual redelivery start
+their own operation roots and link to the retained Event instead of rewriting
+its history. Customer bodies and Standard Webhooks headers contain no internal
+journey or trace identifiers.
+
 The public client telemetry runtime is opt-in. Chalk's mobile surface enables it
 when a token provider can authenticate intake. The public web surface requires
 both `VITE_CHALK_TELEMETRY_ENABLED=true` and an authenticated
@@ -102,16 +120,17 @@ v1.
 
 ## Coverage
 
-| Layer                  | Captured in v1                                                                                                      | Connection to the journey                           |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| TypeScript client      | lifecycle, fan-out, diagnostics, HTTP, sync frames, bounded aggregate RTC statistics, exporter health and drops     | journey ID, W3C trace context, parent event IDs     |
-| Go API                 | edge requests, authentication, rate limits, business phases, provider calls, errors, runtime signals, ledger intake | propagated context and durable ledger               |
-| Elixir sync            | upgrade, protocol frames, room/state operations, OTP handoffs, connection terminal paths, BEAM health               | propagated frame/header context and span links      |
-| Cloudflare SFU         | Chalk adapter calls and endpoint RTC summaries; provider analytics, logs, and webhooks are deployment inputs        | provider IDs mapped to journey and trace attributes |
-| Cloudflare RealtimeKit | the same adapter-boundary and endpoint coverage on the uncommon path                                                | provider IDs mapped to journey and trace attributes |
-| Data stores            | operation timing, failures, pool/runtime health, journey writes                                                     | active trace and journey attributes                 |
-| Telemetry pipeline     | collector health, rejected/refused exports, stale-pipeline canary                                                   | independent critical alerts                         |
-| Operations             | traces, metrics, logs, profiles, durable journey timeline, alert state                                              | one provisioned Grafana surface                     |
+| Layer                  | Captured in v1                                                                                                       | Connection to the journey                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| TypeScript client      | lifecycle, fan-out, diagnostics, HTTP, sync frames, bounded aggregate RTC statistics, exporter health and drops      | journey ID, W3C trace context, parent event IDs     |
+| Go API                 | edge requests, authentication, rate limits, business phases, provider calls, errors, runtime signals, ledger intake  | propagated context and durable ledger               |
+| Elixir sync            | upgrade, protocol frames, room/state operations, OTP handoffs, connection terminal paths, BEAM health                | propagated frame/header context and span links      |
+| Webhook dispatcher     | Event commit and fanout, queue age, claim and lease recovery, signed HTTP Attempts, retries, terminal state, cleanup | durable branch Events and producer-linked traces    |
+| Cloudflare SFU         | Chalk adapter calls and endpoint RTC summaries; provider analytics, logs, and webhooks are deployment inputs         | provider IDs mapped to journey and trace attributes |
+| Cloudflare RealtimeKit | the same adapter-boundary and endpoint coverage on the uncommon path                                                 | provider IDs mapped to journey and trace attributes |
+| Data stores            | operation timing, failures, pool/runtime health, journey writes                                                      | active trace and journey attributes                 |
+| Telemetry pipeline     | collector health, rejected/refused exports, stale-pipeline canary                                                    | independent critical alerts                         |
+| Operations             | traces, metrics, logs, profiles, durable journey timeline, alert state                                               | one provisioned Grafana surface                     |
 
 ## Shipping contract
 

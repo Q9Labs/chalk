@@ -18,6 +18,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   source manifests, fenced PostgreSQL artifact and cleanup jobs, private R2
   transcript artifacts, DeepInfra and Cloudflare adapters, and a scale-to-zero
   Lambda dispatcher with deterministic OpenTofu release contracts.
+- Tenant-scoped outbound webhooks for the eight core Room, Session, and
+  Participant lifecycle events, with durable signed retries and redelivery,
+  generated management clients, server-only TypeScript receiver processing,
+  and linked journey observability.
 - API-issued five-minute Ed25519 sync participant tokens with fail-closed
   production verification, overlap key rotation, authenticated refresh, and
   generated SDK contracts.

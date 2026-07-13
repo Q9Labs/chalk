@@ -20,4 +20,35 @@ defmodule ChalkSync.Operations.MetricsTest do
     assert get_in(snapshot, [:metrics, metric, :total_bytes]) >= 23
     refute inspect(snapshot) =~ "must-not-be-retained"
   end
+
+  test "webhook counters retain only bounded event and API-version labels" do
+    production_metric = "chalk.sync.webhook.production.committed.participant_left.v1"
+    fanout_metric = "chalk.sync.webhook.fanout.queued.participant_left.v1"
+    before = Metrics.snapshot().metrics
+
+    Telemetry.execute(
+      [:webhook, :production],
+      %{count: 1},
+      %{
+        api_version: 1,
+        event_name: "participant.left",
+        outcome: :committed,
+        tenant_id: "must-not-be-retained"
+      }
+    )
+
+    Telemetry.execute(
+      [:webhook, :fanout],
+      %{count: 3},
+      %{api_version: 1, event_name: "participant.left", outcome: :queued}
+    )
+
+    snapshot = Metrics.snapshot().metrics
+
+    assert snapshot[production_metric].count ==
+             (get_in(before, [production_metric, :count]) || 0) + 1
+
+    assert snapshot[fanout_metric].count == (get_in(before, [fanout_metric, :count]) || 0) + 3
+    refute inspect(snapshot) =~ "must-not-be-retained"
+  end
 end

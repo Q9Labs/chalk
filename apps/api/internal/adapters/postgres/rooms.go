@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
@@ -15,6 +16,7 @@ import (
 
 type RoomRepository struct {
 	queries roomQuerier
+	pool    *pgxpool.Pool
 }
 
 type roomQuerier interface {
@@ -28,11 +30,18 @@ type roomQuerier interface {
 	UpdateTenantRoomSession(ctx context.Context, arg sqlc.UpdateTenantRoomSessionParams) (sqlc.RoomSession, error)
 }
 
-func NewRoomRepository(queries roomQuerier) RoomRepository {
-	return RoomRepository{queries: queries}
+func NewRoomRepository(queries roomQuerier, pools ...*pgxpool.Pool) RoomRepository {
+	var pool *pgxpool.Pool
+	if len(pools) > 0 {
+		pool = pools[0]
+	}
+	return RoomRepository{queries: queries, pool: pool}
 }
 
 func (r RoomRepository) CreateRoom(ctx context.Context, input rooms.CreateRoomInput) (rooms.Room, error) {
+	if r.pool != nil {
+		return r.createRoomWithWebhook(ctx, input)
+	}
 	room, err := r.queries.CreateRoom(ctx, sqlc.CreateRoomParams{
 		ID:              uuid(input.ID),
 		Name:            input.Name,
@@ -97,6 +106,9 @@ func (r RoomRepository) ListRooms(ctx context.Context, tenantID utilities.ID, pa
 }
 
 func (r RoomRepository) UpdateRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, input rooms.UpdateRoomInput) (rooms.Room, error) {
+	if r.pool != nil {
+		return r.updateRoomWithWebhook(ctx, tenantID, roomID, input)
+	}
 	room, err := r.queries.UpdateTenantRoom(ctx, sqlc.UpdateTenantRoomParams{
 		TenantID:           uuid(tenantID),
 		ID:                 uuid(roomID),
@@ -127,6 +139,9 @@ func (r RoomRepository) UpdateRoom(ctx context.Context, tenantID utilities.ID, r
 }
 
 func (r RoomRepository) CreateSession(ctx context.Context, input rooms.CreateSessionInput) (rooms.Session, error) {
+	if r.pool != nil {
+		return r.createSessionWithWebhook(ctx, input)
+	}
 	session, err := r.queries.CreateRoomSession(ctx, sqlc.CreateRoomSessionParams{
 		ID:              uuid(input.ID),
 		Status:          input.Status,

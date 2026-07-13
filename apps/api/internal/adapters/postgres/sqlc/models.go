@@ -478,3 +478,106 @@ type User struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
+
+type WebhookDelivery struct {
+	ID                     pgtype.UUID        `json:"id"`
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	EventID                pgtype.UUID        `json:"event_id"`
+	EndpointID             pgtype.UUID        `json:"endpoint_id"`
+	EndpointRevisionID     pgtype.UUID        `json:"endpoint_revision_id"`
+	EndpointRevision       int32              `json:"endpoint_revision"`
+	State                  string             `json:"state"`
+	NextAttemptAt          pgtype.Timestamptz `json:"next_attempt_at"`
+	AttemptCount           int32              `json:"attempt_count"`
+	LeaseToken             pgtype.UUID        `json:"lease_token"`
+	LeaseOwner             pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt         pgtype.Timestamptz `json:"lease_expires_at"`
+	TerminalAt             pgtype.Timestamptz `json:"terminal_at"`
+	QueuedJourneyEventID   pgtype.UUID        `json:"queued_journey_event_id"`
+	TerminalJourneyEventID pgtype.UUID        `json:"terminal_journey_event_id"`
+	ParentDeliveryID       pgtype.UUID        `json:"parent_delivery_id"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WebhookDeliveryAttempt struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	DeliveryID          pgtype.UUID        `json:"delivery_id"`
+	AttemptNumber       int32              `json:"attempt_number"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	FinishedAt          pgtype.Timestamptz `json:"finished_at"`
+	LatencyMilliseconds pgtype.Int4        `json:"latency_milliseconds"`
+	Outcome             string             `json:"outcome"`
+	HttpStatus          pgtype.Int4        `json:"http_status"`
+	ErrorCode           pgtype.Text        `json:"error_code"`
+	TraceID             pgtype.Text        `json:"trace_id"`
+	SpanID              pgtype.Text        `json:"span_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type WebhookEndpoint struct {
+	ID                       pgtype.UUID        `json:"id"`
+	TenantID                 pgtype.UUID        `json:"tenant_id"`
+	Name                     string             `json:"name"`
+	Enabled                  bool               `json:"enabled"`
+	Revision                 int32              `json:"revision"`
+	CurrentTargetRevision    int32              `json:"current_target_revision"`
+	CurrentSecretCiphertext  []byte             `json:"current_secret_ciphertext"`
+	PreviousSecretCiphertext []byte             `json:"previous_secret_ciphertext"`
+	PreviousSecretExpiresAt  pgtype.Timestamptz `json:"previous_secret_expires_at"`
+	CreatedByUserID          pgtype.UUID        `json:"created_by_user_id"`
+	DeletedAt                pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+}
+
+type WebhookEndpointRevision struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	EndpointID     pgtype.UUID        `json:"endpoint_id"`
+	Revision       int32              `json:"revision"`
+	UrlCiphertext  []byte             `json:"url_ciphertext"`
+	UrlRedacted    string             `json:"url_redacted"`
+	UrlDestroyedAt pgtype.Timestamptz `json:"url_destroyed_at"`
+	ApiVersion     int32              `json:"api_version"`
+	EventTypes     []string           `json:"event_types"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type WebhookEvent struct {
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	EventName             string             `json:"event_name"`
+	ApiVersion            int32              `json:"api_version"`
+	OccurredAt            pgtype.Timestamptz `json:"occurred_at"`
+	Body                  []byte             `json:"body"`
+	BodySha256            []byte             `json:"body_sha256"`
+	SemanticTransitionKey string             `json:"semantic_transition_key"`
+	ResourceType          string             `json:"resource_type"`
+	ResourceID            pgtype.UUID        `json:"resource_id"`
+	LinkedUserID          pgtype.UUID        `json:"linked_user_id"`
+	JourneyID             pgtype.UUID        `json:"journey_id"`
+	ParentJourneyEventID  pgtype.UUID        `json:"parent_journey_event_id"`
+	ProducingTraceID      pgtype.Text        `json:"producing_trace_id"`
+	ProducingSpanID       pgtype.Text        `json:"producing_span_id"`
+	ErasedAt              pgtype.Timestamptz `json:"erased_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type WebhookIdempotencyRecord struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	Operation          string             `json:"operation"`
+	IdempotencyKey     string             `json:"idempotency_key"`
+	RequestSha256      []byte             `json:"request_sha256"`
+	ResponseStatus     int32              `json:"response_status"`
+	ResponseCiphertext []byte             `json:"response_ciphertext"`
+	ResourceID         pgtype.UUID        `json:"resource_id"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type WebhookTenantState struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}

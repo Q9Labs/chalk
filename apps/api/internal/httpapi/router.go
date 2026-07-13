@@ -62,6 +62,7 @@ type Options struct {
 	FinalizerWorker        TranscriptFinalizerWorkerService
 	FinalizerAuthority     FinalizerAuthority
 	Users                  UserService
+	Webhooks               WebhookService
 }
 
 func NewRouter(options Options) http.Handler {
@@ -166,6 +167,7 @@ func mountV1Routes(r chi.Router, options Options) {
 				mountTranscriptRoutes(r, options.Transcripts, options.Recordings, options.RecordingObjects, options.Tenants, options.AITranscriptions, options.TenantAuthz, options.RateLimit)
 			}
 			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)
+			mountWebhookRoutes(r, options.Webhooks, options.TenantAuthz, options.RateLimit)
 		})
 	})
 }

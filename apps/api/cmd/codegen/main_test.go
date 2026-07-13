@@ -119,6 +119,41 @@ func TestJourneyTraceIdentifiersMatchIntakeValidation(t *testing.T) {
 	}
 }
 
+func TestWebhookSchemasExposePublicWireShapes(t *testing.T) {
+	doc := generatedDocument()
+
+	patch := doc.Components.Schemas["UpdateWebhookEndpointRequest"]
+	if required, exists := patch["required"]; exists {
+		t.Fatalf("webhook PATCH fields must all be optional, required = %#v", required)
+	}
+	patchProperties := mapValue(t, patch["properties"])
+	for name, wantType := range map[string]string{
+		"name": "string", "url": "string", "enabled": "boolean", "api_version": "integer", "event_types": "array",
+	} {
+		property := mapValue(t, patchProperties[name])
+		if property["type"] != wantType {
+			t.Fatalf("webhook PATCH %s schema = %#v, want direct %s", name, property, wantType)
+		}
+	}
+
+	endpointProperties := mapValue(t, doc.Components.Schemas["WebhookEndpoint"]["properties"])
+	if _, exists := endpointProperties["secret"]; exists {
+		t.Fatal("ordinary webhook endpoint schema must not expose secret")
+	}
+	create := doc.Components.Schemas["WebhookEndpointWithSecret"]
+	createProperties := mapValue(t, create["properties"])
+	if createProperties["secret"] == nil || !slices.Contains(stringSlice(t, create["required"]), "secret") {
+		t.Fatalf("created webhook endpoint must require secret, schema = %#v", create)
+	}
+
+	detailProperties := mapValue(t, doc.Components.Schemas["WebhookDeliveryDetail"]["properties"])
+	for _, name := range []string{"id", "event_id", "event_type", "endpoint_id", "endpoint_revision", "state", "attempt_count", "next_attempt_at", "terminal_at", "created_at", "updated_at", "event", "attempts"} {
+		if _, exists := detailProperties[name]; !exists {
+			t.Fatalf("webhook delivery detail missing %s: %#v", name, detailProperties)
+		}
+	}
+}
+
 func generatedDocument() openAPIDoc {
 	routes := httpapi.PreviewRouteContracts()
 	gen := newGenerator(routes)

@@ -1,0 +1,77 @@
+// Generated from contract/webhooks/v1/fixtures.json. Do not edit.
+export const webhookFixturesV1 = [
+  {
+    event: "room.created",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000001","event":"room.created","api_version":1,"occurred_at":"2026-07-12T18:00:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"20000000-0000-4000-8000-000000000001","name":"Weekly design review","slug":"weekly-design-review","status":"active","media_plane":"cf_rtk","created_at":"2026-07-01T08:00:00.000Z","updated_at":"2026-07-12T18:00:00.000Z"}}}',
+  },
+  {
+    event: "room.updated",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000002","event":"room.updated","api_version":1,"occurred_at":"2026-07-12T18:01:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"20000000-0000-4000-8000-000000000001","name":"Design review – 東京","slug":"weekly-design-review","status":"active","media_plane":"cf_rtk","created_at":"2026-07-01T08:00:00.000Z","updated_at":"2026-07-12T18:01:00.000Z"},"changed_fields":["metadata","name"]}}',
+  },
+  {
+    event: "room.archived",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000003","event":"room.archived","api_version":1,"occurred_at":"2026-07-12T18:02:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"20000000-0000-4000-8000-000000000001","name":"Design review","slug":"weekly-design-review","status":"archived","media_plane":"cf_rtk","created_at":"2026-07-01T08:00:00.000Z","updated_at":"2026-07-12T18:02:00.000Z"}}}',
+  },
+  {
+    event: "room.restored",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000004","event":"room.restored","api_version":1,"occurred_at":"2026-07-12T18:03:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"20000000-0000-4000-8000-000000000001","name":"Design review","slug":"weekly-design-review","status":"active","media_plane":"cf_rtk","created_at":"2026-07-01T08:00:00.000Z","updated_at":"2026-07-12T18:03:00.000Z"}}}',
+  },
+  {
+    event: "session.started",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000005","event":"session.started","api_version":1,"occurred_at":"2026-07-12T18:04:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"30000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","status":"active","started_at":"2026-07-12T18:04:00.000Z","ended_at":null,"created_at":"2026-07-12T18:04:00.000Z","updated_at":"2026-07-12T18:04:00.000Z"}}}',
+  },
+  {
+    event: "session.ended",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000006","event":"session.ended","api_version":1,"occurred_at":"2026-07-12T19:04:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"30000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","status":"ended","started_at":"2026-07-12T18:04:00.000Z","ended_at":"2026-07-12T19:04:00.000Z","created_at":"2026-07-12T18:04:00.000Z","updated_at":"2026-07-12T19:04:00.000Z"}}}',
+  },
+  {
+    event: "participant.joined",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000007","event":"participant.joined","api_version":1,"occurred_at":"2026-07-12T18:05:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"40000000-0000-4000-8000-000000000001","user_id":"50000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","name":"Ada – <&> \\"東京\\" \\\\","status":"active","joined_at":"2026-07-12T18:05:00.000Z","left_at":null}}}',
+  },
+  {
+    event: "participant.left",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000008","event":"participant.left","api_version":1,"occurred_at":"2026-07-12T19:00:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"40000000-0000-4000-8000-000000000001","user_id":"50000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","name":"Ada – 東京","status":"left","joined_at":"2026-07-12T18:05:00.000Z","left_at":"2026-07-12T19:00:00.000Z"}}}',
+  },
+  {
+    event: "recording.started",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000009","event":"recording.started","api_version":1,"occurred_at":"2026-07-12T18:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","status":"started","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T18:06:00.000Z"}}}',
+  },
+  {
+    event: "recording.completed",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000010","event":"recording.completed","api_version":1,"occurred_at":"2026-07-12T19:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","status":"completed","started_at":"2026-07-12T18:06:00.000Z","completed_at":"2026-07-12T19:06:00.000Z","failed_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T19:06:00.000Z"}}}',
+  },
+  {
+    event: "recording.failed",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000011","event":"recording.failed","api_version":1,"occurred_at":"2026-07-12T19:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","status":"failed","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":"2026-07-12T19:06:00.000Z","failure":{"code":"recording_processing_failed"},"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T19:06:00.000Z"}}}',
+  },
+  {
+    event: "transcript.started",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000012","event":"transcript.started","api_version":1,"occurred_at":"2026-07-12T19:07:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","status":"started","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:07:00.000Z"}}}',
+  },
+  {
+    event: "transcript.completed",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000013","event":"transcript.completed","api_version":1,"occurred_at":"2026-07-12T19:12:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","status":"completed","languages":["en"],"started_at":"2026-07-12T19:07:00.000Z","completed_at":"2026-07-12T19:12:00.000Z","failed_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:12:00.000Z"}}}',
+  },
+  {
+    event: "transcript.failed",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000014","event":"transcript.failed","api_version":1,"occurred_at":"2026-07-12T19:12:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","room_id":"20000000-0000-4000-8000-000000000001","session_id":"30000000-0000-4000-8000-000000000001","status":"failed","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":"2026-07-12T19:12:00.000Z","failure":{"code":"transcription_failed"},"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:12:00.000Z"}}}',
+  },
+  {
+    event: "endpoint.test",
+    body_utf8: '{"id":"00000000-0000-4000-8000-000000000015","event":"endpoint.test","api_version":1,"occurred_at":"2026-07-12T19:13:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"endpoint_id":"80000000-0000-4000-8000-000000000001"}}}',
+  },
+] as const;

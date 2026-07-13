@@ -33,6 +33,8 @@ type APIParameterContract struct {
 	Pattern   string
 	MinLength int
 	MaxLength int
+	ItemsType string
+	Enum      []string
 }
 
 type APIRouteContract struct {
@@ -63,6 +65,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
 	endpoints = append(endpoints, integrationEndpoints(nil, nil, integrationRouteOptions{})...)
+	endpoints = append(endpoints, webhookEndpoints(nil, nil)...)
 	return routeContracts(endpoints)
 }
 

@@ -231,3 +231,321 @@ groups:
         labels:
           service: chalk-observability
           severity: critical
+  - orgId: 1
+    name: Chalk webhook health
+    folder: Chalk
+    interval: 1m
+    rules:
+      - uid: chalk-webhook-oldest-eligible
+        title: Chalk webhook eligible queue is stale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: max(chalk_webhook_delivery_oldest_eligible_age_seconds)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 300
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 8
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: At least one eligible webhook Delivery has waited more than five minutes to begin an Attempt.
+          summary: Chalk webhook dispatch is falling behind.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-webhook-first-attempt-p99
+        title: Chalk webhook first-attempt p99 breached
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: histogram_quantile(0.99, sum by (le) (rate(chalk_webhook_delivery_first_attempt_latency_seconds_bucket[5m])))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 60
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 9
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: p99 Event-to-first-Attempt latency has exceeded the 60-second internal objective for five minutes.
+          summary: Eligible webhook Deliveries are not starting within the launch objective.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-webhook-exhausted
+        title: Chalk webhook Deliveries are exhausting
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(chalk_webhook_deliveries_terminal_total{outcome="exhausted"}[15m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 11
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: One or more webhook Deliveries exhausted their retry window in the last 15 minutes. Receiver availability is a customer dependency, so correlate by Event and Delivery IDs before assigning cause.
+          summary: Webhook delivery exhaustion changed from its expected zero baseline.
+        labels:
+          service: chalk-api
+          severity: warning
+      - uid: chalk-webhook-lease-churn
+        title: Chalk webhook leases are repeatedly expiring
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(chalk_webhook_delivery_lease_expiries_total[15m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 5
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 12
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: More than five webhook delivery leases expired in 15 minutes, which can indicate dispatcher crashes, timeouts, or database contention.
+          summary: Webhook claim ownership is unstable.
+        labels:
+          service: chalk-api
+          severity: warning
+      - uid: chalk-webhook-journey-branch-stuck
+        title: Chalk webhook journey branch is missing a terminal Event
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: max(chalk_webhook_journey_oldest_unterminated_branch_age_seconds)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 259500
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 12
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: A webhook Delivery branch remains unterminated after the 72-hour window and five-minute reconciliation allowance.
+          summary: The durable webhook journey skeleton is incomplete.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-webhook-cleanup-stale
+        title: Chalk webhook retention cleanup is stale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: max(chalk_webhook_cleanup_last_success_age_seconds)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 86400
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: chalk-observability-v1
+        panelId: 12
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: The dispatcher has not completed webhook retention cleanup within the daily safety bound.
+          summary: Retained webhook data may exceed its intended cleanup schedule.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-webhook-canary-missing
+        title: Chalk signed webhook canary is missing
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: time() - max(chalk_webhook_canary_last_success_unixtime{service_name="chalk-webhook-canary"})
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 900
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: No configured signed webhook canary has completed through the public API and receiver within the 15-minute freshness bound. An unconfigured canary intentionally remains alerting.
+          summary: The end-to-end signed webhook path has no fresh success proof.
+        labels:
+          service: chalk-webhook-canary
+          severity: critical

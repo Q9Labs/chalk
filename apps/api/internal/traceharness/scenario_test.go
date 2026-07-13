@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
@@ -209,6 +210,29 @@ func TestRunRouteJourneyEventIntakeScenario(t *testing.T) {
 	assertEvent(t, result.Events, "http", "POST /v1/telemetry/journey-events")
 	assertEvent(t, result.Events, "ledger", "JourneyService.Intake")
 	assertEvent(t, result.Events, "ledger", "observability_journey_events.insert")
+}
+
+func TestWebhookDeliveryAttemptScenarioShowsAtomicProductionRetryAndSuccess(t *testing.T) {
+	result, err := Run(context.Background(), WebhookDeliveryAttemptScenario)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(result.Body) != `{"state":"succeeded","attempt_count":2}` {
+		t.Fatalf("body = %s", result.Body)
+	}
+	for _, name := range []string{"webhook.producer.transaction_committed", "webhook.event.inserted", "webhook.delivery.queued", "webhook.delivery.attempt_failed", "webhook.delivery.retry_scheduled", "webhook.delivery.attempt_succeeded", "webhook.delivery.succeeded"} {
+		assertEvent(t, result.Events, "database", name)
+	}
+	encoded, err := json.Marshal(result.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace := string(encoded)
+	for _, forbidden := range []string{"https://", "whsec_", "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="} {
+		if strings.Contains(trace, forbidden) {
+			t.Fatalf("trace exposed forbidden secret or URL material %q", forbidden)
+		}
+	}
 }
 
 func TestRunAllRegisteredScenarios(t *testing.T) {

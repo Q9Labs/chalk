@@ -59,6 +59,35 @@ priority, retry budgets, or lifecycle state. Recorder-owned committed source
 metadata must exist before a request is accepted, and normalized transcript
 bytes remain private R2 artifacts exposed through short-lived download URLs.
 
+### Outbound webhook encryption and erasure
+
+Outbound webhook target URLs and replayable one-time responses are encrypted at
+rest. Local development may omit webhook encryption configuration and use the
+deterministic local-only default. Every non-local environment fails closed
+unless it supplies either `CHALK_WEBHOOK_ENCRYPTION_KEY` as one base64-encoded
+32-byte key, or a versioned keyring through
+`CHALK_WEBHOOK_ENCRYPTION_KEYRING` plus
+`CHALK_WEBHOOK_ENCRYPTION_CURRENT_VERSION`. A keyring entry uses
+`version:base64-key`; retain the previous version during a rotation overlap so
+existing ciphertext remains decryptable, and make the new version current for
+all new writes.
+
+The repository currently uses process-injected AES-GCM keys. It has no KMS or
+envelope-key provider, so deployment secret injection and key retirement remain
+external operational responsibilities.
+
+User deletion must call `WebhookRepository.EraseUserWebhookEvents` before the
+user row is deleted. The hook destroys linked event bodies, terminally fences
+their Deliveries, closes an in-flight Attempt as `event_erased`, emits a
+content-free terminal journey event, and then removes the user link. This live
+erasure path is enforced and directly covered by a PostgreSQL integration test.
+The repository does not yet contain a deletion orchestrator or an external
+tombstone authority that survives database backup restoration. Therefore a
+restored backup can revive pre-erasure webhook bodies or encrypted Endpoint
+material and must not be declared ready until an external durable tombstone
+reconciler has replayed deletions. Backup restore plus tombstone replay is an
+explicit production-readiness blocker, not a capability of the current API.
+
 ## Database
 
 The API uses Postgres with `pgx`, `sqlc`, and `goose`. For local Postgres,

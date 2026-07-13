@@ -115,6 +115,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runEdgeInvalidRouteID(ctx)
 	case ExecuteIntegrationActionScenario:
 		return runExecuteIntegrationAction(ctx)
+	case WebhookDeliveryAttemptScenario:
+		return runWebhookDeliveryAttempt(ctx)
 	default:
 		return ScenarioResult{}, fmt.Errorf("unknown trace scenario %q", name)
 	}

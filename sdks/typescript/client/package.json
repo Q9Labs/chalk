@@ -11,7 +11,10 @@
     "dist"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/webhooks/server-only.js",
+    "./dist/webhooks/server-only.cjs"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,6 +25,12 @@
       ],
       "effect": [
         "./dist/effect.d.ts"
+      ],
+      "webhooks": [
+        "./dist/webhooks/index.d.ts"
+      ],
+      "webhooks/test": [
+        "./dist/webhooks/test.d.ts"
       ],
       "*": [
         "./dist/index.d.ts"
@@ -48,6 +57,72 @@
       "import": "./dist/effect.js",
       "require": "./dist/effect.js",
       "default": "./dist/effect.js"
+    },
+    "./webhooks": {
+      "browser": {
+        "import": {
+          "types": "./dist/webhooks/server-only.d.ts",
+          "default": "./dist/webhooks/server-only.js"
+        },
+        "require": {
+          "types": "./dist/webhooks/server-only.d.cts",
+          "default": "./dist/webhooks/server-only.cjs"
+        },
+        "default": "./dist/webhooks/server-only.js"
+      },
+      "react-native": {
+        "import": {
+          "types": "./dist/webhooks/server-only.d.ts",
+          "default": "./dist/webhooks/server-only.js"
+        },
+        "require": {
+          "types": "./dist/webhooks/server-only.d.cts",
+          "default": "./dist/webhooks/server-only.cjs"
+        },
+        "default": "./dist/webhooks/server-only.js"
+      },
+      "import": {
+        "types": "./dist/webhooks/index.d.ts",
+        "default": "./dist/webhooks/index.js"
+      },
+      "require": {
+        "types": "./dist/webhooks/index.d.cts",
+        "default": "./dist/webhooks/index.cjs"
+      },
+      "default": "./dist/webhooks/index.js"
+    },
+    "./webhooks/test": {
+      "browser": {
+        "import": {
+          "types": "./dist/webhooks/server-only.d.ts",
+          "default": "./dist/webhooks/server-only.js"
+        },
+        "require": {
+          "types": "./dist/webhooks/server-only.d.cts",
+          "default": "./dist/webhooks/server-only.cjs"
+        },
+        "default": "./dist/webhooks/server-only.js"
+      },
+      "react-native": {
+        "import": {
+          "types": "./dist/webhooks/server-only.d.ts",
+          "default": "./dist/webhooks/server-only.js"
+        },
+        "require": {
+          "types": "./dist/webhooks/server-only.d.cts",
+          "default": "./dist/webhooks/server-only.cjs"
+        },
+        "default": "./dist/webhooks/server-only.js"
+      },
+      "import": {
+        "types": "./dist/webhooks/test.d.ts",
+        "default": "./dist/webhooks/test.js"
+      },
+      "require": {
+        "types": "./dist/webhooks/test.d.cts",
+        "default": "./dist/webhooks/test.cjs"
+      },
+      "default": "./dist/webhooks/test.js"
     }
   },
   "publishConfig": {
@@ -55,10 +130,14 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts --format esm --out-dir ./dist --platform browser --external effect && pnpm run build:types",
+    "build": "pnpm run generate:webhooks && rm -rf ./dist && tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts --format esm --out-dir ./dist --platform browser --external effect && tsup ./src/webhooks/index.ts ./src/webhooks/test.ts ./src/webhooks/server-only.ts --format esm,cjs --out-dir ./dist/webhooks --platform neutral && pnpm run build:types && pnpm run build:webhooks:cjs-types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
+    "build:webhooks:cjs-types": "node ./scripts/generate-webhook-cjs-types.mjs",
     "dev": "tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
+    "generate:webhooks": "node ./scripts/generate-webhook-contract.mjs",
+    "check:webhooks-generated": "node ./scripts/generate-webhook-contract.mjs --check",
     "test": "pnpm exec vitest run",
+    "test:webhooks-package": "pnpm run build && node ./scripts/check-webhook-package.mjs",
     "test:sync-browser": "pnpm run build && node ./scripts/real-browser-sync.mjs",
     "test:sync-node-restart": "pnpm run build && node ./scripts/real-node-restart-sync.mjs",
     "check-types": "tsc --noEmit",

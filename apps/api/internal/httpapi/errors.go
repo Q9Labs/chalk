@@ -99,6 +99,23 @@ var (
 	apiErrorInvalidAuditLogID = APIError{Status: http.StatusBadRequest, Code: "invalid_audit_log_id", Message: "Invalid audit log id"}
 	apiErrorAuditLogNotFound  = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Audit log not found"}
 
+	apiErrorInvalidWebhookEndpointID        = APIError{Status: http.StatusBadRequest, Code: "invalid_webhook_endpoint_id", Message: "Invalid webhook endpoint id"}
+	apiErrorInvalidWebhookDeliveryID        = APIError{Status: http.StatusBadRequest, Code: "invalid_webhook_delivery_id", Message: "Invalid webhook delivery id"}
+	apiErrorInvalidWebhookURL               = APIError{Status: http.StatusBadRequest, Code: "invalid_webhook_url", Message: "Invalid webhook URL"}
+	apiErrorUnsafeWebhookURL                = APIError{Status: http.StatusBadRequest, Code: "unsafe_webhook_url", Message: "Webhook URL is not a safe public HTTPS destination"}
+	apiErrorInvalidWebhookEventType         = APIError{Status: http.StatusBadRequest, Code: "invalid_webhook_event_type", Message: "Invalid webhook event type"}
+	apiErrorWebhookEventTypeUnavailable     = APIError{Status: http.StatusConflict, Code: "webhook_event_type_unavailable", Message: "Webhook event type is not available"}
+	apiErrorInvalidWebhookAPIVersion        = APIError{Status: http.StatusBadRequest, Code: "invalid_webhook_api_version", Message: "Invalid webhook API version"}
+	apiErrorWebhookEndpointLimit            = APIError{Status: http.StatusConflict, Code: "webhook_endpoint_limit_reached", Message: "Webhook endpoint limit reached"}
+	apiErrorWebhookEndpointNotFound         = APIError{Status: http.StatusNotFound, Code: "webhook_endpoint_not_found", Message: "Webhook endpoint not found"}
+	apiErrorWebhookDeliveryNotFound         = APIError{Status: http.StatusNotFound, Code: "webhook_delivery_not_found", Message: "Webhook delivery not found"}
+	apiErrorWebhookDeliveryNotRedeliverable = APIError{Status: http.StatusConflict, Code: "webhook_delivery_not_redeliverable", Message: "Webhook delivery cannot be redelivered"}
+	apiErrorWebhookEventErased              = APIError{Status: http.StatusGone, Code: "webhook_event_erased", Message: "Webhook event body was erased"}
+	apiErrorWebhookRevisionConflict         = APIError{Status: http.StatusPreconditionFailed, Code: "webhook_endpoint_revision_conflict", Message: "Webhook endpoint revision does not match"}
+	apiErrorWebhookIdempotencyRequired      = APIError{Status: http.StatusBadRequest, Code: "idempotency_key_required", Message: "Idempotency-Key is required"}
+	apiErrorWebhookIdempotencyConflict      = APIError{Status: http.StatusConflict, Code: "idempotency_key_conflict", Message: "Idempotency key was used for another request"}
+	apiErrorWebhookIdempotencyExpired       = APIError{Status: http.StatusConflict, Code: "idempotency_key_expired", Message: "Idempotency key has expired"}
+
 	apiErrorInvalidJourneyID         = APIError{Status: http.StatusBadRequest, Code: "invalid_journey_id", Message: "Invalid journey id"}
 	apiErrorInvalidJourneyEvent      = APIError{Status: http.StatusBadRequest, Code: "invalid_journey_event", Message: "Invalid journey event"}
 	apiErrorJourneyNotFound          = APIError{Status: http.StatusNotFound, Code: "journey_not_found", Message: "Journey not found"}

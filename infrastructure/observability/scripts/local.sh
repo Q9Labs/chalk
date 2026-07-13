@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! command -v docker >/dev/null 2>&1 && [[ -x "${HOME}/.orbstack/bin/docker" ]]; then
+  export PATH="${HOME}/.orbstack/bin:${PATH}"
+fi
+
 root="$(cd "$(dirname "$0")/../../.." && pwd)"
 compose_file="${root}/infrastructure/observability/compose.yaml"
 command_name="${1:-start}"
@@ -47,8 +51,11 @@ case "${command_name}" in
   e2e)
     bash "${root}/infrastructure/observability/scripts/e2e.sh"
     ;;
+  webhook-canary)
+    node "${root}/infrastructure/observability/scripts/webhook-canary.mjs"
+    ;;
   *)
-    echo "Usage: $0 {start|stop|reset|status|logs|smoke|e2e}" >&2
+    echo "Usage: $0 {start|stop|reset|status|logs|smoke|e2e|webhook-canary}" >&2
     exit 2
     ;;
 esac

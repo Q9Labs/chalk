@@ -229,7 +229,7 @@ func primitiveAttribute(value any) bool {
 
 func IsTerminalState(state string) bool {
 	switch strings.ToLower(strings.TrimSpace(state)) {
-	case "completed", "succeeded", "failed", "cancelled", "canceled":
+	case "completed", "succeeded", "failed", "cancelled", "canceled", "exhausted", "erased":
 		return true
 	default:
 		return false
@@ -237,5 +237,5 @@ func IsTerminalState(state string) bool {
 }
 
 func IsTerminalEvent(event Event) bool {
-	return strings.EqualFold(strings.TrimSpace(event.Phase), "terminal") && IsTerminalState(event.State)
+	return !strings.HasPrefix(strings.ToLower(strings.TrimSpace(event.Name)), "webhook.delivery.") && strings.EqualFold(strings.TrimSpace(event.Phase), "terminal") && IsTerminalState(event.State)
 }

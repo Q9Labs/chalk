@@ -20,6 +20,7 @@ defmodule ChalkSync.Application do
         {ChalkSync.Operations, []},
         fanout_child(),
         lifecycle_consumer_child(),
+        external_operation_consumer_child(),
         retention_scheduler_child(),
         boot_check_child(),
         {ChalkSync.Operations.Readiness, []},
@@ -60,6 +61,22 @@ defmodule ChalkSync.Application do
     case Application.fetch_env!(:chalk_sync, :stateholder) do
       ChalkSync.Stateholder.Postgres -> {ChalkSync.LifecycleConsumer, []}
       _adapter -> nil
+    end
+  end
+
+  defp external_operation_consumer_child do
+    case Application.fetch_env!(:chalk_sync, :stateholder) do
+      ChalkSync.Stateholder.Postgres ->
+        {ChalkSync.ExternalOperationConsumer,
+         adapter_timeout_ms:
+           Application.fetch_env!(:chalk_sync, :external_operation_adapter_timeout_ms),
+         poll_interval_ms:
+           Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms),
+         media_plane: Application.get_env(:chalk_sync, :media_plane),
+         recording_plane: Application.get_env(:chalk_sync, :recording_plane)}
+
+      _adapter ->
+        nil
     end
   end
 

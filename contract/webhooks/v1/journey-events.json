@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "events": ["webhook.event.committed", "webhook.delivery.queued", "webhook.delivery.attempt_started", "webhook.delivery.attempt_succeeded", "webhook.delivery.retry_scheduled", "webhook.delivery.exhausted", "webhook.delivery.cancelled", "webhook.delivery.erased"],
+  "terminal_states": ["succeeded", "exhausted", "cancelled", "erased"]
+}
