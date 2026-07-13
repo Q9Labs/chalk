@@ -12,19 +12,29 @@ import (
 
 const maxObjectKeyBytes = 1024
 
+const (
+	maxMetadataEntries    = 16
+	maxMetadataKeyBytes   = 64
+	maxMetadataValueBytes = 256
+)
+
 var (
 	ErrInvalidObjectKey     = errors.New("invalid object key")
 	ErrInvalidContentType   = errors.New("invalid object content type")
 	ErrInvalidObjectBody    = errors.New("invalid object body")
+	ErrInvalidObjectSize    = errors.New("invalid object size")
+	ErrInvalidMetadata      = errors.New("invalid object metadata")
 	ErrInvalidURLExpiration = errors.New("invalid object url expiration")
 	ErrStoreUnavailable     = errors.New("object store unavailable")
 	ErrObjectNotFound       = errors.New("object not found")
+	ErrObjectAlreadyExists  = errors.New("object already exists")
 	ErrProviderFailed       = errors.New("object storage provider failed")
 )
 
 type Store interface {
 	PutObject(ctx context.Context, input PutObjectInput) (Object, error)
 	GetObject(ctx context.Context, key string) (ObjectReader, error)
+	InspectObject(ctx context.Context, key string) (ObjectFacts, error)
 	DeleteObject(ctx context.Context, key string) error
 	CreateUploadURL(ctx context.Context, input CreateUploadURLInput) (SignedURL, error)
 	CreateDownloadURL(ctx context.Context, input CreateDownloadURLInput) (SignedURL, error)
@@ -42,12 +52,16 @@ type PutObjectInput struct {
 	ContentLength int64
 	CacheControl  string
 	Metadata      map[string]string
+	IfNoneMatch   bool
 }
 
 type CreateUploadURLInput struct {
-	Key         string
-	ContentType string
-	ExpiresIn   time.Duration
+	Key           string
+	ContentType   string
+	ContentLength int64
+	ExpiresIn     time.Duration
+	Metadata      map[string]string
+	IfNoneMatch   bool
 }
 
 type CreateDownloadURLInput struct {
@@ -70,6 +84,12 @@ type Object struct {
 type ObjectReader struct {
 	Object
 	Body         io.ReadCloser
+	LastModified time.Time
+	Metadata     map[string]string
+}
+
+type ObjectFacts struct {
+	Object
 	LastModified time.Time
 	Metadata     map[string]string
 }
@@ -108,6 +128,19 @@ func (s Service) GetObject(ctx context.Context, key string) (ObjectReader, error
 	}
 
 	return s.store.GetObject(ctx, key)
+}
+
+func (s Service) InspectObject(ctx context.Context, key string) (ObjectFacts, error) {
+	if s.store == nil {
+		return ObjectFacts{}, ErrStoreUnavailable
+	}
+
+	key, err := objectKey(key)
+	if err != nil {
+		return ObjectFacts{}, ErrInvalidObjectKey
+	}
+
+	return s.store.InspectObject(ctx, key)
 }
 
 func (s Service) DeleteObject(ctx context.Context, key string) error {
@@ -176,6 +209,9 @@ func normalizePutObjectInput(input *PutObjectInput) error {
 	if input.Body == nil || input.ContentLength < 0 {
 		return ErrInvalidObjectBody
 	}
+	if err := validateMetadata(input.Metadata); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -195,6 +231,12 @@ func normalizeCreateUploadURLInput(input *CreateUploadURLInput) error {
 
 	if input.ExpiresIn <= 0 {
 		return ErrInvalidURLExpiration
+	}
+	if input.ContentLength < 0 || (input.IfNoneMatch && input.ContentLength == 0) {
+		return ErrInvalidObjectSize
+	}
+	if err := validateMetadata(input.Metadata); err != nil {
+		return err
 	}
 
 	return nil
@@ -250,4 +292,26 @@ func contentType(value string) (string, error) {
 	}
 
 	return value, nil
+}
+
+func validateMetadata(metadata map[string]string) error {
+	if len(metadata) > maxMetadataEntries {
+		return ErrInvalidMetadata
+	}
+
+	for key, value := range metadata {
+		if key == "" || len(key) > maxMetadataKeyBytes || len(value) > maxMetadataValueBytes {
+			return ErrInvalidMetadata
+		}
+		for _, char := range key {
+			if !(char >= 'a' && char <= 'z') && !(char >= '0' && char <= '9') && char != '-' && char != '_' {
+				return ErrInvalidMetadata
+			}
+		}
+		if strings.ContainsFunc(value, unicode.IsControl) {
+			return ErrInvalidMetadata
+		}
+	}
+
+	return nil
 }

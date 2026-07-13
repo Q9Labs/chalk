@@ -73,6 +73,29 @@ func TestServiceCreateUploadURL(t *testing.T) {
 	}
 }
 
+func TestServiceCreateUploadURLPreservesImmutableUploadConstraints(t *testing.T) {
+	store := &storeStub{signedURL: objectstorage.SignedURL{URL: "https://storage.test/upload", Method: "PUT"}}
+	service := objectstorage.NewService(store)
+
+	_, err := service.CreateUploadURL(context.Background(), objectstorage.CreateUploadURLInput{
+		Key:           "tenants/tenant_123/recordings/bundles/random-key",
+		ContentType:   "application/octet-stream",
+		ContentLength: 4096,
+		ExpiresIn:     time.Minute,
+		IfNoneMatch:   true,
+		Metadata:      map[string]string{"checksum": "sha256:value", "attempt": "2"},
+	})
+	if err != nil {
+		t.Fatalf("create upload url: %v", err)
+	}
+	if store.uploadInput.ContentLength != 4096 || !store.uploadInput.IfNoneMatch {
+		t.Fatalf("upload constraints = %#v", store.uploadInput)
+	}
+	if store.uploadInput.Metadata["attempt"] != "2" {
+		t.Fatalf("metadata = %#v", store.uploadInput.Metadata)
+	}
+}
+
 func TestServiceCreateDownloadURL(t *testing.T) {
 	expiresIn := 15 * time.Minute
 	store := &storeStub{
@@ -93,6 +116,19 @@ func TestServiceCreateDownloadURL(t *testing.T) {
 	}
 	if store.downloadInput.Key != "tenants/tenant_123/videos/recording.mp4" {
 		t.Fatalf("key = %q, want canonical key", store.downloadInput.Key)
+	}
+}
+
+func TestServiceInspectObject(t *testing.T) {
+	store := &storeStub{facts: objectstorage.ObjectFacts{Object: objectstorage.Object{Key: "tenants/tenant_123/files/report.pdf", Size: 42}}}
+	service := objectstorage.NewService(store)
+
+	facts, err := service.InspectObject(context.Background(), " tenants/tenant_123/files/report.pdf ")
+	if err != nil {
+		t.Fatalf("inspect object: %v", err)
+	}
+	if store.inspectKey != "tenants/tenant_123/files/report.pdf" || facts.Size != 42 {
+		t.Fatalf("inspect key = %q, facts = %#v", store.inspectKey, facts)
 	}
 }
 
@@ -172,6 +208,26 @@ func TestServiceRejectsInvalidInput(t *testing.T) {
 			},
 			want: objectstorage.ErrInvalidURLExpiration,
 		},
+		{
+			name: "conditional upload without exact size",
+			run: func(service objectstorage.Service) error {
+				_, err := service.CreateUploadURL(context.Background(), objectstorage.CreateUploadURLInput{
+					Key: "tenants/tenant_123/files/report.pdf", ContentType: "application/pdf", ExpiresIn: time.Minute, IfNoneMatch: true,
+				})
+				return err
+			},
+			want: objectstorage.ErrInvalidObjectSize,
+		},
+		{
+			name: "unsafe metadata",
+			run: func(service objectstorage.Service) error {
+				input := validPut
+				input.Metadata = map[string]string{"Invalid Key": "value"}
+				_, err := service.PutObject(context.Background(), input)
+				return err
+			},
+			want: objectstorage.ErrInvalidMetadata,
+		},
 	}
 
 	service := objectstorage.NewService(&storeStub{})
@@ -192,6 +248,8 @@ type storeStub struct {
 	deleteURLInput objectstorage.CreateDeleteURLInput
 	object         objectstorage.Object
 	reader         objectstorage.ObjectReader
+	facts          objectstorage.ObjectFacts
+	inspectKey     string
 	signedURL      objectstorage.SignedURL
 	err            error
 }
@@ -206,6 +264,11 @@ func (s *storeStub) GetObject(context.Context, string) (objectstorage.ObjectRead
 		s.reader.Body = io.NopCloser(strings.NewReader(""))
 	}
 	return s.reader, s.err
+}
+
+func (s *storeStub) InspectObject(_ context.Context, key string) (objectstorage.ObjectFacts, error) {
+	s.inspectKey = key
+	return s.facts, s.err
 }
 
 func (s *storeStub) DeleteObject(context.Context, string) error {
