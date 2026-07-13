@@ -58,9 +58,12 @@ This worktree does not establish staging or production readiness. The following
 evidence is outside the code available on `origin/master` or requires approved
 external systems:
 
-- the recorder capture/render implementation that commits the authenticated
-  speaker-turn manifest and transcription-ready isolated audio chunks is not
-  present, so a real composite recording-to-transcript run cannot start;
+- the initial recorder foundation now includes fenced control-plane jobs,
+  authenticated speaker-turn construction, transcription chunk planning, and a
+  deterministic encrypted capture-to-render fixture, but its executables remain
+  fixture-only and the recording-artifact commit does not yet transactionally
+  seed the transcription manifest and chunk set, so a real composite
+  recording-to-transcript run still cannot start;
 - DeepInfra commercial/privacy approval, processing and deletion terms,
   environment token isolation, spending controls, rotation and revocation,
   observed execution identity, quota/load proof, and the ratified multilingual
