@@ -1,0 +1,747 @@
+{
+  "$schema": "chalk.sync.v3",
+  "version": 3,
+  "protocol": {
+    "field": "protocol",
+    "value": 3,
+    "transport": "websocket-json-text",
+    "route": "/v3/sync"
+  },
+  "directions": {
+    "clientToServer": "client-to-server",
+    "serverToClient": "server-to-client"
+  },
+  "limits": {
+    "decodedInboundFrameBytes": 65536,
+    "tokenBytes": 8192,
+    "commandIdMinBytes": 16,
+    "commandIdMaxBytes": 64,
+    "requestIdMinBytes": 16,
+    "requestIdMaxBytes": 64,
+    "decodedCommandPayloadBytes": 16384,
+    "encodedLiveEventBytes": 32768,
+    "replayPageMaxEvents": 128,
+    "replayPageEncodedBytes": 262144,
+    "completeReplayMaxEvents": 2048,
+    "completeReplayEncodedBytes": 2097152,
+    "snapshotEncodedBytes": 1048576,
+    "projectionSnapshotEncodedBytes": 1048576,
+    "projectionMaxItems": 1500,
+    "directedRequestTtlMs": 30000,
+    "directedRequestsPerActorTarget": 4,
+    "protocolErrorDetailBytes": 1024
+  },
+  "stateDigest": {
+    "algorithm": "sha256",
+    "prefix": "chalk-sync-state-v3",
+    "versionEncoding": "uint32-big-endian",
+    "projectionEncoding": "rfc8785-json",
+    "wireEncoding": "hex-lowercase"
+  },
+  "streams": {
+    "control": {
+      "required": true,
+      "authority": "postgres",
+      "version": "revision-and-digest",
+      "cursor": "controlCursor",
+      "recovery": ["snapshot", "bounded_exact_replay", "up_to_date", "terminal"]
+    },
+    "media": {
+      "required": true,
+      "authority": "media-plane-observation",
+      "version": "projection-id-and-exact-next-sequence",
+      "cursor": null,
+      "recovery": ["replace_latest_snapshot"]
+    },
+    "presence": {
+      "required": true,
+      "authority": "sync-live-projection",
+      "version": "projection-id-and-exact-next-sequence",
+      "cursor": null,
+      "recovery": ["replace_latest_snapshot"]
+    },
+    "requests": {
+      "required": true,
+      "authority": "directed-live-delivery",
+      "version": "none",
+      "cursor": null,
+      "recovery": ["none"]
+    }
+  },
+  "phases": [
+    {
+      "id": "awaiting_hello",
+      "accepts": ["hello", "ping"],
+      "hello": { "transitionsTo": "recovering", "deadlineMs": 5000 }
+    },
+    {
+      "id": "recovering",
+      "accepts": ["recovery_ack", "ping"],
+      "recoveryComplete": { "transitionsTo": "live" }
+    },
+    {
+      "id": "live",
+      "accepts": ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "ping"],
+      "heartbeat": { "intervalMs": 20000, "missedDeadlinesBeforeClose": 2 }
+    },
+    { "id": "terminal", "transitionsTo": "closed" },
+    { "id": "draining", "transitionsTo": "closed" }
+  ],
+  "capabilities": ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf", "manageAdmission", "promoteDemote", "transferHost", "muteOthers", "stopVideoOthers", "stopScreenOthers", "requestMediaOthers", "removeParticipant", "manageRecording", "endMeeting"],
+  "policy": {
+    "hostExitPolicy": ["require_transfer", "promote_cohost"],
+    "roles": ["host", "cohost", "participant"],
+    "assignableRoles": ["cohost", "participant"],
+    "admissionPolicy": ["open", "approval", "closed"],
+    "screenShareConcurrency": 1,
+    "roleCapabilitiesImmutable": true,
+    "hostExitPolicyImmutable": true,
+    "deadlineMutationAuthority": "tenant-control-plane-only"
+  },
+  "controlCursor": {
+    "revision": { "kind": "integer", "minimum": 0 },
+    "stateSchemaVersion": { "kind": "integer", "minimum": 1 },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "snapshot": {
+    "controlRevision": { "kind": "integer", "minimum": 0 },
+    "stateSchemaVersion": { "kind": "integer", "minimum": 1 },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": { "kind": "string", "enum": ["active", "ended"] },
+    "admissionPolicy": { "kind": "string", "enum": ["open", "approval", "closed"] },
+    "hostExitPolicy": { "kind": "string", "enum": ["require_transfer", "promote_cohost"] },
+    "hostParticipantSessionId": {
+      "kind": "string",
+      "minBytes": 36,
+      "maxBytes": 36,
+      "format": "uuid",
+      "nullable": true,
+      "invariant": "null_only_when_participants_empty_before_initial_host_admission"
+    },
+    "deadlineAtMs": { "kind": "integer", "minimum": 1 },
+    "deadlineGeneration": { "kind": "integer", "minimum": 1 },
+    "roleCapabilities": {
+      "kind": "object",
+      "additionalProperties": true,
+      "exactFields": ["host", "cohost", "participant"],
+      "values": { "kind": "array", "maxItems": 16, "of": "capability" }
+    },
+    "recording": {
+      "kind": "object",
+      "additionalProperties": true,
+      "nullable": true,
+      "exactFields": ["recording_id", "status", "failure_code"],
+      "fields": {
+        "recordingId": "uuid",
+        "status": ["starting", "recording", "stopping", "stopped", "failed"],
+        "failureCode": { "kind": "string", "minBytes": 1, "maxBytes": 96, "nullable": true }
+      }
+    },
+    "participants": {
+      "kind": "array",
+      "maxItems": 500,
+      "items": {
+        "participantSessionId": {
+          "kind": "string",
+          "minBytes": 36,
+          "maxBytes": 36,
+          "format": "uuid"
+        },
+        "displayName": { "kind": "string", "minBytes": 1, "maxBytes": 256 },
+        "handRaised": { "kind": "boolean" },
+        "admissionRevision": { "kind": "integer", "minimum": 1 },
+        "role": { "kind": "string", "enum": ["host", "cohost", "participant"] },
+        "eligibleRoles": {
+          "kind": "array",
+          "maxItems": 3,
+          "of": "role"
+        },
+        "capabilities": {
+          "kind": "array",
+          "maxItems": 16,
+          "of": "capability"
+        }
+      }
+    },
+    "admissionRequests": {
+      "kind": "array",
+      "maxItems": 500,
+      "items": {
+        "admissionRequestId": "uuid",
+        "participantSessionId": "uuid",
+        "displayName": { "kind": "string", "minBytes": 1, "maxBytes": 256 },
+        "initialRole": { "kind": "string", "enum": ["host", "cohost", "participant"] },
+        "eligibleRoles": { "kind": "array", "maxItems": 3, "of": "role" },
+        "expiresAtMs": { "kind": "integer", "minimum": 1 }
+      }
+    }
+  },
+  "hello": {
+    "direction": "client-to-server",
+    "type": "hello",
+    "token": { "kind": "string", "maxBytes": 8192 },
+    "streams": {
+      "control": { "cursor": "controlCursor", "nullable": true },
+      "media": { "cursor": null },
+      "presence": { "cursor": null },
+      "requests": { "cursor": null }
+    }
+  },
+  "deliveryAck": {
+    "direction": "client-to-server",
+    "type": "delivery_ack",
+    "stream": "control",
+    "revision": { "kind": "integer", "minimum": 1 },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "recoveryAck": {
+    "direction": "client-to-server",
+    "type": "recovery_ack",
+    "recoveryId": {
+      "kind": "string",
+      "minBytes": 36,
+      "maxBytes": 36,
+      "format": "uuid"
+    },
+    "revision": { "kind": "integer", "minimum": 0 },
+    "stateDigest": {
+      "kind": "string",
+      "minBytes": 64,
+      "maxBytes": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "welcome": {
+    "direction": "server-to-client",
+    "type": "welcome",
+    "participantSessionId": {
+      "kind": "string",
+      "minBytes": 36,
+      "maxBytes": 36,
+      "format": "uuid"
+    },
+    "participantSessionGeneration": { "kind": "integer", "minimum": 1 },
+    "recoveryId": {
+      "kind": "string",
+      "minBytes": 36,
+      "maxBytes": 36,
+      "format": "uuid"
+    },
+    "head": "controlCursor",
+    "modes": [{ "id": "snapshot", "snapshot": "snapshot" }, { "id": "replay" }, { "id": "up_to_date" }, { "id": "terminal", "reason": "terminalReason" }]
+  },
+  "replayPage": {
+    "direction": "server-to-client",
+    "type": "replay_page",
+    "recoveryId": "uuid",
+    "firstRevision": { "kind": "integer", "minimum": 1 },
+    "lastRevision": { "kind": "integer", "minimum": 1 },
+    "events": "event",
+    "maxEvents": 128,
+    "maxEncodedBytes": 262144
+  },
+  "recoveryComplete": {
+    "direction": "server-to-client",
+    "type": "recovery_complete",
+    "recoveryId": "uuid",
+    "head": "controlCursor"
+  },
+  "commands": [
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "set_hand_raised",
+      "capability": "raiseHand",
+      "payload": { "raised": { "kind": "boolean" } }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "set_display_name",
+      "capability": "renameSelf",
+      "payload": {
+        "displayName": {
+          "kind": "string",
+          "minBytes": 1,
+          "maxBytes": 256,
+          "trimmedNonEmpty": true
+        }
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "set_admission_policy",
+      "capability": "manageAdmission",
+      "payload": {
+        "policy": { "kind": "string", "enum": ["open", "approval", "closed"] }
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "set_participant_role",
+      "capability": "promoteDemote",
+      "payload": {
+        "participantSessionId": { "kind": "string", "format": "uuid", "minBytes": 36, "maxBytes": 36 },
+        "role": { "kind": "string", "enum": ["cohost", "participant"] }
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "transfer_host",
+      "capability": "transferHost",
+      "actorMustBeHost": true,
+      "payload": {
+        "participantSessionId": { "kind": "string", "format": "uuid", "minBytes": 36, "maxBytes": 36 }
+      }
+    }
+  ],
+  "operations": [
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "admit_participant",
+      "capability": "manageAdmission",
+      "payload": { "admissionRequestId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "deny_admission",
+      "capability": "manageAdmission",
+      "payload": { "admissionRequestId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "mute_participant",
+      "capability": "muteOthers",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "stop_participant_camera",
+      "capability": "stopVideoOthers",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "stop_participant_screen_share",
+      "capability": "stopScreenOthers",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "remove_participant",
+      "capability": "removeParticipant",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "start_recording",
+      "capability": "manageRecording",
+      "payload": { "recordingId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "stop_recording",
+      "capability": "manageRecording",
+      "payload": { "recordingId": "uuid" }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "participant_leave",
+      "authorization": "self",
+      "payload": {}
+    },
+    {
+      "direction": "client-to-server",
+      "type": "operation",
+      "name": "end_session",
+      "capability": "endMeeting",
+      "payload": {}
+    }
+  ],
+  "operationFrame": {
+    "direction": "client-to-server",
+    "type": "operation",
+    "exactFields": ["type", "command_id", "name", "payload"],
+    "commandId": "commandId",
+    "names": "operations"
+  },
+  "liveTargets": [
+    { "name": "set_microphone_enabled", "source": "microphone", "capability": "publishAudio" },
+    { "name": "set_camera_enabled", "source": "camera", "capability": "publishVideo" },
+    { "name": "set_screen_share_enabled", "source": "screen", "capability": "publishScreen", "requiresLease": true }
+  ],
+  "mediaPlanePort": {
+    "sources": ["microphone", "camera", "screen"],
+    "clientRuntime": {
+      "operations": ["set_local_publication_target", "observe_local_publications", "observe_remote_publications"],
+      "enableRequiresLocalConsent": true
+    },
+    "serverControl": {
+      "operations": ["grant_publication", "revoke_publication", "remove_participant", "observe_session_publications"],
+      "remoteForceOn": false
+    },
+    "operationOutcomes": ["confirmed", "satisfied", "retryable_failure", "terminal_failure", "ambiguous"],
+    "idempotency": "stable-operation-id",
+    "observation": "provider-neutral-projection"
+  },
+  "liveTargetFrames": {
+    "request": {
+      "direction": "client-to-server",
+      "type": "live_target",
+      "exactFields": ["type", "operation_id", "name", "enabled"],
+      "operationId": "requestId",
+      "name": ["set_microphone_enabled", "set_camera_enabled", "set_screen_share_enabled"],
+      "enabled": { "kind": "boolean" }
+    },
+    "result": {
+      "direction": "server-to-client",
+      "type": "live_target_result",
+      "exactFields": ["type", "operation_id", "name", "outcome", "error_code"],
+      "operationId": "requestId",
+      "name": ["set_microphone_enabled", "set_camera_enabled", "set_screen_share_enabled"],
+      "outcome": ["confirmed", "satisfied", "retryable_failure", "terminal_failure", "ambiguous"],
+      "errorCodeNullable": true
+    }
+  },
+  "directedRequests": [
+    { "name": "request_unmute", "source": "microphone", "capability": "requestMediaOthers" },
+    { "name": "request_start_camera", "source": "camera", "capability": "requestMediaOthers" }
+  ],
+  "directedRequestFrames": {
+    "send": {
+      "direction": "client-to-server",
+      "type": "directed_request",
+      "exactFields": ["type", "request_id", "name", "target_participant_session_id"],
+      "requestId": "requestId",
+      "name": ["request_unmute", "request_start_camera"],
+      "targetParticipantSessionId": "uuid"
+    },
+    "deliver": {
+      "direction": "server-to-client",
+      "type": "directed_request",
+      "exactFields": ["type", "request_id", "name", "actor_participant_session_id", "expires_at_ms"],
+      "requestId": "requestId",
+      "name": ["request_unmute", "request_start_camera"],
+      "actorParticipantSessionId": "uuid",
+      "expiresAtMs": { "kind": "integer", "minimum": 1 }
+    },
+    "acknowledge": {
+      "direction": "client-to-server",
+      "type": "request_ack",
+      "exactFields": ["type", "request_id"],
+      "requestId": "requestId"
+    },
+    "result": {
+      "direction": "server-to-client",
+      "type": "directed_request_result",
+      "exactFields": ["type", "request_id", "result"],
+      "requestId": "requestId",
+      "result": ["delivered", "target_unavailable", "expired", "rejected", "rate_limited"]
+    }
+  },
+  "externalIntents": [
+    "admit_participant",
+    "deny_admission",
+    "admission_request_expired",
+    "mute_participant",
+    "stop_participant_camera",
+    "stop_participant_screen_share",
+    "remove_participant",
+    "start_recording",
+    "stop_recording",
+    "participant_leave",
+    "end_session",
+    "tenant_transfer_host",
+    "tenant_set_deadline",
+    "tenant_end_session",
+    "maximum_duration_expired"
+  ],
+  "events": [
+    {
+      "name": "participant_joined",
+      "origin": "lifecycle",
+      "payload": {
+        "participantSessionId": "uuid",
+        "displayName": { "kind": "string", "minBytes": 1, "maxBytes": 256 },
+        "role": ["host", "cohost", "participant"],
+        "eligibleRoles": { "kind": "array", "maxItems": 3, "of": "role" },
+        "admissionRevision": { "kind": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "name": "participant_left",
+      "origin": "external",
+      "payload": { "participantSessionId": "uuid", "reason": ["left", "removed"] }
+    },
+    {
+      "name": "host_left_and_transferred",
+      "origin": "external",
+      "payload": { "departingParticipantSessionId": "uuid", "successorParticipantSessionId": "uuid" }
+    },
+    {
+      "name": "session_ended",
+      "origin": "external",
+      "payload": { "reason": ["ended_by_participant", "tenant_recovery", "maximum_duration"] }
+    },
+    {
+      "name": "hand_raised",
+      "origin": "command",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "name": "hand_lowered",
+      "origin": "command",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "name": "participant_display_name_changed",
+      "origin": "command",
+      "payload": {
+        "participantSessionId": "uuid",
+        "displayName": { "kind": "string", "minBytes": 1, "maxBytes": 256 }
+      }
+    },
+    {
+      "name": "admission_policy_changed",
+      "origin": "command",
+      "payload": { "policy": ["open", "approval", "closed"] }
+    },
+    {
+      "name": "participant_role_changed",
+      "origin": "command",
+      "payload": { "participantSessionId": "uuid", "role": ["cohost", "participant"] }
+    },
+    {
+      "name": "host_transferred",
+      "origin": "command_or_external",
+      "payload": { "previousHostParticipantSessionId": "uuid", "newHostParticipantSessionId": "uuid" }
+    },
+    {
+      "name": "deadline_changed",
+      "origin": "external",
+      "payload": {
+        "deadlineAtMs": { "kind": "integer", "minimum": 1 },
+        "deadlineGeneration": { "kind": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "name": "admission_requested",
+      "origin": "lifecycle",
+      "payload": {
+        "admissionRequestId": "uuid",
+        "participantSessionId": "uuid",
+        "displayName": { "kind": "string", "minBytes": 1, "maxBytes": 256 },
+        "initialRole": ["host", "cohost", "participant"],
+        "eligibleRoles": { "kind": "array", "maxItems": 3, "of": "role" },
+        "expiresAtMs": { "kind": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "name": "admission_denied",
+      "origin": "external",
+      "payload": { "admissionRequestId": "uuid" }
+    },
+    {
+      "name": "admission_expired",
+      "origin": "external",
+      "payload": { "admissionRequestId": "uuid" }
+    },
+    {
+      "name": "participant_microphone_stopped",
+      "origin": "external",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "name": "participant_camera_stopped",
+      "origin": "external",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "name": "participant_screen_share_stopped",
+      "origin": "external",
+      "payload": { "participantSessionId": "uuid" }
+    },
+    {
+      "name": "recording_status_changed",
+      "origin": "external",
+      "payload": {
+        "recordingId": "uuid",
+        "status": ["starting", "recording", "stopping", "stopped", "failed"],
+        "failureCode": { "kind": "string", "minBytes": 1, "maxBytes": 96, "nullable": true }
+      }
+    }
+  ],
+  "eventFrame": {
+    "direction": "server-to-client",
+    "type": "event",
+    "stream": "control",
+    "commonExactFields": ["type", "stream", "name", "event_id", "base_revision", "revision", "schema_version", "resulting_state_digest", "payload"],
+    "commandOriginField": "command_id",
+    "lifecycleOriginField": "lifecycle_intent_id",
+    "externalOriginField": "external_operation_id",
+    "originInvariant": "exactly_one_origin_field"
+  },
+  "projections": {
+    "media": {
+      "sources": ["microphone", "camera", "screen"],
+      "snapshotFrame": "projection_snapshot",
+      "eventFrame": "projection_event"
+    },
+    "presence": {
+      "states": ["connected", "disconnected"],
+      "snapshotFrame": "projection_snapshot",
+      "eventFrame": "projection_event"
+    },
+    "sequence": {
+      "snapshot": 0,
+      "event": "exact-next-within-projection-id",
+      "newProjectionId": "replace"
+    }
+  },
+  "projectionFrames": {
+    "mediaSnapshot": {
+      "direction": "server-to-client",
+      "type": "projection_snapshot",
+      "stream": "media",
+      "exactFields": ["type", "stream", "projection_id", "sequence", "items"],
+      "projectionId": "uuid",
+      "sequence": 0,
+      "items": {
+        "kind": "array",
+        "maxItems": 1500,
+        "exactFields": ["participant_session_id", "source", "enabled", "publication_id"],
+        "participantSessionId": "uuid",
+        "source": ["microphone", "camera", "screen"],
+        "enabled": { "kind": "boolean" },
+        "publicationId": { "kind": "string", "minBytes": 1, "maxBytes": 256, "nullable": true },
+        "invariant": "enabled_iff_publication_id_non_null"
+      }
+    },
+    "mediaEvent": {
+      "direction": "server-to-client",
+      "type": "projection_event",
+      "stream": "media",
+      "exactFields": ["type", "stream", "projection_id", "sequence", "item"],
+      "projectionId": "uuid",
+      "sequence": { "kind": "integer", "minimum": 1 },
+      "item": "mediaSnapshot.items"
+    },
+    "presenceSnapshot": {
+      "direction": "server-to-client",
+      "type": "projection_snapshot",
+      "stream": "presence",
+      "exactFields": ["type", "stream", "projection_id", "sequence", "items"],
+      "projectionId": "uuid",
+      "sequence": 0,
+      "items": {
+        "kind": "array",
+        "maxItems": 500,
+        "exactFields": ["participant_session_id", "state", "speaking", "active_speaker"],
+        "participantSessionId": "uuid",
+        "state": ["connected", "disconnected"],
+        "speaking": { "kind": "boolean" },
+        "activeSpeaker": { "kind": "boolean" },
+        "invariant": "disconnected_implies_not_speaking_and_not_active_speaker"
+      }
+    },
+    "presenceEvent": {
+      "direction": "server-to-client",
+      "type": "projection_event",
+      "stream": "presence",
+      "exactFields": ["type", "stream", "projection_id", "sequence", "item"],
+      "projectionId": "uuid",
+      "sequence": { "kind": "integer", "minimum": 1 },
+      "item": "presenceSnapshot.items"
+    }
+  },
+  "acks": {
+    "type": "ack",
+    "delivery": ["original", "duplicate"],
+    "outcomes": ["committed", "satisfied", "rejected", "command_id_conflict"],
+    "committedFields": ["command_id", "delivery", "outcome", "event_id", "revision", "state_digest"],
+    "satisfiedFields": ["command_id", "delivery", "outcome", "revision", "state_digest"],
+    "rejectedFields": ["command_id", "delivery", "outcome", "reason"],
+    "conflictFields": ["command_id", "delivery", "outcome", "reason"]
+  },
+  "terminal": {
+    "reasons": ["session_ended", "participant_inactive", "stale_participant_generation"]
+  },
+  "rejectionReasons": ["session_ended", "participant_inactive", "stale_participant_generation", "capability_denied", "invalid_state", "invalid_target", "role_not_eligible", "host_transfer_required", "screen_share_in_use", "recording_in_progress", "command_id_conflict", "external_operation_failed"],
+  "retryableError": {
+    "direction": "server-to-client",
+    "type": "retryable_error",
+    "codes": ["overloaded", "server_draining", "dependency_unavailable", "decision_unavailable", "external_operation_pending"]
+  },
+  "error": {
+    "direction": "server-to-client",
+    "type": "error",
+    "code": ["protocol_error", "invalid_frame", "unsupported_protocol"],
+    "detail": { "kind": "string", "maxBytes": 1024 }
+  },
+  "ping": { "direction": "client-to-server", "type": "ping" },
+  "pong": { "direction": "server-to-client", "type": "pong" },
+  "continuity": {
+    "cursor": {
+      "field": "streams.control.cursor",
+      "resume": "events_after_cursor_when_digest_matches",
+      "stream": "control"
+    },
+    "events": {
+      "baseRevisionField": "base_revision",
+      "revisionField": "revision",
+      "rule": "revision_equals_base_revision_plus_one",
+      "stream": "control"
+    },
+    "snapshotFallback": {
+      "when": ["cursor_missing", "cursor_future", "cursor_malformed", "cursor_expired", "cursor_unavailable", "cursor_same_revision_digest_mismatch"],
+      "welcomeMode": "snapshot"
+    },
+    "replay": {
+      "pageAcknowledgement": "recovery_ack",
+      "pageCompletion": "recovery_complete_after_acknowledged_head",
+      "liveEventsAfter": "recovery_complete",
+      "maxEvents": 2048,
+      "maxEncodedBytes": 2097152
+    }
+  },
+  "idempotency": {
+    "key": "command_id",
+    "outcomes": ["committed", "satisfied", "rejected"],
+    "scope": "participant_session",
+    "duplicate": "reuses_original_semantic_outcome",
+    "conflict": "preserves_original_receipt"
+  },
+  "closeCodes": [
+    { "code": 1000, "connection": "closed", "reasons": ["terminal recovery drained"] },
+    { "code": 1008, "connection": "closed", "reasons": ["invalid token", "policy violation"] },
+    { "code": 1009, "connection": "closed", "reasons": ["malformed frame", "oversized frame"] },
+    { "code": 1012, "connection": "closed", "reasons": ["service restart", "server draining"] }
+  ]
+}

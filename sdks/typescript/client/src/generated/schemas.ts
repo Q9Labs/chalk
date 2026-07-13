@@ -24,7 +24,8 @@ export const RoomSessionIdSchema = Schema.String.check(Schema.isMinLength(36), S
 export type RoomSessionId = typeof RoomSessionIdSchema.Type;
 
 export const AdmitSessionParticipantRequestSchema = Schema.Struct({
-  capabilities: Schema.Array(Schema.String),
+  eligible_roles: Schema.Array(Schema.String),
+  initial_role: Schema.String.check(Schema.isMinLength(1)),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.String.check(Schema.isMinLength(1)),
   participant_session_id: RoomSessionIdSchema,
@@ -116,6 +117,14 @@ export const CreateRecordingRequestSchema = Schema.Struct({
 });
 export type CreateRecordingRequest = typeof CreateRecordingRequestSchema.Type;
 
+export const CreateRecordingReservationRequestSchema = Schema.Struct({
+  input_bitrate_bps: Schema.Number,
+  max_duration_minutes: Schema.Number,
+  participant_count: Schema.Number,
+  scheduled_start: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+});
+export type CreateRecordingReservationRequest = typeof CreateRecordingReservationRequestSchema.Type;
+
 export const CreateRoomRequestSchema = Schema.Struct({
   media_plane: Schema.String.check(Schema.isMinLength(1)),
   metadata: Schema.optional(Schema.Unknown),
@@ -127,7 +136,11 @@ export const CreateRoomRequestSchema = Schema.Struct({
 export type CreateRoomRequest = typeof CreateRoomRequestSchema.Type;
 
 export const CreateRoomSessionRequestSchema = Schema.Struct({
+  admission_policy: Schema.String.check(Schema.isMinLength(1)),
+  host_exit_policy: Schema.String.check(Schema.isMinLength(1)),
+  maximum_duration_seconds: Schema.Number,
   metadata: Schema.optional(Schema.Unknown),
+  role_capabilities: Schema.Record(Schema.String, Schema.Array(Schema.String)),
   started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
 });
 export type CreateRoomSessionRequest = typeof CreateRoomSessionRequestSchema.Type;
@@ -179,6 +192,15 @@ export const CreateUserRequestSchema = Schema.Struct({
 });
 export type CreateUserRequest = typeof CreateUserRequestSchema.Type;
 
+export const CreateWebhookEndpointRequestSchema = Schema.Struct({
+  api_version: Schema.Number,
+  enabled: Schema.Boolean,
+  event_types: Schema.Array(Schema.String),
+  name: Schema.String.check(Schema.isMinLength(1)),
+  url: Schema.String.check(Schema.isMinLength(1)),
+});
+export type CreateWebhookEndpointRequest = typeof CreateWebhookEndpointRequestSchema.Type;
+
 export const ErrorResponseSchema = Schema.Struct({
   error: Schema.Struct({
     code: Schema.String,
@@ -193,6 +215,11 @@ export const ExecuteIntegrationActionRequestSchema = Schema.Struct({
   text: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
 });
 export type ExecuteIntegrationActionRequest = typeof ExecuteIntegrationActionRequestSchema.Type;
+
+export const ExtendRecordingReservationRequestSchema = Schema.Struct({
+  max_duration_minutes: Schema.Number,
+});
+export type ExtendRecordingReservationRequest = typeof ExtendRecordingReservationRequestSchema.Type;
 
 export const IntegrationActionIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationActionId"));
 export type IntegrationActionId = typeof IntegrationActionIdSchema.Type;
@@ -336,6 +363,15 @@ export const RoomIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.i
 export type RoomId = typeof RoomIdSchema.Type;
 
 export const ParticipantLifecycleSchema = Schema.Struct({
+  admission_request: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        expires_at: DateTimeStringSchema,
+        id: UUIDSchema,
+        status: Schema.String,
+      }),
+    ),
+  ),
   expires_at: Schema.optional(DateTimeStringSchema),
   lifecycle_intent: Schema.Struct({
     created_at: DateTimeStringSchema,
@@ -365,6 +401,28 @@ export const ParticipantLifecycleSchema = Schema.Struct({
   sync_token: Schema.optional(Schema.String),
 });
 export type ParticipantLifecycle = typeof ParticipantLifecycleSchema.Type;
+
+export const ParticipantRemovalSchema = Schema.Struct({
+  external_operation: Schema.Struct({
+    created_at: DateTimeStringSchema,
+    deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+    id: UUIDSchema,
+    operation_name: Schema.String,
+    request_key: Schema.String,
+    status: Schema.String,
+    target_participant_session_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+    target_participant_session_id: Schema.optional(Schema.NullOr(RoomSessionIdSchema)),
+  }),
+  participant: Schema.Struct({
+    generation: Schema.Number,
+    id: UUIDSchema,
+    room_id: RoomIdSchema,
+    session_id: RoomSessionIdSchema,
+    status: Schema.String,
+    tenant_id: TenantIdSchema,
+  }),
+});
+export type ParticipantRemoval = typeof ParticipantRemovalSchema.Type;
 
 export const RecordingIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId"));
 export type RecordingId = typeof RecordingIdSchema.Type;
@@ -397,6 +455,41 @@ export const RecordingListSchema = Schema.Struct({
   recordings: Schema.Array(RecordingSchema),
 });
 export type RecordingList = typeof RecordingListSchema.Type;
+
+export const RecordingPipelineSchema = Schema.Struct({
+  capture_completed_at: Schema.NullOr(DateTimeStringSchema),
+  committed_at: Schema.NullOr(DateTimeStringSchema),
+  created_at: DateTimeStringSchema,
+  recording_id: RecordingIdSchema,
+  reservation_id: UUIDSchema,
+  state: Schema.String,
+  tenant_id: TenantIdSchema,
+  updated_at: DateTimeStringSchema,
+});
+export type RecordingPipeline = typeof RecordingPipelineSchema.Type;
+
+export const RecordingReservationSchema = Schema.Struct({
+  created_at: DateTimeStringSchema,
+  ends_at: DateTimeStringSchema,
+  id: UUIDSchema,
+  input_bitrate_bps: Schema.Number,
+  max_duration_minutes: Schema.Number,
+  participant_count: Schema.Number,
+  recording_id: RecordingIdSchema,
+  room_id: RoomIdSchema,
+  scheduled_start: Schema.NullOr(Schema.String),
+  session_id: RoomSessionIdSchema,
+  state: Schema.String,
+  tenant_id: TenantIdSchema,
+  updated_at: DateTimeStringSchema,
+});
+export type RecordingReservation = typeof RecordingReservationSchema.Type;
+
+export const RecoverRoomSessionHostRequestSchema = Schema.Struct({
+  participant_session_generation: Schema.Number,
+  participant_session_id: RoomSessionIdSchema,
+});
+export type RecoverRoomSessionHostRequest = typeof RecoverRoomSessionHostRequestSchema.Type;
 
 export const RegionsSchema = Schema.Struct({
   regions: Schema.Array(
@@ -468,20 +561,55 @@ export const RoomSessionListSchema = Schema.Struct({
 });
 export type RoomSessionList = typeof RoomSessionListSchema.Type;
 
-export const SessionEndSchema = Schema.Struct({
-  lifecycle_intent: Schema.Struct({
+export const RotateWebhookSecretRequestSchema = Schema.Struct({
+  revoke_previous_immediately: Schema.Boolean,
+});
+export type RotateWebhookSecretRequest = typeof RotateWebhookSecretRequestSchema.Type;
+
+export const RotateWebhookSecretResponseSchema = Schema.Struct({
+  endpoint_id: UUIDSchema,
+  previous_secret_expires_at: Schema.NullOr(DateTimeStringSchema),
+  revision: Schema.Number,
+  secret: Schema.String,
+});
+export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
+
+export const SessionControlSchema = Schema.Struct({
+  external_operation: Schema.Struct({
     created_at: DateTimeStringSchema,
+    deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
     id: UUIDSchema,
-    intent_name: Schema.String,
-    participant_session_generation: Schema.NullOr(Schema.Number),
-    participant_session_id: Schema.NullOr(RoomSessionIdSchema),
+    operation_name: Schema.String,
     request_key: Schema.String,
     status: Schema.String,
+    target_participant_session_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+    target_participant_session_id: Schema.optional(Schema.NullOr(RoomSessionIdSchema)),
+  }),
+  session_id: RoomSessionIdSchema,
+  status: Schema.String,
+});
+export type SessionControl = typeof SessionControlSchema.Type;
+
+export const SessionEndSchema = Schema.Struct({
+  external_operation: Schema.Struct({
+    created_at: DateTimeStringSchema,
+    deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+    id: UUIDSchema,
+    operation_name: Schema.String,
+    request_key: Schema.String,
+    status: Schema.String,
+    target_participant_session_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+    target_participant_session_id: Schema.optional(Schema.NullOr(RoomSessionIdSchema)),
   }),
   session_id: RoomSessionIdSchema,
   status: Schema.String,
 });
 export type SessionEnd = typeof SessionEndSchema.Type;
+
+export const SetRoomSessionDeadlineRequestSchema = Schema.Struct({
+  deadline_at: DateTimeStringSchema,
+});
+export type SetRoomSessionDeadlineRequest = typeof SetRoomSessionDeadlineRequestSchema.Type;
 
 export const StartIntegrationConnectionRequestSchema = Schema.Struct({
   account_alias: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
@@ -609,6 +737,15 @@ export const UpdateTenantRequestSchema = Schema.Struct({
 });
 export type UpdateTenantRequest = typeof UpdateTenantRequestSchema.Type;
 
+export const UpdateWebhookEndpointRequestSchema = Schema.Struct({
+  api_version: Schema.optional(Schema.Number),
+  enabled: Schema.optional(Schema.Boolean),
+  event_types: Schema.optional(Schema.Array(Schema.String)),
+  name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  url: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+});
+export type UpdateWebhookEndpointRequest = typeof UpdateWebhookEndpointRequestSchema.Type;
+
 export const UserSchema = Schema.Struct({
   created_at: DateTimeStringSchema,
   email: EmailSchema,
@@ -623,6 +760,102 @@ export const UserListSchema = Schema.Struct({
   users: Schema.Array(UserSchema),
 });
 export type UserList = typeof UserListSchema.Type;
+
+export const WebhookDeliveryCreatedSchema = Schema.Struct({
+  delivery_id: UUIDSchema,
+  endpoint_id: UUIDSchema,
+  endpoint_revision: Schema.Number,
+  event_id: UUIDSchema,
+  state: Schema.String,
+});
+export type WebhookDeliveryCreated = typeof WebhookDeliveryCreatedSchema.Type;
+
+export const WebhookDeliveryDetailSchema = Schema.Struct({
+  attempt_count: Schema.Number,
+  attempts: Schema.Array(
+    Schema.Struct({
+      error_code: Schema.NullOr(Schema.String),
+      finished_at: Schema.NullOr(DateTimeStringSchema),
+      http_status: Schema.NullOr(Schema.Number),
+      id: UUIDSchema,
+      latency_milliseconds: Schema.NullOr(Schema.Number),
+      number: Schema.Number,
+      outcome: Schema.String,
+      started_at: DateTimeStringSchema,
+    }),
+  ),
+  created_at: DateTimeStringSchema,
+  endpoint_id: UUIDSchema,
+  endpoint_revision: Schema.Number,
+  event: Schema.Unknown,
+  event_id: UUIDSchema,
+  event_type: Schema.String,
+  id: UUIDSchema,
+  next_attempt_at: Schema.NullOr(DateTimeStringSchema),
+  state: Schema.String,
+  terminal_at: Schema.NullOr(DateTimeStringSchema),
+  updated_at: DateTimeStringSchema,
+});
+export type WebhookDeliveryDetail = typeof WebhookDeliveryDetailSchema.Type;
+
+export const WebhookDeliveryListSchema = Schema.Struct({
+  deliveries: Schema.Array(
+    Schema.Struct({
+      attempt_count: Schema.Number,
+      created_at: DateTimeStringSchema,
+      endpoint_id: UUIDSchema,
+      endpoint_revision: Schema.Number,
+      event_id: UUIDSchema,
+      event_type: Schema.String,
+      id: UUIDSchema,
+      next_attempt_at: Schema.NullOr(DateTimeStringSchema),
+      state: Schema.String,
+      terminal_at: Schema.NullOr(DateTimeStringSchema),
+      updated_at: DateTimeStringSchema,
+    }),
+  ),
+  page: Schema.Struct({
+    next_cursor: Schema.NullOr(Schema.String),
+  }),
+});
+export type WebhookDeliveryList = typeof WebhookDeliveryListSchema.Type;
+
+export const WebhookEndpointSchema = Schema.Struct({
+  api_version: Schema.Number,
+  created_at: DateTimeStringSchema,
+  enabled: Schema.Boolean,
+  event_types: Schema.Array(Schema.String),
+  id: UUIDSchema,
+  name: Schema.String,
+  revision: Schema.Number,
+  tenant_id: TenantIdSchema,
+  updated_at: DateTimeStringSchema,
+  url_redacted: Schema.String,
+});
+export type WebhookEndpoint = typeof WebhookEndpointSchema.Type;
+
+export const WebhookEndpointListSchema = Schema.Struct({
+  page: Schema.Struct({
+    next_cursor: Schema.NullOr(Schema.String),
+  }),
+  webhook_endpoints: Schema.Array(WebhookEndpointSchema),
+});
+export type WebhookEndpointList = typeof WebhookEndpointListSchema.Type;
+
+export const WebhookEndpointWithSecretSchema = Schema.Struct({
+  api_version: Schema.Number,
+  created_at: DateTimeStringSchema,
+  enabled: Schema.Boolean,
+  event_types: Schema.Array(Schema.String),
+  id: UUIDSchema,
+  name: Schema.String,
+  revision: Schema.Number,
+  secret: Schema.String,
+  tenant_id: TenantIdSchema,
+  updated_at: DateTimeStringSchema,
+  url_redacted: Schema.String,
+});
+export type WebhookEndpointWithSecret = typeof WebhookEndpointWithSecretSchema.Type;
 
 export const LocationHeaderSchema = URLStringSchema;
 export type LocationHeader = typeof LocationHeaderSchema.Type;
@@ -734,6 +967,31 @@ export const CreateRecordingDownloadURL429ResponseHeadersSchema = Schema.Struct(
 });
 export type CreateRecordingDownloadURL429ResponseHeaders = typeof CreateRecordingDownloadURL429ResponseHeadersSchema.Type;
 
+export const CreateRecordingReservationPathParamsSchema = Schema.Struct({
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type CreateRecordingReservationPathParams = typeof CreateRecordingReservationPathParamsSchema.Type;
+
+export const CreateRecordingReservationRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type CreateRecordingReservationRequestHeaders = typeof CreateRecordingReservationRequestHeadersSchema.Type;
+
+export const CreateRecordingReservationRequestBodySchema = CreateRecordingReservationRequestSchema;
+export type CreateRecordingReservationRequestBody = typeof CreateRecordingReservationRequestBodySchema.Type;
+
+export const CreateRecordingReservationResponseSchema = RecordingReservationSchema;
+export type CreateRecordingReservationResponse = typeof CreateRecordingReservationResponseSchema.Type;
+
+export const CreateRecordingReservation429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CreateRecordingReservation429ResponseHeaders = typeof CreateRecordingReservation429ResponseHeadersSchema.Type;
+
 export const CreateRoomPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -814,6 +1072,29 @@ export const CreateUser429ResponseHeadersSchema = Schema.Struct({
 });
 export type CreateUser429ResponseHeaders = typeof CreateUser429ResponseHeadersSchema.Type;
 
+export const CreateWebhookEndpointPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type CreateWebhookEndpointPathParams = typeof CreateWebhookEndpointPathParamsSchema.Type;
+
+export const CreateWebhookEndpointRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type CreateWebhookEndpointRequestHeaders = typeof CreateWebhookEndpointRequestHeadersSchema.Type;
+
+export const CreateWebhookEndpointRequestBodySchema = CreateWebhookEndpointRequestSchema;
+export type CreateWebhookEndpointRequestBody = typeof CreateWebhookEndpointRequestBodySchema.Type;
+
+export const CreateWebhookEndpointResponseSchema = WebhookEndpointWithSecretSchema;
+export type CreateWebhookEndpointResponse = typeof CreateWebhookEndpointResponseSchema.Type;
+
+export const CreateWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CreateWebhookEndpoint429ResponseHeaders = typeof CreateWebhookEndpoint429ResponseHeadersSchema.Type;
+
 export const DeleteTranscriptPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
   transcript_id: TranscriptIdSchema,
@@ -826,6 +1107,25 @@ export const DeleteTranscript429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type DeleteTranscript429ResponseHeaders = typeof DeleteTranscript429ResponseHeadersSchema.Type;
+
+export const DeleteWebhookEndpointPathParamsSchema = Schema.Struct({
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type DeleteWebhookEndpointPathParams = typeof DeleteWebhookEndpointPathParamsSchema.Type;
+
+export const DeleteWebhookEndpointRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  "If-Match": Schema.String.check(Schema.isPattern(new RegExp('^"[1-9][0-9]*"$'))),
+});
+export type DeleteWebhookEndpointRequestHeaders = typeof DeleteWebhookEndpointRequestHeadersSchema.Type;
+
+export const DeleteWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type DeleteWebhookEndpoint429ResponseHeaders = typeof DeleteWebhookEndpoint429ResponseHeadersSchema.Type;
 
 export const DisableIntegrationConnectionPathParamsSchema = Schema.Struct({
   connection_id: UUIDSchema,
@@ -889,6 +1189,25 @@ export const ExecuteIntegrationAction429ResponseHeadersSchema = Schema.Struct({
 });
 export type ExecuteIntegrationAction429ResponseHeaders = typeof ExecuteIntegrationAction429ResponseHeadersSchema.Type;
 
+export const ExtendRecordingReservationPathParamsSchema = Schema.Struct({
+  recording_reservation_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type ExtendRecordingReservationPathParams = typeof ExtendRecordingReservationPathParamsSchema.Type;
+
+export const ExtendRecordingReservationRequestBodySchema = ExtendRecordingReservationRequestSchema;
+export type ExtendRecordingReservationRequestBody = typeof ExtendRecordingReservationRequestBodySchema.Type;
+
+export const ExtendRecordingReservationResponseSchema = RecordingReservationSchema;
+export type ExtendRecordingReservationResponse = typeof ExtendRecordingReservationResponseSchema.Type;
+
+export const ExtendRecordingReservation429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ExtendRecordingReservation429ResponseHeaders = typeof ExtendRecordingReservation429ResponseHeadersSchema.Type;
+
 export const GetAuditLogPathParamsSchema = Schema.Struct({
   audit_log_id: AuditLogIdSchema,
   tenant_id: TenantIdSchema,
@@ -925,6 +1244,24 @@ export type GetRecordingPathParams = typeof GetRecordingPathParamsSchema.Type;
 
 export const GetRecordingResponseSchema = RecordingSchema;
 export type GetRecordingResponse = typeof GetRecordingResponseSchema.Type;
+
+export const GetRecordingPipelinePathParamsSchema = Schema.Struct({
+  recording_id: RecordingIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetRecordingPipelinePathParams = typeof GetRecordingPipelinePathParamsSchema.Type;
+
+export const GetRecordingPipelineResponseSchema = RecordingPipelineSchema;
+export type GetRecordingPipelineResponse = typeof GetRecordingPipelineResponseSchema.Type;
+
+export const GetRecordingReservationPathParamsSchema = Schema.Struct({
+  recording_reservation_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetRecordingReservationPathParams = typeof GetRecordingReservationPathParamsSchema.Type;
+
+export const GetRecordingReservationResponseSchema = RecordingReservationSchema;
+export type GetRecordingReservationResponse = typeof GetRecordingReservationResponseSchema.Type;
 
 export const GetRoomPathParamsSchema = Schema.Struct({
   room_id: RoomIdSchema,
@@ -969,6 +1306,39 @@ export type GetUserPathParams = typeof GetUserPathParamsSchema.Type;
 
 export const GetUserResponseSchema = UserSchema;
 export type GetUserResponse = typeof GetUserResponseSchema.Type;
+
+export const GetWebhookDeliveryPathParamsSchema = Schema.Struct({
+  delivery_id: UUIDSchema,
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetWebhookDeliveryPathParams = typeof GetWebhookDeliveryPathParamsSchema.Type;
+
+export const GetWebhookDeliveryResponseSchema = WebhookDeliveryDetailSchema;
+export type GetWebhookDeliveryResponse = typeof GetWebhookDeliveryResponseSchema.Type;
+
+export const GetWebhookDelivery429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetWebhookDelivery429ResponseHeaders = typeof GetWebhookDelivery429ResponseHeadersSchema.Type;
+
+export const GetWebhookEndpointPathParamsSchema = Schema.Struct({
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetWebhookEndpointPathParams = typeof GetWebhookEndpointPathParamsSchema.Type;
+
+export const GetWebhookEndpointResponseSchema = WebhookEndpointSchema;
+export type GetWebhookEndpointResponse = typeof GetWebhookEndpointResponseSchema.Type;
+
+export const GetWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetWebhookEndpoint429ResponseHeaders = typeof GetWebhookEndpoint429ResponseHeadersSchema.Type;
 
 export const IntakeJourneyEventsRequestBodySchema = JourneyEventBatchSchema;
 export type IntakeJourneyEventsRequestBody = typeof IntakeJourneyEventsRequestBodySchema.Type;
@@ -1139,6 +1509,71 @@ export type ListUsersQueryParams = typeof ListUsersQueryParamsSchema.Type;
 export const ListUsersResponseSchema = UserListSchema;
 export type ListUsersResponse = typeof ListUsersResponseSchema.Type;
 
+export const ListWebhookDeliveriesPathParamsSchema = Schema.Struct({
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type ListWebhookDeliveriesPathParams = typeof ListWebhookDeliveriesPathParamsSchema.Type;
+
+export const ListWebhookDeliveriesQueryParamsSchema = Schema.Struct({
+  cursor: Schema.optional(Schema.String),
+  event_type: Schema.optional(
+    Schema.Array(
+      Schema.Literals([
+        "endpoint.test",
+        "participant.joined",
+        "participant.left",
+        "recording.completed",
+        "recording.failed",
+        "recording.started",
+        "room.archived",
+        "room.created",
+        "room.restored",
+        "room.updated",
+        "session.ended",
+        "session.started",
+        "transcript.completed",
+        "transcript.failed",
+        "transcript.started",
+      ]),
+    ),
+  ),
+  page_size: Schema.optional(Schema.NumberFromString),
+  state: Schema.optional(Schema.Array(Schema.Literals(["pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"]))),
+});
+export type ListWebhookDeliveriesQueryParams = typeof ListWebhookDeliveriesQueryParamsSchema.Type;
+
+export const ListWebhookDeliveriesResponseSchema = WebhookDeliveryListSchema;
+export type ListWebhookDeliveriesResponse = typeof ListWebhookDeliveriesResponseSchema.Type;
+
+export const ListWebhookDeliveries429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListWebhookDeliveries429ResponseHeaders = typeof ListWebhookDeliveries429ResponseHeadersSchema.Type;
+
+export const ListWebhookEndpointsPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type ListWebhookEndpointsPathParams = typeof ListWebhookEndpointsPathParamsSchema.Type;
+
+export const ListWebhookEndpointsQueryParamsSchema = Schema.Struct({
+  cursor: Schema.optional(Schema.String),
+  page_size: Schema.optional(Schema.NumberFromString),
+});
+export type ListWebhookEndpointsQueryParams = typeof ListWebhookEndpointsQueryParamsSchema.Type;
+
+export const ListWebhookEndpointsResponseSchema = WebhookEndpointListSchema;
+export type ListWebhookEndpointsResponse = typeof ListWebhookEndpointsResponseSchema.Type;
+
+export const ListWebhookEndpoints429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListWebhookEndpoints429ResponseHeaders = typeof ListWebhookEndpoints429ResponseHeadersSchema.Type;
+
 export const LoginRequestBodySchema = LoginRequestSchema;
 export type LoginRequestBody = typeof LoginRequestBodySchema.Type;
 
@@ -1154,6 +1589,53 @@ export type Login429ResponseHeaders = typeof Login429ResponseHeadersSchema.Type;
 
 export const LogoutResponseSchema = StatusSchema;
 export type LogoutResponse = typeof LogoutResponseSchema.Type;
+
+export const RecoverRoomSessionHostPathParamsSchema = Schema.Struct({
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RecoverRoomSessionHostPathParams = typeof RecoverRoomSessionHostPathParamsSchema.Type;
+
+export const RecoverRoomSessionHostRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type RecoverRoomSessionHostRequestHeaders = typeof RecoverRoomSessionHostRequestHeadersSchema.Type;
+
+export const RecoverRoomSessionHostRequestBodySchema = RecoverRoomSessionHostRequestSchema;
+export type RecoverRoomSessionHostRequestBody = typeof RecoverRoomSessionHostRequestBodySchema.Type;
+
+export const RecoverRoomSessionHostResponseSchema = SessionControlSchema;
+export type RecoverRoomSessionHostResponse = typeof RecoverRoomSessionHostResponseSchema.Type;
+
+export const RecoverRoomSessionHost429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RecoverRoomSessionHost429ResponseHeaders = typeof RecoverRoomSessionHost429ResponseHeadersSchema.Type;
+
+export const RedeliverWebhookDeliveryPathParamsSchema = Schema.Struct({
+  delivery_id: UUIDSchema,
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RedeliverWebhookDeliveryPathParams = typeof RedeliverWebhookDeliveryPathParamsSchema.Type;
+
+export const RedeliverWebhookDeliveryRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type RedeliverWebhookDeliveryRequestHeaders = typeof RedeliverWebhookDeliveryRequestHeadersSchema.Type;
+
+export const RedeliverWebhookDeliveryResponseSchema = WebhookDeliveryCreatedSchema;
+export type RedeliverWebhookDeliveryResponse = typeof RedeliverWebhookDeliveryResponseSchema.Type;
+
+export const RedeliverWebhookDelivery429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RedeliverWebhookDelivery429ResponseHeaders = typeof RedeliverWebhookDelivery429ResponseHeadersSchema.Type;
 
 export const RefreshIntegrationConnectionPathParamsSchema = Schema.Struct({
   connection_id: UUIDSchema,
@@ -1184,6 +1666,22 @@ export const Register429ResponseHeadersSchema = Schema.Struct({
 });
 export type Register429ResponseHeaders = typeof Register429ResponseHeadersSchema.Type;
 
+export const ReleaseRecordingReservationPathParamsSchema = Schema.Struct({
+  recording_reservation_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type ReleaseRecordingReservationPathParams = typeof ReleaseRecordingReservationPathParamsSchema.Type;
+
+export const ReleaseRecordingReservationResponseSchema = RecordingReservationSchema;
+export type ReleaseRecordingReservationResponse = typeof ReleaseRecordingReservationResponseSchema.Type;
+
+export const ReleaseRecordingReservation429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ReleaseRecordingReservation429ResponseHeaders = typeof ReleaseRecordingReservation429ResponseHeadersSchema.Type;
+
 export const RemoveSessionParticipantPathParamsSchema = Schema.Struct({
   participant_session_id: RoomSessionIdSchema,
   room_id: RoomIdSchema,
@@ -1200,7 +1698,7 @@ export type RemoveSessionParticipantRequestHeaders = typeof RemoveSessionPartici
 export const RemoveSessionParticipantRequestBodySchema = RemoveSessionParticipantRequestSchema;
 export type RemoveSessionParticipantRequestBody = typeof RemoveSessionParticipantRequestBodySchema.Type;
 
-export const RemoveSessionParticipantResponseSchema = ParticipantLifecycleSchema;
+export const RemoveSessionParticipantResponseSchema = ParticipantRemovalSchema;
 export type RemoveSessionParticipantResponse = typeof RemoveSessionParticipantResponseSchema.Type;
 
 export const RemoveSessionParticipant429ResponseHeadersSchema = Schema.Struct({
@@ -1228,6 +1726,55 @@ export const RequestTranscript429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RequestTranscript429ResponseHeaders = typeof RequestTranscript429ResponseHeadersSchema.Type;
+
+export const RotateWebhookEndpointSecretPathParamsSchema = Schema.Struct({
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RotateWebhookEndpointSecretPathParams = typeof RotateWebhookEndpointSecretPathParamsSchema.Type;
+
+export const RotateWebhookEndpointSecretRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type RotateWebhookEndpointSecretRequestHeaders = typeof RotateWebhookEndpointSecretRequestHeadersSchema.Type;
+
+export const RotateWebhookEndpointSecretRequestBodySchema = RotateWebhookSecretRequestSchema;
+export type RotateWebhookEndpointSecretRequestBody = typeof RotateWebhookEndpointSecretRequestBodySchema.Type;
+
+export const RotateWebhookEndpointSecretResponseSchema = RotateWebhookSecretResponseSchema;
+export type RotateWebhookEndpointSecretResponse = typeof RotateWebhookEndpointSecretResponseSchema.Type;
+
+export const RotateWebhookEndpointSecret429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RotateWebhookEndpointSecret429ResponseHeaders = typeof RotateWebhookEndpointSecret429ResponseHeadersSchema.Type;
+
+export const SetRoomSessionDeadlinePathParamsSchema = Schema.Struct({
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type SetRoomSessionDeadlinePathParams = typeof SetRoomSessionDeadlinePathParamsSchema.Type;
+
+export const SetRoomSessionDeadlineRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type SetRoomSessionDeadlineRequestHeaders = typeof SetRoomSessionDeadlineRequestHeadersSchema.Type;
+
+export const SetRoomSessionDeadlineRequestBodySchema = SetRoomSessionDeadlineRequestSchema;
+export type SetRoomSessionDeadlineRequestBody = typeof SetRoomSessionDeadlineRequestBodySchema.Type;
+
+export const SetRoomSessionDeadlineResponseSchema = SessionControlSchema;
+export type SetRoomSessionDeadlineResponse = typeof SetRoomSessionDeadlineResponseSchema.Type;
+
+export const SetRoomSessionDeadline429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type SetRoomSessionDeadline429ResponseHeaders = typeof SetRoomSessionDeadline429ResponseHeadersSchema.Type;
 
 export const StartGoogleSignIn302ResponseHeadersSchema = Schema.Struct({
   Location: LocationHeaderSchema,
@@ -1258,6 +1805,27 @@ export const StartIntegrationConnection429ResponseHeadersSchema = Schema.Struct(
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type StartIntegrationConnection429ResponseHeaders = typeof StartIntegrationConnection429ResponseHeadersSchema.Type;
+
+export const TestWebhookEndpointPathParamsSchema = Schema.Struct({
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type TestWebhookEndpointPathParams = typeof TestWebhookEndpointPathParamsSchema.Type;
+
+export const TestWebhookEndpointRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type TestWebhookEndpointRequestHeaders = typeof TestWebhookEndpointRequestHeadersSchema.Type;
+
+export const TestWebhookEndpointResponseSchema = WebhookDeliveryCreatedSchema;
+export type TestWebhookEndpointResponse = typeof TestWebhookEndpointResponseSchema.Type;
+
+export const TestWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type TestWebhookEndpoint429ResponseHeaders = typeof TestWebhookEndpoint429ResponseHeadersSchema.Type;
 
 export const UpdateMembershipPathParamsSchema = Schema.Struct({
   membership_id: MembershipIdSchema,
@@ -1354,6 +1922,31 @@ export const UpdateTenant429ResponseHeadersSchema = Schema.Struct({
 });
 export type UpdateTenant429ResponseHeaders = typeof UpdateTenant429ResponseHeadersSchema.Type;
 
+export const UpdateWebhookEndpointPathParamsSchema = Schema.Struct({
+  endpoint_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type UpdateWebhookEndpointPathParams = typeof UpdateWebhookEndpointPathParamsSchema.Type;
+
+export const UpdateWebhookEndpointRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  "If-Match": Schema.String.check(Schema.isPattern(new RegExp('^"[1-9][0-9]*"$'))),
+});
+export type UpdateWebhookEndpointRequestHeaders = typeof UpdateWebhookEndpointRequestHeadersSchema.Type;
+
+export const UpdateWebhookEndpointRequestBodySchema = UpdateWebhookEndpointRequestSchema;
+export type UpdateWebhookEndpointRequestBody = typeof UpdateWebhookEndpointRequestBodySchema.Type;
+
+export const UpdateWebhookEndpointResponseSchema = WebhookEndpointSchema;
+export type UpdateWebhookEndpointResponse = typeof UpdateWebhookEndpointResponseSchema.Type;
+
+export const UpdateWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type UpdateWebhookEndpoint429ResponseHeaders = typeof UpdateWebhookEndpoint429ResponseHeadersSchema.Type;
+
 export class EmailAlreadyRegisteredError extends Schema.TaggedErrorClass<EmailAlreadyRegisteredError>()("EmailAlreadyRegisteredError", {
   error: Schema.Struct({
     code: Schema.Literal("email_already_registered"),
@@ -1426,6 +2019,63 @@ export const IdempotencyConflictErrorWireSchema = Schema.Struct({
 export const IdempotencyConflictErrorSchema = IdempotencyConflictErrorWireSchema.pipe(
   Schema.decodeTo(IdempotencyConflictError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "IdempotencyConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class IdempotencyKeyConflictError extends Schema.TaggedErrorClass<IdempotencyKeyConflictError>()("IdempotencyKeyConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_key_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdempotencyKeyConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_key_conflict"),
+    message: Schema.String,
+  }),
+});
+export const IdempotencyKeyConflictErrorSchema = IdempotencyKeyConflictErrorWireSchema.pipe(
+  Schema.decodeTo(IdempotencyKeyConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdempotencyKeyConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class IdempotencyKeyExpiredError extends Schema.TaggedErrorClass<IdempotencyKeyExpiredError>()("IdempotencyKeyExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_key_expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdempotencyKeyExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_key_expired"),
+    message: Schema.String,
+  }),
+});
+export const IdempotencyKeyExpiredErrorSchema = IdempotencyKeyExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(IdempotencyKeyExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdempotencyKeyExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class IdempotencyKeyRequiredError extends Schema.TaggedErrorClass<IdempotencyKeyRequiredError>()("IdempotencyKeyRequiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_key_required"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdempotencyKeyRequiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("idempotency_key_required"),
+    message: Schema.String,
+  }),
+});
+export const IdempotencyKeyRequiredErrorSchema = IdempotencyKeyRequiredErrorWireSchema.pipe(
+  Schema.decodeTo(IdempotencyKeyRequiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdempotencyKeyRequiredError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -1943,6 +2593,44 @@ export const InvalidPasswordErrorSchema = InvalidPasswordErrorWireSchema.pipe(
   }),
 );
 
+export class InvalidRecordingBitrateError extends Schema.TaggedErrorClass<InvalidRecordingBitrateError>()("InvalidRecordingBitrateError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_bitrate"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidRecordingBitrateErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_bitrate"),
+    message: Schema.String,
+  }),
+});
+export const InvalidRecordingBitrateErrorSchema = InvalidRecordingBitrateErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidRecordingBitrateError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidRecordingBitrateError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidRecordingDurationError extends Schema.TaggedErrorClass<InvalidRecordingDurationError>()("InvalidRecordingDurationError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_duration"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidRecordingDurationErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_duration"),
+    message: Schema.String,
+  }),
+});
+export const InvalidRecordingDurationErrorSchema = InvalidRecordingDurationErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidRecordingDurationError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidRecordingDurationError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class InvalidRecordingFieldError extends Schema.TaggedErrorClass<InvalidRecordingFieldError>()("InvalidRecordingFieldError", {
   error: Schema.Struct({
     code: Schema.Literal("invalid_recording_field"),
@@ -1977,6 +2665,44 @@ export const InvalidRecordingIdErrorWireSchema = Schema.Struct({
 export const InvalidRecordingIdErrorSchema = InvalidRecordingIdErrorWireSchema.pipe(
   Schema.decodeTo(InvalidRecordingIdError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidRecordingIdError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidRecordingParticipantCountError extends Schema.TaggedErrorClass<InvalidRecordingParticipantCountError>()("InvalidRecordingParticipantCountError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_participant_count"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidRecordingParticipantCountErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_participant_count"),
+    message: Schema.String,
+  }),
+});
+export const InvalidRecordingParticipantCountErrorSchema = InvalidRecordingParticipantCountErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidRecordingParticipantCountError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidRecordingParticipantCountError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidRecordingReservationIdError extends Schema.TaggedErrorClass<InvalidRecordingReservationIdError>()("InvalidRecordingReservationIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_reservation_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidRecordingReservationIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_recording_reservation_id"),
+    message: Schema.String,
+  }),
+});
+export const InvalidRecordingReservationIdErrorSchema = InvalidRecordingReservationIdErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidRecordingReservationIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidRecordingReservationIdError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2304,6 +3030,101 @@ export const InvalidUserNameErrorSchema = InvalidUserNameErrorWireSchema.pipe(
   }),
 );
 
+export class InvalidWebhookApiVersionError extends Schema.TaggedErrorClass<InvalidWebhookApiVersionError>()("InvalidWebhookApiVersionError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_api_version"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidWebhookApiVersionErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_api_version"),
+    message: Schema.String,
+  }),
+});
+export const InvalidWebhookApiVersionErrorSchema = InvalidWebhookApiVersionErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidWebhookApiVersionError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidWebhookApiVersionError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidWebhookDeliveryIdError extends Schema.TaggedErrorClass<InvalidWebhookDeliveryIdError>()("InvalidWebhookDeliveryIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_delivery_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidWebhookDeliveryIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_delivery_id"),
+    message: Schema.String,
+  }),
+});
+export const InvalidWebhookDeliveryIdErrorSchema = InvalidWebhookDeliveryIdErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidWebhookDeliveryIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidWebhookDeliveryIdError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidWebhookEndpointIdError extends Schema.TaggedErrorClass<InvalidWebhookEndpointIdError>()("InvalidWebhookEndpointIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_endpoint_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidWebhookEndpointIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_endpoint_id"),
+    message: Schema.String,
+  }),
+});
+export const InvalidWebhookEndpointIdErrorSchema = InvalidWebhookEndpointIdErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidWebhookEndpointIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidWebhookEndpointIdError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidWebhookEventTypeError extends Schema.TaggedErrorClass<InvalidWebhookEventTypeError>()("InvalidWebhookEventTypeError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_event_type"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidWebhookEventTypeErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_event_type"),
+    message: Schema.String,
+  }),
+});
+export const InvalidWebhookEventTypeErrorSchema = InvalidWebhookEventTypeErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidWebhookEventTypeError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidWebhookEventTypeError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidWebhookUrlError extends Schema.TaggedErrorClass<InvalidWebhookUrlError>()("InvalidWebhookUrlError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_url"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidWebhookUrlErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_webhook_url"),
+    message: Schema.String,
+  }),
+});
+export const InvalidWebhookUrlErrorSchema = InvalidWebhookUrlErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidWebhookUrlError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidWebhookUrlError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class JourneyLedgerUnavailableError extends Schema.TaggedErrorClass<JourneyLedgerUnavailableError>()("JourneyLedgerUnavailableError", {
   error: Schema.Struct({
     code: Schema.Literal("journey_ledger_unavailable"),
@@ -2532,6 +3353,25 @@ export const RateLimitedErrorSchema = RateLimitedErrorWireSchema.pipe(
   }),
 );
 
+export class RecordingCapacityUnavailableError extends Schema.TaggedErrorClass<RecordingCapacityUnavailableError>()("RecordingCapacityUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording_capacity_unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingCapacityUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording_capacity_unavailable"),
+    message: Schema.String,
+  }),
+});
+export const RecordingCapacityUnavailableErrorSchema = RecordingCapacityUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingCapacityUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingCapacityUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class RecordingNotReadyError extends Schema.TaggedErrorClass<RecordingNotReadyError>()("RecordingNotReadyError", {
   error: Schema.Struct({
     code: Schema.Literal("recording_not_ready"),
@@ -2547,6 +3387,25 @@ export const RecordingNotReadyErrorWireSchema = Schema.Struct({
 export const RecordingNotReadyErrorSchema = RecordingNotReadyErrorWireSchema.pipe(
   Schema.decodeTo(RecordingNotReadyError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingNotReadyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class RecordingReservationNotFoundError extends Schema.TaggedErrorClass<RecordingReservationNotFoundError>()("RecordingReservationNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording_reservation_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingReservationNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording_reservation_not_found"),
+    message: Schema.String,
+  }),
+});
+export const RecordingReservationNotFoundErrorSchema = RecordingReservationNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingReservationNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingReservationNotFoundError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -2646,6 +3505,158 @@ export const UnauthenticatedErrorSchema = UnauthenticatedErrorWireSchema.pipe(
   }),
 );
 
+export class UnsafeWebhookUrlError extends Schema.TaggedErrorClass<UnsafeWebhookUrlError>()("UnsafeWebhookUrlError", {
+  error: Schema.Struct({
+    code: Schema.Literal("unsafe_webhook_url"),
+    message: Schema.String,
+  }),
+}) {}
+export const UnsafeWebhookUrlErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("unsafe_webhook_url"),
+    message: Schema.String,
+  }),
+});
+export const UnsafeWebhookUrlErrorSchema = UnsafeWebhookUrlErrorWireSchema.pipe(
+  Schema.decodeTo(UnsafeWebhookUrlError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "UnsafeWebhookUrlError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class WebhookDeliveryNotFoundError extends Schema.TaggedErrorClass<WebhookDeliveryNotFoundError>()("WebhookDeliveryNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_delivery_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const WebhookDeliveryNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_delivery_not_found"),
+    message: Schema.String,
+  }),
+});
+export const WebhookDeliveryNotFoundErrorSchema = WebhookDeliveryNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(WebhookDeliveryNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WebhookDeliveryNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class WebhookDeliveryNotRedeliverableError extends Schema.TaggedErrorClass<WebhookDeliveryNotRedeliverableError>()("WebhookDeliveryNotRedeliverableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_delivery_not_redeliverable"),
+    message: Schema.String,
+  }),
+}) {}
+export const WebhookDeliveryNotRedeliverableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_delivery_not_redeliverable"),
+    message: Schema.String,
+  }),
+});
+export const WebhookDeliveryNotRedeliverableErrorSchema = WebhookDeliveryNotRedeliverableErrorWireSchema.pipe(
+  Schema.decodeTo(WebhookDeliveryNotRedeliverableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WebhookDeliveryNotRedeliverableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class WebhookEndpointLimitReachedError extends Schema.TaggedErrorClass<WebhookEndpointLimitReachedError>()("WebhookEndpointLimitReachedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_endpoint_limit_reached"),
+    message: Schema.String,
+  }),
+}) {}
+export const WebhookEndpointLimitReachedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_endpoint_limit_reached"),
+    message: Schema.String,
+  }),
+});
+export const WebhookEndpointLimitReachedErrorSchema = WebhookEndpointLimitReachedErrorWireSchema.pipe(
+  Schema.decodeTo(WebhookEndpointLimitReachedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WebhookEndpointLimitReachedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class WebhookEndpointNotFoundError extends Schema.TaggedErrorClass<WebhookEndpointNotFoundError>()("WebhookEndpointNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_endpoint_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const WebhookEndpointNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_endpoint_not_found"),
+    message: Schema.String,
+  }),
+});
+export const WebhookEndpointNotFoundErrorSchema = WebhookEndpointNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(WebhookEndpointNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WebhookEndpointNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class WebhookEndpointRevisionConflictError extends Schema.TaggedErrorClass<WebhookEndpointRevisionConflictError>()("WebhookEndpointRevisionConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_endpoint_revision_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const WebhookEndpointRevisionConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_endpoint_revision_conflict"),
+    message: Schema.String,
+  }),
+});
+export const WebhookEndpointRevisionConflictErrorSchema = WebhookEndpointRevisionConflictErrorWireSchema.pipe(
+  Schema.decodeTo(WebhookEndpointRevisionConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WebhookEndpointRevisionConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class WebhookEventErasedError extends Schema.TaggedErrorClass<WebhookEventErasedError>()("WebhookEventErasedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_event_erased"),
+    message: Schema.String,
+  }),
+}) {}
+export const WebhookEventErasedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_event_erased"),
+    message: Schema.String,
+  }),
+});
+export const WebhookEventErasedErrorSchema = WebhookEventErasedErrorWireSchema.pipe(
+  Schema.decodeTo(WebhookEventErasedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WebhookEventErasedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class WebhookEventTypeUnavailableError extends Schema.TaggedErrorClass<WebhookEventTypeUnavailableError>()("WebhookEventTypeUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_event_type_unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const WebhookEventTypeUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("webhook_event_type_unavailable"),
+    message: Schema.String,
+  }),
+});
+export const WebhookEventTypeUnavailableErrorSchema = WebhookEventTypeUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(WebhookEventTypeUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "WebhookEventTypeUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export const AdmitSessionParticipantErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   IdempotencyConflictErrorSchema,
@@ -2721,6 +3732,27 @@ export const CreateRecordingErrorSchema = Schema.Union([
 ]);
 export type CreateRecordingError = typeof CreateRecordingErrorSchema.Type;
 
+export const CreateRecordingReservationErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyConflictErrorSchema,
+  InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
+  InvalidRecordingBitrateErrorSchema,
+  InvalidRecordingDurationErrorSchema,
+  InvalidRecordingParticipantCountErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  RecordingCapacityUnavailableErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type CreateRecordingReservationError = typeof CreateRecordingReservationErrorSchema.Type;
+
 export const CreateRoomErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidRequestErrorSchema, InvalidTenantIdErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, RoomSlugAlreadyUsedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type CreateRoomError = typeof CreateRoomErrorSchema.Type;
 
@@ -2770,8 +3802,67 @@ export type CreateTranscriptDownloadURLError = typeof CreateTranscriptDownloadUR
 export const CreateUserErrorSchema = Schema.Union([InternalErrorSchema, InvalidRequestErrorSchema, InvalidUserEmailErrorSchema, InvalidUserNameErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type CreateUserError = typeof CreateUserErrorSchema.Type;
 
+export const CreateWebhookEndpointErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyKeyConflictErrorSchema,
+  IdempotencyKeyExpiredErrorSchema,
+  IdempotencyKeyRequiredErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookApiVersionErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  InvalidWebhookEventTypeErrorSchema,
+  InvalidWebhookUrlErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  UnsafeWebhookUrlErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookDeliveryNotRedeliverableErrorSchema,
+  WebhookEndpointLimitReachedErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEndpointRevisionConflictErrorSchema,
+  WebhookEventErasedErrorSchema,
+  WebhookEventTypeUnavailableErrorSchema,
+]);
+export type CreateWebhookEndpointError = typeof CreateWebhookEndpointErrorSchema.Type;
+
 export const DeleteTranscriptErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidTenantIdErrorSchema, InvalidTranscriptIdErrorSchema, NotFoundErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type DeleteTranscriptError = typeof DeleteTranscriptErrorSchema.Type;
+
+export const DeleteWebhookEndpointErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyKeyConflictErrorSchema,
+  IdempotencyKeyExpiredErrorSchema,
+  IdempotencyKeyRequiredErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookApiVersionErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  InvalidWebhookEventTypeErrorSchema,
+  InvalidWebhookUrlErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  UnsafeWebhookUrlErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookDeliveryNotRedeliverableErrorSchema,
+  WebhookEndpointLimitReachedErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEndpointRevisionConflictErrorSchema,
+  WebhookEventErasedErrorSchema,
+  WebhookEventTypeUnavailableErrorSchema,
+]);
+export type DeleteWebhookEndpointError = typeof DeleteWebhookEndpointErrorSchema.Type;
 
 export const DisableIntegrationConnectionErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -2828,6 +3919,22 @@ export const ExecuteIntegrationActionErrorSchema = Schema.Union([
 ]);
 export type ExecuteIntegrationActionError = typeof ExecuteIntegrationActionErrorSchema.Type;
 
+export const ExtendRecordingReservationErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidRecordingDurationErrorSchema,
+  InvalidRecordingReservationIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  RecordingCapacityUnavailableErrorSchema,
+  RecordingReservationNotFoundErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type ExtendRecordingReservationError = typeof ExtendRecordingReservationErrorSchema.Type;
+
 export const GetAuditLogErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidAuditLogIdErrorSchema, InvalidTenantIdErrorSchema, NotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type GetAuditLogError = typeof GetAuditLogErrorSchema.Type;
 
@@ -2839,6 +3946,12 @@ export type GetMeError = typeof GetMeErrorSchema.Type;
 
 export const GetRecordingErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidRecordingIdErrorSchema, InvalidTenantIdErrorSchema, NotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type GetRecordingError = typeof GetRecordingErrorSchema.Type;
+
+export const GetRecordingPipelineErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidRecordingIdErrorSchema, InvalidTenantIdErrorSchema, NotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type GetRecordingPipelineError = typeof GetRecordingPipelineErrorSchema.Type;
+
+export const GetRecordingReservationErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidRecordingReservationIdErrorSchema, InvalidTenantIdErrorSchema, RecordingReservationNotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type GetRecordingReservationError = typeof GetRecordingReservationErrorSchema.Type;
 
 export const GetRoomErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidRoomIdErrorSchema, InvalidTenantIdErrorSchema, NotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type GetRoomError = typeof GetRoomErrorSchema.Type;
@@ -2854,6 +3967,40 @@ export type GetTranscriptError = typeof GetTranscriptErrorSchema.Type;
 
 export const GetUserErrorSchema = Schema.Union([InternalErrorSchema, InvalidUserIdErrorSchema, NotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type GetUserError = typeof GetUserErrorSchema.Type;
+
+export const GetWebhookDeliveryErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEventErasedErrorSchema,
+]);
+export type GetWebhookDeliveryError = typeof GetWebhookDeliveryErrorSchema.Type;
+
+export const GetWebhookEndpointErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEventErasedErrorSchema,
+]);
+export type GetWebhookEndpointError = typeof GetWebhookEndpointErrorSchema.Type;
 
 export const IntakeJourneyEventsErrorSchema = Schema.Union([InternalErrorSchema, InvalidJourneyEventErrorSchema, InvalidRequestErrorSchema, JourneyLedgerUnavailableErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type IntakeJourneyEventsError = typeof IntakeJourneyEventsErrorSchema.Type;
@@ -2913,11 +4060,94 @@ export type ListTranscriptsError = typeof ListTranscriptsErrorSchema.Type;
 export const ListUsersErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type ListUsersError = typeof ListUsersErrorSchema.Type;
 
+export const ListWebhookDeliveriesErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEventErasedErrorSchema,
+]);
+export type ListWebhookDeliveriesError = typeof ListWebhookDeliveriesErrorSchema.Type;
+
+export const ListWebhookEndpointsErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEventErasedErrorSchema,
+]);
+export type ListWebhookEndpointsError = typeof ListWebhookEndpointsErrorSchema.Type;
+
 export const LoginErrorSchema = Schema.Union([InternalErrorSchema, InvalidCredentialsErrorSchema, InvalidEmailErrorSchema, InvalidPasswordErrorSchema, InvalidRequestErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
 export type LoginError = typeof LoginErrorSchema.Type;
 
 export const LogoutErrorSchema = Schema.Union([InternalErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type LogoutError = typeof LogoutErrorSchema.Type;
+
+export const RecoverRoomSessionHostErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyConflictErrorSchema,
+  InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  NotFoundErrorSchema,
+  ParticipantGenerationMismatchErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SessionNotActiveErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type RecoverRoomSessionHostError = typeof RecoverRoomSessionHostErrorSchema.Type;
+
+export const RedeliverWebhookDeliveryErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyKeyConflictErrorSchema,
+  IdempotencyKeyExpiredErrorSchema,
+  IdempotencyKeyRequiredErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookApiVersionErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  InvalidWebhookEventTypeErrorSchema,
+  InvalidWebhookUrlErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  UnsafeWebhookUrlErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookDeliveryNotRedeliverableErrorSchema,
+  WebhookEndpointLimitReachedErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEndpointRevisionConflictErrorSchema,
+  WebhookEventErasedErrorSchema,
+  WebhookEventTypeUnavailableErrorSchema,
+]);
+export type RedeliverWebhookDeliveryError = typeof RedeliverWebhookDeliveryErrorSchema.Type;
 
 export const RefreshIntegrationConnectionErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -2948,6 +4178,18 @@ export const RegisterErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
 ]);
 export type RegisterError = typeof RegisterErrorSchema.Type;
+
+export const ReleaseRecordingReservationErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidRecordingReservationIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  RateLimitedErrorSchema,
+  RecordingReservationNotFoundErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type ReleaseRecordingReservationError = typeof ReleaseRecordingReservationErrorSchema.Type;
 
 export const RemoveSessionParticipantErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -2988,6 +4230,54 @@ export const RequestTranscriptErrorSchema = Schema.Union([
 ]);
 export type RequestTranscriptError = typeof RequestTranscriptErrorSchema.Type;
 
+export const RotateWebhookEndpointSecretErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyKeyConflictErrorSchema,
+  IdempotencyKeyExpiredErrorSchema,
+  IdempotencyKeyRequiredErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookApiVersionErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  InvalidWebhookEventTypeErrorSchema,
+  InvalidWebhookUrlErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  UnsafeWebhookUrlErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookDeliveryNotRedeliverableErrorSchema,
+  WebhookEndpointLimitReachedErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEndpointRevisionConflictErrorSchema,
+  WebhookEventErasedErrorSchema,
+  WebhookEventTypeUnavailableErrorSchema,
+]);
+export type RotateWebhookEndpointSecretError = typeof RotateWebhookEndpointSecretErrorSchema.Type;
+
+export const SetRoomSessionDeadlineErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyConflictErrorSchema,
+  InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SessionNotActiveErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type SetRoomSessionDeadlineError = typeof SetRoomSessionDeadlineErrorSchema.Type;
+
 export const StartGoogleSignInErrorSchema = Schema.Union([InternalErrorSchema, OauthNotConfiguredErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
 export type StartGoogleSignInError = typeof StartGoogleSignInErrorSchema.Type;
 
@@ -3007,6 +4297,35 @@ export const StartIntegrationConnectionErrorSchema = Schema.Union([
   UnauthenticatedErrorSchema,
 ]);
 export type StartIntegrationConnectionError = typeof StartIntegrationConnectionErrorSchema.Type;
+
+export const TestWebhookEndpointErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyKeyConflictErrorSchema,
+  IdempotencyKeyExpiredErrorSchema,
+  IdempotencyKeyRequiredErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookApiVersionErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  InvalidWebhookEventTypeErrorSchema,
+  InvalidWebhookUrlErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  UnsafeWebhookUrlErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookDeliveryNotRedeliverableErrorSchema,
+  WebhookEndpointLimitReachedErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEndpointRevisionConflictErrorSchema,
+  WebhookEventErasedErrorSchema,
+  WebhookEventTypeUnavailableErrorSchema,
+]);
+export type TestWebhookEndpointError = typeof TestWebhookEndpointErrorSchema.Type;
 
 export const UpdateMembershipErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -3089,35 +4408,80 @@ export const UpdateTenantErrorSchema = Schema.Union([
 ]);
 export type UpdateTenantError = typeof UpdateTenantErrorSchema.Type;
 
+export const UpdateWebhookEndpointErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  IdempotencyKeyConflictErrorSchema,
+  IdempotencyKeyExpiredErrorSchema,
+  IdempotencyKeyRequiredErrorSchema,
+  InternalErrorSchema,
+  InvalidCursorErrorSchema,
+  InvalidPageSizeErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  InvalidWebhookApiVersionErrorSchema,
+  InvalidWebhookDeliveryIdErrorSchema,
+  InvalidWebhookEndpointIdErrorSchema,
+  InvalidWebhookEventTypeErrorSchema,
+  InvalidWebhookUrlErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+  UnsafeWebhookUrlErrorSchema,
+  WebhookDeliveryNotFoundErrorSchema,
+  WebhookDeliveryNotRedeliverableErrorSchema,
+  WebhookEndpointLimitReachedErrorSchema,
+  WebhookEndpointNotFoundErrorSchema,
+  WebhookEndpointRevisionConflictErrorSchema,
+  WebhookEventErasedErrorSchema,
+  WebhookEventTypeUnavailableErrorSchema,
+]);
+export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema.Type;
+
 export const ChalkOperationPolicies = {
   admitSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecordingDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  createRecordingReservation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRoom: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRoomSession: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTranscriptDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createUser: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  createWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  deleteWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   disableIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endRoomSession: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  extendRecordingReservation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getMe: { rateLimit: { limit: 100, policy: "auth.me", windowSeconds: 60 } },
+  getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
+  getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   intakeJourneyEvents: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
   issueSessionParticipantSyncToken: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
+  listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
+  recoverRoomSessionHost: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
+  releaseRecordingReservation: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  setRoomSessionDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   startIntegrationConnection: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRoom: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateRoomSession: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  updateWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
 } as const;
 export type ChalkOperationPolicy = (typeof ChalkOperationPolicies)[keyof typeof ChalkOperationPolicies];

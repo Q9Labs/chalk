@@ -1,0 +1,100 @@
+{
+  "client_frames": [
+    { "type": "hello", "protocol": 3, "token": "signed-token", "streams": { "control": { "cursor": null }, "media": { "cursor": null }, "presence": { "cursor": null } } },
+    { "type": "command", "command_id": "command-00000001", "name": "set_hand_raised", "payload": { "raised": true, "extra": false } },
+    { "type": "command", "command_id": "short", "name": "set_display_name", "payload": { "display_name": "Ada" } },
+    { "type": "directed_request", "request_id": "request-000000001", "name": "request_unmute", "target_participant_session_id": "not-a-uuid" },
+    { "type": "command", "command_id": "command-00000003", "name": "set_display_name", "payload": { "display_name": " Ada " } }
+  ],
+  "server_frames": [
+    { "type": "ack", "command_id": "command-00000002", "delivery": "duplicate", "outcome": "satisfied", "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23", "revision": 1, "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    { "type": "projection_snapshot", "stream": "media", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25", "sequence": 1, "items": [] },
+    { "type": "projection_event", "stream": "media", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25", "sequence": 1, "item": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "source": "microphone", "enabled": false, "publication_id": "publication-1" } },
+    { "type": "projection_event", "stream": "presence", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26", "sequence": 1, "item": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "state": "disconnected", "speaking": true, "active_speaker": false } }
+  ],
+  "snapshot_mutations": [
+    { "name": "participant_eligible_roles_empty", "changes": [{ "path": ["participants", 0, "eligible_roles"], "value": [] }] },
+    { "name": "participant_eligible_roles_duplicate", "changes": [{ "path": ["participants", 0, "eligible_roles"], "value": ["host", "cohost", "host"] }] },
+    { "name": "participant_current_role_absent", "changes": [{ "path": ["participants", 0, "eligible_roles"], "value": ["cohost"] }] },
+    { "name": "participant_host_missing_cohost_eligibility", "changes": [{ "path": ["participants", 0, "eligible_roles"], "value": ["host"] }] },
+    {
+      "name": "role_capabilities_duplicate",
+      "changes": [
+        { "path": ["role_capabilities", "host"], "value": ["publishAudio", "publishAudio"] },
+        { "path": ["participants", 0, "capabilities"], "value": ["publishAudio", "publishAudio"] }
+      ]
+    },
+    { "name": "participant_ids_duplicate", "changes": [{ "path": ["participants", 1, "participant_session_id"], "value": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21" }] },
+    { "name": "admission_request_ids_duplicate", "changes": [{ "path": ["admission_requests", 1, "admission_request_id"], "value": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30" }] },
+    { "name": "pending_candidate_ids_duplicate", "changes": [{ "path": ["admission_requests", 1, "participant_session_id"], "value": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c31" }] },
+    { "name": "active_pending_candidate_overlap", "changes": [{ "path": ["admission_requests", 0, "participant_session_id"], "value": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" }] },
+    {
+      "name": "participant_capabilities_not_ordered_exactly",
+      "changes": [
+        { "path": ["role_capabilities", "participant"], "value": ["subscribe", "raiseHand"] },
+        { "path": ["participants", 1, "capabilities"], "value": ["raiseHand", "subscribe"] }
+      ]
+    },
+    { "name": "active_nonempty_host_null", "changes": [{ "path": ["host_participant_session_id"], "value": null }] },
+    {
+      "name": "active_multiple_hosts",
+      "changes": [
+        { "path": ["participants", 1, "role"], "value": "host" },
+        { "path": ["participants", 1, "eligible_roles"], "value": ["host", "cohost"] },
+        { "path": ["participants", 1, "capabilities"], "value": ["publishAudio", "endMeeting"] }
+      ]
+    },
+    { "name": "active_host_id_role_mismatch", "changes": [{ "path": ["host_participant_session_id"], "value": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" }] },
+    { "name": "active_empty_host_non_null", "changes": [{ "path": ["participants"], "value": [] }] },
+    {
+      "name": "ended_retains_participants",
+      "changes": [
+        { "path": ["status"], "value": "ended" },
+        { "path": ["admission_requests"], "value": [] },
+        { "path": ["host_participant_session_id"], "value": null }
+      ]
+    },
+    {
+      "name": "ended_retains_admission_requests",
+      "changes": [
+        { "path": ["status"], "value": "ended" },
+        { "path": ["participants"], "value": [] },
+        { "path": ["host_participant_session_id"], "value": null }
+      ]
+    },
+    {
+      "name": "ended_retains_host",
+      "changes": [
+        { "path": ["status"], "value": "ended" },
+        { "path": ["participants"], "value": [] },
+        { "path": ["admission_requests"], "value": [] }
+      ]
+    },
+    {
+      "name": "ended_retains_recording",
+      "changes": [
+        { "path": ["status"], "value": "ended" },
+        { "path": ["participants"], "value": [] },
+        { "path": ["admission_requests"], "value": [] },
+        { "path": ["host_participant_session_id"], "value": null },
+        { "path": ["recording"], "value": { "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34", "status": "recording", "failure_code": null } }
+      ]
+    },
+    { "name": "admission_eligible_roles_empty", "changes": [{ "path": ["admission_requests", 0, "eligible_roles"], "value": [] }] },
+    { "name": "admission_eligible_roles_duplicate", "changes": [{ "path": ["admission_requests", 0, "eligible_roles"], "value": ["participant", "participant"] }] },
+    { "name": "admission_initial_role_absent", "changes": [{ "path": ["admission_requests", 0, "eligible_roles"], "value": ["cohost"] }] },
+    {
+      "name": "admission_host_missing_cohost_eligibility",
+      "changes": [
+        { "path": ["admission_requests", 0, "initial_role"], "value": "host" },
+        { "path": ["admission_requests", 0, "eligible_roles"], "value": ["host"] }
+      ]
+    },
+    { "name": "recording_failed_without_failure_code", "changes": [{ "path": ["recording"], "value": { "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34", "status": "failed", "failure_code": null } }] },
+    { "name": "recording_nonfailed_with_failure_code", "changes": [{ "path": ["recording"], "value": { "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34", "status": "recording", "failure_code": "backend_failure" } }] },
+    { "name": "participant_display_name_empty", "changes": [{ "path": ["participants", 0, "display_name"], "value": "" }] },
+    { "name": "admission_display_name_empty", "changes": [{ "path": ["admission_requests", 0, "display_name"], "value": "" }] },
+    { "name": "recording_failure_code_empty", "changes": [{ "path": ["recording"], "value": { "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34", "status": "failed", "failure_code": "" } }] },
+    { "name": "snapshot_unknown_field", "changes": [{ "path": ["unexpected"], "value": true }] }
+  ]
+}

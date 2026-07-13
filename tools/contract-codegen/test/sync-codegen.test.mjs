@@ -1,6 +1,5 @@
 // @ts-check
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -8,23 +7,56 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 import { ClientFrameSchema, ServerFrameSchema, SyncCloseCodes, SyncCorrelationFieldsSchema, SyncProtocolMetadata } from "../../../sdks/typescript/client/src/generated/sync.ts";
-import { ClientFrameSchema as ClientV2FrameSchema, ServerFrameSchema as ServerV2FrameSchema, SyncProtocolLimits, SyncProtocolMetadata as SyncV2ProtocolMetadata, encodeSyncFrame, encodedSyncFrameBytes } from "../../../sdks/typescript/client/src/generated/sync-v2.ts";
+import { SyncProtocolMetadata as SyncV3ProtocolMetadata, SyncV3ClientFrameSchema as ClientV3FrameSchema, SyncV3ServerFrameSchema as ServerV3FrameSchema, encodeSyncFrame as encodeV3SyncFrame } from "../../../sdks/typescript/client/src/generated/sync-v3.ts";
 import { loadSyncContract, syncProtocolVersion } from "../src/emitters/sync-contract.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const v1SchemaPath = resolve(repositoryRoot, "contract/schema/sync-v1.json");
-const v2SchemaPath = resolve(repositoryRoot, "contract/schema/sync-v2.json");
+const v3SchemaPath = resolve(repositoryRoot, "contract/schema/sync-v3.json");
 const typeScriptEmitter = resolve(repositoryRoot, "tools/contract-codegen/src/emitters/sync-typescript.mjs");
 const elixirEmitter = resolve(repositoryRoot, "tools/contract-codegen/src/emitters/sync-elixir.mjs");
 const generatedTypeScriptPath = resolve(repositoryRoot, "sdks/typescript/client/src/generated/sync.ts");
 const generatedElixirPath = resolve(repositoryRoot, "apps/sync/lib/chalk_sync/contract/generated.ex");
-const generatedV2TypeScriptPath = resolve(repositoryRoot, "sdks/typescript/client/src/generated/sync-v2.ts");
-const generatedV2ElixirPath = resolve(repositoryRoot, "apps/sync/lib/chalk_sync/contract/generated_v2.ex");
-const v2FixturePath = resolve(repositoryRoot, "contract/schema/fixtures/sync-v2/golden-frames.json");
-const v2DigestFixturePath = resolve(repositoryRoot, "contract/schema/fixtures/sync-v2/digest-vectors.json");
-const v2ParticipantFixturePath = resolve(repositoryRoot, "contract/schema/fixtures/sync-v2/max-participant.json");
+const generatedV3TypeScriptPath = resolve(repositoryRoot, "sdks/typescript/client/src/generated/sync-v3.ts");
+const generatedV3ElixirPath = resolve(repositoryRoot, "apps/sync/lib/chalk_sync/contract/generated_v3.ex");
+const v3FixturePath = resolve(repositoryRoot, "contract/schema/fixtures/sync-v3/golden-frames.json");
+const v3InvalidFixturePath = resolve(repositoryRoot, "contract/schema/fixtures/sync-v3/invalid-frames.json");
+const expectedSnapshotMutationNames = [
+  "participant_eligible_roles_empty",
+  "participant_eligible_roles_duplicate",
+  "participant_current_role_absent",
+  "participant_host_missing_cohost_eligibility",
+  "role_capabilities_duplicate",
+  "participant_ids_duplicate",
+  "admission_request_ids_duplicate",
+  "pending_candidate_ids_duplicate",
+  "active_pending_candidate_overlap",
+  "participant_capabilities_not_ordered_exactly",
+  "active_nonempty_host_null",
+  "active_multiple_hosts",
+  "active_host_id_role_mismatch",
+  "active_empty_host_non_null",
+  "ended_retains_participants",
+  "ended_retains_admission_requests",
+  "ended_retains_host",
+  "ended_retains_recording",
+  "admission_eligible_roles_empty",
+  "admission_eligible_roles_duplicate",
+  "admission_initial_role_absent",
+  "admission_host_missing_cohost_eligibility",
+  "recording_failed_without_failure_code",
+  "recording_nonfailed_with_failure_code",
+  "participant_display_name_empty",
+  "admission_display_name_empty",
+  "recording_failure_code_empty",
+  "snapshot_unknown_field",
+];
 
-/** @typedef {{canonical_json: string, projection: unknown, state_digest: string, state_schema_version: number}} DigestVector */
+/** @typedef {Record<string, any>} JsonMap */
+/** @typedef {{client_frames: JsonMap[], server_frames: JsonMap[]}} V3GoldenFixtures */
+/** @typedef {{name: string, changes: {path: (number | string)[], value: unknown}[]}} SnapshotMutationFixture */
+/** @typedef {V3GoldenFixtures & {snapshot_mutations: SnapshotMutationFixture[]}} V3InvalidFixtures */
+/** @typedef {JsonMap & {operations: ({name: string, payload: JsonMap})[], events: ({name: string, origin: string, payload: JsonMap})[], externalIntents: string[]}} V3ContractFixture */
 
 describe("sync v1 contract generation", () => {
   it("regenerates byte-identical TypeScript and Elixir golden outputs", async () => {
@@ -217,126 +249,150 @@ describe("generated TypeScript sync codecs", () => {
   });
 });
 
-describe("sync v2 contract generation", () => {
-  it("requires explicit version selection and regenerates the v2 TypeScript and Elixir goldens", async () => {
-    expect(syncProtocolVersion("1")).toBe(1);
-    expect(syncProtocolVersion("2")).toBe(2);
-    expect(() => syncProtocolVersion("3")).toThrow('expected "1" or "2"');
+describe("sync v3 contract generation", () => {
+  it("selects v3 explicitly and regenerates byte-identical TypeScript and Elixir goldens", async () => {
+    expect(syncProtocolVersion("3")).toBe(3);
+    expect(() => syncProtocolVersion("2")).toThrow('expected "1" or "3"');
 
     await withTemporaryDirectory(async (directory) => {
-      const typeScriptOutput = resolve(directory, "sync-v2.ts");
-      const elixirOutput = resolve(directory, "generated_v2.ex");
-
-      await emit(typeScriptEmitter, "CODEGEN_SYNC_TYPESCRIPT_OUTPUT_PATH", typeScriptOutput, v2SchemaPath, 2);
-      await emit(elixirEmitter, "CODEGEN_SYNC_ELIXIR_OUTPUT_PATH", elixirOutput, v2SchemaPath, 2);
-
-      await expect(readFile(typeScriptOutput, "utf8")).resolves.toBe(await readFile(generatedV2TypeScriptPath, "utf8"));
-      await expect(readFile(elixirOutput, "utf8")).resolves.toBe(await readFile(generatedV2ElixirPath, "utf8"));
+      const typeScriptOutput = resolve(directory, "sync-v3.ts");
+      const elixirOutput = resolve(directory, "generated_v3.ex");
+      await emit(typeScriptEmitter, "CODEGEN_SYNC_TYPESCRIPT_OUTPUT_PATH", typeScriptOutput, v3SchemaPath, 3);
+      await emit(elixirEmitter, "CODEGEN_SYNC_ELIXIR_OUTPUT_PATH", elixirOutput, v3SchemaPath, 3);
+      await expect(readFile(typeScriptOutput, "utf8")).resolves.toBe(await readFile(generatedV3TypeScriptPath, "utf8"));
+      await expect(readFile(elixirOutput, "utf8")).resolves.toBe(await readFile(generatedV3ElixirPath, "utf8"));
     });
   }, 60_000);
 
-  it("rejects a v2 source with a non-approved limit before emission", async () => {
+  it("decodes and re-encodes every golden v3 frame", async () => {
+    const fixtures = /** @type {V3GoldenFixtures} */ (JSON.parse(await readFile(v3FixturePath, "utf8")));
+    const contract = /** @type {V3ContractFixture} */ (JSON.parse(await readFile(v3SchemaPath, "utf8")));
+    const decodeClient = Schema.decodeUnknownSync(ClientV3FrameSchema);
+    const decodeServer = Schema.decodeUnknownSync(ServerV3FrameSchema);
+    fixtures.client_frames.forEach((frame) => expect(encodeV3SyncFrame(decodeClient(frame))).toBe(JSON.stringify(frame)));
+    fixtures.server_frames.forEach((frame) => expect(encodeV3SyncFrame(decodeServer(frame))).toBe(JSON.stringify(frame)));
+    expect(fixtures.client_frames.filter((frame) => frame.type === "operation").map((frame) => frame.name)).toEqual(contract.operations.map((operation) => operation.name));
+    expect(fixtures.server_frames.filter((frame) => frame.type === "event").map((frame) => frame.name)).toEqual(contract.events.map((event) => event.name));
+  });
+
+  it("retains the control stream in the generated Elixir delivery acknowledgement", async () => {
     await withTemporaryDirectory(async (directory) => {
-      const invalidPath = resolve(directory, "sync-v2.json");
-      const source = await readFile(v2SchemaPath, "utf8");
-      await writeFile(invalidPath, source.replace('"tokenBytes": 8192', '"tokenBytes": 8193'));
-
-      await expect(loadSyncContract(invalidPath, 2)).rejects.toThrow("limits.tokenBytes must equal 8192");
+      const output = resolve(directory, "generated_v3.ex");
+      await emit(elixirEmitter, "CODEGEN_SYNC_ELIXIR_OUTPUT_PATH", output, v3SchemaPath, 3);
+      const generated = await readFile(output, "utf8");
+      expect(generated).toContain("{:delivery_ack, %{stream: :control, revision: revision, state_digest: digest}}");
     });
   });
 
-  it("decodes and re-encodes every golden v2 frame", async () => {
-    const fixtures = /** @type {{client_frames: unknown[], server_frames: unknown[]}} */ (JSON.parse(await readFile(v2FixturePath, "utf8")));
-    const decodeClient = Schema.decodeUnknownSync(ClientV2FrameSchema);
-    const decodeServer = Schema.decodeUnknownSync(ServerV2FrameSchema);
+  it("rejects every malformed exact-key, bound, acknowledgement, projection, and snapshot-invariant fixture", async () => {
+    const golden = /** @type {V3GoldenFixtures} */ (JSON.parse(await readFile(v3FixturePath, "utf8")));
+    const fixtures = /** @type {V3InvalidFixtures} */ (JSON.parse(await readFile(v3InvalidFixturePath, "utf8")));
+    const decodeClient = Schema.decodeUnknownSync(ClientV3FrameSchema);
+    const decodeServer = Schema.decodeUnknownSync(ServerV3FrameSchema);
+    fixtures.client_frames.forEach((frame) => expect(() => decodeClient(frame)).toThrow());
+    fixtures.server_frames.forEach((frame) => expect(() => decodeServer(frame)).toThrow());
+    expect(fixtures.snapshot_mutations.map((fixture) => fixture.name)).toEqual(expectedSnapshotMutationNames);
+    snapshotMutationFrames(golden, fixtures).forEach((frame) => expect(() => decodeServer(frame)).toThrow());
+  });
 
-    fixtures.client_frames.forEach((frame) => {
-      expect(encodeSyncFrame(decodeClient(frame))).toBe(JSON.stringify(frame));
+  it("accepts v3 goldens and rejects negative fixtures through the generated Elixir decoder", async () => {
+    const golden = /** @type {V3GoldenFixtures} */ (JSON.parse(await readFile(v3FixturePath, "utf8")));
+    const invalid = /** @type {V3InvalidFixtures} */ (JSON.parse(await readFile(v3InvalidFixturePath, "utf8")));
+    const invalidServerFrames = [...invalid.server_frames, ...snapshotMutationFrames(golden, invalid)];
+    const script = `
+      Code.compile_file(${JSON.stringify(generatedV3ElixirPath)})
+      golden = ${renderElixirTestValue(golden)}
+      invalid = ${renderElixirTestValue(invalid)}
+      invalid_server_frames = ${renderElixirTestValue(invalidServerFrames)}
+      client_ok = Enum.all?(golden["client_frames"], &match?({:ok, _}, ChalkSync.Contract.GeneratedV3.decode_client_frame(&1)))
+      server_ok = Enum.all?(golden["server_frames"], &ChalkSync.Contract.GeneratedV3.valid_server_frame?/1)
+      client_rejected = Enum.all?(invalid["client_frames"], &match?({:error, _}, ChalkSync.Contract.GeneratedV3.decode_client_frame(&1)))
+      server_rejected = Enum.all?(invalid_server_frames, &(not ChalkSync.Contract.GeneratedV3.valid_server_frame?(&1)))
+      unless client_ok and server_ok and client_rejected and server_rejected, do: raise("generated v3 Elixir decoder fixture failure")
+    `;
+    await executeProcess("elixir", ["-e", script], repositoryRoot);
+  }, 60_000);
+
+  it("decodes every exact operation envelope and rejects unknown payload keys", async () => {
+    const contract = /** @type {V3ContractFixture} */ (JSON.parse(await readFile(v3SchemaPath, "utf8")));
+    const decodeClient = Schema.decodeUnknownSync(ClientV3FrameSchema);
+    for (const [index, operation] of contract.operations.entries()) {
+      const payload = Object.fromEntries(Object.keys(operation.payload).map((key) => [key.replace(/[A-Z]/gu, (letter) => `_${letter.toLowerCase()}`), "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21"]));
+      const frame = { type: "operation", command_id: `operation-command-${String(index).padStart(2, "0")}`, name: operation.name, payload };
+      expect(decodeClient(frame)).toEqual(frame);
+      expect(() => decodeClient({ ...frame, payload: { ...payload, unexpected: true } })).toThrow();
+    }
+  });
+
+  it("decodes all eighteen exact control-event payloads and rejects payload or origin ambiguity", async () => {
+    const contract = /** @type {V3ContractFixture} */ (JSON.parse(await readFile(v3SchemaPath, "utf8")));
+    expect(contract.events).toHaveLength(18);
+    const decodeServer = Schema.decodeUnknownSync(ServerV3FrameSchema);
+    for (const [index, event] of contract.events.entries()) {
+      const payload = Object.fromEntries(Object.entries(event.payload).map(([key, field]) => [key.replace(/[A-Z]/gu, (letter) => `_${letter.toLowerCase()}`), sampleV3Field(field)]));
+      const origin = event.origin === "external" ? contract.eventFrame.externalOriginField : event.origin === "lifecycle" ? contract.eventFrame.lifecycleOriginField : contract.eventFrame.commandOriginField;
+      const frame = {
+        type: "event",
+        stream: "control",
+        name: event.name,
+        event_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+        base_revision: index,
+        revision: index + 1,
+        schema_version: 1,
+        resulting_state_digest: "b".repeat(64),
+        payload,
+        [origin]: origin === contract.eventFrame.commandOriginField ? "event-command-001" : "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24",
+      };
+      expect(decodeServer(frame)).toMatchObject({ name: event.name, payload });
+      if (event.origin === "command_or_external") {
+        const externalFrame = { ...frame, [contract.eventFrame.externalOriginField]: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24" };
+        delete externalFrame[contract.eventFrame.commandOriginField];
+        expect(decodeServer(externalFrame)).toMatchObject({ name: event.name, payload });
+      }
+      expect(() => decodeServer({ ...frame, payload: { ...payload, unexpected: true } })).toThrow();
+      const otherOrigin = origin === contract.eventFrame.commandOriginField ? contract.eventFrame.externalOriginField : contract.eventFrame.commandOriginField;
+      expect(() => decodeServer({ ...frame, [otherOrigin]: "event-command-002" })).toThrow();
+    }
+  });
+
+  it("accepts the populated active, pre-first-host active, and empty ended snapshot shapes", async () => {
+    const fixtures = /** @type {V3GoldenFixtures} */ (JSON.parse(await readFile(v3FixturePath, "utf8")));
+    const decodeServer = Schema.decodeUnknownSync(ServerV3FrameSchema);
+    const fixtureWelcome = fixtures.server_frames.find((frame) => frame.type === "welcome" && frame.mode === "snapshot");
+    if (!fixtureWelcome) throw new Error("golden v3 fixtures require a snapshot welcome frame");
+    const welcome = structuredClone(fixtureWelcome);
+    expect(decodeServer(welcome)).toMatchObject({ type: "welcome", mode: "snapshot" });
+    welcome.snapshot.participants = [];
+    welcome.snapshot.admission_requests = [];
+    welcome.snapshot.host_participant_session_id = null;
+    expect(decodeServer(welcome)).toMatchObject({ snapshot: { status: "active", host_participant_session_id: null } });
+    welcome.snapshot.status = "ended";
+    welcome.snapshot.recording = null;
+    expect(decodeServer(welcome)).toMatchObject({ snapshot: { status: "ended", participants: [], admission_requests: [], host_participant_session_id: null, recording: null } });
+    expect(SyncV3ProtocolMetadata.streams).toHaveProperty("requests.required", true);
+    expect(SyncV3ProtocolMetadata.externalIntents).toEqual(expect.arrayContaining(["admission_request_expired", "tenant_set_deadline"]));
+  });
+
+  it("rejects a v3 source missing an exact frame declaration", async () => {
+    await withTemporaryDirectory(async (directory) => {
+      const invalidPath = resolve(directory, "sync-v3.json");
+      const contract = /** @type {V3ContractFixture} */ (JSON.parse(await readFile(v3SchemaPath, "utf8")));
+      delete contract.projectionFrames;
+      await writeFile(invalidPath, JSON.stringify(contract));
+      await expect(loadSyncContract(invalidPath, 3)).rejects.toThrow("projectionFrames is required");
     });
-    fixtures.server_frames.forEach((frame) => {
-      expect(encodeSyncFrame(decodeServer(frame))).toBe(JSON.stringify(frame));
+  });
+
+  it("rejects a v3 source missing a durable event or external intent", async () => {
+    await withTemporaryDirectory(async (directory) => {
+      const missingEventPath = resolve(directory, "sync-v3-missing-event.json");
+      const missingIntentPath = resolve(directory, "sync-v3-missing-intent.json");
+      const contract = /** @type {V3ContractFixture} */ (JSON.parse(await readFile(v3SchemaPath, "utf8")));
+      await writeFile(missingEventPath, JSON.stringify({ ...contract, events: contract.events.filter((event) => event.name !== "deadline_changed") }));
+      await writeFile(missingIntentPath, JSON.stringify({ ...contract, externalIntents: contract.externalIntents.filter((intent) => intent !== "tenant_set_deadline") }));
+      await expect(loadSyncContract(missingEventPath, 3)).rejects.toThrow("durable event set and origins must be exhaustive");
+      await expect(loadSyncContract(missingIntentPath, 3)).rejects.toThrow("external intent set must be exhaustive");
     });
-  });
-
-  it("rejects unknown fields, unbounded command IDs, ambiguous origins, and malformed replay pages", async () => {
-    const decodeClient = Schema.decodeUnknownSync(ClientV2FrameSchema);
-    const decodeServer = Schema.decodeUnknownSync(ServerV2FrameSchema);
-    const fixtures = JSON.parse(await readFile(v2FixturePath, "utf8"));
-
-    expect(() =>
-      decodeClient({
-        type: "command",
-        command_id: "short",
-        name: "raise_hand",
-        payload: {},
-      }),
-    ).toThrow();
-
-    expect(() =>
-      decodeClient({
-        type: "hello",
-        protocol: 2,
-        token: "signed-token",
-        streams: { control: { cursor: null } },
-        unexpected: true,
-      }),
-    ).toThrow();
-
-    const event = structuredClone(fixtures.server_frames[2].events[0]);
-    event.lifecycle_intent_id = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25";
-    expect(() => decodeServer(event)).toThrow();
-
-    const replayPage = structuredClone(fixtures.server_frames[2]);
-    replayPage.first_revision = 5;
-    expect(() => decodeServer(replayPage)).toThrow();
-  });
-
-  it("requires the delivery acknowledgement's exact control-stream wire shape", () => {
-    const decodeClient = Schema.decodeUnknownSync(ClientV2FrameSchema);
-    const frame = {
-      type: "delivery_ack",
-      stream: "control",
-      revision: 7,
-      state_digest: "a".repeat(64),
-    };
-
-    expect(decodeClient(frame)).toEqual(frame);
-    expect(() => decodeClient({ ...frame, unexpected: true })).toThrow();
-    expect(() => decodeClient({ ...frame, stream: "events" })).toThrow();
-    expect(() => decodeClient({ ...frame, revision: 0 })).toThrow();
-    expect(() => decodeClient({ ...frame, state_digest: "A".repeat(64) })).toThrow();
-  });
-
-  it("requires the recovery acknowledgement's exact recovery wire shape", () => {
-    const decodeClient = Schema.decodeUnknownSync(ClientV2FrameSchema);
-    const frame = {
-      type: "recovery_ack",
-      recovery_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
-      revision: 0,
-      state_digest: "a".repeat(64),
-    };
-
-    expect(decodeClient(frame)).toEqual(frame);
-    expect(() => decodeClient({ ...frame, unexpected: true })).toThrow();
-    expect(() => decodeClient({ ...frame, recovery_id: "not-a-uuid" })).toThrow();
-    expect(() => decodeClient({ ...frame, revision: -1 })).toThrow();
-    expect(() => decodeClient({ ...frame, state_digest: "A".repeat(64) })).toThrow();
-  });
-
-  it("keeps approved digest and maximum participant encoding vectors exact", async () => {
-    const digestVectors = /** @type {{prefix: string, vectors: DigestVector[]}} */ (JSON.parse(await readFile(v2DigestFixturePath, "utf8")));
-    const participantFixture = /** @type {{encoded_bytes: number, participant: unknown, reservation_bytes: number}} */ (JSON.parse(await readFile(v2ParticipantFixturePath, "utf8")));
-
-    digestVectors.vectors.forEach((vector) => {
-      expect(JSON.stringify(vector.projection)).toBe(vector.canonical_json);
-      const input = Buffer.concat([Buffer.from(digestVectors.prefix, "ascii"), Buffer.from([0]), Buffer.from([0, 0, 0, vector.state_schema_version]), Buffer.from(vector.canonical_json, "utf8")]);
-      expect(createHash("sha256").update(input).digest("hex")).toBe(vector.state_digest);
-    });
-
-    expect(encodedSyncFrameBytes(participantFixture.participant)).toBe(participantFixture.encoded_bytes);
-    expect(participantFixture.encoded_bytes).toBeLessThanOrEqual(participantFixture.reservation_bytes);
-    expect(SyncProtocolLimits.decodedInboundFrameBytes).toBe(65_536);
-    expect(SyncV2ProtocolMetadata.continuity.replay.maxEvents).toBe(2_048);
   });
 });
 
@@ -370,6 +426,77 @@ async function emit(emitter, outputVariable, outputPath, schemaPath, protocolVer
       },
     );
   });
+}
+
+/**
+ * @param {string} executable
+ * @param {string[]} arguments_
+ * @param {string} cwd
+ */
+async function executeProcess(executable, arguments_, cwd) {
+  await new Promise((resolvePromise, reject) => {
+    execFile(executable, arguments_, { cwd, env: process.env }, (error, _stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr || error.message));
+        return;
+      }
+      resolvePromise(undefined);
+    });
+  });
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+function renderElixirTestValue(value) {
+  if (value === null) return "nil";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `[${value.map(renderElixirTestValue).join(", ")}]`;
+  if (typeof value !== "object") throw new Error("Elixir fixture values must be JSON-compatible");
+  return `%{${Object.entries(value)
+    .map(([key, child]) => `${JSON.stringify(key)} => ${renderElixirTestValue(child)}`)
+    .join(", ")}}`;
+}
+
+/**
+ * @param {V3GoldenFixtures} golden
+ * @param {V3InvalidFixtures} invalid
+ * @returns {JsonMap[]}
+ */
+function snapshotMutationFrames(golden, invalid) {
+  const welcome = golden.server_frames.find((frame) => frame.type === "welcome" && frame.mode === "snapshot");
+  if (!welcome) throw new Error("golden v3 fixtures require a snapshot welcome frame");
+  return invalid.snapshot_mutations.map((fixture) => {
+    const frame = structuredClone(welcome);
+    fixture.changes.forEach((change) => setPath(frame.snapshot, change.path, change.value));
+    return frame;
+  });
+}
+
+/**
+ * @param {any} target
+ * @param {(number | string)[]} path
+ * @param {unknown} value
+ */
+function setPath(target, path, value) {
+  const last = path[path.length - 1];
+  if (last === undefined) throw new Error("snapshot mutation paths must not be empty");
+  let parent = target;
+  for (const segment of path.slice(0, -1)) parent = parent[segment];
+  parent[last] = value;
+}
+
+/** @param {any} field */
+function sampleV3Field(field) {
+  if (field === "uuid" || field.format === "uuid") return "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
+  if (Array.isArray(field)) return field[0];
+  if (field.kind === "boolean") return true;
+  if (field.kind === "integer") return field.minimum;
+  if (field.kind === "array") return [];
+  if (field.nullable) return null;
+  return "value";
 }
 
 /**
