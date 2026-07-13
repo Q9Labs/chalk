@@ -10,6 +10,7 @@ import (
 )
 
 type operationQuerier struct {
+	sqlc.Querier
 	next   sqlc.Querier
 	logger *slog.Logger
 }
@@ -20,8 +21,9 @@ func OperationQueries(next sqlc.Querier, logger *slog.Logger) sqlc.Querier {
 	}
 
 	return operationQuerier{
-		next:   next,
-		logger: logger,
+		Querier: next,
+		next:    next,
+		logger:  logger,
 	}
 }
 
@@ -102,7 +104,7 @@ func (q operationQuerier) CreateRoom(ctx context.Context, arg sqlc.CreateRoomPar
 	return room, err
 }
 
-func (q operationQuerier) CreateRoomSession(ctx context.Context, arg sqlc.CreateRoomSessionParams) (sqlc.RoomSession, error) {
+func (q operationQuerier) CreateRoomSession(ctx context.Context, arg sqlc.CreateRoomSessionParams) (sqlc.CreateRoomSessionRow, error) {
 	startedAt := time.Now()
 	session, err := q.next.CreateRoomSession(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "CreateRoomSession", startedAt, err)
@@ -200,7 +202,7 @@ func (q operationQuerier) GetTenantRoom(ctx context.Context, arg sqlc.GetTenantR
 	return room, err
 }
 
-func (q operationQuerier) GetTenantRoomSession(ctx context.Context, arg sqlc.GetTenantRoomSessionParams) (sqlc.RoomSession, error) {
+func (q operationQuerier) GetTenantRoomSession(ctx context.Context, arg sqlc.GetTenantRoomSessionParams) (sqlc.GetTenantRoomSessionRow, error) {
 	startedAt := time.Now()
 	session, err := q.next.GetTenantRoomSession(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "GetTenantRoomSession", startedAt, err)
@@ -263,7 +265,7 @@ func (q operationQuerier) ListTenantRecordings(ctx context.Context, arg sqlc.Lis
 	return recordings, err
 }
 
-func (q operationQuerier) ListTenantRoomSessions(ctx context.Context, arg sqlc.ListTenantRoomSessionsParams) ([]sqlc.RoomSession, error) {
+func (q operationQuerier) ListTenantRoomSessions(ctx context.Context, arg sqlc.ListTenantRoomSessionsParams) ([]sqlc.ListTenantRoomSessionsRow, error) {
 	startedAt := time.Now()
 	sessions, err := q.next.ListTenantRoomSessions(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "ListTenantRoomSessions", startedAt, err)
@@ -347,7 +349,7 @@ func (q operationQuerier) UpdateTenantRoom(ctx context.Context, arg sqlc.UpdateT
 	return room, err
 }
 
-func (q operationQuerier) UpdateTenantRoomSession(ctx context.Context, arg sqlc.UpdateTenantRoomSessionParams) (sqlc.RoomSession, error) {
+func (q operationQuerier) UpdateTenantRoomSession(ctx context.Context, arg sqlc.UpdateTenantRoomSessionParams) (sqlc.UpdateTenantRoomSessionRow, error) {
 	startedAt := time.Now()
 	session, err := q.next.UpdateTenantRoomSession(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "UpdateTenantRoomSession", startedAt, err)

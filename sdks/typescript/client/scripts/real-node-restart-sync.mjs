@@ -23,10 +23,10 @@ async function run() {
     const config = await fixture.ready;
     assertLocalhostWebSocketUrl(config.url);
 
-    await runWorker("stage", config, pendingStorePath);
+    await stageAndKillWorker(config, pendingStorePath);
     const staged = await readPendingCommands(pendingStorePath);
-    if (staged.length !== 1 || staged[0]?.command?.name !== "raise_hand") {
-      throw new Error("first Node process did not durably stage exactly one pending raise_hand command");
+    if (staged.length !== 1 || staged[0]?.command?.name !== "set_hand_raised" || staged[0]?.command?.payload?.raised !== true || staged[0]?.bytes <= 0) {
+      throw new Error("first Node process did not durably stage exactly one v3 set_hand_raised target");
     }
 
     const resumed = await runWorker("resume", config, pendingStorePath);
@@ -58,8 +58,8 @@ function assertLocalhostWebSocketUrl(value) {
   const url = new URL(value);
   const localhost = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
-  if (url.protocol !== "ws:" || !localhost.has(url.hostname)) {
-    throw new Error("node-restart sync proof only connects to an explicit ws://localhost URL");
+  if (url.protocol !== "ws:" || !localhost.has(url.hostname) || url.pathname !== "/v3/sync") {
+    throw new Error("node-restart sync proof only connects to an explicit ws://localhost/v3/sync URL");
   }
 }
 
@@ -145,15 +145,7 @@ async function waitForExit(child, timeoutMs) {
 }
 
 async function runWorker(action, config, pendingStorePath) {
-  const child = spawn(process.execPath, [workerPath, action], {
-    env: {
-      ...process.env,
-      CHALK_SYNC_BROWSER_TOKEN: config.token,
-      CHALK_SYNC_BROWSER_URL: config.url,
-      CHALK_SYNC_PENDING_STORE_PATH: pendingStorePath,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = spawnWorker(action, config, pendingStorePath);
   const stdout = [];
   const stderr = [];
   child.stdout.setEncoding("utf8");
@@ -170,6 +162,49 @@ async function runWorker(action, config, pendingStorePath) {
     return JSON.parse(stdout.join(""));
   } catch {
     throw new Error(`Node restart worker ${action} did not return JSON`);
+  }
+}
+
+async function stageAndKillWorker(config, pendingStorePath) {
+  const child = spawnWorker("stage", config, pendingStorePath);
+  const stdout = [];
+  const stderr = [];
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => stdout.push(chunk));
+  child.stderr.on("data", (chunk) => stderr.push(chunk));
+
+  try {
+    await waitForWorkerOutput(child, stdout, stderr, "stage");
+    child.kill("SIGKILL");
+    const [, signal] = await once(child, "exit");
+    if (signal !== "SIGKILL") {
+      throw new Error(`Node restart worker stage was not killed at the process boundary (signal ${signal ?? "none"})`);
+    }
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }
+}
+
+function spawnWorker(action, config, pendingStorePath) {
+  return spawn(process.execPath, [workerPath, action], {
+    env: {
+      ...process.env,
+      CHALK_SYNC_BROWSER_TOKEN: config.token,
+      CHALK_SYNC_BROWSER_URL: config.url,
+      CHALK_SYNC_PENDING_STORE_PATH: pendingStorePath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+async function waitForWorkerOutput(child, stdout, stderr, action) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline && !stdout.join("").includes("\n") && child.exitCode === null && child.signalCode === null) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  if (!stdout.join("").includes("\n")) {
+    throw new Error(`Node restart worker ${action} did not stage before exit: ${stderr.join("").trim() || stdout.join("").trim()}`);
   }
 }
 

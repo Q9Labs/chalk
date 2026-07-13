@@ -1,7 +1,8 @@
 defmodule ChalkSync.Transport.Router do
   @moduledoc """
   HTTP surface. Operational routes stay unversioned; the sync WebSocket lives
-  under the `/v1` boundary (north star: one versioned public boundary).
+  under the `/v3/sync` boundary. The disabled `/v1/sync` route is retained only
+  as a local compatibility surface.
   """
 
   use Plug.Router
@@ -46,10 +47,16 @@ defmodule ChalkSync.Transport.Router do
     end
   end
 
-  get "/v2/sync" do
+  get "/v3/sync" do
     if Operations.accepting_connections?() do
+      observability = ChalkSync.Observability.context(conn.req_headers)
+
       conn
-      |> WebSockAdapter.upgrade(ChalkSync.Transport.SocketV2, [], timeout: 60_000)
+      |> WebSockAdapter.upgrade(
+        ChalkSync.Transport.SocketV3,
+        %{observability: observability},
+        timeout: 60_000
+      )
       |> halt()
     else
       send_json(conn, 503, %{"error" => "server_draining"})

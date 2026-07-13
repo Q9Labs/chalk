@@ -5,14 +5,29 @@ defmodule ChalkSync.Stateholder.Command do
 
   @command_id ~r/\A[A-Za-z0-9_-]{16,64}\z/
   @max_payload_bytes 16 * 1024
-  @names %{"raise_hand" => :raise_hand, "lower_hand" => :lower_hand}
+  @names %{
+    "set_hand_raised" => :set_hand_raised,
+    "set_display_name" => :set_display_name,
+    "set_admission_policy" => :set_admission_policy,
+    "set_participant_role" => :set_participant_role,
+    "transfer_host" => :transfer_host,
+    "raise_hand" => :raise_hand,
+    "lower_hand" => :lower_hand
+  }
 
   @enforce_keys [:id, :name, :payload, :fingerprint, :normalized_bytes]
   defstruct [:id, :name, :payload, :fingerprint, :normalized_bytes]
 
   @type t :: %__MODULE__{
           id: String.t(),
-          name: :raise_hand | :lower_hand,
+          name:
+            :set_hand_raised
+            | :set_display_name
+            | :set_admission_policy
+            | :set_participant_role
+            | :transfer_host
+            | :raise_hand
+            | :lower_hand,
           payload: map(),
           fingerprint: binary(),
           normalized_bytes: pos_integer()
@@ -64,4 +79,37 @@ defmodule ChalkSync.Stateholder.Command do
   defp validate_payload(name, payload) when name in [:raise_hand, :lower_hand] do
     if map_size(payload) == 0, do: :ok, else: {:error, :invalid_payload}
   end
+
+  defp validate_payload(:set_hand_raised, %{"raised" => raised} = payload)
+       when map_size(payload) == 1 and is_boolean(raised),
+       do: :ok
+
+  defp validate_payload(:set_display_name, %{"displayName" => display_name} = payload)
+       when map_size(payload) == 1 and is_binary(display_name) do
+    if String.valid?(display_name) and display_name == String.trim(display_name) and
+         byte_size(display_name) in 1..256,
+       do: :ok,
+       else: {:error, :invalid_payload}
+  end
+
+  defp validate_payload(:set_admission_policy, %{"policy" => policy} = payload)
+       when map_size(payload) == 1 and policy in ["open", "approval", "closed"],
+       do: :ok
+
+  defp validate_payload(
+         :set_participant_role,
+         %{
+           "participantSessionId" => participant_id,
+           "role" => role
+         } = payload
+       )
+       when map_size(payload) == 2 and is_binary(participant_id) and
+              role in ["cohost", "participant"],
+       do: :ok
+
+  defp validate_payload(:transfer_host, %{"participantSessionId" => participant_id} = payload)
+       when map_size(payload) == 1 and is_binary(participant_id),
+       do: :ok
+
+  defp validate_payload(_name, _payload), do: {:error, :invalid_payload}
 end

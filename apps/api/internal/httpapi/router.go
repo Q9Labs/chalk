@@ -9,10 +9,15 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 type ReadinessChecker interface {
 	Check(ctx context.Context) error
+}
+
+type RecorderHealthChecker interface {
+	CheckRecorderPool(ctx context.Context, role workeridentity.Role) error
 }
 
 type TenantAuthorizer interface {
@@ -30,6 +35,7 @@ type Options struct {
 	Profiler               http.Handler
 	RateLimit              RateLimitOptions
 	Readiness              ReadinessChecker
+	RecorderHealth         RecorderHealthChecker
 	Authentication         AuthenticationService
 	Integrations           IntegrationService
 	Journeys               JourneyService
@@ -42,6 +48,8 @@ type Options struct {
 	RecordingDownloads     RecordingDownloadService
 	RecordingObjects       RecordingObjectService
 	Recordings             RecordingService
+	RecordingPipeline      RecordingPipelineService
+	RecorderMetrics        RecordingPipelineMetricRecorder
 	Rooms                  RoomService
 	SessionLifecycle       SessionLifecycleService
 	SyncTokens             SyncTokenIssuer
@@ -87,12 +95,32 @@ func NewRouter(options Options) http.Handler {
 	mountTranscriptFinalizeRoutes(r, options.FinalizerWorker, options.WorkloadAuthorizer, options.FinalizerAuthority)
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
+	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
+	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
 	r.Get("/readyz", handleReady(options.Readiness))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}
 
 	return r
+}
+
+func handleRecorderHealth(checker RecorderHealthChecker, role workeridentity.Role) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		if checker == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(request.Context(), time.Second)
+		defer cancel()
+		if err := checker.CheckRecorderPool(ctx, role); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -161,6 +189,7 @@ func mountV1Routes(r chi.Router, options Options) {
 			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
 			mountSessionLifecycleRoutes(r, options.Rooms, options.Tenants, options.SessionLifecycle, options.SyncTokens, options.SyncTokenRefresh, options.MediaPlane, options.TenantAuthz, options.RateLimit)
 			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
+			mountRecordingPipelineRoutes(r, options.RecordingPipeline, options.RecorderMetrics, options.TenantAuthz, options.RateLimit)
 			if options.TranscriptArtifacts != nil {
 				mountTranscriptArtifactRoutes(r, options.TranscriptArtifacts, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
 			} else {

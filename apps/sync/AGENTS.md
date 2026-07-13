@@ -13,7 +13,7 @@ acceleration only.
   transaction boundary.
 - Durable lifecycle comes only from API intents. Socket loss is volatile
   presence and never a durable participant leave.
-- Protocol v2 and its generated contract are the production surface. V1 stays
+- Protocol v3 and its generated contract are the production surface. V1 stays
   disabled in production.
 - Keep every frame, queue, task set, replay, diagnostic buffer, and retained
   database set explicitly bounded.

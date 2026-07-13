@@ -2,15 +2,12 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -18,13 +15,19 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-const idempotencyKeyHeader = "Idempotency-Key"
+const (
+	idempotencyKeyHeader = "Idempotency-Key"
+	// The plan-limit seam does not exist yet, so the API owns the existing 24-hour database ceiling.
+	defaultMaximumDurationCeilingSeconds int32 = 24 * 60 * 60
+)
 
 type SessionLifecycleService interface {
 	CreateSession(context.Context, sessionlifecycle.CreateSessionInput) (sessionlifecycle.Session, error)
 	AdmitParticipant(context.Context, sessionlifecycle.AdmitParticipantInput) (sessionlifecycle.Admission, error)
 	RequestParticipantRemoval(context.Context, sessionlifecycle.RequestParticipantRemovalInput) (sessionlifecycle.Removal, error)
 	RequestSessionEnd(context.Context, sessionlifecycle.RequestSessionEndInput) (sessionlifecycle.EndRequest, error)
+	TransferHost(context.Context, sessionlifecycle.TransferHostInput) (sessionlifecycle.ControlRequest, error)
+	SetDeadline(context.Context, sessionlifecycle.SetDeadlineInput) (sessionlifecycle.ControlRequest, error)
 }
 
 type SyncTokenIssuer interface {
@@ -43,7 +46,8 @@ type admitParticipantRequest struct {
 	ParticipantSessionID string                 `json:"participant_session_id"`
 	Name                 string                 `json:"name"`
 	Metadata             utilities.OptionalJSON `json:"metadata"`
-	Capabilities         []string               `json:"capabilities"`
+	InitialRole          string                 `json:"initial_role"`
+	EligibleRoles        []string               `json:"eligible_roles"`
 }
 
 type removeParticipantRequest struct {
@@ -73,6 +77,32 @@ type endSessionEndpointRequest struct {
 	RoomID     utilities.ID
 	SessionID  utilities.ID
 	RequestKey string
+}
+
+type transferHostRequest struct {
+	ParticipantSessionID         string `json:"participant_session_id"`
+	ParticipantSessionGeneration int64  `json:"participant_session_generation"`
+}
+
+type transferHostEndpointRequest struct {
+	TenantID      utilities.ID
+	RoomID        utilities.ID
+	SessionID     utilities.ID
+	ParticipantID utilities.ID
+	RequestKey    string
+	Body          transferHostRequest
+}
+
+type setDeadlineRequest struct {
+	DeadlineAt time.Time `json:"deadline_at"`
+}
+
+type setDeadlineEndpointRequest struct {
+	TenantID   utilities.ID
+	RoomID     utilities.ID
+	SessionID  utilities.ID
+	RequestKey string
+	Body       setDeadlineRequest
 }
 
 type issueSyncTokenEndpointRequest struct {
@@ -107,11 +137,23 @@ type participantSessionResponse struct {
 }
 
 type participantLifecycleResponse struct {
+	Participant      participantSessionResponse `json:"participant"`
+	Intent           lifecycleIntentResponse    `json:"lifecycle_intent"`
+	AdmissionRequest *admissionRequestResponse  `json:"admission_request,omitempty"`
+	SyncToken        string                     `json:"sync_token,omitempty"`
+	ExpiresAt        string                     `json:"expires_at,omitempty"`
+	MediaPlane       *mediaPlaneResponse        `json:"media_plane,omitempty"`
+}
+
+type participantRemovalResponse struct {
 	Participant participantSessionResponse `json:"participant"`
-	Intent      lifecycleIntentResponse    `json:"lifecycle_intent"`
-	SyncToken   string                     `json:"sync_token,omitempty"`
-	ExpiresAt   string                     `json:"expires_at,omitempty"`
-	MediaPlane  *mediaPlaneResponse        `json:"media_plane,omitempty"`
+	Operation   externalOperationResponse  `json:"external_operation"`
+}
+
+type admissionRequestResponse struct {
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 type mediaPlaneResponse struct {
@@ -120,9 +162,26 @@ type mediaPlaneResponse struct {
 }
 
 type sessionEndResponse struct {
-	SessionID string                  `json:"session_id"`
-	Status    string                  `json:"status"`
-	Intent    lifecycleIntentResponse `json:"lifecycle_intent"`
+	SessionID string                    `json:"session_id"`
+	Status    string                    `json:"status"`
+	Operation externalOperationResponse `json:"external_operation"`
+}
+
+type externalOperationResponse struct {
+	ID                          string  `json:"id"`
+	RequestKey                  string  `json:"request_key"`
+	OperationName               string  `json:"operation_name"`
+	TargetParticipantSessionID  *string `json:"target_participant_session_id,omitempty"`
+	TargetParticipantGeneration *int64  `json:"target_participant_session_generation,omitempty"`
+	DeadlineGeneration          *int64  `json:"deadline_generation,omitempty"`
+	Status                      string  `json:"status"`
+	CreatedAt                   string  `json:"created_at"`
+}
+
+type sessionControlResponse struct {
+	SessionID string                    `json:"session_id"`
+	Status    string                    `json:"status"`
+	Operation externalOperationResponse `json:"external_operation"`
 }
 
 func mountSessionLifecycleRoutes(r chi.Router, rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, media MediaPlaneResolver, authorizer TenantAuthorizer, limits RateLimitOptions) {
@@ -136,8 +195,10 @@ func sessionLifecycleEndpoints(rooms RoomService, tenants TenantService, lifecyc
 		createLifecycleSessionEndpoint(rooms, lifecycle, authorizer),
 		admitParticipantEndpoint(lifecycle, tokens, rooms, tenants, media, authorizer),
 		issueSyncTokenEndpoint(refresh, authorizer),
-		removeParticipantEndpoint(lifecycle, rooms, tenants, media, authorizer),
-		endSessionEndpoint(lifecycle, rooms, tenants, media, authorizer),
+		removeParticipantEndpoint(lifecycle, authorizer),
+		transferHostEndpoint(lifecycle, authorizer),
+		setDeadlineEndpoint(lifecycle, authorizer),
+		endSessionEndpoint(lifecycle, authorizer),
 	}
 }
 
@@ -177,8 +238,11 @@ func createLifecycleSessionEndpoint(rooms RoomService, lifecycle SessionLifecycl
 		created, err := lifecycle.CreateSession(ctx, sessionlifecycle.CreateSessionInput{
 			TenantID: request.TenantID, RoomID: request.RoomID, Metadata: request.Body.Metadata.Value,
 			CreatedByUserID: createdByUserID(ctx), StartedAt: request.Body.StartedAt,
-			InitialControl: sessionlifecycle.EmptyInitialControlState(),
-			Request:        sessionlifecycle.Request{Key: request.RequestKey},
+			AdmissionPolicy: request.Body.AdmissionPolicy, HostExitPolicy: request.Body.HostExitPolicy,
+			RoleCapabilities: request.Body.RoleCapabilities, MaximumDurationSeconds: request.Body.MaximumDurationSeconds,
+			MaximumDurationCeilingSeconds: defaultMaximumDurationCeilingSeconds,
+			DeadlineAt:                    time.Now().UTC().Add(time.Duration(request.Body.MaximumDurationSeconds) * time.Second),
+			Request:                       sessionlifecycle.Request{Key: request.RequestKey},
 		})
 		if err != nil {
 			return roomSessionResponse{}, err
@@ -209,12 +273,20 @@ func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenI
 		admission, err := service.AdmitParticipant(ctx, sessionlifecycle.AdmitParticipantInput{
 			TenantID: request.TenantID, RoomID: request.RoomID, SessionID: request.SessionID,
 			ParticipantID: request.ParticipantID, Name: request.Body.Name, Metadata: request.Body.Metadata.Value,
-			Capabilities: participantCapabilities(), UserID: createdByUserID(ctx), Request: sessionlifecycle.Request{Key: request.RequestKey},
+			InitialRole: request.Body.InitialRole, EligibleRoles: request.Body.EligibleRoles,
+			UserID: createdByUserID(ctx), Request: sessionlifecycle.Request{Key: request.RequestKey},
 		})
 		if err != nil {
 			return participantLifecycleResponse{}, err
 		}
 		response := newParticipantLifecycleResponse(admission.Participant, admission.Intent)
+		if admission.AdmissionRequest != nil {
+			response.AdmissionRequest = &admissionRequestResponse{
+				ID: admission.AdmissionRequest.ID.String(), Status: admission.AdmissionRequest.Status,
+				ExpiresAt: admission.AdmissionRequest.ExpiresAt.UTC().Format(time.RFC3339),
+			}
+			return response, nil
+		}
 		mediaService, err := resolveMediaPlane(ctx, media, rooms, tenants, request.TenantID, request.RoomID)
 		if err != nil {
 			return participantLifecycleResponse{}, err
@@ -258,7 +330,8 @@ func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenI
 				TenantID: admission.Participant.TenantID, RoomID: admission.Participant.RoomID,
 				SessionID: admission.Participant.SessionID, ParticipantID: admission.Participant.ID,
 				ParticipantGeneration: admission.Participant.Generation, AdmissionLifecycleIntentID: admission.Intent.ID,
-				DisplayName: request.Body.Name, Capabilities: participantCapabilities(),
+				DisplayName: request.Body.Name, InitialRole: request.Body.InitialRole,
+				EligibleRoles: append([]string(nil), request.Body.EligibleRoles...),
 			})
 			if err != nil {
 				return participantLifecycleResponse{}, err
@@ -277,17 +350,13 @@ func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenI
 		MapErrors(sessionLifecycleEndpointAPIError)
 }
 
-func participantCapabilities() []string {
-	return []string{"control:hand"}
-}
-
-func removeParticipantEndpoint(service SessionLifecycleService, rooms RoomService, tenants TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[removeParticipantEndpointRequest, participantLifecycleResponse] {
-	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove", "removeSessionParticipant", decodeRemoveParticipantRequest, func(ctx context.Context, request removeParticipantEndpointRequest) (participantLifecycleResponse, error) {
+func removeParticipantEndpoint(service SessionLifecycleService, authorizer TenantAuthorizer) Endpoint[removeParticipantEndpointRequest, participantRemovalResponse] {
+	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove", "removeSessionParticipant", decodeRemoveParticipantRequest, func(ctx context.Context, request removeParticipantEndpointRequest) (participantRemovalResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
-			return participantLifecycleResponse{}, err
+			return participantRemovalResponse{}, err
 		}
 		if service == nil {
-			return participantLifecycleResponse{}, apiErrorServiceUnavailable
+			return participantRemovalResponse{}, apiErrorServiceUnavailable
 		}
 		removal, err := service.RequestParticipantRemoval(ctx, sessionlifecycle.RequestParticipantRemovalInput{
 			TenantID: request.TenantID, RoomID: request.RoomID, SessionID: request.SessionID,
@@ -295,21 +364,20 @@ func removeParticipantEndpoint(service SessionLifecycleService, rooms RoomServic
 			Request: sessionlifecycle.Request{Key: request.RequestKey},
 		})
 		if err != nil {
-			return participantLifecycleResponse{}, err
+			return participantRemovalResponse{}, err
 		}
-		bestEffortRemoveMediaParticipant(ctx, media, rooms, tenants, removal, request)
-		return newParticipantLifecycleResponse(removal.Participant, removal.Intent), nil
+		return newParticipantRemovalResponse(removal.Participant, removal.Intent), nil
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter(), participantSessionIDParameter(), idempotencyKeyParameter()).
 		RequestBody("RemoveSessionParticipantRequest", removeParticipantRequest{}).
-		Responds(http.StatusAccepted, "ParticipantLifecycle", participantLifecycleResponse{}).
+		Responds(http.StatusAccepted, "ParticipantRemoval", participantRemovalResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSessionNotFound, apiErrorSessionNotActive, apiErrorParticipantNotFound, apiErrorParticipantNotActive, apiErrorParticipantGenerationMismatch, apiErrorIdempotencyConflict, apiErrorLifecycleCapacityExceeded, apiErrorRateLimited)...).
 		MapErrors(sessionLifecycleEndpointAPIError)
 }
 
-func endSessionEndpoint(service SessionLifecycleService, rooms RoomService, tenants TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[endSessionEndpointRequest, sessionEndResponse] {
+func endSessionEndpoint(service SessionLifecycleService, authorizer TenantAuthorizer) Endpoint[endSessionEndpointRequest, sessionEndResponse] {
 	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end", "endRoomSession", decodeEndSessionRequest, func(ctx context.Context, request endSessionEndpointRequest) (sessionEndResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
 			return sessionEndResponse{}, err
@@ -324,14 +392,66 @@ func endSessionEndpoint(service SessionLifecycleService, rooms RoomService, tena
 		if err != nil {
 			return sessionEndResponse{}, err
 		}
-		bestEffortEndMediaSession(ctx, media, rooms, tenants, end, request)
-		return sessionEndResponse{SessionID: end.Session.ID.String(), Status: end.Session.Status, Intent: newLifecycleIntentResponse(end.Intent)}, nil
+		return sessionEndResponse{SessionID: end.Session.ID.String(), Status: end.Session.Status, Operation: newExternalOperationResponseFromIntent(end.Intent)}, nil
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter(), idempotencyKeyParameter()).
 		Responds(http.StatusAccepted, "SessionEnd", sessionEndResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidRequestKey, apiErrorSessionNotFound, apiErrorSessionNotActive, apiErrorIdempotencyConflict, apiErrorLifecycleCapacityExceeded, apiErrorRateLimited)...).
+		MapErrors(sessionLifecycleEndpointAPIError)
+}
+
+func transferHostEndpoint(service SessionLifecycleService, authorizer TenantAuthorizer) Endpoint[transferHostEndpointRequest, sessionControlResponse] {
+	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/host/recover", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/host/recover", "recoverRoomSessionHost", decodeTransferHostRequest, func(ctx context.Context, request transferHostEndpointRequest) (sessionControlResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
+			return sessionControlResponse{}, err
+		}
+		if service == nil {
+			return sessionControlResponse{}, apiErrorServiceUnavailable
+		}
+		control, err := service.TransferHost(ctx, sessionlifecycle.TransferHostInput{
+			TenantID: request.TenantID, RoomID: request.RoomID, SessionID: request.SessionID,
+			ParticipantID: request.ParticipantID, ParticipantGeneration: request.Body.ParticipantSessionGeneration,
+			Request: sessionlifecycle.Request{Key: request.RequestKey},
+		})
+		if err != nil {
+			return sessionControlResponse{}, err
+		}
+		return sessionControlResponse{SessionID: control.Session.ID.String(), Status: control.Session.Status, Operation: newExternalOperationResponse(control.Operation)}, nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter(), idempotencyKeyParameter()).
+		RequestBody("RecoverRoomSessionHostRequest", transferHostRequest{}).
+		Responds(http.StatusAccepted, "SessionControl", sessionControlResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidParticipantID, apiErrorParticipantGenerationMismatch, apiErrorInvalidRequestKey, apiErrorSessionNotFound, apiErrorSessionNotActive, apiErrorIdempotencyConflict, apiErrorRateLimited)...).
+		MapErrors(sessionLifecycleEndpointAPIError)
+}
+
+func setDeadlineEndpoint(service SessionLifecycleService, authorizer TenantAuthorizer) Endpoint[setDeadlineEndpointRequest, sessionControlResponse] {
+	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/deadline", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/deadline", "setRoomSessionDeadline", decodeSetDeadlineRequest, func(ctx context.Context, request setDeadlineEndpointRequest) (sessionControlResponse, error) {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
+			return sessionControlResponse{}, err
+		}
+		if service == nil {
+			return sessionControlResponse{}, apiErrorServiceUnavailable
+		}
+		control, err := service.SetDeadline(ctx, sessionlifecycle.SetDeadlineInput{
+			TenantID: request.TenantID, RoomID: request.RoomID, SessionID: request.SessionID,
+			Deadline: request.Body.DeadlineAt, Request: sessionlifecycle.Request{Key: request.RequestKey},
+		})
+		if err != nil {
+			return sessionControlResponse{}, err
+		}
+		return sessionControlResponse{SessionID: control.Session.ID.String(), Status: control.Session.Status, Operation: newExternalOperationResponse(control.Operation)}, nil
+	}).
+		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter(), idempotencyKeyParameter()).
+		RequestBody("SetRoomSessionDeadlineRequest", setDeadlineRequest{}).
+		Responds(http.StatusAccepted, "SessionControl", sessionControlResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidRequestKey, apiErrorSessionNotFound, apiErrorSessionNotActive, apiErrorIdempotencyConflict, apiErrorRateLimited)...).
 		MapErrors(sessionLifecycleEndpointAPIError)
 }
 
@@ -352,92 +472,4 @@ func resolveMediaPlane(ctx context.Context, resolver MediaPlaneResolver, rooms R
 		return nil, fmt.Errorf("%w: tenant lookup failed", mediaplane.ErrPlaneUnavailable)
 	}
 	return resolver.Resolve(ctx, tenant, room)
-}
-
-func bestEffortRemoveMediaParticipant(ctx context.Context, resolver MediaPlaneResolver, rooms RoomService, tenants TenantService, removal sessionlifecycle.Removal, request removeParticipantEndpointRequest) {
-	mediaService, err := resolveMediaPlane(ctx, resolver, rooms, tenants, request.TenantID, request.RoomID)
-	if err != nil {
-		logMediaCleanupFailure(ctx, "remove_participant", request.TenantID, request.RoomID, request.SessionID, request.ParticipantID, err)
-		return
-	}
-	if mediaService == nil {
-		return
-	}
-	sessionID := removal.Session.ID
-	if sessionID.IsZero() {
-		sessionID = request.SessionID
-	}
-	participantID := removal.Participant.ID
-	if participantID.IsZero() {
-		participantID = request.ParticipantID
-	}
-	err = mediaService.RemoveParticipant(ctx, mediaplane.RemoveParticipantInput{
-		Provider:       mediaService.Provider(),
-		SessionRef:     sessionID.String(),
-		ParticipantRef: participantID.String(),
-	})
-	if err != nil {
-		logMediaCleanupFailure(ctx, "remove_participant", request.TenantID, request.RoomID, sessionID, participantID, err)
-	}
-}
-
-func bestEffortEndMediaSession(ctx context.Context, resolver MediaPlaneResolver, rooms RoomService, tenants TenantService, end sessionlifecycle.EndRequest, request endSessionEndpointRequest) {
-	mediaService, err := resolveMediaPlane(ctx, resolver, rooms, tenants, request.TenantID, request.RoomID)
-	if err != nil {
-		logMediaCleanupFailure(ctx, "end_session", request.TenantID, request.RoomID, request.SessionID, utilities.ID{}, err)
-		return
-	}
-	if mediaService == nil {
-		return
-	}
-	sessionID := end.Session.ID
-	if sessionID.IsZero() {
-		sessionID = request.SessionID
-	}
-	err = mediaService.EndSession(ctx, mediaplane.EndSessionInput{Provider: mediaService.Provider(), SessionRef: sessionID.String()})
-	if err != nil {
-		logMediaCleanupFailure(ctx, "end_session", request.TenantID, request.RoomID, sessionID, utilities.ID{}, err)
-	}
-}
-
-func logMediaCleanupFailure(ctx context.Context, operation string, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID, participantID utilities.ID, err error) {
-	attrs := []any{
-		"event", "media_plane.cleanup_failed",
-		"operation", operation,
-		"tenant_id", tenantID.String(),
-		"room_id", roomID.String(),
-		"session_id", sessionID.String(),
-		"error_code", mediaPlaneErrorCode(err),
-	}
-	if !participantID.IsZero() {
-		attrs = append(attrs, "participant_id", participantID.String())
-	}
-	slog.Default().WarnContext(ctx, "media-plane cleanup failed", attrs...)
-}
-
-func mediaPlaneErrorCode(err error) string {
-	switch {
-	case errors.Is(err, mediaplaneproviders.ErrUnknownProvider):
-		return "unknown_provider"
-	case errors.Is(err, mediaplaneproviders.ErrInvalidMode):
-		return "invalid_mode"
-	case errors.Is(err, mediaplaneproviders.ErrMissingProviderConfig):
-		return "missing_provider_config"
-	case errors.Is(err, mediaplaneproviders.ErrInvalidProviderConfig):
-		return "invalid_provider_config"
-	case errors.Is(err, mediaplaneproviders.ErrAdapterUnavailable):
-		return "adapter_unavailable"
-	case errors.Is(err, mediaplane.ErrInvalidProvider):
-		return "invalid_provider"
-	case errors.Is(err, mediaplane.ErrProviderUnauthorized):
-		return "provider_unauthorized"
-	case errors.Is(err, mediaplane.ErrProviderRateLimited):
-		return "provider_rate_limited"
-	case errors.Is(err, mediaplane.ErrProviderFailed):
-		return "provider_failed"
-	case errors.Is(err, mediaplane.ErrPlaneUnavailable):
-		return "plane_unavailable"
-	default:
-		return "media_plane_error"
-	}
 }

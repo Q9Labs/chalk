@@ -1,5 +1,5 @@
 defmodule ChalkSync.Auth.JWTTokenVerifier do
-  @moduledoc "Production Ed25519 verifier for API-issued protocol-v2 participant tokens."
+  @moduledoc "Production Ed25519 verifier for API-issued participant tokens."
 
   @behaviour ChalkSync.Auth.TokenVerifier
 
@@ -79,8 +79,7 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
            "participant_session_id" => participant_session_id,
            "participant_session_generation" => generation,
            "admission_lifecycle_intent_id" => intent_id,
-           "display_name" => display_name,
-           "capabilities" => capabilities
+           "display_name" => display_name
          } <- claims,
          true <-
            valid_strings?([
@@ -98,7 +97,7 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
          true <- participant_id == subject,
          true <- is_integer(generation) and generation > 0,
          true <- byte_size(display_name) <= 256,
-         true <- valid_capabilities?(capabilities),
+         {:ok, authorization} <- authorization_envelope(claims),
          true <- valid_times?(issued_at, not_before, expires_at, now) do
       {:ok,
        %Claims{
@@ -112,7 +111,9 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
          issued_at: issued_at,
          expires_at: expires_at,
          display_name: display_name,
-         capabilities: capabilities
+         initial_role: authorization.initial_role,
+         eligible_roles: authorization.eligible_roles,
+         capabilities: authorization.capabilities
        }}
     else
       _ -> {:error, :invalid_claims}
@@ -128,6 +129,32 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
   defp valid_capabilities?(capabilities) do
     is_list(capabilities) and length(capabilities) <= 32 and
       Enum.all?(capabilities, &(is_binary(&1) and byte_size(&1) in 1..64))
+  end
+
+  defp authorization_envelope(claims) do
+    role_claims? = Map.has_key?(claims, "initial_role") or Map.has_key?(claims, "eligible_roles")
+    capabilities? = Map.has_key?(claims, "capabilities")
+
+    cond do
+      capabilities? and not role_claims? ->
+        capabilities = claims["capabilities"]
+
+        if valid_capabilities?(capabilities),
+          do: {:ok, %{initial_role: nil, eligible_roles: [], capabilities: capabilities}},
+          else: {:error, :invalid_capabilities}
+
+      not capabilities? and role_claims? ->
+        initial_role = claims["initial_role"]
+        eligible_roles = claims["eligible_roles"]
+
+        if Claims.valid_role_envelope?(initial_role, eligible_roles),
+          do:
+            {:ok, %{initial_role: initial_role, eligible_roles: eligible_roles, capabilities: []}},
+          else: {:error, :invalid_role_envelope}
+
+      true ->
+        {:error, :invalid_authorization_envelope}
+    end
   end
 
   defp valid_times?(issued_at, not_before, expires_at, now) do

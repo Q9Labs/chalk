@@ -13,7 +13,7 @@ import (
 
 func (r SessionLifecycleRepository) GetSyncTokenSubject(ctx context.Context, key synctokens.SubjectKey) (synctokens.Input, error) {
 	var subject synctokens.Input
-	err := r.transaction(ctx, func(queries *sqlc.Queries) error {
+	err := r.transaction(ctx, func(queries *sqlc.Queries, _ pgx.Tx) error {
 		row, err := queries.GetSyncTokenSubject(ctx, sqlc.GetSyncTokenSubjectParams{
 			TenantID: uuid(key.TenantID), RoomID: uuid(key.RoomID), SessionID: uuid(key.SessionID), ParticipantSessionID: uuid(key.ParticipantID),
 		})
@@ -27,7 +27,7 @@ func (r SessionLifecycleRepository) GetSyncTokenSubject(ctx context.Context, key
 			TenantID: utilities.IDFromBytes(row.TenantID.Bytes), RoomID: utilities.IDFromBytes(row.RoomID.Bytes),
 			SessionID: utilities.IDFromBytes(row.SessionID.Bytes), ParticipantID: utilities.IDFromBytes(row.ParticipantSessionID.Bytes),
 			ParticipantGeneration: row.Generation, AdmissionLifecycleIntentID: utilities.IDFromBytes(row.AdmissionLifecycleIntentID.Bytes),
-			DisplayName: row.Name.String, Capabilities: append([]string(nil), row.Capabilities...),
+			DisplayName: row.Name.String, InitialRole: row.InitialRole, EligibleRoles: append([]string(nil), row.EligibleRoles...),
 		}
 		return nil
 	})

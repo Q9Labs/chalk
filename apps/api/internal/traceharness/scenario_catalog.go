@@ -1627,6 +1627,17 @@ func (s tracedObjectStore) GetObject(ctx context.Context, key string) (objectsto
 	return objectstorage.ObjectReader{Object: objectstorage.Object{Key: key, ETag: "etag-trace", ContentType: "image/png", Size: 12}, Body: io.NopCloser(bytes.NewReader([]byte("trace"))), LastModified: s.now()}, nil
 }
 
+func (s tracedObjectStore) InspectObject(ctx context.Context, key string) (objectstorage.ObjectFacts, error) {
+	reader, err := s.GetObject(ctx, key)
+	if err != nil {
+		return objectstorage.ObjectFacts{}, err
+	}
+	if reader.Body != nil {
+		_ = reader.Body.Close()
+	}
+	return objectstorage.ObjectFacts{Object: reader.Object, LastModified: reader.LastModified, Metadata: reader.Metadata}, nil
+}
+
 func (s tracedObjectStore) DeleteObject(ctx context.Context, key string) error {
 	_ = ctx
 	s.recorder.Add("adapter", "r2.Store.DeleteObject", "delete object from cloudflare r2", map[string]any{"key": key})

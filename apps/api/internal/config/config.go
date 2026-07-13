@@ -40,6 +40,8 @@ const (
 	DatabaseURL                 = "CHALK_DATABASE_URL"
 	DatabaseMaxConns            = "CHALK_DATABASE_MAX_CONNS"
 	DatabaseMinConns            = "CHALK_DATABASE_MIN_CONNS"
+	DeadlineSchedulerIntervalMS = "CHALK_DEADLINE_SCHEDULER_INTERVAL_MS"
+	DeadlineSchedulerBatch      = "CHALK_DEADLINE_SCHEDULER_BATCH"
 
 	GoogleOAuthClientID     = "CHALK_GOOGLE_OAUTH_CLIENT_ID"
 	GoogleOAuthClientSecret = "CHALK_GOOGLE_OAUTH_CLIENT_SECRET"
@@ -82,6 +84,8 @@ const (
 	DefaultDatabaseURL                        = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
 	DefaultDBMaxConns                         = int32(10)
 	DefaultDBMinConns                         = int32(0)
+	DefaultDeadlineSchedulerIntervalMS        = int64(1000)
+	DefaultDeadlineSchedulerBatch             = int32(50)
 	DefaultEnvironment                        = "local"
 	DefaultGoogleRedirectURL                  = "http://127.0.0.1:8080/v1/auth/google/callback"
 	DefaultLogFormat                          = "json"
@@ -207,12 +211,18 @@ type WebhookConfig struct {
 	CurrentKeyVersion byte
 }
 
+type DeadlineSchedulerConfig struct {
+	Interval time.Duration
+	Batch    int32
+}
+
 type Config struct {
 	API                APIConfig
 	Auth               AuthConfig
 	CloudflareRealtime CloudflareRealtimeConfig
 	Composio           ComposioConfig
 	Database           DatabaseConfig
+	DeadlineScheduler  DeadlineSchedulerConfig
 	GoogleOAuth        GoogleOAuthConfig
 	Observability      ObservabilityConfig
 	R2                 R2Config
@@ -242,6 +252,17 @@ func Load() (Config, error) {
 	}
 	if minConns > maxConns {
 		return Config{}, fmt.Errorf("%s cannot be greater than %s", DatabaseMinConns, DatabaseMaxConns)
+	}
+	deadlineSchedulerInterval, err := envMilliseconds(DeadlineSchedulerIntervalMS, DefaultDeadlineSchedulerIntervalMS)
+	if err != nil {
+		return Config{}, err
+	}
+	deadlineSchedulerBatch, err := envInt32(DeadlineSchedulerBatch, DefaultDeadlineSchedulerBatch)
+	if err != nil {
+		return Config{}, err
+	}
+	if deadlineSchedulerInterval <= 0 || deadlineSchedulerBatch <= 0 {
+		return Config{}, fmt.Errorf("deadline scheduler interval and batch must be greater than zero")
 	}
 	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
 	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
@@ -375,6 +396,7 @@ func Load() (Config, error) {
 			MaxConns: maxConns,
 			MinConns: minConns,
 		},
+		DeadlineScheduler: DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
 		GoogleOAuth: GoogleOAuthConfig{
 			ClientID:     envOrDefault(GoogleOAuthClientID, ""),
 			ClientSecret: envOrDefault(GoogleOAuthClientSecret, ""),

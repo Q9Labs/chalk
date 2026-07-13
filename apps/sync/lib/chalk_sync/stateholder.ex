@@ -10,8 +10,11 @@ defmodule ChalkSync.Stateholder do
   alias ChalkSync.Rooms.Room
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Decision
+  alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.LifecycleDecision
+  alias ChalkSync.Stateholder.Operation
+  alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Recovery
   alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.Telemetry
@@ -32,6 +35,34 @@ defmodule ChalkSync.Stateholder do
               :ok | {:retryable, atom()}
   @callback pending_lifecycle_intents(pos_integer()) ::
               {:ok, [{SessionKey.t(), String.t()}]} | {:retryable, atom()}
+  @callback begin_operation(Identity.t(), Operation.t()) ::
+              {:ok, OperationDecision.t()} | {:retryable, atom()}
+  @callback begin_internal_operation(SessionKey.t(), Operation.t()) ::
+              {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback claim_operations(pos_integer()) ::
+              {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  @callback claim_local_operations(pos_integer()) ::
+              {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  @callback read_operation(SessionKey.t(), String.t()) ::
+              {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}
+  @callback finalize_operation(SessionKey.t(), String.t(), tuple()) ::
+              {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback participant_authority(SessionKey.t(), String.t(), pos_integer() | nil) ::
+              {:ok,
+               %{
+                 participant_session_id: String.t(),
+                 generation: pos_integer(),
+                 role: String.t(),
+                 capabilities: [String.t()]
+               }}
+              | {:error, atom()}
+              | {:retryable, atom()}
+  @callback reserve_publication_grant(Identity.t(), String.t(), MediaPlane.source()) ::
+              {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  @callback complete_publication_grant(SessionKey.t(), String.t(), MediaPlane.outcome()) ::
+              {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
+              {:ok, Decision.t()} | {:retryable, atom()}
 
   # Temporary v1 compatibility callbacks. They are removed with RoomServer in
   # the coordinator migration; production adapters do not implement them.
@@ -45,7 +76,9 @@ defmodule ChalkSync.Stateholder do
   @callback events_since(room_id :: String.t(), cursor :: non_neg_integer()) ::
               {:ok, [Room.event()]} | {:error, :cursor_unavailable}
 
-  @optional_callbacks load: 1, commit: 4, events_since: 2
+  @optional_callbacks load: 1,
+                      commit: 4,
+                      events_since: 2
 
   @spec impl() :: module()
   def impl, do: Application.fetch_env!(:chalk_sync, :stateholder)
@@ -114,6 +147,64 @@ defmodule ChalkSync.Stateholder do
           {:ok, [{SessionKey.t(), String.t()}]} | {:retryable, atom()}
   def pending_lifecycle_intents(limit) when is_integer(limit) and limit > 0,
     do: impl().pending_lifecycle_intents(limit)
+
+  @spec begin_operation(Identity.t(), Operation.t()) ::
+          {:ok, OperationDecision.t()} | {:retryable, atom()}
+  def begin_operation(%Identity{} = identity, %Operation{} = operation),
+    do: impl().begin_operation(identity, operation)
+
+  @spec begin_internal_operation(SessionKey.t(), Operation.t()) ::
+          {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  def begin_internal_operation(%SessionKey{} = session, %Operation{} = operation),
+    do: impl().begin_internal_operation(session, operation)
+
+  @spec claim_operations(pos_integer()) ::
+          {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  def claim_operations(limit) when is_integer(limit) and limit in 1..64,
+    do: impl().claim_operations(limit)
+
+  @spec claim_local_operations(pos_integer()) ::
+          {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
+    do: impl().claim_local_operations(limit)
+
+  @spec read_operation(SessionKey.t(), String.t()) ::
+          {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}
+  def read_operation(%SessionKey{} = session, external_operation_id)
+      when is_binary(external_operation_id),
+      do: impl().read_operation(session, external_operation_id)
+
+  @spec finalize_operation(SessionKey.t(), String.t(), tuple()) ::
+          {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  def finalize_operation(%SessionKey{} = session, external_operation_id, outcome)
+      when is_binary(external_operation_id) and is_tuple(outcome),
+      do: impl().finalize_operation(session, external_operation_id, outcome)
+
+  @spec participant_authority(SessionKey.t(), String.t(), pos_integer() | nil) ::
+          {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  def participant_authority(%SessionKey{} = session, participant_session_id, expected_generation)
+      when is_binary(participant_session_id) and
+             (is_nil(expected_generation) or
+                (is_integer(expected_generation) and expected_generation > 0)),
+      do: impl().participant_authority(session, participant_session_id, expected_generation)
+
+  @spec reserve_publication_grant(Identity.t(), String.t(), MediaPlane.source()) ::
+          {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  def reserve_publication_grant(%Identity{} = identity, operation_id, source)
+      when is_binary(operation_id),
+      do: impl().reserve_publication_grant(identity, operation_id, source)
+
+  @spec complete_publication_grant(SessionKey.t(), String.t(), MediaPlane.outcome()) ::
+          {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  def complete_publication_grant(%SessionKey{} = session, reservation_id, outcome)
+      when is_binary(reservation_id),
+      do: impl().complete_publication_grant(session, reservation_id, outcome)
+
+  @spec begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
+          {:ok, Decision.t()} | {:retryable, atom()}
+  def begin_role_transition(%Identity{} = identity, %Command{} = command, publications)
+      when is_list(publications),
+      do: impl().begin_role_transition(identity, command, publications)
 
   @spec load(String.t()) :: {:ok, Room.t()} | :not_found
   def load(room_id, observability \\ nil) do

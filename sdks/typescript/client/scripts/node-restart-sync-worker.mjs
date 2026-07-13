@@ -1,5 +1,5 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { createBrowserWebSocketFactory, createSyncClient } from "../dist/index.js";
+import { createV3SyncClient } from "../dist/index.js";
 
 const action = process.argv[2];
 const url = requiredEnvironment("CHALK_SYNC_BROWSER_URL");
@@ -7,12 +7,12 @@ const token = requiredEnvironment("CHALK_SYNC_BROWSER_TOKEN");
 const pendingStorePath = requiredEnvironment("CHALK_SYNC_PENDING_STORE_PATH");
 
 async function run() {
-  const client = createSyncClient({
+  const client = createV3SyncClient({
     lifecycle: { subscribe: () => () => {} },
     pendingStore: new FilePendingCommandStore(pendingStorePath),
     token: async () => token,
     url,
-    webSocket: createBrowserWebSocketFactory(globalThis.WebSocket),
+    webSocket: createNodeWebSocketFactory(),
   });
 
   try {
@@ -30,26 +30,64 @@ async function run() {
   }
 }
 
-async function stagePendingCommand(client) {
-  await client.send({ name: "raise_hand" });
-  const snapshot = client.getSnapshot();
+function createNodeWebSocketFactory() {
+  return { connect: (socketUrl) => new NodeSyncSocket(socketUrl) };
+}
 
-  if (snapshot.pending.count !== 1) {
-    throw new Error("first process did not retain the staged pending command");
+class NodeSyncSocket {
+  #socket;
+  #receivedFrameTypes = [];
+  onopen = null;
+  onmessage = null;
+  onclose = null;
+  onerror = null;
+
+  constructor(socketUrl) {
+    this.#socket = new WebSocket(socketUrl);
+    this.#socket.addEventListener("open", () => this.onopen?.());
+    this.#socket.addEventListener("message", (event) => {
+      try {
+        const frame = JSON.parse(event.data);
+        this.#receivedFrameTypes.push([frame.type, frame.code, frame.outcome, frame.revision].filter((value) => value !== undefined).join(":"));
+      } catch {
+        this.#receivedFrameTypes.push(typeof event.data);
+      }
+      if (this.#receivedFrameTypes.length > 12) this.#receivedFrameTypes.shift();
+      this.onmessage?.({ data: event.data });
+    });
+    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code }));
+    this.#socket.addEventListener("error", () => this.onerror?.());
   }
 
-  process.stdout.write(JSON.stringify({ pending: snapshot.pending.count }) + "\n");
+  send(data) {
+    this.#socket.send(data);
+  }
+
+  close(code, reason) {
+    if (code !== undefined && code !== 1000 && (code < 3000 || code > 4999)) {
+      throw new Error(`v3 client requested invalid browser close code ${code} (${reason ?? "no reason"}); recent frames=${this.#receivedFrameTypes.join(",")}`);
+    }
+    this.#socket.close(code, reason);
+  }
+}
+
+async function stagePendingCommand(client) {
+  void client.setHandRaised(true);
+  const snapshot = await waitFor(() => (client.getSnapshot().pendingCommandCount === 1 ? client.getSnapshot() : null), "first process did not retain the staged v3 pending target");
+
+  process.stdout.write(JSON.stringify({ pending: snapshot.pendingCommandCount }) + "\n");
+  await new Promise(() => setInterval(() => {}, 60_000));
 }
 
 async function resumePendingCommand(client) {
   await client.start();
   const snapshot = await waitFor(() => {
     const next = client.getSnapshot();
-    const participant = next.canonical?.state.participants[0];
-    return next.pending.count === 0 && next.canonical?.revision === 2 && participant?.handRaised ? next : null;
+    const participant = next.control?.participants.find((item) => item.participantSessionId === next.participantSessionId);
+    return next.connection.phase === "live" && next.media && next.presence && next.pendingCommandCount === 0 && next.control?.revision === 2 && participant?.handRaised ? next : null;
   }, "restarted process did not converge the persisted command");
 
-  process.stdout.write(JSON.stringify({ pending: snapshot.pending.count, revision: snapshot.canonical.revision }) + "\n");
+  process.stdout.write(JSON.stringify({ pending: snapshot.pendingCommandCount, revision: snapshot.control.revision }) + "\n");
 }
 
 async function waitFor(predicate, description) {

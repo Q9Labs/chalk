@@ -110,6 +110,82 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
              })
   end
 
+  test "persists satisfied v3 targets without changing the head and duplicates their semantic outcome" do
+    {session, identity} = seed_identity("session-a")
+    assert {:ok, before} = Memory.recover(session, nil)
+
+    target = command_with_payload("hand_already_low1", :set_hand_raised, %{"raised" => false})
+
+    assert {:ok, satisfied} = Memory.decide_command(identity, target)
+    assert satisfied.result == :satisfied
+    assert satisfied.delivery == :original
+    assert satisfied.revision == before.head.revision
+    assert satisfied.state_digest == before.head.digest
+
+    assert {:ok, duplicate} = Memory.decide_command(identity, target)
+    assert duplicate.result == :satisfied
+    assert duplicate.delivery == :duplicate
+    assert duplicate.revision == satisfied.revision
+    assert duplicate.state_digest == satisfied.state_digest
+
+    assert {:ok, after_recovery} = Memory.recover(session, nil)
+    assert after_recovery.head == before.head
+  end
+
+  test "authorizes from the locked role mapping instead of identity capability claims" do
+    {_session, identity} = seed_identity("session-a")
+    untrusted_claims = %{identity | capabilities: []}
+
+    assert {:ok, %{result: :committed}} =
+             Memory.decide_command(
+               untrusted_claims,
+               command_with_payload("rename_from_role1", :set_display_name, %{
+                 "displayName" => "Ada Lovelace"
+               })
+             )
+  end
+
+  test "rejects a role outside the target participant eligible set" do
+    session = %SessionKey{
+      tenant_id: "11111111-1111-4111-8111-111111111111",
+      room_id: "22222222-2222-4222-8222-222222222222",
+      session_id: session_uuid("session-a")
+    }
+
+    host = %{
+      id: "55555555-5555-4555-8555-555555555555",
+      generation: 1,
+      display_name: "Ada",
+      role: "host",
+      eligible_roles: ["host", "cohost", "participant"]
+    }
+
+    guest = %{
+      id: "66666666-6666-4666-8666-666666666666",
+      generation: 1,
+      display_name: "Grace",
+      role: "participant",
+      eligible_roles: ["participant"]
+    }
+
+    :ok = Memory.seed_session(session, [host, guest])
+
+    identity = %Identity{
+      session: session,
+      participant_session_id: host.id,
+      participant_session_generation: 1
+    }
+
+    assert {:ok, %{result: :rejected, reason: :role_not_eligible}} =
+             Memory.decide_command(
+               identity,
+               command_with_payload("ineligible_role1", :set_participant_role, %{
+                 "participantSessionId" => guest.id,
+                 "role" => "cohost"
+               })
+             )
+  end
+
   defp seed_identity(session_id) do
     session = %SessionKey{
       tenant_id: "11111111-1111-4111-8111-111111111111",
@@ -141,6 +217,11 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
 
   defp command(id, name) do
     {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), name, %{})
+    command
+  end
+
+  defp command_with_payload(id, name, payload) do
+    {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), name, payload)
     command
   end
 end

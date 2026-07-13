@@ -19,7 +19,8 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
          {:ok, %{} = claims} <- decode_json(json),
          %{"tenant_id" => tenant_id, "room_id" => room_id, "participant_id" => participant_id}
          when is_binary(tenant_id) and is_binary(room_id) and is_binary(participant_id) <-
-           claims do
+           claims,
+         {:ok, authorization} <- authorization_envelope(claims) do
       {:ok,
        %Claims{
          tenant_id: tenant_id,
@@ -32,7 +33,9 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
          issued_at: Map.get(claims, "issued_at"),
          expires_at: Map.get(claims, "expires_at"),
          display_name: Map.get(claims, "display_name", "Guest"),
-         capabilities: Map.get(claims, "capabilities", [])
+         initial_role: authorization.initial_role,
+         eligible_roles: authorization.eligible_roles,
+         capabilities: authorization.capabilities
        }}
     else
       _ -> {:error, :invalid_token}
@@ -50,6 +53,33 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
     case JSON.decode(json) do
       {:ok, decoded} -> {:ok, decoded}
       {:error, _} -> {:error, :invalid_token}
+    end
+  end
+
+  defp authorization_envelope(claims) do
+    role_claims? = Map.has_key?(claims, "initial_role") or Map.has_key?(claims, "eligible_roles")
+    capabilities? = Map.has_key?(claims, "capabilities")
+
+    cond do
+      not role_claims? ->
+        {:ok,
+         %{
+           initial_role: nil,
+           eligible_roles: [],
+           capabilities: Map.get(claims, "capabilities", [])
+         }}
+
+      not capabilities? and
+          Claims.valid_role_envelope?(claims["initial_role"], claims["eligible_roles"]) ->
+        {:ok,
+         %{
+           initial_role: claims["initial_role"],
+           eligible_roles: claims["eligible_roles"],
+           capabilities: []
+         }}
+
+      true ->
+        {:error, :invalid_role_envelope}
     end
   end
 end

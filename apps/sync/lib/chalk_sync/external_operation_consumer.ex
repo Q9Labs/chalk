@@ -95,9 +95,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
              adapter_timeout_ms > 0 do
     case dispatch(session, operation, media_plane, recording_plane, adapter_timeout_ms) do
       {:confirmed, authority} ->
+        execution_checkpoint(:after_provider_confirmation_before_finalize, session, operation)
         finalize_confirmed(session, operation, authority, finalize)
 
       {:terminal_failure, reason} ->
+        execution_checkpoint(:after_provider_terminal_failure_before_finalize, session, operation)
         finalize_terminal_failure(session, operation, reason, finalize)
 
       :pending ->
@@ -366,6 +368,21 @@ defmodule ChalkSync.ExternalOperationConsumer do
     case finalize.(session, operation.external_operation_id, {:failed, reason}) do
       {:ok, _decision} -> :terminal_failure
       result -> finalization_failure(operation.name, result)
+    end
+  end
+
+  defp execution_checkpoint(point, session, operation) do
+    case Application.get_env(:chalk_sync, :external_operation_fault_hook) do
+      hook when is_function(hook, 2) ->
+        hook.(point, %{
+          tenant_id: session.tenant_id,
+          session_id: session.session_id,
+          external_operation_id: operation.external_operation_id,
+          operation: operation.name
+        })
+
+      _ ->
+        :ok
     end
   end
 

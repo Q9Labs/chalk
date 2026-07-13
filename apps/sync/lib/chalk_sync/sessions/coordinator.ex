@@ -9,7 +9,8 @@ defmodule ChalkSync.Sessions.Coordinator do
 
   use GenServer
 
-  alias ChalkSync.ProtocolV2
+  alias ChalkSync.DeliveryGate
+  alias ChalkSync.Live.Session, as: LiveSession
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Recovery
@@ -19,6 +20,7 @@ defmodule ChalkSync.Sessions.Coordinator do
 
   @repair_interval_ms 5_000
   @queue_check_interval_ms 1_000
+  @live_reconcile_interval_ms 2_000
 
   def start_link(%SessionKey{} = session) do
     GenServer.start_link(__MODULE__, session, name: via(session))
@@ -52,8 +54,13 @@ defmodule ChalkSync.Sessions.Coordinator do
   end
 
   @spec activate_recovery(pid(), Recovery.t(), pid()) :: :ok | {:error, atom()}
-  def activate_recovery(coordinator, %Recovery{} = recovery, socket \\ self()) do
-    GenServer.call(coordinator, {:activate_recovery, socket, recovery}, 3_000)
+  def activate_recovery(
+        coordinator,
+        %Recovery{} = recovery,
+        socket \\ self(),
+        timeout_ms \\ 3_000
+      ) do
+    GenServer.call(coordinator, {:activate_recovery, socket, recovery}, timeout_ms)
   catch
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
@@ -75,6 +82,17 @@ defmodule ChalkSync.Sessions.Coordinator do
     case whereis(session) do
       nil -> :ok
       coordinator -> GenServer.call(coordinator, {:publish, event}, 3_000)
+    end
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
+  @spec publish_pending(SessionKey.t(), map(), pid()) ::
+          {:ok, [binary()]} | {:error, atom()}
+  def publish_pending(%SessionKey{} = session, event, socket \\ self()) when is_map(event) do
+    case whereis(session) do
+      nil -> {:ok, []}
+      coordinator -> GenServer.call(coordinator, {:publish_pending, socket, event}, 3_000)
     end
   catch
     :exit, _reason -> {:error, :coordinator_unavailable}
@@ -127,6 +145,47 @@ defmodule ChalkSync.Sessions.Coordinator do
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
 
+  @spec live_target(pid(), Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
+  def live_target(coordinator, %Identity{} = identity, target, socket \\ self()) do
+    GenServer.call(
+      coordinator,
+      {:live_target, socket, identity, target},
+      provider_call_timeout()
+    )
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
+  @spec directed_request(pid(), Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
+  def directed_request(coordinator, %Identity{} = identity, request, socket \\ self()) do
+    GenServer.call(coordinator, {:directed_request, socket, identity, request}, 3_000)
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
+  @spec acknowledge_request(pid(), Identity.t(), String.t(), pid()) :: :ok | {:error, atom()}
+  def acknowledge_request(coordinator, %Identity{} = identity, request_id, socket \\ self()) do
+    GenServer.call(coordinator, {:acknowledge_request, socket, identity, request_id}, 1_000)
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
+  @doc false
+  @spec expire_live_requests(pid(), integer()) :: :ok | {:error, atom()}
+  def expire_live_requests(coordinator, now_ms) when is_integer(now_ms) do
+    GenServer.call(coordinator, {:expire_live_requests, now_ms}, 1_000)
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
+  @doc false
+  @spec reconcile_live(pid()) :: :ok | {:error, atom()}
+  def reconcile_live(coordinator) do
+    GenServer.call(coordinator, :reconcile_live, provider_call_timeout())
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
   @spec whereis(SessionKey.t()) :: pid() | nil
   def whereis(%SessionKey{} = session) do
     case Registry.lookup(ChalkSync.Sessions.Registry, SessionKey.authority_key(session)) do
@@ -150,8 +209,18 @@ defmodule ChalkSync.Sessions.Coordinator do
   def init(session) do
     Process.send_after(self(), :repair, @repair_interval_ms)
     Process.send_after(self(), :check_queues, @queue_check_interval_ms)
+    Process.send_after(self(), :expire_live_requests, @queue_check_interval_ms)
+    Process.send_after(self(), :reconcile_live, @live_reconcile_interval_ms)
 
-    {:ok, %{session: session, head: nil, target_revision: 0, sockets: %{}}}
+    {:ok,
+     %{
+       session: session,
+       head: nil,
+       target_revision: 0,
+       sockets: %{},
+       live: LiveSession.new(session),
+       live_reconcile_task: nil
+     }}
   end
 
   @impl GenServer
@@ -251,6 +320,25 @@ defmodule ChalkSync.Sessions.Coordinator do
     end
   end
 
+  def handle_call({:publish_pending, socket, event}, _from, state) do
+    previous_revision =
+      case Map.get(state.sockets, socket) do
+        %{mode: :live, identity: %{protocol_version: 3}, enqueued_revision: revision} -> revision
+        _subscriber -> nil
+      end
+
+    with revision when is_integer(revision) <- field(event, :revision),
+         {:ok, delivered} <- deliver_event(state, event),
+         {:ok, frames, next} <-
+           pending_event_frames(delivered, socket, previous_revision, revision) do
+      {:reply, {:ok, frames}, next}
+    else
+      _error ->
+        send(self(), :repair_now)
+        {:reply, {:error, :revision_gap}, state}
+    end
+  end
+
   def handle_call({:pop, socket}, _from, state) do
     case Map.fetch(state.sockets, socket) do
       :error ->
@@ -292,6 +380,62 @@ defmodule ChalkSync.Sessions.Coordinator do
       _ ->
         {:reply, {:error, :not_recovering}, state}
     end
+  end
+
+  def handle_call({:live_target, socket, identity, target}, _from, state) do
+    case Map.get(state.sockets, socket) do
+      %{mode: :live, identity: ^identity} ->
+        {live, result} = LiveSession.live_target(state.live, identity, target)
+        {live, result} = refresh_after_live_target(live, result)
+        {:reply, {:ok, result}, %{state | live: live}}
+
+      _subscriber ->
+        {:reply, {:error, :not_live}, state}
+    end
+  end
+
+  def handle_call({:directed_request, socket, identity, request}, _from, state) do
+    case Map.get(state.sockets, socket) do
+      %{mode: :live, identity: ^identity} ->
+        {live, result} =
+          LiveSession.directed_request(
+            state.live,
+            identity,
+            request,
+            System.system_time(:millisecond)
+          )
+
+        {:reply, {:ok, result}, %{state | live: live}}
+
+      _subscriber ->
+        {:reply, {:error, :not_live}, state}
+    end
+  end
+
+  def handle_call({:acknowledge_request, socket, identity, request_id}, _from, state) do
+    case Map.get(state.sockets, socket) do
+      %{mode: :live, identity: ^identity} ->
+        live =
+          LiveSession.acknowledge_request(
+            state.live,
+            identity,
+            request_id,
+            System.system_time(:millisecond)
+          )
+
+        {:reply, :ok, %{state | live: live}}
+
+      _subscriber ->
+        {:reply, {:error, :not_live}, state}
+    end
+  end
+
+  def handle_call({:expire_live_requests, now_ms}, _from, state) do
+    {:reply, :ok, expire_live_requests_at(state, now_ms)}
+  end
+
+  def handle_call(:reconcile_live, _from, state) do
+    {:reply, :ok, start_live_reconcile(state)}
   end
 
   @impl GenServer
@@ -339,6 +483,44 @@ defmodule ChalkSync.Sessions.Coordinator do
     end
   end
 
+  def handle_info(:expire_live_requests, state) do
+    state = expire_live_requests_at(state, System.system_time(:millisecond))
+
+    if map_size(state.sockets) == 0 do
+      {:stop, :normal, state}
+    else
+      Process.send_after(self(), :expire_live_requests, @queue_check_interval_ms)
+      {:noreply, state}
+    end
+  end
+
+  def handle_info(:reconcile_live, state) do
+    state = start_live_reconcile(state)
+
+    if map_size(state.sockets) == 0 do
+      {:stop, :normal, state}
+    else
+      Process.send_after(self(), :reconcile_live, @live_reconcile_interval_ms)
+      {:noreply, state}
+    end
+  end
+
+  def handle_info(
+        {reference, result},
+        %{live_reconcile_task: %{ref: reference, live: snapshot}} = state
+      ) do
+    Process.demonitor(reference, [:flush])
+    state = %{state | live_reconcile_task: nil}
+    {:noreply, apply_live_reconcile_result(state, snapshot, result)}
+  end
+
+  def handle_info(
+        {:DOWN, reference, :process, _pid, _reason},
+        %{live_reconcile_task: %{ref: reference}} = state
+      ) do
+    {:noreply, %{state | live_reconcile_task: nil}}
+  end
+
   def handle_info({:DOWN, monitor, :process, socket, _reason}, state) do
     case Map.get(state.sockets, socket) do
       %{monitor: ^monitor} -> stop_if_empty(remove_socket(state, socket))
@@ -358,6 +540,10 @@ defmodule ChalkSync.Sessions.Coordinator do
       pid ->
         {:ok, pid}
     end
+  end
+
+  defp provider_call_timeout do
+    Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5_000) + 1_000
   end
 
   defp repair(%{head: nil} = state), do: state
@@ -436,7 +622,7 @@ defmodule ChalkSync.Sessions.Coordinator do
 
   defp enqueue_catch_up_events(socket, subscriber, events) do
     Enum.reduce_while(events, {:ok, subscriber}, fn event, {:ok, current} ->
-      encoded = ProtocolV2.event(event)
+      encoded = protocol(subscriber).event(event)
 
       case enqueue_event(socket, current, event, encoded) do
         {:ok, next} -> {:cont, {:ok, next}}
@@ -449,12 +635,12 @@ defmodule ChalkSync.Sessions.Coordinator do
   defp deliver_event(state, event) do
     revision = field(event, :revision)
 
-    with :ok <- valid_delivery_revision(state.head, revision),
-         {:ok, encoded} <- encode_event(event) do
-      {:ok, deliver_encoded_event(state, event, encoded, revision)}
-    else
+    case valid_delivery_revision(state.head, revision) do
+      :ok -> {:ok, deliver_encoded_event(state, event, revision)}
       {:error, _reason} -> {:error, state}
     end
+  rescue
+    ArgumentError -> {:error, state}
   end
 
   defp valid_delivery_revision(_head, revision) when not is_integer(revision),
@@ -466,10 +652,10 @@ defmodule ChalkSync.Sessions.Coordinator do
 
   defp valid_delivery_revision(_head, _revision), do: :ok
 
-  defp deliver_encoded_event(state, event, encoded, revision) do
+  defp deliver_encoded_event(state, event, revision) do
     sockets =
       Enum.reduce(state.sockets, %{}, fn socket_entry, kept ->
-        deliver_to_socket(socket_entry, kept, event, encoded)
+        deliver_to_socket(socket_entry, kept, event)
       end)
 
     head =
@@ -485,11 +671,11 @@ defmodule ChalkSync.Sessions.Coordinator do
     }
   end
 
-  defp deliver_to_socket({socket, subscriber}, kept, event, encoded) do
+  defp deliver_to_socket({socket, subscriber}, kept, event) do
     result =
       if subscriber.mode == :recovering,
         do: {:ok, subscriber},
-        else: enqueue_event(socket, subscriber, event, encoded)
+        else: enqueue_event(socket, subscriber, event, protocol(subscriber).event(event))
 
     case result do
       {:ok, next_subscriber} ->
@@ -557,7 +743,11 @@ defmodule ChalkSync.Sessions.Coordinator do
     do: {:drop, reason}
 
   defp notify_reserved_event(socket, subscriber, true) when not subscriber.notified? do
-    send(socket, {:sync_outbound_ready, self()})
+    deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
+      phase: :live,
+      revision: subscriber.enqueued_revision
+    })
+
     {:ok, %{subscriber | notified?: true}}
   end
 
@@ -565,8 +755,9 @@ defmodule ChalkSync.Sessions.Coordinator do
 
   defp activate_socket_recovery(state, socket, subscriber, recovery) do
     if compatible_head?(state.head, recovery.head) do
-      recovery_id = ProtocolV2.recovery_id()
-      encoded = ProtocolV2.recovery_welcome(subscriber.identity, recovery, recovery_id)
+      protocol = protocol(subscriber)
+      recovery_id = protocol.recovery_id()
+      encoded = protocol.recovery_welcome(subscriber.identity, recovery, recovery_id)
 
       recovery_state = %{
         mode: recovery.mode,
@@ -658,20 +849,35 @@ defmodule ChalkSync.Sessions.Coordinator do
          socket,
          %{recovery: %{head: head}} = subscriber
        ) do
-    live = %{
-      subscriber
-      | mode: :live,
-        identity: nil,
-        recovery: nil,
-        enqueued_revision: head.revision,
-        acknowledged_revision: head.revision,
-        acknowledged_digest: digest_hex(head.digest)
-    }
+    case LiveSession.register(state.live, subscriber.identity, socket) do
+      {:ok, live_state, recovery_frames, broadcast_frames} ->
+        live = %{
+          subscriber
+          | mode: :live,
+            recovery: nil,
+            enqueued_revision: head.revision,
+            acknowledged_revision: head.revision,
+            acknowledged_digest: digest_hex(head.digest)
+        }
 
-    next = %{state | sockets: Map.put(state.sockets, socket, live)}
-    send(socket, {:sync_recovery_live, self()})
-    send(self(), :repair_now)
-    {:reply, :ok, next}
+        send_live_frames(socket, recovery_frames)
+        broadcast_live_frames(live_state, broadcast_frames, except: socket)
+
+        next = %{
+          state
+          | live: live_state,
+            head: head,
+            sockets: Map.put(state.sockets, socket, live)
+        }
+
+        send(socket, {:sync_recovery_live, self()})
+        send(self(), :repair_now)
+        {:reply, :ok, next}
+
+      {:error, reason} ->
+        notify_reconnect(socket, reason, subscriber.acknowledged_revision)
+        {:reply, {:error, reason}, remove_socket(state, socket)}
+    end
   end
 
   defp enqueue_next_recovery_frame(
@@ -685,7 +891,7 @@ defmodule ChalkSync.Sessions.Coordinator do
            recovery.head.revision
          ) do
       {:ok, [_ | _] = events} ->
-        case ProtocolV2.recovery_page(events, recovery.id) do
+        case protocol(subscriber).recovery_page(events, recovery.id) do
           {:ok, encoded, last_revision} ->
             next = %{
               subscriber
@@ -723,7 +929,7 @@ defmodule ChalkSync.Sessions.Coordinator do
     recovery = subscriber.recovery
 
     encoded =
-      ProtocolV2.recovery_complete(
+      protocol(subscriber).recovery_complete(
         %Recovery{mode: recovery.mode, head: recovery.head, snapshot: nil, events: []},
         recovery.id
       )
@@ -740,7 +946,11 @@ defmodule ChalkSync.Sessions.Coordinator do
 
     case OutboundQueue.push(subscriber.queue, encoded, options) do
       :ok ->
-        send(socket, {:sync_outbound_ready, self()})
+        deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
+          phase: :recovery,
+          revision: acknowledgement && acknowledgement.revision
+        })
+
         recovery = %{subscriber.recovery | expected_ack: acknowledgement}
         {:ok, %{subscriber | recovery: recovery, notified?: true}}
 
@@ -835,10 +1045,49 @@ defmodule ChalkSync.Sessions.Coordinator do
   defp popped_entry(state, socket, subscriber, entry) do
     more? = not unsent_empty?(subscriber.queue)
     next_subscriber = %{subscriber | notified?: more?}
-    if more?, do: send(socket, {:sync_outbound_ready, self()})
+
+    if more? do
+      deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
+        phase: :live,
+        revision: entry.revision
+      })
+    end
 
     {:reply, {:ok, entry.encoded, false},
      %{state | sockets: Map.put(state.sockets, socket, next_subscriber)}}
+  end
+
+  defp pending_event_frames(state, _socket, previous_revision, revision)
+       when is_integer(previous_revision) and revision <= previous_revision,
+       do: {:ok, [], state}
+
+  defp pending_event_frames(state, socket, _previous_revision, revision) do
+    case Map.fetch(state.sockets, socket) do
+      {:ok, subscriber} -> pop_pending_frames(state, socket, subscriber, revision, [])
+      :error -> {:error, :not_subscribed}
+    end
+  end
+
+  defp pop_pending_frames(state, socket, subscriber, revision, frames) do
+    case OutboundQueue.pop(subscriber.queue) do
+      {:ok, %{encoded: encoded, revision: current}} when current < revision ->
+        pop_pending_frames(state, socket, subscriber, revision, [encoded | frames])
+
+      {:ok, %{encoded: encoded, revision: ^revision}} ->
+        next_subscriber = %{subscriber | notified?: false}
+
+        {:ok, Enum.reverse([encoded | frames]),
+         %{state | sockets: Map.put(state.sockets, socket, next_subscriber)}}
+
+      {:ok, _later} ->
+        {:error, :revision_gap}
+
+      :empty ->
+        {:error, :revision_gap}
+
+      {:error, _reason} ->
+        {:error, :queue_unavailable}
+    end
   end
 
   defp acknowledge_socket(state, socket, subscriber, revision, state_digest) do
@@ -975,7 +1224,13 @@ defmodule ChalkSync.Sessions.Coordinator do
   defp retain_draining_socket(socket, subscriber, kept) do
     unsent? = not unsent_empty?(subscriber.queue)
     notify? = not subscriber.notified? and unsent?
-    if notify?, do: send(socket, {:sync_outbound_ready, self()})
+
+    if notify? do
+      deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
+        phase: :draining,
+        revision: subscriber.enqueued_revision
+      })
+    end
 
     Map.put(kept, socket, %{
       subscriber
@@ -990,7 +1245,21 @@ defmodule ChalkSync.Sessions.Coordinator do
       close_subscriber(subscriber)
     end)
 
-    %{state | sockets: %{}}
+    live = Enum.reduce(Map.keys(state.sockets), state.live, &LiveSession.unregister(&2, &1))
+    %{state | sockets: %{}, live: live}
+  end
+
+  defp expire_live_requests_at(state, now_ms) do
+    {live, deliveries} = LiveSession.expire_requests(state.live, now_ms)
+
+    Enum.each(deliveries, fn {socket, frame} ->
+      deliver(socket, :live_frame, {:sync_v3_live_frame, self(), frame}, %{
+        frame_type: field(frame, :type),
+        stream: field(frame, :stream)
+      })
+    end)
+
+    %{state | live: live}
   end
 
   defp remove_socket(state, socket) do
@@ -1000,8 +1269,100 @@ defmodule ChalkSync.Sessions.Coordinator do
 
       {subscriber, sockets} ->
         close_subscriber(subscriber)
-        %{state | sockets: sockets}
+        live = unregister_live_socket(state.live, socket)
+        %{state | sockets: sockets, live: live}
     end
+  end
+
+  defp refresh_after_live_target(live, %{"outcome" => outcome} = result)
+       when outcome in ["confirmed", "satisfied"] do
+    case LiveSession.reconcile(live) do
+      {:ok, next, frames} ->
+        broadcast_live_frames(next, frames)
+        {next, result}
+
+      {:error, _reason} ->
+        {live, retryable_live_result(result)}
+    end
+  end
+
+  defp refresh_after_live_target(live, result), do: {live, result}
+
+  defp retryable_live_result(result) do
+    result
+    |> Map.put("outcome", "retryable_failure")
+    |> Map.put("error_code", "dependency_unavailable")
+  end
+
+  defp unregister_live_socket(live, socket) do
+    connection_count = map_size(live.connections)
+    next = LiveSession.unregister(live, socket)
+
+    if map_size(next.connections) < connection_count do
+      case LiveSession.presence_snapshot(next) do
+        {:ok, reconciled, frames} ->
+          broadcast_live_frames(reconciled, frames)
+          reconciled
+
+        {:error, _reason} ->
+          next
+      end
+    else
+      next
+    end
+  end
+
+  defp start_live_reconcile(%{live_reconcile_task: task} = state) when not is_nil(task),
+    do: state
+
+  defp start_live_reconcile(%{live: %{connections: connections}} = state)
+       when map_size(connections) == 0,
+       do: state
+
+  defp start_live_reconcile(state) do
+    snapshot = state.live
+
+    task =
+      Task.Supervisor.async_nolink(ChalkSync.CommandTaskSupervisor, fn ->
+        LiveSession.reconcile(snapshot)
+      end)
+
+    %{state | live_reconcile_task: %{pid: task.pid, ref: task.ref, live: snapshot}}
+  rescue
+    _exception -> state
+  catch
+    :exit, _reason -> state
+  end
+
+  defp apply_live_reconcile_result(state, snapshot, {:ok, live, frames})
+       when state.live == snapshot do
+    broadcast_live_frames(live, frames)
+    %{state | live: live}
+  end
+
+  defp apply_live_reconcile_result(state, _snapshot, _result), do: state
+
+  defp broadcast_live_frames(live, frames, options \\ []) do
+    excluded = Keyword.get(options, :except)
+
+    for socket <- Map.keys(live.connections), socket != excluded do
+      send_live_frames(socket, frames)
+    end
+
+    :ok
+  end
+
+  defp send_live_frames(socket, frames) do
+    Enum.each(frames, fn frame ->
+      deliver(socket, :live_frame, {:sync_v3_live_frame, self(), frame}, %{
+        frame_type: field(frame, :type),
+        stream: field(frame, :stream)
+      })
+    end)
+  end
+
+  defp deliver(socket, checkpoint, message, metadata) do
+    DeliveryGate.emit(checkpoint, metadata, socket, message)
   end
 
   defp close_subscriber(subscriber) do
@@ -1033,11 +1394,7 @@ defmodule ChalkSync.Sessions.Coordinator do
     end
   end
 
-  defp encode_event(event) do
-    {:ok, ProtocolV2.event(event)}
-  rescue
-    ArgumentError -> {:error, :invalid_event}
-  end
+  defp protocol(_subscriber), do: ChalkSync.ProtocolV3
 
   defp compatible_head?(nil, _head), do: true
 

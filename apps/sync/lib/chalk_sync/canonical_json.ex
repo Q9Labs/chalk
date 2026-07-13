@@ -2,7 +2,7 @@ defmodule ChalkSync.CanonicalJSON do
   @moduledoc """
   Canonical JSON encoder for sync control projections.
 
-  The v2 durable projection contains objects with schema-owned ASCII keys,
+  The v3 durable projection contains objects with schema-owned ASCII keys,
   arrays, UTF-8 strings, integers, booleans, and null. Restricting the encoder
   to those values keeps the RFC 8785 representation explicit and rejects
   unsupported numeric values before they can enter a state digest.

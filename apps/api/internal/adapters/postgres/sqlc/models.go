@@ -145,20 +145,60 @@ type ObservabilityJourneyEvent struct {
 }
 
 type Participant struct {
-	ID           pgtype.UUID        `json:"id"`
-	Name         pgtype.Text        `json:"name"`
-	Metadata     []byte             `json:"metadata"`
-	Capabilities []string           `json:"capabilities"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	RoomID       pgtype.UUID        `json:"room_id"`
-	SessionID    pgtype.UUID        `json:"session_id"`
-	UserID       pgtype.UUID        `json:"user_id"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	Generation   int64              `json:"generation"`
-	Status       string             `json:"status"`
-	JoinedAt     pgtype.Timestamptz `json:"joined_at"`
-	LeftAt       pgtype.Timestamptz `json:"left_at"`
+	ID            pgtype.UUID        `json:"id"`
+	Name          pgtype.Text        `json:"name"`
+	Metadata      []byte             `json:"metadata"`
+	Capabilities  []string           `json:"capabilities"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	RoomID        pgtype.UUID        `json:"room_id"`
+	SessionID     pgtype.UUID        `json:"session_id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	Generation    int64              `json:"generation"`
+	Status        string             `json:"status"`
+	JoinedAt      pgtype.Timestamptz `json:"joined_at"`
+	LeftAt        pgtype.Timestamptz `json:"left_at"`
+	Role          string             `json:"role"`
+	EligibleRoles []string           `json:"eligible_roles"`
+}
+
+type ProviderOperationObservation struct {
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	SessionID              pgtype.UUID        `json:"session_id"`
+	Incarnation            int64              `json:"incarnation"`
+	Sequence               int64              `json:"sequence"`
+	Publications           []byte             `json:"publications"`
+	ObservationFingerprint []byte             `json:"observation_fingerprint"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProviderOperationObservationHead struct {
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	SessionID              pgtype.UUID        `json:"session_id"`
+	Incarnation            int64              `json:"incarnation"`
+	Sequence               int64              `json:"sequence"`
+	ObservationFingerprint []byte             `json:"observation_fingerprint"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProviderOperationReceipt struct {
+	OperationID                  string             `json:"operation_id"`
+	Effect                       string             `json:"effect"`
+	TenantID                     pgtype.UUID        `json:"tenant_id"`
+	SessionID                    pgtype.UUID        `json:"session_id"`
+	ParticipantSessionID         pgtype.UUID        `json:"participant_session_id"`
+	ParticipantSessionGeneration pgtype.Int8        `json:"participant_session_generation"`
+	PublicationSource            pgtype.Text        `json:"publication_source"`
+	RecordingID                  pgtype.UUID        `json:"recording_id"`
+	RequestFingerprint           []byte             `json:"request_fingerprint"`
+	RequestPayload               []byte             `json:"request_payload"`
+	State                        string             `json:"state"`
+	Outcome                      pgtype.Text        `json:"outcome"`
+	Reason                       pgtype.Text        `json:"reason"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+	DispatchingAt                pgtype.Timestamptz `json:"dispatching_at"`
+	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
 }
 
 type Recording struct {
@@ -172,6 +212,109 @@ type Recording struct {
 	Metadata        []byte             `json:"metadata"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingArtifact struct {
+	RecordingID    pgtype.UUID        `json:"recording_id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	RenderJobID    pgtype.UUID        `json:"render_job_id"`
+	ObjectKey      string             `json:"object_key"`
+	ContentType    string             `json:"content_type"`
+	ByteSize       int64              `json:"byte_size"`
+	Checksum       []byte             `json:"checksum"`
+	DurationMillis int64              `json:"duration_millis"`
+	CommittedAt    pgtype.Timestamptz `json:"committed_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingBundle struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	RecordingID          pgtype.UUID        `json:"recording_id"`
+	CaptureJobID         pgtype.UUID        `json:"capture_job_id"`
+	SequenceNumber       int64              `json:"sequence_number"`
+	FencingGeneration    int64              `json:"fencing_generation"`
+	ObjectKey            string             `json:"object_key"`
+	ContentType          string             `json:"content_type"`
+	Codec                string             `json:"codec"`
+	Layer                pgtype.Text        `json:"layer"`
+	ByteSize             int64              `json:"byte_size"`
+	Checksum             []byte             `json:"checksum"`
+	MonotonicStartMillis int64              `json:"monotonic_start_millis"`
+	MonotonicEndMillis   int64              `json:"monotonic_end_millis"`
+	MediaStartMillis     int64              `json:"media_start_millis"`
+	MediaEndMillis       int64              `json:"media_end_millis"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingCapacity struct {
+	ID                      int16              `json:"id"`
+	ReservedMeetings        int32              `json:"reserved_meetings"`
+	ReservedParticipants    int32              `json:"reserved_participants"`
+	ReservedInputBitrateBps int64              `json:"reserved_input_bitrate_bps"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RecordingJob struct {
+	ID                   pgtype.UUID        `json:"id"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	SessionID            pgtype.UUID        `json:"session_id"`
+	RecordingID          pgtype.UUID        `json:"recording_id"`
+	Kind                 string             `json:"kind"`
+	IdempotencyKey       string             `json:"idempotency_key"`
+	PayloadSchemaVersion int32              `json:"payload_schema_version"`
+	State                string             `json:"state"`
+	Priority             int32              `json:"priority"`
+	AvailableAt          pgtype.Timestamptz `json:"available_at"`
+	AttemptCount         int32              `json:"attempt_count"`
+	AttemptLimit         int32              `json:"attempt_limit"`
+	LeaseToken           pgtype.Text        `json:"lease_token"`
+	LeaseOwner           pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt       pgtype.Timestamptz `json:"lease_expires_at"`
+	FencingGeneration    int64              `json:"fencing_generation"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorDetail          pgtype.Text        `json:"error_detail"`
+	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingPipeline struct {
+	RecordingID        pgtype.UUID        `json:"recording_id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	ReservationID      pgtype.UUID        `json:"reservation_id"`
+	State              string             `json:"state"`
+	CaptureCompletedAt pgtype.Timestamptz `json:"capture_completed_at"`
+	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingPoolHealth struct {
+	Role          string             `json:"role"`
+	AdmissionOpen bool               `json:"admission_open"`
+	ReadyCapacity int32              `json:"ready_capacity"`
+	Reason        string             `json:"reason"`
+	ObservedAt    pgtype.Timestamptz `json:"observed_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RecordingReservation struct {
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	RoomID             pgtype.UUID        `json:"room_id"`
+	SessionID          pgtype.UUID        `json:"session_id"`
+	RecordingID        pgtype.UUID        `json:"recording_id"`
+	IdempotencyKey     string             `json:"idempotency_key"`
+	RequestFingerprint []byte             `json:"request_fingerprint"`
+	ParticipantCount   int32              `json:"participant_count"`
+	MaxDurationSeconds int32              `json:"max_duration_seconds"`
+	InputBitrateBps    int64              `json:"input_bitrate_bps"`
+	State              string             `json:"state"`
+	StartsAt           pgtype.Timestamptz `json:"starts_at"`
+	EndsAt             pgtype.Timestamptz `json:"ends_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecordingTranscriptionSource struct {
@@ -218,16 +361,22 @@ type Room struct {
 }
 
 type RoomSession struct {
-	ID              pgtype.UUID        `json:"id"`
-	Status          string             `json:"status"`
-	Metadata        []byte             `json:"metadata"`
-	RoomID          pgtype.UUID        `json:"room_id"`
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
-	StartedAt       pgtype.Timestamptz `json:"started_at"`
-	EndedAt         pgtype.Timestamptz `json:"ended_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ID                            pgtype.UUID        `json:"id"`
+	Status                        string             `json:"status"`
+	Metadata                      []byte             `json:"metadata"`
+	RoomID                        pgtype.UUID        `json:"room_id"`
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	CreatedByUserID               pgtype.UUID        `json:"created_by_user_id"`
+	StartedAt                     pgtype.Timestamptz `json:"started_at"`
+	EndedAt                       pgtype.Timestamptz `json:"ended_at"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	HostExitPolicy                string             `json:"host_exit_policy"`
+	RoleCapabilities              []byte             `json:"role_capabilities"`
+	MaximumDurationSeconds        int32              `json:"maximum_duration_seconds"`
+	MaximumDurationCeilingSeconds int32              `json:"maximum_duration_ceiling_seconds"`
+	DeadlineAt                    pgtype.Timestamptz `json:"deadline_at"`
+	DeadlineGeneration            int64              `json:"deadline_generation"`
 }
 
 type SessionCreateRequest struct {
@@ -237,6 +386,24 @@ type SessionCreateRequest struct {
 	RequestFingerprint []byte             `json:"request_fingerprint"`
 	SessionID          pgtype.UUID        `json:"session_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncAdmissionRequest struct {
+	TenantID                    pgtype.UUID        `json:"tenant_id"`
+	RoomID                      pgtype.UUID        `json:"room_id"`
+	SessionID                   pgtype.UUID        `json:"session_id"`
+	AdmissionRequestID          pgtype.UUID        `json:"admission_request_id"`
+	RequestKey                  string             `json:"request_key"`
+	RequestFingerprint          []byte             `json:"request_fingerprint"`
+	ParticipantSessionID        pgtype.UUID        `json:"participant_session_id"`
+	DisplayName                 string             `json:"display_name"`
+	InitialRole                 string             `json:"initial_role"`
+	EligibleRoles               []string           `json:"eligible_roles"`
+	Status                      string             `json:"status"`
+	DecisionExternalOperationID pgtype.UUID        `json:"decision_external_operation_id"`
+	RequestedAt                 pgtype.Timestamptz `json:"requested_at"`
+	ExpiresAt                   pgtype.Timestamptz `json:"expires_at"`
+	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
 }
 
 type SyncCommandReceipt struct {
@@ -252,6 +419,9 @@ type SyncCommandReceipt struct {
 	EventID              pgtype.UUID        `json:"event_id"`
 	ResultingRevision    pgtype.Int8        `json:"resulting_revision"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	ResultingStateDigest []byte             `json:"resulting_state_digest"`
+	ExternalOperationID  pgtype.UUID        `json:"external_operation_id"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
 }
 
 type SyncControlEvent struct {
@@ -271,6 +441,39 @@ type SyncControlEvent struct {
 	ResultingStateDigest      []byte             `json:"resulting_state_digest"`
 	EncodedBytes              int32              `json:"encoded_bytes"`
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	ExternalOperationID       pgtype.UUID        `json:"external_operation_id"`
+}
+
+type SyncExternalOperation struct {
+	TenantID                    pgtype.UUID        `json:"tenant_id"`
+	RoomID                      pgtype.UUID        `json:"room_id"`
+	SessionID                   pgtype.UUID        `json:"session_id"`
+	ExternalOperationID         pgtype.UUID        `json:"external_operation_id"`
+	ParentExternalOperationID   pgtype.UUID        `json:"parent_external_operation_id"`
+	RequestKey                  string             `json:"request_key"`
+	RequestFingerprint          []byte             `json:"request_fingerprint"`
+	OperationName               string             `json:"operation_name"`
+	ActorParticipantSessionID   pgtype.UUID        `json:"actor_participant_session_id"`
+	ActorGeneration             pgtype.Int8        `json:"actor_generation"`
+	TargetParticipantSessionID  pgtype.UUID        `json:"target_participant_session_id"`
+	TargetParticipantGeneration pgtype.Int8        `json:"target_participant_generation"`
+	Source                      pgtype.Text        `json:"source"`
+	RecordingID                 pgtype.UUID        `json:"recording_id"`
+	DeadlineGeneration          pgtype.Int8        `json:"deadline_generation"`
+	JourneyID                   pgtype.UUID        `json:"journey_id"`
+	ParentJourneyEventID        pgtype.UUID        `json:"parent_journey_event_id"`
+	ProducingTraceID            pgtype.Text        `json:"producing_trace_id"`
+	ProducingSpanID             pgtype.Text        `json:"producing_span_id"`
+	Payload                     []byte             `json:"payload"`
+	Status                      string             `json:"status"`
+	FenceActive                 bool               `json:"fence_active"`
+	AttemptCount                int32              `json:"attempt_count"`
+	NextAttemptAt               pgtype.Timestamptz `json:"next_attempt_at"`
+	LastErrorCode               pgtype.Text        `json:"last_error_code"`
+	AppliedEventID              pgtype.UUID        `json:"applied_event_id"`
+	AppliedRevision             pgtype.Int8        `json:"applied_revision"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
 }
 
 type SyncLifecycleIntent struct {
@@ -293,42 +496,119 @@ type SyncLifecycleIntent struct {
 	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
 	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
 	NextAttemptAt                pgtype.Timestamptz `json:"next_attempt_at"`
+	JourneyID                    pgtype.UUID        `json:"journey_id"`
+	ParentJourneyEventID         pgtype.UUID        `json:"parent_journey_event_id"`
+	ProducingTraceID             pgtype.Text        `json:"producing_trace_id"`
+	ProducingSpanID              pgtype.Text        `json:"producing_span_id"`
+}
+
+type SyncPublicationFence struct {
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	RoomID                pgtype.UUID        `json:"room_id"`
+	SessionID             pgtype.UUID        `json:"session_id"`
+	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	ParticipantGeneration int64              `json:"participant_generation"`
+	Source                string             `json:"source"`
+	ExternalOperationID   pgtype.UUID        `json:"external_operation_id"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncPublicationGrantReservation struct {
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	RoomID                pgtype.UUID        `json:"room_id"`
+	SessionID             pgtype.UUID        `json:"session_id"`
+	ReservationID         pgtype.UUID        `json:"reservation_id"`
+	OperationID           string             `json:"operation_id"`
+	ParticipantSessionID  pgtype.UUID        `json:"participant_session_id"`
+	ParticipantGeneration int64              `json:"participant_generation"`
+	Source                string             `json:"source"`
+	Status                string             `json:"status"`
+	FailureCode           pgtype.Text        `json:"failure_code"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+}
+
+type SyncRecording struct {
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	RoomID                        pgtype.UUID        `json:"room_id"`
+	SessionID                     pgtype.UUID        `json:"session_id"`
+	RecordingID                   pgtype.UUID        `json:"recording_id"`
+	Status                        string             `json:"status"`
+	Generation                    int64              `json:"generation"`
+	AdapterMetadata               []byte             `json:"adapter_metadata"`
+	StartedByParticipantSessionID pgtype.UUID        `json:"started_by_participant_session_id"`
+	StartedByGeneration           pgtype.Int8        `json:"started_by_generation"`
+	StartExternalOperationID      pgtype.UUID        `json:"start_external_operation_id"`
+	StopExternalOperationID       pgtype.UUID        `json:"stop_external_operation_id"`
+	FailureCode                   pgtype.Text        `json:"failure_code"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt                   pgtype.Timestamptz `json:"completed_at"`
+}
+
+type SyncScreenShareLease struct {
+	TenantID                  pgtype.UUID        `json:"tenant_id"`
+	RoomID                    pgtype.UUID        `json:"room_id"`
+	SessionID                 pgtype.UUID        `json:"session_id"`
+	LeaseID                   pgtype.UUID        `json:"lease_id"`
+	OwnerParticipantSessionID pgtype.UUID        `json:"owner_participant_session_id"`
+	OwnerGeneration           int64              `json:"owner_generation"`
+	LeaseGeneration           int64              `json:"lease_generation"`
+	Status                    string             `json:"status"`
+	AcquiredAt                pgtype.Timestamptz `json:"acquired_at"`
+	RenewedUntil              pgtype.Timestamptz `json:"renewed_until"`
+	HardExpiresAt             pgtype.Timestamptz `json:"hard_expires_at"`
 }
 
 type SyncSessionControl struct {
-	TenantID                             pgtype.UUID        `json:"tenant_id"`
-	RoomID                               pgtype.UUID        `json:"room_id"`
-	SessionID                            pgtype.UUID        `json:"session_id"`
-	ControlRevision                      int64              `json:"control_revision"`
-	FoldedState                          []byte             `json:"folded_state"`
-	StateSchemaVersion                   int32              `json:"state_schema_version"`
-	StateDigest                          []byte             `json:"state_digest"`
-	SnapshotBytes                        int64              `json:"snapshot_bytes"`
-	SnapshotReservedBytes                int64              `json:"snapshot_reserved_bytes"`
-	ParticipantEventCount                int64              `json:"participant_event_count"`
-	ParticipantEventBytes                int64              `json:"participant_event_bytes"`
-	LifecycleEventCount                  int64              `json:"lifecycle_event_count"`
-	LifecycleEventBytes                  int64              `json:"lifecycle_event_bytes"`
-	LifecycleReservedEvents              int64              `json:"lifecycle_reserved_events"`
-	LifecycleReservedBytes               int64              `json:"lifecycle_reserved_bytes"`
-	LifecycleIntentCount                 int64              `json:"lifecycle_intent_count"`
-	LifecycleIntentBytes                 int64              `json:"lifecycle_intent_bytes"`
-	LifecycleReservedIntents             int64              `json:"lifecycle_reserved_intents"`
-	LifecycleReservedIntentBytes         int64              `json:"lifecycle_reserved_intent_bytes"`
-	ReceiptCount                         int64              `json:"receipt_count"`
-	ReceiptBytes                         int64              `json:"receipt_bytes"`
-	CreatedAt                            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                            pgtype.Timestamptz `json:"updated_at"`
-	RetentionCheckpointRevision          pgtype.Int8        `json:"retention_checkpoint_revision"`
-	RetentionCheckpointStateDigest       []byte             `json:"retention_checkpoint_state_digest"`
-	RetentionCheckpointEventCount        pgtype.Int8        `json:"retention_checkpoint_event_count"`
-	RetentionCleanedAt                   pgtype.Timestamptz `json:"retention_cleaned_at"`
-	RetentionDeletedEventRows            int64              `json:"retention_deleted_event_rows"`
-	RetentionDeletedEventBytes           int64              `json:"retention_deleted_event_bytes"`
-	RetentionDeletedReceiptRows          int64              `json:"retention_deleted_receipt_rows"`
-	RetentionDeletedReceiptBytes         int64              `json:"retention_deleted_receipt_bytes"`
-	RetentionDeletedLifecycleIntentRows  int64              `json:"retention_deleted_lifecycle_intent_rows"`
-	RetentionDeletedLifecycleIntentBytes int64              `json:"retention_deleted_lifecycle_intent_bytes"`
+	TenantID                                         pgtype.UUID        `json:"tenant_id"`
+	RoomID                                           pgtype.UUID        `json:"room_id"`
+	SessionID                                        pgtype.UUID        `json:"session_id"`
+	ControlRevision                                  int64              `json:"control_revision"`
+	FoldedState                                      []byte             `json:"folded_state"`
+	StateSchemaVersion                               int32              `json:"state_schema_version"`
+	StateDigest                                      []byte             `json:"state_digest"`
+	SnapshotBytes                                    int64              `json:"snapshot_bytes"`
+	SnapshotReservedBytes                            int64              `json:"snapshot_reserved_bytes"`
+	ParticipantEventCount                            int64              `json:"participant_event_count"`
+	ParticipantEventBytes                            int64              `json:"participant_event_bytes"`
+	LifecycleEventCount                              int64              `json:"lifecycle_event_count"`
+	LifecycleEventBytes                              int64              `json:"lifecycle_event_bytes"`
+	LifecycleReservedEvents                          int64              `json:"lifecycle_reserved_events"`
+	LifecycleReservedBytes                           int64              `json:"lifecycle_reserved_bytes"`
+	LifecycleIntentCount                             int64              `json:"lifecycle_intent_count"`
+	LifecycleIntentBytes                             int64              `json:"lifecycle_intent_bytes"`
+	LifecycleReservedIntents                         int64              `json:"lifecycle_reserved_intents"`
+	LifecycleReservedIntentBytes                     int64              `json:"lifecycle_reserved_intent_bytes"`
+	ReceiptCount                                     int64              `json:"receipt_count"`
+	ReceiptBytes                                     int64              `json:"receipt_bytes"`
+	CreatedAt                                        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                                        pgtype.Timestamptz `json:"updated_at"`
+	RetentionCheckpointRevision                      pgtype.Int8        `json:"retention_checkpoint_revision"`
+	RetentionCheckpointStateDigest                   []byte             `json:"retention_checkpoint_state_digest"`
+	RetentionCheckpointEventCount                    pgtype.Int8        `json:"retention_checkpoint_event_count"`
+	RetentionCleanedAt                               pgtype.Timestamptz `json:"retention_cleaned_at"`
+	RetentionDeletedEventRows                        int64              `json:"retention_deleted_event_rows"`
+	RetentionDeletedEventBytes                       int64              `json:"retention_deleted_event_bytes"`
+	RetentionDeletedReceiptRows                      int64              `json:"retention_deleted_receipt_rows"`
+	RetentionDeletedReceiptBytes                     int64              `json:"retention_deleted_receipt_bytes"`
+	RetentionDeletedLifecycleIntentRows              int64              `json:"retention_deleted_lifecycle_intent_rows"`
+	RetentionDeletedLifecycleIntentBytes             int64              `json:"retention_deleted_lifecycle_intent_bytes"`
+	RetentionDeletedExternalOperationRows            int64              `json:"retention_deleted_external_operation_rows"`
+	RetentionDeletedExternalOperationBytes           int64              `json:"retention_deleted_external_operation_bytes"`
+	RetentionDeletedAdmissionRequestRows             int64              `json:"retention_deleted_admission_request_rows"`
+	RetentionDeletedAdmissionRequestBytes            int64              `json:"retention_deleted_admission_request_bytes"`
+	RetentionDeletedRecordingRows                    int64              `json:"retention_deleted_recording_rows"`
+	RetentionDeletedRecordingBytes                   int64              `json:"retention_deleted_recording_bytes"`
+	RetentionDeletedScreenShareLeaseRows             int64              `json:"retention_deleted_screen_share_lease_rows"`
+	RetentionDeletedScreenShareLeaseBytes            int64              `json:"retention_deleted_screen_share_lease_bytes"`
+	RetentionDeletedPublicationFenceRows             int64              `json:"retention_deleted_publication_fence_rows"`
+	RetentionDeletedPublicationFenceBytes            int64              `json:"retention_deleted_publication_fence_bytes"`
+	RetentionDeletedPublicationGrantReservationRows  int64              `json:"retention_deleted_publication_grant_reservation_rows"`
+	RetentionDeletedPublicationGrantReservationBytes int64              `json:"retention_deleted_publication_grant_reservation_bytes"`
+	HostParticipantSessionID                         pgtype.UUID        `json:"host_participant_session_id"`
 }
 
 type Tenant struct {

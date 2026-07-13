@@ -67,15 +67,21 @@ var (
 	apiErrorLifecycleCapacityExceeded     = APIError{Status: http.StatusConflict, Code: "lifecycle_capacity_exceeded", Message: "Session lifecycle capacity is exhausted"}
 	apiErrorMediaPlaneUnavailable         = APIError{Status: http.StatusServiceUnavailable, Code: "media_plane_unavailable", Message: "Media plane is unavailable"}
 
-	apiErrorInvalidRecordingID        = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_id", Message: "Invalid recording id"}
-	apiErrorInvalidRecordingStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_status", Message: "Invalid recording status"}
-	apiErrorInvalidStorageProvider    = APIError{Status: http.StatusBadRequest, Code: "invalid_storage_provider", Message: "Invalid storage provider"}
-	apiErrorInvalidStorageKey         = APIError{Status: http.StatusBadRequest, Code: "invalid_storage_key", Message: "Invalid storage key"}
-	apiErrorInvalidRecordingField     = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_field", Message: "Invalid recording field"}
-	apiErrorInvalidURLExpiration      = APIError{Status: http.StatusBadRequest, Code: "invalid_url_expiration", Message: "Invalid url expiration"}
-	apiErrorRecordingNotReady         = APIError{Status: http.StatusBadRequest, Code: "recording_not_ready", Message: "Recording is not ready"}
-	apiErrorRecordingNotFound         = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording not found"}
-	apiErrorRecordingArtifactNotFound = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording artifact not found"}
+	apiErrorInvalidRecordingID               = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_id", Message: "Invalid recording id"}
+	apiErrorInvalidRecordingStatus           = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_status", Message: "Invalid recording status"}
+	apiErrorInvalidStorageProvider           = APIError{Status: http.StatusBadRequest, Code: "invalid_storage_provider", Message: "Invalid storage provider"}
+	apiErrorInvalidStorageKey                = APIError{Status: http.StatusBadRequest, Code: "invalid_storage_key", Message: "Invalid storage key"}
+	apiErrorInvalidRecordingField            = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_field", Message: "Invalid recording field"}
+	apiErrorInvalidURLExpiration             = APIError{Status: http.StatusBadRequest, Code: "invalid_url_expiration", Message: "Invalid url expiration"}
+	apiErrorRecordingNotReady                = APIError{Status: http.StatusBadRequest, Code: "recording_not_ready", Message: "Recording is not ready"}
+	apiErrorInvalidRecordingReservationID    = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_reservation_id", Message: "Invalid recording reservation id"}
+	apiErrorInvalidRecordingParticipantCount = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_participant_count", Message: "Recording participant count must be between one and ten"}
+	apiErrorInvalidRecordingDuration         = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_duration", Message: "Recording duration must be between one and 120 minutes"}
+	apiErrorInvalidRecordingBitrate          = APIError{Status: http.StatusBadRequest, Code: "invalid_recording_bitrate", Message: "Recording bitrate exceeds the qualified limit"}
+	apiErrorRecordingCapacityUnavailable     = APIError{Status: http.StatusServiceUnavailable, Code: "recording_capacity_unavailable", Message: "Recording capacity is unavailable"}
+	apiErrorRecordingReservationNotFound     = APIError{Status: http.StatusNotFound, Code: "recording_reservation_not_found", Message: "Recording reservation not found"}
+	apiErrorRecordingNotFound                = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording not found"}
+	apiErrorRecordingArtifactNotFound        = APIError{Status: http.StatusNotFound, Code: "not_found", Message: "Recording artifact not found"}
 
 	apiErrorInvalidTranscriptID        = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_id", Message: "Invalid transcript id"}
 	apiErrorInvalidTranscriptStatus    = APIError{Status: http.StatusBadRequest, Code: "invalid_transcript_status", Message: "Invalid transcript status"}

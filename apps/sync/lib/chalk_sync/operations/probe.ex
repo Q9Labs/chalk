@@ -2,12 +2,15 @@ defmodule ChalkSync.Operations.Probe do
   @moduledoc false
 
   alias ChalkSync.Database
+  alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Fanout.PostgresNotifications
   alias ChalkSync.LifecycleConsumer
   alias ChalkSync.Retention.Scheduler, as: RetentionScheduler
   alias ChalkSync.Stateholder.SessionKey
 
   @query_timeout_ms 1_000
+  @external_operation_staleness_floor_ms 2_000
+  @external_operation_staleness_ceiling_ms 30_000
 
   @spec run(keyword()) :: {:ok, map()} | {:error, atom()}
   def run(options \\ []) do
@@ -92,29 +95,31 @@ defmodule ChalkSync.Operations.Probe do
 
   @doc false
   def validate_database(observations) do
-    required_migration = Application.fetch_env!(:chalk_sync, :required_sync_migration)
+    minimum_migration =
+      Application.fetch_env!(:chalk_sync, :minimum_compatible_sync_migration)
+
     require_standby? = Application.get_env(:chalk_sync, :require_synchronous_standby, false)
     max_wal_lag = Application.get_env(:chalk_sync, :max_synchronous_wal_lag_bytes, 0)
 
-    case validate_primary_database(observations, required_migration) do
+    case validate_primary_database(observations, minimum_migration) do
       :ok -> validate_synchronous_standby(observations, require_standby?, max_wal_lag)
       error -> error
     end
   end
 
-  defp validate_primary_database(observations, required_migration) do
-    with :ok <- validate_primary_role_and_schema(observations, required_migration),
+  defp validate_primary_database(observations, minimum_migration) do
+    with :ok <- validate_primary_role_and_schema(observations, minimum_migration),
          :ok <- validate_durability_settings(observations) do
       validate_lifecycle_lag(observations)
     end
   end
 
-  defp validate_primary_role_and_schema(observations, required_migration) do
+  defp validate_primary_role_and_schema(observations, minimum_migration) do
     cond do
       not observations.writable_primary ->
         {:error, :database_not_writable_primary}
 
-      observations.migration_version != required_migration ->
+      observations.migration_version < minimum_migration ->
         {:error, :incompatible_database_migration}
 
       observations.server_version_num < 180_000 ->
@@ -169,11 +174,14 @@ defmodule ChalkSync.Operations.Probe do
          true <- alive?(ChalkSync.Sessions.CommandAdmission),
          true <- alive?(PostgresNotifications),
          true <- alive?(LifecycleConsumer),
+         true <- alive?(ExternalOperationConsumer),
          true <- alive?(RetentionScheduler),
          {:ok, fanout} <- safe_health(PostgresNotifications),
          {:ok, lifecycle} <- safe_health(LifecycleConsumer),
+         {:ok, external_operations} <- safe_health(ExternalOperationConsumer),
          {:ok, retention} <- safe_health(RetentionScheduler),
-         :ok <- validate_lifecycle_health(lifecycle, boot?) do
+         :ok <- validate_lifecycle_health(lifecycle, boot?),
+         :ok <- validate_external_operation_health(external_operations, boot?) do
       {:ok,
        %{
          coordinator_supervisor: "ok",
@@ -182,6 +190,9 @@ defmodule ChalkSync.Operations.Probe do
          notification_count: fanout.received_count,
          lifecycle_consumer: "ok",
          lifecycle_consecutive_failures: lifecycle.consecutive_failures,
+         external_operation_consumer: "ok",
+         external_operation_consumer_consecutive_failures:
+           external_operations.consecutive_failures,
          retention_cleanup: retention.status,
          retention_cleanup_consecutive_failures: retention.consecutive_failures
        }}
@@ -203,6 +214,38 @@ defmodule ChalkSync.Operations.Probe do
     end
   end
 
+  @doc false
+  def validate_external_operation_health(_health, true), do: :ok
+
+  def validate_external_operation_health(health, false) do
+    now = System.monotonic_time(:millisecond)
+
+    cond do
+      health.consecutive_failures >= 2 ->
+        {:error, :external_operation_consumer_unavailable}
+
+      is_nil(health.last_success_at_ms) ->
+        {:error, :external_operation_consumer_initializing}
+
+      now - health.last_success_at_ms > external_operation_staleness_timeout_ms() ->
+        {:error, :external_operation_consumer_stale}
+
+      true ->
+        :ok
+    end
+  end
+
+  @doc false
+  def external_operation_staleness_timeout_ms do
+    poll_interval_ms =
+      Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms)
+
+    poll_interval_ms
+    |> Kernel.*(3)
+    |> max(@external_operation_staleness_floor_ms)
+    |> min(@external_operation_staleness_ceiling_ms)
+  end
+
   defp safe_health(PostgresNotifications) do
     {:ok, PostgresNotifications.health()}
   catch
@@ -213,6 +256,12 @@ defmodule ChalkSync.Operations.Probe do
     {:ok, LifecycleConsumer.health()}
   catch
     :exit, _reason -> {:error, :lifecycle_consumer_unavailable}
+  end
+
+  defp safe_health(ExternalOperationConsumer) do
+    {:ok, ExternalOperationConsumer.health()}
+  catch
+    :exit, _reason -> {:error, :external_operation_consumer_unavailable}
   end
 
   defp safe_health(RetentionScheduler) do

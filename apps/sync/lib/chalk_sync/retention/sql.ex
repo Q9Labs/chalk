@@ -43,8 +43,43 @@ defmodule ChalkSync.Retention.SQL do
           and intent.session_id = control.session_id
           and intent.status = 'pending'
       )
+      and not exists (
+        select 1 from sync_external_operations operation
+        where operation.tenant_id = control.tenant_id
+          and operation.session_id = control.session_id
+          and operation.status = 'pending'
+      )
+      and not exists (
+        select 1 from sync_admission_requests admission
+        where admission.tenant_id = control.tenant_id
+          and admission.session_id = control.session_id
+          and admission.status = 'pending'
+      )
+      and not exists (
+        select 1 from sync_recordings recording
+        where recording.tenant_id = control.tenant_id
+          and recording.session_id = control.session_id
+          and recording.status in ('starting', 'recording', 'stopping')
+      )
+      and not exists (
+        select 1 from sync_screen_share_leases lease
+        where lease.tenant_id = control.tenant_id
+          and lease.session_id = control.session_id
+      )
+      and not exists (
+        select 1 from sync_publication_fences fence
+        where fence.tenant_id = control.tenant_id
+          and fence.session_id = control.session_id
+          and fence.expires_at > $2
+      )
+      and not exists (
+        select 1 from sync_publication_grant_reservations reservation
+        where reservation.tenant_id = control.tenant_id
+          and reservation.session_id = control.session_id
+          and reservation.status in ('pending', 'ambiguous')
+      )
     order by session.ended_at, control.tenant_id, control.session_id
-    limit $2
+    limit $3
     for update of control skip locked
     """
   end
@@ -82,6 +117,18 @@ defmodule ChalkSync.Retention.SQL do
       retention_deleted_receipt_bytes = $9,
       retention_deleted_lifecycle_intent_rows = $10,
       retention_deleted_lifecycle_intent_bytes = $11,
+      retention_deleted_external_operation_rows = $12,
+      retention_deleted_external_operation_bytes = $13,
+      retention_deleted_admission_request_rows = $14,
+      retention_deleted_admission_request_bytes = $15,
+      retention_deleted_recording_rows = $16,
+      retention_deleted_recording_bytes = $17,
+      retention_deleted_screen_share_lease_rows = $18,
+      retention_deleted_screen_share_lease_bytes = $19,
+      retention_deleted_publication_fence_rows = $20,
+      retention_deleted_publication_fence_bytes = $21,
+      retention_deleted_publication_grant_reservation_rows = $22,
+      retention_deleted_publication_grant_reservation_bytes = $23,
       updated_at = $6
     where tenant_id = $1
       and session_id = $2
@@ -103,6 +150,33 @@ defmodule ChalkSync.Retention.SQL do
     """
   end
 
+  def delete_admission_requests, do: delete_rows("sync_admission_requests")
+  def delete_recordings, do: delete_rows("sync_recordings")
+  def delete_screen_share_leases, do: delete_rows("sync_screen_share_leases")
+  def delete_publication_fences, do: delete_rows("sync_publication_fences")
+
+  def delete_publication_grant_reservations,
+    do: delete_rows("sync_publication_grant_reservations")
+
+  def delete_terminal_external_operations do
+    """
+    with deleted as (
+      delete from sync_external_operations
+      where tenant_id = $1 and session_id = $2 and status in ('applied', 'failed')
+      returning 1
+    )
+    select count(*)::bigint from deleted
+    """
+  end
+
+  def measure_terminal_external_operations do
+    """
+    select count(*)::bigint, coalesce(sum(pg_column_size(sync_external_operations)), 0)::bigint
+    from sync_external_operations
+    where tenant_id = $1 and session_id = $2 and status in ('applied', 'failed')
+    """
+  end
+
   def delete_terminal_lifecycle_intents do
     """
     with deleted as (
@@ -114,6 +188,20 @@ defmodule ChalkSync.Retention.SQL do
     """
   end
 
+  def clear_terminal_operation_event_links do
+    """
+    with cleared as (
+      update sync_external_operations
+      set applied_event_id = null, applied_revision = null
+      where tenant_id = $1 and session_id = $2
+        and status in ('applied', 'failed')
+        and applied_event_id is not null
+      returning 1
+    )
+    select count(*)::bigint from cleared
+    """
+  end
+
   def delete_events do
     """
     with deleted as (
@@ -122,6 +210,17 @@ defmodule ChalkSync.Retention.SQL do
       returning 1
     )
     select count(*)::bigint from deleted
+    """
+  end
+
+  defp delete_rows(table) do
+    """
+    with deleted as (
+      delete from #{table}
+      where tenant_id = $1 and session_id = $2
+      returning pg_column_size(#{table})::bigint as encoded_bytes
+    )
+    select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted
     """
   end
 end

@@ -1,10 +1,19 @@
 defmodule ChalkSync.Sessions.CommandAdmissionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
+  alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Sessions.CommandAdmission
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.SessionKey
+
+  defmodule BlockingObservation do
+    def observe_session_publications(_adapter, _session), do: Process.sleep(:infinity)
+  end
+
+  defmodule RaisingObservation do
+    def observe_session_publications(_adapter, _session), do: raise("provider exploded")
+  end
 
   test "admits at most eight database tasks for one Session and releases every lease" do
     parent = self()
@@ -144,6 +153,89 @@ defmodule ChalkSync.Sessions.CommandAdmissionTest do
              CommandAdmission.stats(admission_name)
   end
 
+  test "v3 role transitions observe publications before deciding and retry observation failure" do
+    previous = Application.get_env(:chalk_sync, :media_plane)
+
+    {:ok, adapter} =
+      MediaPlaneTestAdapter.start_link(
+        outcomes: %{observe_session_publications: {:error, :provider_unavailable}}
+      )
+
+    Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:chalk_sync, :media_plane, previous),
+        else: Application.delete_env(:chalk_sync, :media_plane)
+    end)
+
+    task_supervisor = start_supervised!({Task.Supervisor, name: unique_name("Tasks")})
+    admission_name = unique_name("Admission")
+
+    start_supervised!(
+      {CommandAdmission, name: admission_name, task_supervisor: task_supervisor},
+      id: admission_name
+    )
+
+    identity = %{identity(6) | protocol_version: 3}
+
+    {:ok, command} =
+      Command.new("role-observation-001", :set_participant_role, %{
+        "participantSessionId" => uuid(999),
+        "role" => "participant"
+      })
+
+    assert {:ok, lease} = CommandAdmission.submit(admission_name, identity, command, self())
+
+    assert_receive {:sync_command_result, ^lease, "role-observation-001",
+                    {:retryable, :dependency_unavailable}}
+
+    assert [{:observe_session_publications, nil, [identity.session]}] ==
+             MediaPlaneTestAdapter.calls(adapter)
+  end
+
+  test "blocking and raising role observations are bounded dependency failures" do
+    previous_media = Application.get_env(:chalk_sync, :media_plane)
+    previous_timeout = Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms)
+    Application.put_env(:chalk_sync, :external_operation_adapter_timeout_ms, 20)
+
+    on_exit(fn ->
+      restore_env(:media_plane, previous_media)
+      restore_env(:external_operation_adapter_timeout_ms, previous_timeout)
+    end)
+
+    task_supervisor = start_supervised!({Task.Supervisor, name: unique_name("Tasks")})
+    admission_name = unique_name("Admission")
+
+    start_supervised!(
+      {CommandAdmission, name: admission_name, task_supervisor: task_supervisor},
+      id: admission_name
+    )
+
+    identity = %{identity(7) | protocol_version: 3}
+
+    for {module, id} <- [
+          {BlockingObservation, "role-blocking-observe1"},
+          {RaisingObservation, "role-raising-observe01"}
+        ] do
+      Application.put_env(:chalk_sync, :media_plane, {module, nil})
+
+      {:ok, command} =
+        Command.new(id, :set_participant_role, %{
+          "participantSessionId" => uuid(998),
+          "role" => "participant"
+        })
+
+      started_at = System.monotonic_time(:millisecond)
+      assert {:ok, lease} = CommandAdmission.submit(admission_name, identity, command, self())
+
+      assert_receive {:sync_command_result, ^lease, ^id, {:retryable, :dependency_unavailable}},
+                     500
+
+      assert System.monotonic_time(:millisecond) - started_at < 500
+    end
+  end
+
   defp identity(value) do
     %Identity{
       session: %SessionKey{
@@ -170,6 +262,9 @@ defmodule ChalkSync.Sessions.CommandAdmissionTest do
 
   defp unique_name(suffix),
     do: Module.concat(__MODULE__, "#{suffix}#{System.unique_integer([:positive])}")
+
+  defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
+  defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
   defp eventually(assertion, attempts \\ 100)
 

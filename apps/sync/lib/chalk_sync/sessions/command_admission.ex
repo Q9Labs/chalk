@@ -10,6 +10,8 @@ defmodule ChalkSync.Sessions.CommandAdmission do
 
   use GenServer
 
+  alias ChalkSync.DeliveryGate
+  alias ChalkSync.Live.MediaPlaneCall
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Identity
@@ -25,7 +27,7 @@ defmodule ChalkSync.Sessions.CommandAdmission do
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
     task_supervisor = Keyword.get(options, :task_supervisor, ChalkSync.CommandTaskSupervisor)
-    decision_fun = Keyword.get(options, :decision_fun, &Stateholder.decide_command/2)
+    decision_fun = Keyword.get(options, :decision_fun, &decide_command/2)
 
     GenServer.start_link(
       __MODULE__,
@@ -153,7 +155,13 @@ defmodule ChalkSync.Sessions.CommandAdmission do
     case Task.Supervisor.start_child(task_supervisor, fn ->
            try do
              result = decide_safely(decision_fun, identity, command)
-             send(caller, {:sync_command_result, lease, command.id, result})
+
+             DeliveryGate.emit(
+               :command_result,
+               %{outcome: command_result_outcome(result)},
+               caller,
+               {:sync_command_result, lease, command.id, result}
+             )
            after
              safe_release(server, lease)
            end
@@ -179,6 +187,44 @@ defmodule ChalkSync.Sessions.CommandAdmission do
   catch
     :exit, _reason -> {:retryable, :decision_unavailable}
   end
+
+  defp command_result_outcome({:ok, %{result: outcome}}), do: outcome
+  defp command_result_outcome({:error, reason}), do: reason
+  defp command_result_outcome({:retryable, reason}), do: reason
+  defp command_result_outcome(_result), do: :unknown
+
+  defp decide_command(
+         %Identity{protocol_version: 3} = identity,
+         %Command{name: name} = command
+       )
+       when name in [:set_participant_role, :transfer_host] do
+    case Application.get_env(:chalk_sync, :media_plane) do
+      {module, adapter} ->
+        observe_role_transition(module, adapter, identity, command)
+
+      nil ->
+        {:retryable, :dependency_unavailable}
+    end
+  end
+
+  defp decide_command(%Identity{} = identity, %Command{} = command),
+    do: Stateholder.decide_command(identity, command)
+
+  defp observe_role_transition(module, adapter, identity, command) do
+    MediaPlaneCall.invoke(fn ->
+      module.observe_session_publications(adapter, identity.session)
+    end)
+    |> role_transition_observation(identity, command)
+  end
+
+  defp role_transition_observation({:ok, %{publications: publications}}, identity, command),
+    do: Stateholder.begin_role_transition(identity, command, publications)
+
+  defp role_transition_observation({:error, _reason}, _identity, _command),
+    do: {:retryable, :dependency_unavailable}
+
+  defp role_transition_observation(_invalid, _identity, _command),
+    do: {:retryable, :dependency_unavailable}
 
   defp safe_release(server, lease) do
     GenServer.call(server, {:release, lease})

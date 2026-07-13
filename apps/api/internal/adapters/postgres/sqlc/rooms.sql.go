@@ -135,7 +135,20 @@ type CreateRoomSessionParams struct {
 	RoomID          pgtype.UUID        `json:"room_id"`
 }
 
-func (q *Queries) CreateRoomSession(ctx context.Context, arg CreateRoomSessionParams) (RoomSession, error) {
+type CreateRoomSessionRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	Status          string             `json:"status"`
+	Metadata        []byte             `json:"metadata"`
+	RoomID          pgtype.UUID        `json:"room_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	EndedAt         pgtype.Timestamptz `json:"ended_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateRoomSession(ctx context.Context, arg CreateRoomSessionParams) (CreateRoomSessionRow, error) {
 	row := q.db.QueryRow(ctx, createRoomSession,
 		arg.ID,
 		arg.Status,
@@ -146,7 +159,7 @@ func (q *Queries) CreateRoomSession(ctx context.Context, arg CreateRoomSessionPa
 		arg.TenantID,
 		arg.RoomID,
 	)
-	var i RoomSession
+	var i CreateRoomSessionRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
@@ -230,9 +243,22 @@ type GetTenantRoomSessionParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) GetTenantRoomSession(ctx context.Context, arg GetTenantRoomSessionParams) (RoomSession, error) {
+type GetTenantRoomSessionRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	Status          string             `json:"status"`
+	Metadata        []byte             `json:"metadata"`
+	RoomID          pgtype.UUID        `json:"room_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	EndedAt         pgtype.Timestamptz `json:"ended_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetTenantRoomSession(ctx context.Context, arg GetTenantRoomSessionParams) (GetTenantRoomSessionRow, error) {
 	row := q.db.QueryRow(ctx, getTenantRoomSession, arg.TenantID, arg.RoomID, arg.ID)
-	var i RoomSession
+	var i GetTenantRoomSessionRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
@@ -284,7 +310,20 @@ type ListTenantRoomSessionsParams struct {
 	PageSize        int32              `json:"page_size"`
 }
 
-func (q *Queries) ListTenantRoomSessions(ctx context.Context, arg ListTenantRoomSessionsParams) ([]RoomSession, error) {
+type ListTenantRoomSessionsRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	Status          string             `json:"status"`
+	Metadata        []byte             `json:"metadata"`
+	RoomID          pgtype.UUID        `json:"room_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	EndedAt         pgtype.Timestamptz `json:"ended_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListTenantRoomSessions(ctx context.Context, arg ListTenantRoomSessionsParams) ([]ListTenantRoomSessionsRow, error) {
 	rows, err := q.db.Query(ctx, listTenantRoomSessions,
 		arg.TenantID,
 		arg.RoomID,
@@ -297,9 +336,9 @@ func (q *Queries) ListTenantRoomSessions(ctx context.Context, arg ListTenantRoom
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RoomSession
+	var items []ListTenantRoomSessionsRow
 	for rows.Next() {
-		var i RoomSession
+		var i ListTenantRoomSessionsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Status,
@@ -542,7 +581,20 @@ type UpdateTenantRoomSessionParams struct {
 	ID           pgtype.UUID        `json:"id"`
 }
 
-func (q *Queries) UpdateTenantRoomSession(ctx context.Context, arg UpdateTenantRoomSessionParams) (RoomSession, error) {
+type UpdateTenantRoomSessionRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	Status          string             `json:"status"`
+	Metadata        []byte             `json:"metadata"`
+	RoomID          pgtype.UUID        `json:"room_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	EndedAt         pgtype.Timestamptz `json:"ended_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UpdateTenantRoomSession(ctx context.Context, arg UpdateTenantRoomSessionParams) (UpdateTenantRoomSessionRow, error) {
 	row := q.db.QueryRow(ctx, updateTenantRoomSession,
 		arg.StatusSet,
 		arg.Status,
@@ -556,7 +608,7 @@ func (q *Queries) UpdateTenantRoomSession(ctx context.Context, arg UpdateTenantR
 		arg.RoomID,
 		arg.ID,
 	)
-	var i RoomSession
+	var i UpdateTenantRoomSessionRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,

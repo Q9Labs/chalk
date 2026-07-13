@@ -3,135 +3,172 @@ defmodule ChalkSync.Sessions.ReducerTest do
 
   alias ChalkSync.Sessions.Reducer
 
-  test "applies lifecycle and commands as one exact event chain" do
-    state = Reducer.new("session-a")
+  test "applies declarative changes and satisfies an already-current target" do
+    state = host_state()
 
-    assert {:ok, joined, state} =
-             Reducer.apply_lifecycle(state, :participant_joined, %{
-               "participant_session_id" => "participant-a",
-               "display_name" => "Ada"
+    assert {:change, raised, state} =
+             Reducer.decide_command(state, "host", :set_hand_raised, %{"raised" => true})
+
+    assert raised.name == "hand_raised"
+    assert state.revision == 2
+    assert state.participants["host"].hand_raised
+
+    assert {:satisfied, ^state} =
+             Reducer.decide_command(state, "host", :set_hand_raised, %{"raised" => true})
+
+    assert {:change, renamed, state} =
+             Reducer.decide_command(state, "host", :set_display_name, %{
+               "displayName" => "Ada Lovelace"
              })
 
-    assert {joined.base_revision, joined.revision} == {0, 1}
+    assert renamed.name == "participant_display_name_changed"
+    assert state.participants["host"].display_name == "Ada Lovelace"
+  end
 
-    assert {:ok, raised, state} =
-             Reducer.decide_command(state, "participant-a", :raise_hand, %{})
+  test "changes admission policy and eligible participant roles" do
+    state = host_state() |> join("guest", "Grace", "participant", ["participant", "cohost"])
 
-    assert {raised.base_revision, raised.revision} == {1, 2}
-    assert state.participants["participant-a"].hand_raised
-
-    assert {:ok, left, state} =
-             Reducer.apply_lifecycle(state, :participant_left, %{
-               "participant_session_id" => "participant-a"
+    assert {:change, policy_event, state} =
+             Reducer.decide_command(state, "host", :set_admission_policy, %{
+               "policy" => "approval"
              })
 
-    assert {left.base_revision, left.revision} == {2, 3}
-    assert state.participants == %{}
+    assert policy_event.name == "admission_policy_changed"
+    assert state.admission_policy == "approval"
+
+    assert {:change, role_event, state} =
+             Reducer.decide_command(state, "host", :set_participant_role, %{
+               "participantSessionId" => "guest",
+               "role" => "cohost"
+             })
+
+    assert role_event.name == "participant_role_changed"
+    assert state.participants["guest"].role == "cohost"
+
+    assert {:change, demoted_event, demoted} =
+             Reducer.decide_command(state, "host", :set_participant_role, %{
+               "participantSessionId" => "guest",
+               "role" => "participant"
+             })
+
+    assert demoted_event.base_revision == 4
+    assert demoted.revision == 5
+    assert demoted.participants["guest"].role == "participant"
   end
 
-  test "rejects a supplied noncontiguous revision" do
-    event = %{
-      name: "participant_joined",
-      base_revision: 0,
-      revision: 5,
-      payload: %{"participant_session_id" => "participant-a", "display_name" => "Ada"}
-    }
+  test "rejects role and host targets outside the admitted eligible set" do
+    state = host_state() |> join("guest", "Grace", "participant", ["participant"])
 
-    assert Reducer.apply_event(Reducer.new("session-a"), event) == {:error, :revision_gap}
+    assert Reducer.decide_command(state, "host", :set_participant_role, %{
+             "participantSessionId" => "guest",
+             "role" => "cohost"
+           }) == {:error, :role_not_eligible}
+
+    assert Reducer.decide_command(state, "host", :transfer_host, %{
+             "participantSessionId" => "guest"
+           }) == {:error, :invalid_target}
   end
 
-  test "returns explicit errors for unknown events, payloads, and transitions" do
-    state = Reducer.new("session-a")
+  test "transfers host atomically and keeps exactly one derived host" do
+    state = host_state() |> join("successor", "Grace", "cohost", ["host", "cohost"])
 
-    assert Reducer.apply_event(state, %{
-             name: "invented",
-             base_revision: 0,
-             revision: 1,
-             payload: %{}
-           }) == {:error, :unknown_event}
+    assert {:change, event, transferred} =
+             Reducer.decide_command(state, "host", :transfer_host, %{
+               "participantSessionId" => "successor"
+             })
+
+    assert event.name == "host_transferred"
+    assert transferred.host_participant_session_id == "successor"
+    assert transferred.participants["successor"].role == "host"
+    assert transferred.participants["host"].role == "cohost"
+  end
+
+  test "host leave requires transfer or promotes the longest-tenured cohost deterministically" do
+    require_transfer =
+      host_state()
+      |> join("cohost", "Grace", "cohost", ["host", "cohost"])
+
+    assert Reducer.decide_external(require_transfer, :participant_leave, %{
+             "participant_session_id" => "host"
+           }) == {:error, :host_transfer_required}
+
+    promote = %{require_transfer | host_exit_policy: "promote_cohost"}
+
+    promote =
+      join(promote, "cohost-a", "A", "cohost", ["host", "cohost"], 2)
+
+    assert {:change, event, next} =
+             Reducer.decide_external(promote, :participant_leave, %{
+               "participant_session_id" => "host"
+             })
+
+    assert event.name == "host_left_and_transferred"
+    assert event.payload["successor_participant_session_id"] == "cohost"
+    assert next.host_participant_session_id == "cohost"
+    refute Map.has_key?(next.participants, "host")
+  end
+
+  test "snapshot round trip preserves immutable policy, roles, and stable digest" do
+    state =
+      host_state()
+      |> join("guest", "عالیہ", "participant", ["participant", "cohost"])
+
+    snapshot = Reducer.snapshot(state)
+    assert {:ok, decoded} = Reducer.from_snapshot("session-a", snapshot)
+    assert decoded == state
+    assert Reducer.digest(decoded) == Reducer.digest(state)
+    assert byte_size(Reducer.digest(state)) == 32
+
+    reordered = %{state | participants: Map.new(Enum.reverse(Enum.to_list(state.participants)))}
+    assert Reducer.digest(reordered) == Reducer.digest(state)
+  end
+
+  test "rejects non-empty snapshots without exactly one matching host" do
+    snapshot = Reducer.snapshot(host_state())
+
+    assert Reducer.from_snapshot(
+             "session-a",
+             Map.put(snapshot, "host_participant_session_id", nil)
+           ) == {:error, :invalid_snapshot}
+
+    duplicate_host =
+      update_in(snapshot["participants"], fn [host] ->
+        [host, %{host | "participant_session_id" => "other"}]
+      end)
+
+    assert Reducer.from_snapshot("session-a", duplicate_host) == {:error, :invalid_snapshot}
+  end
+
+  test "refuses a 501st participant" do
+    state =
+      Enum.reduce(1..499, host_state(), fn index, state ->
+        join(state, "participant-#{index}", "Participant #{index}", "participant", ["participant"])
+      end)
 
     assert Reducer.apply_lifecycle(state, :participant_joined, %{
-             "participant_session_id" => "participant-a",
-             "display_name" => "Ada",
-             "extra" => true
-           }) == {:error, :invalid_payload}
-
-    assert Reducer.decide_command(state, "missing", :raise_hand, %{}) ==
-             {:error, :not_joined}
+             "participant_session_id" => "participant-500",
+             "display_name" => "Participant 500",
+             "role" => "participant",
+             "eligible_roles" => ["participant"],
+             "admission_revision" => 501
+           }) == {:error, :capacity_exceeded}
   end
 
-  test "session end clears participants and is terminal" do
-    {:ok, _event, state} =
-      Reducer.apply_lifecycle(Reducer.new("session-a"), :participant_joined, %{
-        "participant_session_id" => "participant-a",
-        "display_name" => "Ada"
+  defp host_state do
+    Reducer.new("session-a")
+    |> join("host", "Ada", "host", ["host", "cohost", "participant"], 1)
+  end
+
+  defp join(state, id, name, role, eligible_roles, admission_revision \\ nil) do
+    {:ok, _event, next} =
+      Reducer.apply_lifecycle(state, :participant_joined, %{
+        "participant_session_id" => id,
+        "display_name" => name,
+        "role" => role,
+        "eligible_roles" => eligible_roles,
+        "admission_revision" => admission_revision || state.revision + 1
       })
 
-    assert {:ok, event, ended} = Reducer.apply_lifecycle(state, :session_ended, %{})
-    assert event.name == "session_ended"
-    assert ended.status == "ended"
-    assert ended.participants == %{}
-
-    assert Reducer.decide_command(ended, "participant-a", :raise_hand, %{}) ==
-             {:error, :session_ended}
-  end
-
-  test "snapshot order and digest are independent of map insertion order" do
-    first = %Reducer{
-      session_id: "session-a",
-      revision: 9,
-      participants: %{
-        "participant-b" => %{display_name: "Bo", hand_raised: false},
-        "participant-a" => %{display_name: "عالیہ", hand_raised: true}
-      }
-    }
-
-    second = %Reducer{
-      session_id: "session-a",
-      revision: 9,
-      participants: Map.new(Enum.reverse(Enum.to_list(first.participants)))
-    }
-
-    assert Reducer.snapshot(first) == Reducer.snapshot(second)
-    assert Reducer.digest(first) == Reducer.digest(second)
-    assert byte_size(Reducer.digest(first)) == 32
-  end
-
-  test "snapshot round trip validates exact schema" do
-    state = Reducer.new("session-a")
-    assert {:ok, ^state} = Reducer.from_snapshot("session-a", Reducer.snapshot(state))
-
-    invalid = Map.put(Reducer.snapshot(state), "unexpected", true)
-    assert Reducer.from_snapshot("session-a", invalid) == {:error, :invalid_snapshot}
-  end
-
-  test "refuses a 501st active participant in events and snapshots" do
-    participants =
-      Map.new(1..500, fn index ->
-        {"participant-#{index}", %{display_name: "Participant #{index}", hand_raised: false}}
-      end)
-
-    state = %Reducer{session_id: "session-a", revision: 500, participants: participants}
-
-    assert Reducer.apply_lifecycle(state, :participant_joined, %{
-             "participant_session_id" => "participant-501",
-             "display_name" => "Participant 501"
-           }) == {:error, :capacity_exceeded}
-
-    oversized =
-      state
-      |> Reducer.snapshot()
-      |> Map.update!("participants", fn encoded ->
-        encoded ++
-          [
-            %{
-              "participant_session_id" => "participant-501",
-              "display_name" => "Participant 501",
-              "hand_raised" => false
-            }
-          ]
-      end)
-
-    assert Reducer.from_snapshot("session-a", oversized) == {:error, :invalid_snapshot}
+    next
   end
 end

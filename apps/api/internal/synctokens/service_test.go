@@ -28,7 +28,8 @@ func TestIssueCreatesVerifiableBoundToken(t *testing.T) {
 	token, err := service.Issue(context.Background(), synctokens.Input{
 		TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), RoomID: mustID(t, "22222222-2222-4222-8222-222222222222"),
 		SessionID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444"),
-		ParticipantGeneration: 1, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Ada", Capabilities: []string{"sync.control"},
+		ParticipantGeneration: 1, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Ada",
+		InitialRole: "host", EligibleRoles: []string{"participant", "cohost", "host"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -52,6 +53,16 @@ func TestIssueCreatesVerifiableBoundToken(t *testing.T) {
 	}
 	if claims["iss"] != "https://api.chalk.test" || claims["aud"] != "chalk-sync" || claims["display_name"] != "Ada" {
 		t.Fatalf("claims = %#v", claims)
+	}
+	if claims["initial_role"] != "host" {
+		t.Fatalf("initial_role = %#v", claims["initial_role"])
+	}
+	eligible, ok := claims["eligible_roles"].([]any)
+	if !ok || len(eligible) != 3 || eligible[0] != "host" || eligible[1] != "cohost" || eligible[2] != "participant" {
+		t.Fatalf("eligible_roles = %#v", claims["eligible_roles"])
+	}
+	if _, exists := claims["capabilities"]; exists {
+		t.Fatalf("token contains forbidden capabilities claim: %#v", claims)
 	}
 	if token.ExpiresAt.Sub(now) != synctokens.Lifetime {
 		t.Fatalf("lifetime = %s", token.ExpiresAt.Sub(now))
@@ -78,12 +89,61 @@ func TestBrokerRefreshesFromPersistedSubject(t *testing.T) {
 		if got != key {
 			t.Fatalf("subject key = %#v", got)
 		}
-		return synctokens.Input{TenantID: key.TenantID, RoomID: key.RoomID, SessionID: key.SessionID, ParticipantID: key.ParticipantID, ParticipantGeneration: 2, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Persisted", Capabilities: []string{"control:hand"}}, nil
+		return synctokens.Input{TenantID: key.TenantID, RoomID: key.RoomID, SessionID: key.SessionID, ParticipantID: key.ParticipantID, ParticipantGeneration: 2, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Persisted", InitialRole: "cohost", EligibleRoles: []string{"cohost", "participant"}}, nil
 	})
 
 	token, err := synctokens.NewBroker(repository, signer).IssueForParticipant(context.Background(), key)
 	if err != nil || token.Value == "" {
 		t.Fatalf("issue token = %#v, %v", token, err)
+	}
+	parts := strings.Split(token.Value, ".")
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		t.Fatal(err)
+	}
+	if claims["initial_role"] != "cohost" || claims["participant_session_generation"] != float64(2) || claims["admission_lifecycle_intent_id"] != "55555555-5555-4555-8555-555555555555" {
+		t.Fatalf("refreshed claims = %#v", claims)
+	}
+	if _, exists := claims["capabilities"]; exists {
+		t.Fatalf("refreshed token contains forbidden capabilities claim: %#v", claims)
+	}
+}
+
+func TestIssueRejectsMalformedAuthorityEnvelope(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := synctokens.NewService(synctokens.Config{Issuer: "issuer", Audience: "audience", KeyID: "key", PrivateKey: privateKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := synctokens.Input{
+		TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"), RoomID: mustID(t, "22222222-2222-4222-8222-222222222222"),
+		SessionID: mustID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: mustID(t, "44444444-4444-4444-8444-444444444444"),
+		ParticipantGeneration: 1, AdmissionLifecycleIntentID: mustID(t, "55555555-5555-4555-8555-555555555555"), DisplayName: "Ada",
+	}
+	tests := []struct {
+		role     string
+		eligible []string
+	}{
+		{role: "moderator", eligible: []string{"participant"}},
+		{role: "participant", eligible: nil},
+		{role: "participant", eligible: []string{"cohost"}},
+		{role: "participant", eligible: []string{"participant", "participant"}},
+		{role: "host", eligible: []string{"host"}},
+	}
+	for _, test := range tests {
+		input := base
+		input.InitialRole = test.role
+		input.EligibleRoles = test.eligible
+		if _, err := service.Issue(context.Background(), input); err != synctokens.ErrInvalidInput {
+			t.Fatalf("role %q eligible %#v error = %v", test.role, test.eligible, err)
+		}
 	}
 }
 

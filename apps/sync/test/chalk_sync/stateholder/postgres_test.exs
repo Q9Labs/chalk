@@ -99,14 +99,9 @@ defmodule ChalkSync.Stateholder.PostgresTest do
   } do
     identity = hd(fixture.identities)
     connection = ChalkSync.Database.connection(identity.session)
+    stale_identity = %{identity | participant_session_generation: 2}
 
-    Postgrex.query!(
-      connection,
-      "update participants set generation = generation + 1 where tenant_id = $1 and id = $2",
-      [UUID.dump!(identity.session.tenant_id), UUID.dump!(identity.participant_session_id)]
-    )
-
-    assert {:ok, stale} = Postgres.recover(identity, nil)
+    assert {:ok, stale} = Postgres.recover(stale_identity, nil)
     assert stale.mode == :terminal
     assert stale.terminal_reason == :stale_participant_generation
     assert stale.snapshot == nil
@@ -282,6 +277,62 @@ defmodule ChalkSync.Stateholder.PostgresTest do
              Postgres.decide_command(missing, command)
   end
 
+  test "satisfies an unchanged v3 target without an Event or head change", %{fixture: fixture} do
+    identity = hd(fixture.identities)
+    target = command_payload("satisfied_target1", :set_hand_raised, %{"raised" => false})
+
+    assert {:ok, before_recovery} = Postgres.recover(fixture.session, nil)
+
+    assert {:ok, satisfied} = Postgres.decide_command(identity, target)
+    assert satisfied.result == :satisfied
+    assert satisfied.delivery == :original
+    assert satisfied.revision == before_recovery.head.revision
+    assert satisfied.state_digest == before_recovery.head.digest
+
+    assert {:ok, duplicate} = Postgres.decide_command(identity, target)
+    assert duplicate.result == :satisfied
+    assert duplicate.delivery == :duplicate
+    assert duplicate.revision == satisfied.revision
+    assert duplicate.state_digest == satisfied.state_digest
+
+    assert {:ok, after_recovery} = Postgres.recover(fixture.session, nil)
+    assert after_recovery.head == before_recovery.head
+  end
+
+  test "authorizes from locked current role and transfers host atomically", %{
+    connections: connections
+  } do
+    fixture = SyncPostgres.seed_session(hd(connections), 2)
+    on_exit(fn -> SyncPostgres.cleanup(hd(connections), fixture.session) end)
+    [host, participant] = fixture.identities
+
+    assert {:ok, %{result: :rejected, reason: :capability_denied}} =
+             Postgres.decide_command(
+               %{participant | capabilities: ["manageAdmission", "transferHost"]},
+               command_payload("untrusted_claims1", :set_admission_policy, %{
+                 "policy" => "approval"
+               })
+             )
+
+    assert {:ok, %{result: :committed, event: event}} =
+             Postgres.decide_command(
+               host,
+               command_payload("atomic_transfer1", :transfer_host, %{
+                 "participantSessionId" => participant.participant_session_id
+               })
+             )
+
+    assert event.name == "host_transferred"
+    assert {:ok, recovery} = Postgres.recover(fixture.session, nil)
+    assert recovery.snapshot["host_participant_session_id"] == participant.participant_session_id
+
+    roles =
+      Map.new(recovery.snapshot["participants"], &{&1["participant_session_id"], &1["role"]})
+
+    assert roles[host.participant_session_id] == "cohost"
+    assert roles[participant.participant_session_id] == "host"
+  end
+
   defp assert_independent_fold(identity, initial_state) do
     connection = ChalkSync.Database.connection(identity.session)
 
@@ -320,6 +371,11 @@ defmodule ChalkSync.Stateholder.PostgresTest do
 
   defp command(id, name) do
     {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), name, %{})
+    command
+  end
+
+  defp command_payload(id, name, payload) do
+    {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), name, payload)
     command
   end
 

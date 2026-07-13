@@ -167,6 +167,63 @@ create table rooms (
 );
 create index rooms_tenant_created_at_id_idx on rooms(tenant_id, created_at desc, id desc);
 
+create function sync_v3_valid_role_capabilities(value jsonb)
+returns boolean
+language plpgsql
+immutable
+strict
+as $$
+declare
+    role_name text;
+    capability_value jsonb;
+    capability_name text;
+    seen text[];
+    allowed constant text[] := array[
+        'publishAudio', 'publishVideo', 'publishScreen', 'subscribe',
+        'raiseHand', 'renameSelf', 'manageAdmission', 'promoteDemote',
+        'transferHost', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
+        'requestMediaOthers', 'removeParticipant', 'manageRecording', 'endMeeting'
+    ];
+begin
+    if jsonb_typeof(value) <> 'object'
+        or not value ?& array['host', 'cohost', 'participant']
+        or (select count(*) from jsonb_object_keys(value)) <> 3 then
+        return false;
+    end if;
+
+    foreach role_name in array array['host', 'cohost', 'participant'] loop
+        capability_value := value -> role_name;
+        if jsonb_typeof(capability_value) <> 'array' or jsonb_array_length(capability_value) > 16 then
+            return false;
+        end if;
+
+        seen := array[]::text[];
+        for capability_name in select jsonb_array_elements_text(capability_value) loop
+            if not capability_name = any(allowed) or capability_name = any(seen) then
+                return false;
+            end if;
+            seen := array_append(seen, capability_name);
+        end loop;
+    end loop;
+
+    return true;
+exception
+    when others then
+        return false;
+end;
+$$;
+
+create function sync_v3_valid_eligible_roles(value text[])
+returns boolean
+language sql
+immutable
+strict
+as $$
+    select cardinality(value) between 1 and 3
+        and value <@ array['host', 'cohost', 'participant']::text[]
+        and cardinality(value) = (select count(distinct role_name) from unnest(value) as role_name)
+$$;
+
 create table room_sessions (
     id uuid primary key,
     status text not null check (status in ('active', 'ending', 'ended')),
@@ -176,14 +233,58 @@ create table room_sessions (
     created_by_user_id uuid references users(id),
     started_at timestamptz,
     ended_at timestamptz,
+    host_exit_policy text not null default 'require_transfer'
+        check (host_exit_policy in ('require_transfer', 'promote_cohost')),
+    role_capabilities jsonb not null
+        default '{"host":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","manageAdmission","promoteDemote","transferHost","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording","endMeeting"],"cohost":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf","manageAdmission","promoteDemote","muteOthers","stopVideoOthers","stopScreenOthers","requestMediaOthers","removeParticipant","manageRecording"],"participant":["publishAudio","publishVideo","publishScreen","subscribe","raiseHand","renameSelf"]}'::jsonb
+        check (sync_v3_valid_role_capabilities(role_capabilities)),
+    maximum_duration_seconds integer not null default 86400,
+    maximum_duration_ceiling_seconds integer not null default 86400,
+    deadline_at timestamptz not null default (now() + interval '24 hours'),
+    deadline_generation bigint not null default 1,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
-    unique (tenant_id, room_id, id)
+    unique (tenant_id, room_id, id),
+    check (
+        maximum_duration_seconds between 60 and 604800
+        and maximum_duration_ceiling_seconds between 60 and 604800
+        and maximum_duration_seconds <= maximum_duration_ceiling_seconds
+        and deadline_generation > 0
+        and deadline_at <= created_at + make_interval(secs => maximum_duration_ceiling_seconds)
+    )
 );
 create index room_sessions_tenant_room_created_at_id_idx on room_sessions(tenant_id, room_id, created_at desc, id desc);
 create index room_sessions_sync_ended_cleanup_idx
     on room_sessions(ended_at, tenant_id, id)
     where status = 'ended';
+
+create function sync_v3_protect_immutable_session_policy()
+returns trigger
+language plpgsql
+as $$
+begin
+    if new.host_exit_policy is distinct from old.host_exit_policy
+        or new.role_capabilities is distinct from old.role_capabilities
+        or new.maximum_duration_ceiling_seconds is distinct from old.maximum_duration_ceiling_seconds then
+        raise exception 'sync v3 immutable Session policy cannot change';
+    end if;
+
+    if new.deadline_at is distinct from old.deadline_at
+        or new.maximum_duration_seconds is distinct from old.maximum_duration_seconds then
+        if new.deadline_generation <> old.deadline_generation + 1 then
+            raise exception 'sync v3 deadline mutation must advance generation exactly once';
+        end if;
+    elsif new.deadline_generation is distinct from old.deadline_generation then
+        raise exception 'sync v3 deadline generation cannot change without a deadline mutation';
+    end if;
+
+    return new;
+end;
+$$;
+
+create trigger room_sessions_sync_v3_immutable_policy
+before update on room_sessions
+for each row execute function sync_v3_protect_immutable_session_policy();
 
 create table session_create_requests (
     tenant_id uuid not null,
@@ -212,23 +313,36 @@ create table participants (
     user_id uuid references users(id),
     generation bigint not null check (generation > 0),
     status text not null check (status in ('joining', 'active', 'leaving', 'left')),
+    role text not null default 'participant'
+        check (role in ('host', 'cohost', 'participant')),
+    eligible_roles text[] not null default array['participant']::text[],
     joined_at timestamptz,
     left_at timestamptz,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
     unique (tenant_id, room_id, session_id, id),
+    unique (tenant_id, room_id, session_id, id, generation),
     foreign key (tenant_id, room_id, session_id)
         references room_sessions(tenant_id, room_id, id)
-        on delete restrict
+        on delete restrict,
+    check (
+        sync_v3_valid_eligible_roles(eligible_roles)
+        and role = any(eligible_roles)
+        and (role <> 'host' or 'cohost' = any(eligible_roles))
+    )
 );
 create index participants_sync_active_session_capacity_idx
     on participants(tenant_id, room_id, session_id)
     where status in ('joining', 'active', 'leaving');
+create unique index participants_sync_v3_one_host_per_session_idx
+    on participants(tenant_id, session_id)
+    where role = 'host' and status in ('joining', 'active', 'leaving');
 
 create table sync_session_control (
     tenant_id uuid not null,
     room_id uuid not null,
     session_id uuid not null,
+    host_participant_session_id uuid,
     control_revision bigint not null default 0,
     folded_state jsonb not null,
     state_schema_version integer not null check (state_schema_version > 0),
@@ -257,6 +371,18 @@ create table sync_session_control (
     retention_deleted_receipt_bytes bigint not null default 0,
     retention_deleted_lifecycle_intent_rows bigint not null default 0,
     retention_deleted_lifecycle_intent_bytes bigint not null default 0,
+    retention_deleted_external_operation_rows bigint not null default 0,
+    retention_deleted_external_operation_bytes bigint not null default 0,
+    retention_deleted_admission_request_rows bigint not null default 0,
+    retention_deleted_admission_request_bytes bigint not null default 0,
+    retention_deleted_recording_rows bigint not null default 0,
+    retention_deleted_recording_bytes bigint not null default 0,
+    retention_deleted_screen_share_lease_rows bigint not null default 0,
+    retention_deleted_screen_share_lease_bytes bigint not null default 0,
+    retention_deleted_publication_fence_rows bigint not null default 0,
+    retention_deleted_publication_fence_bytes bigint not null default 0,
+    retention_deleted_publication_grant_reservation_rows bigint not null default 0,
+    retention_deleted_publication_grant_reservation_bytes bigint not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     primary key (tenant_id, session_id),
@@ -264,6 +390,10 @@ create table sync_session_control (
     foreign key (tenant_id, room_id, session_id)
         references room_sessions(tenant_id, room_id, id)
         on delete restrict,
+    foreign key (tenant_id, room_id, session_id, host_participant_session_id)
+        references participants(tenant_id, room_id, session_id, id)
+        on delete restrict
+        deferrable initially deferred,
     check (
         control_revision >= 0
         and snapshot_bytes >= 0
@@ -298,6 +428,18 @@ create table sync_session_control (
             and retention_deleted_receipt_bytes = 0
             and retention_deleted_lifecycle_intent_rows = 0
             and retention_deleted_lifecycle_intent_bytes = 0
+            and retention_deleted_external_operation_rows = 0
+            and retention_deleted_external_operation_bytes = 0
+            and retention_deleted_admission_request_rows = 0
+            and retention_deleted_admission_request_bytes = 0
+            and retention_deleted_recording_rows = 0
+            and retention_deleted_recording_bytes = 0
+            and retention_deleted_screen_share_lease_rows = 0
+            and retention_deleted_screen_share_lease_bytes = 0
+            and retention_deleted_publication_fence_rows = 0
+            and retention_deleted_publication_fence_bytes = 0
+            and retention_deleted_publication_grant_reservation_rows = 0
+            and retention_deleted_publication_grant_reservation_bytes = 0
         )
         or (
             retention_cleaned_at is not null
@@ -313,6 +455,18 @@ create table sync_session_control (
             and retention_deleted_receipt_bytes >= 0
             and retention_deleted_lifecycle_intent_rows >= 0
             and retention_deleted_lifecycle_intent_bytes >= 0
+            and retention_deleted_external_operation_rows >= 0
+            and retention_deleted_external_operation_bytes >= 0
+            and retention_deleted_admission_request_rows >= 0
+            and retention_deleted_admission_request_bytes >= 0
+            and retention_deleted_recording_rows >= 0
+            and retention_deleted_recording_bytes >= 0
+            and retention_deleted_screen_share_lease_rows >= 0
+            and retention_deleted_screen_share_lease_bytes >= 0
+            and retention_deleted_publication_fence_rows >= 0
+            and retention_deleted_publication_fence_bytes >= 0
+            and retention_deleted_publication_grant_reservation_rows >= 0
+            and retention_deleted_publication_grant_reservation_bytes >= 0
         )
     )
 );
@@ -345,6 +499,12 @@ create table sync_lifecycle_intents (
     foreign key (tenant_id, room_id, session_id, participant_session_id)
         references participants(tenant_id, room_id, session_id, id)
         on delete restrict,
+    foreign key (
+        tenant_id, room_id, session_id,
+        participant_session_id, participant_session_generation
+    )
+        references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
     check (
         (
             intent_name in ('participant_joined', 'participant_left')
@@ -352,7 +512,7 @@ create table sync_lifecycle_intents (
             and participant_session_generation > 0
         )
         or (
-            intent_name = 'session_ended'
+            intent_name in ('session_ended', 'admission_requested')
             and participant_session_id is null
             and participant_session_generation is null
         )
@@ -417,12 +577,15 @@ create table sync_control_events (
     actor_generation bigint,
     command_id text,
     lifecycle_intent_id uuid,
+    external_operation_id uuid,
     event_schema_version integer not null check (event_schema_version > 0),
     resulting_state_digest bytea not null check (octet_length(resulting_state_digest) = 32),
     encoded_bytes integer not null check (encoded_bytes between 1 and 32768),
     created_at timestamptz not null default now(),
     primary key (tenant_id, session_id, revision),
     unique (tenant_id, session_id, lifecycle_intent_id, event_id, revision),
+    unique (tenant_id, session_id, external_operation_id, event_id, revision),
+    unique (tenant_id, session_id, event_id, revision),
     unique (
         tenant_id,
         session_id,
@@ -438,19 +601,32 @@ create table sync_control_events (
     foreign key (tenant_id, room_id, session_id, actor_participant_session_id)
         references participants(tenant_id, room_id, session_id, id)
         on delete restrict,
+    foreign key (
+        tenant_id, room_id, session_id,
+        actor_participant_session_id, actor_generation
+    )
+        references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
     check (base_revision >= 0 and revision = base_revision + 1),
     check (
-        (
-            command_id ~ '^[A-Za-z0-9_-]{16,64}$'
-            and lifecycle_intent_id is null
-            and actor_participant_session_id is not null
-            and actor_generation > 0
-        )
-        or (
-            command_id is null
-            and lifecycle_intent_id is not null
-            and actor_participant_session_id is null
-            and actor_generation is null
+        num_nonnulls(command_id, lifecycle_intent_id, external_operation_id) = 1
+        and (
+            (
+                command_id is not null
+                and command_id ~ '^[A-Za-z0-9_-]{16,64}$'
+                and actor_participant_session_id is not null
+                and actor_generation > 0
+            )
+            or (
+                lifecycle_intent_id is not null
+                and actor_participant_session_id is null
+                and actor_generation is null
+            )
+            or (
+                external_operation_id is not null
+                and (actor_participant_session_id is null) = (actor_generation is null)
+                and (actor_generation is null or actor_generation > 0)
+            )
         )
     )
 );
@@ -465,7 +641,6 @@ create unique index sync_control_events_command_origin_key
 create unique index sync_control_events_lifecycle_origin_key
     on sync_control_events(tenant_id, session_id, lifecycle_intent_id)
     where lifecycle_intent_id is not null;
-
 create table sync_command_receipts (
     tenant_id uuid not null,
     session_id uuid not null,
@@ -473,54 +648,162 @@ create table sync_command_receipts (
     submitted_generation bigint not null check (submitted_generation > 0),
     command_id text not null check (command_id ~ '^[A-Za-z0-9_-]{16,64}$'),
     request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
-    command_name text not null check (command_name in ('raise_hand', 'lower_hand')),
+    command_name text not null check (command_name in (
+        'raise_hand',
+        'lower_hand',
+        'set_hand_raised',
+        'set_display_name',
+        'set_admission_policy',
+        'set_participant_role',
+        'transfer_host',
+        'admit_participant',
+        'deny_admission',
+        'mute_participant',
+        'stop_participant_camera',
+        'stop_participant_screen_share',
+        'remove_participant',
+        'start_recording',
+        'stop_recording',
+        'participant_leave',
+        'end_session'
+    )),
     outcome text not null,
     rejection_reason text,
     event_id uuid,
     resulting_revision bigint,
+    resulting_state_digest bytea,
+    external_operation_id uuid,
+    completed_at timestamptz,
     created_at timestamptz not null default now(),
     primary key (tenant_id, session_id, participant_session_id, command_id),
     foreign key (tenant_id, session_id)
         references sync_session_control(tenant_id, session_id)
         on delete restrict,
-    foreign key (
-        tenant_id,
-        session_id,
-        participant_session_id,
-        submitted_generation,
-        command_id,
-        event_id,
-        resulting_revision
+    constraint sync_command_receipts_sync_v3_event_fkey foreign key (
+        tenant_id, session_id, event_id, resulting_revision
     )
     references sync_control_events(
-        tenant_id,
-        session_id,
-        actor_participant_session_id,
-        actor_generation,
-        command_id,
-        event_id,
-        revision
+        tenant_id, session_id, event_id, revision
     )
-    on delete restrict,
+    on delete restrict
+    deferrable initially deferred,
     check (
         (
-            outcome = 'committed'
-            and rejection_reason is null
-            and event_id is not null
-            and resulting_revision > 0
+            command_name in ('raise_hand', 'lower_hand')
+            and resulting_state_digest is null
+            and external_operation_id is null
+            and completed_at is null
+            and (
+                (
+                    outcome = 'committed'
+                    and rejection_reason is null
+                    and event_id is not null
+                    and resulting_revision > 0
+                )
+                or (
+                    outcome = 'rejected'
+                    and rejection_reason in (
+                        'session_ended',
+                        'participant_inactive',
+                        'stale_participant_generation',
+                        'capability_denied',
+                        'invalid_state',
+                        'command_id_conflict'
+                    )
+                    and event_id is null
+                    and resulting_revision is null
+                )
+            )
         )
         or (
-            outcome = 'rejected'
-            and rejection_reason in (
-                'session_ended',
-                'participant_inactive',
-                'stale_participant_generation',
-                'capability_denied',
-                'invalid_state',
-                'command_id_conflict'
+            command_name in (
+                'set_hand_raised',
+                'set_display_name',
+                'set_admission_policy',
+                'set_participant_role',
+                'transfer_host',
+                'admit_participant',
+                'deny_admission',
+                'mute_participant',
+                'stop_participant_camera',
+                'stop_participant_screen_share',
+                'remove_participant',
+                'start_recording',
+                'stop_recording',
+                'participant_leave',
+                'end_session'
             )
-            and event_id is null
-            and resulting_revision is null
+            and (
+                (
+                    outcome = 'committed'
+                    and rejection_reason is null
+                    and event_id is not null
+                    and resulting_revision > 0
+                    and octet_length(resulting_state_digest) = 32
+                    and completed_at is not null
+                )
+                or (
+                    outcome = 'satisfied'
+                    and rejection_reason is null
+                    and event_id is null
+                    and resulting_revision >= 0
+                    and octet_length(resulting_state_digest) = 32
+                    and external_operation_id is null
+                    and completed_at is not null
+                )
+                or (
+                    outcome = 'pending'
+                    and rejection_reason is null
+                    and external_operation_id is not null
+                    and completed_at is null
+                    and (
+                        (
+                            command_name in ('set_participant_role', 'transfer_host')
+                            and event_id is not null
+                            and resulting_revision > 0
+                            and octet_length(resulting_state_digest) = 32
+                        )
+                        or (
+                            command_name not in ('set_participant_role', 'transfer_host')
+                            and event_id is null
+                            and resulting_revision is null
+                            and resulting_state_digest is null
+                        )
+                    )
+                )
+                or (
+                    outcome = 'rejected'
+                    and rejection_reason in (
+                        'session_ended',
+                        'participant_inactive',
+                        'stale_participant_generation',
+                        'capability_denied',
+                        'invalid_state',
+                        'invalid_target',
+                        'role_not_eligible',
+                        'host_transfer_required',
+                        'screen_share_in_use',
+                        'recording_in_progress',
+                        'external_operation_failed'
+                    )
+                    and completed_at is not null
+                    and (
+                        (
+                            command_name in ('set_participant_role', 'transfer_host')
+                            and external_operation_id is not null
+                            and event_id is not null
+                            and resulting_revision > 0
+                            and octet_length(resulting_state_digest) = 32
+                        )
+                        or (
+                            command_name not in ('set_participant_role', 'transfer_host')
+                            and event_id is null
+                            and resulting_revision is null
+                            and resulting_state_digest is null
+                        )
+                    )
+                )
+            )
         )
     )
 );
@@ -541,6 +824,392 @@ alter table sync_lifecycle_intents
         revision
     )
     on delete restrict;
+
+create table sync_external_operations (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    external_operation_id uuid primary key,
+    parent_external_operation_id uuid,
+    request_key text not null,
+    request_fingerprint bytea not null,
+    operation_name text not null,
+    actor_participant_session_id uuid,
+    actor_generation bigint,
+    target_participant_session_id uuid,
+    target_participant_generation bigint,
+    source text,
+    recording_id uuid,
+    deadline_generation bigint,
+    journey_id uuid,
+    parent_journey_event_id uuid,
+    producing_trace_id text,
+    producing_span_id text,
+    payload jsonb not null,
+    status text not null default 'pending',
+    fence_active boolean not null default false,
+    attempt_count integer not null default 0,
+    next_attempt_at timestamptz not null default now(),
+    last_error_code text,
+    applied_event_id uuid,
+    applied_revision bigint,
+    created_at timestamptz not null default now(),
+    completed_at timestamptz,
+    unique (tenant_id, room_id, session_id, external_operation_id),
+    unique (tenant_id, session_id, external_operation_id),
+    unique (tenant_id, session_id, operation_name, request_key),
+    foreign key (tenant_id, room_id, session_id)
+        references sync_session_control(tenant_id, room_id, session_id)
+        on delete restrict,
+    foreign key (
+        tenant_id, room_id, session_id,
+        actor_participant_session_id, actor_generation
+    )
+        references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
+    foreign key (
+        tenant_id, room_id, session_id,
+        target_participant_session_id, target_participant_generation
+    )
+        references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
+    check (request_key ~ '^[A-Za-z0-9_-]{16,128}$'),
+    check (octet_length(request_fingerprint) = 32),
+    check (octet_length(payload::text) <= 16384),
+    check (operation_name in (
+        'admit_participant', 'deny_admission', 'admission_request_expired', 'mute_participant',
+        'stop_participant_camera', 'stop_participant_screen_share',
+        'remove_participant', 'start_recording', 'stop_recording',
+        'participant_leave', 'end_session', 'tenant_transfer_host', 'tenant_set_deadline',
+        'tenant_end_session', 'maximum_duration_expired',
+        'role_transition_cleanup', 'role_transition_source_stop'
+    )),
+    check (source is null or source in ('microphone', 'camera', 'screen')),
+    check ((actor_participant_session_id is null) = (actor_generation is null)),
+    check (actor_generation is null or actor_generation > 0),
+    check ((target_participant_session_id is null) = (target_participant_generation is null)),
+    check (target_participant_generation is null or target_participant_generation > 0),
+    check (deadline_generation is null or deadline_generation > 0),
+    check (
+        (operation_name in ('tenant_set_deadline', 'maximum_duration_expired'))
+        = (deadline_generation is not null)
+    ),
+    check ((journey_id is null) = (parent_journey_event_id is null)),
+    check (producing_trace_id is null or producing_trace_id ~ '^[0-9a-f]{32}$'),
+    check (producing_span_id is null or producing_span_id ~ '^[0-9a-f]{16}$'),
+    check ((producing_trace_id is null) = (producing_span_id is null)),
+    check (attempt_count between 0 and 100),
+    check (
+        (operation_name = 'role_transition_cleanup' and parent_external_operation_id is null and source is null)
+        or (operation_name = 'role_transition_source_stop' and parent_external_operation_id is not null and source is not null)
+        or (operation_name not in ('role_transition_cleanup', 'role_transition_source_stop') and parent_external_operation_id is null)
+    ),
+    check (
+        (
+            status = 'pending'
+            and completed_at is null
+            and applied_event_id is null
+            and applied_revision is null
+        )
+        or (
+            status = 'applied'
+            and completed_at is not null
+            and last_error_code is null
+            and ((applied_event_id is null and applied_revision is null) or (applied_event_id is not null and applied_revision > 0))
+            and fence_active = false
+        )
+        or (
+            status = 'failed'
+            and completed_at is not null
+            and last_error_code is not null
+            and applied_event_id is null
+            and applied_revision is null
+        )
+    )
+);
+alter table sync_external_operations
+    add foreign key (tenant_id, session_id, parent_external_operation_id)
+    references sync_external_operations(tenant_id, session_id, external_operation_id)
+    on delete restrict;
+create unique index sync_external_operations_parent_source_key
+    on sync_external_operations(tenant_id, session_id, parent_external_operation_id, source)
+    where parent_external_operation_id is not null;
+create index sync_external_operations_pending_idx
+    on sync_external_operations(next_attempt_at, external_operation_id)
+    where status = 'pending';
+
+alter table sync_control_events
+    add foreign key (tenant_id, session_id, external_operation_id)
+    references sync_external_operations(tenant_id, session_id, external_operation_id)
+    on delete restrict;
+
+alter table sync_external_operations
+    add foreign key (
+        tenant_id,
+        session_id,
+        external_operation_id,
+        applied_event_id,
+        applied_revision
+    )
+    references sync_control_events(
+        tenant_id,
+        session_id,
+        external_operation_id,
+        event_id,
+        revision
+    )
+    on delete restrict;
+
+alter table sync_command_receipts
+    add foreign key (tenant_id, session_id, external_operation_id)
+    references sync_external_operations(tenant_id, session_id, external_operation_id)
+    on delete restrict;
+
+create table sync_admission_requests (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    admission_request_id uuid primary key,
+    request_key text not null,
+    request_fingerprint bytea not null,
+    participant_session_id uuid not null,
+    display_name text not null,
+    initial_role text not null,
+    eligible_roles text[] not null,
+    status text not null default 'pending',
+    decision_external_operation_id uuid,
+    requested_at timestamptz not null default now(),
+    expires_at timestamptz not null,
+    completed_at timestamptz,
+    unique (tenant_id, room_id, session_id, admission_request_id),
+    unique (tenant_id, session_id, request_key),
+    unique (tenant_id, session_id, participant_session_id),
+    foreign key (tenant_id, room_id, session_id)
+        references sync_session_control(tenant_id, room_id, session_id)
+        on delete restrict,
+    foreign key (tenant_id, session_id, decision_external_operation_id)
+        references sync_external_operations(tenant_id, session_id, external_operation_id)
+        on delete restrict,
+    check (request_key ~ '^[A-Za-z0-9_-]{16,128}$'),
+    check (octet_length(request_fingerprint) = 32),
+    check (octet_length(display_name) between 1 and 256 and display_name = btrim(display_name)),
+    check (initial_role in ('host', 'cohost', 'participant')),
+    check (
+        sync_v3_valid_eligible_roles(eligible_roles)
+        and initial_role = any(eligible_roles)
+        and (initial_role <> 'host' or 'cohost' = any(eligible_roles))
+    ),
+    check (expires_at > requested_at),
+    check (
+        (status = 'pending' and completed_at is null)
+        or (status in ('admitted', 'denied', 'expired') and decision_external_operation_id is not null and completed_at is not null)
+    )
+);
+create index sync_admission_requests_pending_idx
+    on sync_admission_requests(expires_at, admission_request_id)
+    where status = 'pending';
+
+create table sync_screen_share_leases (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    lease_id uuid not null unique,
+    owner_participant_session_id uuid not null,
+    owner_generation bigint not null,
+    lease_generation bigint not null,
+    status text not null,
+    acquired_at timestamptz not null,
+    renewed_until timestamptz not null,
+    hard_expires_at timestamptz not null,
+    primary key (tenant_id, session_id),
+    foreign key (tenant_id, room_id, session_id)
+        references sync_session_control(tenant_id, room_id, session_id)
+        on delete restrict,
+    foreign key (
+        tenant_id, room_id, session_id,
+        owner_participant_session_id, owner_generation
+    )
+        references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
+    check (owner_generation > 0 and lease_generation > 0),
+    check (status in ('acquiring', 'active')),
+    check (acquired_at < renewed_until and renewed_until <= hard_expires_at)
+);
+create index sync_screen_share_leases_expiry_idx
+    on sync_screen_share_leases(hard_expires_at, lease_id);
+
+create table sync_publication_fences (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    participant_session_id uuid not null,
+    participant_generation bigint not null,
+    source text not null,
+    external_operation_id uuid not null,
+    expires_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, session_id, participant_session_id, source),
+    foreign key (
+        tenant_id, room_id, session_id,
+        participant_session_id, participant_generation
+    )
+        references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
+    foreign key (tenant_id, session_id, external_operation_id)
+        references sync_external_operations(tenant_id, session_id, external_operation_id)
+        on delete restrict,
+    check (source in ('microphone', 'camera', 'screen')),
+    check (participant_generation > 0),
+    check (expires_at > created_at)
+);
+create index sync_publication_fences_expiry_idx
+    on sync_publication_fences(expires_at, external_operation_id);
+
+create table sync_publication_grant_reservations (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    reservation_id uuid primary key,
+    operation_id text not null,
+    participant_session_id uuid not null,
+    participant_generation bigint not null,
+    source text not null,
+    status text not null default 'pending',
+    failure_code text,
+    expires_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    completed_at timestamptz,
+    unique (tenant_id, session_id, operation_id),
+    foreign key (tenant_id, room_id, session_id)
+        references sync_session_control(tenant_id, room_id, session_id)
+        on delete restrict,
+    foreign key (
+        tenant_id, room_id, session_id,
+        participant_session_id, participant_generation
+    ) references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
+    check (operation_id ~ '^[A-Za-z0-9_-]{16,128}$'),
+    check (participant_generation > 0),
+    check (source in ('microphone', 'camera', 'screen')),
+    check (status in ('pending', 'confirmed', 'failed', 'ambiguous')),
+    check (expires_at > created_at),
+    check (
+        (status in ('pending', 'ambiguous') and completed_at is null)
+        or (status = 'confirmed' and failure_code is null and completed_at is not null)
+        or (status = 'failed' and failure_code is not null and completed_at is not null)
+    )
+);
+create unique index sync_publication_grant_reservations_active_source_key
+    on sync_publication_grant_reservations(tenant_id, session_id, participant_session_id, source)
+    where status in ('pending', 'ambiguous');
+create index sync_publication_grant_reservations_expiry_idx
+    on sync_publication_grant_reservations(expires_at, reservation_id);
+
+create table sync_recordings (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    recording_id uuid primary key,
+    status text not null,
+    generation bigint not null,
+    adapter_metadata jsonb not null default '{}'::jsonb,
+    started_by_participant_session_id uuid,
+    started_by_generation bigint,
+    start_external_operation_id uuid not null,
+    stop_external_operation_id uuid,
+    failure_code text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    completed_at timestamptz,
+    unique (tenant_id, room_id, session_id, recording_id),
+    foreign key (tenant_id, room_id, session_id)
+        references sync_session_control(tenant_id, room_id, session_id)
+        on delete restrict,
+    foreign key (
+        tenant_id, room_id, session_id,
+        started_by_participant_session_id, started_by_generation
+    )
+        references participants(tenant_id, room_id, session_id, id, generation)
+        on delete restrict,
+    foreign key (tenant_id, session_id, start_external_operation_id)
+        references sync_external_operations(tenant_id, session_id, external_operation_id)
+        on delete restrict,
+    foreign key (tenant_id, session_id, stop_external_operation_id)
+        references sync_external_operations(tenant_id, session_id, external_operation_id)
+        on delete restrict,
+    check (status in ('starting', 'recording', 'stopping', 'stopped', 'failed')),
+    check (generation > 0),
+    check ((started_by_participant_session_id is null) = (started_by_generation is null)),
+    check (started_by_generation is null or started_by_generation > 0),
+    check (
+        (status in ('starting', 'recording', 'stopping') and completed_at is null and failure_code is null)
+        or (status = 'stopped' and completed_at is not null and failure_code is null)
+        or (status = 'failed' and completed_at is not null and failure_code is not null)
+    )
+);
+create unique index sync_recordings_one_active_per_session_idx
+    on sync_recordings(tenant_id, session_id)
+    where status in ('starting', 'recording', 'stopping');
+
+create function sync_v3_validate_receipt_event_origin()
+returns trigger
+language plpgsql
+as $$
+declare
+    event_row sync_control_events%rowtype;
+begin
+    if new.outcome <> 'committed' then
+        return new;
+    end if;
+
+    select *
+    into event_row
+    from sync_control_events
+    where tenant_id = new.tenant_id
+      and session_id = new.session_id
+      and event_id = new.event_id
+      and revision = new.resulting_revision;
+
+    if not found then
+        raise exception 'committed sync receipt references a missing event';
+    end if;
+
+    if event_row.command_id = new.command_id
+        and event_row.actor_participant_session_id = new.participant_session_id
+        and event_row.actor_generation = new.submitted_generation then
+        return new;
+    end if;
+
+    if new.external_operation_id is not null
+        and event_row.external_operation_id = new.external_operation_id then
+        return new;
+    end if;
+
+    if new.command_name = 'admit_participant'
+        and new.external_operation_id is not null
+        and event_row.event_name = 'participant_joined'
+        and event_row.lifecycle_intent_id is not null
+        and exists (
+            select 1
+            from sync_admission_requests admission
+            where admission.tenant_id = new.tenant_id
+              and admission.session_id = new.session_id
+              and admission.decision_external_operation_id = new.external_operation_id
+              and admission.status = 'admitted'
+              and admission.participant_session_id::text =
+                  event_row.payload ->> 'participant_session_id'
+        ) then
+        return new;
+    end if;
+
+    raise exception 'committed sync receipt event origin does not match its durable request';
+end;
+$$;
+
+create constraint trigger sync_command_receipts_sync_v3_event_origin
+after insert or update on sync_command_receipts
+deferrable initially deferred
+for each row execute function sync_v3_validate_receipt_event_origin();
 
 create table recordings (
     id uuid primary key,
@@ -826,6 +1495,153 @@ create table transcription_cleanup_jobs (
     constraint transcription_cleanup_jobs_provider_copy_check check (provider_copy_status in ('not_applicable', 'pending', 'completed', 'failed'))
 );
 create index transcription_cleanup_jobs_claim_idx on transcription_cleanup_jobs(due_at, created_at, id) where state in ('pending', 'retryable');
+
+create table recording_capacity (
+    id smallint primary key check (id = 1),
+    reserved_meetings integer not null default 0 check (reserved_meetings between 0 and 20),
+    reserved_participants integer not null default 0 check (reserved_participants between 0 and 100),
+    reserved_input_bitrate_bps bigint not null default 0 check (reserved_input_bitrate_bps >= 0),
+    updated_at timestamptz not null default now()
+);
+
+create table recording_pool_health (
+    role text primary key check (role in ('capture', 'render')),
+    admission_open boolean not null,
+    ready_capacity integer not null check (ready_capacity >= 0),
+    reason text not null check (octet_length(reason) <= 256),
+    observed_at timestamptz not null,
+    updated_at timestamptz not null default now()
+);
+
+create table recording_reservations (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    room_id uuid not null references rooms(id),
+    session_id uuid not null references room_sessions(id),
+    recording_id uuid not null references recordings(id),
+    idempotency_key text not null,
+    request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
+    participant_count integer not null check (participant_count between 1 and 10),
+    max_duration_seconds integer not null check (max_duration_seconds between 1 and 7200),
+    input_bitrate_bps bigint not null check (input_bitrate_bps between 1 and 4000000),
+    state text not null check (state in ('reserved', 'released', 'expired')),
+    starts_at timestamptz,
+    ends_at timestamptz not null,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    unique (tenant_id, idempotency_key)
+);
+create index recording_reservations_active_idx
+    on recording_reservations(state, starts_at, ends_at)
+    where state = 'reserved';
+create index recording_reservations_tenant_created_idx
+    on recording_reservations(tenant_id, created_at desc, id desc);
+
+create table recording_pipelines (
+    recording_id uuid primary key references recordings(id),
+    tenant_id uuid not null references tenants(id),
+    reservation_id uuid not null unique references recording_reservations(id),
+    state text not null check (state in (
+        'requested', 'reserved', 'capture_leased', 'capturing_segmented',
+        'capture_complete', 'render_queued', 'rendering', 'verifying',
+        'committed', 'retryable_failure', 'terminal_failure', 'deleted'
+    )),
+    capture_completed_at timestamptz,
+    committed_at timestamptz,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now()
+);
+create index recording_pipelines_tenant_state_idx
+    on recording_pipelines(tenant_id, state, updated_at desc);
+
+create table recording_jobs (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    session_id uuid not null references room_sessions(id),
+    recording_id uuid not null references recordings(id),
+    kind text not null check (kind in ('capture', 'render')),
+    idempotency_key text not null unique,
+    payload_schema_version integer not null check (payload_schema_version > 0),
+    state text not null check (state in ('pending', 'leased', 'succeeded', 'retryable_failure', 'terminal_failure', 'cancelled')),
+    priority integer not null default 0,
+    available_at timestamptz not null,
+    attempt_count integer not null default 0 check (attempt_count >= 0),
+    attempt_limit integer not null check (attempt_limit between 1 and 20),
+    lease_token text,
+    lease_owner text,
+    lease_expires_at timestamptz,
+    fencing_generation bigint not null default 0 check (fencing_generation >= 0),
+    error_code text,
+    error_detail text,
+    terminal_at timestamptz,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    check (error_code is null or octet_length(error_code) <= 128),
+    check (error_detail is null or octet_length(error_detail) <= 2048),
+    check ((state = 'leased') = (lease_token is not null and lease_owner is not null and lease_expires_at is not null))
+);
+create index recording_jobs_claim_idx
+    on recording_jobs(kind, state, available_at, priority desc, id)
+    where state = 'pending';
+create index recording_jobs_lease_recovery_idx
+    on recording_jobs(lease_expires_at, id)
+    where state = 'leased';
+create index recording_jobs_dead_letter_idx
+    on recording_jobs(tenant_id, terminal_at desc, id)
+    where state = 'terminal_failure';
+create unique index recording_jobs_recording_kind_idx
+    on recording_jobs(recording_id, kind);
+
+create table recording_bundles (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    recording_id uuid not null references recordings(id),
+    capture_job_id uuid not null references recording_jobs(id),
+    sequence_number bigint not null check (sequence_number >= 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    object_key text not null,
+    content_type text not null,
+    codec text not null,
+    layer text,
+    byte_size bigint not null check (byte_size >= 0),
+    checksum bytea not null check (octet_length(checksum) between 16 and 128),
+    monotonic_start_millis bigint not null check (monotonic_start_millis >= 0),
+    monotonic_end_millis bigint not null check (monotonic_end_millis >= monotonic_start_millis),
+    media_start_millis bigint not null check (media_start_millis >= 0),
+    media_end_millis bigint not null check (media_end_millis >= media_start_millis),
+    created_at timestamptz not null default now(),
+    unique (recording_id, sequence_number)
+);
+create index recording_bundles_recording_sequence_idx
+    on recording_bundles(recording_id, sequence_number);
+
+create table recording_artifacts (
+    recording_id uuid primary key references recordings(id),
+    tenant_id uuid not null references tenants(id),
+    render_job_id uuid not null references recording_jobs(id),
+    object_key text not null,
+    content_type text not null,
+    byte_size bigint not null check (byte_size >= 0),
+    checksum bytea not null check (octet_length(checksum) between 16 and 128),
+    duration_millis bigint not null check (duration_millis >= 0),
+    committed_at timestamptz not null,
+    created_at timestamptz not null default now()
+);
+
+create function reject_recording_object_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording object facts are immutable';
+end;
+$$;
+
+create trigger recording_bundles_immutable
+before update on recording_bundles
+for each row execute function reject_recording_object_mutation();
+
+create trigger recording_artifacts_immutable
+before update on recording_artifacts
+for each row execute function reject_recording_object_mutation();
 
 create table audit_logs (
     id uuid primary key,
@@ -1247,3 +2063,118 @@ create table webhook_idempotency_records (
 
 create index webhook_idempotency_records_expiry_idx
     on webhook_idempotency_records(expires_at, tenant_id);
+
+create table provider_operation_receipts (
+    operation_id text not null,
+    effect text not null,
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    session_id uuid not null references room_sessions(id) on delete restrict,
+    participant_session_id uuid,
+    participant_session_generation bigint,
+    publication_source text,
+    recording_id uuid references recordings(id) on delete restrict,
+    request_fingerprint bytea not null,
+    request_payload jsonb not null,
+    state text not null default 'prepared',
+    outcome text,
+    reason text,
+    created_at timestamptz not null default now(),
+    dispatching_at timestamptz,
+    completed_at timestamptz,
+    primary key (operation_id, effect),
+    constraint provider_operation_receipts_operation_id_check check (
+        operation_id ~ '^[A-Za-z0-9_-]{16,128}$'
+    ),
+    constraint provider_operation_receipts_effect_check check (effect in (
+        'media.grant_publication', 'media.revoke_publication',
+        'media.remove_participant', 'media.end_session',
+        'recording.start', 'recording.stop'
+    )),
+    constraint provider_operation_receipts_fingerprint_check check (octet_length(request_fingerprint) = 32),
+    constraint provider_operation_receipts_payload_check check (octet_length(request_payload::text) <= 16384),
+    constraint provider_operation_receipts_state_check check (state in ('prepared', 'dispatching', 'completed')),
+    constraint provider_operation_receipts_outcome_check check (outcome is null or outcome in (
+        'confirmed', 'satisfied', 'retryable_failure', 'terminal_failure', 'ambiguous'
+    )),
+    constraint provider_operation_receipts_reason_check check (reason is null or octet_length(reason) between 1 and 256),
+    constraint provider_operation_receipts_participant_check check (
+        (participant_session_id is not null or participant_session_generation is null)
+        and (participant_session_generation is null or participant_session_generation > 0)
+    ),
+    constraint provider_operation_receipts_source_check check (
+        publication_source is null or publication_source in ('microphone', 'camera', 'screen')
+    ),
+    constraint provider_operation_receipts_state_outcome_check check (
+        (state in ('prepared', 'dispatching') and outcome is null and completed_at is null)
+        or (state = 'completed' and outcome is not null and completed_at is not null)
+    ),
+    constraint provider_operation_receipts_dispatching_check check (
+        (state = 'prepared' and dispatching_at is null)
+        or (state in ('dispatching', 'completed') and dispatching_at is not null)
+    ),
+    constraint provider_operation_receipts_effect_fields_check check (
+        (
+            effect in ('media.grant_publication', 'media.revoke_publication')
+            and participant_session_id is not null
+            and publication_source is not null
+            and recording_id is null
+        )
+        or (
+            effect = 'media.remove_participant'
+            and participant_session_id is not null
+            and publication_source is null
+            and recording_id is null
+        )
+        or (
+            effect = 'media.end_session'
+            and participant_session_id is null
+            and publication_source is null
+            and recording_id is null
+        )
+        or (
+            effect in ('recording.start', 'recording.stop')
+            and participant_session_id is null
+            and publication_source is null
+            and recording_id is not null
+        )
+    )
+);
+
+create index provider_operation_receipts_session_idx
+    on provider_operation_receipts(tenant_id, session_id, created_at desc, operation_id, effect);
+create index provider_operation_receipts_reconciliation_idx
+    on provider_operation_receipts(state, created_at, operation_id, effect)
+    where state in ('prepared', 'dispatching');
+
+create table provider_operation_observation_heads (
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    session_id uuid not null references room_sessions(id) on delete restrict,
+    incarnation bigint not null default 0,
+    sequence bigint not null default 0,
+    observation_fingerprint bytea not null default decode(repeat('00', 32), 'hex'),
+    updated_at timestamptz not null default now(),
+    primary key (tenant_id, session_id),
+    constraint provider_operation_observation_heads_cursor_check check (
+        incarnation >= 0 and sequence >= 0
+    ),
+    constraint provider_operation_observation_heads_fingerprint_check check (octet_length(observation_fingerprint) = 32)
+);
+
+create table provider_operation_observations (
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    session_id uuid not null references room_sessions(id) on delete restrict,
+    incarnation bigint not null,
+    sequence bigint not null,
+    publications jsonb not null,
+    observation_fingerprint bytea not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, session_id, incarnation, sequence),
+    constraint provider_operation_observations_cursor_check check (incarnation >= 0 and sequence >= 0),
+    constraint provider_operation_observations_publications_check check (
+        jsonb_typeof(publications) = 'array' and octet_length(publications::text) <= 16384
+    ),
+    constraint provider_operation_observations_fingerprint_check check (octet_length(observation_fingerprint) = 32)
+);
+
+create index provider_operation_observations_session_cursor_idx
+    on provider_operation_observations(tenant_id, session_id, incarnation, sequence);

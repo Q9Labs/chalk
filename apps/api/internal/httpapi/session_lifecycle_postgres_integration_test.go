@@ -55,7 +55,8 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 		SyncTokens:       tokens,
 		SyncTokenRefresh: tokens,
 	}
-	createRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", `{"metadata":{"purpose":"integration"}}`)
+	createBody := `{"metadata":{"purpose":"integration"},"admission_policy":"open","host_exit_policy":"promote_cohost","role_capabilities":{"host":["subscribe","transferHost","endMeeting"],"cohost":["subscribe"],"participant":["subscribe"]},"maximum_duration_seconds":3600}`
+	createRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", createBody)
 	createRequest.Header.Set("Idempotency-Key", "http-create-request-0001")
 	createResponse := requestWithOptionsAndRequest(t, createRequest, authenticatedOptions(t, options))
 	if createResponse.Code != http.StatusCreated {
@@ -69,7 +70,7 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 	if created.Status != sessionlifecycle.SessionStatusActive {
 		t.Fatalf("created status = %q, want active", created.Status)
 	}
-	retryCreateRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", `{"metadata":{"purpose":"integration"}}`)
+	retryCreateRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", createBody)
 	retryCreateRequest.Header.Set("Idempotency-Key", "http-create-request-0001")
 	retryCreateResponse := requestWithOptionsAndRequest(t, retryCreateRequest, authenticatedOptions(t, options))
 	if retryCreateResponse.Code != http.StatusCreated {
@@ -82,7 +83,7 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 	if retriedCreate.ID != created.ID {
 		t.Fatalf("create retry id = %s, want %s", retriedCreate.ID, created.ID)
 	}
-	conflictingCreateRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", `{"metadata":{"purpose":"different"}}`)
+	conflictingCreateRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", `{"metadata":{"purpose":"different"},"admission_policy":"open","host_exit_policy":"promote_cohost","role_capabilities":{"host":["subscribe","transferHost","endMeeting"],"cohost":["subscribe"],"participant":["subscribe"]},"maximum_duration_seconds":3600}`)
 	conflictingCreateRequest.Header.Set("Idempotency-Key", "http-create-request-0001")
 	conflictingCreateResponse := requestWithOptionsAndRequest(t, conflictingCreateRequest, authenticatedOptions(t, options))
 	if conflictingCreateResponse.Code != http.StatusConflict {
@@ -95,7 +96,7 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 	}
 
 	participantID := newLifecycleHTTPTestID(t)
-	admitRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada","capabilities":["control"]}`)
+	admitRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada","initial_role":"cohost","eligible_roles":["cohost","participant"]}`)
 	admitRequest.Header.Set("Idempotency-Key", "http-admit-request-0001")
 	admitResponse := requestWithOptionsAndRequest(t, admitRequest, authenticatedOptions(t, options))
 	if admitResponse.Code != http.StatusCreated {
@@ -109,17 +110,41 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 		t.Fatal("admission sync token is empty")
 	}
 	refreshResponse := authenticatedRequestWithOptions(t, http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants/"+participantID.String()+"/sync-token", options)
+	if refreshResponse.Code != http.StatusNotFound {
+		t.Fatalf("refresh before applied join status = %d, want 404; body=%s", refreshResponse.Code, refreshResponse.Body.String())
+	}
+	assertErrorCode(t, refreshResponse, "participant_not_found")
+	var joinIntentID string
+	if err := pool.QueryRow(ctx, `select lifecycle_intent_id from sync_lifecycle_intents where tenant_id = $1 and session_id = $2 and participant_session_id = $3 and intent_name = 'participant_joined'`, tenantID.String(), sessionID.String(), participantID.String()).Scan(&joinIntentID); err != nil {
+		t.Fatalf("read join intent: %v", err)
+	}
+	eventID := newLifecycleHTTPTestID(t)
+	if _, err := pool.Exec(ctx, `
+insert into sync_control_events (
+  tenant_id, room_id, session_id, event_id, base_revision, revision, event_name, payload,
+	  lifecycle_intent_id, event_schema_version, resulting_state_digest, encoded_bytes
+) values ($1, $2, $3, $4, 0, 1, 'participant_joined', '{}'::jsonb, $5, 3, decode(repeat('00', 32), 'hex'), 2)`,
+		tenantID.String(), roomID.String(), sessionID.String(), eventID.String(), joinIntentID); err != nil {
+		t.Fatalf("insert participant join fact: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `update participants set status = 'active', joined_at = now(), updated_at = now() where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4`, tenantID.String(), roomID.String(), sessionID.String(), participantID.String()); err != nil {
+		t.Fatalf("apply participant product state: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `update sync_lifecycle_intents set status = 'applied', applied_event_id = $1, applied_revision = 1, completed_at = now() where tenant_id = $2 and room_id = $3 and session_id = $4 and lifecycle_intent_id = $5`, eventID.String(), tenantID.String(), roomID.String(), sessionID.String(), joinIntentID); err != nil {
+		t.Fatalf("complete participant join intent: %v", err)
+	}
+	refreshResponse = authenticatedRequestWithOptions(t, http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants/"+participantID.String()+"/sync-token", options)
 	if refreshResponse.Code != http.StatusCreated {
-		t.Fatalf("refresh status = %d, want 201; body=%s", refreshResponse.Code, refreshResponse.Body.String())
+		t.Fatalf("refresh after applied join status = %d, want 201; body=%s", refreshResponse.Code, refreshResponse.Body.String())
 	}
 	var refreshed struct {
 		SyncToken string `json:"sync_token"`
 	}
 	decodeJSON(t, refreshResponse, &refreshed)
 	if refreshed.SyncToken == "" || refreshed.SyncToken == admission.SyncToken {
-		t.Fatal("refresh did not issue a distinct sync token")
+		t.Fatal("refresh after applied join did not issue a distinct sync token")
 	}
-	conflictRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Grace","capabilities":["control"]}`)
+	conflictRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Grace","initial_role":"cohost","eligible_roles":["cohost","participant"]}`)
 	conflictRequest.Header.Set("Idempotency-Key", "http-admit-request-0001")
 	conflictResponse := requestWithOptionsAndRequest(t, conflictRequest, authenticatedOptions(t, options))
 	if conflictResponse.Code != http.StatusConflict {
@@ -138,17 +163,20 @@ func TestSessionLifecycleHTTPFlowCommitsProductRowsAndIntents(t *testing.T) {
 	var controlRevision int64
 	var intents int
 	var validFingerprints int
+	var externalOperations int
 	if err := pool.QueryRow(ctx, `
-select session.status, control.control_revision, count(intent.lifecycle_intent_id), count(*) filter (where octet_length(intent.request_fingerprint) = 32)
+select session.status, control.control_revision,
+       (select count(*) from sync_lifecycle_intents intent where intent.tenant_id = session.tenant_id and intent.session_id = session.id),
+       (select count(*) from sync_lifecycle_intents intent where intent.tenant_id = session.tenant_id and intent.session_id = session.id and octet_length(intent.request_fingerprint) = 32),
+       (select count(*) from sync_external_operations operation where operation.tenant_id = session.tenant_id and operation.session_id = session.id and operation.operation_name = 'tenant_end_session')
 from room_sessions session
 join sync_session_control control on control.tenant_id = session.tenant_id and control.room_id = session.room_id and control.session_id = session.id
-join sync_lifecycle_intents intent on intent.tenant_id = session.tenant_id and intent.room_id = session.room_id and intent.session_id = session.id
 where session.tenant_id = $1 and session.room_id = $2 and session.id = $3
-group by session.status, control.control_revision`, tenantID.String(), roomID.String(), sessionID.String()).Scan(&status, &controlRevision, &intents, &validFingerprints); err != nil {
+`, tenantID.String(), roomID.String(), sessionID.String()).Scan(&status, &controlRevision, &intents, &validFingerprints, &externalOperations); err != nil {
 		t.Fatalf("read committed lifecycle flow: %v", err)
 	}
-	if status != sessionlifecycle.SessionStatusEnding || controlRevision != 0 || intents != 2 || validFingerprints != 2 {
-		t.Fatalf("committed lifecycle state = status %q revision %d intents %d fingerprints %d", status, controlRevision, intents, validFingerprints)
+	if status != sessionlifecycle.SessionStatusEnding || controlRevision != 0 || intents != 1 || validFingerprints != 1 || externalOperations != 1 {
+		t.Fatalf("committed lifecycle state = status %q revision %d intents %d fingerprints %d external operations %d", status, controlRevision, intents, validFingerprints, externalOperations)
 	}
 }
 
@@ -156,7 +184,7 @@ func openLifecycleHTTPTestPool(t *testing.T, ctx context.Context) *pgxpool.Pool 
 	t.Helper()
 	databaseURL := os.Getenv("CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "postgres://postgres:postgres@127.0.0.1:56432/chalk_sync_overhaul?sslmode=disable"
+		databaseURL = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
 	}
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
@@ -173,7 +201,10 @@ func cleanupLifecycleHTTPTest(t *testing.T, pool *pgxpool.Pool, tenantID utiliti
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	for _, table := range []string{"sync_lifecycle_intents", "sync_session_control", "participants", "session_create_requests", "room_sessions", "rooms"} {
+	if _, err := pool.Exec(ctx, `update sync_lifecycle_intents set status = 'pending', applied_event_id = null, applied_revision = null, completed_at = null where tenant_id = $1 and status = 'applied'`, tenantID.String()); err != nil {
+		t.Errorf("detach applied lifecycle intents: %v", err)
+	}
+	for _, table := range []string{"sync_command_receipts", "sync_control_events", "sync_admission_requests", "sync_recordings", "sync_publication_fences", "sync_publication_grant_reservations", "sync_external_operations", "sync_lifecycle_intents", "sync_session_control", "participants", "session_create_requests", "room_sessions", "rooms"} {
 		if _, err := pool.Exec(ctx, fmt.Sprintf("delete from %s where tenant_id = $1", table), tenantID.String()); err != nil {
 			t.Errorf("cleanup %s: %v", table, err)
 		}

@@ -16,11 +16,15 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+const validSessionPolicyJSON = `"admission_policy":"open","host_exit_policy":"require_transfer","role_capabilities":{"host":["subscribe","transferHost","endMeeting"],"cohost":["subscribe"],"participant":["subscribe"]},"maximum_duration_seconds":3600`
+
 type lifecycleService struct {
-	create func(context.Context, sessionlifecycle.CreateSessionInput) (sessionlifecycle.Session, error)
-	admit  func(context.Context, sessionlifecycle.AdmitParticipantInput) (sessionlifecycle.Admission, error)
-	remove func(context.Context, sessionlifecycle.RequestParticipantRemovalInput) (sessionlifecycle.Removal, error)
-	end    func(context.Context, sessionlifecycle.RequestSessionEndInput) (sessionlifecycle.EndRequest, error)
+	create   func(context.Context, sessionlifecycle.CreateSessionInput) (sessionlifecycle.Session, error)
+	admit    func(context.Context, sessionlifecycle.AdmitParticipantInput) (sessionlifecycle.Admission, error)
+	remove   func(context.Context, sessionlifecycle.RequestParticipantRemovalInput) (sessionlifecycle.Removal, error)
+	end      func(context.Context, sessionlifecycle.RequestSessionEndInput) (sessionlifecycle.EndRequest, error)
+	transfer func(context.Context, sessionlifecycle.TransferHostInput) (sessionlifecycle.ControlRequest, error)
+	deadline func(context.Context, sessionlifecycle.SetDeadlineInput) (sessionlifecycle.ControlRequest, error)
 }
 
 type syncTokenIssuerFunc func(context.Context, synctokens.Input) (synctokens.Token, error)
@@ -115,13 +119,27 @@ func (s lifecycleService) RequestSessionEnd(ctx context.Context, input sessionli
 	return s.end(ctx, input)
 }
 
+func (s lifecycleService) TransferHost(ctx context.Context, input sessionlifecycle.TransferHostInput) (sessionlifecycle.ControlRequest, error) {
+	if s.transfer == nil {
+		return sessionlifecycle.ControlRequest{}, errors.New("unexpected host transfer")
+	}
+	return s.transfer(ctx, input)
+}
+
+func (s lifecycleService) SetDeadline(ctx context.Context, input sessionlifecycle.SetDeadlineInput) (sessionlifecycle.ControlRequest, error) {
+	if s.deadline == nil {
+		return sessionlifecycle.ControlRequest{}, errors.New("unexpected deadline change")
+	}
+	return s.deadline(ctx, input)
+}
+
 func TestCreateRoomSessionUsesLifecycleService(t *testing.T) {
 	tenantID := mustTenantID(t, "11111111-1111-4111-8111-111111111111")
 	roomID := mustTenantID(t, "22222222-2222-4222-8222-222222222222")
 	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	created := false
 	read := false
-	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", `{"metadata":{"topic":"planning"}}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions", "raw-session-token", `{"metadata":{"topic":"planning"},`+validSessionPolicyJSON+`}`)
 	request.Header.Set("Idempotency-Key", "create-request-key-0001")
 	res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{
 		Rooms: roomService{getSession: func(_ context.Context, gotTenantID, gotRoomID, gotSessionID utilities.ID) (rooms.Session, error) {
@@ -134,8 +152,11 @@ func TestCreateRoomSessionUsesLifecycleService(t *testing.T) {
 		}},
 		SessionLifecycle: lifecycleService{create: func(_ context.Context, input sessionlifecycle.CreateSessionInput) (sessionlifecycle.Session, error) {
 			created = true
-			if input.TenantID != tenantID || input.RoomID != roomID || input.Request.Key != "create-request-key-0001" || input.InitialControl.Digest == ([32]byte{}) {
+			if input.TenantID != tenantID || input.RoomID != roomID || input.Request.Key != "create-request-key-0001" || input.HostExitPolicy != "require_transfer" || input.MaximumDurationSeconds != 3600 || input.MaximumDurationCeilingSeconds != 86400 || input.DeadlineAt.IsZero() {
 				t.Fatalf("lifecycle create input = %#v", input)
+			}
+			if input.RoleCapabilities["host"][1] != "transferHost" {
+				t.Fatalf("role capabilities = %#v", input.RoleCapabilities)
 			}
 			return sessionlifecycle.Session{ID: sessionID}, nil
 		}},
@@ -151,13 +172,35 @@ func TestCreateRoomSessionUsesLifecycleService(t *testing.T) {
 
 func TestCreateRoomSessionRequiresValidIdempotencyKey(t *testing.T) {
 	for _, key := range []string{"", "short", "123456789012345!"} {
-		request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/rooms/22222222-2222-4222-8222-222222222222/sessions", "raw-session-token", `{}`)
+		request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/rooms/22222222-2222-4222-8222-222222222222/sessions", "raw-session-token", `{`+validSessionPolicyJSON+`}`)
 		request.Header.Set("Idempotency-Key", key)
 		res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{Rooms: guardedRoomService{}, SessionLifecycle: sessionlifecycle.NewService(&captureLifecycleRepository{})}))
 		if res.Code != http.StatusBadRequest {
 			t.Fatalf("key %q status = %d, want 400; body=%s", key, res.Code, res.Body.String())
 		}
 		assertErrorCode(t, res, "invalid_idempotency_key")
+	}
+}
+
+func TestCreateRoomSessionRejectsMissingV3Policy(t *testing.T) {
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/rooms/22222222-2222-4222-8222-222222222222/sessions", "raw-session-token", `{}`)
+	request.Header.Set("Idempotency-Key", "create-request-key-0001")
+	res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{Rooms: guardedRoomService{}, SessionLifecycle: sessionlifecycle.NewService(&captureLifecycleRepository{})}))
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", res.Code, res.Body.String())
+	}
+	assertErrorCode(t, res, "invalid_request")
+}
+
+func TestCreateRoomSessionRejectsClientOwnedCeilingAndDeadline(t *testing.T) {
+	for _, field := range []string{`,"maximum_duration_ceiling_seconds":7200`, `,"deadline_at":"2026-07-13T06:30:00Z"`} {
+		request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/rooms/22222222-2222-4222-8222-222222222222/sessions", "raw-session-token", `{`+validSessionPolicyJSON+field+`}`)
+		request.Header.Set("Idempotency-Key", "create-request-key-0001")
+		res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{Rooms: guardedRoomService{}, SessionLifecycle: lifecycleService{}}))
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("field %s status = %d, want 400; body=%s", field, res.Code, res.Body.String())
+		}
+		assertErrorCode(t, res, "invalid_request")
 	}
 }
 
@@ -185,11 +228,11 @@ func TestAdmitParticipantPassesIdempotencyKeyToLifecycleService(t *testing.T) {
 	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
 	intentID := mustTenantID(t, "55555555-5555-4555-8555-555555555555")
-	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada","capabilities":["control"]}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada","initial_role":"cohost","eligible_roles":["cohost","participant"]}`)
 	request.Header.Set("Idempotency-Key", "admit-request-key-0001")
 	res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{
 		SessionLifecycle: lifecycleService{admit: func(_ context.Context, input sessionlifecycle.AdmitParticipantInput) (sessionlifecycle.Admission, error) {
-			if input.Request.Key != "admit-request-key-0001" || input.ParticipantID != participantID || input.SessionID != sessionID {
+			if input.Request.Key != "admit-request-key-0001" || input.ParticipantID != participantID || input.SessionID != sessionID || input.InitialRole != "cohost" || len(input.EligibleRoles) != 2 {
 				t.Fatalf("admission input = %#v", input)
 			}
 			now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
@@ -202,8 +245,8 @@ func TestAdmitParticipantPassesIdempotencyKeyToLifecycleService(t *testing.T) {
 			if input.ParticipantID != participantID || input.AdmissionLifecycleIntentID != intentID || input.ParticipantGeneration != 1 {
 				t.Fatalf("sync token input = %#v", input)
 			}
-			if len(input.Capabilities) != 1 || input.Capabilities[0] != "control:hand" {
-				t.Fatalf("capabilities = %#v, want server policy", input.Capabilities)
+			if input.InitialRole != "cohost" || len(input.EligibleRoles) != 2 || input.EligibleRoles[1] != "participant" {
+				t.Fatalf("authority envelope = %q %#v", input.InitialRole, input.EligibleRoles)
 			}
 			return synctokens.Token{Value: "signed-sync-token", ExpiresAt: time.Date(2026, 7, 12, 12, 5, 0, 0, time.UTC)}, nil
 		}),
@@ -232,6 +275,71 @@ func TestAdmitParticipantPassesIdempotencyKeyToLifecycleService(t *testing.T) {
 	}
 }
 
+func TestApprovalAdmissionReturnsPendingWithoutMediaJoinOrSyncToken(t *testing.T) {
+	tenantID := mustTenantID(t, "11111111-1111-4111-8111-111111111111")
+	roomID := mustTenantID(t, "22222222-2222-4222-8222-222222222222")
+	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
+	intentID := mustTenantID(t, "55555555-5555-4555-8555-555555555555")
+	requestID := mustTenantID(t, "66666666-6666-4666-8666-666666666666")
+	expiresAt := time.Date(2026, 7, 12, 12, 5, 0, 0, time.UTC)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada","initial_role":"participant","eligible_roles":["participant"]}`)
+	request.Header.Set("Idempotency-Key", "approval-admit-key-0001")
+	res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{
+		SessionLifecycle: lifecycleService{admit: func(_ context.Context, input sessionlifecycle.AdmitParticipantInput) (sessionlifecycle.Admission, error) {
+			return sessionlifecycle.Admission{
+				Participant:      sessionlifecycle.Participant{ID: participantID, TenantID: tenantID, RoomID: roomID, SessionID: sessionID, Generation: 1, Status: sessionlifecycle.ParticipantStatusJoining},
+				Intent:           sessionlifecycle.Intent{ID: intentID, RequestKey: input.Request.Key, IntentName: sessionlifecycle.IntentAdmissionRequested, Status: sessionlifecycle.IntentStatusPending, CreatedAt: expiresAt.Add(-time.Minute)},
+				AdmissionRequest: &sessionlifecycle.AdmissionRequest{ID: requestID, Status: "pending", ExpiresAt: expiresAt},
+			}, nil
+		}},
+		SyncTokens: syncTokenIssuerFunc(func(context.Context, synctokens.Input) (synctokens.Token, error) {
+			t.Fatal("approval admission issued a sync token")
+			return synctokens.Token{}, nil
+		}),
+		MediaPlane: mediaPlaneResolverFunc(func(context.Context, tenants.Tenant, rooms.Room) (*mediaplane.Service, error) {
+			t.Fatal("approval admission resolved the media plane")
+			return nil, nil
+		}),
+	}))
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", res.Code, res.Body.String())
+	}
+	var body struct {
+		SyncToken       string `json:"sync_token"`
+		MediaPlane      any    `json:"media_plane"`
+		LifecycleIntent struct {
+			ID         string `json:"id"`
+			IntentName string `json:"intent_name"`
+		} `json:"lifecycle_intent"`
+		AdmissionRequest struct {
+			ID        string `json:"id"`
+			Status    string `json:"status"`
+			ExpiresAt string `json:"expires_at"`
+		} `json:"admission_request"`
+	}
+	decodeJSON(t, res, &body)
+	if body.SyncToken != "" || body.MediaPlane != nil {
+		t.Fatalf("pending approval exposed join credentials: %#v", body)
+	}
+	if body.LifecycleIntent.ID != intentID.String() || body.LifecycleIntent.IntentName != sessionlifecycle.IntentAdmissionRequested {
+		t.Fatalf("approval lifecycle intent = %#v", body.LifecycleIntent)
+	}
+	if body.AdmissionRequest.ID != requestID.String() || body.AdmissionRequest.Status != "pending" || body.AdmissionRequest.ExpiresAt != "2026-07-12T12:05:00Z" {
+		t.Fatalf("approval request response = %#v", body.AdmissionRequest)
+	}
+}
+
+func TestAdmitParticipantRejectsLegacyCapabilitiesWithoutSignedRoles(t *testing.T) {
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/rooms/22222222-2222-4222-8222-222222222222/sessions/33333333-3333-4333-8333-333333333333/participants", "raw-session-token", `{"participant_session_id":"44444444-4444-4444-8444-444444444444","name":"Ada","capabilities":["endMeeting"]}`)
+	request.Header.Set("Idempotency-Key", "admit-request-key-0001")
+	res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{SessionLifecycle: sessionlifecycle.NewService(&captureLifecycleRepository{})}))
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", res.Code, res.Body.String())
+	}
+	assertErrorCode(t, res, "invalid_request")
+}
+
 func TestAdmitParticipantCreatesMediaJoin(t *testing.T) {
 	tenantID := mustTenantID(t, "11111111-1111-4111-8111-111111111111")
 	roomID := mustTenantID(t, "22222222-2222-4222-8222-222222222222")
@@ -239,7 +347,7 @@ func TestAdmitParticipantCreatesMediaJoin(t *testing.T) {
 	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
 	intentID := mustTenantID(t, "55555555-5555-4555-8555-555555555555")
 	plane := &lifecycleMediaPlane{}
-	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada"}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada","initial_role":"participant","eligible_roles":["participant"]}`)
 	request.Header.Set("Idempotency-Key", "media-join-request-0001")
 	res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{
 		Rooms: mediaRoomService{room: rooms.Room{ID: roomID, TenantID: tenantID, MediaPlane: "cf_rtk"}},
@@ -291,7 +399,7 @@ func TestAdmitParticipantMediaJoinFailureIsStable(t *testing.T) {
 	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
 	plane := &lifecycleMediaPlane{joinErr: mediaplane.ErrProviderFailed}
-	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada"}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","name":"Ada","initial_role":"participant","eligible_roles":["participant"]}`)
 	request.Header.Set("Idempotency-Key", "media-join-failure-0001")
 	res := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{
 		Rooms:   mediaRoomService{room: rooms.Room{ID: roomID, TenantID: tenantID, MediaPlane: "cf_rtk"}},
@@ -311,11 +419,13 @@ func TestAdmitParticipantMediaJoinFailureIsStable(t *testing.T) {
 	assertErrorCode(t, res, "media_plane_unavailable")
 }
 
-func TestRemoveParticipantMediaFailureDoesNotBlockLifecycle(t *testing.T) {
+func TestRemoveParticipantAcceptanceDoesNotCallMediaPlane(t *testing.T) {
 	tenantID := mustTenantID(t, "11111111-1111-4111-8111-111111111111")
 	roomID := mustTenantID(t, "22222222-2222-4222-8222-222222222222")
 	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
+	operationID := mustTenantID(t, "55555555-5555-4555-8555-555555555555")
+	createdAt := time.Date(2026, 7, 13, 6, 0, 0, 0, time.UTC)
 	plane := &lifecycleMediaPlane{removeErr: mediaplane.ErrProviderFailed}
 	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/participants/"+participantID.String()+"/remove", "raw-session-token", `{"participant_session_generation":1}`)
 	request.Header.Set("Idempotency-Key", "media-remove-failure-0001")
@@ -327,19 +437,32 @@ func TestRemoveParticipantMediaFailureDoesNotBlockLifecycle(t *testing.T) {
 			return &service, nil
 		}),
 		SessionLifecycle: lifecycleService{remove: func(_ context.Context, input sessionlifecycle.RequestParticipantRemovalInput) (sessionlifecycle.Removal, error) {
-			return sessionlifecycle.Removal{Session: sessionlifecycle.Session{ID: input.SessionID}, Participant: sessionlifecycle.Participant{ID: input.ParticipantID}}, nil
+			return sessionlifecycle.Removal{
+				Session:     sessionlifecycle.Session{ID: input.SessionID},
+				Participant: sessionlifecycle.Participant{ID: input.ParticipantID, TenantID: input.TenantID, RoomID: input.RoomID, SessionID: input.SessionID, Generation: input.ParticipantGeneration, Status: sessionlifecycle.ParticipantStatusLeaving},
+				Intent:      sessionlifecycle.Intent{ID: operationID, RequestKey: input.Request.Key, IntentName: sessionlifecycle.OperationRemoveParticipant, ParticipantID: input.ParticipantID, ParticipantGeneration: input.ParticipantGeneration, Status: sessionlifecycle.IntentStatusPending, CreatedAt: createdAt},
+			}, nil
 		}},
 	}))
 
 	if res.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202; body=%s", res.Code, res.Body.String())
 	}
-	if plane.removeInput.SessionRef != sessionID.String() || plane.removeInput.ParticipantRef != participantID.String() {
-		t.Fatalf("remove input = %#v", plane.removeInput)
+	if plane.removeInput.SessionRef != "" || plane.removeInput.ParticipantRef != "" {
+		t.Fatalf("API acceptance called remove provider: %#v", plane.removeInput)
+	}
+	var body map[string]any
+	decodeJSON(t, res, &body)
+	if _, advertised := body["lifecycle_intent"]; advertised {
+		t.Fatalf("removal advertised obsolete lifecycle_intent: %#v", body)
+	}
+	operation, ok := body["external_operation"].(map[string]any)
+	if !ok || operation["id"] != operationID.String() || operation["operation_name"] != sessionlifecycle.OperationRemoveParticipant || operation["target_participant_session_id"] != participantID.String() || operation["target_participant_session_generation"] != float64(1) {
+		t.Fatalf("removal external operation = %#v", body["external_operation"])
 	}
 }
 
-func TestEndSessionMediaFailureDoesNotBlockLifecycle(t *testing.T) {
+func TestEndSessionAcceptanceDoesNotCallMediaPlane(t *testing.T) {
 	tenantID := mustTenantID(t, "11111111-1111-4111-8111-111111111111")
 	roomID := mustTenantID(t, "22222222-2222-4222-8222-222222222222")
 	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
@@ -361,8 +484,72 @@ func TestEndSessionMediaFailureDoesNotBlockLifecycle(t *testing.T) {
 	if res.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202; body=%s", res.Code, res.Body.String())
 	}
-	if plane.endInput.SessionRef != sessionID.String() {
-		t.Fatalf("end input = %#v", plane.endInput)
+	if plane.endInput.SessionRef != "" {
+		t.Fatalf("API acceptance called end provider: %#v", plane.endInput)
+	}
+}
+
+func TestTenantControlRoutesProduceExternalOperations(t *testing.T) {
+	tenantID := mustTenantID(t, "11111111-1111-4111-8111-111111111111")
+	roomID := mustTenantID(t, "22222222-2222-4222-8222-222222222222")
+	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
+	operationID := mustTenantID(t, "55555555-5555-4555-8555-555555555555")
+	createdAt := time.Date(2026, 7, 13, 6, 0, 0, 0, time.UTC)
+	service := lifecycleService{
+		transfer: func(_ context.Context, input sessionlifecycle.TransferHostInput) (sessionlifecycle.ControlRequest, error) {
+			if input.ParticipantID != participantID || input.ParticipantGeneration != 7 || input.Request.Key != "tenant-transfer-key-0001" {
+				t.Fatalf("transfer input = %#v", input)
+			}
+			return sessionlifecycle.ControlRequest{Session: sessionlifecycle.Session{ID: sessionID, Status: "active"}, Operation: sessionlifecycle.ExternalOperation{
+				ID: operationID, RequestKey: input.Request.Key, OperationName: sessionlifecycle.OperationTenantTransferHost,
+				TargetParticipantID: participantID, TargetGeneration: 7, Status: "pending", CreatedAt: createdAt,
+			}}, nil
+		},
+		deadline: func(_ context.Context, input sessionlifecycle.SetDeadlineInput) (sessionlifecycle.ControlRequest, error) {
+			if input.Deadline.UnixMilli() != time.Date(2026, 7, 13, 7, 0, 0, 0, time.UTC).UnixMilli() || input.Request.Key != "tenant-deadline-key-0001" {
+				t.Fatalf("deadline input = %#v", input)
+			}
+			return sessionlifecycle.ControlRequest{Session: sessionlifecycle.Session{ID: sessionID, Status: "active"}, Operation: sessionlifecycle.ExternalOperation{
+				ID: operationID, RequestKey: input.Request.Key, OperationName: sessionlifecycle.OperationTenantSetDeadline,
+				DeadlineGeneration: 2, Status: "pending", CreatedAt: createdAt,
+			}}, nil
+		},
+	}
+
+	transferRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/host/recover", "raw-session-token", `{"participant_session_id":"`+participantID.String()+`","participant_session_generation":7}`)
+	transferRequest.Header.Set("Idempotency-Key", "tenant-transfer-key-0001")
+	transferResponse := requestWithOptionsAndRequest(t, transferRequest, authenticatedOptions(t, httpapi.Options{SessionLifecycle: service}))
+	if transferResponse.Code != http.StatusAccepted {
+		t.Fatalf("transfer status = %d, want 202; body=%s", transferResponse.Code, transferResponse.Body.String())
+	}
+	var transferBody struct {
+		Operation struct {
+			OperationName                      string `json:"operation_name"`
+			TargetParticipantSessionID         string `json:"target_participant_session_id"`
+			TargetParticipantSessionGeneration int64  `json:"target_participant_session_generation"`
+		} `json:"external_operation"`
+	}
+	decodeJSON(t, transferResponse, &transferBody)
+	if transferBody.Operation.OperationName != sessionlifecycle.OperationTenantTransferHost || transferBody.Operation.TargetParticipantSessionID != participantID.String() || transferBody.Operation.TargetParticipantSessionGeneration != 7 {
+		t.Fatalf("transfer response = %#v", transferBody)
+	}
+
+	deadlineRequest := bearerRequestWithBody(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/rooms/"+roomID.String()+"/sessions/"+sessionID.String()+"/deadline", "raw-session-token", `{"deadline_at":"2026-07-13T07:00:00Z"}`)
+	deadlineRequest.Header.Set("Idempotency-Key", "tenant-deadline-key-0001")
+	deadlineResponse := requestWithOptionsAndRequest(t, deadlineRequest, authenticatedOptions(t, httpapi.Options{SessionLifecycle: service}))
+	if deadlineResponse.Code != http.StatusAccepted {
+		t.Fatalf("deadline status = %d, want 202; body=%s", deadlineResponse.Code, deadlineResponse.Body.String())
+	}
+	var deadlineBody struct {
+		Operation struct {
+			OperationName      string `json:"operation_name"`
+			DeadlineGeneration int64  `json:"deadline_generation"`
+		} `json:"external_operation"`
+	}
+	decodeJSON(t, deadlineResponse, &deadlineBody)
+	if deadlineBody.Operation.OperationName != sessionlifecycle.OperationTenantSetDeadline || deadlineBody.Operation.DeadlineGeneration != 2 {
+		t.Fatalf("deadline response = %#v", deadlineBody)
 	}
 }
 

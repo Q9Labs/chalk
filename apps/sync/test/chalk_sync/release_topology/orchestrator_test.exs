@@ -175,7 +175,7 @@ defmodule ChalkSync.ReleaseTopology.OrchestratorTest do
         "release_artifact_sha256" => String.duplicate("a", 64),
         "configuration_sha256" => String.duplicate("b", 64),
         "topology_sha256" => String.duplicate("c", 64),
-        "protocol_version" => 2
+        "protocol_version" => 3
       },
       "topology_check" => action("topology", "confirmed"),
       "breaker" => %{"argv" => ["breaker_control"], "timeout_ms" => 1_000},

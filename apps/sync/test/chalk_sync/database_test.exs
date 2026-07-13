@@ -14,6 +14,7 @@ defmodule ChalkSync.DatabaseTest do
     assert options[:username] == "postgres"
     assert options[:password] == "p@ss"
     assert options[:database] == "chalk_sync_overhaul"
+    assert options[:types] == ChalkSync.PostgresTypes
     refute options[:ssl]
   end
 

@@ -69,6 +69,42 @@ defmodule ChalkSync.ScriptedStateholder do
   @impl ChalkSync.Stateholder
   def pending_lifecycle_intents(_limit), do: {:ok, []}
 
+  @impl ChalkSync.Stateholder
+  def begin_operation(_identity, _operation), do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def begin_internal_operation(_session, _operation),
+    do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def claim_operations(_limit), do: {:ok, []}
+
+  @impl ChalkSync.Stateholder
+  def claim_local_operations(_limit), do: {:ok, []}
+
+  @impl ChalkSync.Stateholder
+  def read_operation(_session, _external_operation_id), do: :not_found
+
+  @impl ChalkSync.Stateholder
+  def finalize_operation(_session, _external_operation_id, _outcome),
+    do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def participant_authority(_session, _participant_session_id, _expected_generation),
+    do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def reserve_publication_grant(_identity, _operation_id, _source),
+    do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def complete_publication_grant(_session, _reservation_id, _outcome),
+    do: {:retryable, :dependency_unavailable}
+
+  @impl ChalkSync.Stateholder
+  def begin_role_transition(_identity, _command, _publications),
+    do: {:retryable, :dependency_unavailable}
+
   @impl GenServer
   def init(_opts) do
     {:ok, initial_state()}

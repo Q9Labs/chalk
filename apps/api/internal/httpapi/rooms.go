@@ -101,8 +101,12 @@ type updateRoomRequest struct {
 }
 
 type createRoomSessionRequest struct {
-	Metadata  utilities.OptionalJSON `json:"metadata"`
-	StartedAt *time.Time             `json:"started_at"`
+	Metadata               utilities.OptionalJSON `json:"metadata"`
+	StartedAt              *time.Time             `json:"started_at"`
+	AdmissionPolicy        string                 `json:"admission_policy"`
+	HostExitPolicy         string                 `json:"host_exit_policy"`
+	RoleCapabilities       map[string][]string    `json:"role_capabilities"`
+	MaximumDurationSeconds int32                  `json:"maximum_duration_seconds"`
 }
 
 type updateRoomSessionRequest struct {

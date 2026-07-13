@@ -16,6 +16,16 @@ var (
 	ErrInvalidParticipantID               = errors.New("invalid lifecycle participant id")
 	ErrInvalidParticipantGeneration       = errors.New("invalid lifecycle participant generation")
 	ErrInvalidParticipantName             = errors.New("invalid lifecycle participant name")
+	ErrInvalidAdmissionPolicy             = errors.New("invalid lifecycle admission policy")
+	ErrInvalidHostExitPolicy              = errors.New("invalid lifecycle host exit policy")
+	ErrInvalidRoleCapabilities            = errors.New("invalid lifecycle role capabilities")
+	ErrInvalidMaximumDuration             = errors.New("invalid lifecycle maximum duration")
+	ErrInvalidMaximumDurationCeiling      = errors.New("invalid lifecycle maximum duration ceiling")
+	ErrInvalidDeadline                    = errors.New("invalid lifecycle deadline")
+	ErrDeadlineExceedsCeiling             = errors.New("lifecycle deadline exceeds the server ceiling")
+	ErrInvalidInitialRole                 = errors.New("invalid lifecycle initial role")
+	ErrInvalidEligibleRoles               = errors.New("invalid lifecycle eligible roles")
+	ErrAdmissionClosed                    = errors.New("lifecycle admission is closed")
 	ErrInvalidInitialControlState         = errors.New("invalid initial control state")
 	ErrInvalidInitialControlSchemaVersion = errors.New("invalid initial control schema version")
 	ErrInvalidInitialControlSnapshotBytes = errors.New("invalid initial control snapshot bytes")
@@ -27,6 +37,9 @@ var (
 	ErrParticipantNotFound                = errors.New("lifecycle participant not found")
 	ErrParticipantNotActive               = errors.New("lifecycle participant is not active")
 	ErrParticipantGenerationMismatch      = errors.New("lifecycle participant generation mismatch")
+	ErrHostRecoveryTargetIneligible       = errors.New("lifecycle host recovery target is ineligible")
+	ErrDeadlineChangePending              = errors.New("lifecycle deadline change is already pending")
+	ErrSessionControlBusy                 = errors.New("lifecycle session control is busy")
 	ErrIdempotencyConflict                = errors.New("lifecycle request key conflicts with original request")
 	ErrCapacityExceeded                   = errors.New("lifecycle capacity exceeded")
 	ErrSessionAlreadyExists               = errors.New("lifecycle session already exists")
@@ -43,10 +56,14 @@ const (
 	ParticipantStatusLeaving = "leaving"
 	ParticipantStatusLeft    = "left"
 
-	IntentParticipantJoined = "participant_joined"
-	IntentParticipantLeft   = "participant_left"
-	IntentSessionEnded      = "session_ended"
-	IntentStatusPending     = "pending"
+	IntentParticipantJoined         = "participant_joined"
+	IntentAdmissionRequested        = "admission_requested"
+	IntentStatusPending             = "pending"
+	OperationTenantTransferHost     = "tenant_transfer_host"
+	OperationTenantSetDeadline      = "tenant_set_deadline"
+	OperationTenantEndSession       = "tenant_end_session"
+	OperationMaximumDurationExpired = "maximum_duration_expired"
+	OperationRemoveParticipant      = "remove_participant"
 
 	LifecycleReservationBytes           int64 = 16 * 1024
 	ParticipantSnapshotReservationBytes int64 = 2 * 1024
@@ -54,6 +71,9 @@ const (
 	MaximumParticipantNameBytes               = 256
 	MaximumActiveParticipantSessions    int64 = 500
 	MaximumSnapshotBytes                int64 = 1024 * 1024
+	AdmissionRequestLifetime                  = 5 * time.Minute
+	MinimumSessionDurationSeconds       int32 = 60
+	MaximumSessionDurationSeconds       int32 = 7 * 24 * 60 * 60
 )
 
 type Repository interface {
@@ -61,6 +81,11 @@ type Repository interface {
 	AdmitParticipant(context.Context, AdmitParticipantInput) (Admission, error)
 	RequestParticipantRemoval(context.Context, RequestParticipantRemovalInput) (Removal, error)
 	RequestSessionEnd(context.Context, RequestSessionEndInput) (EndRequest, error)
+}
+
+type ControlRepository interface {
+	TransferHost(context.Context, TransferHostInput) (ControlRequest, error)
+	SetDeadline(context.Context, SetDeadlineInput) (ControlRequest, error)
 }
 
 type Service struct {
@@ -71,20 +96,24 @@ type InitialControlState struct {
 	FoldedState   json.RawMessage
 	Digest        [32]byte
 	SchemaVersion int32
-	// SnapshotBytes comes from the canonical v2 encoder. The lifecycle service
-	// preserves this value because canonicalization does not belong in Go yet.
 	SnapshotBytes int64
 }
 
 type CreateSessionInput struct {
-	ID              utilities.ID
-	TenantID        utilities.ID
-	RoomID          utilities.ID
-	Metadata        json.RawMessage
-	CreatedByUserID utilities.ID
-	StartedAt       *time.Time
-	InitialControl  InitialControlState
-	Request         Request
+	ID                            utilities.ID
+	TenantID                      utilities.ID
+	RoomID                        utilities.ID
+	Metadata                      json.RawMessage
+	CreatedByUserID               utilities.ID
+	StartedAt                     *time.Time
+	AdmissionPolicy               string
+	HostExitPolicy                string
+	RoleCapabilities              map[string][]string
+	MaximumDurationSeconds        int32
+	MaximumDurationCeilingSeconds int32
+	DeadlineAt                    time.Time
+	InitialControl                InitialControlState
+	Request                       Request
 }
 
 type Request struct {
@@ -110,7 +139,8 @@ type AdmitParticipantInput struct {
 	ParticipantID utilities.ID
 	Name          string
 	Metadata      json.RawMessage
-	Capabilities  []string
+	InitialRole   string
+	EligibleRoles []string
 	UserID        utilities.ID
 	Request       Request
 }
@@ -128,6 +158,23 @@ type RequestSessionEndInput struct {
 	TenantID  utilities.ID
 	RoomID    utilities.ID
 	SessionID utilities.ID
+	Request   Request
+}
+
+type TransferHostInput struct {
+	TenantID              utilities.ID
+	RoomID                utilities.ID
+	SessionID             utilities.ID
+	ParticipantID         utilities.ID
+	ParticipantGeneration int64
+	Request               Request
+}
+
+type SetDeadlineInput struct {
+	TenantID  utilities.ID
+	RoomID    utilities.ID
+	SessionID utilities.ID
+	Deadline  time.Time
 	Request   Request
 }
 
@@ -162,9 +209,17 @@ type Intent struct {
 }
 
 type Admission struct {
-	Session     Session
-	Participant Participant
-	Intent      Intent
+	Session          Session
+	Participant      Participant
+	Intent           Intent
+	JoinIntent       Intent
+	AdmissionRequest *AdmissionRequest
+}
+
+type AdmissionRequest struct {
+	ID        utilities.ID
+	Status    string
+	ExpiresAt time.Time
 }
 
 type Removal struct {
@@ -176,6 +231,22 @@ type Removal struct {
 type EndRequest struct {
 	Session Session
 	Intent  Intent
+}
+
+type ExternalOperation struct {
+	ID                  utilities.ID
+	RequestKey          string
+	OperationName       string
+	TargetParticipantID utilities.ID
+	TargetGeneration    int64
+	DeadlineGeneration  int64
+	Status              string
+	CreatedAt           time.Time
+}
+
+type ControlRequest struct {
+	Session   Session
+	Operation ExternalOperation
 }
 
 func NewService(repository Repository) Service {
@@ -226,4 +297,28 @@ func (s Service) RequestSessionEnd(ctx context.Context, input RequestSessionEndI
 	}
 
 	return s.repository.RequestSessionEnd(ctx, input)
+}
+
+func (s Service) TransferHost(ctx context.Context, input TransferHostInput) (ControlRequest, error) {
+	if err := prepareTransferHostInput(&input); err != nil {
+		return ControlRequest{}, err
+	}
+
+	repository, ok := s.repository.(ControlRepository)
+	if !ok {
+		return ControlRequest{}, errors.New("tenant control repository is unavailable")
+	}
+	return repository.TransferHost(ctx, input)
+}
+
+func (s Service) SetDeadline(ctx context.Context, input SetDeadlineInput) (ControlRequest, error) {
+	if err := prepareSetDeadlineInput(&input); err != nil {
+		return ControlRequest{}, err
+	}
+
+	repository, ok := s.repository.(ControlRepository)
+	if !ok {
+		return ControlRequest{}, errors.New("tenant control repository is unavailable")
+	}
+	return repository.SetDeadline(ctx, input)
 }

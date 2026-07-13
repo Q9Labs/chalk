@@ -35,7 +35,7 @@ defmodule ChalkSync.TestWSClient do
     send_frame(client, {:text, JSON.encode!(map)})
   end
 
-  @doc "Acknowledges a snapshot welcome or fully applied replay page on the real v2 wire."
+  @doc "Acknowledges a snapshot welcome or fully applied replay page on the strict recovery wire."
   def acknowledge_recovery(
         %__MODULE__{} = client,
         %{"type" => "welcome", "mode" => "snapshot"} = frame

@@ -36,7 +36,8 @@ type Input struct {
 	ParticipantGeneration      int64
 	AdmissionLifecycleIntentID utilities.ID
 	DisplayName                string
-	Capabilities               []string
+	InitialRole                string
+	EligibleRoles              []string
 }
 
 type Token struct {
@@ -97,9 +98,11 @@ func (b Broker) IssueForParticipant(ctx context.Context, key SubjectKey) (Token,
 }
 
 func (s Service) Issue(_ context.Context, input Input) (Token, error) {
-	if input.TenantID.IsZero() || input.RoomID.IsZero() || input.SessionID.IsZero() || input.ParticipantID.IsZero() || input.AdmissionLifecycleIntentID.IsZero() || input.ParticipantGeneration <= 0 || !validDisplayName(input.DisplayName) || !validCapabilities(input.Capabilities) {
+	eligibleRoles, ok := canonicalAuthorityEnvelope(input.InitialRole, input.EligibleRoles)
+	if input.TenantID.IsZero() || input.RoomID.IsZero() || input.SessionID.IsZero() || input.ParticipantID.IsZero() || input.AdmissionLifecycleIntentID.IsZero() || input.ParticipantGeneration <= 0 || !validDisplayName(input.DisplayName) || !ok {
 		return Token{}, ErrInvalidInput
 	}
+	input.EligibleRoles = eligibleRoles
 
 	now := s.config.Now().UTC().Truncate(time.Second)
 	expiresAt := now.Add(Lifetime)
@@ -128,7 +131,8 @@ func (s Service) Issue(_ context.Context, input Input) (Token, error) {
 		"participant_session_generation": input.ParticipantGeneration,
 		"admission_lifecycle_intent_id":  input.AdmissionLifecycleIntentID.String(),
 		"display_name":                   input.DisplayName,
-		"capabilities":                   append([]string(nil), input.Capabilities...),
+		"initial_role":                   input.InitialRole,
+		"eligible_roles":                 append([]string(nil), input.EligibleRoles...),
 	})
 	if err != nil {
 		return Token{}, fmt.Errorf("encode sync token claims: %w", err)
@@ -143,21 +147,35 @@ func validDisplayName(value string) bool {
 	return value != "" && utf8.ValidString(value) && len(value) <= 256
 }
 
-func validCapabilities(values []string) bool {
-	if len(values) > 32 {
-		return false
+func canonicalAuthorityEnvelope(initialRole string, eligibleRoles []string) ([]string, bool) {
+	roles := map[string]struct{}{"host": {}, "cohost": {}, "participant": {}}
+	if _, ok := roles[initialRole]; !ok || len(eligibleRoles) == 0 || len(eligibleRoles) > len(roles) {
+		return nil, false
 	}
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		if value == "" || len(value) > 64 || !utf8.ValidString(value) {
-			return false
+	seen := make(map[string]struct{}, len(eligibleRoles))
+	for _, role := range eligibleRoles {
+		if _, ok := roles[role]; !ok {
+			return nil, false
 		}
-		if _, exists := seen[value]; exists {
-			return false
+		if _, exists := seen[role]; exists {
+			return nil, false
 		}
-		seen[value] = struct{}{}
+		seen[role] = struct{}{}
 	}
-	return true
+	if _, ok := seen[initialRole]; !ok {
+		return nil, false
+	}
+	_, cohostEligible := seen["cohost"]
+	if initialRole == "host" && !cohostEligible {
+		return nil, false
+	}
+	result := make([]string, 0, len(seen))
+	for _, role := range []string{"host", "cohost", "participant"} {
+		if _, ok := seen[role]; ok {
+			result = append(result, role)
+		}
+	}
+	return result, true
 }
 
 func encode(value any) (string, error) {

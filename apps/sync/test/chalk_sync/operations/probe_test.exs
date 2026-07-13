@@ -8,10 +8,19 @@ defmodule ChalkSync.Operations.ProbeTest do
     previous_verifier = Application.fetch_env!(:chalk_sync, :token_verifier)
     previous_requirement = Application.fetch_env!(:chalk_sync, :require_production_auth)
 
+    previous_poll_interval =
+      Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms)
+
     on_exit(fn ->
       Application.put_env(:chalk_sync, :stateholder, previous_stateholder)
       Application.put_env(:chalk_sync, :token_verifier, previous_verifier)
       Application.put_env(:chalk_sync, :require_production_auth, previous_requirement)
+
+      Application.put_env(
+        :chalk_sync,
+        :external_operation_poll_interval_ms,
+        previous_poll_interval
+      )
     end)
 
     :ok
@@ -33,11 +42,12 @@ defmodule ChalkSync.Operations.ProbeTest do
   end
 
   test "requires the declared PostgreSQL durability settings" do
-    required_migration = Application.fetch_env!(:chalk_sync, :required_sync_migration)
+    minimum_migration =
+      Application.fetch_env!(:chalk_sync, :minimum_compatible_sync_migration)
 
     observations = %{
       writable_primary: true,
-      migration_version: required_migration,
+      migration_version: minimum_migration,
       server_version_num: 180_000,
       fsync: "on",
       full_page_writes: "on",
@@ -54,7 +64,12 @@ defmodule ChalkSync.Operations.ProbeTest do
 
     assert Probe.validate_database(%{
              observations
-             | migration_version: required_migration - 100_000
+             | migration_version: minimum_migration + 100_000
+           }) == :ok
+
+    assert Probe.validate_database(%{
+             observations
+             | migration_version: minimum_migration - 100_000
            }) ==
              {:error, :incompatible_database_migration}
 
@@ -68,5 +83,42 @@ defmodule ChalkSync.Operations.ProbeTest do
       assert Probe.validate_database(Map.put(observations, setting, "off")) ==
                {:error, :unsafe_database_durability}
     end
+  end
+
+  test "rejects an unavailable, initializing, or stale external operation consumer" do
+    assert Probe.validate_external_operation_health(%{consecutive_failures: 2}, false) ==
+             {:error, :external_operation_consumer_unavailable}
+
+    assert Probe.validate_external_operation_health(
+             %{consecutive_failures: 0, last_success_at_ms: nil},
+             false
+           ) ==
+             {:error, :external_operation_consumer_initializing}
+
+    stale_at =
+      System.monotonic_time(:millisecond) -
+        Probe.external_operation_staleness_timeout_ms() - 1
+
+    assert Probe.validate_external_operation_health(
+             %{consecutive_failures: 0, last_success_at_ms: stale_at},
+             false
+           ) ==
+             {:error, :external_operation_consumer_stale}
+
+    assert Probe.validate_external_operation_health(
+             %{consecutive_failures: 0, last_success_at_ms: stale_at},
+             true
+           ) == :ok
+  end
+
+  test "derives external operation staleness from the poll interval within bounds" do
+    Application.put_env(:chalk_sync, :external_operation_poll_interval_ms, 100)
+    assert Probe.external_operation_staleness_timeout_ms() == 2_000
+
+    Application.put_env(:chalk_sync, :external_operation_poll_interval_ms, 10_000)
+    assert Probe.external_operation_staleness_timeout_ms() == 30_000
+
+    Application.put_env(:chalk_sync, :external_operation_poll_interval_ms, 5_000)
+    assert Probe.external_operation_staleness_timeout_ms() == 15_000
   end
 end

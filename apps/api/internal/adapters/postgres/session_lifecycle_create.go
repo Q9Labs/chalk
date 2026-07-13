@@ -3,8 +3,10 @@ package postgres
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -46,14 +48,32 @@ func (r SessionLifecycleRepository) CreateSession(ctx context.Context, input ses
 		if err != nil {
 			return fmt.Errorf("reserve session create request: %w", err)
 		}
+		input.DeadlineAt = timestamp(request.CreatedAt).UTC().Truncate(time.Millisecond).Add(time.Duration(input.MaximumDurationSeconds) * time.Second)
+		input.InitialControl, err = sessionlifecycle.NewInitialControlState(sessionlifecycle.InitialControlPolicy{
+			AdmissionPolicy: input.AdmissionPolicy, HostExitPolicy: input.HostExitPolicy,
+			RoleCapabilities: input.RoleCapabilities, MaximumDurationSeconds: input.MaximumDurationSeconds,
+			MaximumDurationCeilingSeconds: input.MaximumDurationCeilingSeconds, DeadlineAt: input.DeadlineAt,
+		})
+		if err != nil {
+			return err
+		}
 
+		roleCapabilities, err := json.Marshal(input.RoleCapabilities)
+		if err != nil {
+			return fmt.Errorf("encode lifecycle role capabilities: %w", err)
+		}
 		session, err := queries.CreateLifecycleRoomSession(ctx, sqlc.CreateLifecycleRoomSessionParams{
-			ID:              uuid(input.ID),
-			Metadata:        jsonBytes(input.Metadata),
-			CreatedByUserID: uuid(input.CreatedByUserID),
-			StartedAt:       timestamptz(input.StartedAt),
-			TenantID:        uuid(input.TenantID),
-			RoomID:          uuid(input.RoomID),
+			ID:                            uuid(input.ID),
+			Metadata:                      jsonBytes(input.Metadata),
+			CreatedByUserID:               uuid(input.CreatedByUserID),
+			StartedAt:                     timestamptz(input.StartedAt),
+			TenantID:                      uuid(input.TenantID),
+			RoomID:                        uuid(input.RoomID),
+			HostExitPolicy:                input.HostExitPolicy,
+			RoleCapabilities:              roleCapabilities,
+			MaximumDurationSeconds:        input.MaximumDurationSeconds,
+			MaximumDurationCeilingSeconds: input.MaximumDurationCeilingSeconds,
+			DeadlineAt:                    timestamptz(&input.DeadlineAt),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return sessionlifecycle.ErrRoomNotFound
@@ -102,8 +122,9 @@ func (r SessionLifecycleRepository) CreateSession(ctx context.Context, input ses
 func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input sessionlifecycle.AdmitParticipantInput) (sessionlifecycle.Admission, error) {
 	var result sessionlifecycle.Admission
 
-		if err := lockLifecycleControl(ctx, queries, input.TenantID, input.RoomID, input.SessionID); err != nil {
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		control, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.RoomID, input.SessionID)
+		if err != nil {
 			return err
 		}
 		intent, err := queries.LockLifecycleIntentForRequestForUpdate(ctx, lifecycleIntentRequestParams(input, sessionlifecycle.IntentParticipantJoined))
@@ -113,7 +134,12 @@ func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("lock participant admission intent: %w", err)
 		}
-
+		var authority struct {
+			AdmissionPolicy string `json:"admission_policy"`
+		}
+		if err := json.Unmarshal(control.FoldedState, &authority); err != nil {
+			return fmt.Errorf("decode lifecycle admission policy: %w", err)
+		}
 		session, err := lockLifecycleSession(ctx, queries, input.TenantID, input.RoomID, input.SessionID)
 		if err != nil {
 			return err
@@ -123,6 +149,16 @@ func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		}
 
 		payload := input.Request.Payload()
+		switch authority.AdmissionPolicy {
+		case "open":
+		case "approval":
+			return createApprovalAdmission(ctx, queries, tx, input, session, payload, &result)
+		case "closed":
+			return sessionlifecycle.ErrAdmissionClosed
+		default:
+			return sessionlifecycle.ErrInvalidAdmissionPolicy
+		}
+
 		if _, err := queries.ReserveParticipantAdmission(ctx, sqlc.ReserveParticipantAdmissionParams{
 			SnapshotReservationBytes: sessionlifecycle.ParticipantSnapshotReservationBytes,
 			ReservationBytes:         sessionlifecycle.LifecycleReservationBytes,
@@ -138,14 +174,10 @@ func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		}
 
 		participant, err := queries.CreateLifecycleParticipant(ctx, sqlc.CreateLifecycleParticipantParams{
-			ID:           uuid(input.ParticipantID),
-			Name:         pgtype.Text{String: input.Name, Valid: true},
-			Metadata:     jsonBytes(input.Metadata),
-			Capabilities: input.Capabilities,
-			TenantID:     uuid(input.TenantID),
-			RoomID:       uuid(input.RoomID),
-			SessionID:    uuid(input.SessionID),
-			UserID:       uuid(input.UserID),
+			ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true},
+			Metadata: jsonBytes(input.Metadata), InitialRole: input.InitialRole,
+			EligibleRoles: append([]string(nil), input.EligibleRoles...), TenantID: uuid(input.TenantID),
+			RoomID: uuid(input.RoomID), SessionID: uuid(input.SessionID), UserID: uuid(input.UserID),
 		})
 		if err != nil {
 			return fmt.Errorf("create lifecycle participant: %w", err)
@@ -154,6 +186,13 @@ func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		intentID, err := utilities.NewID()
 		if err != nil {
 			return fmt.Errorf("create lifecycle intent id: %w", err)
+		}
+		journey, err := lifecycleJourneyFromContext(ctx)
+		if err != nil {
+			return err
+		}
+		if err := persistLifecycleJourneyRoot(ctx, tx, journey, "participant.admission_requested"); err != nil {
+			return err
 		}
 		intent, err = queries.CreateLifecycleIntent(ctx, sqlc.CreateLifecycleIntentParams{
 			TenantID:                     uuid(input.TenantID),
@@ -166,6 +205,10 @@ func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 			ParticipantSessionID:         uuid(input.ParticipantID),
 			ParticipantSessionGeneration: pgtype.Int8{Int64: participant.Generation, Valid: true},
 			Payload:                      jsonBytes(payload),
+			JourneyID:                    uuid(journey.JourneyID),
+			ParentJourneyEventID:         uuid(journey.ParentEventID),
+			ProducingTraceID:             optionalText(journey.TraceID),
+			ProducingSpanID:              optionalText(journey.SpanID),
 		})
 		if err != nil {
 			return fmt.Errorf("create participant admission intent: %w", err)
@@ -175,6 +218,7 @@ func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 			Session:     mapLifecycleSession(session),
 			Participant: mapLifecycleParticipant(participant),
 			Intent:      mapLifecycleIntent(intent),
+			JoinIntent:  mapLifecycleIntent(intent),
 		}
 		return nil
 	})
@@ -183,6 +227,108 @@ func (r SessionLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 	}
 
 	return result, nil
+}
+
+func createApprovalAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, input sessionlifecycle.AdmitParticipantInput, session sqlc.RoomSession, joinPayload []byte, result *sessionlifecycle.Admission) error {
+	admissionRequestID, err := utilities.NewID()
+	if err != nil {
+		return fmt.Errorf("create admission request id: %w", err)
+	}
+	requestedIntentID, err := utilities.NewID()
+	if err != nil {
+		return fmt.Errorf("create admission requested intent id: %w", err)
+	}
+	joinIntentID, err := utilities.NewID()
+	if err != nil {
+		return fmt.Errorf("create deferred participant join intent id: %w", err)
+	}
+	expiresAt := time.Now().UTC().Add(sessionlifecycle.AdmissionRequestLifetime).Truncate(time.Millisecond)
+	requestedPayload, err := json.Marshal(struct {
+		AdmissionRequestID   string   `json:"admission_request_id"`
+		ParticipantSessionID string   `json:"participant_session_id"`
+		DisplayName          string   `json:"display_name"`
+		InitialRole          string   `json:"initial_role"`
+		EligibleRoles        []string `json:"eligible_roles"`
+		ExpiresAtMillis      int64    `json:"expires_at_ms"`
+	}{
+		AdmissionRequestID: admissionRequestID.String(), ParticipantSessionID: input.ParticipantID.String(),
+		DisplayName: input.Name, InitialRole: input.InitialRole, EligibleRoles: input.EligibleRoles,
+		ExpiresAtMillis: expiresAt.UnixMilli(),
+	})
+	if err != nil {
+		return fmt.Errorf("encode admission requested payload: %w", err)
+	}
+
+	if _, err := queries.ReserveApprovalAdmission(ctx, sqlc.ReserveApprovalAdmissionParams{
+		SnapshotReservationBytes: sessionlifecycle.ParticipantSnapshotReservationBytes,
+		ReservationBytes:         sessionlifecycle.LifecycleReservationBytes,
+		RequestedPayloadBytes:    int64(len(requestedPayload)),
+		JoinPayloadBytes:         int64(len(joinPayload)),
+		TenantID:                 uuid(input.TenantID),
+		RoomID:                   uuid(input.RoomID),
+		SessionID:                uuid(input.SessionID),
+		MaxActiveParticipants:    sessionlifecycle.MaximumActiveParticipantSessions,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return sessionlifecycle.ErrCapacityExceeded
+	} else if err != nil {
+		return fmt.Errorf("reserve approval admission capacity: %w", err)
+	}
+
+	participant, err := queries.CreateLifecycleParticipant(ctx, sqlc.CreateLifecycleParticipantParams{
+		ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true},
+		Metadata: jsonBytes(input.Metadata), InitialRole: input.InitialRole,
+		EligibleRoles: append([]string(nil), input.EligibleRoles...), TenantID: uuid(input.TenantID),
+		RoomID: uuid(input.RoomID), SessionID: uuid(input.SessionID), UserID: uuid(input.UserID),
+	})
+	if err != nil {
+		return fmt.Errorf("create approval lifecycle participant: %w", err)
+	}
+
+	journey, err := lifecycleJourneyFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	if err := persistLifecycleJourneyRoot(ctx, tx, journey, "participant.admission_requested"); err != nil {
+		return err
+	}
+	requestedIntent, err := queries.CreateLifecycleIntent(ctx, sqlc.CreateLifecycleIntentParams{
+		TenantID: uuid(input.TenantID), RoomID: uuid(input.RoomID), SessionID: uuid(input.SessionID),
+		LifecycleIntentID: uuid(requestedIntentID), RequestKey: input.Request.Key,
+		RequestFingerprint: input.Request.Fingerprint[:], IntentName: sessionlifecycle.IntentAdmissionRequested,
+		Payload: jsonBytes(requestedPayload), JourneyID: uuid(journey.JourneyID), ParentJourneyEventID: uuid(journey.ParentEventID),
+		ProducingTraceID: optionalText(journey.TraceID), ProducingSpanID: optionalText(journey.SpanID),
+	})
+	if err != nil {
+		return fmt.Errorf("create admission requested intent: %w", err)
+	}
+	joinIntent, err := queries.CreateDeferredLifecycleIntent(ctx, sqlc.CreateDeferredLifecycleIntentParams{
+		TenantID: uuid(input.TenantID), RoomID: uuid(input.RoomID), SessionID: uuid(input.SessionID),
+		LifecycleIntentID: uuid(joinIntentID), RequestKey: input.Request.Key,
+		RequestFingerprint: input.Request.Fingerprint[:], IntentName: sessionlifecycle.IntentParticipantJoined,
+		ParticipantSessionID: uuid(input.ParticipantID), ParticipantSessionGeneration: pgtype.Int8{Int64: participant.Generation, Valid: true},
+		Payload: jsonBytes(joinPayload), JourneyID: uuid(journey.JourneyID), ParentJourneyEventID: uuid(journey.ParentEventID),
+		ProducingTraceID: optionalText(journey.TraceID), ProducingSpanID: optionalText(journey.SpanID),
+	})
+	if err != nil {
+		return fmt.Errorf("create deferred participant join intent: %w", err)
+	}
+	admissionRequest, err := queries.CreateAdmissionRequest(ctx, sqlc.CreateAdmissionRequestParams{
+		TenantID: uuid(input.TenantID), RoomID: uuid(input.RoomID), SessionID: uuid(input.SessionID),
+		AdmissionRequestID: uuid(admissionRequestID), RequestKey: input.Request.Key,
+		RequestFingerprint: input.Request.Fingerprint[:], ParticipantSessionID: uuid(input.ParticipantID),
+		DisplayName: input.Name, InitialRole: input.InitialRole, EligibleRoles: append([]string(nil), input.EligibleRoles...),
+		ExpiresAt: timestamptz(&expiresAt),
+	})
+	if err != nil {
+		return fmt.Errorf("create admission request: %w", err)
+	}
+
+	*result = sessionlifecycle.Admission{
+		Session: mapLifecycleSession(session), Participant: mapLifecycleParticipant(participant),
+		Intent: mapLifecycleIntent(requestedIntent), JoinIntent: mapLifecycleIntent(joinIntent),
+		AdmissionRequest: mapAdmissionRequest(admissionRequest),
+	}
+	return nil
 }
 
 func resolveAdmissionRetry(ctx context.Context, queries *sqlc.Queries, input sessionlifecycle.AdmitParticipantInput, intent sqlc.SyncLifecycleIntent, result *sessionlifecycle.Admission) error {
@@ -199,12 +345,37 @@ func resolveAdmissionRetry(ctx context.Context, queries *sqlc.Queries, input ses
 		return err
 	}
 
-	*result = sessionlifecycle.Admission{
+	admission := sessionlifecycle.Admission{
 		Session:     mapLifecycleSession(session),
 		Participant: mapLifecycleParticipant(participant),
 		Intent:      mapLifecycleIntent(intent),
+		JoinIntent:  mapLifecycleIntent(intent),
 	}
+	request, err := queries.LockAdmissionRequestForParticipant(ctx, sqlc.LockAdmissionRequestForParticipantParams{
+		TenantID: uuid(input.TenantID), RoomID: uuid(input.RoomID), SessionID: uuid(input.SessionID),
+		ParticipantSessionID: participant.ID,
+	})
+	if err == nil {
+		if !bytes.Equal(request.RequestFingerprint, input.Request.Fingerprint[:]) {
+			return sessionlifecycle.ErrIdempotencyConflict
+		}
+		requestedIntent, err := queries.LockLifecycleIntentForRequestForUpdate(ctx, lifecycleIntentRequestParams(input, sessionlifecycle.IntentAdmissionRequested))
+		if err != nil {
+			return fmt.Errorf("lock admission requested intent: %w", err)
+		}
+		admission.Intent = mapLifecycleIntent(requestedIntent)
+		admission.AdmissionRequest = mapAdmissionRequest(request)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lock admission request: %w", err)
+	}
+	*result = admission
 	return nil
+}
+
+func mapAdmissionRequest(row sqlc.SyncAdmissionRequest) *sessionlifecycle.AdmissionRequest {
+	return &sessionlifecycle.AdmissionRequest{
+		ID: utilities.IDFromBytes(row.AdmissionRequestID.Bytes), Status: row.Status, ExpiresAt: timestamp(row.ExpiresAt),
+	}
 }
 
 func lifecycleIntentRequestParams(input sessionlifecycle.AdmitParticipantInput, intentName string) sqlc.LockLifecycleIntentForRequestForUpdateParams {

@@ -1,51 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { SyncPersistenceError } from "./index";
-import { AsyncStoragePendingCommandStore, createReactNativeSyncLifecycle, createReactNativeWebSocketFactory } from "./react-native";
-import type { PendingCommand } from "./types";
-
-const firstCommand: PendingCommand = {
-  commandId: "command-00000001",
-  command: { name: "raise_hand" },
-  createdAt: 2,
-  bytes: 42,
-};
-
-const secondCommand: PendingCommand = {
-  commandId: "command-00000002",
-  command: { name: "lower_hand" },
-  createdAt: 1,
-  bytes: 42,
-};
-
-describe("React Native pending-command storage", () => {
-  it("serializes concurrent writes, survives a new store instance, and returns isolated records", async () => {
-    const storage = new TestAsyncStorage();
-    const store = new AsyncStoragePendingCommandStore({ scope: "session-1", storage });
-
-    await Promise.all([store.put(firstCommand), store.put(secondCommand)]);
-    const loaded = await store.load();
-
-    expect(loaded.map((command) => command.commandId)).toEqual([secondCommand.commandId, firstCommand.commandId]);
-    (loaded[0] as { commandId: string }).commandId = "mutated-command-id";
-    expect((await new AsyncStoragePendingCommandStore({ scope: "session-1", storage }).load()).map((command) => command.commandId)).toEqual([secondCommand.commandId, firstCommand.commandId]);
-
-    await store.remove(firstCommand.commandId);
-    await store.remove(secondCommand.commandId);
-    expect(storage.values.size).toBe(0);
-  });
-
-  it("rejects invalid persisted data without treating it as a new pending queue", async () => {
-    const storage = new TestAsyncStorage();
-    storage.values.set("chalk-sync-v2:pending-commands:session-1", "not JSON");
-    const store = new AsyncStoragePendingCommandStore({ scope: "session-1", storage });
-
-    await expect(store.load()).rejects.toBeInstanceOf(SyncPersistenceError);
-  });
-});
+import { createReactNativeSyncLifecycle, createReactNativeWebSocketFactory } from "./react-native";
 
 describe("React Native sync boundaries", () => {
   it("adapts property-based WebSocket callbacks and preserves close codes", () => {
-    const socket = createReactNativeWebSocketFactory(TestReactNativeWebSocket).connect("wss://sync.test/v2/sync");
+    const socket = createReactNativeWebSocketFactory(TestReactNativeWebSocket).connect("wss://sync.test/v3/sync");
     const events: string[] = [];
     socket.onopen = () => events.push("open");
     socket.onmessage = (event) => events.push(`message:${String(event.data)}`);
@@ -83,22 +41,6 @@ describe("React Native sync boundaries", () => {
     expect(networkInfo.removed).toBe(true);
   });
 });
-
-class TestAsyncStorage {
-  readonly values = new Map<string, string>();
-
-  async getItem(key: string): Promise<string | null> {
-    return this.values.get(key) ?? null;
-  }
-
-  async setItem(key: string, value: string): Promise<void> {
-    this.values.set(key, value);
-  }
-
-  async removeItem(key: string): Promise<void> {
-    this.values.delete(key);
-  }
-}
 
 class TestReactNativeWebSocket {
   static #sockets: TestReactNativeWebSocket[] = [];

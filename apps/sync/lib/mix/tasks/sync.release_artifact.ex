@@ -8,12 +8,15 @@ defmodule Mix.Tasks.Sync.ReleaseArtifact do
 
   The task refuses a dirty worktree so the Git SHA and dependency lock identify
   the source used for every artifact byte.
+
+  The manifest records the Sync migration compatibility floor. Its upper bound
+  is intentionally open because later additive API and recorder migrations are
+  compatible with this release.
   """
 
   use Mix.Task
 
   @switches [output: :string]
-  @required_migration 20_260_712_180_000
 
   @impl Mix.Task
   def run(arguments) do
@@ -48,6 +51,14 @@ defmodule Mix.Tasks.Sync.ReleaseArtifact do
     Mix.shell().info("PASS release=#{release_path}")
   end
 
+  @doc false
+  def migration_compatibility do
+    %{
+      "minimum" => Application.fetch_env!(:chalk_sync, :minimum_compatible_sync_migration),
+      "maximum" => nil
+    }
+  end
+
   defp manifest(generated_at, git_sha, release_name) do
     dirty_state = git!("status", "--short")
 
@@ -62,12 +73,9 @@ defmodule Mix.Tasks.Sync.ReleaseArtifact do
       "elixir_version" => System.version(),
       "erts_version" => :erlang.system_info(:version) |> List.to_string(),
       "git_sha" => git_sha,
-      "migration_compatibility" => %{
-        "maximum" => @required_migration,
-        "minimum" => @required_migration
-      },
+      "migration_compatibility" => migration_compatibility(),
       "otp_release" => System.otp_release(),
-      "protocol_version" => 2
+      "protocol_version" => 3
     })
   end
 

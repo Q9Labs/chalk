@@ -124,23 +124,23 @@ func TestRunRouteSessionEndMemberScenario(t *testing.T) {
 	}
 
 	var body struct {
-		Status string `json:"status"`
-		Intent struct {
+		Status    string `json:"status"`
+		Operation struct {
 			RequestKey string `json:"request_key"`
 			Status     string `json:"status"`
-		} `json:"lifecycle_intent"`
+		} `json:"external_operation"`
 	}
 	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if body.Status != "ending" || body.Intent.RequestKey != "session-end-trace-0001" || body.Intent.Status != "pending" {
+	if body.Status != "ending" || body.Operation.RequestKey != "session-end-trace-0001" || body.Operation.Status != "pending" {
 		t.Fatalf("body = %#v", body)
 	}
 
 	assertEvent(t, result.Events, "service", "sessionlifecycle.Service.RequestSessionEnd")
 	assertEvent(t, result.Events, "repository", "SessionLifecycleRepository.RequestSessionEnd")
 	assertEvent(t, result.Events, "database", "SET LOCAL synchronous_commit = on")
-	assertEvent(t, result.Events, "database", "INSERT sync_lifecycle_intents")
+	assertEvent(t, result.Events, "database", "INSERT sync_external_operations")
 	assertEvent(t, result.Events, "database", "UPDATE room_sessions SET status = ending")
 	assertEvent(t, result.Events, "database", "COMMIT")
 }

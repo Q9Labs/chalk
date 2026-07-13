@@ -16,8 +16,8 @@ defmodule ChalkSync.Sessions.CoordinatorTest do
     assert {:ok, decision} = Memory.decide_command(identity, command)
 
     send(coordinator, :repair_now)
-    assert_receive {:sync_outbound_ready, ^coordinator}
     assert {:ok, encoded, false} = Coordinator.pop(coordinator, self())
+    assert_receive {:sync_outbound_ready, ^coordinator}
     assert {:ok, %{"type" => "event", "revision" => 2}} = JSON.decode(encoded)
 
     assert :ok = Coordinator.publish(identity.session, decision.event)

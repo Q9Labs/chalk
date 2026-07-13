@@ -17,15 +17,39 @@ import (
 
 var requestKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 
-const sessionCreateFingerprintVersion = "session-create/v1"
+const sessionCreateFingerprintVersion = "session-create/v3"
+
+var validRoles = map[string]struct{}{
+	"host": {}, "cohost": {}, "participant": {},
+}
+
+var capabilityOrder = []string{
+	"publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf",
+	"manageAdmission", "promoteDemote", "transferHost", "muteOthers", "stopVideoOthers",
+	"stopScreenOthers", "requestMediaOthers", "removeParticipant", "manageRecording", "endMeeting",
+}
+
+var roleOrder = []string{"host", "cohost", "participant"}
+
+var validCapabilities = func() map[string]struct{} {
+	result := make(map[string]struct{}, len(capabilityOrder))
+	for _, capability := range capabilityOrder {
+		result[capability] = struct{}{}
+	}
+	return result
+}()
 
 type sessionCreateFingerprintInput struct {
-	Version   string          `json:"fingerprint_version"`
-	TenantID  string          `json:"tenant_id"`
-	RoomID    string          `json:"room_id"`
-	Metadata  json.RawMessage `json:"metadata"`
-	ActorID   string          `json:"actor_id"`
-	StartedAt *string         `json:"started_at"`
+	Version                string              `json:"fingerprint_version"`
+	TenantID               string              `json:"tenant_id"`
+	RoomID                 string              `json:"room_id"`
+	Metadata               json.RawMessage     `json:"metadata"`
+	ActorID                string              `json:"actor_id"`
+	StartedAt              *string             `json:"started_at"`
+	AdmissionPolicy        string              `json:"admission_policy"`
+	HostExitPolicy         string              `json:"host_exit_policy"`
+	RoleCapabilities       map[string][]string `json:"role_capabilities"`
+	MaximumDurationSeconds int32               `json:"maximum_duration_seconds"`
 }
 
 func prepareCreateSessionInput(input *CreateSessionInput) error {
@@ -39,30 +63,34 @@ func prepareCreateSessionInput(input *CreateSessionInput) error {
 	}
 	input.Metadata = metadata
 
-	if len(input.InitialControl.FoldedState) == 0 {
-		return ErrInvalidInitialControlState
-	}
-	foldedState, err := utilities.JSON(input.InitialControl.FoldedState)
+	policy, err := validateInitialControlPolicy(InitialControlPolicy{
+		AdmissionPolicy: input.AdmissionPolicy, HostExitPolicy: input.HostExitPolicy,
+		RoleCapabilities: input.RoleCapabilities, MaximumDurationSeconds: input.MaximumDurationSeconds,
+		MaximumDurationCeilingSeconds: input.MaximumDurationCeilingSeconds, DeadlineAt: input.DeadlineAt,
+	})
 	if err != nil {
-		return ErrInvalidInitialControlState
+		return err
 	}
-	input.InitialControl.FoldedState = foldedState
-	if input.InitialControl.SchemaVersion <= 0 {
-		return ErrInvalidInitialControlSchemaVersion
-	}
-	if input.InitialControl.SnapshotBytes < 0 || input.InitialControl.SnapshotBytes > MaximumSnapshotBytes {
-		return ErrInvalidInitialControlSnapshotBytes
+	input.AdmissionPolicy = policy.AdmissionPolicy
+	input.HostExitPolicy = policy.HostExitPolicy
+	input.RoleCapabilities = policy.RoleCapabilities
+	input.DeadlineAt = policy.DeadlineAt
+	input.InitialControl, err = NewInitialControlState(policy)
+	if err != nil {
+		return err
 	}
 	if err := prepareRequest(&input.Request, nil); err != nil {
 		return err
 	}
 	input.Request.Fingerprint = lifecycleFingerprint(sessionCreateFingerprintInput{
-		Version:   sessionCreateFingerprintVersion,
-		TenantID:  input.TenantID.String(),
-		RoomID:    input.RoomID.String(),
-		Metadata:  canonicalJSON(input.Metadata),
-		ActorID:   input.CreatedByUserID.String(),
-		StartedAt: canonicalTime(input.StartedAt),
+		Version:         sessionCreateFingerprintVersion,
+		TenantID:        input.TenantID.String(),
+		RoomID:          input.RoomID.String(),
+		Metadata:        canonicalJSON(input.Metadata),
+		ActorID:         input.CreatedByUserID.String(),
+		StartedAt:       canonicalTime(input.StartedAt),
+		AdmissionPolicy: input.AdmissionPolicy, HostExitPolicy: input.HostExitPolicy,
+		RoleCapabilities: input.RoleCapabilities, MaximumDurationSeconds: input.MaximumDurationSeconds,
 	})
 
 	return nil
@@ -87,8 +115,13 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		return ErrInvalidIntentPayload
 	}
 	input.Metadata = metadata
+	eligibleRoles, err := validateEligibleRoles(input.InitialRole, input.EligibleRoles)
+	if err != nil {
+		return err
+	}
+	input.EligibleRoles = eligibleRoles
 
-	payload := participantJoinedPayload(input.ParticipantID, input.Name)
+	payload := participantJoinedPayload(input.ParticipantID, input.Name, input.InitialRole, input.EligibleRoles)
 	if err := prepareRequest(&input.Request, payload); err != nil {
 		return err
 	}
@@ -100,13 +133,14 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		IntentName    string          `json:"intent_name"`
 		Name          string          `json:"name"`
 		Metadata      json.RawMessage `json:"metadata"`
-		Capabilities  []string        `json:"capabilities"`
+		InitialRole   string          `json:"initial_role"`
+		EligibleRoles []string        `json:"eligible_roles"`
 		UserID        string          `json:"user_id"`
 		Payload       json.RawMessage `json:"payload"`
 	}{
 		TenantID: input.TenantID.String(), RoomID: input.RoomID.String(), SessionID: input.SessionID.String(),
 		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name,
-		Metadata: input.Metadata, Capabilities: input.Capabilities, UserID: input.UserID.String(), Payload: payload,
+		Metadata: input.Metadata, InitialRole: input.InitialRole, EligibleRoles: input.EligibleRoles, UserID: input.UserID.String(), Payload: payload,
 	})
 	return nil
 }
@@ -132,12 +166,12 @@ func prepareParticipantRemovalInput(input *RequestParticipantRemovalInput) error
 		SessionID     string          `json:"session_id"`
 		ParticipantID string          `json:"participant_session_id"`
 		Generation    int64           `json:"participant_session_generation"`
-		IntentName    string          `json:"intent_name"`
+		OperationName string          `json:"operation_name"`
 		Payload       json.RawMessage `json:"payload"`
 	}{
 		TenantID: input.TenantID.String(), RoomID: input.RoomID.String(), SessionID: input.SessionID.String(),
 		ParticipantID: input.ParticipantID.String(), Generation: input.ParticipantGeneration,
-		IntentName: IntentParticipantLeft, Payload: payload,
+		OperationName: OperationRemoveParticipant, Payload: payload,
 	})
 	return nil
 }
@@ -152,16 +186,97 @@ func prepareSessionEndInput(input *RequestSessionEndInput) error {
 		return err
 	}
 	input.Request.Fingerprint = lifecycleFingerprint(struct {
-		TenantID   string          `json:"tenant_id"`
-		RoomID     string          `json:"room_id"`
-		SessionID  string          `json:"session_id"`
-		IntentName string          `json:"intent_name"`
-		Payload    json.RawMessage `json:"payload"`
+		TenantID      string          `json:"tenant_id"`
+		RoomID        string          `json:"room_id"`
+		SessionID     string          `json:"session_id"`
+		OperationName string          `json:"operation_name"`
+		Payload       json.RawMessage `json:"payload"`
 	}{
 		TenantID: input.TenantID.String(), RoomID: input.RoomID.String(), SessionID: input.SessionID.String(),
-		IntentName: IntentSessionEnded, Payload: payload,
+		OperationName: OperationTenantEndSession, Payload: payload,
 	})
 	return nil
+}
+
+func prepareTransferHostInput(input *TransferHostInput) error {
+	if err := validateTenantRoomSessionIDs(input.TenantID, input.RoomID, input.SessionID); err != nil {
+		return err
+	}
+	if input.ParticipantID.IsZero() {
+		return ErrInvalidParticipantID
+	}
+	if input.ParticipantGeneration <= 0 {
+		return ErrInvalidParticipantGeneration
+	}
+	payload, err := json.Marshal(struct {
+		ParticipantSessionID string `json:"participantSessionId"`
+	}{ParticipantSessionID: input.ParticipantID.String()})
+	if err != nil {
+		return ErrInvalidIntentPayload
+	}
+	if err := prepareRequest(&input.Request, payload); err != nil {
+		return err
+	}
+	input.Request.Fingerprint = lifecycleFingerprint(struct {
+		TenantID              string          `json:"tenant_id"`
+		RoomID                string          `json:"room_id"`
+		SessionID             string          `json:"session_id"`
+		OperationName         string          `json:"operation_name"`
+		ParticipantSessionID  string          `json:"participant_session_id"`
+		ParticipantGeneration int64           `json:"participant_generation"`
+		Payload               json.RawMessage `json:"payload"`
+	}{
+		TenantID: input.TenantID.String(), RoomID: input.RoomID.String(), SessionID: input.SessionID.String(),
+		OperationName: OperationTenantTransferHost, ParticipantSessionID: input.ParticipantID.String(),
+		ParticipantGeneration: input.ParticipantGeneration, Payload: payload,
+	})
+	return nil
+}
+
+func prepareSetDeadlineInput(input *SetDeadlineInput) error {
+	if err := validateTenantRoomSessionIDs(input.TenantID, input.RoomID, input.SessionID); err != nil {
+		return err
+	}
+	if input.Deadline.IsZero() {
+		return ErrInvalidDeadline
+	}
+	input.Deadline = input.Deadline.UTC().Truncate(time.Millisecond)
+	if err := prepareRequest(&input.Request, json.RawMessage(`{}`)); err != nil {
+		return err
+	}
+	input.Request.Fingerprint = lifecycleFingerprint(struct {
+		TenantID      string `json:"tenant_id"`
+		RoomID        string `json:"room_id"`
+		SessionID     string `json:"session_id"`
+		OperationName string `json:"operation_name"`
+		DeadlineAtMS  int64  `json:"deadline_at_ms"`
+	}{
+		TenantID: input.TenantID.String(), RoomID: input.RoomID.String(), SessionID: input.SessionID.String(),
+		OperationName: OperationTenantSetDeadline, DeadlineAtMS: input.Deadline.UnixMilli(),
+	})
+	return nil
+}
+
+func NewMaximumDurationRequest(tenantID, roomID, sessionID utilities.ID, generation int64) (Request, error) {
+	payload, err := json.Marshal(struct {
+		DeadlineGeneration int64 `json:"deadlineGeneration"`
+	}{DeadlineGeneration: generation})
+	if err != nil {
+		return Request{}, ErrInvalidIntentPayload
+	}
+	request := Request{Key: "maximum-duration-" + strconv.FormatInt(generation, 10), payload: payload}
+	request.Fingerprint = lifecycleFingerprint(struct {
+		TenantID           string          `json:"tenant_id"`
+		RoomID             string          `json:"room_id"`
+		SessionID          string          `json:"session_id"`
+		OperationName      string          `json:"operation_name"`
+		DeadlineGeneration int64           `json:"deadline_generation"`
+		Payload            json.RawMessage `json:"payload"`
+	}{
+		TenantID: tenantID.String(), RoomID: roomID.String(), SessionID: sessionID.String(),
+		OperationName: OperationMaximumDurationExpired, DeadlineGeneration: generation, Payload: payload,
+	})
+	return request, nil
 }
 
 func prepareRequest(request *Request, payload json.RawMessage) error {
@@ -269,16 +384,35 @@ func canonicalJSONNumber(number string) string {
 	exponent.Sub(exponent, big.NewInt(int64(fractionDigits)))
 	exponent.Add(exponent, big.NewInt(int64(trailingZeros)))
 
-	if exponent.Sign() == 0 {
-		if negative {
-			return "-" + number
-		}
-		return number
-	}
+	sign := ""
 	if negative {
-		return "-" + number + "e" + exponent.String()
+		sign = "-"
 	}
-	return number + "e" + exponent.String()
+	scientificExponent := new(big.Int).Add(exponent, big.NewInt(int64(len(number)-1)))
+	if scientificExponent.IsInt64() {
+		value := scientificExponent.Int64()
+		decimalPosition := int64(len(number)) + exponent.Int64()
+		if value >= -6 && value < 21 {
+			switch {
+			case decimalPosition <= 0:
+				return sign + "0." + strings.Repeat("0", int(-decimalPosition)) + number
+			case decimalPosition >= int64(len(number)):
+				return sign + number + strings.Repeat("0", int(decimalPosition-int64(len(number))))
+			default:
+				return sign + number[:decimalPosition] + "." + number[decimalPosition:]
+			}
+		}
+	}
+
+	mantissa := number[:1]
+	if len(number) > 1 {
+		mantissa += "." + number[1:]
+	}
+	exponentSign := ""
+	if scientificExponent.Sign() >= 0 {
+		exponentSign = "+"
+	}
+	return sign + mantissa + "e" + exponentSign + scientificExponent.String()
 }
 
 func canonicalTime(value *time.Time) *string {
@@ -289,20 +423,112 @@ func canonicalTime(value *time.Time) *string {
 	return &normalized
 }
 
-func participantJoinedPayload(participantID utilities.ID, displayName string) json.RawMessage {
+func participantJoinedPayload(participantID utilities.ID, displayName string, initialRole string, eligibleRoles []string) json.RawMessage {
 	payload, _ := json.Marshal(struct {
-		DisplayName          string `json:"display_name"`
-		ParticipantSessionID string `json:"participant_session_id"`
+		DisplayName          string   `json:"display_name"`
+		ParticipantSessionID string   `json:"participant_session_id"`
+		InitialRole          string   `json:"initial_role"`
+		EligibleRoles        []string `json:"eligible_roles"`
 	}{
 		DisplayName:          displayName,
 		ParticipantSessionID: participantID.String(),
+		InitialRole:          initialRole,
+		EligibleRoles:        eligibleRoles,
 	})
 	return payload
 }
 
+func validateInitialControlPolicy(policy InitialControlPolicy) (InitialControlPolicy, error) {
+	if policy.AdmissionPolicy != "open" && policy.AdmissionPolicy != "approval" && policy.AdmissionPolicy != "closed" {
+		return InitialControlPolicy{}, ErrInvalidAdmissionPolicy
+	}
+	if policy.HostExitPolicy != "require_transfer" && policy.HostExitPolicy != "promote_cohost" {
+		return InitialControlPolicy{}, ErrInvalidHostExitPolicy
+	}
+	roleCapabilities, err := validateRoleCapabilities(policy.RoleCapabilities)
+	if err != nil {
+		return InitialControlPolicy{}, err
+	}
+	policy.RoleCapabilities = roleCapabilities
+	if policy.MaximumDurationSeconds < MinimumSessionDurationSeconds || policy.MaximumDurationSeconds > MaximumSessionDurationSeconds {
+		return InitialControlPolicy{}, ErrInvalidMaximumDuration
+	}
+	if policy.MaximumDurationCeilingSeconds < MinimumSessionDurationSeconds || policy.MaximumDurationCeilingSeconds > MaximumSessionDurationSeconds || policy.MaximumDurationSeconds > policy.MaximumDurationCeilingSeconds {
+		return InitialControlPolicy{}, ErrInvalidMaximumDurationCeiling
+	}
+	if policy.DeadlineAt.IsZero() || policy.DeadlineAt.UnixMilli() < 1 {
+		return InitialControlPolicy{}, ErrInvalidDeadline
+	}
+	policy.DeadlineAt = policy.DeadlineAt.UTC().Truncate(time.Millisecond)
+	return policy, nil
+}
+
+func validateRoleCapabilities(input map[string][]string) (map[string][]string, error) {
+	if len(input) != len(validRoles) {
+		return nil, ErrInvalidRoleCapabilities
+	}
+	result := make(map[string][]string, len(validRoles))
+	for _, role := range roleOrder {
+		values, ok := input[role]
+		if !ok || len(values) > len(validCapabilities) {
+			return nil, ErrInvalidRoleCapabilities
+		}
+		seen := make(map[string]struct{}, len(values))
+		for _, capability := range values {
+			if _, ok := validCapabilities[capability]; !ok {
+				return nil, ErrInvalidRoleCapabilities
+			}
+			if _, duplicate := seen[capability]; duplicate {
+				return nil, ErrInvalidRoleCapabilities
+			}
+			seen[capability] = struct{}{}
+		}
+		for _, capability := range capabilityOrder {
+			if _, ok := seen[capability]; ok {
+				result[role] = append(result[role], capability)
+			}
+		}
+	}
+	return result, nil
+}
+
+func validateEligibleRoles(initialRole string, input []string) ([]string, error) {
+	if _, ok := validRoles[initialRole]; !ok {
+		return nil, ErrInvalidInitialRole
+	}
+	if len(input) == 0 || len(input) > len(validRoles) {
+		return nil, ErrInvalidEligibleRoles
+	}
+	seen := make(map[string]struct{}, len(input))
+	for _, role := range input {
+		if _, ok := validRoles[role]; !ok {
+			return nil, ErrInvalidEligibleRoles
+		}
+		if _, duplicate := seen[role]; duplicate {
+			return nil, ErrInvalidEligibleRoles
+		}
+		seen[role] = struct{}{}
+	}
+	if _, ok := seen[initialRole]; !ok {
+		return nil, ErrInvalidEligibleRoles
+	}
+	if initialRole == "host" {
+		if _, ok := seen["cohost"]; !ok {
+			return nil, ErrInvalidEligibleRoles
+		}
+	}
+	result := make([]string, 0, len(input))
+	for _, role := range roleOrder {
+		if _, ok := seen[role]; ok {
+			result = append(result, role)
+		}
+	}
+	return result, nil
+}
+
 func participantLeftPayload(participantID utilities.ID) json.RawMessage {
 	payload, _ := json.Marshal(struct {
-		ParticipantSessionID string `json:"participant_session_id"`
+		ParticipantSessionID string `json:"participantSessionId"`
 	}{
 		ParticipantSessionID: participantID.String(),
 	})

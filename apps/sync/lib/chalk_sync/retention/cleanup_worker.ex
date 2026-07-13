@@ -26,7 +26,19 @@ defmodule ChalkSync.Retention.CleanupWorker do
               receipt_rows: 0,
               receipt_bytes: 0,
               lifecycle_intent_rows: 0,
-              lifecycle_intent_bytes: 0
+              lifecycle_intent_bytes: 0,
+              external_operation_rows: 0,
+              external_operation_bytes: 0,
+              admission_request_rows: 0,
+              admission_request_bytes: 0,
+              recording_rows: 0,
+              recording_bytes: 0,
+              screen_share_lease_rows: 0,
+              screen_share_lease_bytes: 0,
+              publication_fence_rows: 0,
+              publication_fence_bytes: 0,
+              publication_grant_reservation_rows: 0,
+              publication_grant_reservation_bytes: 0
 
     @type t :: %__MODULE__{
             sessions: non_neg_integer(),
@@ -35,7 +47,19 @@ defmodule ChalkSync.Retention.CleanupWorker do
             receipt_rows: non_neg_integer(),
             receipt_bytes: non_neg_integer(),
             lifecycle_intent_rows: non_neg_integer(),
-            lifecycle_intent_bytes: non_neg_integer()
+            lifecycle_intent_bytes: non_neg_integer(),
+            external_operation_rows: non_neg_integer(),
+            external_operation_bytes: non_neg_integer(),
+            admission_request_rows: non_neg_integer(),
+            admission_request_bytes: non_neg_integer(),
+            recording_rows: non_neg_integer(),
+            recording_bytes: non_neg_integer(),
+            screen_share_lease_rows: non_neg_integer(),
+            screen_share_lease_bytes: non_neg_integer(),
+            publication_fence_rows: non_neg_integer(),
+            publication_fence_bytes: non_neg_integer(),
+            publication_grant_reservation_rows: non_neg_integer(),
+            publication_grant_reservation_bytes: non_neg_integer()
           }
   end
 
@@ -58,7 +82,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     Postgrex.transaction(connection, fn transaction ->
       Postgrex.query!(transaction, SQL.transaction_settings(), [])
 
-      Postgrex.query!(transaction, SQL.claim_eligible_sessions(), [cutoff, batch_size])
+      Postgrex.query!(transaction, SQL.claim_eligible_sessions(), [cutoff, now, batch_size])
       |> Map.fetch!(:rows)
       |> Enum.reduce(%Result{}, fn row, result ->
         cleanup_candidate(transaction, candidate(row), now, result)
@@ -69,20 +93,58 @@ defmodule ChalkSync.Retention.CleanupWorker do
   defp cleanup_candidate(transaction, candidate, now, result) do
     case verify_history(transaction, candidate) do
       {:ok, event_count, event_bytes} ->
-        write_checkpoint(transaction, candidate, now, event_count, event_bytes)
+        external_operations =
+          measurement(transaction, SQL.measure_terminal_external_operations(), candidate)
 
         receipt_rows = delete_count(transaction, SQL.delete_receipts(), candidate)
 
         lifecycle_intent_rows =
           delete_count(transaction, SQL.delete_terminal_lifecycle_intents(), candidate)
 
+        clear_terminal_operation_event_links(transaction, candidate)
         event_rows = delete_count(transaction, SQL.delete_events(), candidate)
+
+        admission_requests =
+          delete_measurement(transaction, SQL.delete_admission_requests(), candidate)
+
+        recordings = delete_measurement(transaction, SQL.delete_recordings(), candidate)
+
+        publication_fences =
+          delete_measurement(transaction, SQL.delete_publication_fences(), candidate)
+
+        grant_reservations =
+          delete_measurement(transaction, SQL.delete_publication_grant_reservations(), candidate)
+
+        screen_share_leases =
+          delete_measurement(transaction, SQL.delete_screen_share_leases(), candidate)
+
+        external_operation_rows =
+          delete_count(transaction, SQL.delete_terminal_external_operations(), candidate)
 
         if receipt_rows != candidate.receipt_count or
              lifecycle_intent_rows != candidate.lifecycle_intent_count or
-             event_rows != event_count do
+             event_rows != event_count or
+             external_operation_rows != elem(external_operations, 0) do
           Postgrex.rollback(transaction, {:invalid_history, :cleanup_counter_mismatch})
         end
+
+        measurements = %{
+          external_operations: external_operations,
+          admission_requests: admission_requests,
+          recordings: recordings,
+          screen_share_leases: screen_share_leases,
+          publication_fences: publication_fences,
+          grant_reservations: grant_reservations
+        }
+
+        write_checkpoint(
+          transaction,
+          candidate,
+          now,
+          event_count,
+          event_bytes,
+          measurements
+        )
 
         %Result{
           sessions: result.sessions + 1,
@@ -91,7 +153,24 @@ defmodule ChalkSync.Retention.CleanupWorker do
           receipt_rows: result.receipt_rows + receipt_rows,
           receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
           lifecycle_intent_rows: result.lifecycle_intent_rows + lifecycle_intent_rows,
-          lifecycle_intent_bytes: result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes
+          lifecycle_intent_bytes:
+            result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
+          external_operation_rows: result.external_operation_rows + elem(external_operations, 0),
+          external_operation_bytes:
+            result.external_operation_bytes + elem(external_operations, 1),
+          admission_request_rows: result.admission_request_rows + elem(admission_requests, 0),
+          admission_request_bytes: result.admission_request_bytes + elem(admission_requests, 1),
+          recording_rows: result.recording_rows + elem(recordings, 0),
+          recording_bytes: result.recording_bytes + elem(recordings, 1),
+          screen_share_lease_rows: result.screen_share_lease_rows + elem(screen_share_leases, 0),
+          screen_share_lease_bytes:
+            result.screen_share_lease_bytes + elem(screen_share_leases, 1),
+          publication_fence_rows: result.publication_fence_rows + elem(publication_fences, 0),
+          publication_fence_bytes: result.publication_fence_bytes + elem(publication_fences, 1),
+          publication_grant_reservation_rows:
+            result.publication_grant_reservation_rows + elem(grant_reservations, 0),
+          publication_grant_reservation_bytes:
+            result.publication_grant_reservation_bytes + elem(grant_reservations, 1)
         }
 
       {:error, reason} ->
@@ -168,7 +247,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     end)
   end
 
-  defp write_checkpoint(transaction, candidate, now, event_count, event_bytes) do
+  defp write_checkpoint(transaction, candidate, now, event_count, event_bytes, measurements) do
     params = [
       candidate.tenant_id,
       candidate.session_id,
@@ -180,7 +259,19 @@ defmodule ChalkSync.Retention.CleanupWorker do
       candidate.receipt_count,
       candidate.receipt_bytes,
       candidate.lifecycle_intent_count,
-      candidate.lifecycle_intent_bytes
+      candidate.lifecycle_intent_bytes,
+      elem(measurements.external_operations, 0),
+      elem(measurements.external_operations, 1),
+      elem(measurements.admission_requests, 0),
+      elem(measurements.admission_requests, 1),
+      elem(measurements.recordings, 0),
+      elem(measurements.recordings, 1),
+      elem(measurements.screen_share_leases, 0),
+      elem(measurements.screen_share_leases, 1),
+      elem(measurements.publication_fences, 0),
+      elem(measurements.publication_fences, 1),
+      elem(measurements.grant_reservations, 0),
+      elem(measurements.grant_reservations, 1)
     ]
 
     case Postgrex.query!(transaction, SQL.write_checkpoint(), params).rows do
@@ -193,6 +284,23 @@ defmodule ChalkSync.Retention.CleanupWorker do
     case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.session_id]).rows do
       [[count]] -> count
     end
+  end
+
+  defp delete_measurement(transaction, query, candidate) do
+    measurement(transaction, query, candidate)
+  end
+
+  defp measurement(transaction, query, candidate) do
+    case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.session_id]).rows do
+      [[rows, bytes]] -> {rows, bytes}
+    end
+  end
+
+  defp clear_terminal_operation_event_links(transaction, candidate) do
+    Postgrex.query!(transaction, SQL.clear_terminal_operation_event_links(), [
+      candidate.tenant_id,
+      candidate.session_id
+    ])
   end
 
   defp candidate([

@@ -43,7 +43,8 @@ defmodule ChalkSync.Database do
          port: uri.port || 5432,
          username: username,
          password: password,
-         database: database
+         database: database,
+         types: ChalkSync.PostgresTypes
        ] ++ ssl_options}
     else
       _ -> {:error, :invalid_database_url}

@@ -2,6 +2,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.LifecycleConsumer
+  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
@@ -159,10 +160,18 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
       [UUID.dump!(fixture.lifecycle_intent_id)]
     )
 
-    fixture = SyncPostgres.request_pending_end(connection, fixture)
+    assert {:ok, operation} =
+             Operation.new("consumer_tenant_end", :tenant_end_session, %{})
+
+    assert {:ok, %{external_operation_id: operation_id}} =
+             Postgres.begin_internal_operation(fixture.session, operation)
 
     assert {:ok, %{result: :applied}} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.end_lifecycle_intent_id)
+             Postgres.finalize_operation(
+               fixture.session,
+               operation_id,
+               {:applied, :session_ended, %{"reason" => "tenant_recovery"}}
+             )
 
     assert ["superseded", 2_147_483_647, nil] = intent_attempt(connection, fixture)
   end

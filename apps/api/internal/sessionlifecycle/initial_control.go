@@ -4,38 +4,69 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
+	"encoding/json"
+	"time"
 )
 
 const (
-	controlStateDigestPrefix = "chalk-sync-state-v2"
-	controlStateSchemaV1     = int32(1)
-	emptyControlProjection   = `{"control_revision":0,"participants":[],"state_schema_version":1,"status":"active"}`
+	controlStateDigestPrefix = "chalk-sync-state-v3"
+	controlStateSchemaV3     = int32(3)
 )
 
-// EmptyInitialControlState returns the schema-v1 authority state used when a
-// Session is created. The projection and digest definition are shared with the
-// generated sync-v2 contract; Session identity is deliberately outside the
-// durable control projection.
-func EmptyInitialControlState() InitialControlState {
-	digestInput := make([]byte, 0, len(controlStateDigestPrefix)+5+len(emptyControlProjection))
+type InitialControlPolicy struct {
+	AdmissionPolicy               string
+	HostExitPolicy                string
+	RoleCapabilities              map[string][]string
+	MaximumDurationSeconds        int32
+	MaximumDurationCeilingSeconds int32
+	DeadlineAt                    time.Time
+}
+
+// NewInitialControlState validates immutable Session policy and encodes the
+// empty, pre-admission v3 authority projection.
+func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, error) {
+	policy, err := validateInitialControlPolicy(policy)
+	if err != nil {
+		return InitialControlState{}, err
+	}
+
+	durableProjection := map[string]any{
+		"admission_policy":            policy.AdmissionPolicy,
+		"admission_requests":          []any{},
+		"control_revision":            0,
+		"deadline_at_ms":              policy.DeadlineAt.UnixMilli(),
+		"deadline_generation":         1,
+		"host_exit_policy":            policy.HostExitPolicy,
+		"host_participant_session_id": nil,
+		"participants":                []any{},
+		"recording":                   nil,
+		"role_capabilities":           policy.RoleCapabilities,
+		"state_schema_version":        controlStateSchemaV3,
+		"status":                      SessionStatusActive,
+	}
+	projection, _ := json.Marshal(durableProjection)
+	projection = canonicalJSON(projection)
+
+	digestInput := make([]byte, 0, len(controlStateDigestPrefix)+4+len(projection))
 	digestInput = append(digestInput, controlStateDigestPrefix...)
-	digestInput = append(digestInput, 0)
 	version := make([]byte, 4)
-	binary.BigEndian.PutUint32(version, uint32(controlStateSchemaV1))
+	binary.BigEndian.PutUint32(version, uint32(controlStateSchemaV3))
 	digestInput = append(digestInput, version...)
-	digestInput = append(digestInput, emptyControlProjection...)
+	digestInput = append(digestInput, projection...)
 	digest := sha256.Sum256(digestInput)
 
-	wireSnapshot := fmt.Sprintf(
-		`{"control_revision":0,"participants":[],"state_digest":"%s","state_schema_version":1,"status":"active"}`,
-		hex.EncodeToString(digest[:]),
-	)
+	durableProjection["state_digest"] = hex.EncodeToString(digest[:])
+	wireSnapshot := canonicalJSON(mustJSON(durableProjection))
 
 	return InitialControlState{
-		FoldedState:   []byte(emptyControlProjection),
+		FoldedState:   projection,
 		Digest:        digest,
-		SchemaVersion: controlStateSchemaV1,
+		SchemaVersion: controlStateSchemaV3,
 		SnapshotBytes: int64(len(wireSnapshot)),
-	}
+	}, nil
+}
+
+func mustJSON(value any) json.RawMessage {
+	encoded, _ := json.Marshal(value)
+	return encoded
 }

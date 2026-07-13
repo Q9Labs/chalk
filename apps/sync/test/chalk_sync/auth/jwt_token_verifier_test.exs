@@ -37,6 +37,54 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
     assert verified.capabilities == ["control:hand"]
   end
 
+  test "verifies a v3 role envelope without authorizing capabilities", %{
+    private_key: private_key
+  } do
+    claims =
+      claims()
+      |> Map.delete("capabilities")
+      |> Map.merge(%{
+        "initial_role" => "participant",
+        "eligible_roles" => ["participant", "cohost"]
+      })
+
+    assert {:ok, verified} = private_key |> token(claims) |> JWTTokenVerifier.verify()
+    assert verified.initial_role == "participant"
+    assert verified.eligible_roles == ["participant", "cohost"]
+    assert verified.capabilities == []
+  end
+
+  test "rejects mixed, unknown, duplicate, ineligible, and unsafe host role envelopes", %{
+    private_key: private_key
+  } do
+    base = Map.delete(claims(), "capabilities")
+
+    invalid = [
+      Map.merge(base, %{
+        "initial_role" => "owner",
+        "eligible_roles" => ["owner"]
+      }),
+      Map.merge(base, %{
+        "initial_role" => "participant",
+        "eligible_roles" => ["participant", "participant"]
+      }),
+      Map.merge(base, %{
+        "initial_role" => "cohost",
+        "eligible_roles" => ["participant"]
+      }),
+      Map.merge(base, %{"initial_role" => "host", "eligible_roles" => ["host"]}),
+      Map.merge(claims(), %{
+        "initial_role" => "participant",
+        "eligible_roles" => ["participant"]
+      })
+    ]
+
+    Enum.each(invalid, fn candidate ->
+      assert {:error, :invalid_token} =
+               private_key |> token(candidate) |> JWTTokenVerifier.verify()
+    end)
+  end
+
   test "rejects an unsupported algorithm", %{private_key: private_key} do
     assert {:error, :invalid_token} =
              private_key

@@ -49,12 +49,15 @@ defmodule ChalkSync.OperationsTest do
     assert {:error, :server_draining} =
              CommandAdmission.submit(admission, identity, command, self())
 
+    assert Task.yield(drain, 0) == nil
+    refute_receive :coordinators_drained, 25
     send(task, :finish)
+
+    assert Task.await(drain) == :ok
 
     assert_receive {:sync_command_result, ^lease, "drain-command-001",
                     {:retryable, :decision_unavailable}}
 
-    assert Task.await(drain) == :ok
     assert_receive :coordinators_drained
     assert %{draining: true} = Operations.health(operations)
   end

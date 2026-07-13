@@ -11,6 +11,8 @@ defmodule ChalkSync.Observability do
 
   require Logger
 
+  alias ChalkSync.Stateholder.ObservedContext
+  alias ChalkSync.UUID
   alias OpenTelemetry.Span
 
   @event [:chalk_sync, :observability, :event]
@@ -99,6 +101,42 @@ defmodule ChalkSync.Observability do
     |> Map.new()
     |> Map.take(["traceparent", "tracestate"])
     |> Map.put("journey_id", context.journey_id)
+  end
+
+  @doc "Captures one operation's durable journey and W3C producing context."
+  @spec observed_operation_context(context() | nil) :: ObservedContext.t()
+  def observed_operation_context(context) do
+    context = ensure_context(context)
+
+    metadata =
+      safely(fn -> span_metadata(:otel_tracer.current_span_ctx(context.otel_ctx)) end, [])
+
+    {:ok, observed} =
+      ObservedContext.new(
+        context.journey_id,
+        UUID.generate(),
+        Keyword.get(metadata, :trace_id),
+        Keyword.get(metadata, :span_id),
+        DateTime.utc_now()
+      )
+
+    observed
+  end
+
+  @doc "Reconstructs a bounded context from correlation fields stored with durable work."
+  @spec persisted_context(String.t(), String.t() | nil, String.t() | nil) :: context()
+  def persisted_context(journey_id, trace_id, span_id) do
+    fields =
+      if is_binary(trace_id) and is_binary(span_id) do
+        %{
+          "journey_id" => journey_id,
+          "traceparent" => "00-#{trace_id}-#{span_id}-01"
+        }
+      else
+        %{"journey_id" => journey_id}
+      end
+
+    build_context(fields)
   end
 
   @doc "Emits the root event for a journey that starts at this service."

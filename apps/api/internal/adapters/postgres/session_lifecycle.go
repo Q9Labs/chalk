@@ -3,14 +3,17 @@ package postgres
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type sessionLifecycleTransactor interface {
@@ -58,20 +61,19 @@ func (r SessionLifecycleRepository) transaction(ctx context.Context, work func(*
 	return nil
 }
 
-func lockLifecycleControl(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) error {
-	_, err := queries.LockSyncSessionControlForUpdate(ctx, sqlc.LockSyncSessionControlForUpdateParams{
+func lockLifecycleControlRow(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (sqlc.SyncSessionControl, error) {
+	control, err := queries.LockSyncSessionControlForUpdate(ctx, sqlc.LockSyncSessionControlForUpdateParams{
 		TenantID:  uuid(tenantID),
 		RoomID:    uuid(roomID),
 		SessionID: uuid(sessionID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sessionlifecycle.ErrSessionNotFound
+		return sqlc.SyncSessionControl{}, sessionlifecycle.ErrSessionNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("lock lifecycle control: %w", err)
+		return sqlc.SyncSessionControl{}, fmt.Errorf("lock lifecycle control: %w", err)
 	}
-
-	return nil
+	return control, nil
 }
 
 func lockLifecycleSession(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (sqlc.RoomSession, error) {
@@ -157,6 +159,44 @@ func nullableInt64(value pgtype.Int8) int64 {
 	}
 
 	return value.Int64
+}
+
+type lifecycleJourney struct {
+	JourneyID     utilities.ID
+	ParentEventID utilities.ID
+	TraceID       string
+	SpanID        string
+}
+
+func lifecycleJourneyFromContext(ctx context.Context) (lifecycleJourney, error) {
+	journeyID, ok := observability.JourneyIDFromContext(ctx)
+	var err error
+	if !ok {
+		journeyID, err = utilities.NewID()
+		if err != nil {
+			return lifecycleJourney{}, err
+		}
+	}
+	parentID, err := utilities.NewID()
+	if err != nil {
+		return lifecycleJourney{}, err
+	}
+	result := lifecycleJourney{JourneyID: journeyID, ParentEventID: parentID}
+	span := trace.SpanContextFromContext(ctx)
+	if span.IsValid() {
+		result.TraceID = span.TraceID().String()
+		result.SpanID = span.SpanID().String()
+	}
+	return result, nil
+}
+
+func persistLifecycleJourneyRoot(ctx context.Context, tx pgx.Tx, journey lifecycleJourney, name string) error {
+	attributes, err := json.Marshal(map[string]any{"request": name})
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `insert into observability_journey_events(event_id,journey_id,sequence,occurred_at,name,phase,state,origin_kind,first_observed_layer,upstream_visibility,trace_id,span_id,attributes) values($1,$2,0,now(),$3,'api_request','accepted','server','api','visible',$4,$5,$6) on conflict(event_id) do nothing`, uuid(journey.ParentEventID), uuid(journey.JourneyID), name, optionalText(journey.TraceID), optionalText(journey.SpanID), attributes)
+	return err
 }
 
 var _ sessionlifecycle.Repository = SessionLifecycleRepository{}

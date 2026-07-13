@@ -39,9 +39,15 @@ func runRouteSessionCreateMember(ctx context.Context) (ScenarioResult, error) {
 			},
 			SessionLifecycle: service,
 		}),
-		Method:         http.MethodPost,
-		Path:           "/v1/tenants/" + tenantID().String() + "/rooms/" + roomID().String() + "/sessions",
-		Body:           json.RawMessage(`{"metadata":{"purpose":"sync-trace"}}`),
+		Method: http.MethodPost,
+		Path:   "/v1/tenants/" + tenantID().String() + "/rooms/" + roomID().String() + "/sessions",
+		Body: json.RawMessage(`{
+			"metadata":{"purpose":"sync-trace"},
+			"admission_policy":"open",
+			"host_exit_policy":"require_transfer",
+			"role_capabilities":{"host":["subscribe","transferHost","endMeeting"],"cohost":["subscribe"],"participant":["subscribe"]},
+			"maximum_duration_seconds":3600
+		}`),
 		Authorization:  "Bearer trace-session-token",
 		Headers:        map[string]string{"Idempotency-Key": "session-create-trace-0001"},
 		ExpectedStatus: http.StatusCreated,
@@ -107,7 +113,7 @@ func (i tracedSyncTokenIssuer) IssueForParticipant(_ context.Context, key syncto
 	span := i.recorder.Start("service", "synctokens.Broker.IssueForParticipant", "load the active participant identity before signing", map[string]any{
 		"tenant_id": key.TenantID.String(), "room_id": key.RoomID.String(), "session_id": key.SessionID.String(), "participant_session_id": key.ParticipantID.String(),
 	})
-	i.recorder.Add("database", "SELECT active sync token subject", "read the stored generation, capabilities, and admission intent", nil)
+	i.recorder.Add("database", "SELECT active sync token subject", "read the stored generation, signed role envelope, and admission intent", nil)
 	i.recorder.Add("crypto", "Ed25519 sign JWT", "sign bounded identity claims without recording token material", map[string]any{"algorithm": "EdDSA", "key_id": "trace-key"})
 	result := synctokens.Token{Value: "redacted.trace.token", ExpiresAt: i.now().Add(synctokens.Lifetime)}
 	span.End("return short-lived token metadata", map[string]any{"expires_at": result.ExpiresAt.Format(time.RFC3339)}, nil)
@@ -142,6 +148,20 @@ func (s tracedSessionLifecycleService) RequestSessionEnd(ctx context.Context, in
 	})
 	result, err := s.next.RequestSessionEnd(ctx, input)
 	span.End("return committed lifecycle intent", map[string]any{"session_status": result.Session.Status, "intent_id": result.Intent.ID.String()}, err)
+	return result, err
+}
+
+func (s tracedSessionLifecycleService) TransferHost(ctx context.Context, input sessionlifecycle.TransferHostInput) (sessionlifecycle.ControlRequest, error) {
+	span := s.recorder.Start("service", "sessionlifecycle.Service.TransferHost", "validate tenant host recovery request", map[string]any{"session_id": input.SessionID.String()})
+	result, err := s.next.TransferHost(ctx, input)
+	span.End("return tenant host recovery operation", map[string]any{"operation_id": result.Operation.ID.String()}, err)
+	return result, err
+}
+
+func (s tracedSessionLifecycleService) SetDeadline(ctx context.Context, input sessionlifecycle.SetDeadlineInput) (sessionlifecycle.ControlRequest, error) {
+	span := s.recorder.Start("service", "sessionlifecycle.Service.SetDeadline", "validate tenant deadline request", map[string]any{"session_id": input.SessionID.String()})
+	result, err := s.next.SetDeadline(ctx, input)
+	span.End("return tenant deadline operation", map[string]any{"operation_id": result.Operation.ID.String()}, err)
 	return result, err
 }
 
@@ -183,13 +203,13 @@ func (r tracedSessionLifecycleRepository) RequestSessionEnd(_ context.Context, i
 	r.recorder.Add("database", "SET LOCAL synchronous_commit = on", "require WAL durability before response", nil)
 	r.recorder.Add("database", "SELECT sync_session_control FOR UPDATE", "serialize commands and lifecycle transitions", map[string]any{"session_id": input.SessionID.String()})
 	r.recorder.Add("database", "SELECT room_sessions FOR UPDATE", "verify active product Session", map[string]any{"status": "active"})
-	r.recorder.Add("database", "INSERT sync_lifecycle_intents", "persist idempotent session_ended intent", map[string]any{"intent_name": sessionlifecycle.IntentSessionEnded, "status": sessionlifecycle.IntentStatusPending})
+	r.recorder.Add("database", "INSERT sync_external_operations", "persist idempotent tenant_end_session operation with pre-call authority", map[string]any{"operation_name": sessionlifecycle.OperationTenantEndSession, "status": sessionlifecycle.IntentStatusPending})
 	r.recorder.Add("database", "UPDATE room_sessions SET status = ending", "stop new joins and commands", nil)
 	r.recorder.Add("database", "COMMIT", "make product transition and intent visible atomically", nil)
 
 	result := sessionlifecycle.EndRequest{
 		Session: sessionlifecycle.Session{ID: input.SessionID, TenantID: input.TenantID, RoomID: input.RoomID, Status: sessionlifecycle.SessionStatusEnding, CreatedAt: r.now()},
-		Intent:  sessionlifecycle.Intent{ID: lifecycleIntentID(), TenantID: input.TenantID, RoomID: input.RoomID, SessionID: input.SessionID, RequestKey: input.Request.Key, IntentName: sessionlifecycle.IntentSessionEnded, Status: sessionlifecycle.IntentStatusPending, CreatedAt: r.now()},
+		Intent:  sessionlifecycle.Intent{ID: lifecycleIntentID(), TenantID: input.TenantID, RoomID: input.RoomID, SessionID: input.SessionID, RequestKey: input.Request.Key, IntentName: sessionlifecycle.OperationTenantEndSession, Status: sessionlifecycle.IntentStatusPending, CreatedAt: r.now()},
 	}
 	span.End("transaction committed", map[string]any{"intent_id": result.Intent.ID.String(), "session_status": result.Session.Status}, nil)
 	return result, nil

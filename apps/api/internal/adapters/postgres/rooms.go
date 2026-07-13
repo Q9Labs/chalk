@@ -24,10 +24,10 @@ type roomQuerier interface {
 	GetTenantRoom(ctx context.Context, arg sqlc.GetTenantRoomParams) (sqlc.Room, error)
 	ListTenantRooms(ctx context.Context, arg sqlc.ListTenantRoomsParams) ([]sqlc.Room, error)
 	UpdateTenantRoom(ctx context.Context, arg sqlc.UpdateTenantRoomParams) (sqlc.Room, error)
-	CreateRoomSession(ctx context.Context, arg sqlc.CreateRoomSessionParams) (sqlc.RoomSession, error)
-	GetTenantRoomSession(ctx context.Context, arg sqlc.GetTenantRoomSessionParams) (sqlc.RoomSession, error)
-	ListTenantRoomSessions(ctx context.Context, arg sqlc.ListTenantRoomSessionsParams) ([]sqlc.RoomSession, error)
-	UpdateTenantRoomSession(ctx context.Context, arg sqlc.UpdateTenantRoomSessionParams) (sqlc.RoomSession, error)
+	CreateRoomSession(ctx context.Context, arg sqlc.CreateRoomSessionParams) (sqlc.CreateRoomSessionRow, error)
+	GetTenantRoomSession(ctx context.Context, arg sqlc.GetTenantRoomSessionParams) (sqlc.GetTenantRoomSessionRow, error)
+	ListTenantRoomSessions(ctx context.Context, arg sqlc.ListTenantRoomSessionsParams) ([]sqlc.ListTenantRoomSessionsRow, error)
+	UpdateTenantRoomSession(ctx context.Context, arg sqlc.UpdateTenantRoomSessionParams) (sqlc.UpdateTenantRoomSessionRow, error)
 }
 
 func NewRoomRepository(queries roomQuerier, pools ...*pgxpool.Pool) RoomRepository {
@@ -159,7 +159,7 @@ func (r RoomRepository) CreateSession(ctx context.Context, input rooms.CreateSes
 		return rooms.Session{}, fmt.Errorf("create room session: %w", err)
 	}
 
-	return mapRoomSession(session), nil
+	return mapCreateRoomSession(session), nil
 }
 
 func (r RoomRepository) GetSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
@@ -175,7 +175,7 @@ func (r RoomRepository) GetSession(ctx context.Context, tenantID utilities.ID, r
 		return rooms.Session{}, fmt.Errorf("get room session: %w", err)
 	}
 
-	return mapRoomSession(session), nil
+	return mapGetRoomSession(session), nil
 }
 
 func (r RoomRepository) ListSessions(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, page pagination.PageRequest) (rooms.SessionList, error) {
@@ -195,7 +195,7 @@ func (r RoomRepository) ListSessions(ctx context.Context, tenantID utilities.ID,
 		Page:     pagination.Page{PageSize: size, HasMore: hasMore},
 	}
 	for _, row := range rows {
-		list.Sessions = append(list.Sessions, mapRoomSession(row))
+		list.Sessions = append(list.Sessions, mapListRoomSession(row))
 	}
 	if hasMore && len(list.Sessions) > 0 {
 		last := list.Sessions[len(list.Sessions)-1]
@@ -222,7 +222,7 @@ func (r RoomRepository) UpdateSession(ctx context.Context, tenantID utilities.ID
 		return rooms.Session{}, fmt.Errorf("update room session: %w", err)
 	}
 
-	return mapRoomSession(session), nil
+	return mapUpdateRoomSession(session), nil
 }
 
 func listTenantRoomsParams(tenantID utilities.ID, page pagination.PageRequest) sqlc.ListTenantRoomsParams {
@@ -274,7 +274,52 @@ func mapRoom(room sqlc.Room) rooms.Room {
 	}
 }
 
-func mapRoomSession(session sqlc.RoomSession) rooms.Session {
+func mapCreateRoomSession(session sqlc.CreateRoomSessionRow) rooms.Session {
+	return rooms.Session{
+		ID:              utilities.IDFromBytes(session.ID.Bytes),
+		Status:          session.Status,
+		Metadata:        jsonRaw(session.Metadata),
+		RoomID:          utilities.IDFromBytes(session.RoomID.Bytes),
+		TenantID:        utilities.IDFromBytes(session.TenantID.Bytes),
+		CreatedByUserID: nullableID(session.CreatedByUserID),
+		StartedAt:       nullableTimestamp(session.StartedAt),
+		EndedAt:         nullableTimestamp(session.EndedAt),
+		UpdatedAt:       timestamp(session.UpdatedAt),
+		CreatedAt:       timestamp(session.CreatedAt),
+	}
+}
+
+func mapGetRoomSession(session sqlc.GetTenantRoomSessionRow) rooms.Session {
+	return rooms.Session{
+		ID:              utilities.IDFromBytes(session.ID.Bytes),
+		Status:          session.Status,
+		Metadata:        jsonRaw(session.Metadata),
+		RoomID:          utilities.IDFromBytes(session.RoomID.Bytes),
+		TenantID:        utilities.IDFromBytes(session.TenantID.Bytes),
+		CreatedByUserID: nullableID(session.CreatedByUserID),
+		StartedAt:       nullableTimestamp(session.StartedAt),
+		EndedAt:         nullableTimestamp(session.EndedAt),
+		UpdatedAt:       timestamp(session.UpdatedAt),
+		CreatedAt:       timestamp(session.CreatedAt),
+	}
+}
+
+func mapListRoomSession(session sqlc.ListTenantRoomSessionsRow) rooms.Session {
+	return rooms.Session{
+		ID:              utilities.IDFromBytes(session.ID.Bytes),
+		Status:          session.Status,
+		Metadata:        jsonRaw(session.Metadata),
+		RoomID:          utilities.IDFromBytes(session.RoomID.Bytes),
+		TenantID:        utilities.IDFromBytes(session.TenantID.Bytes),
+		CreatedByUserID: nullableID(session.CreatedByUserID),
+		StartedAt:       nullableTimestamp(session.StartedAt),
+		EndedAt:         nullableTimestamp(session.EndedAt),
+		UpdatedAt:       timestamp(session.UpdatedAt),
+		CreatedAt:       timestamp(session.CreatedAt),
+	}
+}
+
+func mapUpdateRoomSession(session sqlc.UpdateTenantRoomSessionRow) rooms.Session {
 	return rooms.Session{
 		ID:              utilities.IDFromBytes(session.ID.Bytes),
 		Status:          session.Status,

@@ -58,14 +58,15 @@ defmodule ChalkSync.RealBrowserFixture do
         "participant_session_id" => identity.participant_session_id,
         "participant_session_generation" => identity.participant_session_generation,
         "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
-        "capabilities" => identity.capabilities,
+        "initial_role" => identity.role,
+        "eligible_roles" => identity.eligible_roles,
         "issued_at" => 1,
         "expires_at" => 4_102_444_800
       })
 
     IO.puts(
       "CHALK_SYNC_BROWSER_FIXTURE=" <>
-        JSON.encode!(%{url: "ws://127.0.0.1:#{port}/v2/sync", token: token})
+        JSON.encode!(%{url: "ws://127.0.0.1:#{port}/v3/sync", token: token})
     )
   end
 end

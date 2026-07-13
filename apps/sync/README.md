@@ -3,10 +3,11 @@
 Elixir/OTP WebSocket sync server and the primary `SyncEngine` adapter.
 
 Postgres is the sole durable authority for Session control state, ordered
-events, command receipts, participant-session lifecycle, and lifecycle delivery
-intents. Every BEAM process, ETS table, notification, and SDK replica is a
-disposable projection. Redis is absent from the correctness path and may only
-be added later as an optional presence or head-hint accelerator.
+events, command receipts, participant-session lifecycle, lifecycle intents,
+and externally effective operation intents. Actual media publications remain
+MediaPlane truth. Every BEAM process, ETS table, notification, and SDK replica
+is a disposable projection. Redis is absent from the correctness path and may
+only be added later as an optional presence or head-hint accelerator.
 
 ## Commands
 
@@ -15,7 +16,6 @@ mix deps.get
 mix test
 iex -S mix
 scripts/gate.sh
-scripts/sync-breaker-v2 --help
 ```
 
 Development listens on `http://localhost:4100`. The interactive lab at
@@ -24,7 +24,7 @@ surface and protocol v1.
 
 ## Durable architecture
 
-The v2 command path is:
+The v3 command path is:
 
 ```text
 WebSocket
@@ -50,23 +50,28 @@ periodic authoritative head read repairs every dropped hint.
 ## Lifecycle
 
 Session creation writes the product Session and revision-zero control row in
-one synchronous Postgres transaction. Participant admission, explicit removal,
-and Session end are API-generated, idempotent lifecycle intents. The sync
-consumer applies each intent through the same Session control lock. Opening or
-losing a socket never creates a durable join or leave.
+one synchronous Postgres transaction. Admission produces bounded lifecycle
+intents. Removal, explicit Leave, host recovery, deadline expiry, Recording,
+and Session end reserve idempotent external operations under the same Session
+control lock, execute provider effects outside the transaction, and finalize
+durable facts only after confirmation. Opening or losing a socket never creates
+a durable join or leave.
 
-## Protocol v2
+## Protocol v3
 
-The language-neutral source is `contract/schema/sync-v2.json`; generated
-Elixir and TypeScript bindings are checked by the root codegen gate. V2 has
+The language-neutral source is `contract/schema/sync-v3.json`; generated
+Elixir and TypeScript bindings are checked by the root codegen gate. V3 has
 strict frame bounds, tenant/Session-scoped identity, stable command IDs,
-digest-checked cursors, snapshot/replay/up-to-date recovery, bounded replay
-pages, retryable dependency outcomes, explicit terminal lifecycle results, and
-cumulative live delivery acknowledgments. A live frame keeps its event, byte,
-and age reservation until the SDK confirms the exact applied revision and
-state digest. Snapshot welcomes and replay pages retain the same reservations
-until an exact `recovery_ack` confirms successful client application, so a slow
-transport cannot hide work beyond the socket bounds.
+digest-checked control cursors, snapshot/replay/up-to-date recovery, bounded
+replay pages, retryable dependency outcomes, and explicit terminal lifecycle
+results. Control events retain their event, byte, and age reservations until
+the SDK confirms the exact applied revision and state digest. Snapshot welcomes
+and replay pages retain the same reservations until an exact `recovery_ack`
+confirms successful client application. Media and presence recover with fresh
+bounded projection snapshots, then change through exact-next events; disabled
+publications and disconnected presence are explicit tombstones. MediaPlane
+observations carry monotonic incarnation/sequence cursors so stale provider
+snapshots cannot overwrite newer truth.
 
 V1 remains only as a local compatibility surface while callers migrate. It is
 disabled by production configuration and is outside the production durability
@@ -86,7 +91,7 @@ Production boot refuses Memory, the development verifier, an incompatible
 migration, a non-writable database, and a missing required synchronous standby.
 The exact launch topology and WAL-lag ceiling remain deployment inputs.
 
-Production protocol-v2 admission verifies API-issued Ed25519 JWTs locally. Set
+Production protocol-v3 admission verifies API-issued Ed25519 JWTs locally. Set
 `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`, and
 `CHALK_SYNC_TOKEN_PUBLIC_KEYS`; the last value is a JSON object mapping each
 accepted `kid` to an unpadded base64url 32-byte Ed25519 public key. Rotation
@@ -134,12 +139,11 @@ its response frames and creates a journey at v1 sync ingress when one is absent.
 
 ## Verification
 
-The deterministic v2 breaker writes replayable artifacts under the ignored
-`apps/sync/.artifacts/` directory. The external
+The external
 [`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md)
-controls only local or staging process and provider drills around that breaker.
-Real-Postgres semantic tests, independent multi-node tests, transport bounds,
-browser/runtime proofs, lifecycle tests, failure schedules, and the repository
-gates define the production claim. See
-`scratchpad/sync-remaining-readiness-spec-2026-07-12.md` for the remaining
-acceptance contract.
+controls local or staging process and provider drills. Real-Postgres semantic
+tests, transport bounds, browser/runtime proofs, lifecycle tests, failure
+schedules, and the repository gates define the local claim. The replayable v3
+matrix is documented in [`sync-breaker-v3.md`](./docs/sync-breaker-v3.md); the
+complete acceptance contract is in
+[`declarative-sync-engine-v3-spec-2026-07-12.md`](../../scratchpad/declarative-sync-engine-v3-spec-2026-07-12.md).

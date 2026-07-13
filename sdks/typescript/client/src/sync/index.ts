@@ -1,18 +1,9 @@
-export { calculateBackoffDelay, type SyncBackoffOptions } from "./backoff";
-export { canonicalJson, canonicalJsonBytes, computeStateDigest, durableControlProjection } from "./canonical";
+export { canonicalJson, canonicalJsonBytes } from "./canonical";
 export { createBrowserSyncLifecycle, createBrowserWebSocketFactory, type BrowserLifecycleEnvironment, type BrowserWebSocketConstructor } from "./browser";
-export { createSyncClient, type CreateSyncClientOptions } from "./create";
-export { SyncClient, type SyncClientOptions } from "./client";
-export { reduceConnection, type ConnectionEvent } from "./connection";
-export { SyncDiagnosticBuffer, type SyncDiagnostic, type SyncDiagnostics } from "./diagnostics";
-export { SyncBrowserCapabilityError, SyncCapacityError, SyncCommandValidationError, SyncPendingExpiredError, SyncPersistenceError, SyncReactNativeCapabilityError } from "./errors";
-export { InMemoryPendingCommandStore, type PendingCommandStore } from "./persistence";
-export { IndexedDbPendingCommandStore, type IndexedDbPendingCommandStoreOptions } from "./indexeddb";
+export { SyncBrowserCapabilityError, SyncReactNativeCapabilityError } from "./errors";
 export {
-  AsyncStoragePendingCommandStore,
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
-  type AsyncStoragePendingCommandStoreOptions,
   type ReactNativeAppState,
   type ReactNativeAsyncStorage,
   type ReactNativeEventSubscription,
@@ -23,38 +14,38 @@ export {
   type ReactNativeWebSocketCloseEvent,
   type ReactNativeWebSocketConstructor,
 } from "./react-native";
-export { acceptReplayPage, beginRecovery, completeRecovery, RECOVERY_LIMITS, RecoveryValidationError, type RecoveryPlan } from "./recovery";
-export { applyOptimisticCommand, emptyControlState, optimisticControlState, reduceControlEvent, type ControlReducerError, type ControlReducerResult } from "./reducer";
-export { jsonSyncProtocolCodec, type SyncProtocolCodec } from "./protocol";
-export { syncV2ProtocolCodec } from "./v2-codec";
-export { SYNC_PROTOCOL_VERSION } from "./types";
+export { V3SyncClient, V3SyncError } from "./v3-client";
+export { createV3SyncClient, type CreateV3SyncClientOptions } from "./v3-create";
+export { decodeV3ClientFrame, decodeV3ServerFrame, encodeV3ClientFrame } from "./v3-codec";
+export { InMemoryV3PendingTargetStore } from "./v3-persistence";
+export { AsyncStorageV3PendingTargetStore, IndexedDbV3PendingTargetStore, type AsyncStorageV3PendingTargetStoreOptions, type IndexedDbV3PendingTargetStoreOptions } from "./v3-platform-persistence";
+export { applyV3Event, assertV3ControlSemantics, computeV3StateDigest, optimisticV3Control, restoreV3Snapshot, V3ReplicaError } from "./v3-reducer";
 export type {
-  AckFrame,
-  CanonicalReplica,
-  ClientFrame as SyncClientWireFrame,
-  ControlEvent,
-  ControlParticipant,
-  ControlState,
-  PendingCommand,
-  ProtocolErrorCode,
-  ProtocolErrorFrame,
-  RecoveryCompleteFrame,
-  ReplayPageFrame,
-  RetryableCommandErrorCode,
-  ServerFrame as SyncServerWireFrame,
-  SnapshotRecovery,
-  SyncClock,
-  SyncCommand,
-  SyncCommandFailure,
-  SyncConnectionState,
-  SyncHead,
-  SyncIdGenerator,
-  SyncLifecycle,
-  SyncLifecycleEvent,
-  SyncRandom,
-  SyncSnapshot,
-  SyncSocket,
-  SyncWebSocketFactory,
-  TerminalRejectionReason,
-  WelcomeFrame,
-} from "./types";
+  V3AdmissionPolicy,
+  V3AdmissionRequest,
+  V3AssignableRole,
+  V3Capability,
+  V3ClientMediaPlane,
+  V3CommandResult,
+  V3ConnectionPhase,
+  V3ControlState,
+  V3DirectedRequest,
+  V3DirectedRequestResult,
+  V3LiveTargetResult,
+  V3MediaPlaneOutcome,
+  V3MediaPlaneResult,
+  V3MediaPlaneTarget,
+  V3MediaPublication,
+  V3MediaSource,
+  V3Participant,
+  V3PendingTarget,
+  V3PendingTargetStore,
+  V3Presence,
+  V3Projection,
+  V3Recording,
+  V3Role,
+  V3SelfMediaTargetResult,
+  V3SessionSnapshot,
+  V3SyncClientOptions,
+  V3TargetCommand,
+} from "./v3-types";

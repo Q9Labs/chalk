@@ -3,7 +3,7 @@ import { createBrowserSyncLifecycle, createBrowserWebSocketFactory } from "./bro
 
 describe("browser sync boundaries", () => {
   it("adapts browser socket and lifecycle events through injected browser capabilities", () => {
-    const socket = createBrowserWebSocketFactory(TestBrowserWebSocket as unknown as new (url: string) => WebSocket).connect("wss://sync.test/v2/sync");
+    const socket = createBrowserWebSocketFactory(TestBrowserWebSocket as unknown as new (url: string) => WebSocket).connect("wss://sync.test/v3/sync");
     const events: string[] = [];
     socket.onopen = () => events.push("open");
     socket.onmessage = (event) => events.push(`message:${String(event.data)}`);
