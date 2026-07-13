@@ -1,0 +1,55 @@
+name: Recorder infrastructure contract
+
+on:
+  pull_request:
+    paths:
+      - "infrastructure/recorder/**"
+      - "infrastructure/uptime-worker/src/**"
+      - "scripts/recorder/**"
+      - ".github/workflows/recorder-infrastructure.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recorder-infrastructure-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate recorder IaC without provider mutation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+
+      - name: Setup pnpm
+        run: corepack enable && corepack prepare pnpm@10.26.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pinned OpenTofu
+        run: |
+          set -euo pipefail
+          version=1.12.3
+          archive="$RUNNER_TEMP/tofu-${version}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/tofu-bin"
+          curl --fail --silent --show-error --location \
+            "https://github.com/opentofu/opentofu/releases/download/v${version}/tofu_${version}_linux_amd64.tar.gz" \
+            --output "$archive"
+          echo "f87d45408dcbb963ddbe10b2f75e55b3495310556e05c35765dfd5913551f182  $archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP/tofu-bin" tofu
+          echo "$RUNNER_TEMP/tofu-bin" >> "$GITHUB_PATH"
+
+      - name: Recorder contract gate
+        run: pnpm run recorder:gate

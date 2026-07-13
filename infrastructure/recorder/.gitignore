@@ -1,0 +1,14 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+*.tfvars.json
+
+# Keep the provider lock file reviewable and checked in when generated.
+!.terraform.lock.hcl

@@ -141,6 +141,26 @@ func TestStoreGetObject(t *testing.T) {
 	}
 }
 
+func TestStoreInspectObject(t *testing.T) {
+	lastModified := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+	objects := &objectClientStub{headOutput: &s3.HeadObjectOutput{
+		ContentLength: aws.Int64(4096), ContentType: aws.String("application/octet-stream"), ETag: aws.String("etag"), LastModified: aws.Time(lastModified),
+		Metadata: map[string]string{"checksum": "sha256:value"},
+	}}
+	store := newStore("chalk-media", objects, nil)
+
+	facts, err := store.InspectObject(context.Background(), "tenants/tenant_123/recordings/bundles/random-key")
+	if err != nil {
+		t.Fatalf("inspect object: %v", err)
+	}
+	if facts.Size != 4096 || facts.ContentType != "application/octet-stream" || facts.Metadata["checksum"] != "sha256:value" {
+		t.Fatalf("facts = %#v", facts)
+	}
+	if aws.ToString(objects.headInput.Key) != "tenants/tenant_123/recordings/bundles/random-key" {
+		t.Fatalf("key = %q", aws.ToString(objects.headInput.Key))
+	}
+}
+
 func TestStoreDeleteObject(t *testing.T) {
 	objects := &objectClientStub{}
 	store := newStore("chalk-media", objects, nil)
@@ -170,9 +190,12 @@ func TestStoreCreateUploadURL(t *testing.T) {
 	store.now = func() time.Time { return now }
 
 	url, err := store.CreateUploadURL(context.Background(), objectstorage.CreateUploadURLInput{
-		Key:         "tenants/tenant_123/images/avatar.png",
-		ContentType: "image/png",
-		ExpiresIn:   15 * time.Minute,
+		Key:           "tenants/tenant_123/images/avatar.png",
+		ContentType:   "image/png",
+		ContentLength: 2048,
+		ExpiresIn:     15 * time.Minute,
+		IfNoneMatch:   true,
+		Metadata:      map[string]string{"checksum": "sha256:value"},
 	})
 	if err != nil {
 		t.Fatalf("create upload url: %v", err)
@@ -189,6 +212,12 @@ func TestStoreCreateUploadURL(t *testing.T) {
 	}
 	if aws.ToString(presign.putInput.ContentType) != "image/png" {
 		t.Fatalf("content type = %q, want image/png", aws.ToString(presign.putInput.ContentType))
+	}
+	if aws.ToInt64(presign.putInput.ContentLength) != 2048 || aws.ToString(presign.putInput.IfNoneMatch) != "*" {
+		t.Fatalf("immutable upload constraints = %#v", presign.putInput)
+	}
+	if presign.putInput.Metadata["checksum"] != "sha256:value" {
+		t.Fatalf("metadata = %#v", presign.putInput.Metadata)
 	}
 	if len(url.SignedHeader["Content-Type"]) != 1 {
 		t.Fatalf("signed headers = %#v, want content type header", url.SignedHeader)
@@ -250,6 +279,11 @@ func TestStoreMapsProviderErrors(t *testing.T) {
 			err:  errors.New("provider down"),
 			want: objectstorage.ErrProviderFailed,
 		},
+		{
+			name: "conditional create conflict",
+			err:  &smithy.GenericAPIError{Code: "PreconditionFailed", Message: "exists"},
+			want: objectstorage.ErrObjectAlreadyExists,
+		},
 	}
 
 	for _, tt := range tests {
@@ -307,8 +341,10 @@ type objectClientStub struct {
 	putInput    *s3.PutObjectInput
 	getInput    *s3.GetObjectInput
 	deleteInput *s3.DeleteObjectInput
+	headInput   *s3.HeadObjectInput
 	putOutput   *s3.PutObjectOutput
 	getOutput   *s3.GetObjectOutput
+	headOutput  *s3.HeadObjectOutput
 	err         error
 }
 
@@ -320,6 +356,11 @@ func (c *objectClientStub) PutObject(_ context.Context, params *s3.PutObjectInpu
 func (c *objectClientStub) GetObject(_ context.Context, params *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	c.getInput = params
 	return c.getOutput, c.err
+}
+
+func (c *objectClientStub) HeadObject(_ context.Context, params *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	c.headInput = params
+	return c.headOutput, c.err
 }
 
 func (c *objectClientStub) DeleteObject(_ context.Context, params *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {

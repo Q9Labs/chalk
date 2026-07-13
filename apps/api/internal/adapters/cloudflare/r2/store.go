@@ -25,6 +25,7 @@ var ErrMissingConfig = errors.New("missing cloudflare r2 config")
 type objectClient interface {
 	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 	DeleteObject(ctx context.Context, params *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
 }
 
@@ -86,6 +87,7 @@ func (s Store) PutObject(ctx context.Context, input objectstorage.PutObjectInput
 		ContentType:   aws.String(input.ContentType),
 		CacheControl:  stringPtr(input.CacheControl),
 		Metadata:      input.Metadata,
+		IfNoneMatch:   conditionalCreate(input.IfNoneMatch),
 	})
 	if err != nil {
 		return objectstorage.Object{}, providerError("put r2 object", err)
@@ -131,6 +133,31 @@ func (s Store) GetObject(ctx context.Context, key string) (objectstorage.ObjectR
 	}, nil
 }
 
+func (s Store) InspectObject(ctx context.Context, key string) (objectstorage.ObjectFacts, error) {
+	if s.objects == nil {
+		return objectstorage.ObjectFacts{}, objectstorage.ErrStoreUnavailable
+	}
+
+	output, err := s.objects.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return objectstorage.ObjectFacts{}, providerError("inspect r2 object", err)
+	}
+	if output == nil {
+		return objectstorage.ObjectFacts{}, fmt.Errorf("inspect r2 object: %w", objectstorage.ErrProviderFailed)
+	}
+
+	return objectstorage.ObjectFacts{
+		Object: objectstorage.Object{
+			Key:         key,
+			ETag:        stringValue(output.ETag),
+			ContentType: stringValue(output.ContentType),
+			Size:        int64Value(output.ContentLength),
+		},
+		LastModified: timeValue(output.LastModified),
+		Metadata:     output.Metadata,
+	}, nil
+}
+
 func (s Store) DeleteObject(ctx context.Context, key string) error {
 	if s.objects == nil {
 		return objectstorage.ErrStoreUnavailable
@@ -153,9 +180,12 @@ func (s Store) CreateUploadURL(ctx context.Context, input objectstorage.CreateUp
 	}
 
 	request, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(input.Key),
-		ContentType: aws.String(input.ContentType),
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(input.Key),
+		ContentType:   aws.String(input.ContentType),
+		ContentLength: positiveInt64(input.ContentLength),
+		IfNoneMatch:   conditionalCreate(input.IfNoneMatch),
+		Metadata:      input.Metadata,
 	}, presignExpires(input.ExpiresIn))
 	if err != nil {
 		return objectstorage.SignedURL{}, providerError("presign r2 upload", err)
@@ -231,8 +261,25 @@ func providerError(operation string, err error) error {
 	if objectNotFound(err) {
 		return fmt.Errorf("%s: %w", operation, errors.Join(objectstorage.ErrObjectNotFound, err))
 	}
+	if objectAlreadyExists(err) {
+		return fmt.Errorf("%s: %w", operation, errors.Join(objectstorage.ErrObjectAlreadyExists, err))
+	}
 
 	return fmt.Errorf("%s: %w", operation, errors.Join(objectstorage.ErrProviderFailed, err))
+}
+
+func objectAlreadyExists(err error) bool {
+	var apiError smithy.APIError
+	if !errors.As(err, &apiError) {
+		return false
+	}
+
+	switch apiError.ErrorCode() {
+	case "PreconditionFailed", "412":
+		return true
+	default:
+		return false
+	}
 }
 
 func objectNotFound(err error) bool {
@@ -267,6 +314,22 @@ func stringPtr(value string) *string {
 	}
 
 	return aws.String(value)
+}
+
+func conditionalCreate(enabled bool) *string {
+	if !enabled {
+		return nil
+	}
+
+	return aws.String("*")
+}
+
+func positiveInt64(value int64) *int64 {
+	if value <= 0 {
+		return nil
+	}
+
+	return aws.Int64(value)
 }
 
 func stringValue(value *string) string {

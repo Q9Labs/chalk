@@ -30,6 +30,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/recorderhealth"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
@@ -165,6 +167,9 @@ func run() error {
 	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
+	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries)
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
+	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	transcriptRepository := postgres.NewTranscriptRepositoryWithPool(operationQueries, pool)
 	transcriptService := transcripts.NewService(transcriptRepository)
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
@@ -276,6 +281,8 @@ func run() error {
 		AuditLogs:          auditLogService,
 		RecordingDownloads: recordingDownloads,
 		RecordingObjects:   recordingObjects,
+		RecordingPipeline:  recordingPipelineService,
+		RecorderHealth:     recorderHealthService,
 		Recordings:         recordingService,
 		Rooms:              roomService,
 		SessionLifecycle:   sessionLifecycleService,
@@ -327,6 +334,9 @@ func run() error {
 	dispatcher := webhooks.NewDispatcher(postgres.NewWebhookDispatchRepository(pool), webhookProtector, webhooks.NewDeliveryClient(nil), dispatcherOwner.String())
 	dispatcherErr := make(chan error, 1)
 	go func() { dispatcherErr <- dispatcher.Run(signalCtx) }()
+	deadlineScheduler := sessionlifecycle.NewDeadlineScheduler(sessionLifecycleRepository, cfg.DeadlineScheduler.Interval, cfg.DeadlineScheduler.Batch)
+	deadlineSchedulerErr := make(chan error, 1)
+	go func() { deadlineSchedulerErr <- deadlineScheduler.Run(signalCtx) }()
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -348,6 +358,9 @@ func run() error {
 		runErr = err
 		stop()
 	case err := <-dispatcherErr:
+		runErr = err
+		stop()
+	case err := <-deadlineSchedulerErr:
 		runErr = err
 		stop()
 	case <-signalCtx.Done():

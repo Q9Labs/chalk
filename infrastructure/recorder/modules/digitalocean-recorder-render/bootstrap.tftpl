@@ -1,0 +1,19 @@
+#cloud-config
+# Reference contract for the external recorder reconciler. OpenTofu does not
+# create Droplets or render this template. The reconciler supplies one signed,
+# one-time assertion over its private bootstrap channel; no assertion or
+# reusable credential is present in state, user-data, or this file.
+write_files:
+  - path: /etc/chalk-recorder/bootstrap.env
+    permissions: "0400"
+    owner: root:root
+    content: |
+      CHALK_RECORDER_ENVIRONMENT=${environment}
+      CHALK_RECORDER_POOL=${pool}
+      CHALK_RECORDER_RELEASE=${release_id}
+      CHALK_RECORDER_IMAGE_DIGEST=${image_digest}
+      CHALK_RECORDER_BOOTSTRAP_ENDPOINT=${bootstrap_endpoint}
+      CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE=external-reconciler
+runcmd:
+  - [ "/usr/local/sbin/chalk-recorder-bootstrap", "--one-time", "--require-signed-assertion", "--require-droplet-inventory-match", "--require-boot-generation", "--env-file", "/etc/chalk-recorder/bootstrap.env" ]
+  - [ "/usr/bin/rm", "-f", "/etc/chalk-recorder/bootstrap.env" ]
