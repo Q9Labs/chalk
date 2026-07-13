@@ -30,3 +30,40 @@ staging, production, or provider database was touched.
 
 Status: done. No migration defect was observed, so the canonical DDL was not
 edited. The migration and this evidence are integrated as one isolated change.
+
+## 2026-07-13 16:49 PKT — review repair and final verification
+
+The post-commit review invalidated the earlier done verdict. It found that the
+backdated `20260712233000` version could be skipped by databases already at the
+`20260713090000` head, and that the v3 lifecycle and receipt checks rejected
+valid v2 writes during a rolling upgrade. GPT-5.6 Sol Medium confirmed the
+repair: move the migration to `20260713130000`, preserve the v2 lifecycle
+index, and make the validated checks accept the disjoint v2 and v3 contracts.
+
+- Renamed the migration to
+  `apps/api/db/migrations/20260713130000_add_declarative_sync_v3.sql`; final
+  hash: `b695b1e83e01208d8d0097d8533c477b65cca3546b6c1dd5277780f1351c7dd1`
+  (`44767` bytes).
+- Updated `apps/api/db/schema.sql` to match the migration and raised Sync's
+  minimum compatible migration to `20260713130000`.
+- `go tool goose -dir db/migrations validate` passed.
+- Fresh PostgreSQL 18.3 verification passed through `20260713130000`, including
+  an empty down-to `20260713120000` and reapply to `20260713130000`.
+- Upgrade verification started from the exact `ff6209fd^` migration set at
+  `20260713090000`; normal Goose `up` applied `20260713100000`,
+  `20260713120000`, and `20260713130000` without `-allow-missing`.
+- Post-upgrade v2 compatibility writes succeeded: four legacy
+  `raise_hand`/`lower_hand` receipts and both `participant_left` and
+  `session_ended` lifecycle intents. All three repaired constraints report
+  `convalidated = true`.
+- The full Go API gate passed against the fresh verification database. The full
+  Sync gate passed: 387 tests, 0 failures, 96 skipped.
+
+Final migration-repair status: done. No staging, production, or provider
+database was touched.
+
+The repository-wide `pnpm run gate` passed hygiene, static analysis, secret and
+dependency security scans, the API gate, contract generation checks, dependency
+alignment, and test-presence checks. It stopped at `format:check` on the same ten
+unrelated pre-existing files reported before this repair; none is part of this
+migration change. The migration's API and Sync gates remain green.

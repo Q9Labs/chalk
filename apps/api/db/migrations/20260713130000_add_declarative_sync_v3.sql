@@ -209,45 +209,16 @@ alter table sync_lifecycle_intents
     add constraint sync_lifecycle_intents_sync_v3_target_check
         check (
             (
-                intent_name = 'participant_joined'
+                intent_name in ('participant_joined', 'participant_left')
                 and participant_session_id is not null
                 and participant_session_generation > 0
             )
             or (
-                intent_name = 'admission_requested'
+                intent_name in ('session_ended', 'admission_requested')
                 and participant_session_id is null
                 and participant_session_generation is null
             )
-        ) not valid;
-
--- NOT VALID keeps unpublished v2 participant_left/session_ended history in
--- place while enforcing the v3 target contract for every new or updated row.
--- Fresh installs and upgrades without that history retain a validated schema.
--- +goose StatementBegin
-do $$
-begin
-    if not exists (
-        select 1
-        from sync_lifecycle_intents
-        where intent_name in ('participant_left', 'session_ended')
-    ) then
-        alter table sync_lifecycle_intents
-            validate constraint sync_lifecycle_intents_sync_v3_target_check;
-    end if;
-end;
-$$;
--- +goose StatementEnd
-
-drop index sync_lifecycle_intents_participant_transition_key;
-create unique index sync_lifecycle_intents_participant_transition_key
-    on sync_lifecycle_intents(
-        tenant_id,
-        session_id,
-        intent_name,
-        participant_session_id,
-        participant_session_generation
-    )
-    where intent_name = 'participant_joined';
+        );
 
 alter table sync_lifecycle_intents
     add constraint sync_lifecycle_intents_sync_v3_generation_fkey
@@ -314,6 +285,8 @@ alter table sync_command_receipts
     add column completed_at timestamptz,
     add constraint sync_command_receipts_sync_v3_command_name_check
         check (command_name in (
+            'raise_hand',
+            'lower_hand',
             'set_hand_raised',
             'set_display_name',
             'set_admission_policy',
@@ -329,79 +302,127 @@ alter table sync_command_receipts
             'stop_recording',
             'participant_leave',
             'end_session'
-        )) not valid,
+        )),
     add constraint sync_command_receipts_sync_v3_outcome_check
         check (
             (
-                outcome = 'committed'
-                and rejection_reason is null
-                and event_id is not null
-                and resulting_revision > 0
-                and octet_length(resulting_state_digest) = 32
-                and completed_at is not null
-            )
-            or (
-                outcome = 'satisfied'
-                and rejection_reason is null
-                and event_id is null
-                and resulting_revision >= 0
-                and octet_length(resulting_state_digest) = 32
+                command_name in ('raise_hand', 'lower_hand')
+                and resulting_state_digest is null
                 and external_operation_id is null
-                and completed_at is not null
-            )
-            or (
-                outcome = 'pending'
-                and rejection_reason is null
-                and external_operation_id is not null
                 and completed_at is null
                 and (
                     (
-                        command_name in ('set_participant_role', 'transfer_host')
+                        outcome = 'committed'
+                        and rejection_reason is null
                         and event_id is not null
                         and resulting_revision > 0
-                        and octet_length(resulting_state_digest) = 32
                     )
                     or (
-                        command_name not in ('set_participant_role', 'transfer_host')
+                        outcome = 'rejected'
+                        and rejection_reason in (
+                            'session_ended',
+                            'participant_inactive',
+                            'stale_participant_generation',
+                            'capability_denied',
+                            'invalid_state',
+                            'command_id_conflict'
+                        )
                         and event_id is null
                         and resulting_revision is null
-                        and resulting_state_digest is null
                     )
                 )
             )
             or (
-                outcome = 'rejected'
-                and rejection_reason in (
-                    'session_ended',
-                    'participant_inactive',
-                    'stale_participant_generation',
-                    'capability_denied',
-                    'invalid_state',
-                    'invalid_target',
-                    'role_not_eligible',
-                    'host_transfer_required',
-                    'screen_share_in_use',
-                    'recording_in_progress',
-                    'external_operation_failed'
+                command_name in (
+                    'set_hand_raised',
+                    'set_display_name',
+                    'set_admission_policy',
+                    'set_participant_role',
+                    'transfer_host',
+                    'admit_participant',
+                    'deny_admission',
+                    'mute_participant',
+                    'stop_participant_camera',
+                    'stop_participant_screen_share',
+                    'remove_participant',
+                    'start_recording',
+                    'stop_recording',
+                    'participant_leave',
+                    'end_session'
                 )
-                and completed_at is not null
                 and (
                     (
-                        command_name in ('set_participant_role', 'transfer_host')
-                        and external_operation_id is not null
+                        outcome = 'committed'
+                        and rejection_reason is null
                         and event_id is not null
                         and resulting_revision > 0
                         and octet_length(resulting_state_digest) = 32
+                        and completed_at is not null
                     )
                     or (
-                        command_name not in ('set_participant_role', 'transfer_host')
+                        outcome = 'satisfied'
+                        and rejection_reason is null
                         and event_id is null
-                        and resulting_revision is null
-                        and resulting_state_digest is null
+                        and resulting_revision >= 0
+                        and octet_length(resulting_state_digest) = 32
+                        and external_operation_id is null
+                        and completed_at is not null
+                    )
+                    or (
+                        outcome = 'pending'
+                        and rejection_reason is null
+                        and external_operation_id is not null
+                        and completed_at is null
+                        and (
+                            (
+                                command_name in ('set_participant_role', 'transfer_host')
+                                and event_id is not null
+                                and resulting_revision > 0
+                                and octet_length(resulting_state_digest) = 32
+                            )
+                            or (
+                                command_name not in ('set_participant_role', 'transfer_host')
+                                and event_id is null
+                                and resulting_revision is null
+                                and resulting_state_digest is null
+                            )
+                        )
+                    )
+                    or (
+                        outcome = 'rejected'
+                        and rejection_reason in (
+                            'session_ended',
+                            'participant_inactive',
+                            'stale_participant_generation',
+                            'capability_denied',
+                            'invalid_state',
+                            'invalid_target',
+                            'role_not_eligible',
+                            'host_transfer_required',
+                            'screen_share_in_use',
+                            'recording_in_progress',
+                            'external_operation_failed'
+                        )
+                        and completed_at is not null
+                        and (
+                            (
+                                command_name in ('set_participant_role', 'transfer_host')
+                                and external_operation_id is not null
+                                and event_id is not null
+                                and resulting_revision > 0
+                                and octet_length(resulting_state_digest) = 32
+                            )
+                            or (
+                                command_name not in ('set_participant_role', 'transfer_host')
+                                and event_id is null
+                                and resulting_revision is null
+                                and resulting_state_digest is null
+                            )
+                        )
                     )
                 )
             )
-        ) not valid,
+        ),
     add constraint sync_command_receipts_sync_v3_event_fkey
         foreign key (
             tenant_id,
@@ -417,22 +438,6 @@ alter table sync_command_receipts
         )
         on delete restrict
         deferrable initially deferred;
-
--- Existing v2 receipts intentionally keep their legacy command names and NULL
--- v3 completion fields. NOT VALID preserves those rows without admitting new
--- v2 writes; an empty receipt history can validate both v3 checks immediately.
--- +goose StatementBegin
-do $$
-begin
-    if not exists (select 1 from sync_command_receipts) then
-        alter table sync_command_receipts
-            validate constraint sync_command_receipts_sync_v3_command_name_check;
-        alter table sync_command_receipts
-            validate constraint sync_command_receipts_sync_v3_outcome_check;
-    end if;
-end;
-$$;
--- +goose StatementEnd
 
 create table sync_external_operations (
     tenant_id uuid not null,
@@ -985,17 +990,6 @@ alter table sync_control_events
 
 alter table sync_lifecycle_intents
     drop constraint sync_lifecycle_intents_sync_v3_generation_fkey;
-
-drop index sync_lifecycle_intents_participant_transition_key;
-create unique index sync_lifecycle_intents_participant_transition_key
-    on sync_lifecycle_intents(
-        tenant_id,
-        session_id,
-        intent_name,
-        participant_session_id,
-        participant_session_generation
-    )
-    where intent_name in ('participant_joined', 'participant_left');
 
 alter table sync_lifecycle_intents
     drop constraint sync_lifecycle_intents_sync_v3_target_check,
