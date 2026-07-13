@@ -1,12 +1,12 @@
 # Declarative core-conference sync v3
 
-Status: proposed
+Status: implementation complete; verification closure blocked
 
 Protocol v3 turns Chalk’s existing durable control path into the provider-neutral state and command contract for a complete core video conference. It preserves the current Postgres authority, exact revision chain, stable receipts, digest-checked recovery, bounded transport, and optimistic client loop, while replacing operation-shaped durable commands with absolute targets and adding the missing admission, role, moderation, recording, media-control, and Session-lifecycle surfaces.
 
 The boundary is hexagonal. `SyncEngine` and `MediaPlane` are independent ports, and provider-specific behavior lives only in adapters. Postgres is the sole durable authority for Session policy, participant lifecycle, roles, desired control state, command receipts, lifecycle and external-operation intents, recording projections, and exact control history. `MediaPlane` executes and observes actual microphone, camera, and screen publications. `SyncEngine` enforces current capabilities, serializes shared live rights, distributes provider-neutral live projections, and repairs clients. The SDK combines those projections into one internally consistent `SessionSnapshot` without treating an adapter or local replica as authority.
 
-Chalk has no production v2 clients, so this is a clean replacement. Production v2 admission remains disabled, v3 uses `/v3/sync`, and v2 is removed after v3 passes equivalent local and staging proofs.
+Chalk has no production v2 clients, so this is a clean replacement. Production v2 admission remains disabled, v3 uses `/v3/sync`, and the unpublished v2 route, contract, runtime, storage, and breaker surfaces are removed without a compatibility window.
 
 ## Done and stopping point
 
@@ -32,12 +32,12 @@ The implementation stops after those workflows and proofs. Chat, reactions, tran
 
 The same Session appears through four authorities, each with one job:
 
-| Concern | Authority | Recovery contract |
-| --- | --- | --- |
-| Session policy, participant lifecycle, display names, host/cohost assignment, hand state, admission, recording projection, moderation facts, receipts, and lifecycle/external-operation intents | Postgres through the Session Stateholder transaction boundary | Exact control replay when serviceable, otherwise digest-checked snapshot; terminal recovery after Session or participant end |
-| Actual microphone, camera, and screen publications | Installed `MediaPlane` adapter behind the provider-neutral port | Observe a fresh provider-neutral publication snapshot; never replay stale track history |
-| Connection, speaking, active-speaker, and current availability | Live coordination/presence projection | Replace with the latest bounded snapshot; socket loss expires presence but never changes durable membership |
-| Device choice, speaker volume, layout, backgrounds, and caption visibility | Local SDK/application | Local persistence if the application wants it; never enters the shared protocol |
+| Concern                                                                                                                                                                                         | Authority                                                       | Recovery contract                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Session policy, participant lifecycle, display names, host/cohost assignment, hand state, admission, recording projection, moderation facts, receipts, and lifecycle/external-operation intents | Postgres through the Session Stateholder transaction boundary   | Exact control replay when serviceable, otherwise digest-checked snapshot; terminal recovery after Session or participant end |
+| Actual microphone, camera, and screen publications                                                                                                                                              | Installed `MediaPlane` adapter behind the provider-neutral port | Observe a fresh provider-neutral publication snapshot; never replay stale track history                                      |
+| Connection, speaking, active-speaker, and current availability                                                                                                                                  | Live coordination/presence projection                           | Replace with the latest bounded snapshot; socket loss expires presence but never changes durable membership                  |
+| Device choice, speaker volume, layout, backgrounds, and caption visibility                                                                                                                      | Local SDK/application                                           | Local persistence if the application wants it; never enters the shared protocol                                              |
 
 `SyncEngine` owns the protocol and live coordination, not the media implementation. It validates current Session authority before a MediaPlane action, carries low-latency provider-neutral signals, and publishes confirmed outcomes. `MediaPlane` owns media execution and observed publication state, not Session roles or durable policy. Its stable contract has a client-runtime surface for local capture/publication and observation plus a server-control surface for grants, remote stop/removal, and authoritative observation; an adapter may implement those surfaces through different provider SDKs without leaking that split into Chalk’s domain. The Go API owns Session creation, tenant policy, signed admission authority, durable lifecycle producers, maximum-duration scheduling, tenant recovery, and recording orchestration.
 
@@ -47,12 +47,12 @@ The durable authority key remains `{tenant_id, session_id}`. `Room` is the reusa
 
 V3 makes each subscribed stream declare its own four-question contract instead of hard-coding all behavior as `control`.
 
-| Stream | Client declaration | Version | Recovery |
-| --- | --- | --- | --- |
-| `control` | Required with nullable `{ revision, state_schema_version, state_digest }` cursor | Durable monotonic revision plus digest | Snapshot, bounded exact replay, up to date, or terminal |
-| `media` | Required with no durable cursor | Provider-observed publication snapshot incarnation | Replace from the latest MediaPlane projection, then apply live exact-incarnation changes |
-| `presence` | Required with no durable cursor | Disposable projection incarnation | Replace with latest presence; stale entries expire |
-| `requests` | Required only for the authenticated participant | No replay cursor | No recovery; requests expire and a missed request is gone |
+| Stream     | Client declaration                                                               | Version                                            | Recovery                                                                                 |
+| ---------- | -------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `control`  | Required with nullable `{ revision, state_schema_version, state_digest }` cursor | Durable monotonic revision plus digest             | Snapshot, bounded exact replay, up to date, or terminal                                  |
+| `media`    | Required with no durable cursor                                                  | Provider-observed publication snapshot incarnation | Replace from the latest MediaPlane projection, then apply live exact-incarnation changes |
+| `presence` | Required with no durable cursor                                                  | Disposable projection incarnation                  | Replace with latest presence; stale entries expire                                       |
+| `requests` | Required only for the authenticated participant                                  | No replay cursor                                   | No recovery; requests expire and a missed request is gone                                |
 
 The language-neutral schema declares these stream policies and bounds. A concrete registry may implement them, but generic callbacks, empty stream modules, or speculative chat/whiteboard implementations are rejected. Every snapshot, replay page, live event, request, queue, and retained reservation remains bounded by count, bytes, and age.
 
@@ -65,11 +65,11 @@ Session creation fixes the following policy:
 - `host_exit_policy` is `require_transfer` or `promote_cohost` and is immutable after creation.
 - Role-to-capability mappings for `host`, `cohost`, and `participant` are supplied by the tenant at creation and remain immutable while the Session is active.
 - Screen-share concurrency is exactly one active sharer.
-- `max_duration` is tenant-selected and bounded by the plan ceiling. Only the tenant control plane may change the resulting deadline, and it may never exceed that ceiling.
+- `max_duration` is tenant-selected and bounded by the plan ceiling. Only the tenant control plane may change the resulting deadline, and it may never exceed that ceiling. Each change creates a generation-fenced `tenant_set_deadline` intent and an exact-next `deadline_changed` control fact so replicas, replay, and maximum-duration scheduling observe the same durable generation.
 
 `admission_policy` is live durable control state and may be set to `open`, `approval`, or `closed` by a participant whose current capabilities allow it. `open` admits a valid join immediately, `approval` creates a bounded durable `AdmissionRequest`, and `closed` rejects without creating pending work.
 
-There is exactly one host authority in an active Session. The canonical state stores `host_participant_id`; the public `host` role is derived for that Participant. Other participants are `cohost` or `participant`. `setParticipantRole` can select only cohost or participant. `transferHost` is the sole participant command that changes `host_participant_id`; it atomically makes the old host a cohost and the target the host.
+There is exactly one host authority in an active Session. The canonical state stores `host_participant_session_id`; the public `host` role is derived for that Participant. Other participants are `cohost` or `participant`. `setParticipantRole` can select only cohost or participant. `transferHost` is the sole participant command that changes `host_participant_session_id`; it atomically makes the old host a cohost and the target the host.
 
 A tenant-signed participant token carries `initial_role` and `eligible_roles`. Admission stores the verified eligible set. A role transition is rejected unless the target role is eligible, so a host can delegate authority without overriding tenant-signed limits. The server evaluates capabilities from the Participant’s current role and the immutable Session mapping on every command; clients may use projected capabilities for UI but never authorize themselves.
 
@@ -102,23 +102,23 @@ Toggle, increment, decrement, “next,” and other relative shapes are forbidde
 
 ### Durable participant and Session targets
 
-| Public SDK method | Wire intent | Authorization | Durable result |
-| --- | --- | --- | --- |
-| `setHandRaised(raised)` | `set_hand_raised { raised }` | Self plus `raiseHand` | `hand_raised` or `hand_lowered`; `satisfied` when unchanged |
-| `setDisplayName(displayName)` | `set_display_name { display_name }` | Self plus `renameSelf` | `participant_display_name_changed`; `satisfied` when unchanged |
-| `setAdmissionPolicy(policy)` | `set_admission_policy { policy }` | `manageAdmission` | `admission_policy_changed`; `satisfied` when unchanged |
-| `setParticipantRole(participantId, role)` | `set_participant_role { participant_id, role }` | `promoteDemote`; target role cohost or participant and token-eligible | `participant_role_changed`; `satisfied` when unchanged |
-| `transferHost(participantId)` | `transfer_host { participant_id }` | Current host; target is active and host-eligible | `host_transferred`; atomically swaps host authority |
+| Public SDK method                                | Wire intent                                             | Authorization                                                         | Durable result                                                 |
+| ------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `setHandRaised(raised)`                          | `set_hand_raised { raised }`                            | Self plus `raiseHand`                                                 | `hand_raised` or `hand_lowered`; `satisfied` when unchanged    |
+| `setDisplayName(displayName)`                    | `set_display_name { display_name }`                     | Self plus `renameSelf`                                                | `participant_display_name_changed`; `satisfied` when unchanged |
+| `setAdmissionPolicy(policy)`                     | `set_admission_policy { policy }`                       | `manageAdmission`                                                     | `admission_policy_changed`; `satisfied` when unchanged         |
+| `setParticipantRole(participantSessionId, role)` | `set_participant_role { participant_session_id, role }` | `promoteDemote`; target role cohost or participant and token-eligible | `participant_role_changed`; `satisfied` when unchanged         |
+| `transferHost(participantSessionId)`             | `transfer_host { participant_session_id }`              | Current host; target is active and host-eligible                      | `host_transferred`; atomically swaps host authority            |
 
 Display names are Session-scoped, self-controlled, non-empty after surrounding-whitespace validation, valid UTF-8, and bounded to the existing 256-byte limit. Names need not be unique and never alter User, external identity, token subject, or Participant ID. Moderator renaming is absent.
 
 ### Live self-media targets
 
-| Public SDK method | Provider-neutral target | Completion |
-| --- | --- | --- |
-| `setMicrophoneEnabled(enabled)` | Local `microphone` publication desired on/off | MediaPlane confirms observed target or returns a stable retryable/terminal error |
-| `setCameraEnabled(enabled)` | Local `camera` publication desired on/off | MediaPlane confirms observed target or returns a stable retryable/terminal error |
-| `setScreenShareEnabled(enabled, options?)` | Acquire/release the single share lease and publish/stop `screen` | Lease plus MediaPlane confirmation; no implicit eviction of another sharer |
+| Public SDK method                          | Provider-neutral target                                          | Completion                                                                       |
+| ------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `setMicrophoneEnabled(enabled)`            | Local `microphone` publication desired on/off                    | MediaPlane confirms observed target or returns a stable retryable/terminal error |
+| `setCameraEnabled(enabled)`                | Local `camera` publication desired on/off                        | MediaPlane confirms observed target or returns a stable retryable/terminal error |
+| `setScreenShareEnabled(enabled, options?)` | Acquire/release the single share lease and publish/stop `screen` | Lease plus MediaPlane confirmation; no implicit eviction of another sharer       |
 
 Local enablement requires the current publish capability and device permission, but DevicePermission remains local and is never confused with Session authority. An already-observed target returns `satisfied`. These operations are safe to retry because they set an absolute target. The SDK does not persist them as durable pending control commands across process death; after reconnect it observes current MediaPlane truth and the application may request a new target.
 
@@ -126,29 +126,31 @@ The single screen-share slot uses a bounded Postgres coordination lease keyed by
 
 ### Directed consent requests
 
-| Public SDK method | Meaning |
-| --- | --- |
-| `requestUnmute(participantId)` | Ask an active participant to enable their microphone |
-| `requestStartCamera(participantId)` | Ask an active participant to enable their camera |
+| Public SDK method                   | Meaning                                              |
+| ----------------------------------- | ---------------------------------------------------- |
+| `requestUnmute(participantId)`      | Ask an active participant to enable their microphone |
+| `requestStartCamera(participantId)` | Ask an active participant to enable their camera     |
 
 Requests require the corresponding moderation capability, are bounded and rate-limited per actor/target/Session, carry a stable request ID and expiry, and are delivered only to the target Participant’s active connections. Delivery ACK means the request reached an active target connection; expiry, rejection, or no active connection never becomes a media-state fact. Requests are not replayed after reconnect. No command may force a remote microphone or camera on.
 
 ### Admission, moderation, recording, and lifecycle intents
 
-| Public/API operation | Durable intent and completion |
-| --- | --- |
-| `admit(requestId)` | Apply one pending AdmissionRequest, create/activate the Participant lifecycle, and publish `participant_joined` |
-| `deny(requestId)` | Terminally mark one pending request denied and publish `admission_denied`; no Participant becomes active |
-| `muteParticipant(participantId)` | Revoke/stop the current microphone publication once; succeed only after MediaPlane confirms off, then publish `participant_microphone_stopped` |
-| `stopParticipantCamera(participantId)` | Stop the current camera publication once; succeed only after MediaPlane confirms off, then publish `participant_camera_stopped` |
-| `stopParticipantScreenShare(participantId)` | Stop the current screen publication and release its lease; succeed only after both are confirmed, then publish `participant_screen_share_stopped` |
-| `removeParticipant(participantId)` | Revoke live authority immediately, remove through MediaPlane, finalize durable membership Leave after confirmation, and publish `participant_left` with a bounded reason code |
-| `startRecording()` | Reserve a stable Recording ID, durably enter `starting`, start through the recording/provider port, and reconcile to `recording` or `failed` |
-| `stopRecording(recordingId)` | Durably enter `stopping`, stop the matching active Recording, and reconcile to `stopped` or `failed` |
-| `leave()` | Create the caller’s lifecycle intent; enforce host-exit policy; remove MediaPlane participation; publish the atomic Leave/succession fact |
-| `endSession()` | Revoke Session authority, stop/reconcile active media and Recording work, and publish terminal `session_ended` |
-| Tenant `transferHost` / `endSession` | Control-plane-only recovery intents authenticated independently of participant capabilities |
-| Maximum-duration expiry | Scheduler-generated idempotent end intent for the current deadline generation |
+| Public/API operation                        | Durable intent and completion                                                                                                                                                 |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admit(requestId)`                          | Apply one pending AdmissionRequest, create/activate the Participant lifecycle, and publish `participant_joined`                                                               |
+| `deny(requestId)`                           | Terminally mark one pending request denied and publish `admission_denied`; no Participant becomes active                                                                      |
+| AdmissionRequest expiry                     | Generation-safe scheduler intent that terminally expires the still-pending request and publishes `admission_expired`                                                          |
+| `muteParticipant(participantId)`            | Revoke/stop the current microphone publication once; succeed only after MediaPlane confirms off, then publish `participant_microphone_stopped`                                |
+| `stopParticipantCamera(participantId)`      | Stop the current camera publication once; succeed only after MediaPlane confirms off, then publish `participant_camera_stopped`                                               |
+| `stopParticipantScreenShare(participantId)` | Stop the current screen publication and release its lease; succeed only after both are confirmed, then publish `participant_screen_share_stopped`                             |
+| `removeParticipant(participantId)`          | Revoke live authority immediately, remove through MediaPlane, finalize durable membership Leave after confirmation, and publish `participant_left` with a bounded reason code |
+| `startRecording()`                          | Reserve a stable Recording ID, durably enter `starting`, start through the recording/provider port, and reconcile to `recording` or `failed`                                  |
+| `stopRecording(recordingId)`                | Durably enter `stopping`, stop the matching active Recording, and reconcile to `stopped` or `failed`                                                                          |
+| `leave()`                                   | Create the caller’s lifecycle intent; enforce host-exit policy; remove MediaPlane participation; publish the atomic Leave/succession fact                                     |
+| `endSession()`                              | Revoke Session authority, stop/reconcile active media and Recording work, and publish terminal `session_ended`                                                                |
+| Tenant `transferHost` / `endSession`        | Control-plane-only recovery intents authenticated independently of participant capabilities                                                                                   |
+| Tenant `setDeadline`                        | Generation-fenced control-plane intent that atomically updates the bounded Session deadline and publishes `deadline_changed`                                                  |
+| Maximum-duration expiry                     | Scheduler-generated idempotent end intent for the current deadline generation                                                                                                 |
 
 Moderation off is a one-time forced stop, not a durable ban on self-publishing. While a stop intent is pending, SyncEngine installs a bounded source-specific publication fence before calling MediaPlane, so the target cannot race the confirmation by republishing. Finalization removes the fence; a participant who still has the current publish capability may then enable again. Removing or restricting that capability requires a role transition; v3 has no per-participant capability override.
 
@@ -191,7 +193,7 @@ Satisfied receipts consume bounded receipt capacity and retention but no event c
 
 The pure control reducer returns `change`, `satisfied`, or a stable error for every target command. Events remain past-tense facts, even when commands are declarative. A repeated target with a new command ID receives a satisfied receipt and emits no event; logs record state transitions rather than every request.
 
-Host Leave under `promote_cohost` must be one atomic reducer fact whose payload identifies the departing host and successor, so no replay prefix exposes an active Session with zero hosts. Explicit `host_transferred` similarly changes `host_participant_id` and the old host’s derived role in one event. Lifecycle and external-operation events have exactly one durable origin ID. Every event remains exact-next and carries the resulting state digest.
+Host Leave under `promote_cohost` must be one atomic reducer fact whose payload identifies the departing host and successor, so no replay prefix exposes an active Session with zero hosts. Explicit `host_transferred` similarly changes `host_participant_session_id` and the old host’s derived role in one event. Lifecycle and external-operation events have exactly one durable origin ID. Every event remains exact-next and carries the resulting state digest.
 
 Replica application accepts only the exact next revision or an identical already-applied duplicate. A gap, conflicting duplicate, schema mismatch, impossible role/host state, or digest mismatch stops live application and enters authoritative recovery.
 
@@ -213,7 +215,7 @@ V3 uses a new pending-storage namespace. Development-era v2 commands are deleted
 - Two simultaneous screen-share starts serialize on the Session lease; at most one receives the lease, and failure or confirmed publication loss releases it without waiting for reconnect grace.
 - Role demotion races with moderation or recording by locking current authority; a command either validates before the role transition and has a durable accepted intent, or observes the new role and is rejected.
 - A role or host transition that revokes an exercised publish capability is durable before cleanup, fences republishing immediately, and withholds terminal success until MediaPlane confirms every required stop.
-- Admission policy changes do not retroactively admit or discard existing requests. Requests already pending remain explicitly decidable until their bounded expiry.
+- Admission policy changes do not retroactively admit or discard existing requests. Requests already pending remain explicitly decidable until their bounded expiry; expiry is an external-origin `admission_expired` fact rather than a wall-clock filter over the fold.
 - Disconnect never means Leave, never transfers host, and never ends Session membership. Presence and directed requests may disappear; durable control and pending commands recover.
 - A Session with no connected host continues. If the host never returns, tenant recovery or maximum-duration expiry provides the only host-authority escape.
 - MediaPlane observation always overrides stale client track state. Postgres never claims a camera or microphone remains on after an adapter reports it gone.
@@ -253,15 +255,15 @@ A failing artifact records seed, Git revision, contract version, sanitized polic
 
 The implementation should be executed in dependency order. Independent lanes may run in parallel only after the shared v3 schema, state vocabulary, error codes, and storage invariants are fixed.
 
-- [ ] **Phase 1 — Freeze interfaces.** Finalize the language-neutral v3 stream, command, event, receipt, policy, capability, and error schemas; update SDK ubiquitous language and North Star references; define Postgres constraints and provider-neutral MediaPlane operations before server or client implementation branches.
-- [ ] **Phase 2 — Durable authority.** Implement migrations, Session policy, host/role/admission/display/hand reducer state, satisfied receipts, external intents, deadline generations, recording projection, and real-Postgres semantic tests. This lane owns database and reducer files.
-- [ ] **Phase 3 — Live media coordination.** Implement MediaPlane-facing self-media targets, confirmed moderation, directed requests, single-share leases, live media/presence snapshots, and reconciliation. This lane owns the port boundary and sync live-coordination files, not durable reducer internals.
-- [ ] **Phase 4 — API lifecycle.** Implement Session creation policy, signed initial/eligible roles, admission producers, tenant host recovery, maximum-duration scheduler, removal/end fencing, and recording orchestration. This lane owns Go/API files and consumes the fixed schema/intents from Phases 1–2.
-- [ ] **Phase 5 — SDK runtime.** Implement v3 codec, `SessionSnapshot`, target methods, durable optimistic queue, MediaPlane composition, capability projection, and browser/React Native persistence. This lane owns TypeScript client files and consumes the fixed generated contract.
-- [ ] **Phase 6 — Breaker and integration.** Extend the deterministic breaker and independent oracle across all action classes, multi-node/Postgres, MediaPlane failures, and process races; add the real browser core-conference flow.
-- [ ] **Phase 7 — Remove v2 and close proofs.** Delete v2 route/schema/generated/runtime/storage surfaces after equivalent v3 tests pass; run all focused and repository gates, one bounded top-level code review, staging-only canary proofs, and document any unavailable production proof as not done.
+- [x] **Phase 1 — Freeze interfaces.** Finalize the language-neutral v3 stream, command, event, receipt, policy, capability, and error schemas; update SDK ubiquitous language and North Star references; define Postgres constraints and provider-neutral MediaPlane operations before server or client implementation branches.
+- [x] **Phase 2 — Durable authority.** Implement migrations, Session policy, host/role/admission/display/hand reducer state, satisfied receipts, external intents, deadline generations, recording projection, and real-Postgres semantic tests. This lane owns database and reducer files.
+- [x] **Phase 3 — Live media coordination.** Implement MediaPlane-facing self-media targets, confirmed moderation, directed requests, single-share leases, live media/presence snapshots, and reconciliation. This lane owns the port boundary and sync live-coordination files, not durable reducer internals.
+- [x] **Phase 4 — API lifecycle.** Implement Session creation policy, signed initial/eligible roles, admission producers, tenant host recovery, maximum-duration scheduler, removal/end fencing, and recording orchestration. This lane owns Go/API files and consumes the fixed schema/intents from Phases 1–2.
+- [x] **Phase 5 — SDK runtime.** Implement v3 codec, `SessionSnapshot`, target methods, durable optimistic queue, MediaPlane composition, capability projection, and browser/React Native persistence. This lane owns TypeScript client files and consumes the fixed generated contract.
+- [x] **Phase 6 — Breaker and integration.** Extend the deterministic breaker and independent oracle across all action classes, multi-node/Postgres, MediaPlane failures, and process races; add the real browser core-conference flow.
+- [ ] **Phase 7 — Remove v2 and close proofs.** The v2 route, schema, generated, runtime, storage, and breaker surfaces are deleted, and the bounded top-level review plus its one allowed re-review are complete with every actionable finding fixed and test-backed. Closure still requires an exact green repository gate and the staging-only canary against an explicitly approved target. The current shared worktree blocks the root gate on unrelated formatter-invalid documents and the existing Expo/Hermes incompatibility with Effect `4.0.0-beta.94`.
 
-One implementation agent owns each file set. Every implementation spawn uses `agent_type: default`, model `gpt-5.6-sol`, reasoning effort `high`, service tier `standard`, and `fork_turns: none`; no implementation lane uses Luna. The parent provides a self-contained brief, fixes shared interfaces before parallel work, integrates cross-lane seams, reads authority/security changes line by line, and runs the final end-to-end proof. At most three implementation agents run concurrently because the parent occupies the fourth slot. A separate advisor may critique authorization, external-effect reconciliation, and invariants but does not implement. Implementation agents do not spawn agents, run `codex review`, edit another lane’s files, or invent schema changes locally; a required interface change returns to the parent before dependent work continues.
+One implementation agent owns each file set. Every implementation spawn uses `agent_type: default`, model `gpt-5.6-sol`, reasoning effort `medium`, the orchestration service-tier default, and `fork_turns: none`; no implementation lane uses Luna. The service-tier field is omitted because the orchestration API represents its default through absence and rejects both literal `standard` and literal `default` for Sol. The parent provides a self-contained brief, fixes shared interfaces before parallel work, integrates cross-lane seams, reads authority/security changes line by line, and runs the final end-to-end proof. At most three implementation agents run concurrently because the parent occupies the fourth slot. A separate advisor may critique authorization, external-effect reconciliation, and invariants but does not implement. Implementation agents do not spawn agents, run `codex review`, edit another lane’s files, or invent schema changes locally; a required interface change returns to the parent before dependent work continues.
 
 ## Verification gate
 

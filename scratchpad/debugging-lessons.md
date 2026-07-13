@@ -94,3 +94,25 @@ every journey requires an explicit delivery contract, durable acceptance point,
 idempotent event identity, deduplication, late-event handling, and backfill.
 Grafana can remain the cockpit while a separate durable record preserves the
 journey skeleton through telemetry-backend outages.
+
+## Transactional Producers Need Post-Commit Signals
+
+Do not emit committed or fanout counters while a webhook producer is still
+inside its enclosing product transaction; a later rollback creates phantom
+success telemetry. Emit from the original post-commit return path, using a
+bounded lookup keyed by the durable transition, and keep replay or duplicate
+resolution silent.
+
+Postgrex defaults JSON/JSONB handling to optional Jason callbacks. An Elixir
+application using the standard `JSON` module should configure Postgrex's JSON
+library explicitly, or production builds that omit a dev-only transitive Jason
+dependency can compile yet fail on their first persisted JSONB read.
+
+## Generated Decoders Must Preserve Validated Authority Fields
+
+A generated decoder can validate an exact wire field and still break the
+runtime if it omits that field from the normalized value. Assert the semantic
+decoded shape as well as fixture acceptance and generated-file drift. Real
+transport proofs should treat a protocol error after apparent convergence as a
+failure, because racing to stop after the event can hide a rejected delivery
+acknowledgement.

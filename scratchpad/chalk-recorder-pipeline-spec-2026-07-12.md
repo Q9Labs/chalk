@@ -20,6 +20,24 @@ track-aware transcription — the consumer of the speaker-turn manifest and
 audio chunks this pipeline emits — is specified in
 `scratchpad/chalk-transcription-spec-2026-07-12.md`.
 
+Implementation details are split across four dedicated companions:
+
+- `scratchpad/chalk-recorder-control-plane-spec-2026-07-13.md` owns admission,
+  worker authority, durable jobs, scaling, reconciliation, cleanup, and health;
+- `scratchpad/chalk-recorder-cloudflare-capture-worker-spec-2026-07-13.md`
+  owns direct Cloudflare Realtime SFU selective capture and encrypted bundles;
+- `scratchpad/chalk-recorder-render-finalization-worker-spec-2026-07-13.md`
+  owns deterministic GPU composition, artifact verification, and transcription
+  source finalization;
+- `scratchpad/chalk-recorder-staging-qualification-spec-2026-07-13.md` owns
+  real-provider ceiling, failure, cleanup, observability, cost, and evidence
+  gates.
+
+These companions may add implementation detail but cannot weaken this file or
+the parent infrastructure contract. An unresolved companion question blocks
+its first contract-freeze gate; it is not permission for an executor to invent
+the answer.
+
 ## Admission and reservation
 
 The production admission ceiling is 20 simultaneous captured meetings within a

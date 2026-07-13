@@ -7,8 +7,13 @@ below; only scheduling and grouping changed.
 
 Parent: `scratchpad/chalk-infrastructure-readiness-spec-2026-07-11.md`. Its
 settled decisions, canonical terms, non-goals, anti-slop rules, and approval
-boundaries bind all execution work. Companion specs hold the recorder,
+boundaries bind all execution work. Companion specs hold the API, recorder,
 transcription, observability, and cost detail.
+
+All implementation that must finish before the first staging apply is now
+collected in `scratchpad/chalk-pre-staging-readiness-spec-2026-07-13.md`. Live
+staging creation and qualification remain in the milestones below and must not
+be pulled into a pre-staging implementation lane.
 
 Owner: Hasan Shoaib
 
@@ -59,17 +64,18 @@ Rules:
 
 Each worker reads the parent spec plus only the companions its lane names:
 
-| Lane | Scope | Additional reading |
-| ---- | ----- | ------------------ |
-| Platform | Go API and Elixir sync packaging, boot state machine, health authority, deploy/rollback, Stateholder proofs | parent only |
-| Capture | SGP1 native selective capture, reservations, bundles, fencing | recorder spec |
-| Render | TOR1 GPU composite, deadline scheduling, envelope decryption | recorder spec |
-| Transcription | Speaker-turn consumption, ASR adapters, Lambda dispatcher | recorder spec (artifact jobs), transcription spec |
-| Observability | Telemetry, uptime services, status, alerting | observability spec |
-| IaC and release | OpenTofu states, release ledger, CI identity, plan/policy/cost checks | cost model |
+| Lane            | Scope                                                                                                       | Additional reading                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Platform        | Go API and Elixir sync packaging, boot state machine, health authority, deploy/rollback, Stateholder proofs | Pre-staging readiness spec; API requirements source; parent for shared platform and Sync |
+| Capture         | SGP1 native selective capture, reservations, bundles, fencing                                               | recorder spec                                                  |
+| Render          | TOR1 GPU composite, deadline scheduling, envelope decryption                                                | recorder spec                                                  |
+| Transcription   | Speaker-turn consumption, ASR adapters, Lambda dispatcher                                                   | recorder spec (artifact jobs), transcription spec              |
+| Observability   | Telemetry, uptime services, status, alerting                                                                | observability spec                                             |
+| IaC and release | OpenTofu states, release ledger, CI identity, plan/policy/cost checks                                       | cost model                                                     |
 
-Lane interfaces are already specified: the PostgreSQL artifact-job tables and
-recorder control API (capture/render/transcription against platform), the
+Lane interfaces are already specified: the API readiness contract, the
+PostgreSQL artifact-job tables and recorder control API
+(capture/render/transcription against platform), the
 release manifest (every lane against IaC), and the telemetry contract (every
 lane against observability).
 

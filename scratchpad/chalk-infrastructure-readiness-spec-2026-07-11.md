@@ -10,7 +10,7 @@ first promotion.
 
 Owner: Hasan Shoaib
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 ## Document Map
 
@@ -19,13 +19,15 @@ topology, and gates. Companion documents hold isolated implementation detail
 and the execution strategy; a worker reads this file plus the companions its
 task names:
 
-| Companion | File |
-| --------- | ---- |
-| Execution strategy: spikes, lanes, milestones, handoff | `scratchpad/chalk-infra-execution-strategy-2026-07-12.md` |
-| Recorder and artifact pipeline | `scratchpad/chalk-recorder-pipeline-spec-2026-07-12.md` |
-| Track-aware transcription | `scratchpad/chalk-transcription-spec-2026-07-12.md` |
-| Observability, uptime, and status | `scratchpad/chalk-observability-uptime-spec-2026-07-12.md` |
-| Cost model, dated prices, and parametric planning model | `scratchpad/chalk-infra-cost-model-2026-07-12.md` |
+| Companion                                               | File                                                        |
+| ------------------------------------------------------- | ----------------------------------------------------------- |
+| Execution strategy: spikes, lanes, milestones, handoff  | `scratchpad/chalk-infra-execution-strategy-2026-07-12.md`   |
+| Across-the-board pre-staging readiness                  | `scratchpad/chalk-pre-staging-readiness-spec-2026-07-13.md` |
+| Go API requirements source                              | `scratchpad/chalk-api-staging-readiness-spec-2026-07-13.md` |
+| Recorder and artifact pipeline                          | `scratchpad/chalk-recorder-pipeline-spec-2026-07-12.md`     |
+| Track-aware transcription                               | `scratchpad/chalk-transcription-spec-2026-07-12.md`         |
+| Observability, uptime, and status                       | `scratchpad/chalk-observability-uptime-spec-2026-07-12.md`  |
+| Cost model, dated prices, and parametric planning model | `scratchpad/chalk-infra-cost-model-2026-07-12.md`           |
 
 The settled decisions, canonical terms, non-goals, source-of-truth rules, and
 anti-slop rules in this file bind every companion, and companions carry the
@@ -1446,21 +1448,13 @@ and usage-ledger controls — is specified in
 
 ### Go API
 
-Before go-live, the API lane must provide:
-
-- a production, non-root, multi-architecture image and graceful shutdown proof;
-- complete environment validation for the selected Cloudflare SFU, R2,
-  PlanetScale, optional Redis acceleration, domain, and observability configuration;
-- liveness that reports only process health and readiness that names required,
-  degraded, and optional dependency failures without triggering replacement
-  loops during a provider outage;
-- trusted proxy and client-IP handling for cloudflared;
-- a release/version endpoint or safe health metadata;
-- separate runtime and migrator database roles;
-- a migration compatibility and live smoke contract;
-- user/tenant deletion, pseudonymization, tombstone replay, expiry scheduling,
-  and provider-deletion workflows for every retained PostgreSQL class;
-- provider timeouts, retries, reconciliation, and safe degraded behavior.
+The across-the-board implementation boundary and the separation between local
+work and later staging verification are specified in
+`scratchpad/chalk-pre-staging-readiness-spec-2026-07-13.md`. The detailed API
+requirements remain in `scratchpad/chalk-api-staging-readiness-spec-2026-07-13.md`
+as a source document; where it mixes implementation with live staging actions,
+the pre-staging boundary controls. Recording and transcription continue to use
+their companion state machine and artifact-job contracts.
 
 ### Elixir sync
 
