@@ -18,8 +18,42 @@ customer-visible component. Deployment-specific URLs, monitor IDs, alert
 recipients, and credentials stay in private configuration rather than public
 documentation.
 
+Recorder admission uses the public-safe API contracts
+`/healthz/recorder/capture` and `/healthz/recorder/render`. Each returns 200
+only when its reconciler and qualified capacity are healthy, and 503 when
+stale provider, qualification, or readiness state closes admission; neither
+response exposes pool counts, regions, identifiers, or failure details.
+
 See [`../docs/observability.md`](../docs/observability.md) for correlation,
 telemetry, alerting, and end-to-end proof requirements.
+
+## Recorder infrastructure
+
+The recorder pools are declared under [`recorder/`](recorder/). Capture uses
+separate SGP1 CPU policy and a scoped DigitalOcean provider identity; render
+uses separate TOR1 GPU policy and identity. OpenTofu owns immutable pool tags,
+outbound-only firewalls, image/release contracts, and the zero-idle capacity
+bounds. The external recorder reconciler owns Droplet creation, prewarm,
+desired capacity, fencing, and replacement, so an IaC replacement can never
+briefly exceed the 11 capture, 10 render, or 21 global caps. The root
+configuration also declares the private temporary R2 lifecycle and Singapore
+AWS KMS recording KEK. The KMS policy grants data-key operations only to the
+control-plane role with the fixed environment and required recording context;
+recorder nodes receive neither KMS nor provider credentials.
+
+Run `pnpm run recorder:gate` for backend-disabled OpenTofu format/validation,
+capacity-contract tests, and the fail-closed credential check. The command does
+not apply infrastructure. A mutation requires a redacted staging-evidence
+digest, separate short-lived DigitalOcean tokens, a scoped Cloudflare token,
+the control-plane role ARN, immutable image digests, and external one-time
+bootstrap endpoints. Production R2 adoption additionally requires an explicit
+existing bucket name, private inventory import ID, and a no-delete/no-
+replacement plan digest; a default name can never create a replacement. The
+external reconciler must provide a signed, one-time bootstrap assertion bound
+to environment, role, release, intended Droplet, region, and boot generation;
+OpenTofu only records that contract and never receives or stores the assertion.
+Protected environment configuration holds these values, never tracked tfvars,
+cloud-init assertions, plans, or logs.
 
 ## Asset CDN
 

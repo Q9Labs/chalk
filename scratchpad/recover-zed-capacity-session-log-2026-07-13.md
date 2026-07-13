@@ -1,0 +1,1 @@
+2026-07-13T06:03:28Z — Started the overnight Zed capacity-recovery check. The Computer Use session was explicitly stopped before any Zed task group or task state could be inspected; no task was resumed.

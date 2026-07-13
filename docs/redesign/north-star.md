@@ -90,17 +90,17 @@ Internal names: **Tenant** (the root) and **User** (the person). "Org / account 
 
 **Identity ⊥ role:** anonymous / user / external-identity is _who you are_; host / co-host / participant is _what you can do_. A guest can be a host; a logged-in user can be a plain participant. "Guest" is never a role.
 
-**v1 meeting roles** (webinars deferred → no viewer tier):
+**Core meeting roles** (webinars deferred → no viewer tier):
 
-- **Host** — admit, remove, mute anyone, lock room, end-for-all, manage recording, promote/demote, transfer ownership.
-- **Co-host / moderator** — delegated moderation; _not_ delete/transfer the room.
-- **Participant** — publish A/V/screen, subscribe, chat, react, raise hand.
+- **Host** — the Session's one host authority; may transfer host when the immutable role mapping grants the corresponding capability.
+- **Co-host / moderator** — delegated conference authority within the immutable Session capability mapping; never acquires host authority implicitly except through the configured host-exit policy.
+- **Participant** — the ordinary conference preset, with its exact authority determined by the same Session mapping.
 
-**Mechanics:** a role is a named **preset over a capability set**; the **token carries resolved capabilities**, not the role name, and **MediaPlane / SyncEngine enforce capabilities server-side** — never trusted from the client. Webinar roles slot in later as new presets without touching enforcement.
+**Mechanics:** a role is a named **preset over a capability set**. A tenant-signed participant token carries `initial_role` and `eligible_roles`; the immutable Session role-to-capability mapping resolves current authority. MediaPlane / SyncEngine derive and enforce that authority server-side on every operation, never from client-asserted capabilities. Webinar roles can slot in later as new presets without changing that enforcement boundary.
 
-**Capabilities:** `publishAudio/Video/Screen` · `subscribe` · `sendChat` · `react` · `raiseHand` · `muteOthers` · `removeParticipant` · `admitFromLobby` · `lockRoom` · `endMeeting` · `manageRecording` · `promoteDemote` · `grantDraw`.
+**Core-conference capabilities:** `publishAudio` · `publishVideo` · `publishScreen` · `subscribe` · `raiseHand` · `renameSelf` · `manageAdmission` · `promoteDemote` · `transferHost` · `muteOthers` · `stopVideoOthers` · `stopScreenOthers` · `requestMediaOthers` · `removeParticipant` · `manageRecording` · `endMeeting`. Chat, reactions, drawing, and other collaboration capabilities remain owned by their separate streams.
 
-**Decided for v1:** **lobby / waiting room** (adds a `pending → admitted` participant state); **screen-share open to all, restrictable** by host/tenant; a **no-account guest can be host** (caps come from the token, not identity); **host succession is a Session policy** with two modes: `require_transfer` rejects the sole host's explicit leave until they transfer host authority or end the Session, while `promote_cohost` atomically promotes the longest-tenured active co-host, using Participant ID as the deterministic tie-breaker, and falls back to `require_transfer` when no co-host is active. A disconnect is presence loss rather than an explicit leave, so it never transfers host authority or ends the meeting.
+**Settled for Sync v3:** admission is `open | approval | closed`; screen sharing has one serialized active lease; a no-account guest can be host because authority comes from the signed role envelope rather than identity; and host succession is an immutable per-Session policy. `require_transfer` rejects the sole host's explicit leave until host authority is transferred or the Session ends. `promote_cohost` atomically promotes the longest-tenured active co-host, using Participant ID as the deterministic tie-breaker, and falls back to `require_transfer` when no co-host is active. A disconnect is presence loss rather than an explicit leave, so it never transfers host authority or ends the meeting. Only the tenant control plane may change a Session deadline, and every change advances its durable generation exactly once.
 
 ---
 

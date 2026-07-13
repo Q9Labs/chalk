@@ -140,6 +140,32 @@ There should be no placeholder logic kept as a reminder of what core might do
 later. The reminder belongs here, in this spec. The code should either be real
 owned behavior in the right package or no behavior at all.
 
+## SyncEngine v3
+
+`V3SyncClient` is the provider-neutral conference state client. Point it at the
+exact `/v3/sync` websocket endpoint and supply a participant token plus a
+platform websocket factory. Applications that use self-media setters must also
+install a `V3ClientMediaPlane` adapter. The server result authorizes the live
+target, then the same stable operation ID is passed to
+`setLocalPublicationTarget`; the Promise resolves only after both halves report
+`confirmed` or `satisfied`, so wire permission never masquerades as a real
+microphone, camera, or screen change. The adapter exposes read-only local and
+remote publication observations and deliberately has no remote force-on method.
+
+The Session snapshot composes durable control state with replace-latest media
+and presence projections. Capabilities are always derived from the durable role
+map, and directed media requests remain live-only.
+The snapshot keeps canonical `control` separate from `optimisticControl`, so a
+pending target never masquerades under the authoritative revision and digest.
+
+Durable setters and operations accept an optional stable `commandId`; otherwise
+the client generates one. The five durable target methods are
+`setHandRaised`, `setDisplayName`, `setAdmissionPolicy`, `setParticipantRole`,
+and `transferHost`. Local media uses `setMicrophoneEnabled`,
+`setCameraEnabled`, and `setScreenShareEnabled`. Remote media can only be
+stopped through the moderation methods or requested through `requestUnmute`
+and `requestStartCamera`; the SDK has no remote force-on surface.
+
 ## Core-Owned Behaviors
 
 Chalk Client should own the behaviors that make every surface agree on how a

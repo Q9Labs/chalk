@@ -1,0 +1,1 @@
+- 2026-07-12T22:05:39Z — Found 2 exact `gopls` processes via `pgrep -fl gopls`; terminated them with `pkill -TERM -x gopls`; verification returned zero remaining. SIGKILL was not needed.

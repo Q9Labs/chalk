@@ -17,6 +17,7 @@ const ignoredPathMatchers = [
   (relativePath) => relativePath.endsWith("/styles.ts"),
   (relativePath) => relativePath.includes("/types/"),
   (relativePath) => relativePath.endsWith("/types.ts"),
+  (relativePath) => relativePath.endsWith("-types.ts"),
   (relativePath) => relativePath.includes("/routes/"),
   (relativePath) => relativePath.includes("/scripts/"),
 ];

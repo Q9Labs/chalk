@@ -1,0 +1,4 @@
+# Recover capacity session log — 2026-07-13
+
+- 2026-07-13T09:04:34+05:00 — Started the overnight Zed capacity-recovery check. Read the prior automation memory, which identified the four Chalk implementation tasks to inspect. Computer Use's initial Zed state capture did not return after 70 seconds and was terminated; the subsequent Computer Use call reported that the application session had been explicitly stopped for this turn. No Zed workspace group or task state was read in this run, and no `continue` action was sent.
+- 2026-07-13T10:01:55+05:00 — Started a fresh scheduled check. Read the automation memory and prior session logs. The desktop thread-title update remained unresponsive after 30 seconds, so the check continued. Computer Use then reported that Zed's application session had been explicitly stopped for this turn. No visible workspace groups or tasks could be inspected, and no `continue` action was sent.

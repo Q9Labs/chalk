@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Recorder pipeline foundation with bounded reservation admission, PostgreSQL
+  leased jobs and fencing, mTLS worker identity, encrypted capture bundles,
+  deterministic 720p render fixtures, generated API/SDK contracts, public-safe
+  pool health checks, and fail-closed recorder infrastructure gates.
 - Track-aware asynchronous transcription foundations, including recorder-owned
   source manifests, fenced PostgreSQL artifact and cleanup jobs, private R2
   transcript artifacts, DeepInfra and Cloudflare adapters, and a scale-to-zero
@@ -22,16 +26,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Participant lifecycle events, with durable signed retries and redelivery,
   generated management clients, server-only TypeScript receiver processing,
   and linked journey observability.
+- Declarative SyncEngine v3 TypeScript client support for exact four-stream
+  recovery, role-derived capabilities, durable target commands, conference
+  operations, live media targets, directed consent requests, and isolated web
+  and React Native pending-target persistence.
+- Declarative SyncEngine v3 server authority for immutable Session policy,
+  roles and admission, generation-fenced deadlines, confirmed moderation and
+  Recording operations, single-share leases, exact-next live projections, and
+  bounded terminal retention on PostgreSQL 18.
+- A checksummed four-phase SyncEngine v3 breaker that executes 37 seeded
+  durable, provider, delivery, recovery, wire, and production-SDK schedules and
+  reproduces the complete semantic artifact twice.
 - API-issued five-minute Ed25519 sync participant tokens with fail-closed
   production verification, overlap key rotation, authenticated refresh, and
   generated SDK contracts.
 - Public-safe release-topology failure scheduling with validated deterministic
   schedules, local/staging execution safeguards, and sanitized evidence
   bundles.
-- Protocol-v2 durable sync control with PostgreSQL authority, stable command
-  receipts, exact revision folding, acknowledged bounded recovery and live
-  delivery, multi-node repair, production readiness/drain telemetry, and
-  browser plus React Native client persistence adapters.
 - Test-only sync breaker harness with deterministic model histories, real
   WebSocket campaigns, controlled writer faults, replay-ready JSONL traces, and
   failure-first Markdown reports.
@@ -117,5 +128,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Removed
 
+- Unpublished SyncEngine v2 routes, generated contracts, server transport,
+  breaker harness, tests, and TypeScript client and persistence surfaces after
+  the strict v3 replacement passed its local proofs.
 - Raw scratchpad session logs, local upload artifacts, private agent skills, and
   internal release archaeology from the tracked tree.

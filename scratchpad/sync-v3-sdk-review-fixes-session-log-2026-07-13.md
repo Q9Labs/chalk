@@ -1,0 +1,9 @@
+# Sync v3 SDK review fixes session log
+
+- 2026-07-13: Reviewed repository instructions, the v3 client lifecycle, durable pending-target persistence, and existing client tests. Confirmed three async gaps: failed startup leaves `#started` latched, stopped startup resumes after `load()`, and failed durable cleanup throws before settling the command promise.
+- 2026-07-13: Added a startup generation guard and reset-on-failure behavior. Added an in-memory pending-removal lane that reserves acknowledged command IDs, retries persistence deletion, and is excluded from command replay.
+- 2026-07-13: Added focused client regressions. `pnpm exec vitest run src/sync/v3-client.test.ts` passed 39 tests; `pnpm run check-types` and targeted `oxfmt --check` both passed.
+- 2026-07-13: Final focused v3 SDK run passed 43 tests across client, persistence, platform persistence, and creation. TypeScript checking and targeted formatting passed after the final lifecycle cleanup.
+- 2026-07-13: Follow-up integration fixes settle ACK promises before cleanup I/O, reserve cleanup-only IDs before settlement/removal, reconcile absent rows on startup, and include cleanup-only rows and bytes in capacity. Added blocking-removal restart, ambiguous-delete, and capacity regressions; the focused client file passed 42 tests.
+- 2026-07-13: Guarded cleanup completions by pending-record identity so a stale ambiguous attempt cannot re-reserve an ID after startup proves its row absent. Final focused suite passed 46 tests; type and formatting checks passed.
+- 2026-07-13: Routed expired/over-capacity restored-row deletion through cleanup-only retry handling. Added a failing-removal expired-row regression proving zero replay and successful scheduled cleanup; final focused suite passed 47 tests, with type and formatting checks green.

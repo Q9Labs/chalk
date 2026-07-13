@@ -1,0 +1,4 @@
+# Recover overnight Zed workers — session log
+
+- 2026-07-13 06:01 PKT — Started the scheduled capacity-recovery check. Read the Computer Use, writing, and code standards instructions; automation memory was absent. Thread-title update did not return after 60 seconds and was cancelled; inspection will proceed through Zed's visible UI.
+- 2026-07-13 06:07 PKT — Inspected Chalk tasks: "Implement Chalk transcription spec" and "Implement Chalk recorder pipeline" had ordinary idle prompts with no capacity interruption; "Implement Declarative Core-Conference Sync v3" was visibly Working; "Outbound Webhooks Implementation Phases 1-3" had an ordinary idle prompt with no capacity interruption. Expanded kaadr and inspected one UUID-titled task with an ordinary idle prompt and one background terminal running. The user then explicitly stopped the application session before the second kaadr task or other collapsed workspace groups could be inspected. No continuation was sent.
