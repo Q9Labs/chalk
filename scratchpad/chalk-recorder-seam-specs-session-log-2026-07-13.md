@@ -12,3 +12,8 @@
 - Used official Cloudflare documentation to settle direct Cloudflare Realtime SFU as the native capture transport; Pion is the worker WebRTC client, RealtimeKit remains transitional, and workers never receive the SFU application secret.
 - Folded a cross-spec critique into the drafts: server-owned object intents, reconciler-owned pool health, transactional artifact/transcription finalization with one job per chunk, evidence-driven capture density, pinned GPU contract gates, exact monitoring envelopes, staging-only mutation language, and explicit fixed-versus-usage cost guards.
 - Verified formatting, whitespace, local references, and that every spec ends with its unresolved questions.
+
+## 2026-07-13 18:17 PKT
+
+- Re-read the four seam specs as one system and prepared the brief-style grand summary: architectural verdict, authority boundaries, qualification bar, and the decisions that still block contract freeze.
+- No repository `brief.md` or `BRIEF.md` was present, so the summary follows the established grand-summary convention rather than inventing a new document format.
