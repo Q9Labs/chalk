@@ -1,0 +1,1511 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Recorder Contract Flow</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        background: light-dark(rgb(255 255 255), rgb(24 24 24));
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        box-sizing: border-box;
+        padding: 1rem;
+        background: inherit;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        max-width: 736px;
+        height: calc(100vh - 2rem);
+        margin: 0 auto;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      sandbox="allow-scripts"
+      referrerpolicy="no-referrer"
+      title="Recorder Contract Flow"
+      srcdoc='&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+&lt;meta name="referrer" content="no-referrer"&gt;
+&lt;meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;"&gt;
+&lt;title&gt;Recorder Contract Flow&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(--background) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: light-dark(rgb(255 255 255), rgb(24 24 24));
+  --foreground: light-dark(rgb(26 28 31), rgb(255 255 255));
+  --card: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --card-foreground: var(--foreground);
+  --popover: light-dark(rgb(255 255 255), rgb(45 45 45));
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(rgb(51 156 255), rgb(131 195 255));
+  --primary-foreground: light-dark(rgb(255 255 255), rgb(13 13 13));
+  --secondary: light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: light-dark(
+    rgb(26 28 31 / 49.4%),
+    rgb(255 255 255 / 49.8%)
+  );
+  --accent: light-dark(rgb(229 242 255), rgb(13 39 63));
+  --accent-foreground: var(--primary);
+  --destructive: light-dark(rgb(226 85 7), rgb(255 133 73));
+  --border: light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%));
+  --input: light-dark(
+    rgb(26 28 31 / 11.8%),
+    color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+  );
+  --ring: light-dark(rgb(51 156 255), rgb(131 195 255 / 76%));
+  --font-size-base: 14px;
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: 12.5px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+  --color-background-primary: var(--background);
+  --color-text-primary: var(--foreground);
+  --color-border-secondary: var(--border);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--viz-font-weight-medium);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+    [aria-pressed="true"],
+    [aria-selected="true"],
+    .is-selected
+  ) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id="recorder-contract-flow"&gt;
+  &lt;style&gt;
+    #recorder-contract-flow {
+      display: grid;
+      gap: 1.25rem;
+      color: var(--foreground);
+    }
+
+    #recorder-contract-flow .rcv-controls {
+      justify-content: center;
+    }
+
+    #recorder-contract-flow .rcv-detail {
+      display: flex;
+      min-height: 2.5rem;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: var(--foreground);
+      text-align: center;
+    }
+
+    #recorder-contract-flow .rcv-detail strong {
+      font-weight: 500;
+    }
+
+    #recorder-contract-flow .rcv-stage {
+      width: 100%;
+      color: var(--muted-foreground);
+    }
+
+    #recorder-contract-flow .rcv-stage text {
+      fill: var(--foreground);
+      font-family: inherit;
+      font-size: var(--font-size-base);
+      font-weight: 500;
+      text-anchor: middle;
+    }
+
+    #recorder-contract-flow .rcv-stage .rcv-subtext {
+      fill: var(--muted-foreground);
+      font-size: max(11px, calc(var(--font-size-base) - 2px));
+      font-weight: 400;
+    }
+
+    #recorder-contract-flow .rcv-stage .rcv-band-label {
+      fill: var(--muted-foreground);
+      font-weight: 400;
+      text-anchor: start;
+    }
+
+    #recorder-contract-flow .rcv-band {
+      fill: color-mix(in srgb, var(--muted) 45%, transparent);
+    }
+
+    #recorder-contract-flow .rcv-mark {
+      fill: var(--background);
+      stroke: var(--border);
+      stroke-width: 2;
+      transition:
+        fill 180ms ease,
+        stroke 180ms ease,
+        transform 180ms ease;
+    }
+
+    #recorder-contract-flow [data-node].is-active .rcv-mark {
+      fill: color-mix(in srgb, var(--viz-series-1) 18%, var(--background));
+      stroke: var(--viz-series-1);
+      transform: translateY(-2px);
+    }
+
+    #recorder-contract-flow .rcv-glyph {
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    #recorder-contract-flow .rcv-record-dot {
+      fill: var(--destructive);
+    }
+
+    #recorder-contract-flow .rcv-edge {
+      fill: none;
+      stroke: var(--border);
+      stroke-width: 2;
+      transition:
+        stroke 180ms ease,
+        stroke-width 180ms ease;
+    }
+
+    #recorder-contract-flow .rcv-edge.is-active {
+      stroke: var(--viz-series-1);
+      stroke-width: 4;
+    }
+
+    #recorder-contract-flow .rcv-token {
+      fill: var(--viz-series-1);
+      stroke: var(--background);
+      stroke-width: 3;
+      transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    #recorder-contract-flow .rcv-mobile {
+      display: none;
+    }
+
+    #recorder-contract-flow .rcv-delegation {
+      display: grid;
+      grid-template-columns: minmax(72px, 0.9fr) repeat(9, minmax(0, 1fr));
+      gap: 0.45rem 0.25rem;
+      align-items: center;
+    }
+
+    #recorder-contract-flow .rcv-axis-label {
+      color: var(--muted-foreground);
+      text-align: center;
+    }
+
+    #recorder-contract-flow .rcv-axis-label[data-position="now"] {
+      grid-column: 2 / 5;
+    }
+
+    #recorder-contract-flow .rcv-axis-label[data-position="parallel"] {
+      grid-column: 5 / 9;
+    }
+
+    #recorder-contract-flow .rcv-axis-label[data-position="last"] {
+      grid-column: 9 / 11;
+    }
+
+    #recorder-contract-flow .rcv-lane-label {
+      color: var(--foreground);
+      font-weight: 500;
+    }
+
+    #recorder-contract-flow .rcv-lane-track {
+      height: 2.25rem;
+      grid-column: 2 / 11;
+      grid-row: var(--lane-row);
+      border-top: 1px solid var(--border);
+    }
+
+    #recorder-contract-flow .rcv-lane-label {
+      grid-column: 1;
+      grid-row: var(--lane-row);
+    }
+
+    #recorder-contract-flow .rcv-bar {
+      display: flex;
+      min-width: 0;
+      height: 2.25rem;
+      align-items: center;
+      justify-content: center;
+      padding-inline: 0.4rem;
+      overflow: hidden;
+      border-radius: 0.45rem;
+      color: var(--foreground);
+      font-weight: 500;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    #recorder-contract-flow .rcv-bar[data-phase="freeze"] {
+      grid-column: 2 / 5;
+      background: color-mix(in srgb, var(--viz-series-1) 24%, transparent);
+    }
+
+    #recorder-contract-flow .rcv-bar[data-phase="build"] {
+      grid-column: 5 / 9;
+      background: color-mix(in srgb, var(--viz-series-2) 24%, transparent);
+    }
+
+    #recorder-contract-flow .rcv-bar[data-phase="prove"] {
+      grid-column: 9 / 11;
+      background: color-mix(in srgb, var(--viz-series-3) 24%, transparent);
+    }
+
+    @media (max-width: 540px) {
+      #recorder-contract-flow .rcv-desktop {
+        display: none;
+      }
+
+      #recorder-contract-flow .rcv-mobile {
+        display: block;
+      }
+
+      #recorder-contract-flow .rcv-controls {
+        justify-content: flex-start;
+      }
+
+      #recorder-contract-flow .rcv-delegation {
+        grid-template-columns: minmax(66px, 0.85fr) repeat(9, minmax(0, 1fr));
+      }
+
+      #recorder-contract-flow .rcv-bar {
+        padding-inline: 0.2rem;
+      }
+
+      #recorder-contract-flow .rcv-bar span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #recorder-contract-flow .rcv-mark,
+      #recorder-contract-flow .rcv-edge,
+      #recorder-contract-flow .rcv-token {
+        transition: none;
+      }
+    }
+  &lt;/style&gt;
+
+  &lt;div class="viz-controls rcv-controls" role="group" aria-label="Recording journey steps"&gt;
+    &lt;button class="btn btn-primary" type="button" data-step-button="1" aria-pressed="true"&gt;1 · Start&lt;/button&gt;
+    &lt;button class="btn" type="button" data-step-button="2" aria-pressed="false"&gt;2 · Trust&lt;/button&gt;
+    &lt;button class="btn" type="button" data-step-button="3" aria-pressed="false"&gt;3 · Capture&lt;/button&gt;
+    &lt;button class="btn" type="button" data-step-button="4" aria-pressed="false"&gt;4 · Render&lt;/button&gt;
+    &lt;button class="btn" type="button" data-step-button="5" aria-pressed="false"&gt;5 · Commit&lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;div class="rcv-detail" aria-live="polite"&gt;
+    &lt;span class="viz-badge" id="rcv-step-number"&gt;Step 1&lt;/span&gt;
+    &lt;strong id="rcv-step-detail"&gt;Chalk admits the recording and reserves its maximum duration.&lt;/strong&gt;
+  &lt;/div&gt;
+
+  &lt;svg class="rcv-stage rcv-desktop" viewBox="0 0 736 360" role="img" aria-labelledby="rcv-desktop-title rcv-desktop-desc"&gt;
+    &lt;title id="rcv-desktop-title"&gt;Recorder data and authority flow&lt;/title&gt;
+    &lt;desc id="rcv-desktop-desc"&gt;A recording moves from meeting admission through a trusted job contract, Cloudflare capture, encrypted bundles, GPU rendering, and an atomic committed artifact.&lt;/desc&gt;
+    &lt;defs&gt;
+      &lt;marker id="rcv-arrow-desktop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"&gt;
+        &lt;path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"&gt;&lt;/path&gt;
+      &lt;/marker&gt;
+    &lt;/defs&gt;
+
+    &lt;rect class="rcv-band" x="0" y="8" width="736" height="132" rx="14"&gt;&lt;/rect&gt;
+    &lt;text class="rcv-band-label" x="16" y="32"&gt;AUTHORITY&lt;/text&gt;
+    &lt;rect class="rcv-band" x="0" y="160" width="736" height="192" rx="14"&gt;&lt;/rect&gt;
+    &lt;text class="rcv-band-label" x="16" y="184"&gt;MEDIA&lt;/text&gt;
+
+    &lt;path class="rcv-edge is-active" data-step-edge="admit" d="M 102 86 H 177" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="assign" d="M 313 86 H 374" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="authorize" d="M 430 113 C 430 150 272 150 272 202" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="media" d="M 103 246 H 204" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="bundle" d="M 316 246 H 351" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="render" d="M 437 246 H 478" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="commit" d="M 574 246 H 619" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="verify" d="M 663 211 C 663 142 264 162 264 117" marker-end="url(#rcv-arrow-desktop)"&gt;&lt;/path&gt;
+
+    &lt;g data-node="start" class="is-active"&gt;
+      &lt;circle class="rcv-mark" cx="67" cy="86" r="35"&gt;&lt;/circle&gt;
+      &lt;circle class="rcv-record-dot" cx="67" cy="86" r="11"&gt;&lt;/circle&gt;
+      &lt;text x="67" y="135"&gt;Record&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="control" class="is-active"&gt;
+      &lt;rect class="rcv-mark" x="178" y="48" width="135" height="76" rx="16"&gt;&lt;/rect&gt;
+      &lt;ellipse class="rcv-glyph" cx="245" cy="70" rx="25" ry="8"&gt;&lt;/ellipse&gt;
+      &lt;path class="rcv-glyph" d="M220 70v24c0 5 11 9 25 9s25-4 25-9V70M220 82c0 5 11 9 25 9s25-4 25-9"&gt;&lt;/path&gt;
+      &lt;text x="245" y="139"&gt;Control + database&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="contract"&gt;
+      &lt;path class="rcv-mark" d="M402 45h56v43c0 22-13 37-28 45-15-8-28-23-28-45z"&gt;&lt;/path&gt;
+      &lt;rect class="rcv-glyph" x="419" y="76" width="22" height="20" rx="4"&gt;&lt;/rect&gt;
+      &lt;path class="rcv-glyph" d="M423 76v-6a7 7 0 0 1 14 0v6"&gt;&lt;/path&gt;
+      &lt;text x="430" y="147"&gt;Job contract&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="sfu"&gt;
+      &lt;circle class="rcv-mark" cx="67" cy="246" r="36"&gt;&lt;/circle&gt;
+      &lt;path class="rcv-glyph" d="M48 251h38M52 240c10-10 20-10 30 0M57 231c7-6 14-6 20 0"&gt;&lt;/path&gt;
+      &lt;text x="67" y="299"&gt;Cloudflare SFU&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="capture"&gt;
+      &lt;rect class="rcv-mark" x="204" y="207" width="112" height="78" rx="16"&gt;&lt;/rect&gt;
+      &lt;path class="rcv-glyph" d="M228 239h10l6-13 10 35 9-22h13M282 226v35"&gt;&lt;/path&gt;
+      &lt;text x="260" y="301"&gt;Capture&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="bundles"&gt;
+      &lt;rect class="rcv-mark" x="351" y="214" width="86" height="64" rx="12"&gt;&lt;/rect&gt;
+      &lt;path class="rcv-glyph" d="M370 230h48M370 242h48M370 254h35"&gt;&lt;/path&gt;
+      &lt;text x="394" y="301"&gt;Encrypted bundles&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="gpu"&gt;
+      &lt;rect class="rcv-mark" x="478" y="207" width="96" height="78" rx="16"&gt;&lt;/rect&gt;
+      &lt;rect class="rcv-glyph" x="503" y="225" width="46" height="42" rx="6"&gt;&lt;/rect&gt;
+      &lt;path class="rcv-glyph" d="M492 227h11M492 239h11M492 251h11M492 263h11M549 227h11M549 239h11M549 251h11M549 263h11"&gt;&lt;/path&gt;
+      &lt;text x="526" y="301"&gt;GPU render&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="artifact"&gt;
+      &lt;circle class="rcv-mark" cx="663" cy="246" r="44"&gt;&lt;/circle&gt;
+      &lt;path class="rcv-glyph" d="M650 229l28 17-28 17z"&gt;&lt;/path&gt;
+      &lt;text x="663" y="309"&gt;Video + transcript&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;circle class="rcv-token" data-token="desktop" cx="0" cy="0" r="8" style="transform: translate(67px, 86px)"&gt;&lt;/circle&gt;
+  &lt;/svg&gt;
+
+  &lt;svg class="rcv-stage rcv-mobile" viewBox="0 0 320 680" role="img" aria-labelledby="rcv-mobile-title rcv-mobile-desc"&gt;
+    &lt;title id="rcv-mobile-title"&gt;Recorder data and authority flow&lt;/title&gt;
+    &lt;desc id="rcv-mobile-desc"&gt;A vertical version of the recording journey from admission to committed video and transcript.&lt;/desc&gt;
+    &lt;defs&gt;
+      &lt;marker id="rcv-arrow-mobile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"&gt;
+        &lt;path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"&gt;&lt;/path&gt;
+      &lt;/marker&gt;
+    &lt;/defs&gt;
+
+    &lt;rect class="rcv-band" x="8" y="8" width="304" height="244" rx="14"&gt;&lt;/rect&gt;
+    &lt;text class="rcv-band-label" x="20" y="32"&gt;AUTHORITY&lt;/text&gt;
+    &lt;rect class="rcv-band" x="8" y="268" width="304" height="404" rx="14"&gt;&lt;/rect&gt;
+    &lt;text class="rcv-band-label" x="20" y="292"&gt;MEDIA&lt;/text&gt;
+
+    &lt;path class="rcv-edge is-active" data-step-edge="admit" d="M160 92V117" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="assign" d="M160 193v22" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="authorize" d="M184 248c38 18 50 40 50 72" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="media" d="M101 354h75" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="bundle" d="M234 393v48" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="render" d="M234 505v37" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="commit" d="M234 606v26" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+    &lt;path class="rcv-edge" data-step-edge="verify" d="M198 649C74 649 65 203 126 166" marker-end="url(#rcv-arrow-mobile)"&gt;&lt;/path&gt;
+
+    &lt;g data-node="start" class="is-active"&gt;
+      &lt;circle class="rcv-mark" cx="160" cy="67" r="28"&gt;&lt;/circle&gt;
+      &lt;circle class="rcv-record-dot" cx="160" cy="67" r="9"&gt;&lt;/circle&gt;
+      &lt;text x="160" y="107"&gt;Record&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="control" class="is-active"&gt;
+      &lt;rect class="rcv-mark" x="101" y="119" width="118" height="74" rx="16"&gt;&lt;/rect&gt;
+      &lt;ellipse class="rcv-glyph" cx="160" cy="141" rx="22" ry="7"&gt;&lt;/ellipse&gt;
+      &lt;path class="rcv-glyph" d="M138 141v22c0 5 10 8 22 8s22-3 22-8v-22M138 152c0 5 10 8 22 8s22-3 22-8"&gt;&lt;/path&gt;
+      &lt;text x="160" y="209"&gt;Control + database&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="contract"&gt;
+      &lt;path class="rcv-mark" d="M136 218h48v36c0 19-11 31-24 38-13-7-24-19-24-38z"&gt;&lt;/path&gt;
+      &lt;rect class="rcv-glyph" x="151" y="244" width="18" height="16" rx="3"&gt;&lt;/rect&gt;
+      &lt;path class="rcv-glyph" d="M154 244v-5a6 6 0 0 1 12 0v5"&gt;&lt;/path&gt;
+      &lt;text x="160" y="310"&gt;Job contract&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="sfu"&gt;
+      &lt;circle class="rcv-mark" cx="66" cy="354" r="34"&gt;&lt;/circle&gt;
+      &lt;path class="rcv-glyph" d="M47 359h38M51 348c10-10 20-10 30 0M56 339c7-6 14-6 20 0"&gt;&lt;/path&gt;
+      &lt;text x="66" y="405"&gt;SFU&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="capture"&gt;
+      &lt;rect class="rcv-mark" x="176" y="317" width="116" height="76" rx="16"&gt;&lt;/rect&gt;
+      &lt;path class="rcv-glyph" d="M198 350h10l6-13 10 35 9-22h13M254 337v35"&gt;&lt;/path&gt;
+      &lt;text x="234" y="410"&gt;Capture&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="bundles"&gt;
+      &lt;rect class="rcv-mark" x="188" y="442" width="92" height="63" rx="12"&gt;&lt;/rect&gt;
+      &lt;path class="rcv-glyph" d="M207 458h54M207 470h54M207 482h38"&gt;&lt;/path&gt;
+      &lt;text x="234" y="523"&gt;Bundles&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="gpu"&gt;
+      &lt;rect class="rcv-mark" x="186" y="543" width="96" height="63" rx="14"&gt;&lt;/rect&gt;
+      &lt;rect class="rcv-glyph" x="210" y="556" width="48" height="38" rx="6"&gt;&lt;/rect&gt;
+      &lt;text x="234" y="624"&gt;GPU render&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;g data-node="artifact"&gt;
+      &lt;circle class="rcv-mark" cx="234" cy="650" r="29"&gt;&lt;/circle&gt;
+      &lt;path class="rcv-glyph" d="M225 638l20 12-20 12z"&gt;&lt;/path&gt;
+      &lt;text x="103" y="655"&gt;Video + transcript&lt;/text&gt;
+    &lt;/g&gt;
+
+    &lt;circle class="rcv-token" data-token="mobile" cx="0" cy="0" r="7" style="transform: translate(160px, 67px)"&gt;&lt;/circle&gt;
+  &lt;/svg&gt;
+
+  &lt;div class="rcv-delegation" role="img" aria-label="Shared contracts are frozen first, control capture and render build in parallel, and qualification runs after they merge"&gt;
+    &lt;span&gt;&lt;/span&gt;
+    &lt;span class="rcv-axis-label text-small" data-position="now"&gt;LOCK FIRST&lt;/span&gt;
+    &lt;span class="rcv-axis-label text-small" data-position="parallel"&gt;BUILD IN PARALLEL&lt;/span&gt;
+    &lt;span class="rcv-axis-label text-small" data-position="last"&gt;PROVE LAST&lt;/span&gt;
+
+    &lt;span class="rcv-lane-label" style="--lane-row: 2"&gt;Shared&lt;/span&gt;
+    &lt;span class="rcv-lane-track" style="--lane-row: 2"&gt;&lt;/span&gt;
+    &lt;span class="rcv-bar" data-phase="freeze" style="grid-row: 2"&gt;&lt;span&gt;Freeze contract&lt;/span&gt;&lt;/span&gt;
+
+    &lt;span class="rcv-lane-label" style="--lane-row: 3"&gt;Control&lt;/span&gt;
+    &lt;span class="rcv-lane-track" style="--lane-row: 3"&gt;&lt;/span&gt;
+    &lt;span class="rcv-bar" data-phase="build" style="grid-row: 3"&gt;&lt;span&gt;Implement&lt;/span&gt;&lt;/span&gt;
+
+    &lt;span class="rcv-lane-label" style="--lane-row: 4"&gt;Capture&lt;/span&gt;
+    &lt;span class="rcv-lane-track" style="--lane-row: 4"&gt;&lt;/span&gt;
+    &lt;span class="rcv-bar" data-phase="build" style="grid-row: 4"&gt;&lt;span&gt;Implement&lt;/span&gt;&lt;/span&gt;
+
+    &lt;span class="rcv-lane-label" style="--lane-row: 5"&gt;Render&lt;/span&gt;
+    &lt;span class="rcv-lane-track" style="--lane-row: 5"&gt;&lt;/span&gt;
+    &lt;span class="rcv-bar" data-phase="build" style="grid-row: 5"&gt;&lt;span&gt;Implement&lt;/span&gt;&lt;/span&gt;
+
+    &lt;span class="rcv-lane-label" style="--lane-row: 6"&gt;Qualify&lt;/span&gt;
+    &lt;span class="rcv-lane-track" style="--lane-row: 6"&gt;&lt;/span&gt;
+    &lt;span class="rcv-bar" data-phase="prove" style="grid-row: 6"&gt;&lt;span&gt;Staging&lt;/span&gt;&lt;/span&gt;
+  &lt;/div&gt;
+
+  &lt;script&gt;
+    (() =&gt; {
+      const root = document.getElementById("recorder-contract-flow");
+      const detail = root.querySelector("#rcv-step-detail");
+      const number = root.querySelector("#rcv-step-number");
+      const tokens = {
+        desktop: root.querySelector(&#x27;[data-token="desktop"]&#x27;),
+        mobile: root.querySelector(&#x27;[data-token="mobile"]&#x27;),
+      };
+      const steps = {
+        1: {
+          detail: "Chalk admits the recording and reserves its maximum duration.",
+          nodes: ["start", "control"],
+          edges: ["admit"],
+          desktop: [67, 86],
+          mobile: [160, 67],
+        },
+        2: {
+          detail: "A short-lived, fenced job contract tells one trusted worker exactly what it may do.",
+          nodes: ["control", "contract", "capture"],
+          edges: ["assign", "authorize"],
+          desktop: [430, 86],
+          mobile: [160, 254],
+        },
+        3: {
+          detail: "Pion receives selected Cloudflare tracks and writes encrypted, immutable bundles.",
+          nodes: ["sfu", "capture", "bundles"],
+          edges: ["media", "bundle"],
+          desktop: [394, 246],
+          mobile: [234, 474],
+        },
+        4: {
+          detail: "The GPU replays the pinned timeline and produces one deterministic video.",
+          nodes: ["bundles", "gpu"],
+          edges: ["render"],
+          desktop: [526, 246],
+          mobile: [234, 574],
+        },
+        5: {
+          detail: "One database transaction commits the video and creates every transcription job.",
+          nodes: ["gpu", "artifact", "control"],
+          edges: ["commit", "verify"],
+          desktop: [663, 246],
+          mobile: [234, 650],
+        },
+      };
+
+      function selectStep(value) {
+        const step = steps[value];
+        if (!step) return;
+
+        number.textContent = `Step ${value}`;
+        detail.textContent = step.detail;
+
+        root.querySelectorAll("[data-step-button]").forEach((button) =&gt; {
+          const active = button.dataset.stepButton === String(value);
+          button.classList.toggle("btn-primary", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+
+        root.querySelectorAll("[data-node]").forEach((node) =&gt; {
+          node.classList.toggle("is-active", step.nodes.includes(node.dataset.node));
+        });
+
+        root.querySelectorAll("[data-step-edge]").forEach((edge) =&gt; {
+          edge.classList.toggle("is-active", step.edges.includes(edge.dataset.stepEdge));
+        });
+
+        tokens.desktop.style.transform = `translate(${step.desktop[0]}px, ${step.desktop[1]}px)`;
+        tokens.mobile.style.transform = `translate(${step.mobile[0]}px, ${step.mobile[1]}px)`;
+      }
+
+      root.querySelectorAll("[data-step-button]").forEach((button) =&gt; {
+        button.addEventListener("click", () =&gt; selectStep(Number(button.dataset.stepButton)));
+      });
+    })();
+  &lt;/script&gt;
+&lt;/div&gt;
+
+&lt;script src="https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js"&gt;&lt;/script&gt;
+&lt;script src="https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set(["top", "right", "bottom", "left"]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest("[data-tooltip]")
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute("data-tooltip")?.trim() ?? "";
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute("data-tooltip-placement");
+    return tooltipPlacements.has(placement) ? placement : "top";
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement("div");
+      tooltip.id = tooltipId;
+      tooltip.className = "tooltip";
+      tooltip.setAttribute("role", "tooltip");
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute("aria-describedby") ?? "")
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute("aria-describedby");
+    } else {
+      trigger.setAttribute("aria-describedby", [...ids].join(" "));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              "--tooltip-available-width",
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              "--tooltip-available-height",
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: "fixed",
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = "visible";
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = "hidden";
+    floating.style.transform = "translate(0, 0)";
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === "touch") {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handleLeave = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(":focus-visible")) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === "Escape") {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    document.removeEventListener("pointerover", handlePointerOpen);
+    document.removeEventListener("pointerout", handleLeave);
+    document.removeEventListener("focusin", handleFocusIn);
+    document.removeEventListener("focusout", handleLeave);
+    document.removeEventListener("keydown", handleKeyDown);
+    document.removeEventListener("contextmenu", handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener("pointerover", handlePointerOpen);
+  document.addEventListener("pointerout", handleLeave);
+  document.addEventListener("focusin", handleFocusIn);
+  document.addEventListener("focusout", handleLeave);
+  document.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("contextmenu", handleContextMenu);
+  window.addEventListener("pagehide", destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id="codex-visualization-lucide" async src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById("codex-visualization-lucide")
+    ?.addEventListener("load", initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+'
+    ></iframe>
+  </body>
+</html>
