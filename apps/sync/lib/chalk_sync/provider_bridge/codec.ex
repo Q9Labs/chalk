@@ -204,34 +204,50 @@ defmodule ChalkSync.ProviderBridge.Codec do
          %{
            "participant_session_id" => participant,
            "source" => source,
-           "enabled" => enabled
+           "enabled" => enabled,
+           "publication_id" => publication_id
          } = publication
-       )
-       when is_binary(participant) and byte_size(participant) > 0 and
-              byte_size(participant) <= @max_identifier_bytes and
-              is_binary(source) and is_boolean(enabled) do
-    allowed = MapSet.new(["participant_session_id", "source", "enabled"])
-
-    if MapSet.equal?(MapSet.new(Map.keys(publication)), allowed) do
-      case source do
-        source when source in @sources ->
-          {:ok,
-           %{
-             participant_session_id: participant,
-             source: String.to_existing_atom(source),
-             enabled: enabled,
-             publication_id: nil
-           }}
-
-        _ ->
-          {:error, :invalid_source}
-      end
+       ) do
+    with :ok <- validate_publication_fields(publication),
+         true <- valid_identifier?(participant),
+         true <- is_boolean(enabled),
+         true <- valid_publication_id?(publication_id),
+         true <- enabled == not is_nil(publication_id),
+         {:ok, decoded_source} <- decode_source(source) do
+      {:ok,
+       %{
+         participant_session_id: participant,
+         source: decoded_source,
+         enabled: enabled,
+         publication_id: publication_id
+       }}
     else
-      {:error, :malformed_response}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :malformed_response}
     end
   end
 
   defp decode_publication(_publication), do: {:error, :malformed_response}
+
+  defp validate_publication_fields(publication) do
+    allowed = MapSet.new(["participant_session_id", "source", "enabled", "publication_id"])
+
+    if MapSet.equal?(MapSet.new(Map.keys(publication)), allowed),
+      do: :ok,
+      else: {:error, :malformed_response}
+  end
+
+  defp valid_identifier?(value),
+    do: is_binary(value) and byte_size(value) > 0 and byte_size(value) <= @max_identifier_bytes
+
+  defp valid_publication_id?(nil), do: true
+  defp valid_publication_id?(value), do: valid_identifier?(value)
+
+  defp decode_source(source) when source in @sources,
+    do: {:ok, String.to_existing_atom(source)}
+
+  defp decode_source(source) when is_binary(source), do: {:error, :invalid_source}
+  defp decode_source(_source), do: {:error, :malformed_response}
 
   defp ordered_observations?([]), do: :ok
 

@@ -51,6 +51,7 @@ var (
 	ErrInvalidParticipantID         = errors.New("invalid provider operation participant id")
 	ErrInvalidParticipantGeneration = errors.New("invalid provider operation participant generation")
 	ErrInvalidPublicationSource     = errors.New("invalid provider publication source")
+	ErrInvalidPublicationID         = errors.New("invalid provider publication id")
 	ErrInvalidRecordingID           = errors.New("invalid provider operation recording id")
 	ErrInvalidOutcome               = errors.New("invalid provider operation outcome")
 	ErrNonTerminalOutcome           = errors.New("provider operation outcome is not terminal")
@@ -123,6 +124,7 @@ type Publication struct {
 	ParticipantSessionID utilities.ID
 	Source               string
 	Enabled              bool
+	PublicationID        string
 }
 
 type ObservationInput struct {
@@ -174,9 +176,10 @@ type canonicalPayload struct {
 }
 
 type canonicalPublication struct {
-	ParticipantSessionID string `json:"participant_session_id"`
-	Source               string `json:"source"`
-	Enabled              bool   `json:"enabled"`
+	ParticipantSessionID string  `json:"participant_session_id"`
+	Source               string  `json:"source"`
+	Enabled              bool    `json:"enabled"`
+	PublicationID        *string `json:"publication_id"`
 }
 
 func Canonicalize(input OperationInput) (CanonicalOperation, error) {
@@ -297,6 +300,10 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 		if !validPublicationSource(publication.Source) {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationSource
 		}
+		publication.PublicationID = strings.TrimSpace(publication.PublicationID)
+		if len(publication.PublicationID) > 256 || publication.Enabled != (publication.PublicationID != "") {
+			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationID
+		}
 		key := publication.ParticipantSessionID.String() + "\x00" + publication.Source
 		if _, exists := seen[key]; exists {
 			return ObservationInput{}, [32]byte{}, nil, ErrObservationConflict
@@ -311,7 +318,11 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 	})
 	publications := make([]canonicalPublication, len(input.Publications))
 	for index, publication := range input.Publications {
-		publications[index] = canonicalPublication{ParticipantSessionID: publication.ParticipantSessionID.String(), Source: publication.Source, Enabled: publication.Enabled}
+		canonical := canonicalPublication{ParticipantSessionID: publication.ParticipantSessionID.String(), Source: publication.Source, Enabled: publication.Enabled}
+		if publication.PublicationID != "" {
+			canonical.PublicationID = &publication.PublicationID
+		}
+		publications[index] = canonical
 	}
 	payload, err := json.Marshal(publications)
 	if err != nil {

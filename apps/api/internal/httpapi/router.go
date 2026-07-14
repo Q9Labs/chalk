@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
@@ -43,6 +44,7 @@ type Options struct {
 	LocalTelemetry         bool
 	MeetingCredentials     MeetingCredentialVerifier
 	MediaPlane             MediaPlaneResolver
+	MediaPublications      mediapublications.Registry
 	Memberships            MembershipService
 	AuditLogs              AuditLogService
 	RecordingDownloads     RecordingDownloadService
@@ -187,7 +189,7 @@ func mountV1Routes(r chi.Router, options Options) {
 			mountUserRoutes(r, options.Users, options.RateLimit)
 			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
 			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
-			mountSessionLifecycleRoutes(r, options.Rooms, options.Tenants, options.SessionLifecycle, options.SyncTokens, options.SyncTokenRefresh, options.MediaPlane, options.TenantAuthz, options.RateLimit)
+			mountSessionLifecycleRoutes(r, options.Rooms, options.Tenants, options.SessionLifecycle, options.SyncTokens, options.SyncTokenRefresh, options.MediaPlane, options.MediaPublications, options.TenantAuthz, options.RateLimit)
 			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
 			mountRecordingPipelineRoutes(r, options.RecordingPipeline, options.RecorderMetrics, options.TenantAuthz, options.RateLimit)
 			if options.TranscriptArtifacts != nil {

@@ -27,6 +27,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
@@ -185,6 +186,8 @@ func run() error {
 		meetingCredentials = verifier
 	}
 	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(cfg.CloudflareRealtime)
+	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
+	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService
 	var transcriptionStorage *objectstorage.Service
@@ -277,6 +280,7 @@ func run() error {
 		LocalTelemetry:     cfg.Observability.Environment == config.DefaultEnvironment,
 		MeetingCredentials: meetingCredentials,
 		MediaPlane:         mediaPlaneRegistry,
+		MediaPublications:  mediaPublicationService,
 		Memberships:        membershipService,
 		AuditLogs:          auditLogService,
 		RecordingDownloads: recordingDownloads,

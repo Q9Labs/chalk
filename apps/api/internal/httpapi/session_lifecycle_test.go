@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
+	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -45,14 +48,29 @@ func (f mediaPlaneResolverFunc) Resolve(ctx context.Context, tenant tenants.Tena
 	return f(ctx, tenant, room)
 }
 
+type mediaPublicationRegistryStub struct {
+	record func(context.Context, mediapublications.RecordInput) error
+	latest func(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error)
+}
+
+func (s mediaPublicationRegistryStub) RecordPublishedTracks(ctx context.Context, input mediapublications.RecordInput) error {
+	return s.record(ctx, input)
+}
+
+func (s mediaPublicationRegistryStub) Latest(ctx context.Context, tenantID, sessionID utilities.ID) (mediapublications.Snapshot, error) {
+	return s.latest(ctx, tenantID, sessionID)
+}
+
 type lifecycleMediaPlane struct {
-	ensureInput mediaplane.EnsureSessionInput
-	joinInput   mediaplane.CreateJoinInput
-	removeInput mediaplane.RemoveParticipantInput
-	endInput    mediaplane.EndSessionInput
-	joinErr     error
-	removeErr   error
-	endErr      error
+	ensureInput      mediaplane.EnsureSessionInput
+	joinInput        mediaplane.CreateJoinInput
+	tracksInput      mediaplane.TracksRequest
+	renegotiateInput mediaplane.RenegotiateRequest
+	removeInput      mediaplane.RemoveParticipantInput
+	endInput         mediaplane.EndSessionInput
+	joinErr          error
+	removeErr        error
+	endErr           error
 }
 
 func (p *lifecycleMediaPlane) EnsureSession(_ context.Context, input mediaplane.EnsureSessionInput) (mediaplane.Session, error) {
@@ -82,6 +100,16 @@ func (*lifecycleMediaPlane) SessionUsage(context.Context, mediaplane.SessionUsag
 	return mediaplane.Usage{}, nil
 }
 
+func (p *lifecycleMediaPlane) AddTracks(_ context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
+	p.tracksInput = input
+	return mediaplane.TracksResponse{SessionDescription: &mediaplane.SessionDescription{Type: "answer", SDP: "provider-answer"}}, nil
+}
+
+func (p *lifecycleMediaPlane) Renegotiate(_ context.Context, input mediaplane.RenegotiateRequest) error {
+	p.renegotiateInput = input
+	return nil
+}
+
 type mediaRoomService struct {
 	guardedRoomService
 	room rooms.Room
@@ -89,6 +117,10 @@ type mediaRoomService struct {
 
 func (s mediaRoomService) GetRoom(context.Context, utilities.ID, utilities.ID) (rooms.Room, error) {
 	return s.room, nil
+}
+
+func (s mediaRoomService) GetSession(_ context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
+	return rooms.Session{ID: sessionID, TenantID: tenantID, RoomID: roomID, Status: rooms.SessionStatusActive}, nil
 }
 
 func (s lifecycleService) CreateSession(ctx context.Context, input sessionlifecycle.CreateSessionInput) (sessionlifecycle.Session, error) {
@@ -390,6 +422,65 @@ func TestAdmitParticipantCreatesMediaJoin(t *testing.T) {
 	decodeJSON(t, res, &body)
 	if body.MediaPlane == nil || body.MediaPlane.Provider != string(mediaplane.ProviderCloudflareRTK) || body.MediaPlane.ClientPayload["token"] != "opaque-token" {
 		t.Fatalf("media response = %#v", body.MediaPlane)
+	}
+}
+
+func TestCloudflareSFUSignalingRoutesProxyWithoutExposingSecret(t *testing.T) {
+	tenantID := mustTenantID(t, "11111111-1111-4111-8111-111111111111")
+	roomID := mustTenantID(t, "22222222-2222-4222-8222-222222222222")
+	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
+	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
+	plane := &lifecycleMediaPlane{}
+	var recorded mediapublications.RecordInput
+	options := authenticatedOptions(t, httpapi.Options{
+		Rooms: mediaRoomService{room: rooms.Room{ID: roomID, TenantID: tenantID, MediaPlane: "cf_sfu"}},
+		Tenants: tenantService{getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
+			return tenants.Tenant{ID: tenantID}, nil
+		}},
+		MediaPlane: mediaPlaneResolverFunc(func(context.Context, tenants.Tenant, rooms.Room) (*mediaplane.Service, error) {
+			service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, plane)
+			return &service, nil
+		}),
+		MediaPublications: mediaPublicationRegistryStub{
+			record: func(_ context.Context, input mediapublications.RecordInput) error {
+				recorded = input
+				return nil
+			},
+			latest: func(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error) {
+				return mediapublications.Snapshot{Incarnation: 1, Sequence: 2, Publications: []provideroperations.Publication{{ParticipantSessionID: participantID, Source: "camera", Enabled: true, PublicationID: "connection_123|camera-track"}}}, nil
+			},
+		},
+	})
+	basePath := "/v1/tenants/" + tenantID.String() + "/rooms/" + roomID.String() + "/sessions/" + sessionID.String() + "/participants/" + participantID.String() + "/media/sfu/"
+
+	tracksRequest := bearerRequestWithBody(http.MethodPost, basePath+"tracks", "raw-session-token", `{"connection_id":"connection_123","session_description":{"type":"offer","sdp":"offer-sdp"},"tracks":[{"location":"local","mid":"0","trackName":"camera-track","source":"camera"}]}`)
+	tracksResponse := requestWithOptionsAndRequest(t, tracksRequest, options)
+	if tracksResponse.Code != http.StatusOK {
+		t.Fatalf("tracks status = %d, want 200; body=%s", tracksResponse.Code, tracksResponse.Body.String())
+	}
+	if plane.tracksInput.ConnectionID != "connection_123" || plane.tracksInput.Tracks[0].TrackName != "camera-track" {
+		t.Fatalf("tracks input = %#v", plane.tracksInput)
+	}
+	if recorded.ParticipantSessionID != participantID || recorded.Tracks[0].Source != "camera" {
+		t.Fatalf("publication observation = %#v", recorded)
+	}
+	if strings.Contains(tracksResponse.Body.String(), "secret") || !strings.Contains(tracksResponse.Body.String(), "provider-answer") {
+		t.Fatalf("tracks response = %s", tracksResponse.Body.String())
+	}
+
+	renegotiateRequest := bearerRequestWithBody(http.MethodPost, basePath+"renegotiate", "raw-session-token", `{"connection_id":"connection_123","session_description":{"type":"answer","sdp":"browser-answer"}}`)
+	renegotiateResponse := requestWithOptionsAndRequest(t, renegotiateRequest, options)
+	if renegotiateResponse.Code != http.StatusOK {
+		t.Fatalf("renegotiate status = %d, want 200; body=%s", renegotiateResponse.Code, renegotiateResponse.Body.String())
+	}
+	if plane.renegotiateInput.ConnectionID != "connection_123" || plane.renegotiateInput.SessionDescription.SDP != "browser-answer" {
+		t.Fatalf("renegotiate input = %#v", plane.renegotiateInput)
+	}
+
+	publicationsRequest := bearerRequestWithBody(http.MethodGet, basePath+"publications", "raw-session-token", "")
+	publicationsResponse := requestWithOptionsAndRequest(t, publicationsRequest, options)
+	if publicationsResponse.Code != http.StatusOK || !strings.Contains(publicationsResponse.Body.String(), `"publication_id":"connection_123|camera-track"`) {
+		t.Fatalf("publications status = %d; body=%s", publicationsResponse.Code, publicationsResponse.Body.String())
 	}
 }
 

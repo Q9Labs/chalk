@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -184,14 +185,14 @@ type sessionControlResponse struct {
 	Operation externalOperationResponse `json:"external_operation"`
 }
 
-func mountSessionLifecycleRoutes(r chi.Router, rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, media MediaPlaneResolver, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range sessionLifecycleEndpoints(rooms, tenants, lifecycle, tokens, refresh, media, authorizer) {
+func mountSessionLifecycleRoutes(r chi.Router, rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, media MediaPlaneResolver, publications mediapublications.Registry, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range sessionLifecycleEndpoints(rooms, tenants, lifecycle, tokens, refresh, media, publications, authorizer) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func sessionLifecycleEndpoints(rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
-	return []RouteEndpoint{
+func sessionLifecycleEndpoints(rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, media MediaPlaneResolver, publications mediapublications.Registry, authorizer TenantAuthorizer) []RouteEndpoint {
+	endpoints := []RouteEndpoint{
 		createLifecycleSessionEndpoint(rooms, lifecycle, authorizer),
 		admitParticipantEndpoint(lifecycle, tokens, rooms, tenants, media, authorizer),
 		issueSyncTokenEndpoint(refresh, authorizer),
@@ -200,6 +201,7 @@ func sessionLifecycleEndpoints(rooms RoomService, tenants TenantService, lifecyc
 		setDeadlineEndpoint(lifecycle, authorizer),
 		endSessionEndpoint(lifecycle, authorizer),
 	}
+	return append(endpoints, sfuSignalingEndpoints(rooms, tenants, media, publications, authorizer)...)
 }
 
 func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAuthorizer) Endpoint[issueSyncTokenEndpointRequest, syncTokenResponse] {

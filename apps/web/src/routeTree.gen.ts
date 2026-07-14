@@ -13,6 +13,7 @@ import { Route as WhiteboardRouteImport } from './routes/whiteboard'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
+import { Route as RoomRouteImport } from './routes/room'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as IndexRouteImport } from './routes/index'
@@ -37,6 +38,11 @@ const SdkPreviewRoute = SdkPreviewRouteImport.update({
   path: '/sdk-preview',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomRoute = RoomRouteImport.update({
+  id: '/room',
+  path: '/room',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
+  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
+  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
+  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/new'
     | '/privacy'
+    | '/room'
     | '/sdk-preview'
     | '/status'
     | '/terms'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/new'
     | '/privacy'
+    | '/room'
     | '/sdk-preview'
     | '/status'
     | '/terms'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/new'
     | '/privacy'
+    | '/room'
     | '/sdk-preview'
     | '/status'
     | '/terms'
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   NewRoute: typeof NewRoute
   PrivacyRoute: typeof PrivacyRoute
+  RoomRoute: typeof RoomRoute
   SdkPreviewRoute: typeof SdkPreviewRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
@@ -151,6 +164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SdkPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/room': {
+      id: '/room'
+      path: '/room'
+      fullPath: '/room'
+      preLoaderRoute: typeof RoomRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
@@ -179,6 +199,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   NewRoute: NewRoute,
   PrivacyRoute: PrivacyRoute,
+  RoomRoute: RoomRoute,
   SdkPreviewRoute: SdkPreviewRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,

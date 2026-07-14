@@ -43,7 +43,8 @@ func TestEnsureSessionReturnsBootstrapMetadata(t *testing.T) {
 }
 
 func TestCreateJoinReturnsSyncBootstrapPayload(t *testing.T) {
-	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK})
+	client := &roundTripStub{statusCode: http.StatusOK, body: `{"sessionId":"connection_123"}`}
+	adapter := testAdapter(t, client)
 
 	join, err := adapter.CreateJoin(context.Background(), mediaplane.CreateJoinInput{
 		Provider: mediaplane.ProviderCloudflareSFU,
@@ -65,8 +66,59 @@ func TestCreateJoinReturnsSyncBootstrapPayload(t *testing.T) {
 	if join.ClientPayload["syncOwner"] != syncOwner {
 		t.Fatalf("client payload = %#v, want sync owner", join.ClientPayload)
 	}
+	if join.ClientPayload["connectionId"] != "connection_123" {
+		t.Fatalf("client payload = %#v, want Cloudflare connection id", join.ClientPayload)
+	}
+	if client.path != "/v1/apps/sfu-app-id/sessions/new" {
+		t.Fatalf("path = %q, want session creation path", client.path)
+	}
 	if _, ok := join.ClientPayload["appSecret"]; ok {
 		t.Fatal("client payload leaked app secret")
+	}
+}
+
+func TestAddTracksProxiesTypedSignalingRequest(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"sessionDescription":{"type":"answer","sdp":"answer-sdp"},"tracks":[{"location":"local","mid":"0","trackName":"camera-track"}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID:       "connection_123",
+		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "offer-sdp"},
+		Tracks:             []mediaplane.Track{{Location: "local", Mid: "0", TrackName: "camera-track"}},
+	})
+	if err != nil {
+		t.Fatalf("add tracks: %v", err)
+	}
+	if client.method != http.MethodPost || client.path != "/v1/apps/sfu-app-id/sessions/connection_123/tracks/new" {
+		t.Fatalf("request = %s %s, want tracks/new", client.method, client.path)
+	}
+	if !strings.Contains(client.requestBody, `"trackName":"camera-track"`) {
+		t.Fatalf("request body = %s, want track name", client.requestBody)
+	}
+	if response.SessionDescription == nil || response.SessionDescription.SDP != "answer-sdp" {
+		t.Fatalf("response = %#v, want provider SDP answer", response)
+	}
+}
+
+func TestRenegotiateProxiesAnswer(t *testing.T) {
+	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
+	adapter := testAdapter(t, client)
+
+	err := adapter.Renegotiate(context.Background(), mediaplane.RenegotiateRequest{
+		ConnectionID:       "connection_123",
+		SessionDescription: mediaplane.SessionDescription{Type: "answer", SDP: "answer-sdp"},
+	})
+	if err != nil {
+		t.Fatalf("renegotiate: %v", err)
+	}
+	if client.method != http.MethodPut || client.path != "/v1/apps/sfu-app-id/sessions/connection_123/renegotiate" {
+		t.Fatalf("request = %s %s, want renegotiate", client.method, client.path)
+	}
+	if !strings.Contains(client.requestBody, `"type":"answer"`) {
+		t.Fatalf("request body = %s, want answer", client.requestBody)
 	}
 }
 
@@ -161,15 +213,20 @@ func testAdapter(t *testing.T, client *roundTripStub) Adapter {
 }
 
 type roundTripStub struct {
-	statusCode int
-	body       string
-	method     string
-	path       string
+	statusCode  int
+	body        string
+	method      string
+	path        string
+	requestBody string
 }
 
 func (s *roundTripStub) Do(request *http.Request) (*http.Response, error) {
 	s.method = request.Method
 	s.path = request.URL.EscapedPath()
+	if request.Body != nil {
+		payload, _ := io.ReadAll(request.Body)
+		s.requestBody = string(payload)
+	}
 
 	return &http.Response{
 		StatusCode: s.statusCode,

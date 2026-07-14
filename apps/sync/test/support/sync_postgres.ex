@@ -99,7 +99,9 @@ defmodule ChalkSync.SyncPostgres do
 
     payload = %{
       "participant_session_id" => participant_id,
-      "display_name" => display_name
+      "display_name" => display_name,
+      "initial_role" => "host",
+      "eligible_roles" => ["host", "cohost", "participant"]
     }
 
     {:ok, _result} =

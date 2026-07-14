@@ -3433,6 +3433,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp lifecycle_payload(%{name: "participant_joined", payload: payload}, participant, state) do
     payload
+    |> Map.delete("initial_role")
     |> Map.put("role", participant.role)
     |> Map.put("eligible_roles", participant.eligible_roles)
     |> Map.put("admission_revision", state.revision + 1)

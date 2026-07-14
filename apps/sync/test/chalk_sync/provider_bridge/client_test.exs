@@ -334,7 +334,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              )
   end
 
-  test "decodes ordered observations without provider publication identifiers" do
+  test "decodes ordered observations with opaque publication identifiers" do
     transport = fn method, url, _headers, _body, _options ->
       send(self(), {:get, method, url})
 
@@ -353,7 +353,8 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
                %{
                  "participant_session_id" => @participant,
                  "source" => "camera",
-                 "enabled" => true
+                 "enabled" => true,
+                 "publication_id" => "cf:session-1:camera-track"
                }
              ]
            }
@@ -377,7 +378,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              participant_session_id: @participant,
              source: :camera,
              enabled: true,
-             publication_id: nil
+             publication_id: "cf:session-1:camera-track"
            }
 
     assert_receive {:get, :get, url}
@@ -416,7 +417,12 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              "incarnation" => 1,
              "sequence" => 1,
              "publications" => [
-               %{"participant_session_id" => "p", "source" => "speaker", "enabled" => true}
+               %{
+                 "participant_session_id" => "p",
+                 "source" => "speaker",
+                 "enabled" => true,
+                 "publication_id" => "opaque-track"
+               }
              ]
            }
          ],
@@ -444,7 +450,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     assert {:error, :malformed_response} = Client.observe_session_publications(client, @session)
   end
 
-  test "rejects provider publication identifiers at the private boundary" do
+  test "preserves bounded opaque publication identifiers at the private boundary" do
     transport = fn _method, _url, _headers, _body, _options ->
       {:ok, 200, [],
        JSON.encode!(%{
@@ -468,7 +474,9 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     end
 
     client = Client.new!(base_url: "http://localhost", transport: transport)
-    assert {:error, :malformed_response} = Client.observe_session_publications(client, @session)
+
+    assert {:ok, %{publications: [%{publication_id: "provider-id"}]}} =
+             Client.observe_session_publications(client, @session)
   end
 
   test "rejects operation response contract drift and mismatched observation cursors" do

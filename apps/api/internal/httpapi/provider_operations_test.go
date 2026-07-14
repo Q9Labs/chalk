@@ -79,6 +79,7 @@ func TestProviderBridgeGETReturnsProviderNeutralObservationPage(t *testing.T) {
 				ParticipantSessionID: participantID,
 				Source:               "screen",
 				Enabled:              true,
+				PublicationID:        "cf:session-1:screen-track",
 			}},
 		}},
 		Next: &provideroperations.Cursor{Incarnation: 2, Sequence: 7},
@@ -99,8 +100,8 @@ func TestProviderBridgeGETReturnsProviderNeutralObservationPage(t *testing.T) {
 	if payload["has_more"] != true || payload["next_cursor"] == nil {
 		t.Fatalf("response = %#v", payload)
 	}
-	if bytes.Contains(response.Body.Bytes(), []byte("publication_id")) || bytes.Contains(response.Body.Bytes(), []byte("provider_id")) {
-		t.Fatalf("response leaked provider identifiers: %s", response.Body.String())
+	if !bytes.Contains(response.Body.Bytes(), []byte(`"publication_id":"cf:session-1:screen-track"`)) || bytes.Contains(response.Body.Bytes(), []byte("provider_id")) {
+		t.Fatalf("response did not preserve the opaque publication id: %s", response.Body.String())
 	}
 }
 

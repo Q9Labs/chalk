@@ -22,7 +22,7 @@ describe("browser sync boundaries", () => {
     document.hidden = true;
     const navigator = { onLine: false };
     const lifecycleEvents: string[] = [];
-    const unsubscribe = createBrowserSyncLifecycle({ window, document, navigator }).subscribe((event) => lifecycleEvents.push(event));
+    const unsubscribe = createBrowserSyncLifecycle({ window, navigator }).subscribe((event) => lifecycleEvents.push(event));
     navigator.onLine = true;
     window.dispatchEvent(new Event("online"));
     window.dispatchEvent(new Event("offline"));
@@ -34,7 +34,7 @@ describe("browser sync boundaries", () => {
     expect(events).toEqual(["open", "message:frame", "close:1012", "error"]);
     expect(native.sent).toEqual(["outbound"]);
     expect(native.closed).toEqual([1000, "done"]);
-    expect(lifecycleEvents).toEqual(["offline", "inactive", "online", "offline", "active"]);
+    expect(lifecycleEvents).toEqual(["offline", "online", "offline"]);
   });
 });
 

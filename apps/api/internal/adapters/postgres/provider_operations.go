@@ -286,9 +286,10 @@ func mapProviderObservation(row providerOperationObservationRow) (provideroperat
 	var fingerprint [32]byte
 	copy(fingerprint[:], row.ObservationFingerprint)
 	var publications []struct {
-		ParticipantSessionID string `json:"participant_session_id"`
-		Source               string `json:"source"`
-		Enabled              bool   `json:"enabled"`
+		ParticipantSessionID string  `json:"participant_session_id"`
+		Source               string  `json:"source"`
+		Enabled              bool    `json:"enabled"`
+		PublicationID        *string `json:"publication_id"`
 	}
 	if err := json.Unmarshal(row.Publications, &publications); err != nil {
 		return provideroperations.Observation{}, fmt.Errorf("decode provider observation: %w", err)
@@ -299,7 +300,11 @@ func mapProviderObservation(row providerOperationObservationRow) (provideroperat
 		if err != nil {
 			return provideroperations.Observation{}, fmt.Errorf("decode provider observation participant id: %w", err)
 		}
-		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantSessionID: id, Source: publication.Source, Enabled: publication.Enabled})
+		publicationID := ""
+		if publication.PublicationID != nil {
+			publicationID = *publication.PublicationID
+		}
+		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantSessionID: id, Source: publication.Source, Enabled: publication.Enabled, PublicationID: publicationID})
 	}
 	return result, nil
 }

@@ -70,7 +70,7 @@ func TestCanonicalizeObservationSortsAndRejectsConflicts(t *testing.T) {
 		TenantID: testID(t, "10000000-0000-4000-8000-000000000001"), SessionID: testID(t, "10000000-0000-4000-8000-000000000002"),
 		Incarnation: 7, Sequence: 2,
 		Publications: []Publication{
-			{ParticipantSessionID: testID(t, "10000000-0000-4000-8000-000000000004"), Source: "screen", Enabled: true},
+			{ParticipantSessionID: testID(t, "10000000-0000-4000-8000-000000000004"), Source: "screen", Enabled: true, PublicationID: "cf:session-1:screen-track"},
 			{ParticipantSessionID: testID(t, "10000000-0000-4000-8000-000000000003"), Source: "camera", Enabled: false},
 		},
 	}
@@ -81,7 +81,7 @@ func TestCanonicalizeObservationSortsAndRejectsConflicts(t *testing.T) {
 	if canonical.Publications[0].ParticipantSessionID.String() != "10000000-0000-4000-8000-000000000003" {
 		t.Fatalf("first participant = %s", canonical.Publications[0].ParticipantSessionID)
 	}
-	if string(payload) != `[{"participant_session_id":"10000000-0000-4000-8000-000000000003","source":"camera","enabled":false},{"participant_session_id":"10000000-0000-4000-8000-000000000004","source":"screen","enabled":true}]` {
+	if string(payload) != `[{"participant_session_id":"10000000-0000-4000-8000-000000000003","source":"camera","enabled":false,"publication_id":null},{"participant_session_id":"10000000-0000-4000-8000-000000000004","source":"screen","enabled":true,"publication_id":"cf:session-1:screen-track"}]` {
 		t.Fatalf("payload = %s", payload)
 	}
 	input.Publications = append(input.Publications, input.Publications[0])

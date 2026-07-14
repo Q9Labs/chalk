@@ -36,6 +36,7 @@ const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_RETRIES = 3;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const OPERATION_PENDING_POLL_INTERVAL_MS = 1_000;
+const CLIENT_RESTART_CLOSE_CODE = 4000;
 
 type CommandDeferred = Deferred<V3CommandResult> & { readonly frame: SyncV3ClientFrame; retries: number; readonly durableTarget: boolean; readonly createdAt: number };
 type LiveTargetClientFrame = Extract<SyncV3ClientFrame, { readonly type: "live_target" }>;
@@ -361,7 +362,7 @@ export class V3SyncClient {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
     socket.onclose = () => this.#disconnected(socket);
-    socket.onerror = () => socket.close(1012, "transport error");
+    socket.onerror = () => socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
   }
 
   async #authenticate(socket: V3Socket): Promise<void> {
@@ -382,7 +383,7 @@ export class V3SyncClient {
       });
       this.#emit();
     } catch {
-      socket.close(1012, "authentication failed");
+      socket.close(CLIENT_RESTART_CLOSE_CODE, "authentication failed");
     }
   }
 
@@ -831,7 +832,7 @@ export class V3SyncClient {
   #recover(reason: string): void {
     const socket = this.#socket;
     if (!socket) return;
-    socket.close(1002, reason);
+    socket.close(CLIENT_RESTART_CLOSE_CODE, reason);
     this.#disconnected(socket);
   }
 
@@ -839,7 +840,7 @@ export class V3SyncClient {
     if (event === "online" || event === "offline") this.#online = event === "online";
     else this.#active = event === "active";
     this.#transportAvailable = this.#online && this.#active;
-    if (!this.#transportAvailable) this.#socket?.close(1001, "lifecycle unavailable");
+    if (!this.#transportAvailable) this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "lifecycle unavailable");
     else this.#connect();
   }
 
@@ -995,7 +996,7 @@ export class V3SyncClient {
       if (this.#phase.phase !== "live") return;
       this.#missedHeartbeats += 1;
       if (this.#missedHeartbeats > 2) {
-        this.#socket?.close(1012, "heartbeat timeout");
+        this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
         return;
       }
       this.#send({ type: "ping" });

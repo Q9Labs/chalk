@@ -5,7 +5,6 @@ export type BrowserWebSocketConstructor = new (url: string) => WebSocket;
 
 export type BrowserLifecycleEnvironment = {
   readonly window: Pick<Window, "addEventListener" | "removeEventListener">;
-  readonly document: Pick<Document, "addEventListener" | "removeEventListener" | "hidden">;
   readonly navigator?: Pick<Navigator, "onLine">;
 };
 
@@ -26,17 +25,13 @@ export function createBrowserSyncLifecycle(environment = browserLifecycleEnviron
     subscribe(listener) {
       const online = () => listener("online");
       const offline = () => listener("offline");
-      const visibility = () => listener(environment.document.hidden ? "inactive" : "active");
       environment.window.addEventListener("online", online);
       environment.window.addEventListener("offline", offline);
-      environment.document.addEventListener("visibilitychange", visibility);
       listener((environment.navigator?.onLine ?? true) ? "online" : "offline");
-      visibility();
 
       return () => {
         environment.window.removeEventListener("online", online);
         environment.window.removeEventListener("offline", offline);
-        environment.document.removeEventListener("visibilitychange", visibility);
       };
     },
   };
@@ -67,8 +62,8 @@ class BrowserSyncSocket implements SyncSocket {
 }
 
 function browserLifecycleEnvironment(): BrowserLifecycleEnvironment {
-  if (typeof globalThis.window === "undefined" || typeof globalThis.document === "undefined" || typeof globalThis.navigator === "undefined") {
+  if (typeof globalThis.window === "undefined" || typeof globalThis.navigator === "undefined") {
     throw new SyncBrowserCapabilityError("browser lifecycle");
   }
-  return { window: globalThis.window, document: globalThis.document, navigator: globalThis.navigator };
+  return { window: globalThis.window, navigator: globalThis.navigator };
 }

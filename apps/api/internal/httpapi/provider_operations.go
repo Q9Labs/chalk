@@ -52,9 +52,10 @@ type providerObservationResponse struct {
 }
 
 type providerPublicationResponse struct {
-	ParticipantSessionID string `json:"participant_session_id"`
-	Source               string `json:"source"`
-	Enabled              bool   `json:"enabled"`
+	ParticipantSessionID string  `json:"participant_session_id"`
+	Source               string  `json:"source"`
+	Enabled              bool    `json:"enabled"`
+	PublicationID        *string `json:"publication_id"`
 }
 
 type providerObservationCursorResponse struct {
@@ -255,10 +256,16 @@ func newProviderObservationPageResponse(page provideroperations.ObservationPage)
 	for _, observation := range page.Observations {
 		publications := make([]providerPublicationResponse, 0, len(observation.Publications))
 		for _, publication := range observation.Publications {
+			var publicationID *string
+			if publication.PublicationID != "" {
+				value := publication.PublicationID
+				publicationID = &value
+			}
 			publications = append(publications, providerPublicationResponse{
 				ParticipantSessionID: publication.ParticipantSessionID.String(),
 				Source:               publication.Source,
 				Enabled:              publication.Enabled,
+				PublicationID:        publicationID,
 			})
 		}
 		response.Observations = append(response.Observations, providerObservationResponse{

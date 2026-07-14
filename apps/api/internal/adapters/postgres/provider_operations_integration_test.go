@@ -95,7 +95,7 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 		t.Fatalf("ambiguous completion = %v", err)
 	}
 
-	observationInput := provideroperations.ObservationInput{TenantID: tenantID, SessionID: sessionID, Incarnation: 1, Sequence: 1, Publications: []provideroperations.Publication{{ParticipantSessionID: input.ParticipantSessionID, Source: "camera", Enabled: true}}}
+	observationInput := provideroperations.ObservationInput{TenantID: tenantID, SessionID: sessionID, Incarnation: 1, Sequence: 1, Publications: []provideroperations.Publication{{ParticipantSessionID: input.ParticipantSessionID, Source: "camera", Enabled: true, PublicationID: "session-1|camera-track"}}}
 	if _, err := repository.AppendObservation(ctx, observationInput); err != nil {
 		t.Fatalf("append observation: %v", err)
 	}

@@ -109,6 +109,62 @@ describe("V3SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("stopped");
   });
 
+  it("uses browser-legal application close codes for client-initiated restarts", async () => {
+    const transportSocket = new TestSocket();
+    const transportClient = new V3SyncClient({
+      url: "ws://sync.test/v3/sync",
+      token: async () => "token",
+      webSocket: { connect: () => transportSocket },
+    });
+    await transportClient.start();
+    transportSocket.error();
+    expect(transportSocket.closeCalls).toEqual([{ code: 4000, reason: "transport error" }]);
+
+    const authenticationSocket = new TestSocket();
+    const authenticationClient = new V3SyncClient({
+      url: "ws://sync.test/v3/sync",
+      token: async () => Promise.reject(new Error("token unavailable")),
+      webSocket: { connect: () => authenticationSocket },
+    });
+    await authenticationClient.start();
+    authenticationSocket.open();
+    await settle();
+    expect(authenticationSocket.closeCalls).toEqual([{ code: 4000, reason: "authentication failed" }]);
+
+    const clock = new TestClock();
+    const { socket: heartbeatSocket } = await liveClient({ clock });
+    clock.advance(60_000);
+    expect(heartbeatSocket.closeCalls).toContainEqual({ code: 4000, reason: "heartbeat timeout" });
+
+    const recoverySocket = new TestSocket();
+    const recoveryClient = new V3SyncClient({
+      url: "ws://sync.test/v3/sync",
+      token: async () => "token",
+      webSocket: { connect: () => recoverySocket },
+    });
+    await recoveryClient.start();
+    recoverySocket.receive({ type: "unknown" });
+    await settle();
+    expect(recoverySocket.closeCalls).toContainEqual({ code: 4000, reason: "invalid_frame" });
+
+    let lifecycle: ((event: "online" | "offline" | "active" | "inactive") => void) | undefined;
+    const lifecycleSocket = new TestSocket();
+    const lifecycleClient = new V3SyncClient({
+      url: "ws://sync.test/v3/sync",
+      token: async () => "token",
+      lifecycle: {
+        subscribe: (listener) => {
+          lifecycle = listener;
+          return () => undefined;
+        },
+      },
+      webSocket: { connect: () => lifecycleSocket },
+    });
+    await lifecycleClient.start();
+    lifecycle?.("inactive");
+    expect(lifecycleSocket.closeCalls).toContainEqual({ code: 4000, reason: "lifecycle unavailable" });
+  });
+
   it("gates live traffic on control, media, and presence recovery and declares all four streams", async () => {
     const { client, socket } = await liveClient();
     const hello = socket.frames()[0];
@@ -1092,14 +1148,20 @@ class TestSocket implements SyncSocket {
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
   onclose: ((event: { readonly code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
+  readonly closeCalls: { readonly code: number; readonly reason: string | undefined }[] = [];
   readonly sent: string[] = [];
 
   send(data: string): void {
     this.sent.push(data);
   }
 
-  close(code = 1000): void {
+  close(code = 1000, reason?: string): void {
+    this.closeCalls.push({ code, reason });
     this.onclose?.({ code });
+  }
+
+  error(): void {
+    this.onerror?.();
   }
 
   open(): void {
