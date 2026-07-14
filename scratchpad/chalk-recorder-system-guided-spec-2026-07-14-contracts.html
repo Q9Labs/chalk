@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chalk Recorder — Lock the Shared Contracts</title>
+    <link rel="stylesheet" href="chalk-recorder-system-guide-2026-07-14.css" />
+    <script defer src="chalk-recorder-system-guide-2026-07-14.js"></script>
+  </head>
+  <body>
+    <nav class="topbar" aria-label="Recorder guide pages">
+      <div class="topbar-inner">
+        <a class="brand" href="chalk-recorder-system-guided-spec-2026-07-14.html">Chalk recorder guide</a>
+        <div class="page-tabs">
+          <a href="chalk-recorder-system-guided-spec-2026-07-14.html">1 · Understand</a>
+          <a href="chalk-recorder-system-guided-spec-2026-07-14-contracts.html" aria-current="page">2 · Contracts</a>
+          <a href="chalk-recorder-system-guided-spec-2026-07-14-delivery.html">3 · Delivery</a>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <header class="hero reading">
+        <div class="eyebrow">Shared contract freeze</div>
+        <h1>Five promises must mean the same thing everywhere</h1>
+        <p class="lede">This is the boundary between design and delegation. Control, capture, rendering, and qualification may split only after these identities, assignments, object grants, progress reports, and finalization rules are frozen.</p>
+        <div class="meta-row">
+          <span class="badge amber">0 of 5 ratified</span>
+          <span class="badge">Page 2 of 3</span>
+          <a href="chalk-recorder-system-guided-spec-2026-07-14.md">Precise Markdown</a>
+        </div>
+      </header>
+
+      <section class="reading" id="background">
+        <h2>Background</h2>
+        <p>The recorder crosses machines, providers, storage, and delayed jobs. If each lane invents its own idea of “current worker,” “successful upload,” or “finished recording,” retries will create duplicate work or let stale machines change current state.</p>
+        <p>The control service owns intent. Workers receive the smallest temporary authority that lets one attempt succeed, then report immutable facts. Every write proves which job, attempt, fence, worker, and lease produced it.</p>
+      </section>
+
+      <section id="contract-map">
+        <h2>The shared contract map</h2>
+        <div class="contract-list">
+          <article class="contract-row" id="identity">
+            <div class="contract-number">01</div>
+            <div>
+              <h3>Identity</h3>
+              <span class="badge">machine + role</span>
+            </div>
+            <div>
+              <strong>Rule</strong>
+              <p>A five-minute one-time bootstrap becomes a short-lived node certificate. The database records issuance, expiry, and revocation.</p>
+            </div>
+            <div>
+              <strong>Failure test</strong>
+              <p>A copied, expired, wrong-role, or revoked identity cannot claim or mutate work.</p>
+            </div>
+          </article>
+
+          <article class="contract-row" id="assignment">
+            <div class="contract-number">02</div>
+            <div>
+              <h3>Assignment</h3>
+              <span class="badge">one fenced attempt</span>
+            </div>
+            <div>
+              <strong>Rule</strong>
+              <p>Claim commits the job, attempt, owner, lease, deadline, and increasing fence before the assignment is returned.</p>
+            </div>
+            <div>
+              <strong>Failure test</strong>
+              <p>After replacement, every late heartbeat, upload report, completion, and finalization from the old fence is rejected.</p>
+            </div>
+          </article>
+
+          <article class="contract-row" id="storage">
+            <div class="contract-number">03</div>
+            <div>
+              <h3>Storage + keys</h3>
+              <span class="badge">server-owned intent</span>
+            </div>
+            <div>
+              <strong>Rule</strong>
+              <p>The server chooses the exact object key, operation, size, condition, checksum, expiry, and encryption authority. Workers never supply arbitrary paths.</p>
+            </div>
+            <div>
+              <strong>Failure test</strong>
+              <p>A conflicting immutable object stops the attempt. Chalk never overwrites different bytes at an accepted key.</p>
+            </div>
+          </article>
+
+          <article class="contract-row" id="progress">
+            <div class="contract-number">04</div>
+            <div>
+              <h3>Progress + failure</h3>
+              <span class="badge">lease + vocabulary</span>
+            </div>
+            <div>
+              <strong>Rule</strong>
+              <p>Every worker reports bounded progress, resource use, gap facts, retryability, and one terminal result using shared event shapes.</p>
+            </div>
+            <div>
+              <strong>Failure test</strong>
+              <p>Missed heartbeats fence and replace the attempt; duplicate or out-of-order facts stay idempotent.</p>
+            </div>
+          </article>
+
+          <article class="contract-row" id="finalization">
+            <div class="contract-number">05</div>
+            <div>
+              <h3>Finalization</h3>
+              <span class="badge">one transaction</span>
+            </div>
+            <div>
+              <strong>Rule</strong>
+              <p>One database transaction commits the video, complete audio source and chunks, exactly one transcription job per chunk, and the render result.</p>
+            </div>
+            <div>
+              <strong>Failure test</strong>
+              <p>A retry creates no duplicate artifact or transcription jobs, and a video cannot commit with a partial transcript handoff.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="ownership">
+        <h2>Where truth lives</h2>
+        <div class="grid three">
+          <div class="card">
+            <span class="badge accent">Durable database</span>
+            <h3>Owns decisions</h3>
+            <p class="caption">Reservations, recordings, jobs, attempts, leases, fences, object intents, manifests, artifacts, cleanup, usage, and evidence.</p>
+          </div>
+          <div class="card">
+            <span class="badge accent">Private object storage</span>
+            <h3>Owns bytes</h3>
+            <p class="caption">Encrypted capture bundles, final video, speaker map, and transcription audio chunks. It does not decide lifecycle state.</p>
+          </div>
+          <div class="card">
+            <span class="badge accent">Workers</span>
+            <h3>Own observations</h3>
+            <p class="caption">Heartbeats, progress, resource use, verified checksums, gaps, and one fenced terminal report.</p>
+          </div>
+        </div>
+        <div class="callout red">A worker never receives reusable database credentials, storage credentials, encryption keys, infrastructure credentials, or the Cloudflare application secret.</div>
+      </section>
+
+      <section id="state">
+        <h2>The normal state path</h2>
+        <div class="state-track" aria-label="Normal recorder state progression">
+          <div class="state">Requested</div>
+          <div class="state">Reserved</div>
+          <div class="state">Capturing</div>
+          <div class="state">Capture complete</div>
+          <div class="state">Rendering</div>
+          <div class="state">Verifying</div>
+          <div class="state done">Committed</div>
+        </div>
+        <div class="grid two">
+          <div class="callout amber">
+            <h3>Retryable failure</h3>
+            <p>A provider, machine, or transfer failure preserves committed inputs, increases the fence, and returns work to capture or rendering while retention allows.</p>
+          </div>
+          <div class="callout red">
+            <h3>Terminal failure</h3>
+            <p>Exhausted attempts, expired retention, object conflicts, or missed deadlines stop the release path and keep the failure observable.</p>
+          </div>
+        </div>
+
+        <figure class="visual-plate">
+          <img src="assets/recorder-pipeline-debrief/lifecycle.png" alt="Recorder reservation and job lifecycles, including leases, heartbeats, capture, rendering, verification, retryable failure, and terminal failure." />
+          <figcaption>Reservations protect capacity. Jobs protect execution. Both fail closed when their temporary authority expires.</figcaption>
+        </figure>
+      </section>
+
+      <section id="failures">
+        <h2>Failure behavior</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Failure</th>
+              <th>What survives</th>
+              <th>Recovery</th>
+              <th>Visible result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Capture worker dies</td>
+              <td>Committed encrypted bundles</td>
+              <td>Fence, replace, rejoin, request a keyframe</td>
+              <td>Recording continues with an honest gap</td>
+            </tr>
+            <tr>
+              <td>Control service disappears</td>
+              <td>The current 30-minute authority envelope</td>
+              <td>Close admission; existing capture uses only issued authority</td>
+              <td>Capture stops if authority expires first</td>
+            </tr>
+            <tr>
+              <td>Graphics worker dies</td>
+              <td>Verified capture inputs</td>
+              <td>Fence and retry with new read and write grants</td>
+              <td>Deadline remains unchanged</td>
+            </tr>
+            <tr>
+              <td>Old worker reports late</td>
+              <td>Current job state</td>
+              <td>Reject its stale fence</td>
+              <td>No duplicate or rollback</td>
+            </tr>
+            <tr>
+              <td>Object contains different bytes</td>
+              <td>Both immutable fact sets</td>
+              <td>Stop and reconcile; never overwrite</td>
+              <td>Attempt fails visibly</td>
+            </tr>
+            <tr>
+              <td>Render misses 30 minutes</td>
+              <td>Bounded retry inputs and evidence</td>
+              <td>Fail qualification; close new admission</td>
+              <td>Release is not qualified</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="limits">
+        <h2>Launch limits are admission rules</h2>
+        <div class="grid four">
+          <div class="card">
+            <div class="label">Recorded meetings</div>
+            <div class="stat">20 at once</div>
+          </div>
+          <div class="card">
+            <div class="label">Recorded participants</div>
+            <div class="stat">100 globally</div>
+          </div>
+          <div class="card">
+            <div class="label">One recorded room</div>
+            <div class="stat">10 people</div>
+          </div>
+          <div class="card">
+            <div class="label">Recording duration</div>
+            <div class="stat">120 minutes</div>
+          </div>
+          <div class="card">
+            <div class="label">Input target</div>
+            <div class="stat">3 megabits/sec</div>
+            <p class="caption">4 megabits/sec hard ceiling.</p>
+          </div>
+          <div class="card">
+            <div class="label">Capture bundles</div>
+            <div class="stat">10–15 seconds</div>
+          </div>
+          <div class="card">
+            <div class="label">Final video</div>
+            <div class="stat">720p · 30 fps</div>
+          </div>
+          <div class="card">
+            <div class="label">Finalization</div>
+            <div class="stat">Within 30 min</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="decisions">
+        <h2>Proposed defaults to ratify</h2>
+        <p class="reading caption">These choices close open seams without changing the product promise. They remain proposals until Hasan accepts or changes them.</p>
+        <div class="decision-grid">
+          <div class="decision">
+            <h3>1 · Usage reservation</h3>
+            <p>Reserve the maximum accepted recording minutes when admission succeeds.</p>
+            <div class="recommendation">Recommended: simple, conservative, and atomic.</div>
+          </div>
+          <div class="decision">
+            <h3>2 · Legacy mutations</h3>
+            <p>Translate old recording routes into the new model, emit deprecation signals, then remove them deliberately.</p>
+            <div class="recommendation">Recommended: avoid an immediate breaking cutover.</div>
+          </div>
+          <div class="decision">
+            <h3>3 · Worker identity</h3>
+            <p>Use a dedicated recorder certificate authority whose signing key stays inside a managed key service.</p>
+            <div class="recommendation">Recommended: narrow trust without adding another service.</div>
+          </div>
+          <div class="decision">
+            <h3>4 · Liveness</h3>
+            <p>Heartbeat every 15 seconds and treat roughly 45 seconds without a valid heartbeat as lost work.</p>
+            <div class="recommendation">Recommended: bounded detection without noisy churn.</div>
+          </div>
+          <div class="decision">
+            <h3>5 · Wire formats</h3>
+            <p>Generate both the private route description and exact message schemas from shared Go types.</p>
+            <div class="recommendation">Recommended: one type source for HTTP and worker messages.</div>
+          </div>
+          <div class="decision">
+            <h3>6 · Track ownership</h3>
+            <p>The media-publication control domain owns participant-to-Cloudflare-track mapping.</p>
+            <div class="recommendation">Recommended: workers never infer identity from provider labels.</div>
+          </div>
+          <div class="decision">
+            <h3>7 · Composition</h3>
+            <p>Use GStreamer for composition, FFmpeg tools for independent verification, and pinned Inter/Noto Sans fonts.</p>
+            <div class="recommendation">Recommended: dynamic media pipeline plus separate proof.</div>
+          </div>
+          <div class="decision">
+            <h3>8 · Machine ceilings</h3>
+            <p>Ratify capture and render instance sizes only after measured headroom, deadlines, and cost evidence exist.</p>
+            <div class="recommendation">Recommended: evidence decides capacity, not a guessed SKU.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="glossary">
+        <h2>Plain-language glossary</h2>
+        <div class="glossary">
+          <div><strong>Admission</strong><span>Whether Chalk can safely promise recording now.</span></div>
+          <div><strong>Reservation</strong><span>The durable hold on capacity, time, and usage.</span></div>
+          <div><strong>Job</strong><span>Durable work with an attempt, lease, fence, deadline, and terminal result.</span></div>
+          <div><strong>Lease</strong><span>Temporary permission for one worker to execute one attempt.</span></div>
+          <div><strong>Fence</strong><span>An increasing number that makes replaced attempts stale.</span></div>
+          <div><strong>Object intent</strong><span>A one-operation storage grant whose exact path and limits came from the server.</span></div>
+          <div><strong>Bundle</strong><span>One immutable 10–15 second encrypted media and timeline piece.</span></div>
+          <div><strong>Finalization</strong><span>The transaction that commits the video and complete transcript handoff once.</span></div>
+          <div><strong>Reconciler</strong><span>The loop that compares intended state with provider and worker reality.</span></div>
+          <div><strong>Qualification</strong><span>The real staging proof of limits, failures, cleanup, observability, cost, and deadlines.</span></div>
+        </div>
+      </section>
+
+      <div class="next-pages">
+        <a href="chalk-recorder-system-guided-spec-2026-07-14.html"><strong>← Back: understand the system</strong><span>Return to the product promise, architecture, and interactive scenarios.</span></a>
+        <a href="chalk-recorder-system-guided-spec-2026-07-14-delivery.html"><strong>Next: deliver in four lanes →</strong><span>See the worktree split, integration order, gates, and stopping point.</span></a>
+      </div>
+
+      <footer>Ratification rewrites the affected Markdown specs in place. This page does not itself freeze a proposal or authorize implementation.</footer>
+    </main>
+  </body>
+</html>

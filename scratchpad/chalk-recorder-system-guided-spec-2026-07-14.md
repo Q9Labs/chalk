@@ -4,7 +4,11 @@ Status: Draft orientation and shared-contract decision spec.
 
 Owner: Hasan Shoaib
 
-HTML companion: `scratchpad/chalk-recorder-system-guided-spec-2026-07-14.html`
+HTML walkthrough:
+
+1. `scratchpad/chalk-recorder-system-guided-spec-2026-07-14.html` — understand the product promise, architecture, journey, and failure behavior;
+2. `scratchpad/chalk-recorder-system-guided-spec-2026-07-14-contracts.html` — lock shared contracts, ownership, limits, and proposed defaults;
+3. `scratchpad/chalk-recorder-system-guided-spec-2026-07-14-delivery.html` — understand the four implementation lanes, worktree order, gates, scope, and stopping point.
 
 Binding sources:
 
@@ -18,7 +22,7 @@ Binding sources:
 
 ## Purpose, authority, and how to use this spec
 
-This spec is the zero-context map of Chalk recording. It explains the product promise, the systems involved, the recording journey, the five contracts every implementation lane shares, the important failure behavior, the launch ceilings, the work split, and the decisions Hasan must eventually ratify. The HTML companion is the primary reading surface; this Markdown file is the precise source an executor cites.
+This spec is the zero-context map of Chalk recording. It explains the product promise, the systems involved, the recording journey, the five contracts every implementation lane shares, the important failure behavior, the launch ceilings, the work split, and the decisions Hasan must eventually ratify. The three-page HTML walkthrough is the primary reading surface; this Markdown file is the precise source an executor cites.
 
 This document does not replace or weaken its binding sources. When it summarizes a settled rule, the underlying specification remains authoritative. When it recommends a decision that is still open in a companion, the recommendation remains proposed until Hasan ratifies it and the open question is rewritten in place in every affected spec.
 
@@ -38,7 +42,7 @@ Chalk therefore separates live capture from later composition. Live capture save
 
 The system is intentionally bounded for launch: at most twenty simultaneous recorded meetings, one hundred participants globally, ten participants in one recorded room, and one hundred twenty minutes per recording.
 
-The HTML companion places two image-generated overview plates beside the precise diagrams. They are also available directly as the [architecture overview](assets/recorder-pipeline-debrief/architecture.png) and [reservation and job lifecycle](assets/recorder-pipeline-debrief/lifecycle.png).
+The HTML walkthrough places two image-generated overview plates beside stable native HTML diagrams. It has no diagram-rendering dependency when opened from disk. The plates are also available directly as the [architecture overview](assets/recorder-pipeline-debrief/architecture.png) and [reservation and job lifecycle](assets/recorder-pipeline-debrief/lifecycle.png).
 
 ## The user-visible promise
 
@@ -323,11 +327,11 @@ Every agent prompt includes all recorder specs as context, one owned companion, 
 
 This guided spec pair is complete when:
 
-- the Markdown and HTML describe the same system, limits, proposals, lanes, and stopping point;
-- the HTML opens with zero-context background, defines unfamiliar terms on every occurrence, and leads with diagrams rather than prose;
+- the Markdown and three HTML pages describe the same system, limits, proposals, lanes, and stopping point;
+- every HTML page opens with zero-context background, uses plain language, defines unfamiliar terms on every occurrence, and leads with native diagrams rather than prose;
 - the mini world faithfully models normal recording, launch-limit rejection, capture loss, control-plane loss, render loss, stale attempts, deadlines, and cleanup outcomes;
 - architecture, workflow, data ownership, state, failure, scope, phases, orchestration, glossary, progress, and open decisions are visually represented;
-- every Mermaid diagram parses, every local document link resolves, the mini world works by keyboard and pointer, and light and dark themes remain readable;
+- every native diagram fits its page without external rendering, every local document link resolves, the mini world works by keyboard and pointer, and mobile, light, and dark layouts remain readable;
 - the companion specs remain the only implementation authorities, and this document does not authorize staging or production mutation.
 
 The recorder implementation itself is not done when this documentation pair is complete. System completion still requires G0–G5 and the full C, K, R, and Q evidence.
@@ -349,7 +353,7 @@ Out of scope:
 - implementing the four companion specs through this orientation document;
 - changing thresholds after a failed qualification run without explicit re-ratification.
 
-Work stops after the synchronized guided Markdown and HTML exist, their behavior and diagrams are verified, and Hasan has a clear decision surface. Contract implementation begins only after G0.
+Work stops after the synchronized guided Markdown and three-page HTML walkthrough exist, their behavior and diagrams are verified, and Hasan has a clear decision surface. Contract implementation begins only after G0.
 
 ## Canonical vocabulary
 
@@ -371,7 +375,7 @@ Work stops after the synchronized guided Markdown and HTML exist, their behavior
 
 ## Decisions presented for later ratification
 
-The HTML companion explains these decisions visually before asking Hasan to choose:
+The contracts page explains these decisions visually before asking Hasan to choose:
 
 1. Reserve maximum recording minutes for tenant usage, or adopt a more granular unit now.
 2. Translate and deprecate legacy recording mutations, or make an immediate breaking change.
