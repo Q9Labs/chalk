@@ -1,0 +1,1422 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chalk Recorder System Guided Spec</title>
+    <style>
+      :root {
+        --bg: #faf9f7;
+        --fg: #37352f;
+        --muted: #9b9a97;
+        --line: #e8e6e1;
+        --card: #f3f1ec;
+        --accent: #2383e2;
+        --amber: #d9730d;
+        --green: #448361;
+        --red: #d44c47;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #191919;
+          --fg: #e3e2e0;
+          --muted: #9b9b9b;
+          --line: #2f2f2f;
+          --card: #232323;
+          --accent: #529cca;
+          --amber: #cb7b37;
+          --green: #4f9768;
+          --red: #de5550;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--fg);
+        background: var(--bg);
+        font:
+          16px/1.65 ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Helvetica,
+          Arial,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1fr min(720px, calc(100% - 3rem)) 1fr;
+        row-gap: 0.25rem;
+        padding: 3rem 0 6rem;
+      }
+
+      main > * {
+        grid-column: 2;
+        min-width: 0;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+        width: min(1080px, calc(100% - 3rem));
+        justify-self: center;
+      }
+
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      h2 {
+        margin: 3rem 0 1rem;
+        padding-bottom: 0.3rem;
+        border-bottom: 1px solid var(--line);
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      h3 {
+        margin: 2rem 0 0.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      p {
+        margin: 0.6rem 0;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .caption {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      figure.visual {
+        overflow: hidden;
+        margin: 1.25rem auto;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fbf8f1;
+      }
+
+      figure.visual img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      figure.visual figcaption {
+        padding: 0.75rem 1rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        background: var(--card);
+        font-size: 0.85rem;
+      }
+
+      nav.toc {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        grid-column: 1 / -1;
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 1rem;
+        padding: 0.5rem 1.5rem;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--bg) 88%, transparent);
+        backdrop-filter: blur(8px);
+        font-size: 0.85rem;
+      }
+
+      nav.toc a {
+        color: var(--muted);
+      }
+
+      nav.toc a:hover {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .card {
+        margin: 1rem 0;
+        padding: 1rem 1.25rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+      }
+
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .tiles .card {
+        margin: 0;
+      }
+
+      .cols2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.1rem 0.6rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .badge.accent {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .badge.green {
+        color: var(--green);
+        border-color: var(--green);
+      }
+
+      .badge.amber {
+        color: var(--amber);
+        border-color: var(--amber);
+      }
+
+      .badge.red {
+        color: var(--red);
+        border-color: var(--red);
+      }
+
+      .callout {
+        margin: 1rem 0;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 8px;
+        background: var(--card);
+      }
+
+      .callout.amber {
+        border-left-color: var(--amber);
+      }
+
+      .callout.red {
+        border-left-color: var(--red);
+      }
+
+      .progress {
+        height: 6px;
+        overflow: hidden;
+        border-radius: 3px;
+        background: var(--line);
+      }
+
+      .progress > i {
+        display: block;
+        height: 100%;
+        background: var(--green);
+      }
+
+      .term {
+        position: relative;
+        border-bottom: 1px dotted var(--muted);
+        cursor: help;
+      }
+
+      .term:hover::after,
+      .term:focus::after {
+        position: absolute;
+        z-index: 30;
+        top: calc(100% + 4px);
+        left: 0;
+        width: max-content;
+        max-width: 320px;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--fg);
+        background: var(--card);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        content: attr(data-def);
+        font-size: 0.85rem;
+        line-height: 1.4;
+      }
+
+      details {
+        margin: 1rem 0;
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+      }
+
+      summary {
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 0.9rem;
+      }
+
+      details[open] summary {
+        margin-bottom: 0.5rem;
+      }
+
+      table {
+        width: 100%;
+        margin: 1rem 0;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+
+      th,
+      td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.8rem;
+        font-weight: 500;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      code,
+      pre,
+      kbd {
+        font:
+          0.875rem/1.6 ui-monospace,
+          "SF Mono",
+          Menlo,
+          Consolas,
+          monospace;
+      }
+
+      code {
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        background: var(--card);
+      }
+
+      button {
+        padding: 0.35rem 0.9rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--fg);
+        background: var(--card);
+        cursor: pointer;
+        font: inherit;
+      }
+
+      button:hover {
+        border-color: var(--muted);
+      }
+
+      button.primary {
+        color: #fff;
+        border-color: var(--accent);
+        background: var(--accent);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      input,
+      select {
+        padding: 0.35rem 0.6rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--fg);
+        background: var(--bg);
+        font: inherit;
+      }
+
+      .mermaid {
+        max-width: 100%;
+        margin: 1.5rem 0;
+        overflow-x: auto;
+      }
+
+      .header-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .stat-label {
+        color: var(--muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .stat-value {
+        margin-top: 0.25rem;
+        font-weight: 600;
+      }
+
+      .mini-world {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .sim-controls {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+
+      .sim-controls label {
+        display: grid;
+        gap: 0.3rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .sim-controls output {
+        color: var(--fg);
+        font-weight: 600;
+      }
+
+      .sim-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .sim-flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .sim-node {
+        position: relative;
+        display: grid;
+        min-height: 92px;
+        place-content: center;
+        gap: 0.25rem;
+        padding: 0.65rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--muted);
+        background: var(--bg);
+        text-align: center;
+      }
+
+      .sim-node:not(:last-child)::after {
+        position: absolute;
+        z-index: 1;
+        top: 50%;
+        right: -0.58rem;
+        color: var(--muted);
+        content: "→";
+        transform: translateY(-50%);
+      }
+
+      .sim-node strong {
+        color: inherit;
+        font-weight: 600;
+      }
+
+      .sim-node small {
+        font-size: 0.75rem;
+      }
+
+      .sim-node.current {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .sim-node.success {
+        color: var(--green);
+        border-color: var(--green);
+      }
+
+      .sim-node.warning {
+        color: var(--amber);
+        border-color: var(--amber);
+      }
+
+      .sim-node.failure {
+        color: var(--red);
+        border-color: var(--red);
+      }
+
+      .sim-narration {
+        min-height: 64px;
+        padding: 0.75rem 1rem;
+        border-left: 3px solid var(--accent);
+        background: var(--card);
+      }
+
+      .contract-chain {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.5rem;
+      }
+
+      .contract {
+        position: relative;
+        display: grid;
+        min-height: 132px;
+        align-content: start;
+        gap: 0.35rem;
+        padding: 0.8rem;
+        border-top: 3px solid var(--accent);
+        background: var(--card);
+      }
+
+      .contract:not(:last-child)::after {
+        position: absolute;
+        z-index: 1;
+        top: 50%;
+        right: -0.55rem;
+        color: var(--muted);
+        content: "→";
+      }
+
+      .contract strong {
+        font-size: 0.9rem;
+      }
+
+      .contract span {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .exists-missing {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+      }
+
+      .exists-missing ul,
+      .scope ul,
+      .checklist {
+        margin: 0.5rem 0 0;
+        padding-left: 1.25rem;
+      }
+
+      .phase-grid {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .phase {
+        display: grid;
+        grid-template-columns: 58px 1fr auto;
+        gap: 0.75rem;
+        align-items: center;
+      }
+
+      .phase > strong {
+        color: var(--accent);
+      }
+
+      .phase p {
+        margin: 0;
+      }
+
+      .glossary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem 1rem;
+      }
+
+      .glossary div {
+        padding: 0.55rem 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .glossary strong {
+        display: block;
+      }
+
+      .glossary span {
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      @media (max-width: 760px) {
+        .sim-controls {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .sim-flow,
+        .contract-chain {
+          grid-template-columns: 1fr;
+        }
+
+        .sim-node:not(:last-child)::after,
+        .contract:not(:last-child)::after {
+          top: auto;
+          right: 50%;
+          bottom: -0.8rem;
+          content: "↓";
+          transform: translateX(50%);
+        }
+
+        .exists-missing,
+        .cols2,
+        .glossary {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .sim-controls {
+          grid-template-columns: 1fr;
+        }
+
+        .phase {
+          grid-template-columns: 48px 1fr;
+        }
+
+        .phase .badge {
+          grid-column: 2;
+          justify-self: start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="toc" aria-label="Spec sections">
+      <a href="#background">Background</a>
+      <a href="#mini-world">Try it</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#journey">Journey</a>
+      <a href="#contracts">Shared contracts</a>
+      <a href="#data">Data</a>
+      <a href="#failures">Failures</a>
+      <a href="#limits">Limits</a>
+      <a href="#today">Today</a>
+      <a href="#decisions">Decisions</a>
+      <a href="#lanes">Lanes</a>
+      <a href="#done">Done</a>
+      <a href="#glossary">Glossary</a>
+    </nav>
+
+    <main>
+      <header>
+        <div class="header-meta">
+          <span class="badge">Chalk</span>
+          <span class="badge amber">Draft</span>
+          <span class="caption">July 14, 2026</span>
+        </div>
+        <h1>Recorder system guided spec</h1>
+        <p>A visual map from “record this meeting” to a committed video and transcript, including what must be locked before four implementation lanes separate.</p>
+        <p class="caption">
+          <a href="chalk-recorder-system-guided-spec-2026-07-14.md">Open the executor Markdown source</a>
+        </p>
+      </header>
+
+      <section class="tiles wide" aria-label="Spec summary">
+        <div class="card">
+          <div class="stat-label">What it is</div>
+          <div class="stat-value">One map of the whole recorder</div>
+        </div>
+        <div class="card">
+          <div class="stat-label">Shape</div>
+          <div class="stat-value">5 contracts · 4 lanes · 6 gates</div>
+        </div>
+        <div class="card">
+          <div class="stat-label">Highest-risk seam</div>
+          <div class="stat-value">Identity → media → final commit</div>
+        </div>
+        <div class="card">
+          <div class="stat-label">Current gate progress</div>
+          <div class="stat-value">0 / 6 ratified</div>
+          <div class="progress" aria-label="Zero of six guided gates complete"><i style="width: 0%"></i></div>
+        </div>
+      </section>
+
+      <section id="background">
+        <h2>Background</h2>
+        <p>Chalk meetings already move live audio and video through Cloudflare. Recording adds a second promise: the result must survive a closed browser, a dead worker, delayed processing, and retries without losing ownership or charging twice.</p>
+        <p>The chosen design separates live capture from later composition. A small native worker stores short encrypted pieces during the meeting; a graphics worker assembles the final view afterward. This keeps live capture light and lets expensive graphics machines turn off when idle.</p>
+        <pre class="mermaid wide">
+flowchart LR
+  Today["Live meeting"] --> Promise["Recording promise"]
+  Promise --> Capture["Save selected media safely"]
+  Capture --> Compose["Build the final view later"]
+  Compose --> Result["Video and transcript"]
+        </pre>
+        <div class="callout">This guide explains the system. It does not authorize one agent to implement every seam, and it does not authorize staging or production changes.</div>
+      </section>
+
+      <section id="mini-world" class="wide">
+        <h2>Mini world: try the intended behavior</h2>
+        <div class="card mini-world">
+          <div class="sim-controls">
+            <label>
+              Participants
+              <span><output id="participants-output">3</output> people</span>
+              <input id="participants" type="range" min="1" max="12" value="3" />
+            </label>
+            <label>
+              Requested duration
+              <span><output id="duration-output">60</output> minutes</span>
+              <input id="duration" type="range" min="15" max="150" step="15" value="60" />
+            </label>
+            <label>
+              Start type
+              <select id="start-type">
+                <option value="scheduled">Scheduled</option>
+                <option value="unscheduled">Unscheduled now</option>
+              </select>
+            </label>
+            <label>
+              What goes wrong?
+              <select id="scenario">
+                <option value="normal">Nothing</option>
+                <option value="capture-loss">Capture worker dies</option>
+                <option value="control-loss">Control service disappears after renewal</option>
+                <option value="render-loss">Graphics worker dies once</option>
+                <option value="stale-report">Old worker reports late</option>
+                <option value="object-conflict">Storage object conflicts</option>
+                <option value="slow-render">Graphics work misses the deadline</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="sim-actions">
+            <button id="run-simulation" class="primary" type="button">Start scenario</button>
+            <button id="next-step" type="button" disabled>Next step</button>
+          </div>
+
+          <div class="sim-flow" aria-label="Recording simulation stages">
+            <div class="sim-node" data-sim-node="0">
+              <strong>1 · Admit</strong>
+              <small>capacity + duration</small>
+            </div>
+            <div class="sim-node" data-sim-node="1">
+              <strong>2 · Trust</strong>
+              <small>identity + one job</small>
+            </div>
+            <div class="sim-node" data-sim-node="2">
+              <strong>3 · Capture</strong>
+              <small>selected media pieces</small>
+            </div>
+            <div class="sim-node" data-sim-node="3">
+              <strong>4 · Render</strong>
+              <small>replay the stage</small>
+            </div>
+            <div class="sim-node" data-sim-node="4">
+              <strong>5 · Commit</strong>
+              <small>video + transcript jobs</small>
+            </div>
+          </div>
+
+          <div id="sim-narration" class="sim-narration" aria-live="polite">Choose a meeting shape and failure, then start the scenario.</div>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>Architecture: decisions stay separate from media</h2>
+        <pre class="mermaid wide">
+flowchart LR
+  subgraph Product["Product boundary"]
+    Meeting["Meeting requests recording"]
+    Playback["Authorized playback"]
+  end
+  subgraph Authority["Chalk authority boundary"]
+    Control["Control service"]
+    DB[("Durable database")]
+    Reconcile["Reconciler"]
+  end
+  subgraph Live["Live media boundary"]
+    Relay["Cloudflare media relay"]
+    Capture["Native capture worker"]
+  end
+  subgraph Async["After-meeting boundary"]
+    Temp[("Encrypted temporary pieces")]
+    Render["Graphics render worker"]
+    Final[("Final video and audio chunks")]
+    Transcript["Transcription workers"]
+  end
+  Meeting -->|reserve| Control
+  Control -->|commit every decision| DB
+  Control -->|one fenced job| Capture
+  Relay -->|selected encoded tracks| Capture
+  Capture -->|encrypted pieces| Temp
+  DB -->|one render job| Render
+  Temp -->|scoped reads| Render
+  Render -->|verified outputs| Final
+  Render -->|facts only| Control
+  DB -->|one job per audio chunk| Transcript
+  Reconcile -->|compare intent with reality| DB
+  Final -->|authorized result| Playback
+        </pre>
+        <figure class="visual wide">
+          <img
+            src="assets/recorder-pipeline-debrief/architecture.png"
+            alt="Recorder architecture from the client SDK through the Go control plane, PostgreSQL jobs, native capture, encrypted Cloudflare R2 storage, graphics rendering, and committed MP4, with health, admission, encryption, and infrastructure boundaries."
+          />
+          <figcaption>Easy-read architecture plate. The live diagram above is the precise authority and data-flow model.</figcaption>
+        </figure>
+        <p class="caption">Cloudflare moves live packets. Storage holds bytes. Workers do bounded jobs. The control service and <span class="term" tabindex="0" data-def="The durable relational database that remains correct after any worker disappears.">PostgreSQL</span> decide what exists.</p>
+      </section>
+
+      <section id="journey">
+        <h2>One recording journey</h2>
+        <pre class="mermaid wide">
+sequenceDiagram
+  participant Person as Meeting participant
+  participant Control as Control service
+  participant Capture as Capture worker
+  participant Cloud as Cloudflare relay
+  participant Store as Private storage
+  participant Render as Graphics worker
+  participant Speech as Transcription
+  Person->>Control: Request recording
+  Control->>Control: Reserve capacity and usage
+  Control-->>Capture: Issue one fenced assignment
+  Capture->>Cloud: Join and request selected tracks
+  Cloud-->>Capture: Encoded audio, camera, and screen share
+  loop Every 10–15 seconds
+    Capture->>Store: Write one encrypted immutable piece
+    Capture->>Control: Report verified object facts
+  end
+  Capture->>Control: Complete ordered manifest
+  Control-->>Render: Issue verified render assignment
+  Render->>Store: Read and decrypt bounded inputs
+  Render->>Store: Write video, speaker map, and audio chunks
+  Render->>Control: Finalize verified facts
+  Control->>Control: Commit artifact and jobs atomically
+  Control-->>Speech: Make one job per audio chunk available
+  Control-->>Person: Recording is available
+        </pre>
+        <div class="tiles wide">
+          <div class="card"><strong>Before the meeting</strong><br /><span class="caption">Reserve capture, render deadline, and usage.</span></div>
+          <div class="card"><strong>During the meeting</strong><br /><span class="caption">Save selected encoded tracks and every layout decision.</span></div>
+          <div class="card"><strong>After the meeting</strong><br /><span class="caption">Replay the recorded timeline and verify one final video.</span></div>
+          <div class="card"><strong>At commit</strong><br /><span class="caption">Make video and transcription work permanent in one transaction.</span></div>
+        </div>
+      </section>
+
+      <section id="contracts" class="wide">
+        <h2>The five promises every implementation lane shares</h2>
+        <div class="contract-chain" aria-label="Five shared recorder contracts">
+          <div class="contract">
+            <strong>1 · Identity</strong>
+            <span>Which current machine and role is speaking?</span>
+            <span class="badge">short-lived certificate</span>
+          </div>
+          <div class="contract">
+            <strong>2 · Assignment</strong>
+            <span>Which exact attempt may it perform?</span>
+            <span class="badge">immutable job</span>
+          </div>
+          <div class="contract">
+            <strong>3 · Storage + keys</strong>
+            <span>Which one object operation is allowed?</span>
+            <span class="badge">server-owned intent</span>
+          </div>
+          <div class="contract">
+            <strong>4 · Progress + failure</strong>
+            <span>Is the attempt alive, stale, retryable, or done?</span>
+            <span class="badge">lease + fence</span>
+          </div>
+          <div class="contract">
+            <strong>5 · Finalization</strong>
+            <span>How does the result become permanent once?</span>
+            <span class="badge">one transaction</span>
+          </div>
+        </div>
+
+        <div class="cols2">
+          <div class="card">
+            <strong>The control plane always chooses</strong>
+            <ul>
+              <li>tenant, recording, participant ownership, and attempt;</li>
+              <li>storage key, method, size, condition, and expiry;</li>
+              <li>layout and media policy versions;</li>
+              <li>deadline, retry, cleanup, and final state.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <strong>A worker may only report</strong>
+            <ul>
+              <li>heartbeat, bounded progress, and resource use;</li>
+              <li>verified immutable object facts;</li>
+              <li>explicit media gaps and failure codes;</li>
+              <li>one fenced terminal result.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="data">
+        <h2>Data ownership: the database remembers; storage holds bytes</h2>
+        <pre class="mermaid wide">
+erDiagram
+  RESERVATION ||--|| RECORDING : creates
+  RECORDING ||--o{ JOB : owns
+  NODE_IDENTITY ||--o{ JOB : claims
+  JOB ||--o{ OBJECT_INTENT : receives
+  RECORDING ||--o{ BUNDLE : captures
+  BUNDLE }o--|| CAPTURE_MANIFEST : orders
+  CAPTURE_MANIFEST ||--|| ARTIFACT : renders
+  ARTIFACT ||--|| TRANSCRIPTION_SOURCE : seeds
+  TRANSCRIPTION_SOURCE ||--o{ TRANSCRIPTION_JOB : creates
+  RECORDING ||--o{ EVIDENCE : proves
+  RESERVATION {
+    string id PK
+    int max_minutes
+    int participants
+  }
+  RECORDING {
+    string id PK
+    string state
+  }
+  JOB {
+    string id PK
+    int attempt
+    int fence
+  }
+  NODE_IDENTITY {
+    string worker_id PK
+    string role
+    string revocation_state
+  }
+  OBJECT_INTENT {
+    string key PK
+    string method
+    int max_bytes
+  }
+  BUNDLE {
+    string key PK
+    int sequence
+    string checksum
+  }
+  CAPTURE_MANIFEST {
+    string checksum PK
+    string gap_facts
+  }
+  ARTIFACT {
+    string key PK
+    string checksum
+  }
+  TRANSCRIPTION_SOURCE {
+    string manifest_key PK
+    int chunk_count
+  }
+  TRANSCRIPTION_JOB {
+    string id PK
+    int chunk_sequence
+  }
+  EVIDENCE {
+    string id PK
+    string binary_verdict
+  }
+        </pre>
+        <p class="caption">
+          Large encrypted bytes live in <span class="term" tabindex="0" data-def="Cloudflare's private object storage, used for encrypted media pieces and final files.">R2</span>. Durable ownership, lifecycle, attempts, checksums, and verdicts live in
+          <span class="term" tabindex="0" data-def="The durable relational database that remains correct after any worker disappears.">PostgreSQL</span>.
+        </p>
+      </section>
+
+      <section id="failures">
+        <h2>Failure behavior: preserve truth, then recover</h2>
+        <pre class="mermaid wide">
+stateDiagram-v2
+  [*] --> Requested
+  Requested --> Reserved: capacity accepted
+  Reserved --> Capturing: worker acknowledges
+  Capturing --> CaptureComplete: manifest verified
+  CaptureComplete --> Rendering: render job claimed
+  Rendering --> Verifying: output closed
+  Verifying --> Committed: one atomic finalization
+  Capturing --> RetryableFailure: worker or provider loss
+  Rendering --> RetryableFailure: machine or transfer loss
+  RetryableFailure --> Capturing: fenced capture retry
+  RetryableFailure --> Rendering: fenced render retry
+  RetryableFailure --> TerminalFailure: attempts or retention exhausted
+  Committed --> Deleted: retention or erasure
+  TerminalFailure --> Deleted: cleanup complete
+        </pre>
+
+        <figure class="visual wide">
+          <img
+            src="assets/recorder-pipeline-debrief/lifecycle.png"
+            alt="Two-part recorder lifecycle showing reservation from request through reserve, capture lease, release or expiry, and job progression from pending through capture, render, verification, commit, retryable failure, or terminal failure."
+          />
+          <figcaption>Easy-read reservation and job lifecycle plate. Fences make replaced attempts stale; committed facts survive retries.</figcaption>
+        </figure>
+
+        <table class="wide">
+          <thead>
+            <tr>
+              <th>Failure</th>
+              <th>What survives</th>
+              <th>What Chalk does</th>
+              <th>User-visible result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Capture worker dies</td>
+              <td>Committed encrypted pieces</td>
+              <td>Fence, replace, rejoin, request a fresh keyframe</td>
+              <td>Recording continues with an honest gap</td>
+            </tr>
+            <tr>
+              <td>Control service disappears after renewal</td>
+              <td>The current 30-minute authority envelope</td>
+              <td>Close new admission; existing capture uses only issued authority</td>
+              <td>Capture continues until authority expires</td>
+            </tr>
+            <tr>
+              <td>Graphics worker dies</td>
+              <td>Encrypted inputs and deadline facts</td>
+              <td>Start a new fenced attempt with new output intents</td>
+              <td>Retry, or a visible deadline failure</td>
+            </tr>
+            <tr>
+              <td>Old worker reports late</td>
+              <td>The current attempt</td>
+              <td>Reject the stale fence</td>
+              <td>No duplicate or rewritten result</td>
+            </tr>
+            <tr>
+              <td>Storage object conflicts</td>
+              <td>Existing immutable object facts</td>
+              <td>Accept an exact idempotent match or reject the conflict</td>
+              <td>No overwrite</td>
+            </tr>
+            <tr>
+              <td>Cleanup misses one hour</td>
+              <td>The committed final artifact</td>
+              <td>Alert and reconcile; use the 24-hour orphan backstop</td>
+              <td>Recording remains available</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="limits">
+        <h2>Launch envelope</h2>
+        <div class="tiles wide">
+          <div class="card">
+            <div class="stat-label">Recorded meetings</div>
+            <div class="stat-value">20 simultaneous</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Recorded participants</div>
+            <div class="stat-value">100 global · 10 per room</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Recording duration</div>
+            <div class="stat-value">120 minutes</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Input budget</div>
+            <div class="stat-value">3 <span class="term" tabindex="0" data-def="Megabits per second, a measure of how much media data arrives each second.">Mbps</span> target · 4 max</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Capture fleet</div>
+            <div class="stat-value">11 machines max</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Graphics fleet</div>
+            <div class="stat-value">10 machines max</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Final artifact</div>
+            <div class="stat-value">Within 30 minutes</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Temporary media</div>
+            <div class="stat-value">1 hour normal · 24 hour backstop</div>
+          </div>
+        </div>
+        <div class="callout amber">These are ceilings, not targets. Missing a ceiling or deadline closes recording admission; the system does not silently switch to an unqualified recorder.</div>
+      </section>
+
+      <section id="today">
+        <h2>What exists today</h2>
+        <div class="exists-missing wide">
+          <div class="card">
+            <span class="badge green">Foundation exists</span>
+            <ul>
+              <li>durable jobs, leases, fences, bundle and artifact facts;</li>
+              <li>worker certificate verification primitives;</li>
+              <li>layout, track, encryption, render-plan, and fixture helpers;</li>
+              <li>direct Cloudflare room, session, track, and renegotiation proof;</li>
+              <li>fixture worker commands, health, and trace coverage.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <span class="badge red">Production path missing</span>
+            <ul>
+              <li>private bootstrap listener and certificate issuer;</li>
+              <li>complete assignment and renewal envelopes;</li>
+              <li>server-owned storage grants and transactional finalization;</li>
+              <li>native <span class="term" tabindex="0" data-def="A Go WebRTC library used by the capture worker as a media client; it is not the media server.">Pion</span> capture loop;</li>
+              <li>production <span class="term" tabindex="0" data-def="A graphics processor used to compose and encode the final video much faster than real time.">GPU</span> executor;</li>
+              <li>fleet reconciliation and real staging evidence.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="caption">Fixture output proves code shape. It does not prove real media, graphics performance, provider recovery, deletion, cost, or launch capacity.</p>
+      </section>
+
+      <section id="decisions">
+        <h2>Recommended defaults to ratify after this walkthrough</h2>
+        <div class="callout amber"><strong>Usage: reserve maximum recording minutes.</strong><br />Keep participants, bytes, and graphics time as separate capacity and operational measurements. This is easier to explain and can evolve later without blocking launch admission.</div>
+        <div class="callout amber"><strong>Compatibility: translate old recording actions, then deprecate them.</strong><br />Existing clients continue working while the reservation service remains the only authority.</div>
+        <div class="callout amber">
+          <strong>Identity: use a dedicated recorder certificate authority backed by <span class="term" tabindex="0" data-def="A managed key service that can sign without exposing the private signing key.">KMS</span>.</strong><br />The control service verifies bootstrap; the database records nonce
+          use, issued identities, last use, and revocation.
+        </div>
+        <div class="callout amber"><strong>Failure detection: heartbeat every 15 seconds and fence after roughly 45 seconds.</strong><br />This reacts quickly enough for recording recovery without treating one brief network wobble as machine death.</div>
+        <div class="callout amber">
+          <strong
+            >Wire format: publish both private <span class="term" tabindex="0" data-def="A machine-readable description of HTTP routes, requests, responses, and errors.">OpenAPI</span> and
+            <span class="term" tabindex="0" data-def="A machine-readable description of the exact shape and validation rules of a JSON message.">JSON Schema</span>.</strong
+          ><br />One explains routes; the other gives worker lanes stable message fixtures.
+        </div>
+        <div class="callout amber"><strong>Media ownership: the media-publication service owns participant-to-track mapping.</strong><br />The recorder consumes authenticated publication facts instead of guessing identity from media or labels.</div>
+        <div class="callout amber">
+          <strong
+            >Rendering: <span class="term" tabindex="0" data-def="A media pipeline framework well suited to changing tracks and graphics-accelerated composition.">GStreamer</span> composes;
+            <span class="term" tabindex="0" data-def="A media toolkit used here as an independent checker of the final container, codecs, and timing.">FFmpeg</span> verifies.</strong
+          ><br />Bundle Inter and Noto Sans so the same labels render on every machine.
+        </div>
+        <div class="callout amber"><strong>Resource ceilings: measure before ratifying.</strong><br />Capture and render lanes must show peak use, sustained use, headroom, density, and cost. Hasan approves visible evidence rather than guessing memory or scratch limits.</div>
+      </section>
+
+      <section id="scope">
+        <h2>Scope</h2>
+        <div class="cols2 scope wide">
+          <div class="card">
+            <strong>✅ In scope</strong>
+            <ul>
+              <li>admission through final video and transcript handoff;</li>
+              <li>the five shared contracts and ownership;</li>
+              <li>failure, security, limits, current state, and proof;</li>
+              <li>four lane boundaries and worktree order.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <strong>🚫 Non-goals</strong>
+            <ul>
+              <li>production mutation or enablement;</li>
+              <li>browser, client-side, or managed <span class="term" tabindex="0" data-def="Cloudflare's higher-level meeting product; Chalk's native recorder uses the lower-level direct media relay instead.">RealtimeKit</span> recording;</li>
+              <li>arbitrary gallery edits or voice-based identity;</li>
+              <li>rooms over ten people or recordings over two hours;</li>
+              <li>one agent implementing the entire program from this guide.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="lanes">
+        <h2>How the four lanes separate</h2>
+        <pre class="mermaid wide">
+flowchart LR
+  Freeze{"Shared contracts frozen?"}
+  Freeze -->|yes| Control["Control-plane lane"]
+  Freeze -->|yes| Capture["Capture lane"]
+  Freeze -->|yes| Render["Render lane"]
+  Control --> Local{"Integrated local proof"}
+  Capture --> Local
+  Render --> Local
+  Local -->|pass| Qualify["Staging qualification lane"]
+  Local -->|fail| Return["Return defect to owning lane"]
+  Qualify -->|all gates pass and cleanup proven| Dormant["Qualified dormant staging"]
+  Qualify -->|any miss| Closed["Not done; admission closed"]
+        </pre>
+        <div class="tiles wide">
+          <div class="card">
+            <span class="badge accent">Lane 1</span>
+            <h3>Control plane</h3>
+            <p class="caption">Identity, jobs, authority, finalization, admission, reconciliation.</p>
+          </div>
+          <div class="card">
+            <span class="badge accent">Lane 2</span>
+            <h3>Capture</h3>
+            <p class="caption">Cloudflare join, selected tracks, timeline, encrypted pieces, recovery.</p>
+          </div>
+          <div class="card">
+            <span class="badge accent">Lane 3</span>
+            <h3>Render</h3>
+            <p class="caption">Verified input, deterministic graphics, final video, audio chunks, deadline.</p>
+          </div>
+          <div class="card">
+            <span class="badge accent">Lane 4</span>
+            <h3>Qualification</h3>
+            <p class="caption">Exact staging release, real load, failures, cleanup, observability, cost.</p>
+          </div>
+        </div>
+        <div class="callout">Give every lane all recorder specs as context and only one companion as execution authority. Use one worktree per writing owner from the frozen baseline; qualification starts only from the integrated immutable release.</div>
+      </section>
+
+      <section id="phases">
+        <h2>Guided phase tracker</h2>
+        <div class="phase-grid wide">
+          <div class="card phase">
+            <strong>G0</strong>
+            <p>Understand the walkthrough and ratify or change every shared default.</p>
+            <span class="badge">0 / 1</span>
+          </div>
+          <div class="card phase">
+            <strong>G1</strong>
+            <p>Freeze schemas, identity, provider proof, assignments, storage authority, and finalization.</p>
+            <span class="badge">0 / 1</span>
+          </div>
+          <div class="card phase">
+            <strong>G2</strong>
+            <p>Implement control, capture, and render locally in their owned worktrees.</p>
+            <span class="badge">0 / 1</span>
+          </div>
+          <div class="card phase">
+            <strong>G3</strong>
+            <p>Run one clean local reservation-to-transcription topology with failure recovery.</p>
+            <span class="badge">0 / 1</span>
+          </div>
+          <div class="card phase">
+            <strong>G4</strong>
+            <p>Qualify the immutable release at the real staging ceilings and deadlines.</p>
+            <span class="badge">0 / 1</span>
+          </div>
+          <div class="card phase">
+            <strong>G5</strong>
+            <p>Record the verdict, revoke temporary authority, prove deletion and zero compute.</p>
+            <span class="badge">0 / 1</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="done">
+        <h2>Done and stopping point</h2>
+        <div class="card">
+          <strong>This walkthrough pair is done when:</strong>
+          <ul class="checklist">
+            <li>☑ Markdown and HTML describe the same system and proposals.</li>
+            <li>☑ The mini world covers normal behavior, launch bounds, stale work, worker loss, deadline failure, and cleanup.</li>
+            <li>☑ Every diagram parses and every local link resolves.</li>
+            <li>☐ Pointer and keyboard interaction work in light and dark themes.</li>
+            <li>☑ Companion specs remain the only implementation authorities.</li>
+          </ul>
+        </div>
+        <div class="callout red">Documentation complete does not mean recorder complete. The system remains not done until G0–G5 and all control, capture, render, and qualification gates have observed evidence.</div>
+        <p>Work stops after Hasan has a clear decision surface. Shared-contract implementation starts only after G0.</p>
+      </section>
+
+      <section id="glossary">
+        <h2>Plain-language glossary</h2>
+        <div class="glossary wide">
+          <div><strong>Admission</strong><span>The decision that Chalk can safely promise recording now.</span></div>
+          <div><strong>Reservation</strong><span>The durable capacity, time, and usage hold created by admission.</span></div>
+          <div><strong>Control plane</strong><span>The service and loops that make decisions without carrying media.</span></div>
+          <div><strong>Media relay</strong><span>Cloudflare's service that forwards selected participant tracks without mixing them.</span></div>
+          <div><strong>Capture worker</strong><span>The native process that receives encoded tracks and writes encrypted pieces.</span></div>
+          <div><strong>Bundle</strong><span>One immutable 10–15 second encrypted media and timeline piece.</span></div>
+          <div><strong>Timeline</strong><span>The ordered record of track owners, layout decisions, clocks, and gaps.</span></div>
+          <div><strong>Render worker</strong><span>The graphics process that replays the timeline and builds the final outputs.</span></div>
+          <div><strong>Job</strong><span>Durable work with an identity, attempt, lease, fence, and terminal result.</span></div>
+          <div><strong>Lease</strong><span>Temporary permission for one worker to execute one attempt.</span></div>
+          <div><strong>Fence</strong><span>A generation number that makes every older attempt stale after replacement.</span></div>
+          <div><strong>Object intent</strong><span>A one-operation storage grant whose key and limits were chosen by the server.</span></div>
+          <div><strong>Finalization</strong><span>The transaction that commits the video and complete transcription handoff once.</span></div>
+          <div><strong>Reconciler</strong><span>The loop that compares intended state with provider and worker reality.</span></div>
+          <div><strong>Qualification</strong><span>The real staging proof of limits, failures, cleanup, observability, cost, and deadlines.</span></div>
+          <div><strong>Authority envelope</strong><span>The short-lived bundle of permissions needed for one fenced job attempt.</span></div>
+        </div>
+      </section>
+
+      <section id="open-decisions">
+        <h2>Later staging decisions</h2>
+        <div class="callout amber">
+          Before staging starts, the active thread must name the exact Cloudflare, DigitalOcean, AWS, database, monitoring, and transcription targets; provider quotas; spend ceiling; activation window; operator; load runner; and cleanup authority. Missing bindings stop the run. They are never
+          inferred from credentials or defaults.
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (() => {
+        const participants = document.getElementById("participants");
+        const participantsOutput = document.getElementById("participants-output");
+        const duration = document.getElementById("duration");
+        const durationOutput = document.getElementById("duration-output");
+        const startType = document.getElementById("start-type");
+        const scenario = document.getElementById("scenario");
+        const runButton = document.getElementById("run-simulation");
+        const nextButton = document.getElementById("next-step");
+        const narration = document.getElementById("sim-narration");
+        const nodes = [...document.querySelectorAll("[data-sim-node]")];
+
+        let plan = [];
+        let currentStep = -1;
+
+        const scenarioPlans = {
+          normal: ["success", "success", "success", "success", "success"],
+          "capture-loss": ["success", "success", "warning", "success", "success"],
+          "control-loss": ["success", "success", "warning", "success", "success"],
+          "render-loss": ["success", "success", "success", "warning", "success"],
+          "stale-report": ["success", "success", "warning", "success", "success"],
+          "object-conflict": ["success", "success", "failure", "idle", "idle"],
+          "slow-render": ["success", "success", "success", "failure", "failure"],
+        };
+
+        function updateOutputs() {
+          participantsOutput.value = participants.value;
+          durationOutput.value = duration.value;
+        }
+
+        function resetNodes() {
+          nodes.forEach((node) => {
+            node.classList.remove("current", "success", "warning", "failure");
+          });
+        }
+
+        function stageNarration(step, status) {
+          const people = Number(participants.value);
+          const minutes = Number(duration.value);
+          const acceptedMinutes = Math.min(minutes, 120);
+          const unscheduled = startType.value === "unscheduled";
+          const selectedScenario = scenario.value;
+
+          if (step === 0) {
+            if (people > 10) {
+              return `Recording is unavailable for ${people} people because launch recording supports at most 10 in one room. Chalk does not make a false recording promise.`;
+            }
+            const startCopy = unscheduled ? "The meeting waits up to 120 seconds for a capture worker to acknowledge its lease." : "Chalk prewarms capacity five minutes before the scheduled start.";
+            const durationCopy = minutes > 120 ? `The request asks for ${minutes} minutes, so recording is capped at 120 with warnings at 110 and 118 minutes.` : `${acceptedMinutes} recording minutes are reserved.`;
+            return `${startCopy} ${durationCopy}`;
+          }
+
+          if (step === 1) {
+            return "A short-lived node certificate proves the machine and role. A narrower lease grants one attempt; every older attempt is fenced.";
+          }
+
+          if (step === 2 && selectedScenario === "capture-loss") {
+            return "The capture process dies. Committed encrypted pieces survive; Chalk fences the old attempt, starts a replacement, requests a fresh keyframe, and records the real gap.";
+          }
+          if (step === 2 && selectedScenario === "control-loss") {
+            return "The control service disappears after renewal. Existing capture continues only within its issued 30-minute authority; new admission closes and capture stops honestly if authority expires first.";
+          }
+          if (step === 2 && selectedScenario === "stale-report") {
+            return "An old worker reports after replacement. Its fence is stale, so the report is rejected without changing the current recording.";
+          }
+          if (step === 2 && selectedScenario === "object-conflict") {
+            return "A storage key already contains different immutable facts. Chalk refuses to overwrite it, stops this attempt, and sends the conflict to reconciliation.";
+          }
+          if (step === 2) {
+            return "The native worker receives selected Cloudflare tracks and closes one encrypted, immutable bundle every 10–15 seconds.";
+          }
+
+          if (step === 3 && selectedScenario === "render-loss") {
+            return "The graphics worker dies once. Encrypted inputs survive; a new fenced attempt re-verifies them and uses new conditional output grants before retrying.";
+          }
+          if (step === 3 && selectedScenario === "slow-render") {
+            return "The graphics release cannot finish inside the measured deadline budget. Qualification fails and new recording admission closes; the system does not weaken the threshold.";
+          }
+          if (step === 3) {
+            return "The graphics worker replays the recorded timeline, preserves explicit gaps, and verifies the 720p video before reporting output facts.";
+          }
+
+          if (step === 4 && status === "failure") {
+            return "The final artifact did not meet its 30-minute contract. The miss stays visible, inputs remain bounded for retry, and this release cannot qualify.";
+          }
+          return "One database transaction commits the video, inserts the complete audio source and chunks, and creates exactly one transcription job per chunk. Cleanup then deletes temporary media and wrapped key material inside the bounded retention window.";
+        }
+
+        function renderStep() {
+          resetNodes();
+          nodes.forEach((node, index) => {
+            if (index < currentStep) {
+              const prior = plan[index];
+              if (prior !== "idle") node.classList.add(prior);
+            }
+          });
+
+          const node = nodes[currentStep];
+          const status = plan[currentStep];
+          if (node) {
+            node.classList.add(status === "idle" ? "failure" : status, "current");
+            narration.textContent = stageNarration(currentStep, status);
+          }
+
+          if (currentStep >= nodes.length - 1 || status === "failure") {
+            nextButton.disabled = true;
+            runButton.textContent = "Restart scenario";
+          } else {
+            nextButton.disabled = false;
+          }
+        }
+
+        function startSimulation() {
+          const people = Number(participants.value);
+          plan = [...scenarioPlans[scenario.value]];
+          if (people > 10) {
+            plan = ["failure", "idle", "idle", "idle", "idle"];
+          }
+          currentStep = 0;
+          runButton.textContent = "Restart scenario";
+          renderStep();
+        }
+
+        participants.addEventListener("input", updateOutputs);
+        duration.addEventListener("input", updateOutputs);
+        runButton.addEventListener("click", startSimulation);
+        nextButton.addEventListener("click", () => {
+          if (currentStep < nodes.length - 1) {
+            currentStep += 1;
+            renderStep();
+          }
+        });
+
+        updateOutputs();
+      })();
+    </script>
+
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      const css = getComputedStyle(document.documentElement);
+      const value = (name) => css.getPropertyValue(name).trim();
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "base",
+        themeVariables: {
+          background: value("--bg"),
+          primaryColor: value("--card"),
+          primaryTextColor: value("--fg"),
+          primaryBorderColor: value("--line"),
+          lineColor: value("--muted"),
+          fontFamily: "inherit",
+        },
+      });
+    </script>
+  </body>
+</html>
