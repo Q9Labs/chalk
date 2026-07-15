@@ -1,388 +1,323 @@
-# Chalk Recorder System Guided Spec
+# Chalk Recording System
 
-Status: Draft orientation and shared-contract decision spec.
+Status: Ready for implementation review
 
 Owner: Hasan Shoaib
 
-HTML walkthrough:
+Refreshed: July 15, 2026
 
-1. `scratchpad/chalk-recorder-system-guided-spec-2026-07-14.html` — understand the product promise, architecture, journey, and failure behavior;
-2. `scratchpad/chalk-recorder-system-guided-spec-2026-07-14-contracts.html` — lock shared contracts, ownership, limits, and proposed defaults;
-3. `scratchpad/chalk-recorder-system-guided-spec-2026-07-14-delivery.html` — understand the four implementation lanes, worktree order, gates, scope, and stopping point.
+Companion: `scratchpad/chalk-recorder-system-guided-spec-2026-07-14.html`
 
-Binding sources:
+## Decision
 
-- `scratchpad/chalk-infrastructure-readiness-spec-2026-07-11.md`
-- `scratchpad/chalk-recorder-pipeline-spec-2026-07-12.md`
-- `scratchpad/chalk-recorder-control-plane-spec-2026-07-13.md`
-- `scratchpad/chalk-recorder-cloudflare-capture-worker-spec-2026-07-13.md`
-- `scratchpad/chalk-recorder-render-finalization-worker-spec-2026-07-13.md`
-- `scratchpad/chalk-recorder-staging-qualification-spec-2026-07-13.md`
-- `scratchpad/chalk-transcription-spec-2026-07-12.md`
+Chalk should launch recording on Cloudflare RealtimeKit's managed recording service, not finish the custom Pion capture and DigitalOcean GPU render fleets described in the July 11–14 recorder documents.
 
-## Purpose, authority, and how to use this spec
+RealtimeKit now provides the two outputs Chalk needs: a 720p H.264/AAC composite recording and separate participant audio tracks. Chalk remains the product and lifecycle authority. It admits recording, starts and stops provider jobs, verifies signed provider events, imports durable artifacts, seeds transcription, exposes status, and handles failure. RealtimeKit owns media capture and composition.
 
-This spec is the zero-context map of Chalk recording. It explains the product promise, the systems involved, the recording journey, the five contracts every implementation lane shares, the important failure behavior, the launch ceilings, the work split, and the decisions Hasan must eventually ratify. The three-page HTML walkthrough is the primary reading surface; this Markdown file is the precise source an executor cites.
+This document is the source of truth for the launch path. It supersedes the custom capture/render architecture and cross-cutting recorder decisions in the July 11–14 infrastructure, pipeline, control-plane, capture-worker, render-worker, staging, and guided specs. Those documents remain implementation history. Their PostgreSQL fencing, object-integrity, privacy, observability, and transcription invariants survive where this document repeats them.
 
-This document does not replace or weaken its binding sources. When it summarizes a settled rule, the underlying specification remains authoritative. When it recommends a decision that is still open in a companion, the recommendation remains proposed until Hasan ratifies it and the open question is rewritten in place in every affected spec.
+## Why this changed
 
-This document is an orientation and contract-freeze aid, not permission for one agent to implement the entire recorder. Each implementation lane receives all recorder specs as context and only its named companion as execution authority.
+The old design was reasonable when Chalk had to build server-side recording itself. It split live codec capture in Singapore from asynchronous GPU composition in Toronto, requiring a worker certificate authority, a reconciler, 21 compute nodes at launch ceiling, encrypted bundle exchange, a renderer, and five shared protocols.
 
-## Grand summary
+That system is still only a foundation:
 
-Chalk recording is a split pipeline. A control plane decides whether recording is safe and affordable, a native capture worker receives selected media from Cloudflare and stores short encrypted bundles, a graphics worker later turns those bundles into the final video and transcription inputs, and a qualification lane proves the integrated release under real load.
+- PostgreSQL reservation, job, fence, and artifact primitives exist.
+- Direct Cloudflare SFU helpers and deterministic capture/render fixtures exist.
+- The capture and render commands deliberately refuse non-fixture operation.
+- The recorder worker router is not mounted by the running API.
+- Artifact commit does not update the public recording object used for download.
+- Recorder finalization is not connected to the existing transcription dispatcher.
+- No real-provider or staging qualification has passed.
 
-PostgreSQL owns every durable decision. Workers receive short-lived authority for one fenced attempt and never receive reusable database, storage, encryption, or infrastructure credentials. The architecture is coherent, but implementation delegation remains blocked until the shared job, identity, storage, event, and finalization contracts are frozen and their open policy choices are ratified.
+Meanwhile RealtimeKit added managed composite recording, participant audio-track recording, direct cloud storage, signed status webhooks, and an explicit provider lifecycle. Completing the old fleets would now duplicate the provider, delay launch, and add more failure boundaries than the product needs.
 
-## Background: what problem this system solves
+## Product promise
 
-A meeting recording must survive browser closure, device sleep, weak participant networks, host departure, worker failure, and delayed rendering. Client-side recording cannot provide that guarantee, and a browser-based server recorder would make twenty simultaneous rooms expensive and operationally heavy.
+When Chalk says **Recording**, the provider has entered its `RECORDING` state. The recording survives the host's browser closing or the host leaving. After the meeting stops, Chalk shows one honest processing state until a verified private MP4 is ready. A provider or import failure is visible and retryable where safe; Chalk never fabricates missing media or labels an unconfirmed request as recording.
 
-Chalk therefore separates live capture from later composition. Live capture saves only the encoded media and decisions needed to reproduce the accepted stage view. Rendering happens after the meeting on a burstable GPU pool. This keeps live workers small, lets rendering scale to zero, preserves committed capture work across crashes, and makes the final result reproducible.
+The meeting can continue when recording is unavailable, but only after the host explicitly chooses **Continue without recording**. Chalk never silently downgrades a meeting that was expected to be recorded.
 
-The system is intentionally bounded for launch: at most twenty simultaneous recorded meetings, one hundred participants globally, ten participants in one recorded room, and one hundred twenty minutes per recording.
+### User story
 
-The HTML walkthrough places two image-generated overview plates beside stable native HTML diagrams. It has no diagram-rendering dependency when opened from disk. The plates are also available directly as the [architecture overview](assets/recorder-pipeline-debrief/architecture.png) and [reservation and job lifecycle](assets/recorder-pipeline-debrief/lifecycle.png).
+Maya schedules a customer interview with recording enabled. Five minutes before start, Chalk creates the meeting and recording intent. When Maya opens the room, Chalk asks RealtimeKit to start composite and participant-track recording. The lobby says **Preparing recording** until the signed provider state is `RECORDING`; only then does the red recording indicator appear and the room open normally.
 
-## The user-visible promise
+Maya stops the recording after the interview. The room immediately says **Processing recording**. RealtimeKit uploads the composite MP4 directly to Chalk's dedicated private R2 ingest bucket and makes participant audio tracks available for import. A webhook advances the durable recording, an importer verifies every expected object, the finalizer commits the public recording and transcription source, and the recording page becomes playable. Transcript processing continues independently and cannot revoke a playable video.
 
-For a person using Chalk, recording behaves as follows:
+If RealtimeKit cannot start within 120 seconds, Maya sees **Recording unavailable** with retry and **Continue without recording** actions. If upload or import later fails, the recording page says **Recording failed** with a stable support reference; it never spins forever.
 
-1. **Recording is accepted before the meeting relies on it.** A scheduled recording reserves capacity ahead of time. An unscheduled recorded meeting waits for a capture worker for at most 120 seconds; it never begins under a false promise that missing opening minutes were recorded.
-2. **The meeting shows a deterministic stage.** Screen share wins the primary stage. Otherwise the active speaker is primary, with a stable strip of at most six other participants. The recording preserves the decisions that produced that view.
-3. **The meeting warns before the limit.** Chalk warns ten minutes and two minutes before the accepted duration ends. At the limit, recording stops visibly while the meeting may continue unrecorded.
-4. **The recording survives bounded failures.** A dead capture worker loses only the uncommitted interval. Chalk fences it, starts a replacement, preserves committed bundles, and records the real gap instead of inventing media.
-5. **The final video arrives on a deadline.** The accepted output is a 720p30 H.264/AAC MP4. It must be committed within thirty minutes after capture ends, with a separate transcript lifecycle that cannot damage the recording if transcription fails.
+## Current state and desired state
 
-## System map
+### Current
+
+Chalk has two incomplete authorities. The public recording API lets callers write status and storage fields, while a separate recorder pipeline owns reservations and fenced jobs. A synthetic fixture can render an MP4, but no production process can claim a real capture or render assignment. The resulting pipeline can be `committed` without satisfying the public download route.
+
+### Desired
+
+One Chalk recording row owns the user-visible lifecycle. PostgreSQL owns every durable state transition. RealtimeKit identifiers and webhook deliveries are provider facts attached to that recording, never a second product authority. One durable finalization transaction makes the imported video downloadable and seeds the complete transcription source.
+
+## Scope
+
+### In scope
+
+- scheduled and host-initiated recording for RealtimeKit meetings;
+- a managed 1280×720 H.264/AAC MP4;
+- separate WebM participant audio tracks for speaker-aware transcription;
+- direct composite upload to a dedicated private Chalk R2 ingest bucket;
+- import of participant tracks from provider-managed storage before their seven-day expiry;
+- a single PostgreSQL lifecycle and public recording surface;
+- signed, deduplicated webhooks with reconciliation polling;
+- explicit start, processing, ready, and failure UX;
+- private playback through short-lived Chalk download authority;
+- bounded retention, cleanup, metrics, traces, audit events, and support references;
+- staging qualification of the managed provider before production activation.
+
+### Non-goals
+
+- Chalk-operated Pion capture workers;
+- DigitalOcean capture or GPU render fleets;
+- Chromium or client-side recording;
+- live streaming, RTMP, HLS, editing, clips, or alternate layouts;
+- video tracks per participant;
+- acoustic diarization or inferring identity from a voice;
+- transparent failover between managed and custom recorders;
+- production activation, pricing, or entitlement changes in this implementation;
+- deleting the old recorder foundation before the managed path is qualified.
+
+## Launch policy
+
+| Policy | Launch behavior |
+| --- | --- |
+| Recorded rooms | At most 20 concurrently until provider and importer load tests justify a higher limit. |
+| Participants | At most 10 in one recorded room and 100 across recorded rooms. An over-limit room may continue only after explicit confirmation that it is unrecorded. |
+| Duration | At most 120 minutes. Warn at 110 and 118 minutes; stop recording at 120 while the meeting may continue. |
+| Start deadline | Wait at most 120 seconds for provider state `RECORDING`. Before that state, the UI says **Preparing recording**, not **Recording**. |
+| Processing target | A playable video is ready within 30 minutes after stop at p95. A miss breaches the release SLO but remains processing until the recovery deadline. |
+| Recovery deadline | Retry reconciliation and import for 24 hours, then terminally fail with a support reference. |
+| Brief recordings | Treat recordings shorter than five seconds as unsupported and show a bounded failure reason. |
+| Empty room | Accept the provider's empty-room stop behavior and surface the resulting transition honestly. |
+
+These are product limits, not claims about RealtimeKit's maximum capacity. They let Chalk qualify a bounded launch and raise ceilings from evidence.
+
+## System boundaries
 
 ```mermaid
 flowchart LR
-  Person["Meeting and recording request"] -->|reserve| Control["Control API"]
-  Control -->|durable decisions| Database[("PostgreSQL")]
-  Control -->|job-scoped authority| Capture["Native capture worker"]
-  Cloudflare["Cloudflare Realtime SFU"] -->|selected encoded tracks| Capture
-  Capture -->|encrypted 10–15 second bundles| Temporary[("Private R2 temporary objects")]
-  Control -->|verified manifest and scoped reads| Render["GPU render worker"]
-  Temporary -->|encrypted bundle reads| Render
-  Render -->|verified MP4 and audio chunks| Final[("Private R2 final objects")]
-  Render -->|immutable facts only| Control
-  Control -->|transactional commit and jobs| Database
-  Database -->|one job per chunk| Transcript["Transcription pipeline"]
+  Host["Host and meeting UI"] -->|start or stop| API["Chalk recording API"]
+  API -->|durable intent| DB[(PostgreSQL)]
+  API -->|provider request| RTK["RealtimeKit recording"]
+  RTK -->|composite MP4| Ingest[(Private R2 ingest)]
+  RTK -->|signed status event| Hook["Webhook ingress"]
+  RTK -->|participant audio URLs| Import["Recording importer"]
+  Hook -->|event and job| DB
+  DB -->|claim fenced import| Import
+  Ingest -->|verify and promote| Import
+  Import -->|atomic artifact and source commit| DB
+  Import -->|private final objects| Final[(Private R2 archive)]
+  DB -->|one job per audio chunk| Transcript["Transcription pipeline"]
+  DB -->|ready or failed| Host
 ```
 
-The control plane is the authority boundary. Cloudflare transports live media, R2 stores bytes, DigitalOcean runs workers, and the workers report facts. None of those systems may independently decide that a recording, artifact, job, or billable result exists.
+### Ownership
 
-## The recording journey
+| Fact | Authority | Notes |
+| --- | --- | --- |
+| User-visible recording state | PostgreSQL | Only Chalk transitions the product lifecycle. |
+| Provider recording state and identifiers | RealtimeKit, recorded by Chalk | Provider facts are append-only inputs to Chalk decisions. |
+| Composite bytes before finalization | Dedicated R2 ingest bucket | RealtimeKit may read, write, and list only this bucket. It has no access to canonical storage. |
+| Canonical video and participant audio | Chalk private R2 archive | Only Chalk services can promote, read, or delete these objects. |
+| Recording metadata and downloadability | PostgreSQL | Finalization updates the public recording and artifact in one transaction. |
+| Transcript source and chunk jobs | PostgreSQL | Seeded atomically with the recording artifact; processed independently afterward. |
+| Meeting media capture and composition | RealtimeKit | Chalk does not proxy or reconstruct media in the launch path. |
 
-### 1. Admission and reservation
+## Lifecycle
 
-The control plane checks meeting count, participant count, input bitrate, requested duration, capture capacity, render deadline capacity, tenant entitlement, and the funded usage guard in one atomic reservation decision. An accepted reservation creates the recording intent and first capture job in the same PostgreSQL transaction.
+The public lifecycle is intentionally small:
 
-Scheduled work prewarms five minutes before start and must be ready two minutes before. Unscheduled work holds meeting opening until capture acknowledges the lease. A no-show releases capacity ten minutes after the scheduled start when no capture lease was acknowledged.
+1. `requested` — Chalk has durable intent but has not asked the provider.
+2. `starting` — RealtimeKit accepted the request; the meeting UI says **Preparing recording**.
+3. `recording` — a signed event or authoritative fetch reports provider state `RECORDING`.
+4. `processing` — stop was requested or provider state is `UPLOADING`/`UPLOADED`; imports may still be running.
+5. `ready` — the verified MP4 and complete transcription source committed atomically.
+6. `failed` — start, provider, upload, or import exhausted its recovery policy.
+7. `cancelled` — intent was cancelled before recording started.
 
-### 2. Worker identity and claim
+Provider states map as follows:
 
-A new worker exchanges a five-minute, one-time bootstrap assertion for a short-lived node certificate. The assertion binds the environment, role, release, intended machine, region, boot generation, and nonce. The control plane consumes the nonce once and records certificate issuance and revocation.
+| RealtimeKit | Chalk | Rule |
+| --- | --- | --- |
+| `INVOKED` | `starting` | Never show the red indicator. |
+| `RECORDING` | `recording` | First state that earns the recording claim. |
+| `UPLOADING` | `processing` | Keep the artifact unavailable. |
+| `UPLOADED` | `processing` | Enqueue or wake import; do not mark ready yet. |
+| `ERRORED` | `failed` | Preserve a stable bounded failure code and provider reference. |
 
-The authenticated worker claims one PostgreSQL job. Claim commits the lease, attempt, fence, and owner before the API returns the assignment. A copied, late, or replaced worker cannot mutate the current attempt because every write compares the job, attempt, fencing generation, worker identity, and lease token.
+Transitions are monotonic except an idempotent replay of the current state. Late events cannot move `ready`, `failed`, or `cancelled` backward. Provider events never directly write public status; the recording service evaluates them under a row lock.
 
-### 3. Native selective capture
+## Start and stop contract
 
-The capture worker uses Pion as its WebRTC client and joins Chalk's direct Cloudflare Realtime SFU path. The control plane keeps the Cloudflare application secret and proxies the bounded session, track, and renegotiation operations authorized for that assignment.
+The Chalk API, not the browser SDK, starts and stops recording. That keeps credentials, storage configuration, lifecycle decisions, and idempotency on the server.
 
-The worker receives audible Opus tracks, the current screen share, the active speaker layer, and low layers for a strip of at most six participants. It records track ownership, layout decisions, media-clock mapping, mute and presence changes, speaker activity, overlap, keyframes, discontinuities, and gaps on one monotonic timeline.
+Start creates or reuses one durable recording intent, sends an idempotent provider request, stores the returned composite and track recording identifiers, and polls if no webhook confirms state. A retry returns the existing intent; it cannot start a second recorder for the same meeting.
 
-Every ten to fifteen seconds it closes one independently verifiable bundle containing codec-native fragments and the corresponding timeline slice. The bundle is encrypted with the per-recording data key and uploaded through the exact conditional-create object intent selected by the control plane.
+Composite recording uses the provider's default H.264 output: 1280×720 MP4 with AAC audio. The start request selects the dedicated R2 ingest bucket and disables the provider-managed composite copy. Track recording captures all consented participant audio as separate WebM files. The importer maps each provider `user_id` to Chalk's authenticated meeting member; unknown identities remain explicitly unknown.
 
-### 4. Capture completion and render scheduling
+Stop is also idempotent. Chalk asks both provider recordings to stop, records the first accepted stop time, and advances to `processing`. Provider auto-stop, an empty meeting, and a host stop converge on the same state machine.
 
-Capture completion verifies the ordered manifest and creates exactly one render job in the same transaction. The render scheduler uses earliest-deadline discrete packing. It never assumes that dividing total output hours by aggregate GPU throughput proves that every individual job can meet its deadline.
+## Webhook and reconciliation contract
 
-### 5. Deterministic GPU rendering
+Webhook ingress reads the raw request body, verifies the provider's RSA-SHA256 signature, validates event shape and app identity, and inserts the event keyed by RealtimeKit's unique webhook UUID. A duplicate returns success without a second transition or job.
 
-The render worker receives the complete manifest, scoped input reads, recording-key authority, one final-output intent, transcription-output intents, the pinned timeline and policy versions, and the artifact deadline. It verifies every immutable input fact before decrypting any media.
+Ingress performs no object download or transcription work. It commits the event and a durable processing job, then returns `2xx` quickly. Invalid signatures return a non-success response and emit a security event without logging the body.
 
-The renderer replays the recorded layout decisions. It does not recalculate the active speaker, participant names, screen-share winner, strip order, or track identity from current state. Explicit gaps remain visible. The same release and input must reproduce the same layout decisions, speaker-turn manifest, chunk boundaries, and normalized media facts.
+Webhooks are hints, not the sole recovery mechanism. A reconciler fetches authoritative provider state for recordings stuck in `starting` or `processing`, uses bounded exponential backoff with jitter, and stops after the 24-hour recovery deadline. This covers dropped, delayed, duplicated, and reordered events.
 
-### 6. Atomic finalization
+## Storage and finalization
 
-After producing and verifying the MP4, speaker-turn manifest, and transcription chunks, the worker reports immutable facts to one private finalization operation. The control plane then performs one database transaction that:
+RealtimeKit receives one R2 S3 credential scoped to a dedicated ingest bucket. Cloudflare R2 currently offers bucket-scoped **Object Read & Write**, which also allows listing; it does not offer a write-only S3 token. Isolation therefore comes from a separate bucket, an unguessable per-recording prefix, no canonical objects in that bucket, secret rotation, and audit alerts. Chalk does not send storage credentials in each recording request; operations configure them once in the provider dashboard.
 
-1. commits the final recording artifact exactly once;
-2. inserts the complete transcription source and chunk set;
-3. creates exactly one fenced transcription job per chunk; and
-4. records the render attempt's terminal result.
+The composite copy in RealtimeKit's managed bucket is disabled only after the external ingest configuration passes a real upload test. If both destinations are disabled or invalid, the provider considers the recording invalid.
 
-The transaction either completes all four effects or none. A playable video cannot become committed without its complete transcription handoff, and a retry cannot create duplicate artifact or chunk jobs.
+Participant track recording currently lands in RealtimeKit-managed R2 and expires after seven days. Chalk imports tracks immediately after `UPLOADED`, verifies file count and duration against provider metadata, and stores them privately. The privacy notice and data inventory must name that temporary provider copy. Launch is blocked if legal or product policy cannot accept that seven-day provider retention.
 
-### 7. Cleanup and evidence
+The importer acts under one leased PostgreSQL job with attempt, owner, lease token, and fencing generation. It:
 
-Normal finalization deletes capture bundles and wrapped recording-key material within one hour. Transcription chunks delete within one hour after the normalized transcript commits. A twenty-four-hour storage lifecycle is the orphan backstop, while reconciliation forces commit or terminal render failure by hour twenty-three.
+1. fetches authoritative recording details;
+2. checks that composite and track provider IDs belong to the expected meeting;
+3. verifies content type, byte size, checksums when supplied, media codecs, duration, and the expected participant-track set;
+4. copies accepted objects to server-selected canonical keys using conditional create;
+5. writes an immutable import manifest without credentials or signed URLs;
+6. atomically commits the public recording, canonical artifact, transcription source, chunks, and one transcription job per chunk; and
+7. schedules ingest cleanup.
 
-Every phase propagates Chalk's journey identifier and W3C trace context. Success, rejection, retry, timeout, fencing, cleanup, and terminal failure appear in bounded metrics, structured logs, traces, health, and the durable evidence ledger without exposing media, plaintext keys, tokens, display names, or full object URLs.
+The transaction is idempotent. The same verified inputs produce the same object and database identities; a stale fenced attempt cannot commit. Transcription failure after finalization changes transcript status only and never revokes a playable recording.
 
-## The five shared contracts
+## Failure behavior
 
-These contracts must be frozen before the four implementation lanes can work independently.
+| Failure | User experience | System behavior |
+| --- | --- | --- |
+| Provider does not reach `RECORDING` within 120 seconds | **Recording unavailable**; retry or continue unrecorded | Stop any invoked recorder, close the attempt, preserve the meeting. |
+| Provider errors while recording | Indicator changes to **Recording interrupted** | Fetch authoritative state, stop companion track recording, import any valid available output, otherwise fail. No hidden custom fallback. |
+| Webhook is missing or duplicated | No visible churn | Reconciliation fetches state; UUID deduplication makes replay harmless. |
+| Composite upload is delayed | **Processing recording** | Retry authoritative fetch and object verification until the recovery deadline. |
+| Participant track is missing | Video may become ready; transcript says **Unavailable** | Commit video only if the finalization schema records a terminal incomplete transcript source. Never invent speaker audio. |
+| Importer dies | No duplicate recording | Lease expires, a fenced attempt retries, conditional writes and the final transaction remain idempotent. |
+| Verification finds wrong meeting, codec, or object | **Recording failed** with support reference | Quarantine the ingest prefix, emit a security/quality event, never publish it. |
+| 30-minute target is missed | **Still processing** | Page the recorder SLO; continue bounded recovery. The target miss is not itself terminal. |
+| 24-hour recovery deadline is missed | **Recording failed** | Terminalize once, retain evidence, and run policy-bound cleanup. |
 
-### Contract 1: node identity
+## Security, privacy, and retention
 
-The control plane owns bootstrap, certificate issuance, certificate revocation, role, release, and live provider-inventory verification. A worker derives its environment, role, and worker ID from the verified client certificate; request bodies cannot select them.
+- Recording requires the existing meeting consent and privilege model. Every participant sees the active recording indicator.
+- RealtimeKit API credentials, webhook verification material, and R2 credentials remain server-side secrets.
+- Provider storage access is bucket-scoped and separated from canonical storage. Rotate it on provider compromise, staff departure, and the normal secret schedule.
+- Signed URLs, raw provider bodies, participant display names, media, and secrets never enter logs, traces, support references, or webhook error responses.
+- Canonical objects are private and served only through short-lived tenant-authorized download URLs.
+- Ingest objects delete after successful promotion, with a 24-hour lifecycle backstop. Quarantined failures follow the incident retention policy.
+- Participant track URLs expire at the provider after seven days. Chalk must not rely on that expiry as its cleanup mechanism.
+- Deletion of a Chalk recording removes the canonical video, participant audio, transcript artifacts, import manifest, and provider identifiers according to product retention policy.
+- Audit events cover start, stop, consent/privilege result, provider transition, import, publish, download-authority creation, failure, retry, and deletion.
 
-The certificate proves the node. It does not grant unlimited recorder access. A narrower job lease proves which one attempt the process may execute.
+## Observability
 
-### Contract 2: immutable job assignment
+One journey ID follows the meeting, Chalk recording, composite provider recording, track provider recording, webhook events, import job, artifact, and transcript source. Provider IDs are safe only as bounded structured fields; media URLs and payloads are not.
 
-Every assignment carries one protocol version and enough information to finish without guessing:
+Required signals:
 
-- job, tenant, session, recording, attempt, fence, lease, role, release, journey, and trace identity;
-- capture session authority or render manifest authority;
-- participant, track, timeline, layout, media, codec, and resource policy versions;
-- scoped object operations and encryption-key authority;
-- deadlines, renewal boundaries, expected outputs, cleanup, and reporting requirements.
+- counts and latency for start requests and time to `recording`;
+- provider states, webhook verification failures, duplicates, and event lag;
+- processing age, import attempts, bytes, verification failures, and cleanup age;
+- ready latency from stop at p50, p95, and p99;
+- terminal failures by bounded stage and code;
+- participant track completeness and transcript-source completeness;
+- recordings stuck beyond 10, 30, and 1,440 minutes;
+- ingest bucket object age and canonical promotion mismatch;
+- synthetic scheduled and host-initiated recording canaries in staging.
 
-Renewal may extend time and replenish future object intents. It cannot change job identity, attempt, fence, participant ownership, layout policy, or already committed objects.
+Alerts must point to a runbook and a bounded support reference. A dashboard without an operator action is not an acceptance signal.
 
-### Contract 3: server-owned storage and key authority
+## Implementation plan
 
-The control plane chooses every tenant, owner, object key, method, content type, byte ceiling, write condition, sequence, and expiry before the worker acts. The worker receives one-operation URLs and the minimum plaintext recording-key authority required for that attempt; it never receives reusable R2 or KMS credentials.
+The work is intentionally sequential at the contracts and parallel after them.
 
-Workers upload bytes, inspect them, and report immutable facts. Only the control plane may accept those facts into PostgreSQL and authorize the final artifact.
+### Phase 0 — replace the authority
 
-### Contract 4: progress, fencing, and failure
+- [ ] Make one recording service the only writer of status, storage, and provider fields.
+- [ ] Remove caller-selected status/storage mutations from the public API or translate them through the new service during a bounded migration.
+- [ ] Define the public lifecycle, provider event, import manifest, and finalization schemas.
+- [ ] Add migrations for provider IDs, event deduplication, import attempts, failure codes, and processing deadlines.
+- [ ] Preserve existing PostgreSQL lease/fence primitives for import and reconciliation jobs.
 
-The proposed default heartbeat is every fifteen seconds. Three missed heartbeats plus bounded jitter make the attempt lost after roughly forty-five seconds. The control plane fences the old attempt before replacement, so two workers cannot both be current.
+Gate: a database integration test proves idempotent start, ordered and reordered provider events, stale-fence rejection, one final artifact, and a downloadable public recording.
 
-Progress reports are descriptive. They cannot extend a deadline, increase authority, select a new key, rewrite a prior fact, or keep an expired lease alive. Failures use stable bounded codes; raw provider and tool output never enters the wire contract or logs.
+### Phase 1 — provider and storage seam
 
-### Contract 5: transactional finalization
+- [ ] Implement server-side composite and track start/stop/fetch clients.
+- [ ] Configure a dedicated staging ingest bucket and scoped credential; disable the managed composite copy only after an upload proof.
+- [ ] Implement raw-body webhook verification, UUID deduplication, fast acknowledgement, and durable dispatch.
+- [ ] Implement reconciliation for missing and delayed events.
+- [ ] Implement fenced import, media verification, canonical promotion, atomic artifact/transcription finalization, and cleanup.
 
-Finalization accepts verified artifact, source-manifest, chunk, and terminal facts against server-owned intents. PostgreSQL commits the artifact, complete source set, one job per chunk, and terminal render outcome atomically. Partial source seeding, duplicate jobs, caller-selected ownership, and stale attempts are rejected.
+Gate: one real staging meeting produces a verified private MP4 and participant audio set, becomes downloadable through Chalk, and seeds the existing transcription dispatcher exactly once.
 
-## Data ownership
+### Phase 2 — product experience and operations
 
-| Fact                                                         | Authoritative owner                              | Why                                                                                              |
-| ------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Reservation, recording state, jobs, leases, attempts, fences | PostgreSQL                                       | Recovery and billing cannot depend on a worker still being alive.                                |
-| Node certificate, bootstrap nonce, revocation                | PostgreSQL plus the certificate issuer           | A replaced machine must stop claiming work before a successor starts.                            |
-| Participant-to-SFU session and track map                     | Chalk control plane                              | Media identity must come from authenticated application state, never a voice or untrusted label. |
-| Object keys, checksums, sizes, owners, conditions            | PostgreSQL                                       | A worker may report bytes but cannot choose tenant ownership or overwrite policy.                |
-| Encrypted media and final artifact bytes                     | Private R2                                       | Large bytes belong in object storage, while PostgreSQL stores their immutable facts.             |
-| Live media transport                                         | Cloudflare Realtime SFU                          | Cloudflare moves packets but does not own Chalk recording state.                                 |
-| Desired and observed worker fleet                            | Control-plane reconciler plus provider inventory | Worker self-report is evidence, not permission to open admission.                                |
-| Qualification verdict and evidence                           | Staging evidence ledger                          | Launch claims require observed provider proof tied to one immutable release.                     |
-
-## State and failure model
-
-```mermaid
-stateDiagram-v2
-  [*] --> requested
-  requested --> reserved: capacity and usage accepted
-  reserved --> capture_leased: worker acknowledges
-  capture_leased --> capturing
-  capturing --> capture_complete: manifest verified
-  capture_complete --> render_queued: same transaction
-  render_queued --> rendering
-  rendering --> verifying
-  verifying --> committed: atomic finalization
-  capturing --> retryable_failure: worker or provider loss
-  rendering --> retryable_failure: node or transfer loss
-  retryable_failure --> capture_leased: capture retry
-  retryable_failure --> render_queued: render retry
-  retryable_failure --> terminal_failure: attempts or retention exhausted
-  committed --> deleted: retention or erasure policy
-  terminal_failure --> deleted: cleanup complete
-```
+- [ ] Implement preparing, recording, interrupted, processing, ready, and failed surfaces.
+- [ ] Enforce privilege, consent, limits, duration warnings, explicit unrecorded continuation, and retry behavior.
+- [ ] Add metrics, traces, audit events, dashboards, alerts, canaries, and runbooks.
+- [ ] Exercise missing, duplicate, and reordered webhooks; provider errors; delayed uploads; missing tracks; dead importer; quarantine; and cleanup.
+- [ ] Qualify 20 concurrent rooms, 100 participants, and ending-together imports against the 30-minute target.
 
-Failure is expected behavior, not an undefined exception:
+Gate: the immutable staging release passes the acceptance checklist, cleans all test media, and returns provider and Chalk resources to dormant state. Production remains separately authorized.
 
-| Failure                                 | Active work                                              | New admission                                        | Recovery and visible result                                                                   |
-| --------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Capture process dies                    | Committed bundles survive.                               | Closes if capacity or health is no longer qualified. | Fence old attempt, replace, request keyframes, record the real gap.                           |
-| Control API disappears after renewal    | Existing capture uses only its issued autonomy envelope. | Closed.                                              | Reconcile on return; stop capture when authority expires.                                     |
-| Cloudflare join or required audio fails | Attempt stops without claiming success.                  | Closed for the affected capacity or provider state.  | Retry within policy or fail visibly with a bounded provider code.                             |
-| Render node dies                        | Encrypted inputs survive.                                | Closes if the deadline schedule becomes unsafe.      | New fenced attempt re-verifies input and writes to new conditional intents.                   |
-| Old worker reports late                 | No current work changes.                                 | Unaffected.                                          | Reject the stale attempt and retain its bounded audit fact.                                   |
-| Object already exists                   | Never overwrite it.                                      | Depends on reconciliation.                           | Inspect immutable facts; accept an exact idempotent match or reject a conflict.               |
-| Cleanup misses one hour                 | Final artifact remains available.                        | May close when safety evidence becomes stale.        | Alert, reconcile, and rely on the twenty-four-hour orphan backstop.                           |
-| Provider quota is insufficient          | Existing assigned work is preserved.                     | Closed.                                              | Scale no further and report capacity unavailable instead of substituting an unqualified path. |
+### Dormant fallback
 
-## Security boundary
-
-Workers are disposable and deliberately weak in authority:
+- [ ] Keep the custom capture/render foundation unmounted and mutation-disabled.
+- [ ] Record qualification evidence before deleting or reviving it.
+- [ ] Reconsider a custom recorder only if managed recording fails a documented product requirement that Cloudflare cannot address.
 
-- they cannot connect to PostgreSQL;
-- they never receive DigitalOcean control tokens, KMS credentials, reusable R2 credentials, or the Cloudflare application secret;
-- they receive short-lived mTLS identity, one fenced lease, scoped object operations, and bounded key authority;
-- they cannot choose tenant, recording, participant ownership, object key, final artifact identity, or lifecycle state;
-- they store no persistent plaintext media, and crash dumps, images, snapshots, scratch, logs, and telemetry may not contain media or key material;
-- capture encrypts before media leaves Singapore, and render decrypts only inside the bounded TOR1 job.
+## Acceptance
 
-## Launch ceilings and deadlines
+The recorder is done for staging when all of the following are observed on one immutable release:
 
-| Constraint                        |                                              Launch value | Consequence of a miss                                                                                              |
-| --------------------------------- | --------------------------------------------------------: | ------------------------------------------------------------------------------------------------------------------ |
-| Simultaneous recorded meetings    |                                                        20 | Recording admission closes above the ceiling.                                                                      |
-| Global recorded participants      |                                                       100 | Admission rejects or removes recording according to the ratified product policy.                                   |
-| Participants in one recorded room |                                                        10 | The room may continue, but launch recording is unavailable.                                                        |
-| Recording duration                |                                               120 minutes | Capture stops visibly at the accepted limit.                                                                       |
-| Input budget                      |                 3 Mbps target, 4 Mbps maximum per meeting | Thumbnail quality degrades before screen-share legibility; an unqualified track shape cannot expand without bound. |
-| Capture fleet                     |               11 nodes maximum, including one ready spare | A lower quota blocks launch qualification.                                                                         |
-| Render fleet                      |                                      10 GPU nodes maximum | Admission closes before the discrete schedule would miss a deadline.                                               |
-| Global recorder compute           |                                          21 nodes maximum | Provider actions clamp at the hard ceiling.                                                                        |
-| Final artifact deadline           |                             30 minutes after capture ends | The miss remains visible and blocks qualification.                                                                 |
-| Render performance                | At least 15× media speed; no two-hour job over 10 minutes | A slower release fails the twenty-job ending-together proof.                                                       |
-| Normal temporary-media deletion   |                                             Within 1 hour | Reconciliation and alerts activate.                                                                                |
-| Orphan storage backstop           |                                                  24 hours | By hour 23 the system must commit or terminally fail and schedule deletion.                                        |
+- [ ] A scheduled recording and an in-meeting start both reach `recording` only after authoritative provider confirmation.
+- [ ] Closing the host browser and the host leaving do not stop the recording.
+- [ ] Stop leads to a verified 1280×720 H.264/AAC MP4 downloadable through the existing tenant-authorized Chalk route.
+- [ ] Consented participant tracks map to authenticated members or explicit unknown identities and seed transcription exactly once.
+- [ ] Duplicate and reordered webhook events cannot duplicate work or regress state.
+- [ ] A dropped webhook is recovered by reconciliation.
+- [ ] A killed importer retries under a new fence without publishing duplicate objects or rows.
+- [ ] A wrong-meeting or invalid-media object is quarantined and never becomes downloadable.
+- [ ] The UI never says **Recording** during `requested`, `starting`, `processing`, or `failed`.
+- [ ] Over-limit and start-timeout flows require explicit confirmation before an unrecorded meeting continues.
+- [ ] Twenty concurrent recorded rooms and 100 total participants stay within the start and processing SLOs.
+- [ ] Ending-together recordings meet the 30-minute p95 ready target.
+- [ ] Successful imports clear ingest objects; the lifecycle backstop clears abandoned objects; no signed URL or secret appears in telemetry.
+- [ ] The provider's Beta status, seven-day participant-track copy, GA price model, and rollback trigger are documented for launch approval.
+- [ ] Production credentials and production activation remain untouched until separately approved.
 
-## Current implementation state
+## Open decision
 
-The repository already contains a useful foundation:
+One launch decision remains product/legal rather than engineering: whether temporary participant audio in RealtimeKit-managed storage for up to seven days is acceptable. The recommended default is **yes for the bounded Beta**, provided it appears in the data inventory and privacy review and the importer copies tracks immediately. If the answer is no, launch composite video first without speaker-aware transcription; do not rebuild custom capture merely to hide the provider-retention decision.
 
-- PostgreSQL recording jobs, lease and fencing queries, immutable bundle and artifact facts, and recorder health projections;
-- mTLS identity verification primitives and a recorder worker route foundation;
-- versioned Go protocol types, bundle encryption/validation, layout, track, render-plan, and fixture-worker helpers;
-- direct Cloudflare SFU room, session, track, and renegotiation proof in the API and TypeScript client;
-- fixture capture and render commands plus local health and trace coverage.
+## Glossary
 
-The foundation is not the production recorder. The private bootstrap listener, certificate issuer and revocation path, complete assignment envelope, server-owned object intents, authority renewal, transactional render finalization, native Pion capture loop, production GPU executor, fleet reconciler, and real staging proof remain incomplete.
+- **Canonical object** — the private Chalk-owned media object that the public recording references after verification.
+- **Composite recording** — one provider-rendered video containing the meeting layout and mixed audio.
+- **Fencing generation** — a monotonic attempt number that prevents an expired worker from committing after replacement.
+- **Import manifest** — immutable metadata describing provider inputs, verification results, and canonical outputs without embedding credentials or signed URLs.
+- **Participant track** — one participant's audio-only WebM recording, identified by provider and authenticated Chalk membership facts.
+- **Provider fact** — a signed event or authoritative API response recorded as input, not a direct product-state mutation.
+- **Recovery deadline** — the maximum time Chalk retries reconciliation and import before terminal failure.
 
-Fixture output and unit tests cannot satisfy the real-media, GPU, provider, failure-recovery, cleanup, cost, or staging gates.
+## References
 
-## Proposed shared-contract defaults
-
-These recommendations give the implementation lanes one coherent starting point. They remain proposals until Hasan ratifies them after the HTML walkthrough.
-
-1. **Reserve maximum recording minutes for tenant usage.** Participant count, bytes, and GPU time remain separate capacity and operational meters. This keeps admission understandable while preserving the measurements needed for later billing changes.
-2. **Translate legacy recording mutations into the reservation service, then deprecate them.** Existing clients keep working, while PostgreSQL retains one recording authority instead of two competing state machines.
-3. **Issue certificates through a dedicated recorder intermediate CA with a KMS-backed signing key.** The control API verifies bootstrap and requests signing; PostgreSQL owns nonce consumption, issued identity, last use, and revocation. Static image certificates are prohibited.
-4. **Use a fifteen-second heartbeat and fence after three misses plus jitter.** This detects dead workers quickly enough for capture recovery without treating a brief network wobble as node loss.
-5. **Publish both private OpenAPI and JSON Schema artifacts from the Go source types.** OpenAPI explains routes and errors; standalone JSON Schemas give capture and render lanes stable payload fixtures and validation.
-6. **Let the media-publication control-plane domain own participant-to-SFU mapping.** It already owns authenticated publication facts, so the recorder consumes one authoritative participant, session, track, class, and epoch catalog.
-7. **Use GStreamer for the timeline-driven GPU graph and FFmpeg/ffprobe for final verification.** GStreamer handles dynamic composition and NVIDIA elements; independent verification prevents the compositor from grading its own output.
-8. **Bundle Inter plus Noto Sans as the immutable label fonts.** Inter matches Chalk's shared UI, while Noto Sans supplies deterministic fallback coverage. System fonts are not accepted because images and hosts may render them differently.
-
-Capture and render memory, GPU-memory, and scratch ceilings are measured decisions. The implementation lanes must first run production-shaped fixtures, publish peak and sustained use with headroom, and then ratify ceilings before density or GPU qualification. Hasan should approve the visible headroom and cost consequence, not guess byte limits without evidence.
-
-## Four implementation lanes
-
-All lanes read this guide, the umbrella, and all four companions. Execution authority stays narrow.
-
-### Lane 1: control plane
-
-Owns the control-plane companion and shared schemas. It implements bootstrap, certificate lifecycle, private listener, job assignments, leases, object/key authority, finalization, admission, reconciliation, cleanup, and health. It is the only lane allowed to change shared worker contracts after freeze.
-
-Primary phases: C0–C6.
-
-### Lane 2: capture worker
-
-Owns the capture companion. It implements Pion join, selective subscriptions, timeline, authenticated track epochs, encrypted bundles, renewal, replacement, resource proof, and the real Cloudflare staging handoff. It consumes shared contracts and does not edit their meaning.
-
-Primary phases: K0–K6.
-
-### Lane 3: render and finalization worker
-
-Owns the render companion. It implements verified input reconstruction, deterministic composition, the GPU path, artifact and transcription outputs, deadline recovery, and real performance proof. It consumes the capture manifest and shared finalization contract.
-
-Primary phases: R0–R6.
-
-### Lane 4: staging qualification
-
-Owns the qualification companion after the other three lanes merge. It confirms exact staging targets and spend, deploys the immutable release, runs provider, security, single-recording, capture-ceiling, render-ceiling, failure, cleanup, observability, and cost gates, then returns staging to zero compute.
-
-Primary phases: Q0–Q6. It changes no shared contract to make a failed workload pass.
-
-## Orchestration and worktrees
-
-```mermaid
-flowchart LR
-  Freeze{"Shared contract freeze passes?"}
-  Freeze -->|yes| Control["Control-plane lane"]
-  Freeze -->|yes| Capture["Capture lane"]
-  Freeze -->|yes| Render["Render lane"]
-  Control --> Merge{"Integrated local gate"}
-  Capture --> Merge
-  Render --> Merge
-  Merge -->|pass| Qualify["Staging qualification lane"]
-  Merge -->|fail| Owners["Return defect to owning lane"]
-  Qualify -->|pass and cleanup proven| Dormant["Qualified dormant staging"]
-  Qualify -->|any miss| Closed["Not done; admission closed"]
-```
-
-The shared-contract owner creates one immutable baseline commit. Control, capture, and render use separate worktrees and branches from that baseline; no two writing agents share a worktree. The integration owner merges and verifies those lanes before qualification begins. The qualification lane runs from the integrated immutable release, not from an individual worker branch.
-
-Every agent prompt includes all recorder specs as context, one owned companion, explicit phases and paths, the exact base commit, exclusions, verification commands, and the rule that open questions cannot be invented away. Subagents may research or inspect, but the top-level lane owner writes and verifies its own code.
-
-## Guided phase checklist
-
-- [ ] **G0 — Understand and ratify:** Hasan reviews the HTML mini world and diagrams, accepts or changes each proposed shared default, and the affected companion specs are rewritten in place with no contradictory open question.
-- [ ] **G1 — Freeze and prove shared contracts:** C0, K0, K1, and R0 pass; versioned schemas, golden fixtures, private route shapes, Cloudflare provider proof, assignment envelopes, object intents, and finalization transaction tests are committed in one baseline.
-- [ ] **G2 — Implement local lanes:** C1–C5, K2–K5, and R1–R5 pass in their owned worktrees with focused failure, security, cleanup, observability, and trace evidence.
-- [ ] **G3 — Integrate locally:** C6 passes one clean reservation-to-transcription topology with restart, node loss, stale fence, duplicate report, cleanup, and database-backed recovery.
-- [ ] **G4 — Qualify staging:** K6, R6, and Q0–Q5 pass against exact approved provider bindings, release digests, quotas, spend, and workload ceilings.
-- [ ] **G5 — Close safely:** Q6 records the binary verdict, deletes temporary media, revokes or rotates staging authority, proves zero recorder compute, and leaves staging dormant.
-
-## Acceptance criteria for this guided spec
-
-This guided spec pair is complete when:
-
-- the Markdown and three HTML pages describe the same system, limits, proposals, lanes, and stopping point;
-- every HTML page opens with zero-context background, uses plain language, defines unfamiliar terms on every occurrence, and leads with native diagrams rather than prose;
-- the mini world faithfully models normal recording, launch-limit rejection, capture loss, control-plane loss, render loss, stale attempts, deadlines, and cleanup outcomes;
-- architecture, workflow, data ownership, state, failure, scope, phases, orchestration, glossary, progress, and open decisions are visually represented;
-- every native diagram fits its page without external rendering, every local document link resolves, the mini world works by keyboard and pointer, and mobile, light, and dark layouts remain readable;
-- the companion specs remain the only implementation authorities, and this document does not authorize staging or production mutation.
-
-The recorder implementation itself is not done when this documentation pair is complete. System completion still requires G0–G5 and the full C, K, R, and Q evidence.
-
-## Scope and stopping point
-
-In scope:
-
-- understanding the launch recorder from admission through final artifact and transcript handoff;
-- freezing the five shared contracts and their ownership;
-- explaining user-visible behavior, failure recovery, security, ceilings, current implementation, delegation, and proof;
-- making the remaining decisions understandable before Hasan is asked to ratify them.
-
-Out of scope:
-
-- production mutation or enablement;
-- managed RealtimeKit recording, browser or client-side capture, or a Chromium compositor;
-- arbitrary post-meeting gallery edits, recordings over ten participants or two hours, and acoustic speaker identification;
-- implementing the four companion specs through this orientation document;
-- changing thresholds after a failed qualification run without explicit re-ratification.
-
-Work stops after the synchronized guided Markdown and three-page HTML walkthrough exist, their behavior and diagrams are verified, and Hasan has a clear decision surface. Contract implementation begins only after G0.
-
-## Canonical vocabulary
-
-- **Admission:** the decision that enough qualified capture, render, duration, participant, bitrate, entitlement, and usage capacity exists to promise recording.
-- **Reservation:** the durable capacity and usage hold created by accepted admission.
-- **Control plane:** the API and background control loops that own decisions; they do not carry or render media.
-- **SFU:** Cloudflare's media relay, which forwards selected participant tracks without mixing them into one video.
-- **Capture worker:** the native process that receives selected encoded tracks and writes encrypted bundles.
-- **Bundle:** one immutable ten-to-fifteen-second encrypted slice of encoded tracks plus its timeline.
-- **Timeline:** the ordered record of media ownership, layout decisions, clock mapping, speaker activity, screen share, and gaps.
-- **Render worker:** the GPU process that replays the timeline and creates the final MP4 and transcription inputs.
-- **Job:** durable PostgreSQL work with an identity, attempt, lease, fence, deadline, and terminal result.
-- **Lease:** temporary permission for one worker to execute one attempt.
-- **Fence:** the generation number that makes every older attempt stale after replacement.
-- **Object intent:** a server-selected, one-operation storage grant with an exact key, method, size, condition, and expiry.
-- **Finalization:** the one transaction that permanently commits the artifact and complete transcription handoff.
-- **Reconciler:** the control loop that compares desired state, provider reality, workers, jobs, objects, cleanup, and usage, then applies idempotent corrections.
-- **Qualification:** the real staging proof that the exact release meets limits, failure, security, cleanup, observability, cost, and deadline requirements.
-
-## Decisions presented for later ratification
-
-The contracts page explains these decisions visually before asking Hasan to choose:
-
-1. Reserve maximum recording minutes for tenant usage, or adopt a more granular unit now.
-2. Translate and deprecate legacy recording mutations, or make an immediate breaking change.
-3. Use the dedicated KMS-backed recorder intermediate CA, or introduce a separate workload-identity service.
-4. Accept the fifteen-second heartbeat and roughly forty-five-second loss threshold.
-5. Emit both private OpenAPI and JSON Schema artifacts from the shared Go types.
-6. Name the media-publication control-plane domain as the authoritative participant-to-SFU track mapper.
-7. Ratify GStreamer-first composition with FFmpeg/ffprobe verification and the Inter/Noto Sans font bundle.
-8. Approve measured capture and render resource ceilings after the lanes present headroom and cost evidence.
-9. Later, before Q0, confirm the exact staging accounts, projects, regions, quotas, spend ceiling, activation window, load runner, operator, monitoring plan, and cleanup authority.
+- [Cloudflare RealtimeKit recording overview](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/)
+- [Start recording](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/start-recording/)
+- [Monitor recording status](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/monitor-status/)
+- [Participant track recording](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/track-recording/)
+- [Upload recording to private cloud storage](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/custom-cloud-storage/)
+- [Disable the provider-managed composite copy](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/configure-realtimekit-bucket-config/)
+- [RealtimeKit webhooks](https://developers.cloudflare.com/realtime/realtimekit/webhooks/)
+- [RealtimeKit pricing and Beta status](https://developers.cloudflare.com/realtime/realtimekit/pricing/)
+- [Cloudflare R2 API-token permissions](https://developers.cloudflare.com/r2/api/tokens/)
