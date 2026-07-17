@@ -1,0 +1,2490 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Interactive atlas of Chalk's product, runtime, data, and operational architecture." />
+    <title>Chalk — System Architecture Atlas</title>
+    <link rel="icon" href="./apps/web/public/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #e9e4d8;
+        --paper-2: #efeade;
+        --surface: #fbfaf6;
+        --surface-bright: #fff;
+        --board: #26382f;
+        --board-deep: #1e2d26;
+        --ink: #20281f;
+        --ink-2: #5a6355;
+        --ink-3: #8b9184;
+        --line: #d7d1c1;
+        --line-strong: #bdb5a0;
+        --accent: #3e7647;
+        --accent-strong: #335f3b;
+        --accent-wash: #e6f0e3;
+        --green: #8fbf87;
+        --yellow: #d8b94f;
+        --blue: #67b0cb;
+        --pink: #cf8585;
+        --violet: #9488c2;
+        --planned-bg: #e4dfd3;
+        --planned-ink: #777a70;
+        --planned-line: #aaa493;
+        --edge: #9aa094;
+        --edge-hot: #4b8656;
+        --header: rgb(251 250 246/0.9);
+        --dot: rgb(38 56 47/0.11);
+        --shadow: 0 1px 2px rgb(46 52 38/0.06), 0 8px 24px rgb(46 52 38/0.07);
+        --shadow-lg: 0 4px 10px rgb(46 52 38/0.08), 0 24px 52px rgb(46 52 38/0.14);
+        --font: "Figtree", "Avenir Next", Avenir, system-ui, sans-serif;
+        --display: "Bricolage Grotesque", "Avenir Next", Avenir, system-ui, sans-serif;
+        --mono: "Spline Sans Mono", "SFMono-Regular", Consolas, monospace;
+      }
+      .dark {
+        color-scheme: dark;
+        --paper: #17221c;
+        --paper-2: #1d2b23;
+        --surface: #25362c;
+        --surface-bright: #2a3d32;
+        --board: #101913;
+        --board-deep: #0c120e;
+        --ink: #f3f0e7;
+        --ink-2: #c1c8bd;
+        --ink-3: #89948a;
+        --line: #3a4d40;
+        --line-strong: #526759;
+        --accent: #91c48e;
+        --accent-strong: #b3d9ae;
+        --accent-wash: #2b4533;
+        --green: #9acb94;
+        --yellow: #e6c968;
+        --blue: #79c2dc;
+        --pink: #e4a1a1;
+        --violet: #b2a7df;
+        --planned-bg: #202d25;
+        --planned-ink: #8e9b90;
+        --planned-line: #536057;
+        --edge: #647369;
+        --edge-hot: #93c790;
+        --header: rgb(23 34 28/0.9);
+        --dot: rgb(235 240 231/0.08);
+        --shadow: 0 1px 2px rgb(0 0 0/0.25), 0 8px 24px rgb(0 0 0/0.18);
+        --shadow-lg: 0 24px 52px rgb(0 0 0/0.3);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--font);
+        -webkit-font-smoothing: antialiased;
+        transition:
+          background 0.2s,
+          color 0.2s;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      #backdrop {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background: var(--paper);
+      }
+      #backdrop::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+        background-size: 24px 24px;
+        mask-image: radial-gradient(ellipse 100% 90% at 50% 46%, #000 36%, transparent 100%);
+      }
+      #backdrop::after {
+        content: "";
+        position: absolute;
+        inset: 66px 0 0;
+        opacity: 0.28;
+        background: linear-gradient(105deg, transparent 48%, color-mix(in srgb, var(--green) 12%, transparent), transparent 54%);
+        transform: translateX(-28%);
+      }
+      header {
+        position: fixed;
+        inset: 0 0 auto;
+        height: 66px;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 16px;
+        background: var(--header);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(14px);
+      }
+      #brand {
+        align-self: stretch;
+        margin-left: -16px;
+        padding: 0 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border: 0;
+        background: var(--board-deep);
+        color: #fff;
+        cursor: pointer;
+        flex: 0 0 auto;
+      }
+      #brand img {
+        width: 92px;
+        max-height: 32px;
+        filter: brightness(0) invert(1);
+      }
+      #brand span {
+        font-size: 9px;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: rgb(255 255 255/0.62);
+        white-space: nowrap;
+      }
+      #tabs {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 3px;
+        background: var(--paper-2);
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        flex: 0 0 auto;
+      }
+      #tabs button {
+        border: 0;
+        background: transparent;
+        color: var(--ink-2);
+        padding: 6px 11px;
+        border-radius: 8px;
+        font-size: 11.5px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #tabs button.on {
+        background: var(--surface);
+        color: var(--ink);
+        box-shadow: 0 1px 4px rgb(46 52 38/0.09);
+      }
+      #crumbs {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        color: var(--ink-2);
+        font-size: 12px;
+      }
+      .crumb {
+        border: 1px solid transparent;
+        background: transparent;
+        color: inherit;
+        padding: 5px 7px;
+        border-radius: 8px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .crumb:hover {
+        background: var(--paper-2);
+        border-color: var(--line);
+      }
+      .crumb.here {
+        color: var(--accent-strong);
+        background: var(--accent-wash);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+        cursor: default;
+      }
+      .sep {
+        color: var(--ink-3);
+      }
+      #level {
+        margin-left: auto;
+        flex: 0 0 auto;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        color: var(--accent-strong);
+        background: var(--accent-wash);
+        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+        border-radius: 99px;
+        padding: 5px 9px;
+      }
+      .hbtn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: transparent;
+        color: var(--ink-2);
+        font-size: 11.5px;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+      .hbtn:hover {
+        color: var(--ink);
+        border-color: var(--line-strong);
+      }
+      .hbtn kbd {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--ink-3);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      #stage {
+        position: fixed;
+        inset: 66px 0 0;
+        overflow: hidden;
+        cursor: grab;
+        perspective: 1800px;
+        user-select: none;
+        touch-action: none;
+      }
+      #stage.dragging {
+        cursor: grabbing;
+      }
+      #tilt {
+        position: absolute;
+        inset: 0;
+        transform-style: preserve-3d;
+        transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      #stage.tilted #tilt {
+        transform: rotateX(16deg) scale(0.96);
+      }
+      #viewport {
+        position: absolute;
+        inset: 0 auto auto 0;
+        transform-origin: 0 0;
+        will-change: transform;
+      }
+      #world {
+        position: relative;
+      }
+      #world > svg {
+        position: absolute;
+        inset: 0 auto auto 0;
+        overflow: visible;
+      }
+      .edge {
+        fill: none;
+        stroke: var(--edge);
+        stroke-width: 1.45;
+      }
+      .edge.hot {
+        stroke: var(--edge-hot);
+        stroke-width: 1.8;
+      }
+      .edge.dashed {
+        stroke-dasharray: 5 7;
+        animation: dash 30s linear infinite;
+      }
+      .edge.planned {
+        stroke: var(--planned-line);
+        stroke-dasharray: 3 7;
+        animation: none;
+        opacity: 0.7;
+      }
+      .edge.flow {
+        stroke-dasharray: 7 7;
+        animation: dash 20s linear infinite;
+      }
+      @keyframes dash {
+        to {
+          stroke-dashoffset: -700;
+        }
+      }
+      .edge-label {
+        font: 10.5px var(--font);
+        fill: var(--ink-2);
+        paint-order: stroke;
+        stroke: var(--paper);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .zone-bg {
+        fill: color-mix(in srgb, var(--surface) 45%, transparent);
+        stroke: var(--line);
+        stroke-dasharray: 3 6;
+      }
+      .zone-label {
+        font: 700 10px var(--font);
+        letter-spacing: 0.15em;
+        fill: var(--ink-3);
+      }
+      .lane-bg {
+        fill: color-mix(in srgb, var(--surface) 50%, transparent);
+        stroke: var(--line);
+      }
+      .arrow {
+        stroke: var(--edge);
+      }
+      .arrow-hot {
+        stroke: var(--edge-hot);
+      }
+      .node {
+        position: absolute;
+        border-radius: 15px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        padding: 15px 16px;
+        cursor: pointer;
+        transition:
+          transform 0.16s,
+          border-color 0.16s,
+          box-shadow 0.16s;
+        animation: rise 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+        overflow: visible;
+      }
+      .node[role="button"]:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--accent) 70%, transparent);
+        outline-offset: 4px;
+      }
+      .node::after {
+        content: "";
+        position: absolute;
+        inset: 0 auto auto 14px;
+        width: 46px;
+        height: 3px;
+        background: var(--node-color, var(--green));
+        border-radius: 0 0 4px 4px;
+        opacity: 0.9;
+      }
+      .node:hover {
+        transform: translateY(-2px);
+        border-color: var(--line-strong);
+        box-shadow: var(--shadow-lg);
+      }
+      .node.core {
+        border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+        background: linear-gradient(150deg, var(--accent-wash), var(--surface) 68%);
+        box-shadow: var(--shadow-lg);
+      }
+      .node.context {
+        background: color-mix(in srgb, var(--paper-2) 72%, var(--surface));
+        border-style: dotted;
+        cursor: default;
+      }
+      .node.context:hover,
+      .node.headcard:hover {
+        transform: none;
+        box-shadow: var(--shadow);
+      }
+      .node.partial {
+        background: linear-gradient(135deg, var(--surface) 0 83%, color-mix(in srgb, var(--yellow) 18%, var(--surface)) 83%);
+      }
+      .node.planned {
+        color: var(--planned-ink);
+        background: repeating-linear-gradient(135deg, var(--planned-bg) 0 9px, color-mix(in srgb, var(--planned-bg) 84%, var(--surface)) 9px 18px);
+        border-color: var(--planned-line);
+        border-style: dashed;
+        box-shadow: none;
+      }
+      .node.planned::after {
+        background: var(--planned-line);
+      }
+      .status {
+        position: absolute;
+        top: -9px;
+        right: 10px;
+        font: 750 8.5px var(--mono);
+        letter-spacing: 0.08em;
+        padding: 3px 7px;
+        border: 1px solid var(--line-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--ink-2);
+        z-index: 2;
+      }
+      .partial > .status {
+        color: color-mix(in srgb, var(--yellow) 70%, var(--ink));
+        border-color: color-mix(in srgb, var(--yellow) 70%, var(--line));
+      }
+      .planned > .status {
+        color: var(--planned-ink);
+        border-color: var(--planned-line);
+        background: var(--planned-bg);
+      }
+      .node .head {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+      .node .icon {
+        width: 35px;
+        height: 35px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        color: color-mix(in srgb, var(--node-color, var(--green)) 70%, var(--ink));
+        background: color-mix(in srgb, var(--node-color, var(--green)) 16%, transparent);
+        border: 1px solid color-mix(in srgb, var(--node-color, var(--green)) 36%, transparent);
+      }
+      .node svg {
+        display: block;
+        max-width: none;
+      }
+      .node h3 {
+        font: 650 14px/1.18 var(--display);
+        letter-spacing: -0.015em;
+      }
+      .node .tag {
+        font-size: 11.3px;
+        line-height: 1.45;
+        color: var(--ink-2);
+        margin-top: 4px;
+      }
+      .meta {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .chip {
+        font-size: 9.7px;
+        color: var(--ink-2);
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        background: var(--paper-2);
+        padding: 3px 7px;
+      }
+      .chip.acc {
+        color: var(--accent-strong);
+        background: var(--accent-wash);
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+      .chip.warn {
+        color: color-mix(in srgb, var(--yellow) 70%, var(--ink));
+        border-color: color-mix(in srgb, var(--yellow) 55%, var(--line));
+        background: color-mix(in srgb, var(--yellow) 14%, transparent);
+      }
+      .enter {
+        margin-top: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 11px;
+        border-radius: 9px;
+        color: #fff;
+        background: var(--accent);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .lane-head {
+        position: absolute;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line-strong);
+        background: var(--paper-2);
+        border-radius: 10px;
+        color: var(--ink);
+        font-size: 10.5px;
+        font-weight: 750;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        animation: rise 0.4s both;
+      }
+      .node.step {
+        padding: 13px 14px;
+      }
+      .node.step h3 {
+        font-size: 12.5px;
+        line-height: 1.35;
+      }
+      .node.step .tag {
+        font-size: 10.3px;
+      }
+      .kind {
+        position: absolute;
+        top: -9px;
+        left: 10px;
+        font: 700 8px var(--mono);
+        letter-spacing: 0.08em;
+        padding: 3px 7px;
+        border: 1px solid var(--line-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--ink-3);
+      }
+      .step.start,
+      .step.end {
+        border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+      }
+      .step.decision {
+        border-color: color-mix(in srgb, var(--yellow) 60%, var(--line));
+      }
+      .step.state {
+        border-style: dashed;
+      }
+      .schema-card {
+        padding: 0;
+        overflow: hidden;
+      }
+      .schema-card::after {
+        display: none;
+      }
+      .schema-card .schema-head {
+        padding: 11px 13px;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--node-color) 13%, transparent);
+        font: 700 11.5px var(--mono);
+      }
+      .schema-list {
+        padding: 8px 13px 11px;
+        display: grid;
+        gap: 4px;
+      }
+      .schema-list div {
+        font: 10px/1.35 var(--mono);
+        color: var(--ink-2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      #drawer {
+        position: fixed;
+        top: 66px;
+        right: 0;
+        bottom: 0;
+        width: 420px;
+        max-width: 94vw;
+        z-index: 48;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface-bright);
+        border-left: 1px solid var(--line);
+        box-shadow: -14px 0 40px rgb(26 36 29/0.13);
+        transform: translateX(103%);
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      #drawer.open {
+        transform: none;
+      }
+      #drawer-head {
+        padding: 22px 24px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      #drawer-kicker {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+        color: var(--accent-strong);
+        font: 700 9.5px var(--mono);
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+      #drawer h2 {
+        font: 680 20px/1.25 var(--display);
+        letter-spacing: -0.02em;
+        padding-right: 30px;
+      }
+      #drawer-body {
+        padding: 18px 24px 42px;
+        overflow: auto;
+        font-size: 12.8px;
+        line-height: 1.65;
+        color: var(--ink-2);
+      }
+      #drawer-body p {
+        margin-bottom: 12px;
+      }
+      #drawer-body h4 {
+        margin: 18px 0 8px;
+        color: var(--ink-3);
+        font: 750 9.5px var(--mono);
+        letter-spacing: 0.13em;
+      }
+      .rules {
+        list-style: none;
+        display: grid;
+        gap: 7px;
+      }
+      .rules li {
+        position: relative;
+        padding: 9px 11px 9px 29px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--paper-2);
+        color: var(--ink);
+        font-size: 11.8px;
+        line-height: 1.5;
+      }
+      .rules li::before {
+        content: "";
+        position: absolute;
+        left: 12px;
+        top: 14px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .source {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 14px;
+        padding: 5px 8px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--paper-2);
+        font: 9.5px var(--mono);
+        color: var(--ink-2);
+      }
+      #drawer-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface);
+        color: var(--ink-2);
+        cursor: pointer;
+      }
+      #drawer-close:hover {
+        color: var(--ink);
+        border-color: var(--line-strong);
+      }
+      #controls {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        z-index: 42;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .control {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: var(--surface);
+        color: var(--ink-2);
+        box-shadow: var(--shadow);
+        cursor: pointer;
+      }
+      .control:hover {
+        color: var(--ink);
+        border-color: var(--line-strong);
+      }
+      .control.on {
+        color: var(--accent-strong);
+        background: var(--accent-wash);
+        border-color: var(--accent);
+      }
+      .control:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      #legend {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 41;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 9px 13px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        font-size: 10px;
+        color: var(--ink-2);
+      }
+      .key {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .swatch {
+        width: 10px;
+        height: 10px;
+        border: 1px solid var(--line-strong);
+        border-radius: 3px;
+      }
+      .swatch.partial {
+        background: linear-gradient(135deg, var(--surface) 50%, var(--yellow) 50%);
+      }
+      .swatch.planned {
+        background: var(--planned-bg);
+        border-style: dashed;
+      }
+      #hint {
+        position: fixed;
+        left: 50%;
+        bottom: 20px;
+        z-index: 41;
+        transform: translateX(-50%);
+        padding: 8px 16px;
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        font-size: 11px;
+        color: var(--ink-2);
+        white-space: nowrap;
+      }
+      #hint b {
+        color: var(--accent-strong);
+      }
+      #search {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: none;
+        background: rgb(13 22 16/0.32);
+        backdrop-filter: blur(4px);
+      }
+      #search.open {
+        display: block;
+      }
+      #search-panel {
+        position: absolute;
+        top: 13vh;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 600px;
+        max-width: 92vw;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--surface-bright);
+        box-shadow: 0 24px 70px rgb(13 22 16/0.28);
+      }
+      #search-input {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        outline: 0;
+        background: transparent;
+        color: var(--ink);
+        font-size: 14px;
+        padding: 17px 19px;
+      }
+      #search-input::placeholder {
+        color: var(--ink-3);
+      }
+      #search-results {
+        max-height: 52vh;
+        overflow: auto;
+        padding: 8px;
+      }
+      .result {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .result:hover,
+      .result.selected {
+        background: var(--accent-wash);
+      }
+      .result-title {
+        font-size: 12.5px;
+        font-weight: 700;
+      }
+      .result-sub {
+        font-size: 10.5px;
+        color: var(--ink-2);
+        margin-top: 2px;
+      }
+      .result-type {
+        margin-left: auto;
+        flex: 0 0 auto;
+        padding: 2px 6px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        color: var(--ink-3);
+        font: 8.5px var(--mono);
+        letter-spacing: 0.08em;
+      }
+      ::-webkit-scrollbar {
+        width: 9px;
+        height: 9px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--line-strong);
+        border-radius: 99px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      @media (max-width: 900px) {
+        header {
+          gap: 7px;
+          padding-right: 9px;
+        }
+        #brand {
+          padding: 0 14px;
+        }
+        #brand span,
+        #level,
+        #search-button kbd {
+          display: none;
+        }
+        #tabs button {
+          padding: 6px 8px;
+        }
+        .hbtn span {
+          display: none;
+        }
+        #search-button::before {
+          content: "⌕";
+          font-size: 15px;
+          line-height: 1;
+        }
+        #crumbs {
+          display: none;
+        }
+        #legend {
+          display: none;
+        }
+        #hint {
+          bottom: 14px;
+          max-width: 70vw;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .node {
+          transition: none;
+        }
+      }
+      @media (max-width: 580px) {
+        #brand img {
+          width: 76px;
+        }
+        #tabs button {
+          font-size: 0;
+          padding: 8px;
+        }
+        #tabs button::first-letter {
+          font-size: 11px;
+        }
+        #theme-button {
+          display: none;
+        }
+        #drawer {
+          width: 100%;
+          max-width: none;
+        }
+        #hint {
+          display: none !important;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .node,
+        .lane-head {
+          animation: none;
+        }
+        .edge {
+          animation: none;
+        }
+        #tilt,
+        #drawer {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="backdrop"></div>
+    <header>
+      <button id="brand" title="Return to system context"><img src="./packages/assets/src/logos/chalk-logo.svg" alt="Chalk" /><span>Architecture atlas</span></button>
+      <nav id="tabs" aria-label="Architecture perspective">
+        <button data-view="system" class="on">System</button>
+        <button data-view="planes">Planes</button>
+        <button data-view="journeys">Journeys</button>
+        <button data-view="runtime">Runtime</button>
+      </nav>
+      <nav id="crumbs" aria-label="Breadcrumb"></nav>
+      <span id="level">L0 · SYSTEM</span>
+      <button class="hbtn" id="theme-button" aria-label="Toggle theme" title="Toggle theme (D)"><span>Theme</span></button>
+      <button class="hbtn" id="search-button" aria-label="Search architecture"><span>Search</span><kbd>⌘K</kbd></button>
+    </header>
+    <main id="stage" aria-label="Interactive architecture canvas">
+      <div id="tilt">
+        <div id="viewport"><div id="world"></div></div>
+      </div>
+    </main>
+    <aside id="drawer" aria-label="Architecture details" aria-hidden="true" inert>
+      <button id="drawer-close" aria-label="Close details" title="Close details">×</button>
+      <div id="drawer-head">
+        <div id="drawer-kicker"></div>
+        <h2 id="drawer-title"></h2>
+      </div>
+      <div id="drawer-body"></div>
+    </aside>
+    <div id="controls" aria-label="Canvas controls">
+      <button class="control" id="zoom-in" title="Zoom in">+</button>
+      <button class="control" id="zoom-out" title="Zoom out">−</button>
+      <button class="control" id="zoom-fit" title="Fit to view (F)">⛶</button>
+      <button class="control" id="tilt-button" title="Toggle perspective (T)">◇</button>
+      <button class="control" id="up-button" title="Go up one level (Esc)">↑</button>
+    </div>
+    <div id="legend" aria-label="Implementation status legend">
+      <span class="key"><span class="swatch"></span>built</span>
+      <span class="key"><span class="swatch partial"></span>partial</span>
+      <span class="key"><span class="swatch planned"></span>planned</span>
+      <span>drag · scroll · click</span>
+    </div>
+    <div id="hint">Enter the <b>Chalk platform</b>, or switch perspectives above. Status describes this repository, not a live deployment.</div>
+    <div id="search" role="dialog" aria-modal="true" aria-label="Search architecture" aria-hidden="true">
+      <div id="search-panel">
+        <input id="search-input" aria-label="Search architecture" autocomplete="off" placeholder="Search planes, components, journeys, services, tables…" />
+        <div id="search-results"></div>
+      </div>
+    </div>
+    <script>
+      "use strict";
+      /* Repository atlas dated 2026-07-17. Built means implemented in this tree;
+   partial means the boundary exists but deployment or a required path remains;
+   planned is an intentional seam, not a shipped claim; context is external. */
+      const $ = (selector) => document.querySelector(selector);
+      const esc = (value) => String(value).replace(/[&<>\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" })[char]);
+      const COLORS = { green: "#78aa72", blue: "#5fa8c4", yellow: "#c7a63d", pink: "#c97f7f", violet: "#8b7dbc", slate: "#7c8b80" };
+      const ICONS = {
+        platform: "M4 8l8-5 8 5-8 5-8-5z M4 13l8 5 8-5 M4 17l8 5 8-5",
+        web: "M3 5h18v14H3z M3 9h18 M7 7h.01 M10 7h.01",
+        mobile: "M7 2h10v20H7z M10 5h4 M11 19h2",
+        code: "M8 8l-4 4 4 4 M16 8l4 4-4 4 M14 4l-4 16",
+        api: "M4 6h16v12H4z M8 10h8 M8 14h5",
+        sync: "M4 8a8 8 0 0 1 13-3l2 2 M20 16a8 8 0 0 1-13 3l-2-2 M19 3v4h-4 M5 21v-4h4",
+        media: "M3 7h13v10H3z M16 10l5-3v10l-5-3",
+        collab: "M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21c0-4 2.7-6.5 6-6.5s6 2.5 6 6.5 M17 5v6 M14 8h6 M16 15h5v5h-5z",
+        artifact: "M7 2h8l4 4v16H7z M15 2v5h5 M10 12h6 M10 16h6",
+        ops: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M19 12l2-2-2-3-3 .7-2-2.2-.4-3h-4l-.4 3-2 2.2-3-.7-2 3 2 2-.1 2.8-2 2 2 3 3-.7 2 2.2.4 3h4l.4-3 2-2.2 3 .7 2-3-2-2z",
+        db: "M12 8c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3z M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+        cloud: "M17.5 19a4.5 4.5 0 0 0 .4-9A7 7 0 0 0 4.3 12.5 3.9 3.9 0 0 0 6 20h11.5z",
+        shield: "M12 2l8 4v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6l8-4z M9 12l2 2 4-4.5",
+        eye: "M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+        route: "M5 5h5v5H5z M14 14h5v5h-5z M10 7.5h3a3 3 0 0 1 3 3V14",
+        lock: "M6 11h12v10H6z M9 11V7.5a3 3 0 0 1 6 0V11",
+        bolt: "M13 2L4 14h6l-1 8 9-12h-6l1-8z",
+        search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M16.2 16.2L21 21",
+        server: "M3 4h18v7H3z M3 13h18v7H3z M6.5 7.5h.01 M6.5 16.5h.01 M10 7.5h4",
+        worker: "M7 4h10v4H7z M5 10h14v10H5z M9 14h6 M9 17h3",
+        globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M3 12h18 M12 3c2.5 2.4 4 5.6 4 9s-1.5 6.6-4 9c-2.5-2.4-4-5.6-4-9s1.5-6.6 4-9z",
+        chart: "M4 20h16 M6 17v-5 M11 17V7 M16 17V4",
+        clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v6l4 2",
+        hook: "M8 4v8a4 4 0 0 0 8 0V7 M13 7h6 M16 4l3 3-3 3",
+        play: "M8 5.5v13l11-6.5-11-6.5z",
+      };
+      const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name] || ICONS.platform}"/></svg>`;
+
+      const STATUS_LABEL = { built: "BUILT", partial: "PARTIAL", planned: "PLANNED", context: "CONTEXT" };
+      const statusText = (status) => STATUS_LABEL[status] || STATUS_LABEL.built;
+      const sourceTag = (source) => `<span class="source">${icon("code", 11)} ${esc(source)}</span>`;
+      const rulesList = (items) => `<ul class="rules">${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`;
+
+      const PLANES = [
+        {
+          id: "experience",
+          name: "Experience surfaces",
+          icon: "web",
+          color: COLORS.pink,
+          status: "partial",
+          x: 90,
+          y: 130,
+          tagline: "Standalone web and mobile apps stay thin over package-owned behavior.",
+          source: "apps/web · apps/mobile · sdks/typescript/react(-native)",
+          detail: "Chalk has two first-class front doors: the hosted application and embeddable SDK surfaces. Web, Android, iOS, iPadOS, and macOS can make different presentation choices while agreeing on room, participant, permission, recording, and failure semantics.",
+          rules: [
+            "Apps consume real SDK state; they do not become the source of meeting truth.",
+            "React stays presentational. React Native owns platform UI, secure persistence, CallKit/ConnectionService seams, and native device behavior.",
+            "Anonymous joining remains first-class; native Chalk identity is additive.",
+          ],
+          components: [
+            { name: "Web app", status: "partial", desc: "Vite, React 19, and TanStack Router surface for the public site and hosted web experience.", rules: ["The app consumes @q9labsai/chalk-client.", "Cloudflare Vite integration keeps the hosted edge surface deployable."] },
+            { name: "Mobile app", status: "built", desc: "Expo 55 and React Native 0.83 verification surface for Android and Apple platforms.", rules: ["Uses platform-specific SDK entry points.", "SecureStore and SQLite provide platform persistence boundaries."] },
+            {
+              name: "React component layers",
+              status: "built",
+              desc: "Atomic, composite, full-screen, and UI subpaths with intentionally presentational ownership.",
+              rules: ["No joining, transport, recording, transcript, or diagnostic truth lives here.", "Narrow imports preserve bundle boundaries."],
+            },
+            {
+              name: "React Native platform surfaces",
+              status: "built",
+              desc: "Native pre-join, room, panels, end screens, multitasking, CallKit, and Android connection services.",
+              rules: ["Platform variants share core meaning without hiding native differences.", "Adapters inject device and transport behavior."],
+            },
+          ],
+        },
+        {
+          id: "sdk",
+          name: "Client SDK",
+          icon: "code",
+          color: COLORS.green,
+          status: "built",
+          x: 470,
+          y: 130,
+          tagline: "Provider-neutral meeting state, HTTP contracts, telemetry, media, and server-only webhooks.",
+          source: "sdks/typescript/client",
+          detail: "The TypeScript client is the shared behavioral boundary for apps and embedders. Generated HTTP and sync types sit beside the hand-authored V3 sync client, Cloudflare media adapter, telemetry runtime, and webhook consumer helpers.",
+          rules: ["Language-neutral schemas generate wire types; TypeScript is one target, not the protocol authority.", "Canonical control state is separate from optimistic state.", "Server-only webhook code is blocked from browser and React Native bundles."],
+          components: [
+            { name: "Generated HTTP client", status: "built", desc: "OpenAPI-derived request, response, and schema types for the public /v1 boundary.", rules: ["Generated artifacts are gate-checked.", "Authentication and tenant scope remain explicit."] },
+            {
+              name: "V3SyncClient",
+              status: "built",
+              desc: "Digest-checked canonical replica with snapshot, bounded replay, recovery acknowledgment, and stable command IDs.",
+              rules: ["A command promise resolves against authoritative outcomes.", "Frame and replay limits match the language-neutral schema."],
+            },
+            { name: "Client media plane", status: "built", desc: "Cloudflare SFU signaling client implementing the V3 media-plane interface.", rules: ["Local setters confirm both sync authorization and provider effect.", "Remote force-on is absent by design."] },
+            { name: "Telemetry runtime", status: "built", desc: "Journey, W3C trace, RTC summaries, batching, persistence, exporter health, and bounded delivery.", rules: ["No private media content or raw identifiers.", "Explicit and unload flushes bypass the normal batching delay."] },
+            { name: "Webhook consumer kit", status: "built", desc: "Versioned event types, raw-body signature verification, validation, dispatch, fixtures, and recipes.", rules: ["Verification uses the raw request body.", "Browser entry points fail closed."] },
+            { name: "Effect surface", status: "built", desc: "Typed Effect-based client entry point alongside the promise-oriented API.", rules: ["Public errors preserve machine-readable categories.", "The boundary remains optional for consumers."] },
+          ],
+        },
+        {
+          id: "api",
+          name: "Control-plane API",
+          icon: "api",
+          color: COLORS.blue,
+          status: "built",
+          x: 850,
+          y: 130,
+          tagline: "Go HTTP service for tenancy, rooms, admission, artifacts, providers, and webhooks.",
+          source: "apps/api",
+          detail: "The Go service owns the durable product/control plane. Thin HTTP adapters call domain services behind ports, while Postgres, Redis, Cloudflare, R2, Composio, and worker integrations remain adapters.",
+          rules: ["Public REST lives under /v1; /healthz and /readyz remain operational.", "Config is environment-only and non-local startup fails closed when required dependencies or secrets are absent.", "Every capability propagates journey and W3C trace context."],
+          components: [
+            { name: "Identity & tenancy", status: "built", desc: "Users, memberships, tenant roots, API keys, auth sessions, signing keys, and authorization.", rules: ["Tenant is the isolation and billing root.", "User identity stays separate from per-session participation."] },
+            { name: "Room & Session lifecycle", status: "built", desc: "Reusable Rooms, time-bounded Sessions, participant admission, token refresh, deadlines, and provider bootstrap.", rules: ["Room is not Session.", "Session creation and revision-zero sync state commit together."] },
+            { name: "Media provider ports", status: "built", desc: "Cloudflare provider adapter plus opaque provider-operation receipts and observations.", rules: ["Core rows do not depend on Cloudflare-specific IDs.", "Uncertain effects reconcile through stable operation identity."] },
+            {
+              name: "Recording control",
+              status: "built",
+              desc: "Recording resources, download authority, capacity admission, fenced pipeline jobs, bundles, and artifacts.",
+              rules: ["One active recording per Session.", "Workers receive job-scoped authority rather than reusable storage credentials."],
+            },
+            {
+              name: "Transcription control",
+              status: "built",
+              desc: "Recorder-owned sources, chunk jobs, attempts, results, finalization, download grants, and cleanup.",
+              rules: ["Public requests cannot choose provider, keys, priority, or retry budget.", "Completion independently verifies the object."],
+            },
+            {
+              name: "Outbound webhooks",
+              status: "built",
+              desc: "Encrypted endpoints, immutable events, delivery leases, attempts, redelivery, rotation, cleanup, and erasure fencing.",
+              rules: ["The business transaction stores the event and initial delivery branches.", "Customer payloads never expose internal journey IDs."],
+            },
+            { name: "Integrations", status: "partial", desc: "Tenant integration connections and audited Composio-backed catalog surfaces.", rules: ["Provider credentials remain outside domain types.", "Connection state is tenant scoped."] },
+            {
+              name: "Operational shell",
+              status: "built",
+              desc: "Readiness, graceful shutdown, structured logs, OTLP, profiling gates, rate limits, and execution trace harness.",
+              rules: ["Postgres readiness is checked independently.", "Production-safe logs omit sensitive bodies and operation content."],
+            },
+          ],
+        },
+        {
+          id: "sync",
+          name: "Sync engine",
+          icon: "sync",
+          color: COLORS.violet,
+          status: "built",
+          x: 1230,
+          y: 130,
+          tagline: "Elixir/OTP WebSocket service with Postgres-authoritative Sync v3.",
+          source: "apps/sync · contract/schema/sync-v3.json",
+          detail: "The sync service turns meeting commands into one canonical, recoverable conference state. Postgres serializes each Session; BEAM processes, ETS, notifications, and socket queues are disposable projections.",
+          rules: ["The authority key is {tenant_id, session_id}.", "A semantic transaction returns a committed exact-next event and receipt or a stable rejected receipt.", "Socket loss changes live presence; it never invents a durable leave."],
+          components: [
+            {
+              name: "Transport & token verifier",
+              status: "built",
+              desc: "Bounded /v3/sync frames, five-second hello, Ed25519 admission JWTs, heartbeats, and drain close semantics.",
+              rules: ["Production disables protocol v1.", "Key rotation accepts overlapping public keys before the API signs with the new kid."],
+            },
+            { name: "Command admission", status: "built", desc: "Bounded command intake validates identity, generation, phase, authority, and payload before execution.", rules: ["Stable command IDs make retries safe.", "Backpressure rejects work before unbounded queues form."] },
+            { name: "Pure Session reducer", status: "built", desc: "Deterministic state transitions for roles, hand raise, display name, admission, host transfer, deadlines, and recording.", rules: ["Role capability mapping is immutable per Session.", "One screen-share lease is serialized."] },
+            { name: "Postgres stateholder", status: "built", desc: "Session-row lock, folded state, exact-next event, command receipt, recovery, and uncertain-COMMIT resolution.", rules: ["A fresh writable-primary read resolves uncertain commits.", "Redis is absent from the correctness path."] },
+            {
+              name: "Coordinator & fanout",
+              status: "built",
+              desc: "Node-local heads, subscriptions, Postgres notification hints, periodic head repair, and bounded per-socket queues.",
+              rules: ["Notifications accelerate delivery but never establish truth.", "Node loss causes reconnect, not acknowledged-state loss."],
+            },
+            {
+              name: "Recovery protocol",
+              status: "built",
+              desc: "Snapshot, bounded exact replay, up-to-date, and terminal modes with revision and SHA-256 state digest checks.",
+              rules: ["Replay pages and snapshots retain reservations until exact recovery_ack.", "Media and presence recover via replace-latest snapshots."],
+            },
+            {
+              name: "External operations",
+              status: "built",
+              desc: "Idempotent lifecycle, media, recording, and Session-end intents executed outside the transaction and finalized after confirmation.",
+              rules: ["Provider effects never run while holding the Session lock.", "Late or stale observations cannot overwrite newer truth."],
+            },
+            {
+              name: "Retention & operations",
+              status: "built",
+              desc: "Ended-session folding/checkpoints, seven-day bounded cleanup, readiness hysteresis, metrics, drain, and failure scheduler.",
+              rules: ["Production boot rejects non-writable or incompatible storage.", "Accepted decisions resolve before shutdown completes."],
+            },
+          ],
+        },
+        {
+          id: "media",
+          name: "Media plane",
+          icon: "media",
+          color: COLORS.yellow,
+          status: "partial",
+          x: 280,
+          y: 420,
+          tagline: "Swappable real-time media behind a stable contract; Cloudflare is the current adapter.",
+          source: "sdks/typescript/client/src/media · apps/api/internal/mediaplane",
+          detail: "Audio, camera, and screen-share packets travel through a provider adapter that stays independent from durable conference control. Chalk can observe its requests, responses, webhooks, and endpoint RTC summaries but cannot instrument Cloudflare internals.",
+          rules: ["Media truth is provider observation; durable permission truth remains sync control state.", "Provider references are opaque outside adapters.", "Usage and egress signals must stay visible per tenant and Session."],
+          components: [
+            { name: "MediaPlane contract", status: "built", desc: "Provider-neutral Session, publication, moderation, observation, and usage boundaries.", rules: ["Control decisions authorize provider effects.", "Provider identity never becomes the domain model."] },
+            { name: "Cloudflare SFU adapter", status: "built", desc: "Direct WebRTC signaling, publication snapshots, track requests, and endpoint observations.", rules: ["Glass-to-glass latency remains physics-bound.", "Chalk measures both adapter calls and endpoint symptoms."] },
+            {
+              name: "RealtimeKit path",
+              status: "partial",
+              desc: "React Native integration used on the uncommon platform path behind the same product semantics.",
+              rules: ["Opaque SDK background work is documented as an observability blind spot.", "Registered transports retain journey attribution."],
+            },
+            { name: "DigitalOcean SFU adapter", status: "planned", desc: "Later Cloudflare-free media tier for full self-hosting.", rules: ["App-tier self-hosting does not wait for this adapter.", "It must satisfy the same authority and usage contract."] },
+          ],
+        },
+        {
+          id: "collaboration",
+          name: "Collaboration",
+          icon: "collab",
+          color: COLORS.pink,
+          status: "partial",
+          x: 660,
+          y: 420,
+          tagline: "Shared whiteboard, chat-shaped UI, reactions, transcripts, and live meeting signals.",
+          source: "packages/whiteboard · sdks/typescript/react(-native) · contract/schema/sync-v3.json",
+          detail: "Collaboration is split by authority: durable conference facts use sync control state, replace-latest signals use live projections, whiteboard behavior lives in its own package, and presentational components never fabricate backend state.",
+          rules: ["Each collaboration stream owns its own permission surface.", "Volatile signals never become durable simply for convenience.", "Shared UI remains reusable across hosted and embedded front doors."],
+          components: [
+            {
+              name: "Whiteboard engine",
+              status: "built",
+              desc: "Framework-neutral contracts, Excalidraw collaboration and file sync, React canvas, cursors, scenes, and math elements.",
+              rules: ["The whiteboard package owns behavior; Chalk React owns the styled wrapper.", "File and scene synchronization are explicit boundaries."],
+            },
+            { name: "Presence & directed requests", status: "built", desc: "Replace-latest presence plus bounded request-unmute and request-camera live delivery.", rules: ["Directed requests expire after 30 seconds.", "No live request is promoted into durable control state."] },
+            {
+              name: "Chat & reactions",
+              status: "partial",
+              desc: "Rich web and native presentation surfaces exist; the complete durable server stream remains a carried product requirement.",
+              rules: ["UI does not claim delivery until a real owner supplies state.", "Chat retention remains tenant-configurable."],
+            },
+            {
+              name: "Transcripts in-room",
+              status: "partial",
+              desc: "Transcript stores and panels consume real state while the artifact pipeline owns post-meeting transcription.",
+              rules: ["Live captions and durable artifacts are separate lifecycles.", "Privacy and recording consent stay visible to participants."],
+            },
+          ],
+        },
+        {
+          id: "artifacts",
+          name: "Recording & artifacts",
+          icon: "artifact",
+          color: COLORS.blue,
+          status: "partial",
+          x: 1040,
+          y: 420,
+          tagline: "Fenced capture, render, transcription, delivery, retention, and hard-delete paths.",
+          source: "apps/api/internal/recordingpipeline · apps/transcription-dispatcher · infrastructure/recorder",
+          detail: "Recording is a multi-cloud artifact pipeline. The control plane owns admission and durable job truth; short-lived workers get fenced assignments and object-scoped authority. Compute can scale to zero without giving workers cloud-control credentials.",
+          rules: ["Control facts commit before external work begins.", "Every assignment carries generation and fence identity.", "Object completion is accepted only after independent verification."],
+          components: [
+            {
+              name: "Recorder admission & reconciliation",
+              status: "partial",
+              desc: "Public-safe health gates, qualified pool policy, reservations, prewarm, fencing, replacement, and zero-idle targets.",
+              rules: ["Infrastructure policy is implemented; real staging failure/recovery qualification is still a deployment proof.", "Global capture plus render capacity is capped at 21 nodes."],
+            },
+            { name: "Capture pool", status: "partial", desc: "SGP1 CPU pool produces encrypted, temporary, sequenced capture bundles.", rules: ["Four meetings, forty participants, or sixteen Mbps per qualified node.", "Bundles expire from private R2 after 24 hours."] },
+            { name: "Render pool", status: "partial", desc: "TOR1 GPU pool composes final recording artifacts under a deadline-aware scaler.", rules: ["Render capacity is capped at ten nodes.", "Workers get one-time bootstrap and job-scoped object authority."] },
+            { name: "AWS KMS envelope boundary", status: "partial", desc: "Singapore KEK issues and decrypts data keys only for the control-plane role and exact recording context.", rules: ["Workers receive neither KMS nor DigitalOcean credentials.", "Key rotation is automatic."] },
+            {
+              name: "Transcription dispatcher",
+              status: "built",
+              desc: "Private Node 22 Lambda claims fenced jobs, uses one provider at a time, writes normalized chunk documents, finalizes, and cleans up.",
+              rules: ["Tokens load from exact SSM parameter ARNs into process memory.", "Provider responses, audio, display names, URLs, keys, and tokens are never logged."],
+            },
+            { name: "R2 artifact stores", status: "built", desc: "Private job-scoped recording and transcript objects plus immutable public SDK media assets.", rules: ["Customer artifacts use short-lived grants.", "The public asset CDN is metadata-driven and cache-immutable."] },
+          ],
+        },
+        {
+          id: "operations",
+          name: "Operations & trust",
+          icon: "ops",
+          color: COLORS.green,
+          status: "partial",
+          x: 1420,
+          y: 420,
+          tagline: "Journey-correlated telemetry, audit, health, uptime, status, delivery, and security gates.",
+          source: "docs/observability.md · infrastructure/observability · infrastructure/uptime-worker",
+          detail: "Every user-visible journey carries a stable journey ID and W3C trace context across Chalk-controlled boundaries. Durable journey events survive reconnects, retries, callbacks, and background work while traces, metrics, and logs converge in one operational surface.",
+          rules: ["New deployed services must join uptime coverage and prove a real failure-to-recovery transition.", "Telemetry uses bounded, non-sensitive attributes.", "Provider internals and hard device loss remain explicit blind spots."],
+          components: [
+            { name: "Correlation contract", status: "built", desc: "x-chalk-journey-id, chalk.journey.id, traceparent, tracestate, parent events, links, and terminal ordering.", rules: ["The first observer creates missing context.", "Late lower-order events cannot rewrite the terminal result."] },
+            {
+              name: "Service telemetry",
+              status: "built",
+              desc: "SDK, Go API, Elixir sync, webhook dispatcher, data adapters, RTC summaries, runtime health, and failure signals.",
+              rules: ["No tokens, room IDs, participant IDs, or operation payloads become metric dimensions.", "Provider callbacks may start linked roots."],
+            },
+            {
+              name: "Local observability stack",
+              status: "built",
+              desc: "OTel Collector, Tempo, Prometheus, Loki, Grafana dashboards, alerts, Postgres ledger, and recurring canary.",
+              rules: ["Smoke verifies correlated traces, metrics, logs, dashboards, and alerts.", "The local stack makes no zero-cost production claim."],
+            },
+            {
+              name: "Uptime & public status",
+              status: "partial",
+              desc: "Scheduled monitor registry and public-safe service health projection.",
+              rules: ["Checks cover the user-visible dependency, not a handler that can stay green while the service fails.", "Deployment URLs and monitor IDs remain private."],
+            },
+            {
+              name: "Audit & erasure",
+              status: "partial",
+              desc: "Tenant audit logs, sensitive access attribution, encrypted webhook material, event erasure fencing, and retention cleanup.",
+              rules: ["Backup restoration still requires an external durable deletion tombstone reconciler.", "A restored backup is not ready before tombstone replay."],
+            },
+          ],
+        },
+      ];
+
+      const SYSTEM_NODES = [
+        {
+          id: "surfaces",
+          name: "Hosted surfaces",
+          icon: "web",
+          color: COLORS.pink,
+          status: "partial",
+          x: 90,
+          y: 160,
+          w: 300,
+          h: 160,
+          tagline: "Web, Android, iOS, iPadOS, macOS",
+          chips: ["standalone", "anonymous-first"],
+          detail: "First-party Chalk applications exercise the same client and platform contracts available to embedders.",
+          rules: ["Apps stay thin over package-owned behavior.", "Platform-native UI may differ while conference meaning stays shared."],
+          source: "apps/web · apps/mobile",
+        },
+        {
+          id: "embedders",
+          name: "Customer applications",
+          icon: "code",
+          color: COLORS.green,
+          status: "context",
+          x: 90,
+          y: 570,
+          w: 300,
+          h: 160,
+          tagline: "Web, React, React Native, and future generated SDK targets",
+          chips: ["embedded", "tenant signed"],
+          detail: "Embedding customers assert external identity and initial meeting authority through scoped, signed tokens.",
+          rules: ["External identity is accepted only after signature verification.", "Customer receivers consume signed, versioned webhooks."],
+          source: "docs/redesign/north-star.md",
+        },
+        {
+          id: "core",
+          name: "Chalk platform",
+          icon: "platform",
+          color: COLORS.green,
+          status: "partial",
+          x: 620,
+          y: 330,
+          w: 460,
+          h: 245,
+          tagline: "Correct conference truth, low-latency media, portable deployment.",
+          chips: ["8 planes", "7 journeys", "2 swappable ports"],
+          detail: "Chalk separates durable product control, real-time sync, provider media, collaboration, artifact processing, and operations behind explicit contracts.",
+          rules: ["Correctness gates speed; speed gates flexibility.", "Postgres is durable authority; provider observations own actual publications.", "Hosted and embedded front doors remain first-class."],
+          source: "docs/redesign/north-star.md",
+        },
+        {
+          id: "cloudflare",
+          name: "Cloudflare network",
+          icon: "cloud",
+          color: COLORS.yellow,
+          status: "context",
+          x: 1360,
+          y: 130,
+          w: 310,
+          h: 170,
+          tagline: "Edge delivery, SFU, RealtimeKit path, R2, asset CDN",
+          chips: ["media physics", "opaque internals"],
+          detail: "Cloudflare supplies the current global media and storage providers. Chalk observes adapter calls and endpoint behavior but cannot instrument proprietary internals.",
+          rules: ["Provider IDs remain opaque outside adapters.", "Cloudflare-free media is a later adapter, not a core rewrite."],
+          source: "sdks/typescript/client/src/media · infrastructure",
+        },
+        {
+          id: "workers",
+          name: "Elastic artifact compute",
+          icon: "worker",
+          color: COLORS.blue,
+          status: "partial",
+          x: 1360,
+          y: 450,
+          w: 310,
+          h: 190,
+          tagline: "Recorder pools and scale-to-zero transcription",
+          chips: ["fenced jobs", "scoped authority"],
+          detail: "DigitalOcean capture/render pools and AWS Lambda transcription workers execute durable assignments without holding reusable control or storage authority.",
+          rules: ["Workers are replaceable and never authoritative.", "Completion is compare-and-set and independently object-verified."],
+          source: "infrastructure/recorder · apps/transcription-dispatcher",
+        },
+        {
+          id: "operators",
+          name: "Operators & customer receivers",
+          icon: "eye",
+          color: COLORS.violet,
+          status: "context",
+          x: 690,
+          y: 780,
+          w: 330,
+          h: 155,
+          tagline: "Grafana, uptime, status, webhook endpoints",
+          chips: ["audited", "journey-correlated"],
+          detail: "Operators investigate one correlated journey; customer systems receive signed domain events without Chalk internal correlation IDs.",
+          rules: ["Operational access is attributable.", "Health and status stay public-safe."],
+          source: "docs/observability.md · sdks/typescript/client/docs/webhooks.md",
+        },
+      ];
+      const SYSTEM_EDGES = [
+        { a: "surfaces", b: "core", label: "HTTP · WebSocket · WebRTC", hot: true },
+        { a: "embedders", b: "core", label: "SDK + signed identity", hot: true },
+        { a: "core", b: "cloudflare", label: "edge · media · objects" },
+        { a: "core", b: "workers", label: "fenced assignments", hot: true },
+        { a: "workers", b: "core", label: "verified results", dashed: true },
+        { a: "core", b: "operators", label: "telemetry · audit · webhooks", dashed: true },
+      ];
+
+      const JOURNEYS = {
+        join: {
+          name: "Create, admit & join",
+          icon: "route",
+          color: COLORS.green,
+          status: "built",
+          tagline: "HTTP identity → durable Session → sync recovery → media flowing",
+          source: "apps/api/internal/httpapi · apps/sync · sdks/typescript/client",
+          actors: ["Surface / SDK", "Go API", "Elixir sync", "Media plane"],
+          steps: [
+            { id: "join-invite", lane: 0, row: 0, kind: "start", title: "Resolve room or invite", sub: "Anonymous, native, or external identity" },
+            { id: "join-admit", lane: 1, row: 1, title: "Authorize tenant + room", sub: "Create or load Room and Session" },
+            { id: "join-session", lane: 1, row: 2, state: true, title: "Commit Session + revision zero", sub: "One Postgres transaction" },
+            { id: "join-token", lane: 1, row: 3, title: "Issue 5-minute sync JWT", sub: "Ed25519 · generation · capabilities" },
+            { id: "join-hello", lane: 0, row: 4, title: "Open /v3/sync + hello", sub: "Cursor and trace context" },
+            { id: "join-recover", lane: 2, row: 5, title: "Verify + recover canonical state", sub: "Snapshot, replay, up-to-date, or terminal" },
+            { id: "join-ack", lane: 0, row: 6, title: "Apply state + recovery_ack", sub: "Exact revision and digest" },
+            { id: "join-media", lane: 3, row: 7, title: "Establish WebRTC publications", sub: "Provider observation becomes media truth" },
+            { id: "join-live", lane: 0, row: 8, kind: "end", title: "Meeting is live", sub: "Control and media agree" },
+          ],
+        },
+        command: {
+          name: "Durable control command",
+          icon: "bolt",
+          color: COLORS.violet,
+          status: "built",
+          tagline: "Stable intent → semantic transaction → exact event → canonical replica",
+          source: "apps/sync/README.md · contract/schema/sync-v3.json",
+          actors: ["V3 client", "WebSocket node", "Postgres", "Other clients"],
+          steps: [
+            { id: "cmd-intent", lane: 0, row: 0, kind: "start", title: "Create stable command ID", sub: "Hand, name, admission, role, host" },
+            { id: "cmd-admit", lane: 1, row: 1, title: "Bounded command admission", sub: "Phase, identity, generation, capability" },
+            { id: "cmd-lock", lane: 2, row: 2, state: true, title: "Lock Session control row", sub: "Serialize {tenant, Session}" },
+            { id: "cmd-reduce", lane: 2, row: 3, title: "Apply pure reducer", sub: "Validate semantic transition" },
+            { id: "cmd-commit", lane: 2, row: 4, state: true, title: "Commit state + event + receipt", sub: "Exact-next revision and digest" },
+            { id: "cmd-hint", lane: 1, row: 5, title: "Fan out head notification", sub: "Hint plus periodic repair" },
+            { id: "cmd-deliver", lane: 3, row: 6, title: "Bounded queue delivers event", sub: "Exact-next only" },
+            { id: "cmd-ack", lane: 0, row: 7, kind: "end", title: "Canonical replica acknowledges", sub: "Optimistic state reconciles" },
+          ],
+        },
+        recovery: {
+          name: "Reconnect & node loss",
+          icon: "sync",
+          color: COLORS.blue,
+          status: "built",
+          tagline: "Disposable node loss → authoritative digest-checked recovery",
+          source: "apps/sync/lib/chalk_sync/transport/socket_v3.ex · sdks/typescript/client/src/sync",
+          actors: ["Client", "New sync node", "Postgres"],
+          steps: [
+            { id: "rec-loss", lane: 0, row: 0, kind: "start", title: "Socket or node disappears", sub: "No durable leave is invented" },
+            { id: "rec-reconnect", lane: 0, row: 1, title: "Reconnect with token + cursor", sub: "Revision, schema version, digest" },
+            { id: "rec-head", lane: 1, row: 2, title: "Read authoritative head", sub: "Ignore stale local projection" },
+            { id: "rec-choose", lane: 2, row: 3, decision: true, title: "Choose recovery mode", sub: "Digest, bounds, retention, terminal state" },
+            { id: "rec-replay", lane: 1, row: 4, title: "Snapshot or bounded replay", sub: "Reservations retained" },
+            { id: "rec-apply", lane: 0, row: 5, title: "Validate and apply", sub: "Replace media/presence projections" },
+            { id: "rec-ack", lane: 0, row: 6, kind: "end", title: "Exact recovery_ack", sub: "Live delivery resumes" },
+          ],
+        },
+        recording: {
+          name: "Managed recording",
+          icon: "media",
+          color: COLORS.pink,
+          status: "partial",
+          tagline: "Host intent → durable operation → capture bundles → rendered artifact",
+          source: "apps/sync/lib/chalk_sync/recording_plane.ex · apps/api/internal/recordingpipeline · infrastructure/recorder",
+          actors: ["Host + sync", "Control API", "Capture pool", "Render pool", "R2 + KMS"],
+          steps: [
+            { id: "r-intent", lane: 0, row: 0, kind: "start", title: "Start recording command", sub: "manageRecording capability" },
+            { id: "r-reserve", lane: 0, row: 1, state: true, title: "Reserve external operation", sub: "Same Session control lock" },
+            { id: "r-admit", lane: 1, row: 2, decision: true, title: "Check public-safe admission", sub: "Capacity, health, qualification" },
+            { id: "r-pipeline", lane: 1, row: 3, state: true, title: "Create fenced pipeline jobs", sub: "Generation and deadline" },
+            { id: "r-key", lane: 4, row: 4, title: "Issue contextual data key", sub: "Control-plane role only" },
+            { id: "r-capture", lane: 2, row: 5, title: "Capture sequenced bundles", sub: "Private, encrypted, 24h temporary R2" },
+            { id: "r-render", lane: 3, row: 6, title: "Claim and render artifact", sub: "Deadline-aware GPU worker" },
+            { id: "r-verify", lane: 1, row: 7, title: "Verify object + finalize", sub: "Compare-and-set completion" },
+            { id: "r-ready", lane: 0, row: 8, kind: "end", title: "Recording becomes available", sub: "Short-lived download authority" },
+          ],
+        },
+        transcription: {
+          name: "Post-meeting transcription",
+          icon: "artifact",
+          color: COLORS.blue,
+          status: "partial",
+          tagline: "Recorder source → fenced chunk jobs → normalized final transcript → cleanup",
+          source: "apps/transcription-dispatcher/README.md · apps/api/internal/transcripts",
+          actors: ["Client", "Control API", "Lambda dispatcher", "AI provider", "Private R2"],
+          steps: [
+            { id: "t-request", lane: 0, row: 0, kind: "start", title: "Request transcript", sub: "No provider or object-key controls" },
+            { id: "t-source", lane: 1, row: 1, decision: true, title: "Verify committed recorder source", sub: "Manifest and audio facts" },
+            { id: "t-queue", lane: 1, row: 2, state: true, title: "Create fenced chunk jobs", sub: "Priority and retry owned by API" },
+            { id: "t-claim", lane: 2, row: 3, title: "Claim + heartbeat", sub: "HMAC workload identity" },
+            { id: "t-read", lane: 4, row: 4, title: "Read job-scoped source URLs", sub: "Checksum, size, content type" },
+            { id: "t-provider", lane: 3, row: 5, title: "Invoke one pinned provider", sub: "Policy and privacy gates" },
+            { id: "t-write", lane: 4, row: 6, title: "Conditional normalized chunk PUT", sub: "transcript.v1 JSON" },
+            { id: "t-complete", lane: 1, row: 7, title: "Verify + compare-and-set", sub: "Late fences return 409" },
+            { id: "t-finalize", lane: 2, row: 8, title: "Compose deterministic final", sub: "Overlaps retained; languages sorted" },
+            { id: "t-clean", lane: 2, row: 9, kind: "end", title: "Finalize and clean temporary objects", sub: "Absence independently HEAD-verified" },
+          ],
+        },
+        webhook: {
+          name: "Outbound webhook delivery",
+          icon: "hook",
+          color: COLORS.yellow,
+          status: "built",
+          tagline: "Business commit → immutable event branches → signed attempts → terminal history",
+          source: "apps/api/internal/webhooks · sdks/typescript/client/src/webhooks",
+          actors: ["Domain transaction", "Postgres", "Dispatcher", "Customer receiver"],
+          steps: [
+            { id: "w-fact", lane: 0, row: 0, kind: "start", title: "Commit customer-visible fact", sub: "Room, Session, participant, artifact" },
+            { id: "w-event", lane: 1, row: 1, state: true, title: "Store immutable Event + branches", sub: "Producer journey and trace reference" },
+            { id: "w-claim", lane: 2, row: 2, title: "Claim Delivery lease", sub: "Queue age and recovery visible" },
+            { id: "w-sign", lane: 2, row: 3, title: "Sign raw body", sub: "Standard Webhooks headers" },
+            { id: "w-send", lane: 3, row: 4, decision: true, title: "Receiver response", sub: "Success, retryable, or terminal" },
+            { id: "w-retry", lane: 2, row: 5, title: "Bounded backoff or redelivery", sub: "Fresh linked attempt trace" },
+            { id: "w-terminal", lane: 1, row: 6, kind: "end", title: "Succeeded, exhausted, canceled, or erased", sub: "History remains auditable" },
+          ],
+        },
+        observability: {
+          name: "End-to-end observability",
+          icon: "chart",
+          color: COLORS.green,
+          status: "partial",
+          tagline: "Journey origin → propagated context → durable ledger + telemetry → one operator surface",
+          source: "docs/observability.md · infrastructure/observability",
+          actors: ["Origin", "Chalk services", "Collector + stores", "Operator"],
+          steps: [
+            { id: "o-origin", lane: 0, row: 0, kind: "start", title: "First observer creates context", sub: "Journey ID + W3C trace when absent" },
+            { id: "o-propagate", lane: 1, row: 1, title: "Propagate every boundary", sub: "HTTP, WS frames, OTP links, jobs, callbacks" },
+            { id: "o-ledger", lane: 1, row: 2, state: true, title: "Append durable journey events", sub: "Idempotent IDs and terminal order" },
+            { id: "o-export", lane: 1, row: 3, title: "Emit bounded telemetry", sub: "Traces, metrics, logs, RTC summaries" },
+            { id: "o-store", lane: 2, row: 4, title: "OTel → Tempo, Prometheus, Loki", sub: "Collector health and canary included" },
+            { id: "o-query", lane: 3, row: 5, title: "Grafana journey surface", sub: "Success and distinct failure paths" },
+            { id: "o-act", lane: 3, row: 6, kind: "end", title: "Alert and investigate", sub: "Blind spots remain explicit" },
+          ],
+        },
+      };
+
+      const RUNTIME_ZONES = [
+        { x: 40, y: 80, w: 360, h: 760, label: "CLIENT + EDGE" },
+        { x: 430, y: 80, w: 700, h: 760, label: "PORTABLE APP TIER" },
+        { x: 1160, y: 80, w: 680, h: 760, label: "PROVIDER + ARTIFACT TIER" },
+        { x: 40, y: 880, w: 1800, h: 250, label: "OPERATIONS + DELIVERY" },
+      ];
+      const RUNTIME_NODES = [
+        {
+          id: "rt-users",
+          name: "Browsers & native apps",
+          icon: "mobile",
+          color: COLORS.pink,
+          status: "context",
+          x: 75,
+          y: 140,
+          w: 290,
+          h: 125,
+          tagline: "Hosted and embedded participants",
+          chips: ["HTTP", "WS", "WebRTC"],
+          detail: "User devices run the SDK, native bridges, and media engines. Device, OS, radio, ISP, and driver internals are visible only through exposed events and aggregate RTC statistics.",
+          rules: ["Never infer invisible device internals as known truth."],
+          source: "sdks/typescript",
+        },
+        {
+          id: "rt-web",
+          name: "Hosted web edge",
+          icon: "web",
+          color: COLORS.green,
+          status: "partial",
+          x: 75,
+          y: 350,
+          w: 290,
+          h: 125,
+          tagline: "Vite + TanStack + Cloudflare adapter",
+          chips: ["static/SSR seam"],
+          detail: "The public and hosted web surface deploys through the Cloudflare Vite integration while consuming the same client contracts as embedded applications.",
+          rules: ["Marketing deployments keep client telemetry off unless explicitly authenticated and enabled."],
+          source: "apps/web",
+        },
+        {
+          id: "rt-assets",
+          name: "Public asset CDN",
+          icon: "cloud",
+          color: COLORS.yellow,
+          status: "built",
+          x: 75,
+          y: 575,
+          w: 290,
+          h: 125,
+          tagline: "assets.chalkmeet.com · immutable R2 objects",
+          chips: ["hashed", "CORS GET/HEAD"],
+          detail: "The metadata-only asset package points to hashed backgrounds and sounds in public R2; the short-lived manifest can change without bundling media into npm packages.",
+          rules: ["Hashed assets are immutable for one year.", "The manifest uses a five-minute cache plus stale-while-revalidate."],
+          source: "packages/assets · infrastructure/README.md",
+        },
+        {
+          id: "rt-api",
+          name: "Go control-plane API",
+          icon: "api",
+          color: COLORS.blue,
+          status: "built",
+          x: 470,
+          y: 140,
+          w: 300,
+          h: 145,
+          tagline: "/v1 REST · internal worker routes · health",
+          chips: ["ports/adapters", "OTLP"],
+          detail: "The portable API tier can run managed or customer-hosted. It owns durable product facts, provider commands, worker authority, signed sync tokens, audit, webhooks, and journey intake.",
+          rules: ["Standard Postgres is the durable dependency.", "Secrets enter through runtime injection."],
+          source: "apps/api",
+        },
+        {
+          id: "rt-sync",
+          name: "Elixir sync service",
+          icon: "sync",
+          color: COLORS.violet,
+          status: "built",
+          x: 800,
+          y: 140,
+          w: 295,
+          h: 145,
+          tagline: "/v3/sync · OTP · bounded fanout",
+          chips: ["Postgres authority", "no Redis truth"],
+          detail: "The WebSocket tier is horizontally disposable. Sticky sockets are an optimization; every node can recover canonical state through Postgres.",
+          rules: ["Protocol v1 is local-only compatibility.", "SIGTERM drains accepted decisions before closing with retryable 1012."],
+          source: "apps/sync",
+        },
+        {
+          id: "rt-pg",
+          name: "Standard PostgreSQL",
+          icon: "db",
+          color: COLORS.green,
+          status: "built",
+          x: 470,
+          y: 400,
+          w: 300,
+          h: 150,
+          tagline: "Product, sync, jobs, events, audit, journey ledger",
+          chips: ["sole durable authority"],
+          detail: "Postgres holds product truth and serializes each Session. Managed and self-hosted deployments must use portable PostgreSQL semantics.",
+          rules: ["Notifications are hints.", "Redis never enters the correctness path.", "Schema migrations are release blockers."],
+          source: "apps/api/db/migrations",
+        },
+        {
+          id: "rt-redis",
+          name: "Redis",
+          icon: "bolt",
+          color: COLORS.yellow,
+          status: "built",
+          x: 800,
+          y: 400,
+          w: 295,
+          h: 125,
+          tagline: "Rate limiting and optional ephemeral acceleration",
+          chips: ["non-authoritative"],
+          detail: "Redis supports rate limits and may later accelerate presence or head hints, but loss of Redis cannot lose acknowledged conference truth.",
+          rules: ["Non-local public rate limits require Redis."],
+          source: "apps/api/internal/ratelimit",
+        },
+        {
+          id: "rt-contracts",
+          name: "Generated contracts",
+          icon: "code",
+          color: COLORS.green,
+          status: "built",
+          x: 470,
+          y: 650,
+          w: 300,
+          h: 125,
+          tagline: "OpenAPI + sync-v3 JSON → Go, Elixir, TypeScript",
+          chips: ["gate-checked", "polyglot seam"],
+          detail: "Language-neutral schemas prevent any SDK or server language from becoming the wire authority.",
+          rules: ["Adding a language is a generation target, never a protocol fork.", "Generated drift fails the root gate."],
+          source: "contract/schema · tools/contract-codegen",
+        },
+        {
+          id: "rt-cf",
+          name: "Cloudflare media + R2",
+          icon: "cloud",
+          color: COLORS.yellow,
+          status: "partial",
+          x: 1200,
+          y: 140,
+          w: 285,
+          h: 145,
+          tagline: "SFU, RealtimeKit path, private artifacts, asset CDN",
+          chips: ["swappable adapter"],
+          detail: "Cloudflare is the current media and object provider boundary. Provider account telemetry and production configuration remain deployment inputs.",
+          rules: ["Cloudflare internals are outside Chalk observability.", "Core storage contains opaque provider references."],
+          source: "infrastructure · sdks/typescript/client/src/media",
+        },
+        {
+          id: "rt-recorder",
+          name: "DigitalOcean recorder pools",
+          icon: "server",
+          color: COLORS.pink,
+          status: "partial",
+          x: 1515,
+          y: 140,
+          w: 285,
+          h: 145,
+          tagline: "SGP1 capture · TOR1 render · zero idle",
+          chips: ["11 + 10 cap", "reconciler-owned"],
+          detail: "OpenTofu owns policy and immutable contracts; the external reconciler owns actual Droplet lifecycle so replacement cannot exceed hard capacity caps.",
+          rules: ["Capture and render use separate scoped provider identities.", "Workers have outbound-only firewalls and one-time bootstrap."],
+          source: "infrastructure/recorder",
+        },
+        {
+          id: "rt-lambda",
+          name: "AWS transcription Lambda",
+          icon: "worker",
+          color: COLORS.blue,
+          status: "built",
+          x: 1200,
+          y: 405,
+          w: 285,
+          h: 145,
+          tagline: "Node 22 · minute reconciliation · scale to zero",
+          chips: ["SSM", "fenced claims"],
+          detail: "The private dispatcher reconciles transcription, finalization, and cleanup with a bounded claim budget so cleanup cannot starve.",
+          rules: ["Exact SSM parameter ARNs are the only production secret sources.", "DeepInfra can be omitted entirely."],
+          source: "apps/transcription-dispatcher · infrastructure/opentofu/modules/aws-transcription-dispatcher",
+        },
+        {
+          id: "rt-kms",
+          name: "AWS KMS + SSM",
+          icon: "lock",
+          color: COLORS.violet,
+          status: "partial",
+          x: 1515,
+          y: 405,
+          w: 285,
+          h: 145,
+          tagline: "Recording KEK + workload parameters",
+          chips: ["context-bound", "least authority"],
+          detail: "KMS protects recording data keys in Singapore; SSM injects transcription provider and workload secrets into Lambda memory.",
+          rules: ["KMS grants require the exact environment, tenant, Session, job, and bundle schema context."],
+          source: "infrastructure/opentofu",
+        },
+        {
+          id: "rt-future",
+          name: "Full self-host media",
+          icon: "server",
+          color: COLORS.slate,
+          status: "planned",
+          x: 1360,
+          y: 650,
+          w: 285,
+          h: 125,
+          tagline: "DigitalOcean or OSS SFU adapter",
+          chips: ["later tier"],
+          detail: "The later deployment tier replaces Cloudflare media without changing control, sync, client, or product contracts.",
+          rules: ["App-tier self-hosting ships before this boundary."],
+          source: "docs/redesign/north-star.md",
+        },
+        {
+          id: "rt-otel",
+          name: "Observability stack",
+          icon: "chart",
+          color: COLORS.green,
+          status: "built",
+          x: 130,
+          y: 930,
+          w: 320,
+          h: 140,
+          tagline: "OTel Collector · Tempo · Prometheus · Loki · Grafana",
+          chips: ["durable ledger", "canary"],
+          detail: "Local proof sends and queries one correlated trace, metric, and log, then verifies dashboards and critical alert rules.",
+          rules: ["Production retention and backend choices are deployment decisions.", "Collector failure is isolated from conference work."],
+          source: "infrastructure/observability",
+        },
+        {
+          id: "rt-uptime",
+          name: "Uptime worker + status",
+          icon: "eye",
+          color: COLORS.blue,
+          status: "partial",
+          x: 510,
+          y: 930,
+          w: 300,
+          h: 140,
+          tagline: "Scheduled synthetic checks and public-safe projection",
+          chips: ["failure → recovery"],
+          detail: "Every customer-visible service must register a stable monitor and prove that the real failure and recovery are observed.",
+          rules: ["Deployment URLs and recipients stay private."],
+          source: "infrastructure/uptime-worker",
+        },
+        {
+          id: "rt-webhooks",
+          name: "Customer webhook receivers",
+          icon: "hook",
+          color: COLORS.yellow,
+          status: "context",
+          x: 880,
+          y: 930,
+          w: 300,
+          h: 140,
+          tagline: "Signed HTTPS events with retries and idempotency",
+          chips: ["Standard Webhooks"],
+          detail: "Customer servers verify raw request bodies with the SDK helper, dispatch typed events, and use event IDs for idempotent processing.",
+          rules: ["Server-only handling never enters browser bundles."],
+          source: "sdks/typescript/client/docs/webhooks.md",
+        },
+        {
+          id: "rt-ci",
+          name: "OpenTofu + CI quality gates",
+          icon: "shield",
+          color: COLORS.violet,
+          status: "partial",
+          x: 1250,
+          y: 930,
+          w: 450,
+          h: 140,
+          tagline: "Reviewed infrastructure · generated-contract checks · language gates",
+          chips: ["pnpm run gate", "no prod laptop apply"],
+          detail: "The root gate composes format, type, test, package, generation, security, and language-specific checks. Infrastructure mutation remains protected and deployment-specific.",
+          rules: ["Production is never touched without explicit approval.", "Migration drift and generated-contract drift block release."],
+          source: "scripts/gates · infrastructure",
+        },
+      ];
+      const RUNTIME_EDGES = [
+        { a: "rt-users", b: "rt-web", label: "hosted app" },
+        { a: "rt-users", b: "rt-api", label: "HTTPS", hot: true },
+        { a: "rt-users", b: "rt-sync", label: "WebSocket", hot: true },
+        { a: "rt-users", b: "rt-cf", label: "WebRTC", hot: true },
+        { a: "rt-web", b: "rt-api", label: "SDK requests" },
+        { a: "rt-api", b: "rt-pg", label: "transactions", hot: true },
+        { a: "rt-sync", b: "rt-pg", label: "semantic Session lock", hot: true },
+        { a: "rt-api", b: "rt-redis", label: "rate limits" },
+        { a: "rt-api", b: "rt-cf", label: "provider + object authority" },
+        { a: "rt-sync", b: "rt-cf", label: "confirmed media effects" },
+        { a: "rt-api", b: "rt-recorder", label: "fenced work" },
+        { a: "rt-api", b: "rt-lambda", label: "wake + control API" },
+        { a: "rt-api", b: "rt-kms", label: "context-bound key" },
+        { a: "rt-lambda", b: "rt-cf", label: "job-scoped URLs" },
+        { a: "rt-contracts", b: "rt-api", label: "types", dashed: true },
+        { a: "rt-contracts", b: "rt-sync", label: "types", dashed: true },
+        { a: "rt-api", b: "rt-otel", label: "OTLP", dashed: true },
+        { a: "rt-sync", b: "rt-otel", label: "OTLP", dashed: true },
+        { a: "rt-uptime", b: "rt-api", label: "synthetic checks", dashed: true },
+        { a: "rt-api", b: "rt-webhooks", label: "signed delivery", hot: true },
+        { a: "rt-ci", b: "rt-api", label: "build + verify", dashed: true },
+      ];
+
+      const DATA_GROUPS = [
+        {
+          id: "data-identity",
+          name: "Identity & tenancy",
+          color: COLORS.green,
+          status: "built",
+          tables: ["tenants", "users", "memberships", "auth_identities", "login_sessions", "api_keys", "tenant_signing_keys"],
+          detail: "Tenant is the isolation and billing root; global Users join tenants through Memberships. Authentication, API authority, and participant-token signing keys rotate independently.",
+          rules: ["Participant identity remains a per-Session fact.", "Signing key overlap enables zero-downtime rotation."],
+          source: "20260629143000_initial_schema.sql · 20260706142000_add_tenant_provider_configs.sql",
+        },
+        {
+          id: "data-meetings",
+          name: "Rooms & Sessions",
+          color: COLORS.blue,
+          status: "built",
+          tables: ["rooms", "room_sessions", "participants", "session_create_requests", "provider_operation_receipts", "provider_operation_observation_heads", "provider_operation_observations"],
+          detail: "A reusable Room contains many time-bounded Sessions; Participants are per-Session presence records that may point to a User.",
+          rules: ["Room is not Session.", "Participant is not User.", "Provider identity stays opaque in core facts."],
+          source: "initial_schema.sql · add_session_create_idempotency.sql · add_provider_operations.sql",
+        },
+        {
+          id: "data-sync",
+          name: "Sync authority",
+          color: COLORS.violet,
+          status: "built",
+          tables: ["sync_session_control", "sync_control_events", "sync_command_receipts", "sync_lifecycle_intents", "sync_external_operations", "sync_admission_requests", "sync_screen_share_leases", "sync_publication_fences", "sync_publication_grant_reservations", "sync_recordings"],
+          detail: "One Session control row serializes semantic changes. Folded state, exact-next events, receipts, lifecycle intents, provider operations, and reservations form the durable Sync v3 truth.",
+          rules: ["Notifications and BEAM state are disposable projections.", "Exactly one active host and screen-share lease are database-enforced."],
+          source: "20260712113000_add_sync_production_schema.sql · 20260713130000_add_declarative_sync_v3.sql",
+        },
+        {
+          id: "data-recording",
+          name: "Recording pipeline",
+          color: COLORS.pink,
+          status: "built",
+          tables: ["recordings", "recording_capacity", "recording_pool_health", "recording_reservations", "recording_pipelines", "recording_jobs", "recording_bundles", "recording_artifacts"],
+          detail: "Recording resources connect user-visible state to admission, pool health, fenced jobs, temporary bundles, and final artifacts.",
+          rules: ["One active recording exists per Session.", "Jobs are lease-recoverable and dead-letter visible."],
+          source: "20260713100000_add_recording_pipeline.sql",
+        },
+        {
+          id: "data-transcript",
+          name: "Transcription artifacts",
+          color: COLORS.blue,
+          status: "built",
+          tables: ["transcriptions", "recording_transcription_sources", "recording_transcription_source_chunks", "artifact_jobs", "transcript_chunks", "transcription_attempts", "transcription_chunk_results", "transcription_cleanup_jobs"],
+          detail: "Recorder-owned sources are chunked into fenced artifact jobs, normalized results, final transcript chunks, attempts, and cleanup work.",
+          rules: ["Exactly one transcript exists per recording.", "Temporary object cleanup is durable work, not a best-effort side effect."],
+          source: "20260713090000_add_transcription_artifact_jobs.sql",
+        },
+        {
+          id: "data-webhooks",
+          name: "Outbound webhooks",
+          color: COLORS.yellow,
+          status: "built",
+          tables: ["webhook_tenant_state", "webhook_endpoints", "webhook_endpoint_revisions", "webhook_events", "webhook_deliveries", "webhook_delivery_attempts", "webhook_idempotency_records"],
+          detail: "Encrypted endpoint configuration and immutable event history are separated from mutable delivery leases, attempt history, and idempotency responses.",
+          rules: ["Automatic fanout is unique per Event and endpoint revision.", "Erasure terminally fences delivery before destroying linked content."],
+          source: "20260712223000_add_outbound_webhooks.sql",
+        },
+        {
+          id: "data-ops",
+          name: "Operations & integrations",
+          color: COLORS.green,
+          status: "built",
+          tables: ["audit_logs", "observability_journey_events", "integration_connections"],
+          detail: "Audit history attributes sensitive changes; the journey ledger preserves ordered lifecycle events; integration connections bind provider state to tenant and user scope.",
+          rules: ["Terminal journey state follows highest sequence.", "Sensitive payloads do not enter operational tables."],
+          source: "add_audit_logs_and_resource_indexes.sql · add_observability_journey_events.sql · add_integration_connections.sql",
+        },
+      ];
+      const DATA_EDGES = [
+        { a: "data-identity", b: "data-meetings", label: "tenant + optional user" },
+        { a: "data-meetings", b: "data-sync", label: "Session authority", hot: true },
+        { a: "data-meetings", b: "data-recording", label: "records" },
+        { a: "data-recording", b: "data-transcript", label: "source artifacts", hot: true },
+        { a: "data-meetings", b: "data-webhooks", label: "domain events" },
+        { a: "data-sync", b: "data-webhooks", label: "lifecycle facts" },
+        { a: "data-identity", b: "data-ops", label: "attribution" },
+        { a: "data-webhooks", b: "data-ops", label: "journey + audit" },
+      ];
+
+      const stage = $("#stage"),
+        viewport = $("#viewport"),
+        world = $("#world");
+      const state = { view: { type: "system" }, width: 1800, height: 1050, scale: 1, x: 0, y: 0 };
+      let clickRegistry = {};
+      function parentView(view) {
+        if (view.type === "system") return null;
+        if (["planes", "journeys", "runtime"].includes(view.type)) return { type: "system" };
+        if (view.type === "plane") return { type: "planes" };
+        if (view.type === "journey") return { type: "journeys" };
+        if (view.type === "data") return { type: "runtime" };
+        return { type: "system" };
+      }
+      function go(view, openId) {
+        state.view = view;
+        draw();
+        if (openId) requestAnimationFrame(() => clickRegistry[openId]?.());
+      }
+      function nodeHTML(node, html, delay = 0, classes = "") {
+        const status = node.status || "built";
+        const badge = ["partial", "planned"].includes(status) ? `<span class="status">${statusText(status)}</span>` : "";
+        return `<article class="node ${status} ${classes}" data-node="${esc(node.id)}" style="left:${node.x}px;top:${node.y}px;width:${node.w}px;${node.h ? `height:${node.h}px;` : ""}--node-color:${node.color || COLORS.green};animation-delay:${delay}ms">${badge}${html}</article>`;
+      }
+      function standardNode(node, delay = 0, classes = "") {
+        const chips = (node.chips || []).map((chip, index) => `<span class="chip${index === 0 ? " acc" : ""}">${esc(chip)}</span>`).join("");
+        return nodeHTML(node, `<div class="head"><div class="icon">${icon(node.icon)}</div><div><h3>${esc(node.name)}</h3><div class="tag">${esc(node.tagline)}</div></div></div>${chips ? `<div class="meta">${chips}</div>` : ""}`, delay, classes);
+      }
+      function registerDrawer(node, kicker) {
+        clickRegistry[node.id] = () =>
+          openDrawer({ kicker: `${kicker} · ${statusText(node.status || "built")}`, title: node.name, body: `<p>${esc(node.detail || node.tagline || "")}</p>${node.rules?.length ? `<h4>BOUNDARIES &amp; INVARIANTS</h4>${rulesList(node.rules)}` : ""}${node.source ? sourceTag(node.source) : ""}` });
+      }
+      function anchors(a, b, offset = 0) {
+        const acx = a.x + a.w / 2,
+          acy = a.y + a.h / 2,
+          bcx = b.x + b.w / 2,
+          bcy = b.y + b.h / 2,
+          dx = bcx - acx,
+          dy = bcy - acy;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          return dx > 0 ? { p1: { x: a.x + a.w, y: acy + offset }, p2: { x: b.x, y: bcy + offset }, horizontal: true } : { p1: { x: a.x, y: acy + offset }, p2: { x: b.x + b.w, y: bcy + offset }, horizontal: true };
+        }
+        return dy > 0 ? { p1: { x: acx + offset, y: a.y + a.h }, p2: { x: bcx + offset, y: b.y }, horizontal: false } : { p1: { x: acx + offset, y: a.y }, p2: { x: bcx + offset, y: b.y + b.h }, horizontal: false };
+      }
+      function edgeSVG(a, b, options = {}) {
+        const { p1, p2, horizontal } = anchors(a, b, options.offset || 0);
+        const d = horizontal ? `M${p1.x} ${p1.y} C${(p1.x + p2.x) / 2} ${p1.y},${(p1.x + p2.x) / 2} ${p2.y},${p2.x} ${p2.y}` : `M${p1.x} ${p1.y} C${p1.x} ${(p1.y + p2.y) / 2},${p2.x} ${(p1.y + p2.y) / 2},${p2.x} ${p2.y}`;
+        const classes = `edge${options.hot ? " hot" : ""}${options.dashed ? " dashed" : ""}${options.flow ? " flow" : ""}${options.planned ? " planned" : ""}`;
+        const marker = options.hot ? "url(#arrow-hot)" : "url(#arrow)";
+        const label = options.label ? `<text class="edge-label" x="${(p1.x + p2.x) / 2}" y="${(p1.y + p2.y) / 2 - 7}" text-anchor="middle">${esc(options.label)}</text>` : "";
+        return `<path class="${classes}" d="${d}" marker-end="${marker}"/>${label}`;
+      }
+      function svgOpen(width, height, extra = "") {
+        return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true"><defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto"><path class="arrow" d="M1 1L8 4.5L1 8" fill="none" stroke-width="1.5" stroke-linecap="round"/></marker><marker id="arrow-hot" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto"><path class="arrow-hot" d="M1 1L8 4.5L1 8" fill="none" stroke-width="1.5" stroke-linecap="round"/></marker></defs>${extra}`;
+      }
+
+      function buildSystem() {
+        state.width = 1800;
+        state.height = 1050;
+        const geometry = Object.fromEntries(SYSTEM_NODES.map((node) => [node.id, node]));
+        let edges = "";
+        SYSTEM_EDGES.forEach((edge) => {
+          edges += edgeSVG(geometry[edge.a], geometry[edge.b], edge);
+        });
+        let nodes = "";
+        SYSTEM_NODES.forEach((node, index) => {
+          nodes += standardNode(node, index * 55, node.id === "core" ? "core" : "");
+          registerDrawer(node, "L0 · SYSTEM CONTEXT");
+        });
+        clickRegistry.core = () => go({ type: "planes" });
+        return svgOpen(state.width, state.height, edges) + "</svg>" + nodes;
+      }
+      function buildPlanes() {
+        state.width = 1850;
+        state.height = 850;
+        const geometry = Object.fromEntries(PLANES.map((plane) => [plane.id, { ...plane, w: 330, h: 190 }]));
+        const edgePairs = [
+          ["experience", "sdk"],
+          ["sdk", "api"],
+          ["sdk", "sync"],
+          ["sdk", "media"],
+          ["api", "sync"],
+          ["sync", "media"],
+          ["sdk", "collaboration"],
+          ["api", "artifacts"],
+          ["sync", "artifacts"],
+          ["api", "operations"],
+          ["sync", "operations"],
+          ["artifacts", "operations"],
+        ];
+        let edges = "";
+        edgePairs.forEach(([a, b]) => {
+          const planned = PLANES.find((p) => p.id === a).status === "planned" || PLANES.find((p) => p.id === b).status === "planned";
+          edges += edgeSVG(geometry[a], geometry[b], { hot: ["sdk:api", "api:sync", "sync:media"].includes(`${a}:${b}`), planned });
+        });
+        let nodes = "";
+        PLANES.forEach((plane, index) => {
+          const node = { ...plane, w: 330, h: 190 };
+          nodes += nodeHTML(
+            node,
+            `<div class="head"><div class="icon">${icon(plane.icon)}</div><div><h3>${esc(plane.name)}</h3><div class="tag">${esc(plane.tagline)}</div></div></div><div class="meta"><span class="chip acc">${plane.components.length} components</span><span class="chip">open plane</span></div><div class="enter">Inspect boundaries ${icon("play", 11)}</div>`,
+            index * 45,
+          );
+          clickRegistry[plane.id] = () => go({ type: "plane", id: plane.id });
+        });
+        return svgOpen(state.width, state.height, edges) + "</svg>" + nodes;
+      }
+      function buildPlane(id) {
+        const plane = PLANES.find((item) => item.id === id),
+          columns = Math.min(3, plane.components.length),
+          cardW = 390,
+          cardH = 180,
+          gapX = 34,
+          gapY = 32;
+        const gridWidth = columns * cardW + (columns - 1) * gapX,
+          rows = Math.ceil(plane.components.length / columns),
+          x0 = 70;
+        state.width = Math.max(gridWidth + 140, 1150);
+        state.height = 315 + rows * (cardH + gapY) + 70;
+        let nodes = nodeHTML(
+          { ...plane, id: "plane-head", x: x0, y: 35, w: gridWidth, h: 205 },
+          `<div class="head"><div class="icon" style="width:44px;height:44px">${icon(plane.icon, 23)}</div><div><h3 style="font-size:19px">${esc(plane.name)}</h3><div class="tag" style="font-size:12px">${esc(plane.detail)}</div></div></div><div class="meta"><span class="chip acc">${statusText(plane.status)}</span><span class="chip">${esc(plane.source)}</span></div>`,
+          0,
+          "headcard",
+        );
+        plane.components.forEach((component, index) => {
+          const id = `component-${index}`,
+            column = index % columns,
+            row = Math.floor(index / columns),
+            node = { ...component, id, x: x0 + column * (cardW + gapX), y: 285 + row * (cardH + gapY), w: cardW, h: cardH, color: plane.color, icon: plane.icon };
+          nodes += nodeHTML(
+            node,
+            `<div class="head"><div class="icon">${icon(plane.icon, 16)}</div><div><h3>${esc(component.name)}</h3></div></div><div class="tag" style="margin-top:10px">${esc(component.desc)}</div><div class="meta"><span class="chip acc">${component.rules.length} invariants</span><span class="chip">open details</span></div>`,
+            60 + index * 45,
+          );
+          registerDrawer({ ...node, detail: component.desc, source: plane.source }, `L2 · ${plane.name}`);
+        });
+        return svgOpen(state.width, state.height) + "</svg>" + nodes;
+      }
+      function buildJourneys() {
+        const entries = Object.entries(JOURNEYS),
+          columns = 3,
+          cardW = 420,
+          cardH = 190,
+          gapX = 40,
+          gapY = 36,
+          x0 = 75;
+        state.width = columns * cardW + (columns - 1) * gapX + 150;
+        state.height = 170 + Math.ceil(entries.length / columns) * (cardH + gapY) + 80;
+        let nodes = nodeHTML(
+          { id: "journey-head", x: x0, y: 30, w: state.width - 150, h: 92, color: COLORS.green, status: "context" },
+          `<div class="head"><div class="icon">${icon("route")}</div><div><h3 style="font-size:18px">Seven journeys define the architecture under load and failure</h3><div class="tag">Open a swimlane to follow authority, persistence, external effects, retries, and terminal outcomes. Each path links the same repository boundaries from a different operational angle.</div></div></div>`,
+          0,
+          "headcard",
+        );
+        entries.forEach(([id, journey], index) => {
+          const column = index % columns,
+            row = Math.floor(index / columns),
+            node = { ...journey, id, x: x0 + column * (cardW + gapX), y: 160 + row * (cardH + gapY), w: cardW, h: cardH };
+          nodes += nodeHTML(
+            node,
+            `<div class="head"><div class="icon">${icon(journey.icon)}</div><div><h3>${esc(journey.name)}</h3><div class="tag">${esc(journey.tagline)}</div></div></div><div class="meta"><span class="chip acc">${journey.actors.length} lanes</span><span class="chip">${journey.steps.length} steps</span></div><div class="enter">Follow journey ${icon("play", 11)}</div>`,
+            index * 50,
+          );
+          clickRegistry[id] = () => go({ type: "journey", id });
+        });
+        return svgOpen(state.width, state.height) + "</svg>" + nodes;
+      }
+      function buildJourney(id) {
+        const journey = JOURNEYS[id],
+          laneWidth = 330,
+          nodeW = 270,
+          nodeH = 94,
+          rowHeight = 142,
+          top = 170,
+          laneX = (index) => 50 + index * laneWidth + (laneWidth - nodeW) / 2;
+        const geometry = {};
+        let maxRow = 0;
+        journey.steps.forEach((step) => {
+          maxRow = Math.max(maxRow, step.row);
+          geometry[step.id] = { x: laneX(step.lane), y: top + step.row * rowHeight, w: nodeW, h: nodeH };
+        });
+        state.width = 100 + journey.actors.length * laneWidth;
+        state.height = top + (maxRow + 1) * rowHeight + 80;
+        let backgrounds = "";
+        journey.actors.forEach((actor, index) => {
+          backgrounds += `<rect class="lane-bg" x="${55 + index * laneWidth}" y="74" width="${laneWidth - 10}" height="${state.height - 130}" rx="15"/>`;
+        });
+        let edges = "";
+        journey.steps.forEach((step, index) => {
+          const next = step.next || journey.steps[index + 1]?.id;
+          if (next) edges += edgeSVG(geometry[step.id], geometry[next], { flow: true, hot: true });
+        });
+        let nodes = "";
+        journey.actors.forEach((actor, index) => {
+          nodes += `<div class="lane-head" style="left:${laneX(index)}px;top:92px;width:${nodeW}px">${esc(actor)}</div>`;
+        });
+        journey.steps.forEach((step, index) => {
+          const g = geometry[step.id],
+            node = { ...step, ...g, status: step.status || journey.status, color: journey.color, name: step.title, detail: step.sub, source: journey.source, rules: [`This step is owned by ${journey.actors[step.lane]}.`, `Its output is accepted only by the next explicit boundary in this journey.`] };
+          const kindLabel = step.kind === "start" ? "START" : step.kind === "end" ? "OUTCOME" : step.decision ? "DECISION" : step.state ? "DURABLE STATE" : "";
+          nodes += nodeHTML(node, `${kindLabel ? `<span class="kind">${kindLabel}</span>` : ""}<h3>${esc(step.title)}</h3><div class="tag">${esc(step.sub)}</div>`, index * 35, `step ${step.kind || ""} ${step.decision ? "decision" : ""} ${step.state ? "state" : ""}`);
+          registerDrawer(node, `JOURNEY · ${journey.name} · ${journey.actors[step.lane]}`);
+        });
+        return svgOpen(state.width, state.height, backgrounds + edges) + "</svg>" + nodes;
+      }
+      function buildRuntime() {
+        state.width = 1880;
+        state.height = 1180;
+        let backgrounds = "";
+        RUNTIME_ZONES.forEach((zone) => {
+          backgrounds += `<rect class="zone-bg" x="${zone.x}" y="${zone.y}" width="${zone.w}" height="${zone.h}" rx="16"/><text class="zone-label" x="${zone.x + 16}" y="${zone.y + 28}">${esc(zone.label)}</text>`;
+        });
+        const geometry = Object.fromEntries(RUNTIME_NODES.map((node) => [node.id, node]));
+        let edges = "";
+        RUNTIME_EDGES.forEach((edge) => {
+          edges += edgeSVG(geometry[edge.a], geometry[edge.b], edge);
+        });
+        let nodes = "";
+        RUNTIME_NODES.forEach((node, index) => {
+          nodes += standardNode(node, index * 28);
+          registerDrawer(node, "RUNTIME TOPOLOGY");
+        });
+        nodes += nodeHTML(
+          { id: "data-entry", x: 800, y: 650, w: 295, h: 125, color: COLORS.green, status: "built" },
+          `<div class="head"><div class="icon">${icon("db")}</div><div><h3>Postgres data model</h3><div class="tag">Seven durable domains and their release-blocking invariants</div></div></div><div class="enter">Open data atlas ${icon("play", 11)}</div>`,
+          120,
+        );
+        clickRegistry["data-entry"] = () => go({ type: "data" });
+        return svgOpen(state.width, state.height, backgrounds + edges) + "</svg>" + nodes;
+      }
+      function buildData() {
+        const columns = 3,
+          cardW = 390,
+          gapX = 48,
+          gapY = 52,
+          x0 = 80,
+          colY = [150, 150, 150],
+          geometry = {};
+        let nodes = "";
+        state.width = columns * cardW + (columns - 1) * gapX + 160;
+        nodes += nodeHTML(
+          { id: "data-head", x: x0, y: 30, w: state.width - 160, h: 88, color: COLORS.green, status: "context" },
+          `<div class="head"><div class="icon">${icon("db")}</div><div><h3 style="font-size:18px">Standard PostgreSQL is Chalk's durable authority</h3><div class="tag">This atlas groups the current migrations by invariant. It is descriptive, not a substitute for checked-in SQL.</div></div></div>`,
+          0,
+          "headcard",
+        );
+        DATA_GROUPS.forEach((group, index) => {
+          const column = index % columns,
+            height = 58 + group.tables.length * 18 + 26,
+            node = { ...group, x: x0 + column * (cardW + gapX), y: colY[column], w: cardW, h: height };
+          geometry[group.id] = node;
+          colY[column] += height + gapY;
+          nodes += nodeHTML(node, `<div class="schema-head">${esc(group.name)} · ${group.tables.length} tables</div><div class="schema-list">${group.tables.map((table) => `<div>${esc(table)}</div>`).join("")}</div>`, index * 45, "schema-card");
+          registerDrawer(group, "DATA DOMAIN");
+        });
+        state.height = Math.max(...colY) + 50;
+        let edges = "";
+        DATA_EDGES.forEach((edge) => {
+          edges += edgeSVG(geometry[edge.a], geometry[edge.b], { ...edge, dashed: true });
+        });
+        return svgOpen(state.width, state.height, edges) + "</svg>" + nodes;
+      }
+
+      function draw() {
+        clickRegistry = {};
+        let html;
+        if (state.view.type === "system") html = buildSystem();
+        else if (state.view.type === "planes") html = buildPlanes();
+        else if (state.view.type === "plane") html = buildPlane(state.view.id);
+        else if (state.view.type === "journeys") html = buildJourneys();
+        else if (state.view.type === "journey") html = buildJourney(state.view.id);
+        else if (state.view.type === "runtime") html = buildRuntime();
+        else html = buildData();
+        world.style.width = `${state.width}px`;
+        world.style.height = `${state.height}px`;
+        world.innerHTML = html;
+        world.querySelectorAll(".node[data-node]").forEach((node) => {
+          if (clickRegistry[node.dataset.node]) {
+            node.setAttribute("role", "button");
+            node.setAttribute("tabindex", "0");
+          }
+        });
+        closeDrawer();
+        renderChrome();
+        fit();
+      }
+      function crumbPath() {
+        const path = [{ label: "System", view: { type: "system" } }],
+          view = state.view;
+        if (view.type === "system") return path;
+        if (view.type === "planes" || view.type === "plane") {
+          path.push({ label: "Architecture planes", view: { type: "planes" } });
+          if (view.type === "plane") path.push({ label: PLANES.find((p) => p.id === view.id).name, view });
+          return path;
+        }
+        if (view.type === "journeys" || view.type === "journey") {
+          path.push({ label: "Journeys", view: { type: "journeys" } });
+          if (view.type === "journey") path.push({ label: JOURNEYS[view.id].name, view });
+          return path;
+        }
+        path.push({ label: "Runtime", view: { type: "runtime" } });
+        if (view.type === "data") path.push({ label: "Postgres data model", view });
+        return path;
+      }
+      function renderChrome() {
+        const path = crumbPath();
+        $("#crumbs").innerHTML = path.map((item, index) => `${index ? '<span class="sep">/</span>' : ""}<button class="crumb${index === path.length - 1 ? " here" : ""}" ${index === path.length - 1 ? 'aria-current="page"' : ""}>${esc(item.label)}</button>`).join("");
+        $("#crumbs")
+          .querySelectorAll(".crumb")
+          .forEach((button, index) => {
+            if (index < path.length - 1) button.addEventListener("click", () => go(path[index].view));
+          });
+        const labels = { system: "L0 · SYSTEM", planes: "L1 · PLANES", plane: "L2 · PLANE", journeys: "L1 · JOURNEYS", journey: "L2 · JOURNEY", runtime: "L1 · RUNTIME", data: "L2 · DATA" };
+        $("#level").textContent = labels[state.view.type];
+        const root = state.view.type === "plane" ? "planes" : state.view.type === "journey" ? "journeys" : state.view.type === "data" ? "runtime" : state.view.type;
+        $("#tabs")
+          .querySelectorAll("button")
+          .forEach((button) => button.classList.toggle("on", button.dataset.view === root));
+        $("#up-button").disabled = !parentView(state.view);
+        $("#hint").style.display = state.view.type === "system" ? "" : "none";
+      }
+      let drawerReturnFocus = null;
+      function openDrawer({ kicker, title, body }) {
+        const drawer = $("#drawer");
+        if (!drawer.classList.contains("open")) drawerReturnFocus = document.activeElement;
+        $("#drawer-kicker").textContent = kicker;
+        $("#drawer-title").textContent = title;
+        $("#drawer-body").innerHTML = body;
+        drawer.removeAttribute("inert");
+        drawer.setAttribute("aria-hidden", "false");
+        drawer.classList.add("open");
+        requestAnimationFrame(() => $("#drawer-close").focus());
+      }
+      function closeDrawer() {
+        const drawer = $("#drawer"),
+          wasOpen = drawer.classList.contains("open");
+        drawer.classList.remove("open");
+        drawer.setAttribute("aria-hidden", "true");
+        drawer.setAttribute("inert", "");
+        if (wasOpen && drawerReturnFocus?.isConnected) drawerReturnFocus.focus();
+        drawerReturnFocus = null;
+      }
+      function applyTransform() {
+        viewport.style.transform = `translate(${state.x}px,${state.y}px) scale(${state.scale})`;
+      }
+      function fit() {
+        const bounds = stage.getBoundingClientRect(),
+          padding = 72;
+        state.scale = Math.max(0.18, Math.min((bounds.width - padding) / state.width, (bounds.height - padding) / state.height, 1.05));
+        state.x = (bounds.width - state.width * state.scale) / 2;
+        state.y = (bounds.height - state.height * state.scale) / 2;
+        applyTransform();
+      }
+      function zoomAt(next, clientX, clientY) {
+        const bounds = stage.getBoundingClientRect(),
+          px = clientX - bounds.left,
+          py = clientY - bounds.top,
+          old = state.scale;
+        state.scale = Math.max(0.18, Math.min(2.5, next));
+        state.x = px - (px - state.x) * (state.scale / old);
+        state.y = py - (py - state.y) * (state.scale / old);
+        applyTransform();
+      }
+      function zoomBy(direction) {
+        const bounds = stage.getBoundingClientRect();
+        zoomAt(state.scale * (direction > 0 ? 1.18 : 0.84), bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+      }
+
+      let drag = null;
+      stage.addEventListener("pointerdown", (event) => {
+        if (event.target.closest(".node,button,input,#drawer")) return;
+        drag = { id: event.pointerId, x: event.clientX, y: event.clientY, originX: state.x, originY: state.y };
+        stage.setPointerCapture(event.pointerId);
+        stage.classList.add("dragging");
+      });
+      stage.addEventListener("pointermove", (event) => {
+        if (!drag || event.pointerId !== drag.id) return;
+        state.x = drag.originX + event.clientX - drag.x;
+        state.y = drag.originY + event.clientY - drag.y;
+        applyTransform();
+      });
+      stage.addEventListener("pointerup", (event) => {
+        if (drag && event.pointerId === drag.id) {
+          drag = null;
+          stage.classList.remove("dragging");
+        }
+      });
+      stage.addEventListener("pointercancel", () => {
+        drag = null;
+        stage.classList.remove("dragging");
+      });
+      stage.addEventListener(
+        "wheel",
+        (event) => {
+          event.preventDefault();
+          zoomAt(state.scale * (event.deltaY < 0 ? 1.12 : 0.89), event.clientX, event.clientY);
+        },
+        { passive: false },
+      );
+      world.addEventListener("click", (event) => {
+        const node = event.target.closest("[data-node]");
+        if (node) clickRegistry[node.dataset.node]?.();
+      });
+      world.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const node = event.target.closest("[data-node]");
+        if (!node || !clickRegistry[node.dataset.node]) return;
+        event.preventDefault();
+        clickRegistry[node.dataset.node]();
+      });
+
+      $("#tabs")
+        .querySelectorAll("button")
+        .forEach((button) => button.addEventListener("click", () => go({ type: button.dataset.view })));
+      $("#brand").addEventListener("click", () => go({ type: "system" }));
+      $("#drawer-close").addEventListener("click", closeDrawer);
+      $("#zoom-in").addEventListener("click", () => zoomBy(1));
+      $("#zoom-out").addEventListener("click", () => zoomBy(-1));
+      $("#zoom-fit").addEventListener("click", fit);
+      $("#up-button").addEventListener("click", () => {
+        const parent = parentView(state.view);
+        if (parent) go(parent);
+      });
+      $("#tilt-button").addEventListener("click", () => {
+        stage.classList.toggle("tilted");
+        $("#tilt-button").classList.toggle("on", stage.classList.contains("tilted"));
+      });
+      function toggleTheme() {
+        document.documentElement.classList.toggle("dark");
+        localStorage.setItem("chalk-atlas-theme", document.documentElement.classList.contains("dark") ? "dark" : "light");
+      }
+      if (localStorage.getItem("chalk-atlas-theme") === "dark") document.documentElement.classList.add("dark");
+      $("#theme-button").prepend(document.createTextNode("◐ "));
+      $("#theme-button").addEventListener("click", toggleTheme);
+
+      const searchIndex = [
+        ...PLANES.map((plane) => ({ label: plane.name, sub: plane.tagline, type: "PLANE", view: { type: "plane", id: plane.id } })),
+        ...PLANES.flatMap((plane) => plane.components.map((component, index) => ({ label: component.name, sub: `${plane.name} · ${component.desc}`, type: "COMPONENT", view: { type: "plane", id: plane.id }, open: `component-${index}` }))),
+        ...Object.entries(JOURNEYS).map(([id, journey]) => ({ label: journey.name, sub: journey.tagline, type: "JOURNEY", view: { type: "journey", id } })),
+        ...RUNTIME_NODES.map((node) => ({ label: node.name, sub: node.tagline, type: "RUNTIME", view: { type: "runtime" }, open: node.id })),
+        ...DATA_GROUPS.map((group) => ({ label: group.name, sub: group.tables.join(" · "), type: "DATA", view: { type: "data" }, open: group.id })),
+        ...DATA_GROUPS.flatMap((group) => group.tables.map((table) => ({ label: table, sub: group.name, type: "TABLE", view: { type: "data" }, open: group.id }))),
+      ];
+      let selectedResult = 0,
+        currentResults = [],
+        searchReturnFocus = null;
+      function showSearch() {
+        const search = $("#search");
+        if (!search.classList.contains("open")) searchReturnFocus = document.activeElement;
+        search.setAttribute("aria-hidden", "false");
+        search.classList.add("open");
+        $("#search-input").value = "";
+        selectedResult = 0;
+        renderSearch();
+        requestAnimationFrame(() => $("#search-input").focus());
+      }
+      function hideSearch() {
+        const search = $("#search"),
+          wasOpen = search.classList.contains("open");
+        search.classList.remove("open");
+        search.setAttribute("aria-hidden", "true");
+        if (wasOpen && searchReturnFocus?.isConnected) searchReturnFocus.focus();
+        searchReturnFocus = null;
+      }
+      function searchScore(item, query) {
+        const label = item.label.toLowerCase(),
+          type = item.type.toLowerCase(),
+          sub = item.sub.toLowerCase();
+        if (label === query) return 0;
+        if (label.startsWith(query)) return 1;
+        if (label.includes(query)) return 2;
+        if (type.includes(query)) return 3;
+        if (sub.includes(query)) return 4;
+        return 99;
+      }
+      function renderSearch() {
+        const query = $("#search-input").value.trim().toLowerCase();
+        currentResults = searchIndex
+          .filter((item) => !query || searchScore(item, query) < 99)
+          .map((item, index) => ({ item, index, score: query ? searchScore(item, query) : 0 }))
+          .sort((a, b) => a.score - b.score || a.index - b.index)
+          .slice(0, 14)
+          .map((result) => result.item);
+        selectedResult = Math.min(selectedResult, Math.max(0, currentResults.length - 1));
+        $("#search-results").innerHTML = currentResults.length
+          ? currentResults
+              .map(
+                (item, index) =>
+                  `<div class="result${index === selectedResult ? " selected" : ""}" data-result="${index}">${icon("search", 14)}<div><div class="result-title">${esc(item.label)}</div><div class="result-sub">${esc(item.sub)}</div></div><span class="result-type">${item.type}</span></div>`,
+              )
+              .join("")
+          : '<div class="result"><div class="result-sub">No architecture matches.</div></div>';
+        $("#search-results")
+          .querySelectorAll("[data-result]")
+          .forEach((element) => element.addEventListener("click", () => chooseResult(currentResults[Number(element.dataset.result)])));
+      }
+      function chooseResult(item) {
+        if (!item) return;
+        hideSearch();
+        go(item.view, item.open);
+      }
+      $("#search-button").addEventListener("click", showSearch);
+      $("#search-input").addEventListener("input", () => {
+        selectedResult = 0;
+        renderSearch();
+      });
+      $("#search-input").addEventListener("keydown", (event) => {
+        if ((event.key === "ArrowDown" || event.key === "ArrowUp") && currentResults.length) {
+          event.preventDefault();
+          selectedResult = (selectedResult + (event.key === "ArrowDown" ? 1 : -1) + currentResults.length) % currentResults.length;
+          renderSearch();
+        }
+        if (event.key === "Enter") chooseResult(currentResults[selectedResult]);
+      });
+      $("#search").addEventListener("click", (event) => {
+        if (event.target === $("#search")) hideSearch();
+      });
+      $("#search").addEventListener("keydown", (event) => {
+        if (event.key !== "Tab") return;
+        event.preventDefault();
+        $("#search-input").focus();
+      });
+      document.addEventListener("keydown", (event) => {
+        const editing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+          event.preventDefault();
+          showSearch();
+          return;
+        }
+        if (event.key === "Escape") {
+          if ($("#search").classList.contains("open")) hideSearch();
+          else if ($("#drawer").classList.contains("open")) closeDrawer();
+          else {
+            const parent = parentView(state.view);
+            if (parent) go(parent);
+          }
+          return;
+        }
+        if (editing) return;
+        if (event.key.toLowerCase() === "f") fit();
+        if (event.key.toLowerCase() === "t") $("#tilt-button").click();
+        if (event.key.toLowerCase() === "d") toggleTheme();
+        if (event.key === "+" || event.key === "=") zoomBy(1);
+        if (event.key === "-") zoomBy(-1);
+      });
+      window.addEventListener("resize", fit);
+      draw();
+    </script>
+  </body>
+</html>

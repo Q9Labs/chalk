@@ -14,6 +14,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Interactive system architecture atlas with drillable product planes,
+  end-to-end journey swimlanes, runtime topology, Postgres data domains,
+  implementation-status semantics, global search, and accessible keyboard
+  navigation.
 - Recorder pipeline foundation with bounded reservation admission, PostgreSQL
   leased jobs and fencing, mTLS worker identity, encrypted capture bundles,
   deterministic 720p render fixtures, generated API/SDK contracts, public-safe
