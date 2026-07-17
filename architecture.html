@@ -658,6 +658,57 @@
         border-radius: 50%;
         background: var(--accent);
       }
+      .gap-panel {
+        margin: 16px 0 4px;
+        padding: 13px;
+        border: 1px solid color-mix(in srgb, var(--yellow) 52%, var(--line));
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--yellow) 11%, var(--surface));
+      }
+      #drawer-body .gap-panel h4 {
+        margin: 0 0 9px;
+        color: color-mix(in srgb, var(--yellow) 72%, var(--ink));
+      }
+      .gap-panel .rules li {
+        background: color-mix(in srgb, var(--yellow) 8%, var(--surface));
+      }
+      .gap-panel .rules li::before {
+        background: var(--yellow);
+      }
+      .drawer-action {
+        width: 100%;
+        margin-top: 16px;
+        padding: 10px 13px;
+        border: 1px solid var(--accent);
+        border-radius: 10px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 11.5px;
+        font-weight: 750;
+        cursor: pointer;
+      }
+      .drawer-action:hover {
+        background: var(--accent-strong);
+      }
+      .node.journey-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 10px 14px;
+      }
+      .node.journey-summary .head {
+        min-width: 0;
+      }
+      .node.journey-summary .tag {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .node.journey-summary .enter {
+        flex: 0 0 auto;
+        margin-top: 0;
+      }
       .source {
         display: inline-flex;
         align-items: center;
@@ -1024,6 +1075,45 @@
       const statusText = (status) => STATUS_LABEL[status] || STATUS_LABEL.built;
       const sourceTag = (source) => `<span class="source">${icon("code", 11)} ${esc(source)}</span>`;
       const rulesList = (items) => `<ul class="rules">${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`;
+
+      const PARTIAL_GAPS = {
+        "Experience surfaces": ["The hosted web app is still a local proof surface, not the complete first-party meeting product.", "Cross-platform release proof for every hosted web and native meeting flow is still outstanding."],
+        "Web app": ["The current room route proves a real localhost API, Sync, and Cloudflare call, but the full hosted meeting UX is not complete.", "A production deployment and end-to-end release proof remain outstanding."],
+        Integrations: ["The API catalog, connection lifecycle, action policy, and audit path exist, but there is no complete first-party integration UI.", "A managed Composio connection and action flow has not yet been proven end to end in a release environment."],
+        "Media plane": ["The Cloudflare SFU adapter is implemented; native RealtimeKit parity and its observability contract remain incomplete.", "Production provider-account, usage, and egress visibility still requires deployment proof."],
+        "RealtimeKit path": ["The uncommon React Native provider path has not completed the same end-to-end release proof as the direct Cloudflare SFU path.", "Opaque SDK background work remains an explicit observability blind spot."],
+        Collaboration: ["A complete durable chat stream, retention path, and delivery contract are not implemented.", "Live captions and their in-room consent/privacy lifecycle are not yet complete."],
+        "Chat & reactions": ["Presentation surfaces exist, but the durable server-owned chat stream and delivery acknowledgements are not complete.", "Tenant-configurable retention still needs an owned persistence and cleanup path."],
+        "Transcripts in-room": ["Post-meeting transcript artifacts exist, but a live caption source and in-room lifecycle are not complete.", "Consent, privacy state, and failure behavior still need end-to-end product proof."],
+        "Recording & artifacts": ["The control and infrastructure contracts exist, but real recorder pools have not completed staging qualification and failure-to-recovery proof.", "Production R2/KMS adoption and a real capture-to-render artifact proof remain outstanding."],
+        "Recorder admission & reconciliation": ["The external reconciler still needs a real staging deployment with qualified nodes.", "Capacity exhaustion, replacement, fencing, and recovery must be observed against actual provider inventory."],
+        "Capture pool": ["The SGP1 pool contract is defined, but the release image and bootstrap path are not qualified under the documented meeting, participant, and bitrate limits.", "Node loss and replacement have not been proven in staging."],
+        "Render pool": ["The TOR1 GPU pool contract and scaler policy exist, but a real deadline-aware render and recovery run is not yet proven.", "The worker image and zero-to-ready path still require staging qualification."],
+        "AWS KMS envelope boundary": ["The key policy and encryption-context contract exist, but production key adoption and control-plane data-key use are not yet proven end to end.", "Rotation and rejected-context behavior still require live staging evidence."],
+        "Operations & trust": ["The local observability stack is proven, but managed telemetry backends, notification routing, and retention are deployment work.", "Every user-visible service still needs a live synthetic failure-to-recovery proof before the plane is complete."],
+        "Uptime & public status": ["The registry and public-safe projection exist, but real deployment targets and notification recipients are not configured in this public tree.", "A live dependency failure and subsequent recovery have not yet been observed end to end."],
+        "Audit & erasure": ["An external durable deletion-tombstone reconciler is still required.", "Backup restoration is not complete until tombstones are replayed and that recovery path is proven."],
+        "Hosted surfaces": ["The hosted web route remains a local real-call proof rather than the complete meeting product.", "Release verification across the supported standalone platforms is still outstanding."],
+        "Chalk platform": ["Hosted web, durable chat/live captions, recorder staging qualification, and managed operations retain incomplete work.", "The platform remains partial until every partial plane has its release and failure-recovery proof."],
+        "Elastic artifact compute": ["The DigitalOcean recorder reconciler and real capture/render pools are not yet qualified in staging.", "The complete recording-to-transcription chain still needs a managed release proof."],
+        "Managed recording": ["The durable intent, job, fencing, and artifact contracts are implemented, but a real staging capture-to-render journey is not yet proven.", "Capacity failure, worker loss, retry, and recovery still require live evidence."],
+        "Issue contextual data key": ["The context-bound KMS contract exists, but a real recorder job has not yet proven data-key issue and use in staging.", "Rejected encryption contexts and key rotation still need live failure-path evidence."],
+        "Capture sequenced bundles": ["The capture contract exists, but the SGP1 worker image and bootstrap path are not yet qualified against real provider inventory.", "Bundle continuity through worker loss, replacement, and retry still needs staging proof."],
+        "Claim and render artifact": ["The render contract exists, but the TOR1 GPU image and zero-to-ready path are not yet qualified in staging.", "Deadline, worker-loss, retry, and compare-and-set recovery still need a real render proof."],
+        "Recording becomes available": ["No staging journey has yet produced and verified a downloadable final artifact through the complete managed pipeline.", "The capacity-failure and worker-recovery paths must reach a correct terminal participant-visible state."],
+        "Post-meeting transcription": ["The API and Lambda dispatcher are implemented, but the full path from a real managed recording through the AI provider to a final artifact is not yet proven in staging.", "Provider failure, chunk retry, and cleanup recovery still require live evidence."],
+        "Verify committed recorder source": ["A real managed recording has not yet been accepted as a transcription source in staging.", "Invalid manifests and incomplete recorder artifacts still need live rejection-path evidence."],
+        "Invoke one pinned provider": ["The provider boundary is implemented, but a real staging source has not completed the pinned-provider path.", "Provider timeout, rejection, and retry behavior still need end-to-end evidence."],
+        "Finalize and clean temporary objects": ["A real staging transcript has not yet reached deterministic finalization through the complete recording-to-provider path.", "Temporary-object cleanup and independently verified recovery after partial failure remain unproven."],
+        "End-to-end observability": ["Local correlated telemetry and the durable journey ledger are proven; managed backends and independently tested human notification are not configured here.", "Provider blind spots and live deployed failure-to-recovery checks remain incomplete."],
+        "Hosted web edge": ["The current hosted room is a localhost proof surface; the complete production meeting experience and deployment verification are not finished."],
+        "Cloudflare media + R2": ["Adapters and infrastructure boundaries exist, but production account configuration, private R2 adoption, and provider usage visibility remain deployment proofs.", "Cloudflare-owned internals remain intentionally unobservable."],
+        "DigitalOcean recorder pools": ["Policy-only OpenTofu is present; the external reconciler still must create and qualify real capture/render nodes.", "Scale-up, fencing, replacement, and scale-to-zero recovery have not been proven in staging."],
+        "AWS KMS + SSM": ["Infrastructure contracts exist, but real workload secret injection and context-bound data-key use are not yet proven in staging.", "Production adoption remains fail-closed until those proofs exist."],
+        "Uptime worker + status": ["The worker and status projection are implemented, but deployment-specific targets and recipients remain private configuration.", "The real failure-to-recovery path has not yet been verified against a live service."],
+        "OpenTofu + CI quality gates": ["The canonical gate is currently red on the repository's known OSV dependency backlog.", "Production deployment and infrastructure verification remain intentionally outside public CI."],
+      };
+      const partialGaps = (node) => (node.status === "partial" ? PARTIAL_GAPS[node.name] || [] : []);
 
       const PLANES = [
         {
@@ -1485,11 +1575,11 @@
             { id: "r-reserve", lane: 0, row: 1, state: true, title: "Reserve external operation", sub: "Same Session control lock" },
             { id: "r-admit", lane: 1, row: 2, decision: true, title: "Check public-safe admission", sub: "Capacity, health, qualification" },
             { id: "r-pipeline", lane: 1, row: 3, state: true, title: "Create fenced pipeline jobs", sub: "Generation and deadline" },
-            { id: "r-key", lane: 4, row: 4, title: "Issue contextual data key", sub: "Control-plane role only" },
-            { id: "r-capture", lane: 2, row: 5, title: "Capture sequenced bundles", sub: "Private, encrypted, 24h temporary R2" },
-            { id: "r-render", lane: 3, row: 6, title: "Claim and render artifact", sub: "Deadline-aware GPU worker" },
+            { id: "r-key", lane: 4, row: 4, status: "partial", title: "Issue contextual data key", sub: "Control-plane role only" },
+            { id: "r-capture", lane: 2, row: 5, status: "partial", title: "Capture sequenced bundles", sub: "Private, encrypted, 24h temporary R2" },
+            { id: "r-render", lane: 3, row: 6, status: "partial", title: "Claim and render artifact", sub: "Deadline-aware GPU worker" },
             { id: "r-verify", lane: 1, row: 7, title: "Verify object + finalize", sub: "Compare-and-set completion" },
-            { id: "r-ready", lane: 0, row: 8, kind: "end", title: "Recording becomes available", sub: "Short-lived download authority" },
+            { id: "r-ready", lane: 0, row: 8, kind: "end", status: "partial", title: "Recording becomes available", sub: "Short-lived download authority" },
           ],
         },
         transcription: {
@@ -1502,15 +1592,15 @@
           actors: ["Client", "Control API", "Lambda dispatcher", "AI provider", "Private R2"],
           steps: [
             { id: "t-request", lane: 0, row: 0, kind: "start", title: "Request transcript", sub: "No provider or object-key controls" },
-            { id: "t-source", lane: 1, row: 1, decision: true, title: "Verify committed recorder source", sub: "Manifest and audio facts" },
+            { id: "t-source", lane: 1, row: 1, decision: true, status: "partial", title: "Verify committed recorder source", sub: "Manifest and audio facts" },
             { id: "t-queue", lane: 1, row: 2, state: true, title: "Create fenced chunk jobs", sub: "Priority and retry owned by API" },
             { id: "t-claim", lane: 2, row: 3, title: "Claim + heartbeat", sub: "HMAC workload identity" },
             { id: "t-read", lane: 4, row: 4, title: "Read job-scoped source URLs", sub: "Checksum, size, content type" },
-            { id: "t-provider", lane: 3, row: 5, title: "Invoke one pinned provider", sub: "Policy and privacy gates" },
+            { id: "t-provider", lane: 3, row: 5, status: "partial", title: "Invoke one pinned provider", sub: "Policy and privacy gates" },
             { id: "t-write", lane: 4, row: 6, title: "Conditional normalized chunk PUT", sub: "transcript.v1 JSON" },
             { id: "t-complete", lane: 1, row: 7, title: "Verify + compare-and-set", sub: "Late fences return 409" },
             { id: "t-finalize", lane: 2, row: 8, title: "Compose deterministic final", sub: "Overlaps retained; languages sorted" },
-            { id: "t-clean", lane: 2, row: 9, kind: "end", title: "Finalize and clean temporary objects", sub: "Absence independently HEAD-verified" },
+            { id: "t-clean", lane: 2, row: 9, kind: "end", status: "partial", title: "Finalize and clean temporary objects", sub: "Absence independently HEAD-verified" },
           ],
         },
         webhook: {
@@ -1953,9 +2043,15 @@
         return { type: "system" };
       }
       function go(view, openId) {
+        const navigatingFromDrawer = $("#drawer").classList.contains("open");
         state.view = view;
         draw();
         if (openId) requestAnimationFrame(() => clickRegistry[openId]?.());
+        else if (navigatingFromDrawer)
+          requestAnimationFrame(() => {
+            const destination = world.querySelector('.node[tabindex="0"]') || $("#crumbs .here");
+            destination?.focus();
+          });
       }
       function nodeHTML(node, html, delay = 0, classes = "") {
         const status = node.status || "built";
@@ -1966,9 +2062,16 @@
         const chips = (node.chips || []).map((chip, index) => `<span class="chip${index === 0 ? " acc" : ""}">${esc(chip)}</span>`).join("");
         return nodeHTML(node, `<div class="head"><div class="icon">${icon(node.icon)}</div><div><h3>${esc(node.name)}</h3><div class="tag">${esc(node.tagline)}</div></div></div>${chips ? `<div class="meta">${chips}</div>` : ""}`, delay, classes);
       }
-      function registerDrawer(node, kicker) {
+      function registerDrawer(node, kicker, action) {
+        const gaps = partialGaps(node),
+          gapPanel = gaps.length ? `<section class="gap-panel"><h4>NOT DONE YET</h4>${rulesList(gaps)}</section>` : "";
         clickRegistry[node.id] = () =>
-          openDrawer({ kicker: `${kicker} · ${statusText(node.status || "built")}`, title: node.name, body: `<p>${esc(node.detail || node.tagline || "")}</p>${node.rules?.length ? `<h4>BOUNDARIES &amp; INVARIANTS</h4>${rulesList(node.rules)}` : ""}${node.source ? sourceTag(node.source) : ""}` });
+          openDrawer({
+            kicker: `${kicker} · ${statusText(node.status || "built")}`,
+            title: node.name,
+            body: `<p>${esc(node.detail || node.tagline || "")}</p>${gapPanel}${node.rules?.length ? `<h4>BOUNDARIES &amp; INVARIANTS</h4>${rulesList(node.rules)}` : ""}${node.source ? sourceTag(node.source) : ""}`,
+            action,
+          });
       }
       function anchors(a, b, offset = 0) {
         const acx = a.x + a.w / 2,
@@ -2005,9 +2108,8 @@
         let nodes = "";
         SYSTEM_NODES.forEach((node, index) => {
           nodes += standardNode(node, index * 55, node.id === "core" ? "core" : "");
-          registerDrawer(node, "L0 · SYSTEM CONTEXT");
+          registerDrawer(node, "L0 · SYSTEM CONTEXT", node.id === "core" ? { label: "Explore platform planes", run: () => go({ type: "planes" }) } : null);
         });
-        clickRegistry.core = () => go({ type: "planes" });
         return svgOpen(state.width, state.height, edges) + "</svg>" + nodes;
       }
       function buildPlanes() {
@@ -2041,7 +2143,8 @@
             `<div class="head"><div class="icon">${icon(plane.icon)}</div><div><h3>${esc(plane.name)}</h3><div class="tag">${esc(plane.tagline)}</div></div></div><div class="meta"><span class="chip acc">${plane.components.length} components</span><span class="chip">open plane</span></div><div class="enter">Inspect boundaries ${icon("play", 11)}</div>`,
             index * 45,
           );
-          clickRegistry[plane.id] = () => go({ type: "plane", id: plane.id });
+          if (plane.status === "partial") registerDrawer(node, "L1 · ARCHITECTURE PLANE", { label: "Open this plane", run: () => go({ type: "plane", id: plane.id }) });
+          else clickRegistry[plane.id] = () => go({ type: "plane", id: plane.id });
         });
         return svgOpen(state.width, state.height, edges) + "</svg>" + nodes;
       }
@@ -2057,12 +2160,14 @@
           x0 = 70;
         state.width = Math.max(gridWidth + 140, 1150);
         state.height = 315 + rows * (cardH + gapY) + 70;
+        const planeHead = { ...plane, id: "plane-head", x: x0, y: 35, w: gridWidth, h: 205 };
         let nodes = nodeHTML(
-          { ...plane, id: "plane-head", x: x0, y: 35, w: gridWidth, h: 205 },
-          `<div class="head"><div class="icon" style="width:44px;height:44px">${icon(plane.icon, 23)}</div><div><h3 style="font-size:19px">${esc(plane.name)}</h3><div class="tag" style="font-size:12px">${esc(plane.detail)}</div></div></div><div class="meta"><span class="chip acc">${statusText(plane.status)}</span><span class="chip">${esc(plane.source)}</span></div>`,
+          planeHead,
+          `<div class="head"><div class="icon" style="width:44px;height:44px">${icon(plane.icon, 23)}</div><div><h3 style="font-size:19px">${esc(plane.name)}</h3><div class="tag" style="font-size:12px">${esc(plane.detail)}</div></div></div><div class="meta"><span class="chip acc">${statusText(plane.status)}</span><span class="chip">${esc(plane.source)}</span>${plane.status === "partial" ? '<span class="chip warn">open status gaps</span>' : ""}</div>`,
           0,
           "headcard",
         );
+        registerDrawer(planeHead, `L2 · ${plane.name}`);
         plane.components.forEach((component, index) => {
           const id = `component-${index}`,
             column = index % columns,
@@ -2102,7 +2207,8 @@
             `<div class="head"><div class="icon">${icon(journey.icon)}</div><div><h3>${esc(journey.name)}</h3><div class="tag">${esc(journey.tagline)}</div></div></div><div class="meta"><span class="chip acc">${journey.actors.length} lanes</span><span class="chip">${journey.steps.length} steps</span></div><div class="enter">Follow journey ${icon("play", 11)}</div>`,
             index * 50,
           );
-          clickRegistry[id] = () => go({ type: "journey", id });
+          if (journey.status === "partial") registerDrawer(node, "L1 · ARCHITECTURE JOURNEY", { label: "Follow this journey", run: () => go({ type: "journey", id }) });
+          else clickRegistry[id] = () => go({ type: "journey", id });
         });
         return svgOpen(state.width, state.height) + "</svg>" + nodes;
       }
@@ -2131,13 +2237,24 @@
           const next = step.next || journey.steps[index + 1]?.id;
           if (next) edges += edgeSVG(geometry[step.id], geometry[next], { flow: true, hot: true });
         });
-        let nodes = "";
+        const summaryNode = {
+          ...journey,
+          id: "journey-summary",
+          x: 55,
+          y: 10,
+          w: state.width - 110,
+          h: 70,
+          detail: journey.tagline,
+          rules: ["Every lane boundary names the owner of the next accepted state.", "Partial status describes missing release proof or capability, not an ambiguous percentage."],
+        };
+        let nodes = nodeHTML(summaryNode, `<div class="head"><div class="icon">${icon(journey.icon, 16)}</div><div><h3>${esc(journey.name)}</h3><div class="tag">${esc(journey.tagline)}</div></div></div><div class="enter">Open journey status ${icon("play", 11)}</div>`, 0, "journey-summary");
+        registerDrawer(summaryNode, `JOURNEY · ${journey.name}`);
         journey.actors.forEach((actor, index) => {
           nodes += `<div class="lane-head" style="left:${laneX(index)}px;top:92px;width:${nodeW}px">${esc(actor)}</div>`;
         });
         journey.steps.forEach((step, index) => {
           const g = geometry[step.id],
-            node = { ...step, ...g, status: step.status || journey.status, color: journey.color, name: step.title, detail: step.sub, source: journey.source, rules: [`This step is owned by ${journey.actors[step.lane]}.`, `Its output is accepted only by the next explicit boundary in this journey.`] };
+            node = { ...step, ...g, status: step.status || "built", color: journey.color, name: step.title, detail: step.sub, source: journey.source, rules: [`This step is owned by ${journey.actors[step.lane]}.`, `Its output is accepted only by the next explicit boundary in this journey.`] };
           const kindLabel = step.kind === "start" ? "START" : step.kind === "end" ? "OUTCOME" : step.decision ? "DECISION" : step.state ? "DURABLE STATE" : "";
           nodes += nodeHTML(node, `${kindLabel ? `<span class="kind">${kindLabel}</span>` : ""}<h3>${esc(step.title)}</h3><div class="tag">${esc(step.sub)}</div>`, index * 35, `step ${step.kind || ""} ${step.decision ? "decision" : ""} ${step.state ? "state" : ""}`);
           registerDrawer(node, `JOURNEY · ${journey.name} · ${journey.actors[step.lane]}`);
@@ -2261,12 +2378,13 @@
         $("#hint").style.display = state.view.type === "system" ? "" : "none";
       }
       let drawerReturnFocus = null;
-      function openDrawer({ kicker, title, body }) {
+      function openDrawer({ kicker, title, body, action }) {
         const drawer = $("#drawer");
         if (!drawer.classList.contains("open")) drawerReturnFocus = document.activeElement;
         $("#drawer-kicker").textContent = kicker;
         $("#drawer-title").textContent = title;
-        $("#drawer-body").innerHTML = body;
+        $("#drawer-body").innerHTML = `${body}${action ? `<button class="drawer-action" type="button">${esc(action.label)}</button>` : ""}`;
+        if (action) $("#drawer-body .drawer-action").addEventListener("click", action.run);
         drawer.removeAttribute("inert");
         drawer.setAttribute("aria-hidden", "false");
         drawer.classList.add("open");
@@ -2485,6 +2603,11 @@
         if (event.key === "-") zoomBy(-1);
       });
       window.addEventListener("resize", fit);
+      const partialEntities = [...PLANES, ...PLANES.flatMap((plane) => plane.components), ...SYSTEM_NODES, ...Object.values(JOURNEYS), ...Object.values(JOURNEYS).flatMap((journey) => journey.steps.map((step) => ({ ...step, name: step.title }))), ...RUNTIME_NODES].filter(
+          (item) => item.status === "partial",
+        ),
+        missingPartialGaps = partialEntities.filter((item) => !partialGaps(item).length);
+      if (missingPartialGaps.length) throw new Error(`Partial architecture items need explicit gaps: ${missingPartialGaps.map((item) => item.name).join(", ")}`);
       draw();
     </script>
   </body>

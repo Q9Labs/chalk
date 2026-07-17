@@ -60,6 +60,14 @@ status, and ingest endpoint against the current application router after route
 or architecture resets. Exercise the complete probe-to-ingest-to-alert loop;
 unit tests against mocked legacy endpoints do not prove active monitoring.
 
+## Partial Status Needs A Completion Boundary
+
+A partial badge without an explicit completion boundary makes readers infer the
+missing work and quickly becomes misleading. Keep the unfinished capability or
+proof next to the status interaction, distinguish missing implementation from
+missing deployment verification, and fail local validation when a partial item
+has no public-safe gap definition.
+
 ## Provider Visibility Ceilings
 
 End-to-end observability cannot turn provider-owned internals into observed
