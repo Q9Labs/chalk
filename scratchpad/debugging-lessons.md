@@ -68,6 +68,14 @@ proof next to the status interaction, distinguish missing implementation from
 missing deployment verification, and fail local validation when a partial item
 has no public-safe gap definition.
 
+## Protected Services Should Monitor Their Denial Boundary
+
+A private service does not need a public health bypass. Its anonymous synthetic
+can expect the authentication denial status plus stable security and build
+headers, proving that the deployment is reachable and still protected without
+disclosing credentials or authenticated content. Treat a bare denial response
+without the expected boundary headers as a failed check.
+
 ## Provider Visibility Ceilings
 
 End-to-end observability cannot turn provider-owned internals into observed

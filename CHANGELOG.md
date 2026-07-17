@@ -18,6 +18,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   end-to-end journey swimlanes, runtime topology, Postgres data domains,
   implementation-status semantics with explicit completion gaps for partial
   work, global search, and accessible keyboard navigation.
+- Standalone protected architecture Worker deployment with content-hashed local
+  assets, encrypted-secret access-code verification, signed secure sessions,
+  native login rate limiting, anonymous-boundary monitoring, and one-command
+  deployment integrity verification.
 - Recorder pipeline foundation with bounded reservation admission, PostgreSQL
   leased jobs and fencing, mTLS worker identity, encrypted capture bundles,
   deterministic 720p render fixtures, generated API/SDK contracts, public-safe

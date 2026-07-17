@@ -8,6 +8,10 @@ crons = ["*/5 * * * *"]
 [vars]
 API_BASE_URL = "https://chalk-api.q9labs.ai"
 
+# Optional private deployment configuration:
+# - ATLAS_BASE_URL adds an anonymous access-boundary synthetic for the protected
+#   architecture Worker. Configure it at deploy time; do not commit the live URL.
+
 # Required secrets:
 # - OPS_INGEST_TOKEN
 # - OPS_MANUAL_RUN_TOKEN

@@ -23,6 +23,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.production.local
 .env.local
 .private/
+infrastructure/architecture-worker/.generated/
+infrastructure/architecture-worker/.wrangler/
 .codex/
 scratchpad/private/
 scratchpad/raw/

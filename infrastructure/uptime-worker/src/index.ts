@@ -7,6 +7,7 @@ type MonitorDefinition = {
   method: "GET" | "HEAD";
   severity: MonitorSeverity;
   expectedStatusCodes: readonly number[];
+  requiredResponseHeaders?: readonly string[];
 };
 
 type MonitorCheckResult = {
@@ -127,6 +128,7 @@ type RuntimeConfig = {
 export interface Env {
   API_BASE_URL?: string;
   CHALK_OPS_API_BASE_URL?: string;
+  ATLAS_BASE_URL?: string;
   OPS_INGEST_TOKEN?: string;
   CHALK_OPS_INGEST_TOKEN?: string;
   CHECK_TIMEOUT_MS?: string;
@@ -181,6 +183,26 @@ const DEFAULT_MONITORS: readonly MonitorDefinition[] = [
     expectedStatusCodes: [200],
   },
 ];
+
+function monitorDefinitions(env: Env): readonly MonitorDefinition[] {
+  if (!env.ATLAS_BASE_URL) return DEFAULT_MONITORS;
+  const atlasURL = new URL(env.ATLAS_BASE_URL);
+  if (atlasURL.protocol !== "https:") throw new Error("ATLAS_BASE_URL must use https");
+  atlasURL.pathname = "/";
+  atlasURL.search = "";
+  atlasURL.hash = "";
+  return [
+    ...DEFAULT_MONITORS,
+    {
+      key: "architecture.access_boundary",
+      method: "GET",
+      url: atlasURL.href,
+      severity: "major",
+      expectedStatusCodes: [401],
+      requiredResponseHeaders: ["www-authenticate", "x-chalk-atlas-build"],
+    },
+  ];
+}
 
 const DEFAULT_CHECK_TIMEOUT_MS = 4_000;
 const DEFAULT_CHECK_RETRIES = 1;
@@ -353,7 +375,8 @@ async function executeMonitorCheck(monitor: MonitorDefinition, config: RuntimeCo
       );
       const latencyMs = Date.now() - startedAt;
       const checkedAt = new Date().toISOString();
-      const isHealthy = monitor.expectedStatusCodes.includes(response.status);
+      const missingResponseHeaders = (monitor.requiredResponseHeaders || []).filter((header) => !response.headers.has(header));
+      const isHealthy = monitor.expectedStatusCodes.includes(response.status) && missingResponseHeaders.length === 0;
 
       if (isHealthy) {
         return {
@@ -384,7 +407,7 @@ async function executeMonitorCheck(monitor: MonitorDefinition, config: RuntimeCo
         httpStatus: response.status,
         attemptCount: attempt,
         errorCode: "unexpected_status",
-        errorMessage: `unexpected status code ${response.status}`,
+        errorMessage: missingResponseHeaders.length ? `missing required response headers: ${missingResponseHeaders.join(", ")}` : `unexpected status code ${response.status}`,
         responseExcerpt,
       };
     } catch (error) {
@@ -801,12 +824,13 @@ async function maybeSendCriticalIngestAlert(env: Env, config: RuntimeConfig, ing
 
 export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promise<RunSummary> {
   const config = readRuntimeConfig(env);
+  const monitors = monitorDefinitions(env);
   const runID = buildRunID(scheduledAt);
   const deadlineAt = Date.now() + config.runDeadlineMs;
 
   console.log("ops-monitor.run.started", {
     run_id: runID,
-    check_count: DEFAULT_MONITORS.length,
+    check_count: monitors.length,
     ingest_url: config.ingestURL,
   });
 
@@ -820,7 +844,7 @@ export async function runMonitorCycle(env: Env, scheduledAt = new Date()): Promi
     });
   }
 
-  const checks = await mapWithConcurrency(DEFAULT_MONITORS, config.maxParallelChecks, (monitor) => executeMonitorCheck(monitor, config, runID, deadlineAt));
+  const checks = await mapWithConcurrency(monitors, config.maxParallelChecks, (monitor) => executeMonitorCheck(monitor, config, runID, deadlineAt));
 
   const failures: IngestFailure[] = [];
   let ingestSuccessCount = 0;
@@ -926,6 +950,7 @@ function hasAuthorizedManualRun(request: Request, env: Env): boolean {
 
 export const __internal = {
   DEFAULT_MONITORS,
+  monitorDefinitions,
   resetForTests() {
     inMemoryCriticalIngestState = {
       streak: 0,

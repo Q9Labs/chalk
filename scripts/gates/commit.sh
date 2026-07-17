@@ -45,6 +45,9 @@ pnpm run lint
 # Run the repository test task after placeholder scripts are fixed.
 pnpm run test
 
+# Build and test the standalone protected architecture Worker, which is not a workspace package.
+pnpm run architecture:test
+
 # Run coverage thresholds across packages/apps that support tests.
 pnpm run test:coverage
 
