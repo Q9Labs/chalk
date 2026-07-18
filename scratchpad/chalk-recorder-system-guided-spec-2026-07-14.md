@@ -1,323 +1,223 @@
-# Chalk Recording System
+# Chalk Meeting Recording Sidelining
 
-Status: Ready for implementation review
-
-Owner: Hasan Shoaib
-
-Refreshed: July 15, 2026
-
+Status: Draft  
+Owner: Hasan Shoaib  
+Refreshed: July 15, 2026  
 Companion: `scratchpad/chalk-recorder-system-guided-spec-2026-07-14.html`
+
+## Background
+
+Chalk has built substantial recording foundations without completing a recording product. The repository contains recording controls, SDK methods, public REST routes, Sync commands, durable pipeline primitives, fixture-only workers, and scale-to-zero infrastructure policy. These surfaces do not form one working path: no checked-in runtime can capture a real meeting end to end.
+
+The partial user experience is the problem. A person can see recording controls or claims and assume the meeting is being captured, while the implementation may only create metadata or leave Sync in `starting`. The retained developer contracts are useful for restarting the work later, but they must be explicitly disabled at the server boundary and unable to activate runtime or cost.
+
+### Current state
+
+- Marketing, SDK documentation, React components, and React Native defaults present meeting recording as available.
+- The TypeScript client exposes `startRecording` and `stopRecording`. Sync grants recording authority to hosts and cohosts by default, persists the start operation, and has no configured recording adapter to complete it.
+- Public REST and generated SDK surfaces expose recording create, update, reservation, pipeline, read, download, and transcription-from-recording operations. Some only mutate metadata; reservation can create a recording row, pipeline, and pending capture job when health gates are open.
+- Custom capture and render commands accept fixtures only. The worker router is not mounted, no external reconciler exists in the repository, and default infrastructure prohibits mutation and keeps recorder compute at zero.
+- There is no managed RealtimeKit recording client, webhook, importer, or provider start call in the checked-in implementation.
+
+### Desired state
+
+Meeting recording is absent from Chalk's end-user product and costs nothing to operate. Users see no recording promise, control, status, automatic-recording setting, or post-meeting download. SDK methods, React and React Native recording utilities, REST routes, generated OpenAPI operations, schemas, and historical decoders remain available to developers for compatibility and a future restart, but every operation that could begin or advance recording returns a deterministic `recording_disabled` result before durable or external effects.
+
+Sync keeps its recording command schema and compiled implementation but detaches recording capability and command registration from the active path. Recorder services, workers, provider bridges, reconcilers, schedules, and infrastructure remain detached or unapplied at zero capacity. Re-enabling later is a small, explicit registration change backed by a new qualification decision, not a cleanup of commented-out, uncompiled code.
 
 ## Decision
 
-Chalk should launch recording on Cloudflare RealtimeKit's managed recording service, not finish the custom Pion capture and DigitalOcean GPU render fleets described in the July 11–14 recorder documents.
+Sideline meeting recording at the product and runtime boundaries. Do not replace the custom recorder with managed recording in this change.
 
-RealtimeKit now provides the two outputs Chalk needs: a 720p H.264/AAC composite recording and separate participant audio tracks. Chalk remains the product and lifecycle authority. It admits recording, starts and stops provider jobs, verifies signed provider events, imports durable artifacts, seeds transcription, exposes status, and handles failure. RealtimeKit owns media capture and composition.
+Keep the SDK methods and REST contract shapes. Do not render recording in Chalk-owned web or mobile UI. Keep REST read/list/download behavior for existing completed records, but gate create, update, reservation, pipeline mutation, and transcription-from-recording work with the canonical `recording_disabled` result. Keep Sync recording types and handlers compiled, remove recording from active role capabilities and command dispatch, and reject old commands before they write state.
 
-This document is the source of truth for the launch path. It supersedes the custom capture/render architecture and cross-cutting recorder decisions in the July 11–14 infrastructure, pipeline, control-plane, capture-worker, render-worker, staging, and guided specs. Those documents remain implementation history. Their PostgreSQL fencing, object-integrity, privacy, observability, and transcription invariants survive where this document repeats them.
+This document supersedes the managed RealtimeKit launch decision previously held in this file and the launch direction in the July 11–14 recorder specs. Those documents remain technical history and dormant implementation reference; none authorizes a recording deployment, provider integration, or production mutation.
 
-## Why this changed
+Literal commented-out source is not the target state. Chalk retains compile-tested modules and detaches them at explicit registration seams, because dormant code that no longer compiles is not easy to restore. A future recording project restores those seams only after a new source-of-truth spec approves architecture, spend, privacy, complete consumer behavior, and end-to-end qualification.
 
-The old design was reasonable when Chalk had to build server-side recording itself. It split live codec capture in Singapore from asynchronous GPU composition in Toronto, requiring a worker certificate authority, a reconciler, 21 compute nodes at launch ceiling, encrypted bundle exchange, a renderer, and five shared protocols.
+## Product behavior
 
-That system is still only a foundation:
+### Chalk-owned clients
 
-- PostgreSQL reservation, job, fence, and artifact primitives exist.
-- Direct Cloudflare SFU helpers and deterministic capture/render fixtures exist.
-- The capture and render commands deliberately refuse non-fixture operation.
-- The recorder worker router is not mounted by the running API.
-- Artifact commit does not update the public recording object used for download.
-- Recorder finalization is not connected to the existing transcription dispatcher.
-- No real-provider or staging qualification has passed.
+A user joining or ending a meeting sees no Record action, recording timer, recording badge, recording tab, recording download, guided-tour step, or recording-related empty state. Scheduling and room settings do not offer automatic recording. Marketing and product documentation make no recording claim.
 
-Meanwhile RealtimeKit added managed composite recording, participant audio-track recording, direct cloud storage, signed status webhooks, and an explicit provider lifecycle. Completing the old fleets would now duplicate the provider, delay launch, and add more failure boundaries than the product needs.
+Chalk's web and mobile apps explicitly set recording capability to false; they do not rely on an SDK default. Live transcription remains independent and may stay visible where it works without a meeting recording. The mobile Headquarters dictation code records local audio for a separate workflow and is not part of this decision.
 
-## Product promise
+### SDK consumers
 
-When Chalk says **Recording**, the provider has entered its `RECORDING` state. The recording survives the host's browser closing or the host leaving. After the meeting stops, Chalk shows one honest processing state until a verified private MP4 is ready. A provider or import failure is visible and retryable where safe; Chalk never fabricates missing media or labels an unconfirmed request as recording.
+The TypeScript client retains recording methods. React and React Native retain recording hooks, components, types, and feature options. Generated clients retain REST recording methods. Developer documentation labels meeting recording disabled and makes clear that initiation returns `recording_disabled`; it does not present the methods as a working product.
 
-The meeting can continue when recording is unavailable, but only after the host explicitly chooses **Continue without recording**. Chalk never silently downgrades a meeting that was expected to be recorded.
+An external app that chooses to render a retained recording component receives the same deterministic disabled result. The SDK must not simulate success, keep a local `starting` state, or swallow the rejection.
 
-### User story
+### REST clients
 
-Maya schedules a customer interview with recording enabled. Five minutes before start, Chalk creates the meeting and recording intent. When Maya opens the room, Chalk asks RealtimeKit to start composite and participant-track recording. The lobby says **Preparing recording** until the signed provider state is `RECORDING`; only then does the red recording indicator appear and the room open normally.
+REST routes remain registered and present in OpenAPI. Read, list, and download-url operations continue to serve authorized completed historical records. Any operation that can create or advance recording work returns HTTP `409 Conflict` with bounded code `recording_disabled` before a recording row, reservation, pipeline, job, object, provider call, or transcription job is created or changed.
 
-Maya stops the recording after the interview. The room immediately says **Processing recording**. RealtimeKit uploads the composite MP4 directly to Chalk's dedicated private R2 ingest bucket and makes participant audio tracks available for import. A webhook advances the durable recording, an importer verifies every expected object, the finalizer commits the public recording and transcription source, and the recording page becomes playable. Transcript processing continues independently and cannot revoke a playable video.
+The disabled mutation set includes recording create, caller-selected recording update, reservation create/extend, and transcription-from-recording. Cleanup operations that can only release pre-existing reservations may remain enabled if a focused test proves they cannot increase capacity or enqueue work.
 
-If RealtimeKit cannot start within 120 seconds, Maya sees **Recording unavailable** with retry and **Continue without recording** actions. If upload or import later fails, the recording page says **Recording failed** with a stable support reference; it never spins forever.
+### Sync clients
 
-## Current state and desired state
+The Sync v3 command schemas and TypeScript methods remain. New sessions grant no `manageRecording` capability. Active command dispatch has no recording handler registration. An old client sending `start_recording` or `stop_recording` receives `recording_disabled` before Sync creates a side-effecting receipt, recording row, recording projection, external operation, or pipeline job. Replays produce the same rejection.
 
-### Current
+No request may remain pending, enter `starting` or `stopping`, reserve capacity, open object storage, invoke a provider bridge, or enqueue transcription.
 
-Chalk has two incomplete authorities. The public recording API lets callers write status and storage fields, while a separate recorder pipeline owns reservations and fenced jobs. A synthetic fixture can render an MP4, but no production process can claim a real capture or render assignment. The resulting pipeline can be `committed` without satisfying the public download route.
+### Historical records
 
-### Desired
-
-One Chalk recording row owns the user-visible lifecycle. PostgreSQL owns every durable state transition. RealtimeKit identifiers and webhook deliveries are provider facts attached to that recording, never a second product authority. One durable finalization transaction makes the imported video downloadable and seeds the complete transcription source.
+This change deletes no rows or media. Existing completed records may still be read and downloaded through authorized REST routes. Replaying historical Sync state remains safe: replicas can decode it, but Chalk-owned UI does not render recording and no replay restores recording capability or dispatch registration.
 
 ## Scope
 
 ### In scope
 
-- scheduled and host-initiated recording for RealtimeKit meetings;
-- a managed 1280×720 H.264/AAC MP4;
-- separate WebM participant audio tracks for speaker-aware transcription;
-- direct composite upload to a dedicated private Chalk R2 ingest bucket;
-- import of participant tracks from provider-managed storage before their seven-day expiry;
-- a single PostgreSQL lifecycle and public recording surface;
-- signed, deduplicated webhooks with reconciliation polling;
-- explicit start, processing, ready, and failure UX;
-- private playback through short-lived Chalk download authority;
-- bounded retention, cleanup, metrics, traces, audit events, and support references;
-- staging qualification of the managed provider before production activation.
+- Remove meeting-recording claims from marketing, screenshots and alt text, product documentation, examples, guided tours, scheduling, and Chalk-owned meeting UI.
+- Explicitly disable recording in Chalk's web and mobile app configuration, including diagnostics, end screens, and previews.
+- Keep public TypeScript, React, React Native, REST, OpenAPI, and generated SDK recording surfaces compile-tested; document their disabled state.
+- Add one fail-closed REST mutation gate that returns `recording_disabled` before repository, storage, provider, pipeline, or transcription effects.
+- Detach Sync recording capability and command dispatch at one obvious registration seam while retaining schemas, methods, handlers, and historical decoding.
+- Keep recorder services, worker routers, provider bridges, reconcilers, and provider configuration detached from runtime startup.
+- Keep recorder infrastructure detached from environment stacks or mutation-disabled with zero desired runtime capacity and no scheduled prewarm, recording canary, or recurring recording job.
+- Add negative tests and observability proving attempted activation cannot create recording state or spend.
+- Update the changelog or release notes to state that meeting recording is temporarily disabled in Chalk-owned products while developer contracts remain reserved.
 
 ### Non-goals
 
-- Chalk-operated Pion capture workers;
-- DigitalOcean capture or GPU render fleets;
-- Chromium or client-side recording;
-- live streaming, RTMP, HLS, editing, clips, or alternate layouts;
-- video tracks per participant;
-- acoustic diarization or inferring identity from a voice;
-- transparent failover between managed and custom recorders;
-- production activation, pricing, or entitlement changes in this implementation;
-- deleting the old recorder foundation before the managed path is qualified.
+- Choosing or implementing a custom, managed, browser, or client-side recorder.
+- Removing or renaming SDK methods, React or React Native exports, REST routes, OpenAPI operations, generated methods, recording tables, migrations, repositories, fixtures, worker protocols, or infrastructure modules.
+- Disabling live transcription, uploaded-media transcription, local dictation, or ordinary microphone use.
+- Redesigning unrelated meeting controls or changing general media permissions.
+- Deleting historical rows, media, or cloud resources.
+- Deploying, mutating staging or production, or inspecting production without explicit approval.
 
-## Launch policy
+## System boundaries and source of truth
 
-| Policy | Launch behavior |
-| --- | --- |
-| Recorded rooms | At most 20 concurrently until provider and importer load tests justify a higher limit. |
-| Participants | At most 10 in one recorded room and 100 across recorded rooms. An over-limit room may continue only after explicit confirmation that it is unrecorded. |
-| Duration | At most 120 minutes. Warn at 110 and 118 minutes; stop recording at 120 while the meeting may continue. |
-| Start deadline | Wait at most 120 seconds for provider state `RECORDING`. Before that state, the UI says **Preparing recording**, not **Recording**. |
-| Processing target | A playable video is ready within 30 minutes after stop at p95. A miss breaches the release SLO but remains processing until the recovery deadline. |
-| Recovery deadline | Retry reconciliation and import for 24 hours, then terminally fail with a support reference. |
-| Brief recordings | Treat recordings shorter than five seconds as unsupported and show a bounded failure reason. |
-| Empty room | Accept the provider's empty-room stop behavior and surface the resulting transition honestly. |
+The disabled server registration is the authority. Hidden UI is defense in depth; retained SDK and REST contracts cannot activate recording by themselves.
 
-These are product limits, not claims about RealtimeKit's maximum capacity. They let Chalk qualify a bounded launch and raise ceilings from evidence.
-
-## System boundaries
-
-```mermaid
-flowchart LR
-  Host["Host and meeting UI"] -->|start or stop| API["Chalk recording API"]
-  API -->|durable intent| DB[(PostgreSQL)]
-  API -->|provider request| RTK["RealtimeKit recording"]
-  RTK -->|composite MP4| Ingest[(Private R2 ingest)]
-  RTK -->|signed status event| Hook["Webhook ingress"]
-  RTK -->|participant audio URLs| Import["Recording importer"]
-  Hook -->|event and job| DB
-  DB -->|claim fenced import| Import
-  Ingest -->|verify and promote| Import
-  Import -->|atomic artifact and source commit| DB
-  Import -->|private final objects| Final[(Private R2 archive)]
-  DB -->|one job per audio chunk| Transcript["Transcription pipeline"]
-  DB -->|ready or failed| Host
-```
-
-### Ownership
-
-| Fact | Authority | Notes |
+| Boundary | Desired rule | Retained for later |
 | --- | --- | --- |
-| User-visible recording state | PostgreSQL | Only Chalk transitions the product lifecycle. |
-| Provider recording state and identifiers | RealtimeKit, recorded by Chalk | Provider facts are append-only inputs to Chalk decisions. |
-| Composite bytes before finalization | Dedicated R2 ingest bucket | RealtimeKit may read, write, and list only this bucket. It has no access to canonical storage. |
-| Canonical video and participant audio | Chalk private R2 archive | Only Chalk services can promote, read, or delete these objects. |
-| Recording metadata and downloadability | PostgreSQL | Finalization updates the public recording and artifact in one transaction. |
-| Transcript source and chunk jobs | PostgreSQL | Seeded atomically with the recording artifact; processed independently afterward. |
-| Meeting media capture and composition | RealtimeKit | Chalk does not proxy or reconstruct media in the launch path. |
+| Marketing and Chalk docs | Recording is not named as an available product capability. | A short developer note explains the reserved disabled contracts. |
+| Chalk web and mobile | No recording control, status, automatic setting, diagnostic action, or end-screen download is rendered. App configuration sets recording false explicitly. | Shared SDK components and hooks remain available to external consumers. |
+| TypeScript, React, React Native | Methods, types, hooks, components, and feature options remain exported and compile-tested. Disabled calls return `recording_disabled` without optimistic local state. | The same contract surface can back a later implementation. |
+| Public REST API | Routes and OpenAPI operations remain. Reads and authorized historical downloads work; recording mutations fail before effects. | Route shapes, generated SDK methods, repositories, and migrations. |
+| Sync v3 | Schemas and methods remain. New sessions grant no recording capability, and active dispatch has no recording registration. | Handlers, adapters, snapshot/event decoding, and tests. |
+| API runtime | Recording capture, pipeline activation, health, worker, provider-bridge, reconciler, and transcription-from-recording execution are not mounted or scheduled. Read-only recording service wiring may remain. | Constructors, storage reads, and focused tests. |
+| Infrastructure | Recorder root is detached from environment application or `enable_apply` remains false; desired nodes are zero and no activation credentials are supplied. | OpenTofu modules and validation tests remain source-only. |
 
-## Lifecycle
+There is one reactivation seam per boundary: app capability, REST mutation gate, Sync capability/dispatch registration, runtime service registration, and infrastructure stack inclusion. No environment variable alone may cross all seams or expose recording accidentally.
 
-The public lifecycle is intentionally small:
+## Failure and offline behavior
 
-1. `requested` — Chalk has durable intent but has not asked the provider.
-2. `starting` — RealtimeKit accepted the request; the meeting UI says **Preparing recording**.
-3. `recording` — a signed event or authoritative fetch reports provider state `RECORDING`.
-4. `processing` — stop was requested or provider state is `UPLOADING`/`UPLOADED`; imports may still be running.
-5. `ready` — the verified MP4 and complete transcription source committed atomically.
-6. `failed` — start, provider, upload, or import exhausted its recovery policy.
-7. `cancelled` — intent was cancelled before recording started.
-
-Provider states map as follows:
-
-| RealtimeKit | Chalk | Rule |
+| Situation | Observable result | Forbidden result |
 | --- | --- | --- |
-| `INVOKED` | `starting` | Never show the red indicator. |
-| `RECORDING` | `recording` | First state that earns the recording claim. |
-| `UPLOADING` | `processing` | Keep the artifact unavailable. |
-| `UPLOADED` | `processing` | Enqueue or wake import; do not mark ready yet. |
-| `ERRORED` | `failed` | Preserve a stable bounded failure code and provider reference. |
+| Current user joins a meeting | No recording affordance exists. | Disabled or “coming soon” controls that advertise the feature. |
+| SDK consumer calls a recording method | Typed `recording_disabled` result; no optimistic recording state. | A no-op success, local spinner, or swallowed error. |
+| REST client reads a completed historical record | Existing authorized read/download behavior. | New recording work or broader storage access. |
+| REST client calls a recording mutation | HTTP `409` with code `recording_disabled`. | A row change, reservation, job, object, provider request, or transcription job. |
+| Sync client sends a recording command | Deterministic `recording_disabled` result with bounded telemetry. | `starting`, `stopping`, pending external operation, or provider dispatch. |
+| A stale recording snapshot is replayed | Replica decodes it; Chalk UI stays recording-free. | Replay restores capability or dispatch. |
+| Recorder environment values are accidentally supplied | Startup and infrastructure gates remain closed. | A service mount, schedule, provider call, bucket, key, or compute node. |
+| Network is offline | Meeting behavior is unchanged; no recording path retries. | Background recording retries or queued activation. |
 
-Transitions are monotonic except an idempotent replay of the current state. Late events cannot move `ready`, `failed`, or `cancelled` backward. Provider events never directly write public status; the recording service evaluates them under a row lock.
+## Cost and operational posture
 
-## Start and stop contract
+The required steady state is zero recording-specific runtime spend, not merely zero active recordings. Recorder compute remains at zero, and the sidelined topology has no recording-specific provider subscription, managed-recording invocation, prewarmed node, scheduled canary, background reconciler, new ingest bucket, encryption key, queue consumer, or always-on monitor.
 
-The Chalk API, not the browser SDK, starts and stops recording. That keeps credentials, storage configuration, lifecycle decisions, and idempotency on the server.
+Source code, database tables, retained SDK/REST contracts, historical object reads, and unapplied infrastructure modules do not count as new recording runtime cost. Existing shared PostgreSQL, API, Sync, and object-storage services may retain dormant code and schema, provided disabled mutation attempts create no recording loop, allocation, object, or external request.
 
-Start creates or reuses one durable recording intent, sends an idempotent provider request, stores the returned composite and track recording identifiers, and polls if no webhook confirms state. A retry returns the existing intent; it cannot start a second recorder for the same meeting.
+Local and read-only infrastructure proofs must show:
 
-Composite recording uses the provider's default H.264 output: 1280×720 MP4 with AAC audio. The start request selects the dedicated R2 ingest bucket and disables the provider-managed composite copy. Track recording captures all consented participant audio as separate WebM files. The importer maps each provider `user_id` to Chalk's authenticated meeting member; unknown identities remain explicitly unknown.
+- checked-in recorder configuration cannot mutate cloud state;
+- desired capture and render capacity is zero;
+- environment stacks do not include the recorder root, or its apply gate remains false;
+- API and Sync release configuration contains no recording adapter, provider bridge, reconciler, worker listener, or recording schedule;
+- no new recording secret, provider credential, storage binding, or monitor registry entry is required;
+- accidental configuration fails closed with a bounded, non-secret diagnostic.
 
-Stop is also idempotent. Chalk asks both provider recordings to stop, records the first accepted stop time, and advances to `processing`. Provider auto-stop, an empty meeting, and a host stop converge on the same state machine.
+## Security, privacy, and observability
 
-## Webhook and reconciliation contract
+Sidelining prevents new meeting media, participant tracks, provider identifiers, signed URLs, recording metadata, or transcription sources from being created through a meeting-recording mutation. Historical download authorization and tenant storage-key validation remain unchanged.
 
-Webhook ingress reads the raw request body, verifies the provider's RSA-SHA256 signature, validates event shape and app identity, and inserts the event keyed by RealtimeKit's unique webhook UUID. A duplicate returns success without a second transition or job.
+Disabled attempts emit one bounded counter and trace outcome by ingress (`sdk`, `rest`, or `sync`) and reason (`recording_disabled`). They do not log request bodies, display names, meeting media, credentials, object keys, or identifiers beyond the existing safe journey reference. Startup emits one bounded configuration fact that recording execution is detached; it must not emit environment values or secrets.
 
-Ingress performs no object download or transcription work. It commits the event and a durable processing job, then returns `2xx` quickly. Invalid signatures return a non-success response and emit a security event without logging the body.
+No recording health monitor or synthetic check is added for an unavailable feature. Existing recorder dashboards may remain as historical artifacts, but they cannot page or imply an active service.
 
-Webhooks are hints, not the sole recovery mechanism. A reconciler fetches authoritative provider state for recordings stuck in `starting` or `processing`, uses bounded exponential backoff with jitter, and stops after the 24-hour recovery deadline. This covers dropped, delayed, duplicated, and reordered events.
+## Compatibility policy
 
-## Storage and finalization
+Developer contracts stay stable; product availability does not. Retaining an SDK method or REST route is acceptable only because the server gives it one honest, typed disabled outcome and performs no recording work. Chalk-owned UI must not surface the retained contracts.
 
-RealtimeKit receives one R2 S3 credential scoped to a dedicated ingest bucket. Cloudflare R2 currently offers bucket-scoped **Object Read & Write**, which also allows listing; it does not offer a write-only S3 token. Isolation therefore comes from a separate bucket, an unguessable per-recording prefix, no canonical objects in that bucket, secret rotation, and audit alerts. Chalk does not send storage credentials in each recording request; operations configure them once in the provider dashboard.
+Do not comment out implementation bodies. Keep schemas, handlers, adapters, and modules compiled and covered by focused dormant tests, then detach them from active capability, dispatch, startup, and infrastructure registration. Re-enabling should be a small reviewable diff at those seams, but it still requires a new qualification decision.
 
-The composite copy in RealtimeKit's managed bucket is disabled only after the external ingest configuration passes a real upload test. If both destinations are disabled or invalid, the provider considers the recording invalid.
+## Implementation phases
 
-Participant track recording currently lands in RealtimeKit-managed R2 and expires after seven days. Chalk imports tracks immediately after `UPLOADED`, verifies file count and duration against provider metadata, and stores them privately. The privacy notice and data inventory must name that temporary provider copy. Launch is blocked if legal or product policy cannot accept that seven-day provider retention.
+One main-thread executor owns all code and contract changes. Read-only explorers may inventory surfaces and verify negative coverage, but workers do not split implementation across shared API, Sync, codegen, SDK, and runtime contracts. This preserves one coherent disabled state and follows Chalk's shared-worktree protocol.
 
-The importer acts under one leased PostgreSQL job with attempt, owner, lease token, and fencing generation. It:
+### Phase 0 — inventory and freeze
 
-1. fetches authoritative recording details;
-2. checks that composite and track provider IDs belong to the expected meeting;
-3. verifies content type, byte size, checksums when supplied, media codecs, duration, and the expected participant-track set;
-4. copies accepted objects to server-selected canonical keys using conditional create;
-5. writes an immutable import manifest without credentials or signed URLs;
-6. atomically commits the public recording, canonical artifact, transcription source, chunks, and one transcription job per chunk; and
-7. schedules ingest cleanup.
+- [ ] Record the complete product and runtime surface list across marketing, apps, React, React Native, TypeScript, REST, Sync, codegen, docs, runtime wiring, and infrastructure.
+- [ ] Define the canonical REST and Sync `recording_disabled` response in existing error-contract conventions.
+- [ ] Identify the single activation seam for app UI, REST mutation, Sync dispatch, runtime execution, and infrastructure.
 
-The transaction is idempotent. The same verified inputs produce the same object and database identities; a stale fenced attempt cannot commit. Transcription failure after finalization changes transcript status only and never revokes a playable recording.
+Gate: the retained-contract list and detachment seams are explicit, and focused tests prove each rejection point precedes every recording write or provider boundary.
 
-## Failure behavior
+### Phase 1 — remove the product promise
 
-| Failure | User experience | System behavior |
-| --- | --- | --- |
-| Provider does not reach `RECORDING` within 120 seconds | **Recording unavailable**; retry or continue unrecorded | Stop any invoked recorder, close the attempt, preserve the meeting. |
-| Provider errors while recording | Indicator changes to **Recording interrupted** | Fetch authoritative state, stop companion track recording, import any valid available output, otherwise fail. No hidden custom fallback. |
-| Webhook is missing or duplicated | No visible churn | Reconciliation fetches state; UUID deduplication makes replay harmless. |
-| Composite upload is delayed | **Processing recording** | Retry authoritative fetch and object verification until the recovery deadline. |
-| Participant track is missing | Video may become ready; transcript says **Unavailable** | Commit video only if the finalization schema records a terminal incomplete transcript source. Never invent speaker audio. |
-| Importer dies | No duplicate recording | Lease expires, a fenced attempt retries, conditional writes and the final transaction remain idempotent. |
-| Verification finds wrong meeting, codec, or object | **Recording failed** with support reference | Quarantine the ingest prefix, emit a security/quality event, never publish it. |
-| 30-minute target is missed | **Still processing** | Page the recorder SLO; continue bounded recovery. The target miss is not itself terminal. |
-| 24-hour recovery deadline is missed | **Recording failed** | Terminalize once, retain evidence, and run policy-bound cleanup. |
+- [ ] Remove recording claims from marketing, product docs, previews, tours, screenshots, and alt text.
+- [ ] Set Chalk web and mobile recording capability false and remove recording controls, statuses, automatic settings, diagnostics, and end-screen downloads from app composition.
+- [ ] Keep SDK exports and generated methods; update developer docs and types so disabled results are explicit and never optimistic.
 
-## Security, privacy, and retention
+Gate: repository search plus real web and mobile UI verification finds no current-user recording promise or action, while SDK compile tests, live transcription, and local dictation still pass.
 
-- Recording requires the existing meeting consent and privilege model. Every participant sees the active recording indicator.
-- RealtimeKit API credentials, webhook verification material, and R2 credentials remain server-side secrets.
-- Provider storage access is bucket-scoped and separated from canonical storage. Rotate it on provider compromise, staff departure, and the normal secret schedule.
-- Signed URLs, raw provider bodies, participant display names, media, and secrets never enter logs, traces, support references, or webhook error responses.
-- Canonical objects are private and served only through short-lived tenant-authorized download URLs.
-- Ingest objects delete after successful promotion, with a 24-hour lifecycle backstop. Quarantined failures follow the incident retention policy.
-- Participant track URLs expire at the provider after seven days. Chalk must not rely on that expiry as its cleanup mechanism.
-- Deletion of a Chalk recording removes the canonical video, participant audio, transcript artifacts, import manifest, and provider identifiers according to product retention policy.
-- Audit events cover start, stop, consent/privilege result, provider transition, import, publish, download-authority creation, failure, retry, and deletion.
+### Phase 2 — detach execution
 
-## Observability
+- [ ] Keep REST routes and OpenAPI operations, but gate all recording mutations before repository, pipeline, storage, provider, or transcription work. Preserve authorized historical read/list/download behavior.
+- [ ] Remove `manageRecording` from default Sync capabilities and detach start/stop from active command dispatch while retaining schemas, methods, and compiled handlers.
+- [ ] Keep capture/pipeline services, provider adapters, worker routers, and reconcilers out of runtime startup and schedules.
+- [ ] Ensure SDK, REST, and Sync disabled attempts converge on `recording_disabled` without durable or external effects.
 
-One journey ID follows the meeting, Chalk recording, composite provider recording, track provider recording, webhook events, import job, artifact, and transcript source. Provider IDs are safe only as bounded structured fields; media URLs and payloads are not.
+Gate: negative API and real PostgreSQL/Sync integration tests prove all disabled paths fail deterministically with zero durable or external effects, historical reads still work, and code-generation drift checks pass.
 
-Required signals:
+### Phase 3 — prove dormant and cost-silent
 
-- counts and latency for start requests and time to `recording`;
-- provider states, webhook verification failures, duplicates, and event lag;
-- processing age, import attempts, bytes, verification failures, and cleanup age;
-- ready latency from stop at p50, p95, and p99;
-- terminal failures by bounded stage and code;
-- participant track completeness and transcript-source completeness;
-- recordings stuck beyond 10, 30, and 1,440 minutes;
-- ingest bucket object age and canonical promotion mismatch;
-- synthetic scheduled and host-initiated recording canaries in staging.
+- [ ] Prove default infrastructure plans cannot create recorder resources and desired recorder capacity remains zero.
+- [ ] Prove release configuration contains no recorder activation, secrets, provider bindings, schedules, or monitor entries.
+- [ ] Add bounded disabled-attempt and startup telemetry, with assertions that no sensitive data is emitted.
+- [ ] Run the API gate, Sync gate, root gate, generated-contract checks, local browser flow, and mobile verification surface.
+- [ ] Update the changelog or release notes and capture final negative evidence in the session log.
 
-Alerts must point to a runbook and a bounded support reference. A dashboard without an operator action is not an acceptance signal.
+Gate: one immutable local revision passes every focused and repository gate, and the executor observes the product, SDK, REST, Sync, database, runtime, and infrastructure outcomes below. Deployment remains separately authorized.
 
-## Implementation plan
+## Acceptance criteria
 
-The work is intentionally sequential at the contracts and parallel after them.
+This change is done only when all of the following are observed in the same revision:
 
-### Phase 0 — replace the authority
+- [ ] Marketing, product docs, previews, tours, screenshots, and alt text make no meeting-recording product claim.
+- [ ] Chalk web and mobile meeting surfaces contain no recording control, status, timer, tab, automatic setting, diagnostic action, or post-meeting download.
+- [ ] Chalk apps explicitly configure recording false; unrelated meeting controls remain usable.
+- [ ] Public React, React Native, TypeScript client, REST, OpenAPI, and generated SDK recording surfaces remain present and compile-tested.
+- [ ] SDK and generated client recording calls return typed `recording_disabled` without optimistic state or swallowed errors.
+- [ ] REST read, list, and download-url operations still work for authorized completed historical records.
+- [ ] Every REST recording mutation returns HTTP `409` with code `recording_disabled` and creates or changes no recording row, reservation, pipeline, job, object, provider request, or transcription job.
+- [ ] New Sync sessions grant no recording capability; active dispatch has no recording start/stop registration.
+- [ ] Legacy Sync recording commands return `recording_disabled` and create no recording projection, side-effecting receipt, external operation, provider dispatch, or stuck pending state.
+- [ ] Replaying a historical recording snapshot remains safe and cannot restore recording authority or Chalk UI.
+- [ ] Recording execution services, worker routers, provider bridges, reconcilers, schedules, and recording canaries are absent from runtime wiring.
+- [ ] Capture and render commands remain fixture-only; dormant handlers, domain code, migrations, and infrastructure source remain compiled or validated.
+- [ ] Default recorder infrastructure is detached or mutation-disabled, plans zero runtime nodes, and requires no new recording-specific cloud resource or secret.
+- [ ] Disabled attempts produce bounded, non-sensitive telemetry; no unavailable-feature health monitor pages an operator.
+- [ ] Live transcription, uploaded-media transcription, mobile Headquarters dictation, and ordinary meeting media still pass focused regression tests.
+- [ ] `apps/api/scripts/gate.sh`, `apps/sync/scripts/gate.sh`, `pnpm run gate`, generated-contract checks, and focused UI tests pass.
+- [ ] A real local browser run confirms the absent Chalk web affordance, and the mobile verification surface confirms recording is absent while unrelated controls remain usable.
+- [ ] No staging or production mutation occurred.
 
-- [ ] Make one recording service the only writer of status, storage, and provider fields.
-- [ ] Remove caller-selected status/storage mutations from the public API or translate them through the new service during a bounded migration.
-- [ ] Define the public lifecycle, provider event, import manifest, and finalization schemas.
-- [ ] Add migrations for provider IDs, event deduplication, import attempts, failure codes, and processing deadlines.
-- [ ] Preserve existing PostgreSQL lease/fence primitives for import and reconciliation jobs.
+## Re-entry gate
 
-Gate: a database integration test proves idempotent start, ordered and reordered provider events, stale-fence rejection, one final artifact, and a downloadable public recording.
+Recording execution may return only under a new spec that replaces this one and proves a complete product state. That spec must choose one capture authority, define user consent and failure behavior, activate the retained SDK and API surfaces honestly, propagate journey and trace context, budget real provider and infrastructure costs, qualify success and failure end to end, and identify an approved deployment target. Until every gate passes, SDK and REST contracts remain disabled, Chalk UI remains absent, and runtime stays detached.
 
-### Phase 1 — provider and storage seam
+## Canonical vocabulary
 
-- [ ] Implement server-side composite and track start/stop/fetch clients.
-- [ ] Configure a dedicated staging ingest bucket and scoped credential; disable the managed composite copy only after an upload proof.
-- [ ] Implement raw-body webhook verification, UUID deduplication, fast acknowledgement, and durable dispatch.
-- [ ] Implement reconciliation for missing and delayed events.
-- [ ] Implement fenced import, media verification, canonical promotion, atomic artifact/transcription finalization, and cleanup.
-
-Gate: one real staging meeting produces a verified private MP4 and participant audio set, becomes downloadable through Chalk, and seeds the existing transcription dispatcher exactly once.
-
-### Phase 2 — product experience and operations
-
-- [ ] Implement preparing, recording, interrupted, processing, ready, and failed surfaces.
-- [ ] Enforce privilege, consent, limits, duration warnings, explicit unrecorded continuation, and retry behavior.
-- [ ] Add metrics, traces, audit events, dashboards, alerts, canaries, and runbooks.
-- [ ] Exercise missing, duplicate, and reordered webhooks; provider errors; delayed uploads; missing tracks; dead importer; quarantine; and cleanup.
-- [ ] Qualify 20 concurrent rooms, 100 participants, and ending-together imports against the 30-minute target.
-
-Gate: the immutable staging release passes the acceptance checklist, cleans all test media, and returns provider and Chalk resources to dormant state. Production remains separately authorized.
-
-### Dormant fallback
-
-- [ ] Keep the custom capture/render foundation unmounted and mutation-disabled.
-- [ ] Record qualification evidence before deleting or reviving it.
-- [ ] Reconsider a custom recorder only if managed recording fails a documented product requirement that Cloudflare cannot address.
-
-## Acceptance
-
-The recorder is done for staging when all of the following are observed on one immutable release:
-
-- [ ] A scheduled recording and an in-meeting start both reach `recording` only after authoritative provider confirmation.
-- [ ] Closing the host browser and the host leaving do not stop the recording.
-- [ ] Stop leads to a verified 1280×720 H.264/AAC MP4 downloadable through the existing tenant-authorized Chalk route.
-- [ ] Consented participant tracks map to authenticated members or explicit unknown identities and seed transcription exactly once.
-- [ ] Duplicate and reordered webhook events cannot duplicate work or regress state.
-- [ ] A dropped webhook is recovered by reconciliation.
-- [ ] A killed importer retries under a new fence without publishing duplicate objects or rows.
-- [ ] A wrong-meeting or invalid-media object is quarantined and never becomes downloadable.
-- [ ] The UI never says **Recording** during `requested`, `starting`, `processing`, or `failed`.
-- [ ] Over-limit and start-timeout flows require explicit confirmation before an unrecorded meeting continues.
-- [ ] Twenty concurrent recorded rooms and 100 total participants stay within the start and processing SLOs.
-- [ ] Ending-together recordings meet the 30-minute p95 ready target.
-- [ ] Successful imports clear ingest objects; the lifecycle backstop clears abandoned objects; no signed URL or secret appears in telemetry.
-- [ ] The provider's Beta status, seven-day participant-track copy, GA price model, and rollback trigger are documented for launch approval.
-- [ ] Production credentials and production activation remain untouched until separately approved.
-
-## Open decision
-
-One launch decision remains product/legal rather than engineering: whether temporary participant audio in RealtimeKit-managed storage for up to seven days is acceptable. The recommended default is **yes for the bounded Beta**, provided it appears in the data inventory and privacy review and the importer copies tracks immediately. If the answer is no, launch composite video first without speaker-aware transcription; do not rebuild custom capture merely to hide the provider-retention decision.
-
-## Glossary
-
-- **Canonical object** — the private Chalk-owned media object that the public recording references after verification.
-- **Composite recording** — one provider-rendered video containing the meeting layout and mixed audio.
-- **Fencing generation** — a monotonic attempt number that prevents an expired worker from committing after replacement.
-- **Import manifest** — immutable metadata describing provider inputs, verification results, and canonical outputs without embedding credentials or signed URLs.
-- **Participant track** — one participant's audio-only WebM recording, identified by provider and authenticated Chalk membership facts.
-- **Provider fact** — a signed event or authoritative API response recorded as input, not a direct product-state mutation.
-- **Recovery deadline** — the maximum time Chalk retries reconciliation and import before terminal failure.
-
-## References
-
-- [Cloudflare RealtimeKit recording overview](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/)
-- [Start recording](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/start-recording/)
-- [Monitor recording status](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/monitor-status/)
-- [Participant track recording](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/track-recording/)
-- [Upload recording to private cloud storage](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/custom-cloud-storage/)
-- [Disable the provider-managed composite copy](https://developers.cloudflare.com/realtime/realtimekit/recording-guide/configure-realtimekit-bucket-config/)
-- [RealtimeKit webhooks](https://developers.cloudflare.com/realtime/realtimekit/webhooks/)
-- [RealtimeKit pricing and Beta status](https://developers.cloudflare.com/realtime/realtimekit/pricing/)
-- [Cloudflare R2 API-token permissions](https://developers.cloudflare.com/r2/api/tokens/)
+- **Meeting recording** — server-side capture of a Chalk meeting for later playback; the product capability being sidelined.
+- **Product surface** — Chalk-owned marketing, scheduling, web, or mobile UI visible to an end user.
+- **Developer contract** — a retained SDK method, type, component, REST route, OpenAPI operation, or Sync schema.
+- **Detachment seam** — one explicit registration point that keeps compiled implementation out of the active path.
+- **Dormant foundation** — retained, compile-tested source, schema, fixtures, and unapplied infrastructure with no mounted runtime path or recurring cost.
+- **Cost-silent** — no recording-specific provider invocation, storage allocation, key, queue consumer, monitor, scheduled job, or compute capacity.
+- **Negative proof** — an observed test showing that a disabled attempt creates no durable state, external request, media object, or billable resource.

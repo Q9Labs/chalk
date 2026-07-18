@@ -1,0 +1,2 @@
+2026-07-14 12:09 PKT — Started a fast scan of current projects and workflows people are building with the Pi coding-agent ecosystem; treating “Pi” as the coding agent rather than Raspberry Pi.
+2026-07-14 12:12 PKT — Finished the scan. Strongest current patterns: autonomous benchmark-driven improvement, steerable subagent fleets, durable multi-lifecycle memory, custom IDE/mobile/web frontends, model routing through Pi workers, browser/MCP integrations, scheduling, and safety/permission layers.
