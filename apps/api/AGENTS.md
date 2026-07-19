@@ -17,7 +17,8 @@ endpoint fill-in.
 - When the change is complete, run performance profiling: `scripts/perf-local.sh`.
 - Commit once the gate passes; stage only your scope (`git add -p`).
 - After committing, run an auto code review of the commit (`codex review
---commit <sha>`) per `~/.codex/auto-code-review.md` OR let the post-commit hook run it automatically. It is slow — wait for it to exit and relay its findings.
+  --commit <sha>`) per `~/.codex/auto-code-review.md`. It is slow — wait for it
+  to exit and relay its findings.
 - Wire the change into the Execution Trace Harness so Hasan can run and inspect
   it, following `docs/execution-trace-harness.md`. This is part of the debrief —
   it's how he traces and understands the change.
