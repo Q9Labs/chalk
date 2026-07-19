@@ -26,6 +26,12 @@
       "effect": [
         "./dist/effect.d.ts"
       ],
+      "media": [
+        "./dist/media/index.d.ts"
+      ],
+      "sync": [
+        "./dist/sync/index.d.ts"
+      ],
       "webhooks": [
         "./dist/webhooks/index.d.ts"
       ],
@@ -57,6 +63,20 @@
       "import": "./dist/effect.js",
       "require": "./dist/effect.js",
       "default": "./dist/effect.js"
+    },
+    "./media": {
+      "types": "./dist/media/index.d.ts",
+      "react-native": "./dist/media/index.js",
+      "import": "./dist/media/index.js",
+      "require": "./dist/media/index.js",
+      "default": "./dist/media/index.js"
+    },
+    "./sync": {
+      "types": "./dist/sync/index.d.ts",
+      "react-native": "./dist/sync/index.js",
+      "import": "./dist/sync/index.js",
+      "require": "./dist/sync/index.js",
+      "default": "./dist/sync/index.js"
     },
     "./webhooks": {
       "browser": {
@@ -130,10 +150,10 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "pnpm run generate:webhooks && rm -rf ./dist && tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts --format esm --out-dir ./dist --platform browser --external effect && tsup ./src/webhooks/index.ts ./src/webhooks/test.ts ./src/webhooks/server-only.ts --format esm,cjs --out-dir ./dist/webhooks --platform neutral && pnpm run build:types && pnpm run build:webhooks:cjs-types",
+    "build": "pnpm run generate:webhooks && rm -rf ./dist && tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts ./src/media/index.ts ./src/sync/index.ts --format esm --out-dir ./dist --platform browser --external effect && tsup ./src/webhooks/index.ts ./src/webhooks/test.ts ./src/webhooks/server-only.ts --format esm,cjs --out-dir ./dist/webhooks --platform neutral && pnpm run build:types && pnpm run build:webhooks:cjs-types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
     "build:webhooks:cjs-types": "node ./scripts/generate-webhook-cjs-types.mjs",
-    "dev": "tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
+    "dev": "tsup ./src/index.ts ./src/telemetry/index.ts ./src/effect.ts ./src/media/index.ts ./src/sync/index.ts --format esm --out-dir ./dist --platform browser --external effect --watch",
     "generate:webhooks": "node ./scripts/generate-webhook-contract.mjs",
     "check:webhooks-generated": "node ./scripts/generate-webhook-contract.mjs --check",
     "test": "pnpm exec vitest run",

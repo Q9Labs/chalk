@@ -2,6 +2,8 @@
 
 _Goals & constraints for the ground-up redesign. Read this when a decision feels ambiguous — it breaks the tie._
 
+> This document describes the intended end state, not current release readiness. See [`product.yaml`](../../product.yaml) or [`checklist.md`](../../checklist.md) for the evidence-backed implementation inventory.
+
 ---
 
 ## What Chalk is

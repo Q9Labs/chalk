@@ -1,7 +1,5 @@
-# Chalk mobile whiteboard
+# Native Chalk whiteboard proposal
 
-Chalk should own a small whiteboard format and render it natively on web, iOS, and Android. The first version needs pen strokes, basic shapes, text, selection, erasing, zoom, and pan.
+This is a target design, not a shipped-capability description. The current React whiteboard uses the shared Excalidraw collaboration package, while React Native exposes whiteboard state but still renders a placeholder stage; see [`product.yaml`](../../product.yaml) for current status.
 
-Clients should apply edits locally, then send versioned operations through Chalk's existing whiteboard transport. Ordered operations, snapshots, retries, and deterministic conflict rules can guarantee that every client eventually reaches the same board, while live cursors and partial strokes make collaboration feel immediate.
-
-This approach avoids a WebView and Excalidraw dependency, but Chalk must build and maintain the editing experience. The scope should stay smaller than Excalidraw until the core board works well on real devices.
+A native implementation should render and edit Chalk's shared whiteboard model directly on iOS and Android rather than embedding a web canvas. It should support local-first edits, versioned operations, snapshots, retry, deterministic conflict handling, cursors, and partial strokes, with one interoperable file format across web and mobile.

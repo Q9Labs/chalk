@@ -1022,12 +1022,12 @@
       <button class="control" id="up-button" title="Go up one level (Esc)">↑</button>
     </div>
     <div id="legend" aria-label="Implementation status legend">
-      <span class="key"><span class="swatch"></span>built</span>
-      <span class="key"><span class="swatch partial"></span>partial</span>
-      <span class="key"><span class="swatch planned"></span>planned</span>
+      <span class="key"><span class="swatch"></span>repository evidence</span>
+      <span class="key"><span class="swatch partial"></span>canonical gaps</span>
+      <span class="key"><span class="swatch planned"></span>planned seam</span>
       <span>drag · scroll · click</span>
     </div>
-    <div id="hint">Enter the <b>Chalk platform</b>, or switch perspectives above. Status describes this repository, not a live deployment.</div>
+    <div id="hint">Enter the <b>Chalk platform</b>, or switch perspectives above. Built means repository implementation or focused-test evidence—not real-network E2E, deployment, or production qualification.</div>
     <div id="search" role="dialog" aria-modal="true" aria-label="Search architecture" aria-hidden="true">
       <div id="search-panel">
         <input id="search-input" aria-label="Search architecture" autocomplete="off" placeholder="Search planes, components, journeys, services, tables…" />
@@ -1036,9 +1036,10 @@
     </div>
     <script>
       "use strict";
-      /* Repository atlas dated 2026-07-17. Built means implemented in this tree;
-   partial means the boundary exists but deployment or a required path remains;
-   planned is an intentional seam, not a shipped claim; context is external. */
+      /* Repository atlas dated 2026-07-18. Built maps to a canonical product.yaml
+   true: implemented in this repository with direct code or focused-test evidence.
+   Open maps to a canonical false item or an aggregate that contains one; it is
+   not a percentage. Planned is an intentional missing seam; context is external. */
       const $ = (selector) => document.querySelector(selector);
       const esc = (value) => String(value).replace(/[&<>\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" })[char]);
       const COLORS = { green: "#78aa72", blue: "#5fa8c4", yellow: "#c7a63d", pink: "#c97f7f", violet: "#8b7dbc", slate: "#7c8b80" };
@@ -1071,19 +1072,31 @@
       };
       const icon = (name, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name] || ICONS.platform}"/></svg>`;
 
-      const STATUS_LABEL = { built: "BUILT", partial: "PARTIAL", planned: "PLANNED", context: "CONTEXT" };
+      const STATUS_LABEL = { built: "REPO BUILT", partial: "CANONICAL GAPS", planned: "PLANNED SEAM", context: "CONTEXT" };
       const statusText = (status) => STATUS_LABEL[status] || STATUS_LABEL.built;
-      const sourceTag = (source) => `<span class="source">${icon("code", 11)} ${esc(source)}</span>`;
+      const sourceTag = (source) => `<span class="source">${icon("code", 11)} repository evidence · ${esc(source)}</span>`;
       const rulesList = (items) => `<ul class="rules">${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`;
 
       const PARTIAL_GAPS = {
         "Experience surfaces": ["The hosted web app is still a local proof surface, not the complete first-party meeting product.", "Cross-platform release proof for every hosted web and native meeting flow is still outstanding."],
-        "Web app": ["The current room route proves a real localhost API, Sync, and Cloudflare call, but the full hosted meeting UX is not complete.", "A production deployment and end-to-end release proof remain outstanding."],
+        "Web app": [
+          "The room route proves a local API, Sync, and Cloudflare media path, but the public create-room flow and hosted meeting experience are not complete.",
+          "The iframe embed, public status, privacy, terms, and documentation app are also not implemented; managed deployment qualification and hosted end-to-end release proof are absent.",
+        ],
+        "Public product surfaces": ["Public create-room, iframe embed, status, privacy, terms, and product documentation routes are not implemented.", "The local room route and deployable seams do not establish hosted end-to-end or production proof."],
+        "Embedding & generated SDK coverage": ["Layered React components are not a turnkey React web provider or join flow; not all public API routes are generated.", "Swift, Kotlin, Python, and Go SDKs are not present in this repository."],
+        "Mobile app": ["Invite-link joining is implemented, but meeting creation is not enabled consistently in release builds.", "Real-device native media end-to-end proof is not present in the repository; this card does not claim a release-ready mobile meeting product."],
         Integrations: ["The API catalog, connection lifecycle, action policy, and audit path exist, but there is no complete first-party integration UI.", "A managed Composio connection and action flow has not yet been proven end to end in a release environment."],
         "Media plane": ["The Cloudflare SFU adapter is implemented; native RealtimeKit parity and its observability contract remain incomplete.", "Production provider-account, usage, and egress visibility still requires deployment proof."],
-        "RealtimeKit path": ["The uncommon React Native provider path has not completed the same end-to-end release proof as the direct Cloudflare SFU path.", "Opaque SDK background work remains an explicit observability blind spot."],
+        "RealtimeKit path": ["The React Native RealtimeKit adapter and lifecycle are implemented, but real-device native media end-to-end proof is not present.", "Opaque provider SDK background work remains an explicit observability blind spot."],
+        "Real-network browser media suite": ["The local room path and Cloudflare adapter exist, but no real-network browser media end-to-end suite is implemented in the repository.", "Network failure, provider-account, and recovery evidence remain outstanding."],
+        "Real-device native media suite": ["The React Native media adapter exists, but no real-device native media end-to-end suite is implemented in the repository.", "Release-build device coverage and failure-path evidence remain outstanding."],
         Collaboration: ["A complete durable chat stream, retention path, and delivery contract are not implemented.", "Live captions and their in-room consent/privacy lifecycle are not yet complete."],
-        "Chat & reactions": ["Presentation surfaces exist, but the durable server-owned chat stream and delivery acknowledgements are not complete.", "Tenant-configurable retention still needs an owned persistence and cleanup path."],
+        "Chat & reactions": ["Presentation surfaces exist, but the durable server-owned chat stream, delivery acknowledgements, and retention are not implemented.", "A server-owned persistence and cleanup path remains outstanding."],
+        "Whiteboard web wiring": [
+          "The whiteboard engine and React canvas are implemented, but the public web app does not wire them into a complete product flow.",
+          "Whiteboard file sync is not the missing product-level file-attachment and tenant-retention flow; a live multi-client browser test is also not present.",
+        ],
         "Transcripts in-room": ["Post-meeting transcript artifacts exist, but a live caption source and in-room lifecycle are not complete.", "Consent, privacy state, and failure behavior still need end-to-end product proof."],
         "Recording & artifacts": ["The control and infrastructure contracts exist, but real recorder pools have not completed staging qualification and failure-to-recovery proof.", "Production R2/KMS adoption and a real capture-to-render artifact proof remain outstanding."],
         "Recorder admission & reconciliation": ["The external reconciler still needs a real staging deployment with qualified nodes.", "Capacity exhaustion, replacement, fencing, and recovery must be observed against actual provider inventory."],
@@ -1091,9 +1104,11 @@
         "Render pool": ["The TOR1 GPU pool contract and scaler policy exist, but a real deadline-aware render and recovery run is not yet proven.", "The worker image and zero-to-ready path still require staging qualification."],
         "AWS KMS envelope boundary": ["The key policy and encryption-context contract exist, but production key adoption and control-plane data-key use are not yet proven end to end.", "Rotation and rejected-context behavior still require live staging evidence."],
         "Operations & trust": ["The local observability stack is proven, but managed telemetry backends, notification routing, and retention are deployment work.", "Every user-visible service still needs a live synthetic failure-to-recovery proof before the plane is complete."],
-        "Uptime & public status": ["The registry and public-safe projection exist, but real deployment targets and notification recipients are not configured in this public tree.", "A live dependency failure and subsequent recovery have not yet been observed end to end."],
+        "Tenant administration & enterprise identity": ["Tenant and membership APIs are implemented, but complete first-party administration UI and SSO, SAML, or OIDC are not.", "Enterprise identity and administrative release proof remain absent."],
+        "Security & compliance gaps": ["End-to-end encryption and legal hold are not implemented; scoped auth, tenant isolation, audit APIs, and webhook secret rotation do not imply them.", "These canonical false capabilities require separate design and evidence."],
+        "Uptime & public status": ["The registry and public-safe projection exist, but the public status page, real deployment targets, and notification recipients are not configured in this public tree.", "A live dependency failure and subsequent recovery have not yet been observed end to end."],
         "Audit & erasure": ["An external durable deletion-tombstone reconciler is still required.", "Backup restoration is not complete until tombstones are replayed and that recovery path is proven."],
-        "Hosted surfaces": ["The hosted web route remains a local real-call proof rather than the complete meeting product.", "Release verification across the supported standalone platforms is still outstanding."],
+        "Hosted surfaces": ["The local web room is a real-call proof, not the complete hosted meeting product; public create-room and production-readiness claims remain open.", "Mobile joining exists, while release-build meeting creation and real-device media proof remain outstanding."],
         "Chalk platform": ["Hosted web, durable chat/live captions, recorder staging qualification, and managed operations retain incomplete work.", "The platform remains partial until every partial plane has its release and failure-recovery proof."],
         "Elastic artifact compute": ["The DigitalOcean recorder reconciler and real capture/render pools are not yet qualified in staging.", "The complete recording-to-transcription chain still needs a managed release proof."],
         "Managed recording": ["The durable intent, job, fencing, and artifact contracts are implemented, but a real staging capture-to-render journey is not yet proven.", "Capacity failure, worker loss, retry, and recovery still require live evidence."],
@@ -1106,12 +1121,12 @@
         "Invoke one pinned provider": ["The provider boundary is implemented, but a real staging source has not completed the pinned-provider path.", "Provider timeout, rejection, and retry behavior still need end-to-end evidence."],
         "Finalize and clean temporary objects": ["A real staging transcript has not yet reached deterministic finalization through the complete recording-to-provider path.", "Temporary-object cleanup and independently verified recovery after partial failure remain unproven."],
         "End-to-end observability": ["Local correlated telemetry and the durable journey ledger are proven; managed backends and independently tested human notification are not configured here.", "Provider blind spots and live deployed failure-to-recovery checks remain incomplete."],
-        "Hosted web edge": ["The current hosted room is a localhost proof surface; the complete production meeting experience and deployment verification are not finished."],
-        "Cloudflare media + R2": ["Adapters and infrastructure boundaries exist, but production account configuration, private R2 adoption, and provider usage visibility remain deployment proofs.", "Cloudflare-owned internals remain intentionally unobservable."],
+        "Hosted web edge": ["The current web room is a local repository proof surface; it is not the public create-room flow, iframe embed, or complete production meeting experience.", "Deployment verification and hosted end-to-end release proof are not finished."],
+        "Cloudflare media + R2": ["The adapters and infrastructure boundary are implemented, but managed production qualification and real-network browser media proof are not present.", "Cloudflare-owned internals remain intentionally unobservable."],
         "DigitalOcean recorder pools": ["Policy-only OpenTofu is present; the external reconciler still must create and qualify real capture/render nodes.", "Scale-up, fencing, replacement, and scale-to-zero recovery have not been proven in staging."],
         "AWS KMS + SSM": ["Infrastructure contracts exist, but real workload secret injection and context-bound data-key use are not yet proven in staging.", "Production adoption remains fail-closed until those proofs exist."],
         "Uptime worker + status": ["The worker and status projection are implemented, but deployment-specific targets and recipients remain private configuration.", "The real failure-to-recovery path has not yet been verified against a live service."],
-        "OpenTofu + CI quality gates": ["The canonical gate is currently red on the repository's known OSV dependency backlog.", "Production deployment and infrastructure verification remain intentionally outside public CI."],
+        "OpenTofu + CI quality gates": ["Repository quality gates and infrastructure definitions are present; they do not establish app-tier self-hosting qualification or managed production qualification.", "Deployment verification remains absent from the repository evidence."],
       };
       const partialGaps = (node) => (node.status === "partial" ? PARTIAL_GAPS[node.name] || [] : []);
 
@@ -1134,7 +1149,19 @@
           ],
           components: [
             { name: "Web app", status: "partial", desc: "Vite, React 19, and TanStack Router surface for the public site and hosted web experience.", rules: ["The app consumes @q9labsai/chalk-client.", "Cloudflare Vite integration keeps the hosted edge surface deployable."] },
-            { name: "Mobile app", status: "built", desc: "Expo 55 and React Native 0.83 verification surface for Android and Apple platforms.", rules: ["Uses platform-specific SDK entry points.", "SecureStore and SQLite provide platform persistence boundaries."] },
+            { name: "Mobile app", status: "partial", desc: "Expo 55 and React Native 0.83 surface with an implemented invite-link join flow.", rules: ["Meeting creation is not enabled consistently in release builds.", "Real-device native media qualification remains a separate open capability."] },
+            {
+              name: "Public product surfaces",
+              status: "partial",
+              desc: "The repository does not yet provide the public create-room flow, iframe embed, status, privacy, terms, or product documentation app.",
+              rules: ["A local room route is not a hosted product qualification.", "These are distinct canonical false capabilities, not implied by the SDK or Cloudflare deployment seams."],
+            },
+            {
+              name: "Deferred product surface",
+              status: "planned",
+              desc: "Webinar/viewer roles, desktop, AI tutoring, and tenant-selectable sound packs remain deferred product work.",
+              rules: ["No deferred surface is represented as shipped capability.", "The planned styling marks an intentional missing seam, not an implementation claim."],
+            },
             {
               name: "React component layers",
               status: "built",
@@ -1162,7 +1189,18 @@
           detail: "The TypeScript client is the shared behavioral boundary for apps and embedders. Generated HTTP and sync types sit beside the hand-authored V3 sync client, Cloudflare media adapter, telemetry runtime, and webhook consumer helpers.",
           rules: ["Language-neutral schemas generate wire types; TypeScript is one target, not the protocol authority.", "Canonical control state is separate from optimistic state.", "Server-only webhook code is blocked from browser and React Native bundles."],
           components: [
-            { name: "Generated HTTP client", status: "built", desc: "OpenAPI-derived request, response, and schema types for the public /v1 boundary.", rules: ["Generated artifacts are gate-checked.", "Authentication and tenant scope remain explicit."] },
+            {
+              name: "Embedding & generated SDK coverage",
+              status: "partial",
+              desc: "React layers and React Native surfaces exist, but turnkey React web joining, complete generated route coverage, and Swift, Kotlin, Python, and Go SDKs are not present.",
+              rules: ["Layered components are not a turnkey React web provider or join flow.", "Generated TypeScript coverage does not imply every public API route or another language SDK."],
+            },
+            {
+              name: "Generated HTTP client",
+              status: "partial",
+              desc: "OpenAPI-derived request, response, and schema types cover the generated control-plane surface.",
+              rules: ["Generated artifacts are gate-checked.", "Not all public API routes are represented in OpenAPI and generated SDK artifacts."],
+            },
             {
               name: "V3SyncClient",
               status: "built",
@@ -1210,6 +1248,12 @@
               rules: ["The business transaction stores the event and initial delivery branches.", "Customer payloads never expose internal journey IDs."],
             },
             { name: "Integrations", status: "partial", desc: "Tenant integration connections and audited Composio-backed catalog surfaces.", rules: ["Provider credentials remain outside domain types.", "Connection state is tenant scoped."] },
+            {
+              name: "Tenant administration & enterprise identity",
+              status: "partial",
+              desc: "Tenant and membership APIs exist, but complete first-party administration UI and SSO, SAML, or OIDC are not implemented.",
+              rules: ["Server authorization is built; an administration UI is not implied.", "Enterprise identity remains a canonical open capability."],
+            },
             {
               name: "Operational shell",
               status: "built",
@@ -1283,9 +1327,21 @@
             { name: "Cloudflare SFU adapter", status: "built", desc: "Direct WebRTC signaling, publication snapshots, track requests, and endpoint observations.", rules: ["Glass-to-glass latency remains physics-bound.", "Chalk measures both adapter calls and endpoint symptoms."] },
             {
               name: "RealtimeKit path",
-              status: "partial",
-              desc: "React Native integration used on the uncommon platform path behind the same product semantics.",
+              status: "built",
+              desc: "React Native RealtimeKit media adapter and lifecycle behind the same product semantics.",
               rules: ["Opaque SDK background work is documented as an observability blind spot.", "Registered transports retain journey attribution."],
+            },
+            {
+              name: "Real-network browser media suite",
+              status: "partial",
+              desc: "The local room path exists, but a real-network browser media end-to-end suite is not present.",
+              rules: ["A Cloudflare adapter and local call do not substitute for real-network browser coverage.", "Provider-account, network failure, and recovery evidence remain separate from repository implementation."],
+            },
+            {
+              name: "Real-device native media suite",
+              status: "partial",
+              desc: "Release and real-device end-to-end qualification for native media is not yet present.",
+              rules: ["Adapter implementation does not substitute for real-device proof.", "Failure paths must be observed on supported native platforms."],
             },
             { name: "DigitalOcean SFU adapter", status: "planned", desc: "Later Cloudflare-free media tier for full self-hosting.", rules: ["App-tier self-hosting does not wait for this adapter.", "It must satisfy the same authority and usage contract."] },
           ],
@@ -1313,8 +1369,14 @@
             {
               name: "Chat & reactions",
               status: "partial",
-              desc: "Rich web and native presentation surfaces exist; the complete durable server stream remains a carried product requirement.",
-              rules: ["UI does not claim delivery until a real owner supplies state.", "Chat retention remains tenant-configurable."],
+              desc: "Rich web and native presentation surfaces exist; durable server-owned chat, acknowledgements, and retention are not implemented.",
+              rules: ["UI does not claim delivery until a real owner supplies state.", "Retention requires an owned tenant-scoped persistence path."],
+            },
+            {
+              name: "Whiteboard web wiring",
+              status: "partial",
+              desc: "The collaboration engine and React canvas exist, but the public web app wiring and live multi-client browser test are missing.",
+              rules: ["The package implementation does not imply first-party app wiring.", "A browser test must exercise more than one client."],
             },
             {
               name: "Transcripts in-room",
@@ -1392,6 +1454,12 @@
               status: "partial",
               desc: "Tenant audit logs, sensitive access attribution, encrypted webhook material, event erasure fencing, and retention cleanup.",
               rules: ["Backup restoration still requires an external durable deletion tombstone reconciler.", "A restored backup is not ready before tombstone replay."],
+            },
+            {
+              name: "Security & compliance gaps",
+              status: "partial",
+              desc: "Scoped auth, tenant isolation, audit APIs, and webhook secret rotation exist; end-to-end encryption and legal hold do not.",
+              rules: ["These controls do not imply end-to-end encryption or legal hold.", "Enterprise compliance claims require separate implementation and evidence."],
             },
           ],
         },
@@ -1592,15 +1660,15 @@
           actors: ["Client", "Control API", "Lambda dispatcher", "AI provider", "Private R2"],
           steps: [
             { id: "t-request", lane: 0, row: 0, kind: "start", title: "Request transcript", sub: "No provider or object-key controls" },
-            { id: "t-source", lane: 1, row: 1, decision: true, status: "partial", title: "Verify committed recorder source", sub: "Manifest and audio facts" },
+            { id: "t-source", lane: 1, row: 1, decision: true, title: "Verify committed recorder source", sub: "Manifest and audio facts" },
             { id: "t-queue", lane: 1, row: 2, state: true, title: "Create fenced chunk jobs", sub: "Priority and retry owned by API" },
             { id: "t-claim", lane: 2, row: 3, title: "Claim + heartbeat", sub: "HMAC workload identity" },
             { id: "t-read", lane: 4, row: 4, title: "Read job-scoped source URLs", sub: "Checksum, size, content type" },
-            { id: "t-provider", lane: 3, row: 5, status: "partial", title: "Invoke one pinned provider", sub: "Policy and privacy gates" },
+            { id: "t-provider", lane: 3, row: 5, title: "Invoke one pinned provider", sub: "Policy and privacy gates" },
             { id: "t-write", lane: 4, row: 6, title: "Conditional normalized chunk PUT", sub: "transcript.v1 JSON" },
             { id: "t-complete", lane: 1, row: 7, title: "Verify + compare-and-set", sub: "Late fences return 409" },
             { id: "t-finalize", lane: 2, row: 8, title: "Compose deterministic final", sub: "Overlaps retained; languages sorted" },
-            { id: "t-clean", lane: 2, row: 9, kind: "end", status: "partial", title: "Finalize and clean temporary objects", sub: "Absence independently HEAD-verified" },
+            { id: "t-clean", lane: 2, row: 9, kind: "end", title: "Finalize and clean temporary objects", sub: "Absence independently HEAD-verified" },
           ],
         },
         webhook: {
@@ -1676,7 +1744,7 @@
           h: 125,
           tagline: "Vite + TanStack + Cloudflare adapter",
           chips: ["static/SSR seam"],
-          detail: "The public and hosted web surface deploys through the Cloudflare Vite integration while consuming the same client contracts as embedded applications.",
+          detail: "The web surface has a Cloudflare Vite deployment seam and consumes the same client contracts as embedded applications; this is not proof of a production-ready hosted meeting experience.",
           rules: ["Marketing deployments keep client telemetry off unless explicitly authenticated and enabled."],
           source: "apps/web",
         },
@@ -1708,7 +1776,7 @@
           h: 145,
           tagline: "/v1 REST · internal worker routes · health",
           chips: ["ports/adapters", "OTLP"],
-          detail: "The portable API tier can run managed or customer-hosted. It owns durable product facts, provider commands, worker authority, signed sync tokens, audit, webhooks, and journey intake.",
+          detail: "The app tier has source for customer-hosted API, sync, and Postgres. Managed deployment remains an unqualified product-readiness claim.",
           rules: ["Standard Postgres is the durable dependency.", "Secrets enter through runtime injection."],
           source: "apps/api",
         },
@@ -2245,7 +2313,7 @@
           w: state.width - 110,
           h: 70,
           detail: journey.tagline,
-          rules: ["Every lane boundary names the owner of the next accepted state.", "Partial status describes missing release proof or capability, not an ambiguous percentage."],
+          rules: ["Every lane boundary names the owner of the next accepted state.", "Open-gap status describes a missing capability or named proof, not an ambiguous percentage."],
         };
         let nodes = nodeHTML(summaryNode, `<div class="head"><div class="icon">${icon(journey.icon, 16)}</div><div><h3>${esc(journey.name)}</h3><div class="tag">${esc(journey.tagline)}</div></div></div><div class="enter">Open journey status ${icon("play", 11)}</div>`, 0, "journey-summary");
         registerDrawer(summaryNode, `JOURNEY · ${journey.name}`);

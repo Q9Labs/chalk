@@ -1,33 +1,33 @@
-# Chalk Quality Gate
+# Chalk Smart Gate
 
-`pnpm run gate` is the canonical local pre-remote quality contract for Chalk.
-Humans and agents should run this same script before asking for a commit, PR, or
-deployment. Lefthook also calls it from `pre-commit`.
+`pnpm run gate` is the single local and pull-request quality contract. It prints
+the changed files, every selected command and its reason, and every skipped
+check before execution.
 
-`pnpm run gate` is intentionally non-mutating. It does not auto-format,
-auto-fix, auto-stage, install hooks, or update generated contracts. If a check
-finds drift, fix the underlying file with an explicit command and rerun the
-gate.
+Local pre-commit runs classify staged files. Pull-request CI classifies the
+merge-base-to-HEAD diff using `GATE_BASE_REF` and `GATE_HEAD_REF`. Set
+`GATE_FILES` to a comma- or newline-delimited list for a focused diagnostic
+run. `pnpm run gate -- --full` is the nightly and release safety net.
 
-`pnpm run review:commit` runs a synchronous Codex review of the commit that Git
-just created. Set `CODEX_REVIEW_RUNS=2` or higher to run multiple reviews. Logs
-are written under `.git/codex-reviews/<short-sha>/` so review output never
-dirties the worktree.
+The classifier fails closed to full scope when gate definitions, root build
+configuration, or an unknown path changes. Its routing tests run at the start
+of every gate.
 
-`pnpm run gate:hygiene` fails on placeholder scripts, `--passWithNoTests`,
-missing scripts referenced by `scripts/gates/commit.sh`, Turbo
-`<NONEXISTENT>` task resolution, and generated OpenAPI stubs. This keeps the
-gate honest before deeper checks run.
+## Selection Rules
 
-`pnpm run test:presence` requires newly added meaningful source files to have
-nearby tests against `origin/master` by default. It excludes generated files,
-declarations, barrels, assets, style-only files, config files, migrations,
-scripts, and test helpers by explicit Chalk policy. Set
-`TEST_PRESENCE_BASE_REF` or `TEST_PRESENCE_FILES` to change the comparison
-scope.
+- Repository hygiene and diff-scoped secret scanning always run.
+- Formatting, Fallow, Semgrep, test-presence, workspace type checks, coverage
+  tests, and builds follow affected source files and workspace dependents.
+- Tests run once with coverage; lint aliases do not repeat formatting or type
+  checks.
+- Go API changes run the complete language gate; Elixir Sync changes run locked
+  dependencies, formatting, and warnings-as-errors compilation. Both share one
+  disposable, migrated PostgreSQL container that is removed on exit. Run
+  `apps/sync/scripts/gate.sh` manually for Sync's Credo and full test suite.
+- Contract producers and consumers run generated-contract and SDK drift checks.
+- Dependency inputs run Syncpack and OSV against tracked product lockfiles.
+- Publishable packages run Publint and Are The Types Wrong only when affected.
+- Architecture and recorder inputs run their standalone gates.
 
-The gate also runs Fallow, Semgrep, Gitleaks, OSV-Scanner, the focused
-`apps/api` Go gate when present, Syncpack, OpenAPI drift/stub checks,
-TypeScript, lint, tests, coverage, build, publint, and Are The Types Wrong.
-Gitleaks scans the commit delta from `origin/master` by default; set
-`GITLEAKS_BASE_REF` or `GITLEAKS_LOG_OPTS` to change that range.
+The full mode selects every rule. CI runs it nightly; release verification must
+run it before shipping.

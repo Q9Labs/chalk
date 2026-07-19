@@ -12,6 +12,7 @@ Usage:
 
 Commands:
   run       Run the full gate. This is also the default.
+  basic     Check locked dependencies, formatting, and compilation only.
   describe  Describe what the gate checks.
   help      Show this help.
 
@@ -25,9 +26,9 @@ Checks:
 EOF
 }
 
-command="${1:-run}"
+command="${1:-${CHALK_SYNC_GATE_MODE:-run}}"
 case "$command" in
-  run) ;;
+  run | basic) ;;
   describe | help | -h | --help)
     describe
     exit 0
@@ -51,7 +52,13 @@ run "Elixir version" elixir --version
 run "Dependencies" mix deps.get --check-locked
 run "Format check" mix format --check-formatted
 run "Compile (warnings as errors)" env MIX_ENV=test mix compile --warnings-as-errors
+
+if [[ "$command" == "basic" ]]; then
+  printf '\nSync server basic gate passed.\n'
+  exit 0
+fi
+
 run "Credo" mix credo --strict
-run "Tests" mix test
+run "Tests" mix test --max-cases "${CHALK_SYNC_TEST_MAX_CASES:-10}"
 
 printf '\nSync server gate passed.\n'

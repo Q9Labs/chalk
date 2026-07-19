@@ -1,22 +1,11 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const repoRoot = process.cwd();
 const errors = [];
 
-const packageJsonPaths = [
-  "package.json",
-  "apps/mobile/package.json",
-  "apps/web/package.json",
-  "infrastructure/uptime-worker/package.json",
-  "packages/assets/package.json",
-  "packages/facehash/package.json",
-  "sdks/typescript/client/package.json",
-  "sdks/typescript/react-native/package.json",
-  "sdks/typescript/react/package.json",
-  "packages/ui/package.json",
-  "packages/whiteboard/package.json",
-];
+const packageJsonPaths = execFileSync("git", ["ls-files", "*package.json"], { cwd: repoRoot, encoding: "utf8" }).trim().split(/\r?\n/).filter(Boolean);
 
 const weakScriptPattern = /^(echo\b.*|true|exit\s+0)$/;
 const placeholderPattern = /No (?:linter|tests?) configured yet|TODO: document/i;
@@ -27,6 +16,9 @@ function readJson(relativePath) {
 
 for (const relativePath of packageJsonPaths) {
   const pkg = readJson(relativePath);
+  if (pkg.private !== true && pkg.license !== "MIT") {
+    errors.push(`${relativePath}: public package must declare an MIT license`);
+  }
   for (const [name, command] of Object.entries(pkg.scripts ?? {})) {
     const trimmed = String(command).trim();
     if (weakScriptPattern.test(trimmed)) {

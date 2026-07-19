@@ -113,7 +113,9 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 		t.Fatalf("stale observation = %v", err)
 	}
 	conflictingObservation := observationInput
+	conflictingObservation.Publications = append([]provideroperations.Publication(nil), observationInput.Publications...)
 	conflictingObservation.Publications[0].Enabled = false
+	conflictingObservation.Publications[0].PublicationID = ""
 	if _, err := repository.AppendObservation(ctx, conflictingObservation); !errors.Is(err, provideroperations.ErrObservationConflict) {
 		t.Fatalf("observation conflict = %v", err)
 	}

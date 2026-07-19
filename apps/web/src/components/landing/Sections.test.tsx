@@ -17,7 +17,7 @@ describe("PerfBudget", () => {
   it("renders the performance targets and latency visual", () => {
     const markup = renderToStaticMarkup(<PerfBudget />);
 
-    expect(markup).toContain("Click to media flowing");
+    expect(markup).toContain("Click to media target");
     expect(markup).toContain("sync");
     expect(markup).toContain("glass-to-glass");
   });
@@ -27,7 +27,7 @@ describe("SelfHost", () => {
   it("renders the stack ownership points", () => {
     const markup = renderToStaticMarkup(<SelfHost />);
 
-    expect(markup).toContain("Managed or self-hosted");
+    expect(markup).toContain("App-tier self-host source");
     expect(markup).toContain("Swappable media plane");
     expect(markup).toContain("Your identity, your tokens");
   });

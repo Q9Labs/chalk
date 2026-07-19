@@ -4,12 +4,13 @@ set -euo pipefail
 args=(scan source --no-resolve)
 while IFS= read -r -d '' file; do
   args+=(--lockfile "$file")
-done < <(
-  find . \
-    \( -path './node_modules' -o -path '*/node_modules' \) -prune -o \
-    \( -name 'go.mod' -o -name 'pnpm-lock.yaml' -o -name 'package-lock.json' -o -name 'yarn.lock' \) \
-    -print0
-)
+done < <(git ls-files -z | while IFS= read -r -d '' file; do
+  case "${file}" in
+    go.mod | */go.mod | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock)
+      printf '%s\0' "${file}"
+      ;;
+  esac
+done)
 
 if [ "${#args[@]}" -eq 3 ]; then
   args=(scan source --recursive --no-resolve --allow-no-lockfiles .)

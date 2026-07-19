@@ -1,22 +1,23 @@
 # Chalk
 
-Open-source, cross-platform, ultra low-latency video conferencing built from scratch.
+Chalk is an open-source monorepo for low-latency video conferencing on Cloudflare RealtimeKit. It contains the Go control-plane API, Elixir SyncEngine, TypeScript/React/React Native SDKs, first-party web and mobile surfaces, reusable whiteboard/UI packages, and supporting infrastructure.
 
-Jitsi and BigBlueButton are dependable but dated and hard to deploy. Zoom and Google Meet are polished but closed and costly. Chalk closes the gap: a flexible, robust core that small and medium teams can self-host from $30 and run secure, private calls on their own terms.
+The core room, session, admission, media-adapter, Sync v3, webhook, and telemetry boundaries are implemented. Chalk is still under active development: the hosted web product, public docs app, durable chat, native whiteboard, production recorder/transcription qualification, and managed operations are not complete.
 
-- **Self-hosted and private** — own your stack, no per-minute fees or vendor lock-in
-- **Cross-platform** — Android, iOS, and web
-- **Low latency** — runs on Cloudflare's global network
-- **Extensible** — built to embed into your own applications
-- **AI-native by design** — built as a foundation for AI tutoring, where a low-latency assistant can live inside the lesson
+Use these files instead of inferring product readiness from a component or route name:
 
-Six months in and on our second iteration.
+- [`product.yaml`](./product.yaml) — canonical, machine-readable capability inventory
+- [`checklist.md`](./checklist.md) — the same inventory as a domain-grouped checklist
+- [`architecture.html`](./architecture.html) — interactive technical architecture and open boundary gaps
+- [`docs/redesign/north-star.md`](./docs/redesign/north-star.md) — intended end state and deliberate v1 exclusions
 
----
+## Development
 
-## Cost Model
+Install dependencies with `pnpm install`. Run `pnpm run gate` for the canonical repository quality gate; `pnpm run gate:explain` describes its checks.
 
-See [`scratchpad/chalk-infra-cost-model-2026-07-12.md`](./scratchpad/chalk-infra-cost-model-2026-07-12.md) for the cost model, dated prices, and parametric planning formulas, or open [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html) in a browser for the live calculator.
+## Cost model
+
+[`scratchpad/chalk-infra-cost-model-2026-07-12.md`](./scratchpad/chalk-infra-cost-model-2026-07-12.md) contains dated planning assumptions and formulas. It is a model, not a current hosting-price guarantee. The interactive calculator is [`scratchpad/chalk-cost-calculator.html`](./scratchpad/chalk-cost-calculator.html).
 
 ## License
 

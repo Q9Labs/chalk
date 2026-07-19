@@ -6,54 +6,48 @@ export function FrontDoors() {
     <section className="section doors" id="sdk">
       <div className="container">
         <div className="section-head">
-          <p className="eyebrow">Two front doors</p>
+          <p className="eyebrow">Product direction</p>
           <h2>
-            Use it as an app. <Chalked>Ship it</Chalked> as a feature.
+            One core. <Chalked>Two front doors.</Chalked>
           </h2>
-          <p className="lede">The same core powers both — nothing about the embedded experience is second-class.</p>
+          <p className="lede">The SDK foundations are implemented today; the first-party hosted app and turnkey web integration are still being completed.</p>
         </div>
         <div className="doors-grid">
           <div className="door">
             <h3>The app</h3>
-            <p>Spin up a room, share the link, and you're meeting. Lobby, roles, recordings, transcripts, chat, and whiteboard are all there on day one — no setup, no downloads for guests.</p>
+            <p>The repository includes a mobile join flow and a local web proof room. Public room creation, the hosted meeting experience, and several collaboration flows are still open work.</p>
             <div className="door-shot" aria-hidden="true">
               <img src="/images/marketing/hero-1.png" width={2560} height={1476} alt="" loading="lazy" />
             </div>
             <div className="room-pill" aria-hidden="true">
-              <span>chalk.new/standup</span>
-              <span className="room-copy">Copy link</span>
+              <span>Hosted room flow</span>
+              <span className="room-copy">In progress</span>
             </div>
-            <a href="/new" className="door-link">
-              Start a meeting →
+            <a href="/sdk-preview" className="door-link">
+              View the current preview →
             </a>
           </div>
           <div className="door door-board">
-            <h3>The SDK</h3>
-            <p>Drop a full meeting experience into your product with one component, themed to match. Identity comes from tokens you sign — your users never leave your app.</p>
+            <h3>The SDKs</h3>
+            <p>The TypeScript client owns API, media, sync, telemetry, and server-only webhook behavior. React provides presentational meeting components, while React Native adds provider, hooks, and native meeting surfaces.</p>
             <div className="codeboard">
               <code className="codeboard-install">npm install @q9labsai/chalk-react</code>
               <pre>
                 <code>
                   <span className="tok-kw">import</span> {"{ "}
-                  <span className="tok-cmp">VideoConference</span>
-                  {" }"} <span className="tok-kw">from</span> <span className="tok-str">"@q9labsai/chalk-react"</span>;{"\n\n"}
-                  <span className="tok-kw">export function</span> <span className="tok-cmp">Meet</span>
-                  {"({ token }) {\n"}
+                  <span className="tok-cmp">VideoGrid</span>
+                  {" }"} <span className="tok-kw">from</span> <span className="tok-str">"@q9labsai/chalk-react/composite"</span>;{"\n\n"}
+                  <span className="tok-kw">export function</span> <span className="tok-cmp">MeetingStage</span>
+                  {"({ participants }) {\n"}
                   {"  "}
-                  <span className="tok-kw">return</span> {"<"}
-                  <span className="tok-cmp">VideoConference</span> <span className="tok-prop">token</span>
-                  {"={token} "}
-                  <span className="tok-prop">theme</span>
-                  {"={{ "}
-                  <span className="tok-prop">accentColor</span>
-                  {": "}
-                  <span className="tok-str">"#3e7647"</span>
-                  {" }} />;\n}"}
+                  <span className="tok-kw">return</span> {" <"}
+                  <span className="tok-cmp">VideoGrid</span> <span className="tok-prop">participants</span>
+                  {"={participants} />;\n}"}
                 </code>
               </pre>
             </div>
             <p className="tok-dim" style={{ fontSize: 13.5 }}>
-              React today — Swift, Kotlin, Python, and Go are generated from the same schema, so no language is second-class.
+              TypeScript, React, and React Native are implemented today. Swift, Kotlin, Python, and Go remain future generation targets.
             </p>
           </div>
         </div>
@@ -65,18 +59,18 @@ export function FrontDoors() {
 const STATS = [
   {
     num: "<1s",
-    what: "Click to media flowing",
-    how: "The join funnel is the money path: token check, session, ICE — first frame in under a second at p50.",
+    what: "Click to media target",
+    how: "The design budget targets first frame in under one second at p50; this is a target, not a published production measurement.",
   },
   {
     num: "<100ms",
-    what: "Every control signal",
-    how: "Mute, hand raise, reactions, chat, active speaker — sync-plane state lands in under 100ms at p95.",
+    what: "Control signal target",
+    how: "The design budget targets sub-100ms p95 for sync-plane signals; production qualification is still outstanding.",
   },
   {
     num: "<200ms",
-    what: "Glass to glass",
-    how: "Media latency same-region, camera to screen. A newly published track renders for others in under 500ms.",
+    what: "Glass-to-glass target",
+    how: "The design budget targets sub-200ms same-region media latency and sub-500ms new-track rendering.",
   },
 ];
 
@@ -90,7 +84,7 @@ export function PerfBudget() {
             <h2>
               Fast is a <Chalked>written spec</Chalked>, not a vibe.
             </h2>
-            <p className="lede">Chalk is built against a performance budget with numbers attached. Designs that miss it don't ship.</p>
+            <p className="lede">These are engineering targets from the north-star design, not observed production guarantees.</p>
           </div>
           <ul className="perf-stats">
             {STATS.map((s) => (
@@ -114,13 +108,13 @@ export function PerfBudget() {
 
 const STACK = [
   {
-    title: "Managed or self-hosted",
-    body: "Run on Chalk's cloud, or host the app tier yourself — API, sync, Redis, and standard Postgres. The core depends on nothing proprietary.",
+    title: "App-tier self-host source",
+    body: "The API, sync service, and standard Postgres authority are in the repository. Repeatable production deployment qualification is still open work.",
     stick: "var(--chalk-green)",
   },
   {
     title: "Swappable media plane",
-    body: "The SFU sits behind one contract, and provider details never leak into your data. Swap the engine without touching the rest.",
+    body: "Cloudflare sits behind a provider-neutral contract. A Cloudflare-free SFU adapter is designed but not implemented yet.",
     stick: "var(--chalk-blue)",
   },
   {
@@ -138,9 +132,9 @@ export function SelfHost() {
           <div className="section-head">
             <p className="eyebrow">Own your stack</p>
             <h2>
-              No lock-in, <Chalked>by construction</Chalked>.
+              Portable boundaries, <Chalked>built in.</Chalked>
             </h2>
-            <p className="lede">Flexibility isn't a roadmap item — the architecture is built so nothing can hold your deployment hostage.</p>
+            <p className="lede">The portability boundaries exist in code, but full self-hosting still depends on a future non-Cloudflare media adapter.</p>
           </div>
           <ul className="stack-points">
             {STACK.map((c) => (

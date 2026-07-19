@@ -110,7 +110,7 @@ func sfuAddTracksEndpoint(rooms RoomService, tenants TenantService, media MediaP
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantRoomSessionParticipantParameters()...).
 		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
-		Responds(http.StatusOK, "CloudflareSFUTracksResponse", mediaplane.TracksResponse{}).
+		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidParticipantID, apiErrorSessionNotFound, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
 		MapErrors(sessionLifecycleEndpointAPIError)
 }

@@ -14,6 +14,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Domain-grouped `product.yaml` and `checklist.md` inventories with 88 evidence-backed boolean capabilities, separating repository implementation from missing end-to-end or production proof.
 - Interactive system architecture atlas with drillable product planes,
   end-to-end journey swimlanes, runtime topology, Postgres data domains,
   implementation-status semantics with explicit completion gaps for partial
@@ -94,6 +95,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Replaced the always-full local gate and partial PR checks with one
+  context-aware contract that reports its decisions, follows affected
+  workspace dependents, includes Go and Elixir service-backed gates, runs tests
+  once with coverage, and retains nightly and release full verification.
+- Replaced stale readiness claims in the root docs and web marketing surface with current implementation boundaries, open product gaps, and target-only performance language.
 - Replaced synchronous application-node OpenRouter transcription with an
   API-owned artifact lifecycle and short-lived, job-scoped worker authority.
 - Tightened API and service completion rules around end-to-end observability,

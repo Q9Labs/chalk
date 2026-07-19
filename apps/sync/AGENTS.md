@@ -17,7 +17,9 @@ acceleration only.
   disabled in production.
 - Keep every frame, queue, task set, replay, diagnostic buffer, and retained
   database set explicitly bounded.
-- Run `scripts/gate.sh` before committing.
+- Run the repository-root `pnpm run gate` before committing; it selects this
+  app's basic gate whenever Sync files or shared gate inputs change. Run
+  `scripts/gate.sh` directly for Credo and the full test suite.
 - Commit only after the gate passes and stage only the intended paths with
   `git add -p`.
 - Run the required automated review after a nontrivial implementation and

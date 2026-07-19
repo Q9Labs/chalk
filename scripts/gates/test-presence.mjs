@@ -59,7 +59,7 @@ function gitLines(args) {
 
 function getExplicitFiles() {
   const raw = process.env.TEST_PRESENCE_FILES;
-  if (!raw) return [];
+  if (raw === undefined) return null;
   return raw
     .split(/[\r\n,]/)
     .map((line) => line.trim())
@@ -68,7 +68,7 @@ function getExplicitFiles() {
 
 function getAddedFiles() {
   const explicitFiles = getExplicitFiles();
-  if (explicitFiles.length > 0) return explicitFiles;
+  if (explicitFiles !== null) return explicitFiles;
 
   const addedFiles = new Set([...gitLines(["diff", "--cached", "--name-only", "--diff-filter=A"]), ...gitLines(["diff", "--name-only", "--diff-filter=A"]), ...gitLines(["ls-files", "--others", "--exclude-standard"])]);
 

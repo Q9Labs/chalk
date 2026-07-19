@@ -98,6 +98,79 @@ export const AuthSchema = Schema.Struct({
 });
 export type Auth = typeof AuthSchema.Type;
 
+export const CloudflareSFUPublicationsResponseSchema = Schema.Struct({
+  incarnation: Schema.Number,
+  publications: Schema.Array(
+    Schema.Struct({
+      participant_session_id: RoomSessionIdSchema,
+      publication_id: UUIDSchema,
+      source: Schema.String,
+    }),
+  ),
+  sequence: Schema.Number,
+});
+export type CloudflareSFUPublicationsResponse = typeof CloudflareSFUPublicationsResponseSchema.Type;
+
+export const CloudflareSFURenegotiateRequestSchema = Schema.Struct({
+  connection_id: UUIDSchema,
+  session_description: Schema.Struct({
+    sdp: Schema.String.check(Schema.isMinLength(1)),
+    type: Schema.String.check(Schema.isMinLength(1)),
+  }),
+});
+export type CloudflareSFURenegotiateRequest = typeof CloudflareSFURenegotiateRequestSchema.Type;
+
+export const CloudflareSFURenegotiateResponseSchema = Schema.Struct({
+  accepted: Schema.Boolean,
+});
+export type CloudflareSFURenegotiateResponse = typeof CloudflareSFURenegotiateResponseSchema.Type;
+
+export const CloudflareSFUTracksAPIResponseSchema = Schema.Struct({
+  requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
+  sessionDescription: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        sdp: Schema.String,
+        type: Schema.String,
+      }),
+    ),
+  ),
+  tracks: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        location: Schema.String,
+        mid: Schema.optional(Schema.String),
+        sessionId: Schema.optional(Schema.String),
+        source: Schema.optional(Schema.String),
+        trackName: Schema.String,
+      }),
+    ),
+  ),
+});
+export type CloudflareSFUTracksAPIResponse = typeof CloudflareSFUTracksAPIResponseSchema.Type;
+
+export const CloudflareSFUTracksRequestSchema = Schema.Struct({
+  connection_id: UUIDSchema,
+  session_description: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        sdp: Schema.String.check(Schema.isMinLength(1)),
+        type: Schema.String.check(Schema.isMinLength(1)),
+      }),
+    ),
+  ),
+  tracks: Schema.Array(
+    Schema.Struct({
+      location: Schema.String.check(Schema.isMinLength(1)),
+      mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      trackName: Schema.String.check(Schema.isMinLength(1)),
+    }),
+  ),
+});
+export type CloudflareSFUTracksRequest = typeof CloudflareSFUTracksRequestSchema.Type;
+
 export const CreateMembershipRequestSchema = Schema.Struct({
   role: Schema.Literals(["owner", "admin", "member", "viewer"]),
   user_id: UserIdSchema,
@@ -869,6 +942,27 @@ export type RateLimitRemainingHeader = typeof RateLimitRemainingHeaderSchema.Typ
 export const RetryAfterHeaderSchema = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
 export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
 
+export const AddCloudflareSFUTracksPathParamsSchema = Schema.Struct({
+  participant_session_id: RoomSessionIdSchema,
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPathParamsSchema.Type;
+
+export const AddCloudflareSFUTracksRequestBodySchema = CloudflareSFUTracksRequestSchema;
+export type AddCloudflareSFUTracksRequestBody = typeof AddCloudflareSFUTracksRequestBodySchema.Type;
+
+export const AddCloudflareSFUTracksResponseSchema = CloudflareSFUTracksAPIResponseSchema;
+export type AddCloudflareSFUTracksResponse = typeof AddCloudflareSFUTracksResponseSchema.Type;
+
+export const AddCloudflareSFUTracks429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type AddCloudflareSFUTracks429ResponseHeaders = typeof AddCloudflareSFUTracks429ResponseHeadersSchema.Type;
+
 export const AdmitSessionParticipantPathParamsSchema = Schema.Struct({
   room_id: RoomIdSchema,
   session_id: RoomSessionIdSchema,
@@ -1390,6 +1484,24 @@ export type ListAuditLogsQueryParams = typeof ListAuditLogsQueryParamsSchema.Typ
 export const ListAuditLogsResponseSchema = AuditLogListSchema;
 export type ListAuditLogsResponse = typeof ListAuditLogsResponseSchema.Type;
 
+export const ListCloudflareSFUPublicationsPathParamsSchema = Schema.Struct({
+  participant_session_id: RoomSessionIdSchema,
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type ListCloudflareSFUPublicationsPathParams = typeof ListCloudflareSFUPublicationsPathParamsSchema.Type;
+
+export const ListCloudflareSFUPublicationsResponseSchema = CloudflareSFUPublicationsResponseSchema;
+export type ListCloudflareSFUPublicationsResponse = typeof ListCloudflareSFUPublicationsResponseSchema.Type;
+
+export const ListCloudflareSFUPublications429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListCloudflareSFUPublications429ResponseHeaders = typeof ListCloudflareSFUPublications429ResponseHeadersSchema.Type;
+
 export const ListIntegrationConnectionsPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -1707,6 +1819,27 @@ export const RemoveSessionParticipant429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RemoveSessionParticipant429ResponseHeaders = typeof RemoveSessionParticipant429ResponseHeadersSchema.Type;
+
+export const RenegotiateCloudflareSFUPathParamsSchema = Schema.Struct({
+  participant_session_id: RoomSessionIdSchema,
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RenegotiateCloudflareSFUPathParams = typeof RenegotiateCloudflareSFUPathParamsSchema.Type;
+
+export const RenegotiateCloudflareSFURequestBodySchema = CloudflareSFURenegotiateRequestSchema;
+export type RenegotiateCloudflareSFURequestBody = typeof RenegotiateCloudflareSFURequestBodySchema.Type;
+
+export const RenegotiateCloudflareSFUResponseSchema = CloudflareSFURenegotiateResponseSchema;
+export type RenegotiateCloudflareSFUResponse = typeof RenegotiateCloudflareSFUResponseSchema.Type;
+
+export const RenegotiateCloudflareSFU429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RenegotiateCloudflareSFU429ResponseHeaders = typeof RenegotiateCloudflareSFU429ResponseHeadersSchema.Type;
 
 export const RequestTranscriptPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
@@ -3657,6 +3790,23 @@ export const WebhookEventTypeUnavailableErrorSchema = WebhookEventTypeUnavailabl
   }),
 );
 
+export const AddCloudflareSFUTracksErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  MediaPlaneUnavailableErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type AddCloudflareSFUTracksError = typeof AddCloudflareSFUTracksErrorSchema.Type;
+
 export const AdmitSessionParticipantErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   IdempotencyConflictErrorSchema,
@@ -4020,6 +4170,21 @@ export type IssueSessionParticipantSyncTokenError = typeof IssueSessionParticipa
 export const ListAuditLogsErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, InvalidTenantIdErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type ListAuditLogsError = typeof ListAuditLogsErrorSchema.Type;
 
+export const ListCloudflareSFUPublicationsErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  MediaPlaneUnavailableErrorSchema,
+  NotFoundErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type ListCloudflareSFUPublicationsError = typeof ListCloudflareSFUPublicationsErrorSchema.Type;
+
 export const ListIntegrationConnectionsErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   InternalErrorSchema,
@@ -4213,6 +4378,23 @@ export const RemoveSessionParticipantErrorSchema = Schema.Union([
   UnauthenticatedErrorSchema,
 ]);
 export type RemoveSessionParticipantError = typeof RemoveSessionParticipantErrorSchema.Type;
+
+export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  MediaPlaneUnavailableErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type RenegotiateCloudflareSFUError = typeof RenegotiateCloudflareSFUErrorSchema.Type;
 
 export const RequestTranscriptErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -4439,6 +4621,7 @@ export const UpdateWebhookEndpointErrorSchema = Schema.Union([
 export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema.Type;
 
 export const ChalkOperationPolicies = {
+  addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -4471,6 +4654,7 @@ export const ChalkOperationPolicies = {
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   releaseRecordingReservation: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   setRoomSessionDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

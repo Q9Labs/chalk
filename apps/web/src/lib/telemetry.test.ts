@@ -14,8 +14,15 @@ afterEach(() => {
 });
 
 describe("webTelemetry", () => {
+  it("does not construct the Effect runtime during server module evaluation", async () => {
+    await import("./telemetry");
+
+    expect(telemetryModule.createTelemetryClient).not.toHaveBeenCalled();
+  });
+
   it("is inert without an explicitly enabled authenticated API deployment", async () => {
-    const { webTelemetry } = await import("./telemetry");
+    const { createWebTelemetry } = await import("./telemetry");
+    const webTelemetry = createWebTelemetry();
 
     expect(webTelemetry.enabled).toBe(false);
   });
@@ -24,7 +31,8 @@ describe("webTelemetry", () => {
     vi.stubEnv("VITE_CHALK_API_URL", "https://api.chalk.test");
     vi.stubEnv("VITE_CHALK_TELEMETRY_ENABLED", "true");
 
-    await import("./telemetry");
+    const { createWebTelemetry } = await import("./telemetry");
+    createWebTelemetry();
 
     expect(telemetryModule.createBrowserRuntimeTelemetryStorage).toHaveBeenCalledWith("chalk.web.telemetry.v1");
   });

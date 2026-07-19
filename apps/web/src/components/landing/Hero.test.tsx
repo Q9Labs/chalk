@@ -18,7 +18,8 @@ describe("Hero", () => {
     const markup = renderToStaticMarkup(<Hero />);
 
     expect(markup).toContain("/images/marketing/hero-2.png");
-    expect(markup).toContain("A live Chalk meeting");
-    expect(markup).toContain("Start a meeting");
+    expect(markup).toContain("Chalk meeting interface concept");
+    expect(markup).toContain("View SDK preview");
+    expect(markup).not.toContain('href="/new"');
   });
 });

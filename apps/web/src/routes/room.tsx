@@ -1,4 +1,5 @@
-import { CloudflareSFUClient, createCloudflareSFUHTTPTransport, createV3SyncClient, type V3SessionSnapshot } from "@q9labsai/chalk-client";
+import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "@q9labsai/chalk-client/media";
+import { createV3SyncClient, type V3SessionSnapshot } from "@q9labsai/chalk-client/sync";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 

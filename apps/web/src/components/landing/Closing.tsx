@@ -1,14 +1,14 @@
 import { Chalked } from "./Chalked";
 
 const FEATURES = [
-  { title: "Recordings", body: "Host-controlled, durably stored, shareable by link.", stick: "var(--chalk-green)" },
-  { title: "Transcription", body: "Live captions that persist, full transcripts after the call.", stick: "var(--chalk-yellow)" },
-  { title: "Chat & files", body: "Durable room chat with attachments and read state.", stick: "var(--chalk-blue)" },
-  { title: "Whiteboard", body: "Draw together with per-person grants and saved snapshots.", stick: "var(--chalk-pink)" },
-  { title: "Lobby & roles", body: "Waiting room, capability-based roles, host succession.", stick: "var(--chalk-blue)" },
-  { title: "Reactions & presence", body: "Hand raise, reactions, active speaker — all near-instant.", stick: "var(--chalk-pink)" },
-  { title: "Webhooks", body: "Signed deliveries with retries and full delivery history.", stick: "var(--chalk-green)" },
-  { title: "Status & diagnostics", body: "Public status page and deep client-side diagnostics.", stick: "var(--chalk-yellow)" },
+  { title: "Meeting core", body: "Room, session, admission, role, and lifecycle boundaries are implemented.", stick: "var(--chalk-green)" },
+  { title: "Realtime sync", body: "Sync v3 provides durable control state, bounded recovery, and reconnect semantics.", stick: "var(--chalk-yellow)" },
+  { title: "Media adapters", body: "Cloudflare web and React Native RealtimeKit adapters are implemented.", stick: "var(--chalk-blue)" },
+  { title: "Whiteboard", body: "The React collaboration package ships today; web-app and native rendering remain open.", stick: "var(--chalk-pink)" },
+  { title: "Recording", body: "Control-plane contracts exist; real capture and render pools are not yet qualified.", stick: "var(--chalk-blue)" },
+  { title: "Transcription", body: "Dispatcher and artifact flows exist; complete managed-path proof remains open.", stick: "var(--chalk-pink)" },
+  { title: "Webhooks", body: "Versioned events, signatures, retries, fixtures, and consumer helpers are implemented.", stick: "var(--chalk-green)" },
+  { title: "Operations", body: "Local telemetry and health contracts exist; managed operations are not yet qualified.", stick: "var(--chalk-yellow)" },
 ];
 
 export function FeatureGrid() {
@@ -16,11 +16,11 @@ export function FeatureGrid() {
     <section className="section features" id="features">
       <div className="container">
         <div className="section-head">
-          <p className="eyebrow">Batteries included</p>
+          <p className="eyebrow">Implementation status</p>
           <h2>
-            The whole <Chalked>meeting surface</Chalked>.
+            Built foundations. <Chalked>Open product work.</Chalked>
           </h2>
-          <p className="lede">Everything a real meeting needs, in the app and through the SDK.</p>
+          <p className="lede">Chalk has substantial infrastructure and SDK coverage, but a component or API boundary does not imply a complete hosted flow.</p>
         </div>
         <div className="features-grid">
           {FEATURES.map((f) => (
@@ -44,13 +44,13 @@ export function Closing() {
             <h2>
               Pick up <Chalked>Chalk</Chalked>.
             </h2>
-            <p>Start a meeting in your browser right now, or put one inside your product this week. Either door leads to the same fast, durable core.</p>
+            <p>Explore the current React component surface and the architecture being assembled around it.</p>
             <div className="close-ctas">
-              <a href="/new" className="btn btn-light">
-                Start a meeting
+              <a href="/sdk-preview" className="btn btn-light">
+                View SDK preview
               </a>
               <a href="#sdk" className="btn btn-ghost" style={{ color: "#eef2ea", borderColor: "rgba(255,255,255,0.28)" }}>
-                Embed the SDK
+                Explore the SDKs
               </a>
             </div>
           </div>
@@ -60,11 +60,7 @@ export function Closing() {
         <div className="container footer-inner">
           <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
           <span>© 2026 Q9 Labs</span>
-          <nav className="footer-links" aria-label="Legal">
-            <a href="/status">Status</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/terms">Terms</a>
-          </nav>
+          <span>Under active development</span>
         </div>
       </footer>
     </>

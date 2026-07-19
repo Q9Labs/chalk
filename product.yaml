@@ -1,0 +1,301 @@
+schema_version: 1
+as_of: "2026-07-18"
+product: Chalk
+status_semantics:
+  true: "Implemented in this repository with direct code or focused-test evidence."
+  false: "Missing, placeholder-only, incomplete end to end, or dependent on production proof not present in this repository."
+notes:
+  - "There is deliberately no partial state. Large capabilities are split into smaller checks so each result is boolean."
+  - "A true result proves repository implementation, not a deployed production service, unless the item explicitly says deployment."
+  - "Evidence paths are representative rather than exhaustive."
+
+domains:
+  product_delivery:
+    - capability: "App-tier self-hosting source is available for API, sync, and Postgres"
+      done: true
+      evidence: ["apps/api", "apps/sync", "infrastructure"]
+    - capability: "App-tier self-hosting has a documented, repeatable production deployment qualification"
+      done: false
+      evidence: ["docs/redesign/north-star.md", "architecture.html"]
+    - capability: "Cloudflare-free media self-hosting"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "Managed production deployment is qualified in this repository"
+      done: false
+      evidence: ["architecture.html", "infrastructure/README.md"]
+    - capability: "Public product documentation app"
+      done: false
+      evidence: ["AGENTS.md"]
+
+  meeting_core:
+    - capability: "Room create, read, update, list, and lifecycle API"
+      done: true
+      evidence: ["apps/api/internal/httpapi/rooms.go", "apps/api/internal/httpapi/router.go"]
+    - capability: "Room, session, and participant-session separation"
+      done: true
+      evidence: ["apps/api/internal/sessionlifecycle", "apps/api/db"]
+    - capability: "Anonymous and token-based participant admission"
+      done: true
+      evidence: ["apps/api/internal/httpapi/session_lifecycle.go"]
+    - capability: "Lobby, admission, role, host-succession, and screen-share control semantics"
+      done: true
+      evidence: ["apps/sync", "sdks/typescript/client/src/sync"]
+    - capability: "Local web room proof with camera, microphone, SFU media, and Sync v3"
+      done: true
+      evidence: ["apps/web/src/routes/room.tsx"]
+    - capability: "Public web create-room flow"
+      done: false
+      evidence: ["apps/web/src/routes/new.tsx"]
+    - capability: "Production-ready hosted web meeting experience"
+      done: false
+      evidence: ["apps/web/src/routes/room.tsx", "architecture.html"]
+    - capability: "Mobile invite-link join flow"
+      done: true
+      evidence: ["apps/mobile/App.tsx", "apps/mobile/src/screens/HomeScreen.shared.tsx"]
+    - capability: "Mobile meeting creation is enabled consistently in release builds"
+      done: false
+      evidence: ["apps/mobile/src/screens/HomeScreen.shared.tsx"]
+    - capability: "Iframe meeting embed"
+      done: false
+      evidence: ["apps/web/src/routes", "docs/redesign/north-star.md"]
+    - capability: "Public status page"
+      done: false
+      evidence: ["apps/web/src/routes/status.tsx"]
+    - capability: "Privacy and terms pages"
+      done: false
+      evidence: ["apps/web/src/routes/privacy.tsx", "apps/web/src/routes/terms.tsx"]
+
+  identity_and_tenancy:
+    - capability: "Authentication and current-user API"
+      done: true
+      evidence: ["apps/api/internal/httpapi/auth.go", "apps/api/internal/httpapi/router.go"]
+    - capability: "Tenant and membership APIs"
+      done: true
+      evidence: ["apps/api/internal/httpapi/tenants.go", "apps/api/internal/httpapi/memberships.go"]
+    - capability: "Server-enforced tenant authorization"
+      done: true
+      evidence: ["apps/api/internal/httpapi", "apps/api/internal/authentication"]
+    - capability: "Complete first-party tenant administration UI"
+      done: false
+      evidence: ["apps/web/src/routes"]
+    - capability: "SSO, SAML, or OIDC"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+
+  media:
+    - capability: "Provider-neutral media-plane boundary"
+      done: true
+      evidence: ["apps/api/internal/mediaplane", "docs/redesign/north-star.md"]
+    - capability: "Cloudflare SFU control-plane and TypeScript client adapter"
+      done: true
+      evidence: ["apps/api/internal/httpapi/sfu_signaling.go", "sdks/typescript/client/src/media/cloudflare-sfu.ts"]
+    - capability: "React Native RealtimeKit media adapter and lifecycle"
+      done: true
+      evidence: ["sdks/typescript/react-native/src/media/realtimekit"]
+    - capability: "Real-network browser media end-to-end suite"
+      done: false
+      evidence: ["apps/web", "sdks/typescript/client"]
+    - capability: "Real-device native media end-to-end suite"
+      done: false
+      evidence: ["apps/mobile", "sdks/typescript/react-native"]
+    - capability: "Alternative self-hosted SFU adapter"
+      done: false
+      evidence: ["docs/redesign/north-star.md", "architecture.html"]
+
+  realtime_sync:
+    - capability: "SyncEngine v3 client, codec, reducer, and persistence"
+      done: true
+      evidence: ["sdks/typescript/client/src/sync"]
+    - capability: "Elixir Sync v3 runtime with Postgres durability"
+      done: true
+      evidence: ["apps/sync/lib", "apps/sync/test"]
+    - capability: "Bounded recovery, replay, receipts, and backpressure behavior"
+      done: true
+      evidence: ["apps/sync/README.md", "apps/sync/test", "sdks/typescript/client/src/sync"]
+    - capability: "Production topology, standby, and failure-recovery qualification"
+      done: false
+      evidence: ["apps/sync/README.md", "architecture.html"]
+
+  collaboration:
+    - capability: "React chat, reaction, participant, and waiting-room UI components"
+      done: true
+      evidence: ["sdks/typescript/react/src/components"]
+    - capability: "Durable server-owned chat stream, delivery acknowledgements, and retention"
+      done: false
+      evidence: ["architecture.html"]
+    - capability: "File attachments and tenant retention flow"
+      done: false
+      evidence: ["docs/redesign/north-star.md", "architecture.html"]
+    - capability: "Framework-neutral whiteboard collaboration engine"
+      done: true
+      evidence: ["packages/whiteboard/src/collab"]
+    - capability: "React Excalidraw canvas and math authoring"
+      done: true
+      evidence: ["packages/whiteboard/src/react", "sdks/typescript/react/src/components/full/WhiteboardPanel.tsx"]
+    - capability: "Whiteboard is wired into the public web app"
+      done: false
+      evidence: ["apps/web/src/routes/whiteboard.tsx"]
+    - capability: "Native mobile whiteboard rendering"
+      done: false
+      evidence: ["sdks/typescript/react-native/src/components/native-meeting-room/NativeMeetingStage.ios-phone.tsx"]
+    - capability: "Live multi-client whiteboard browser test"
+      done: false
+      evidence: ["packages/whiteboard"]
+
+  recording:
+    - capability: "Recording control-plane API and durable job contracts"
+      done: true
+      evidence: ["apps/api/internal/httpapi/recordings.go", "apps/api/internal/recordingpipeline"]
+    - capability: "Capture and render infrastructure definitions"
+      done: true
+      evidence: ["infrastructure/recorder", "infrastructure/opentofu"]
+    - capability: "React recording controls"
+      done: true
+      evidence: ["sdks/typescript/react/src/components"]
+    - capability: "Qualified real capture and render worker pools"
+      done: false
+      evidence: ["architecture.html", "infrastructure/README.md"]
+    - capability: "End-to-end recording to downloadable artifact proof"
+      done: false
+      evidence: ["architecture.html"]
+    - capability: "Meeting recording is wired into the first-party mobile flow"
+      done: false
+      evidence: ["apps/mobile/src"]
+
+  transcription:
+    - capability: "Transcript API, artifact contracts, and worker boundaries"
+      done: true
+      evidence: ["apps/api/internal/httpapi/transcripts.go", "apps/api/internal/httpapi/router.go"]
+    - capability: "Provider dispatcher, retry, finalization, and cleanup implementation"
+      done: true
+      evidence: ["apps/transcription-dispatcher/src", "apps/transcription-dispatcher/test"]
+    - capability: "React transcript and transcription UI"
+      done: true
+      evidence: ["sdks/typescript/react/src/components"]
+    - capability: "End-to-end managed recording-to-provider-to-final-transcript proof"
+      done: false
+      evidence: ["architecture.html"]
+    - capability: "Live in-room captions with consent and privacy lifecycle"
+      done: false
+      evidence: ["architecture.html"]
+    - capability: "Meeting transcripts are wired into the first-party mobile flow"
+      done: false
+      evidence: ["apps/mobile/src"]
+    - capability: "Standalone mobile dictation and transcription flow"
+      done: true
+      evidence: ["apps/mobile/src/lib/headquarters/useDictationController.ts"]
+
+  sdk_and_embedding:
+    - capability: "Generated TypeScript control-plane API and schemas"
+      done: true
+      evidence: ["contract/generated", "sdks/typescript/client/src/generated"]
+    - capability: "TypeScript media, sync, and telemetry client"
+      done: true
+      evidence: ["sdks/typescript/client/src"]
+    - capability: "Layered React meeting components"
+      done: true
+      evidence: ["sdks/typescript/react/src/components"]
+    - capability: "React Native provider, hooks, meeting surfaces, and platform bridges"
+      done: true
+      evidence: ["sdks/typescript/react-native/src"]
+    - capability: "Turnkey React web provider, hooks, and join flow"
+      done: false
+      evidence: ["sdks/typescript/react/README.md"]
+    - capability: "All public API routes are represented in OpenAPI and generated SDKs"
+      done: false
+      evidence: ["apps/api/AGENTS.md"]
+    - capability: "Swift SDK"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "Kotlin SDK"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "Python SDK"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "Go SDK"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+
+  integrations_and_webhooks:
+    - capability: "Tenant integration catalog, connection, policy, and audit APIs"
+      done: true
+      evidence: ["apps/api/internal/httpapi/integrations.go", "apps/api/internal/integrations"]
+    - capability: "Integration routes are generated into OpenAPI and SDK artifacts"
+      done: false
+      evidence: ["apps/api/AGENTS.md"]
+    - capability: "Complete first-party integration management UI"
+      done: false
+      evidence: ["apps/web/src/routes"]
+    - capability: "Versioned webhook event contracts and fixtures"
+      done: true
+      evidence: ["contract/webhooks/v1", "sdks/typescript/client/src/webhooks"]
+    - capability: "Webhook signing, raw-body verification, retries, processing, and idempotency helpers"
+      done: true
+      evidence: ["apps/api/internal/webhooks", "sdks/typescript/client/src/webhooks"]
+    - capability: "Live deployed webhook canary and recovery proof"
+      done: false
+      evidence: ["architecture.html", "infrastructure"]
+
+  observability_and_operations:
+    - capability: "Journey IDs and W3C trace context across client and API boundaries"
+      done: true
+      evidence: ["docs/observability.md", "sdks/typescript/client/src/telemetry", "apps/api/internal"]
+    - capability: "Local OpenTelemetry and Grafana observability stack"
+      done: true
+      evidence: ["infrastructure/observability"]
+    - capability: "API liveness and readiness endpoints"
+      done: true
+      evidence: ["apps/api/internal/httpapi/router.go"]
+    - capability: "Sync liveness, readiness, metrics, and graceful drain implementation"
+      done: true
+      evidence: ["apps/sync/lib", "apps/sync/test"]
+    - capability: "Uptime worker with bounded checks, retry, ingestion, and buffering"
+      done: true
+      evidence: ["infrastructure/uptime-worker/src"]
+    - capability: "Default uptime targets match every current API route"
+      done: false
+      evidence: ["infrastructure/uptime-worker/src/index.ts", "apps/api/internal/httpapi/router.go"]
+    - capability: "Public status projection is implemented"
+      done: false
+      evidence: ["apps/web/src/routes/status.tsx"]
+    - capability: "Managed telemetry backends and alert routing are production-qualified"
+      done: false
+      evidence: ["docs/observability.md", "architecture.html"]
+    - capability: "Real synthetic failure and recovery has been observed"
+      done: false
+      evidence: ["infrastructure/README.md", "architecture.html"]
+
+  security_and_compliance:
+    - capability: "Scoped authentication, tenant isolation, and audit-log APIs"
+      done: true
+      evidence: ["apps/api/internal/authentication", "apps/api/internal/httpapi/audit_logs.go"]
+    - capability: "Webhook secret rotation and signature verification"
+      done: true
+      evidence: ["sdks/typescript/client/src/webhooks"]
+    - capability: "Release mobile secrets are constrained to controlled CI"
+      done: true
+      evidence: ["apps/mobile/MOBILE_ENV_CONTRACT.md", "apps/mobile/scripts"]
+    - capability: "End-to-end encryption"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "Legal hold"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "Enterprise SSO"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+
+  deferred_product_surface:
+    - capability: "Webinar and viewer roles"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "Desktop application"
+      done: false
+      evidence: ["docs/redesign/north-star.md"]
+    - capability: "AI tutoring assistant product"
+      done: false
+      evidence: ["README.md", "architecture.html"]
+    - capability: "Tenant-selectable multi-pack sound system"
+      done: false
+      evidence: ["docs/redesign/sound-design.md"]

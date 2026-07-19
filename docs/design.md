@@ -1,6 +1,6 @@
 # Chalk Design System
 
-Canonical source of truth for Chalk UI work across `sdks/typescript/react`, `apps/web`, and future `apps/mobile`.
+Canonical design direction for Chalk UI work across `sdks/typescript/react`, `apps/web`, and `apps/mobile`. Current implementation gaps are tracked in [`product.yaml`](../product.yaml).
 
 ## Purpose
 
@@ -431,4 +431,4 @@ Chalk's current design system is one system with two layers:
 - `sdk-react core` for neutral embedded conferencing UI
 - `apps/web brand layer` for first-party Chalk expression
 
-This document is the source of truth for both the current implementation and the normalized model we want future work to follow.
+This document is the normalized design model future work should follow. It does not override the evidence-backed current status in [`product.yaml`](../product.yaml).

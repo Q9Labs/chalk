@@ -42,6 +42,7 @@ func TestLoadAcceptsEd25519SyncTokenSigningConfig(t *testing.T) {
 }
 
 func TestLoadDefaults(t *testing.T) {
+	t.Setenv(config.DatabaseURL, "")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("load config: %v", err)

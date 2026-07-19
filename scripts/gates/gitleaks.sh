@@ -19,6 +19,11 @@ if [[ -z "${LOG_OPTS}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1
 fi
 
 run_gitleaks() {
+  if [[ "${GATE_SCOPE:-}" == "staged" ]]; then
+    "$@" protect --staged --config "${CONFIG_PATH}" --redact --verbose
+    return
+  fi
+
   if [[ -n "${LOG_OPTS}" ]]; then
     "$@" git . --log-opts "${LOG_OPTS}" --config "${CONFIG_PATH}" --redact --verbose
   else

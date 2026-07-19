@@ -1,7 +1,3 @@
 # TODO
 
-Keep it minimal
-
-- [ ] Design and ship Chalk iframe embeds integration.
-  - Spec `/embed/rooms/:id`, embed tokens, iframe `allow` attributes, and a small `postMessage` API.
-  - Start with full meeting embed, then consider minimal/dashboard mode.
+The canonical remaining-work list is [`checklist.md`](./checklist.md). Update [`product.yaml`](./product.yaml) first when a capability changes, then keep the checklist in sync.

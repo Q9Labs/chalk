@@ -1,7 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
-import { webTelemetry } from "../lib/telemetry";
+import { createWebTelemetry } from "../lib/telemetry";
 import { installWebTelemetryLifecycle } from "../lib/telemetryLifecycle";
 import appCss from "../styles.css?url";
 
@@ -16,7 +16,7 @@ export const Route = createRootRoute({
       { title: "Chalk — Video calls. Your call." },
       {
         name: "description",
-        content: "Chalk is a real-time video platform with two front doors: a meeting app that works out of the box, and an SDK that drops into your product. Managed or self-hosted.",
+        content: "Chalk is an open-source video-conferencing stack under active development, with a Go API, durable realtime sync, and TypeScript, React, and React Native SDKs.",
       },
     ],
     links: [
@@ -50,6 +50,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 function WebTelemetryBootstrap() {
   useEffect(() => {
+    const webTelemetry = createWebTelemetry();
     const journey = webTelemetry.startJourney({ kind: "web.application" });
     return installWebTelemetryLifecycle(webTelemetry, journey);
   }, []);
