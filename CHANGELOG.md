@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Consumer SDK launch audit covering npm availability, missing meeting runtime
+  and credential boundaries, stale readiness inventory entries, and the
+  install-to-live-call release gate.
 - Domain-grouped `product.yaml` and `checklist.md` inventories with 88 evidence-backed boolean capabilities, separating repository implementation from missing end-to-end or production proof.
 - Interactive system architecture atlas with drillable product planes,
   end-to-end journey swimlanes, runtime topology, Postgres data domains,
