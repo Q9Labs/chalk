@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Implementation-ready web SDK launch board with frozen consumer contracts,
+  file-level pseudodiffs, dependency-ordered task cards, an interactive
+  lifecycle companion, and a packed two-browser release gate.
 - Consumer SDK launch audit covering npm availability, missing meeting runtime
   and credential boundaries, stale readiness inventory entries, and the
   install-to-live-call release gate.
