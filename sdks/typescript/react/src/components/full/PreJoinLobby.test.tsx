@@ -25,4 +25,13 @@ describe("PreJoinLobby", () => {
 
     expect(screen.getByRole("button", { name: "Join meeting" })).toBeDisabled();
   });
+
+  it("uses a consumer-provided logo without assuming an application asset path", () => {
+    const { rerender } = render(<PreJoinLobby defaultDisplayName="Ada" onJoin={vi.fn()} />);
+    expect(screen.queryByRole("img", { name: "Chalk" })).not.toBeInTheDocument();
+    expect(screen.getByText("Chalk")).toBeInTheDocument();
+
+    rerender(<PreJoinLobby logoUrl="/chalk.svg" defaultDisplayName="Ada" onJoin={vi.fn()} />);
+    expect(screen.getByRole("img", { name: "Chalk" })).toHaveAttribute("src", "/chalk.svg");
+  });
 });

@@ -39,7 +39,7 @@ function LocalRoomPage() {
   };
 
   if (!active) {
-    return <PreJoinLobby roomName="Chalk meeting" defaultDisplayName={initialName} isJoining={isCreating} error={error} onJoin={join} />;
+    return <PreJoinLobby roomName="Chalk meeting" logoUrl="/brand/chalk/chalk-logo.svg" defaultDisplayName={initialName} isJoining={isCreating} error={error} onJoin={join} />;
   }
 
   return (

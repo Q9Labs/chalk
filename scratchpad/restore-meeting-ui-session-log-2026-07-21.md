@@ -12,3 +12,6 @@
 - 2026-07-21 20:14 PKT — Ran the updated trace at HTTP 200 and passed the isolated Go API gate, including lifecycle smoke, vet, staticcheck, and vulnerability checks.
 - 2026-07-21 20:17 PKT — The staged gate exposed the expanded HTTP trust-boundary test exceeding Vitest's five-second default under concurrent coverage; raised that integration test's explicit budget to 15 seconds while preserving its assertions.
 - 2026-07-21 20:26 PKT — Passed the canonical staged gate after the timeout-budget correction, including concurrent coverage, packed consumer checks, production builds, and React package publication validation.
+- 2026-07-21 20:38 PKT — The bounded commit review found missing remote-audio rendering, camera-coupled screen-share visibility, a non-durable local host leave policy, and an application-relative SDK logo.
+- 2026-07-21 20:42 PKT — Added the shared audio renderer, made screen shares render without camera video, changed the local verification session to a durable host-leave policy, and parameterized the lobby logo with a text fallback; focused package and web checks passed.
+- 2026-07-21 20:52 PKT — Re-review caught that `continue` was not an accepted host-exit policy; restored `require_transfer` and moved durable demo-host cleanup to the server-only backend, where it ends the shared session and invalidates remaining local browser sessions.

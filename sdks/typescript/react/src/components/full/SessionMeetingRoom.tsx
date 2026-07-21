@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useChalkActions, useChalkSnapshot, useLocalMedia, useParticipants, useRemoteMedia } from "../../session";
 import { cn } from "../../utils/cn";
+import { AudioRenderer } from "../atomic";
 import { ConnectionLostOverlay, ControlBar, InviteModal, LeaveConfirmationDialog, MeetingHeader, ParticipantList, VideoGrid } from "../composite";
 import type { Participant } from "../composite";
 
@@ -45,6 +46,7 @@ export function SessionMeetingRoom({ roomName, displayName, meetingLink, onLeave
 
   const localId = snapshot.subject?.participantSessionId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participants, remoteMedia, localId, displayName, localMedia), [displayName, localId, localMedia, participants, remoteMedia]);
+  const audioParticipants = useMemo(() => toAudioParticipants(remoteMedia), [remoteMedia]);
   const listParticipants = useMemo(
     () =>
       tiles.map((participant) => ({
@@ -89,6 +91,7 @@ export function SessionMeetingRoom({ roomName, displayName, meetingLink, onLeave
 
   return (
     <main data-chalk data-chalk-theme="dark" className={cn("chalk-root dark relative flex h-dvh min-h-[620px] flex-col overflow-hidden bg-background text-foreground", className)}>
+      <AudioRenderer participants={audioParticipants} />
       <MeetingHeader roomName={roomName} duration={duration} layout={layout} onLayoutChange={setLayout} onInvite={() => setInviteOpen(true)} className="relative z-20 shrink-0" />
       <div className="flex min-h-0 flex-1 gap-3 px-3 pb-28 sm:px-5">
         <section className="min-w-0 flex-1 overflow-hidden rounded-[1.75rem] bg-[var(--chalk-bg-stage)] p-2 shadow-inner sm:p-3" aria-label="Meeting stage">
@@ -166,7 +169,7 @@ function toVideoParticipants(participants: readonly ChalkParticipant[], remoteMe
       displayName: localFromSync?.displayName || displayName,
       isLocal: true,
       isMuted: localMedia.microphone.state !== "enabled",
-      isVideoEnabled: localMedia.camera.state === "enabled",
+      isVideoEnabled: localMedia.camera.state === "enabled" || localMedia.screen.state === "enabled",
       isScreenSharing: localMedia.screen.state === "enabled",
       isHandRaised: localFromSync?.handRaised,
       videoTrack: localMedia.camera.track,
@@ -180,7 +183,7 @@ function toVideoParticipants(participants: readonly ChalkParticipant[], remoteMe
       id: participant.participantSessionId,
       displayName: participant.displayName,
       isMuted: !remoteMedia.some((publication) => publication.participantSessionId === participant.participantSessionId && publication.source === "microphone"),
-      isVideoEnabled: Boolean(media?.camera),
+      isVideoEnabled: Boolean(media?.camera || media?.screen),
       isScreenSharing: Boolean(media?.screen),
       isHandRaised: participant.handRaised,
       videoTrack: media?.camera,
@@ -188,6 +191,18 @@ function toVideoParticipants(participants: readonly ChalkParticipant[], remoteMe
     });
   }
   return result;
+}
+
+function toAudioParticipants(remoteMedia: readonly ChalkRemoteMedia[]) {
+  const byParticipant = new Map<string, { id: string; audioTrack?: MediaStreamTrack; screenShareAudioTrack?: MediaStreamTrack }>();
+  for (const publication of remoteMedia) {
+    if (publication.track.kind !== "audio") continue;
+    const participant = byParticipant.get(publication.participantSessionId) ?? { id: publication.participantSessionId };
+    if (publication.source === "microphone") participant.audioTrack = publication.track;
+    if (publication.source === "screen") participant.screenShareAudioTrack = publication.track;
+    byParticipant.set(publication.participantSessionId, participant);
+  }
+  return [...byParticipant.values()];
 }
 
 function toListRole(role: ChalkParticipant["role"] | undefined): "host" | "co-host" | "participant" {

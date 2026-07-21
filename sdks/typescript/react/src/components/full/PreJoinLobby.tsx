@@ -16,6 +16,7 @@ export type PreJoinSettings = {
 
 export interface PreJoinLobbyProps {
   readonly roomName?: string;
+  readonly logoUrl?: string;
   readonly defaultDisplayName?: string;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
@@ -25,7 +26,7 @@ export interface PreJoinLobbyProps {
   readonly className?: string;
 }
 
-export function PreJoinLobby({ roomName = "Chalk room", defaultDisplayName = "", initialMicrophoneEnabled = true, initialCameraEnabled = true, isJoining = false, error, onJoin, className }: PreJoinLobbyProps): React.JSX.Element {
+export function PreJoinLobby({ roomName = "Chalk room", logoUrl, defaultDisplayName = "", initialMicrophoneEnabled = true, initialCameraEnabled = true, isJoining = false, error, onJoin, className }: PreJoinLobbyProps): React.JSX.Element {
   const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(initialMicrophoneEnabled);
   const [cameraEnabled, setCameraEnabled] = useState(initialCameraEnabled);
@@ -97,7 +98,7 @@ export function PreJoinLobby({ roomName = "Chalk room", defaultDisplayName = "",
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 sm:px-7 lg:px-8">
         <header className="flex items-center justify-between gap-4 py-6">
           <div className="flex min-w-0 items-center gap-4">
-            <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" className={cn("h-auto w-36 shrink-0 sm:w-44", isDark && "invert")} draggable={false} />
+            {logoUrl ? <img src={logoUrl} alt="Chalk" className={cn("h-auto w-36 shrink-0 sm:w-44", isDark && "invert")} draggable={false} /> : <span className="text-2xl font-bold tracking-tight">Chalk</span>}
             <span className="hidden h-6 w-px bg-border/70 sm:block" />
             <span className="hidden max-w-64 truncate text-sm font-semibold text-muted-foreground sm:block">{roomName}</span>
           </div>

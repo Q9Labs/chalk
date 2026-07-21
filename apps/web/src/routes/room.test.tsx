@@ -58,6 +58,10 @@ describe("localhost Chalk backend trust boundary", () => {
           calls.push({ operation: "sessions.create", arguments: arguments_ });
           return { id: "session-server" };
         },
+        end: async (...arguments_: unknown[]) => {
+          calls.push({ operation: "sessions.end", arguments: arguments_ });
+          return { status: "accepted" };
+        },
       },
       participants: {
         admit: async (...arguments_: unknown[]) => {
@@ -133,6 +137,8 @@ describe("localhost Chalk backend trust boundary", () => {
       });
       expect(admitted.status).toBe(201);
       expect(await admitted.json()).toEqual({ source: "admission" });
+      const sessionCreate = calls.find((call) => call.operation === "sessions.create");
+      expect(sessionCreate?.arguments[1]).toEqual(expect.objectContaining({ host_exit_policy: "require_transfer" }));
       const admitCalls = calls.filter((call) => call.operation === "participants.admit");
       expect(admitCalls[0]?.arguments).toEqual(["room-server", "session-server", { participant_session_id: "participant-server", name: "Ada", initial_role: "host", eligible_roles: ["host", "cohost", "participant"] }, { idempotencyKey: "local-browser-participant-server" }]);
       expect(admitCalls[1]?.arguments).toEqual(admitCalls[0]?.arguments);
@@ -166,6 +172,21 @@ describe("localhost Chalk backend trust boundary", () => {
         { participant_session_id: "participant-guest", name: "Grace", initial_role: "participant", eligible_roles: ["participant", "cohost"] },
         { idempotencyKey: "local-browser-participant-guest" },
       ]);
+
+      const cleanup = await fetch(`${url}/local-chalk/cleanup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070", cookie },
+        body: JSON.stringify({}),
+      });
+      expect(cleanup.status).toBe(204);
+      expect(calls.find((call) => call.operation === "sessions.end")?.arguments).toEqual(["room-server", "session-server", { idempotencyKey: "local-browser-end-session-server" }]);
+
+      const staleGuest = await fetch(`${url}/local-chalk/access`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070", cookie: guestCookie },
+        body: JSON.stringify({}),
+      });
+      expect(staleGuest.status).toBe(401);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }

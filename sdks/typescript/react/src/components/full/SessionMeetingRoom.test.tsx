@@ -2,10 +2,21 @@
 
 import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChalkProvider } from "../../session";
 import { SessionMeetingRoom } from "./SessionMeetingRoom";
+
+const audioRendererSpy = vi.hoisted(() => vi.fn((_props: unknown) => null));
+const videoGridSpy = vi.hoisted(() => vi.fn((_props: unknown) => null));
+
+vi.mock("../atomic", async (importOriginal) => ({ ...(await importOriginal<typeof import("../atomic")>()), AudioRenderer: audioRendererSpy }));
+vi.mock("../composite", async (importOriginal) => ({ ...(await importOriginal<typeof import("../composite")>()), VideoGrid: videoGridSpy }));
+
+beforeEach(() => {
+  audioRendererSpy.mockClear();
+  videoGridSpy.mockClear();
+});
 
 describe("SessionMeetingRoom", () => {
   it("connects the restored meeting controls to Chalk session actions", () => {
@@ -28,9 +39,55 @@ describe("SessionMeetingRoom", () => {
     expect(setMicrophoneEnabled).toHaveBeenCalledWith(false);
     expect(screen.getByRole("dialog", { name: "Leave Meeting?" })).toBeInTheDocument();
   });
+
+  it("routes remote microphone and screen-share audio to the audio renderer", () => {
+    const microphoneTrack = { kind: "audio" } as MediaStreamTrack;
+    const screenTrack = { kind: "audio" } as MediaStreamTrack;
+    const store = createStore(
+      {},
+      {
+        remoteMedia: [
+          { participantSessionId: "remote", source: "microphone", publicationId: "mic", track: microphoneTrack },
+          { participantSessionId: "remote", source: "screen", publicationId: "screen-audio", track: screenTrack },
+        ],
+      },
+    );
+
+    render(
+      <ChalkProvider session={store}>
+        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+      </ChalkProvider>,
+    );
+
+    expect(audioRendererSpy.mock.calls.at(-1)?.[0]).toEqual({ participants: [{ id: "remote", audioTrack: microphoneTrack, screenShareAudioTrack: screenTrack }] });
+  });
+
+  it("marks a camera-off screen share as renderable video", () => {
+    const screenTrack = { kind: "video" } as MediaStreamTrack;
+    const store = createStore(
+      {},
+      {
+        participants: [
+          { participantSessionId: "local", displayName: "Ada", handRaised: false, role: "host", eligibleRoles: ["host"], capabilities: [] },
+          { participantSessionId: "remote", displayName: "Grace", handRaised: false, role: "participant", eligibleRoles: ["participant"], capabilities: [] },
+        ],
+        remoteMedia: [{ participantSessionId: "remote", source: "screen", publicationId: "screen", track: screenTrack }],
+      },
+    );
+
+    render(
+      <ChalkProvider session={store}>
+        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+      </ChalkProvider>,
+    );
+
+    const videoGridProps = videoGridSpy.mock.calls.at(-1)?.[0] as { readonly layout: string; readonly participants: readonly unknown[] };
+    expect(videoGridProps.layout).toBe("screen-share");
+    expect(videoGridProps.participants).toEqual(expect.arrayContaining([expect.objectContaining({ id: "remote", isVideoEnabled: true, isScreenSharing: true, screenShareTrack: screenTrack })]));
+  });
 });
 
-function createStore(actions: Partial<ChalkSessionStore>): ChalkSessionStore {
+function createStore(actions: Partial<ChalkSessionStore>, snapshotOverrides: Partial<ChalkSessionSnapshot> = {}): ChalkSessionStore {
   const resolved = () => Promise.resolve();
   const snapshot: ChalkSessionSnapshot = {
     state: "live",
@@ -46,6 +103,7 @@ function createStore(actions: Partial<ChalkSessionStore>): ChalkSessionStore {
     },
     remoteMedia: [],
     failure: null,
+    ...snapshotOverrides,
   };
   return {
     getSnapshot: () => snapshot,

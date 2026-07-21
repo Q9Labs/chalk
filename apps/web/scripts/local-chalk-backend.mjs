@@ -52,7 +52,14 @@ export function createLocalChalkHandler(options) {
       }
 
       if (url.pathname === "/local-chalk/cleanup") {
-        browserSessions.delete(browserSessionId);
+        if (browserSession.participantSessionId === hostParticipantSessionId && browserSession.roomId && browserSession.sessionId) {
+          await options.chalk.sessions.end(browserSession.roomId, browserSession.sessionId, { idempotencyKey: `local-browser-end-${browserSession.sessionId}` });
+          browserSessions.clear();
+          sharedRoomPromise = undefined;
+          hostParticipantSessionId = undefined;
+        } else {
+          browserSessions.delete(browserSessionId);
+        }
         response.setHeader("set-cookie", expiredSessionCookie());
         response.statusCode = 204;
         return response.end();

@@ -16,7 +16,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Connected React SDK meeting experience restored from the original Chalk design,
   including a device-aware prejoin lobby, responsive live meeting shell, layout
-  controls, participant list, invitations, and leave flows.
+  controls, participant list, invitations, remote audio playback, camera-independent
+  screen sharing, configurable branding, and leave flows.
 - Managed web SDK launch surface with scoped tenant API-key lifecycle, distinct
   short-lived Sync and media credentials, a server-only Promise client, the
   framework-neutral `ChalkSession` runtime, and React provider and hooks.
