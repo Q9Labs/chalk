@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Connected React SDK meeting experience restored from the original Chalk design,
+  including a device-aware prejoin lobby, responsive live meeting shell, layout
+  controls, participant list, invitations, and leave flows.
 - Managed web SDK launch surface with scoped tenant API-key lifecycle, distinct
   short-lived Sync and media credentials, a server-only Promise client, the
   framework-neutral `ChalkSession` runtime, and React provider and hooks.
@@ -111,6 +114,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Made the localhost web demo assign the first participant as host and made SFU
+  track responses project authoritative local locations so SDK publishing can
+  complete against Cloudflare's location-less provider response.
 - Replaced the first-party web room's direct token, Sync, and SFU orchestration
   with the public Chalk client and React SDK surfaces and a localhost-only
   server boundary that keeps tenant credentials out of the browser.

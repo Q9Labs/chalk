@@ -413,45 +413,42 @@ export const ControlBar = React.memo(
           >
             {/* Middle: Media controls */}
             <div className="flex items-center gap-1.5">
-              <DeviceControlButton
-                type="mic"
-                isActive={!isMuted}
-                onToggle={onToggleMute ?? (() => {})}
-                devices={effectiveAudioInputDevices}
-                selectedDeviceId={selectedAudioInput}
-                onDeviceChange={onAudioInputChange ?? (() => {})}
-                secondaryDevices={effectiveAudioOutputDevices}
-                selectedSecondaryDeviceId={selectedAudioOutput}
-                onSecondaryDeviceChange={onAudioOutputChange}
-                orientation="up"
-                haptic="medium"
-              />
+              {buttonsToRender.includes("mic") && (
+                <DeviceControlButton
+                  type="mic"
+                  isActive={!isMuted}
+                  onToggle={onToggleMute ?? (() => {})}
+                  devices={effectiveAudioInputDevices}
+                  selectedDeviceId={selectedAudioInput}
+                  onDeviceChange={onAudioInputChange ?? (() => {})}
+                  secondaryDevices={effectiveAudioOutputDevices}
+                  selectedSecondaryDeviceId={selectedAudioOutput}
+                  onSecondaryDeviceChange={onAudioOutputChange}
+                  orientation="up"
+                  haptic="medium"
+                />
+              )}
 
-              <DeviceControlButton type="video" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
+              {buttonsToRender.includes("video") && (
+                <DeviceControlButton type="video" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
+              )}
 
-              <div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
-                {renderButton("screenshare")}
-                {renderButton("whiteboard")}
-                {renderButton("handraise")}
-              </div>
+              {mediaButtons.some((button) => button !== "mic" && button !== "video") && (
+                <div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">{mediaButtons.filter((button) => button !== "mic" && button !== "video").map(renderButton)}</div>
+              )}
 
-              <div className="ml-1">
-                <ControlButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeave} danger className="h-10 w-auto px-5 rounded-full hover:scale-105 transition-transform shadow-lg" data-tour="controls-leave" />
-              </div>
+              {showLeave && (
+                <div className="ml-1">
+                  <ControlButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeave} danger className="h-10 w-auto px-5 rounded-full hover:scale-105 transition-transform shadow-lg" data-tour="controls-leave" />
+                </div>
+              )}
             </div>
 
             {/* Divider */}
-            <div className="w-px h-8 bg-black/10 dark:bg-white/10" />
+            {interactionButtons.length > 0 && <div className="w-px h-8 bg-black/10 dark:bg-white/10" />}
 
             {/* Right: Interaction controls */}
-            <div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">
-              {renderButton("participants")}
-              {renderButton("chat")}
-              {renderButton("transcription")}
-              {renderButton("thumbsup")}
-              {renderButton("settings")}
-              {renderButton("diagnostics")}
-            </div>
+            {interactionButtons.length > 0 && <div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">{interactionButtons.map(renderButton)}</div>}
           </div>
         </div>
       );

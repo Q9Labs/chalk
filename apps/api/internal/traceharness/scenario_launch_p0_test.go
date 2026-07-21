@@ -51,6 +51,10 @@ func TestParticipantMediaTraceAcceptsCredentialBeforeSFUAdapter(t *testing.T) {
 	assertEvent(t, result.Events, "resolver", "MediaPlaneResolver.Resolve")
 	assertEvent(t, result.Events, "adapter", "cloudflare.sfu.Adapter.AddTracks")
 	assertEvent(t, result.Events, "provider", "POST Cloudflare SFU tracks/new")
+	assertEvent(t, result.Events, "service", "mediapublications.Registry.RecordPublishedTracks")
+	if !strings.Contains(string(result.Body), `"location":"local"`) || !strings.Contains(string(result.Body), `"publication_id":"chalk-publication-trace"`) {
+		t.Fatalf("track response did not project authoritative publication fields: %s", result.Body)
+	}
 	assertLaunchTraceRedaction(t, result)
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
@@ -99,6 +100,7 @@ func runParticipantMediaRoute(ctx context.Context, name string, wrongAudience bo
 	}
 	resolver := &tracedSFUResolver{recorder: recorder, now: now}
 	active := &tracedActiveParticipant{recorder: recorder}
+	publications := &tracedMediaPublicationRegistry{recorder: recorder}
 	handler := httpapi.NewRouter(httpapi.Options{
 		RateLimit: noRateLimits(now),
 		Rooms: participantMediaRoomService{tracedRoomService: tracedRoomService{
@@ -106,10 +108,11 @@ func runParticipantMediaRoute(ctx context.Context, name string, wrongAudience bo
 		}, now: now},
 		Tenants:                tracedTenantService{recorder: recorder, next: tenants.NewService(tracedTenantRepository{recorder: recorder, now: now})},
 		MediaPlane:             resolver,
+		MediaPublications:      publications,
 		ParticipantMediaVerify: tracedParticipantMediaVerifier{recorder: recorder, next: verifier},
 		ParticipantMediaActive: active,
 	})
-	body := json.RawMessage(`{"connection_id":"connection_trace","tracks":[{"location":"remote","trackName":"remote-camera","sessionId":"remote-session"}]}`)
+	body := json.RawMessage(`{"connection_id":"connection_trace","tracks":[{"location":"local","mid":"0","trackName":"camera-track","source":"camera"}]}`)
 	result, runErr := runRouteTrace(ctx, routeTraceConfig{
 		Name: name, Recorder: recorder, Handler: handler,
 		Method: http.MethodPost,
@@ -129,6 +132,15 @@ func runParticipantMediaRoute(ctx context.Context, name string, wrongAudience bo
 	}
 	if !wrongAudience && (active.calls != 1 || resolver.calls != 1 || resolver.addTrackCalls != 1) {
 		return result, errors.New("valid participant credential did not reach the Cloudflare SFU signaling boundary")
+	}
+	if !wrongAudience {
+		var response mediaplane.TracksResponse
+		if err := json.Unmarshal(result.Body, &response); err != nil {
+			return result, err
+		}
+		if publications.calls != 1 || len(response.Tracks) != 1 || response.Tracks[0].Location != "local" || response.Tracks[0].PublicationID == "" {
+			return result, errors.New("published SFU track response did not restore the authoritative local location and publication reference")
+		}
 	}
 	return result, nil
 }
@@ -275,13 +287,40 @@ func (p *tracedSFUSignalingPlane) AddTracks(_ context.Context, input mediaplane.
 		"track_count": len(input.Tracks), "has_session_description": input.SessionDescription != nil,
 	})
 	p.recorder.Add("provider", "POST Cloudflare SFU tracks/new", "send the bounded signaling operation", map[string]any{"track_count": len(input.Tracks)})
-	response := mediaplane.TracksResponse{}
+	tracks := append([]mediaplane.Track(nil), input.Tracks...)
+	for index := range tracks {
+		tracks[index].Location = ""
+	}
+	response := mediaplane.TracksResponse{Tracks: tracks}
 	span.End("return Cloudflare SFU track result", map[string]any{"track_count": len(input.Tracks)}, nil)
 	return response, nil
 }
 
 func (*tracedSFUSignalingPlane) Renegotiate(context.Context, mediaplane.RenegotiateRequest) error {
 	return errors.New("unexpected SFU renegotiation")
+}
+
+type tracedMediaPublicationRegistry struct {
+	recorder *Recorder
+	calls    int
+}
+
+func (r *tracedMediaPublicationRegistry) RecordPublishedTracks(_ context.Context, input mediapublications.RecordInput) ([]mediapublications.PublishedReference, error) {
+	r.calls++
+	r.recorder.Add("service", "mediapublications.Registry.RecordPublishedTracks", "assign an opaque Chalk publication reference and restore local track semantics at the API boundary", map[string]any{"track_count": len(input.Tracks)})
+	return []mediapublications.PublishedReference{{Source: "camera", MID: "0", TrackName: "camera-track", PublicationID: "chalk-publication-trace"}}, nil
+}
+
+func (*tracedMediaPublicationRegistry) PrepareClose(context.Context, mediapublications.CloseInput) (mediapublications.CloseDecision, error) {
+	return mediapublications.CloseDecision{}, errors.New("unexpected publication close preparation")
+}
+
+func (*tracedMediaPublicationRegistry) RecordClosedPublication(context.Context, mediapublications.CloseInput) error {
+	return errors.New("unexpected publication close")
+}
+
+func (*tracedMediaPublicationRegistry) Latest(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error) {
+	return mediapublications.Snapshot{}, errors.New("unexpected publication lookup")
 }
 
 func traceAPIKey(now time.Time, scopes []authentication.Scope) (string, apikeys.Record) {

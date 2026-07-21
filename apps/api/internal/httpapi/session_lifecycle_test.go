@@ -137,7 +137,11 @@ func (*lifecycleMediaPlane) SessionUsage(context.Context, mediaplane.SessionUsag
 
 func (p *lifecycleMediaPlane) AddTracks(_ context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	p.tracksInput = input
-	return mediaplane.TracksResponse{SessionDescription: &mediaplane.SessionDescription{Type: "answer", SDP: "provider-answer"}, Tracks: append([]mediaplane.Track(nil), input.Tracks...)}, nil
+	tracks := append([]mediaplane.Track(nil), input.Tracks...)
+	for index := range tracks {
+		tracks[index].Location = ""
+	}
+	return mediaplane.TracksResponse{SessionDescription: &mediaplane.SessionDescription{Type: "answer", SDP: "provider-answer"}, Tracks: tracks}, nil
 }
 
 func (p *lifecycleMediaPlane) CloseTracks(_ context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
@@ -526,7 +530,7 @@ func TestCloudflareSFUSignalingRoutesProxyWithoutExposingSecret(t *testing.T) {
 	if recorded.ParticipantSessionID != participantID || recorded.Tracks[0].Source != "camera" {
 		t.Fatalf("publication observation = %#v", recorded)
 	}
-	if strings.Contains(tracksResponse.Body.String(), "secret") || !strings.Contains(tracksResponse.Body.String(), "provider-answer") || !strings.Contains(tracksResponse.Body.String(), `"publication_id":"`+publicationID+`"`) {
+	if strings.Contains(tracksResponse.Body.String(), "secret") || !strings.Contains(tracksResponse.Body.String(), "provider-answer") || !strings.Contains(tracksResponse.Body.String(), `"location":"local"`) || !strings.Contains(tracksResponse.Body.String(), `"publication_id":"`+publicationID+`"`) {
 		t.Fatalf("tracks response = %s", tracksResponse.Body.String())
 	}
 

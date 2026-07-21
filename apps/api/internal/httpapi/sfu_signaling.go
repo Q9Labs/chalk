@@ -242,6 +242,7 @@ func attachPublishedReferences(response *mediaplane.TracksResponse, references [
 		if track.TrackName != reference.TrackName {
 			return mediaplane.ErrProviderFailed
 		}
+		track.Location = "local"
 		track.Source = reference.Source
 		track.PublicationID = reference.PublicationID
 		delete(byMID, track.Mid)

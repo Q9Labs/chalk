@@ -9,6 +9,7 @@ export function createLocalChalkHandler(options) {
   const browserSessions = new Map();
   const allowedOrigins = new Set(options.allowedOrigins);
   let sharedRoomPromise;
+  let hostParticipantSessionId;
 
   return async function localChalkHandler(request, response) {
     setPrivateResponseHeaders(response);
@@ -84,14 +85,16 @@ export function createLocalChalkHandler(options) {
       browserSession.roomId = sharedRoom.roomId;
       browserSession.sessionId = sharedRoom.sessionId;
       browserSession.participantSessionId = participantSessionId;
+      if (!hostParticipantSessionId) hostParticipantSessionId = participantSessionId;
+      const isHost = hostParticipantSessionId === participantSessionId;
       const admission = await options.chalk.participants.admit(
         sharedRoom.roomId,
         sharedRoom.sessionId,
         {
           participant_session_id: participantSessionId,
           name: browserSession.displayName,
-          initial_role: "participant",
-          eligible_roles: ["participant", "cohost"],
+          initial_role: isHost ? "host" : "participant",
+          eligible_roles: isHost ? ["host", "cohost", "participant"] : ["participant", "cohost"],
         },
         { idempotencyKey: `local-browser-${participantSessionId}` },
       );

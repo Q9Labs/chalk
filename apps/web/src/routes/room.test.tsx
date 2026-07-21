@@ -8,9 +8,10 @@ describe("public SDK room", () => {
     const source = roomSource();
     expect(source.match(/new ChalkSession\(/gu)).toHaveLength(1);
     expect(source).toContain("<ChalkProvider");
-    expect(source).toContain("useChalkSnapshot()");
-    expect(source).toContain("useChalkActions()");
-    expect(source).toContain("actions.join()");
+    expect(source).toContain("<PreJoinLobby");
+    expect(source).toContain("<SessionMeetingRoom");
+    expect(source).toContain("initialMicrophoneEnabled: settings.microphoneEnabled");
+    expect(source).toContain("initialCameraEnabled: settings.cameraEnabled");
   });
 
   it("contains no browser API key, identity environment, or direct transport orchestration", () => {
@@ -24,9 +25,9 @@ describe("public SDK room", () => {
 
   it("schedules a best-effort SDK leave after a real SPA unmount", () => {
     const source = roomSource();
-    expect(source).toContain("mountedSessions.set(sessionStore, true)");
+    expect(source).toContain("mountedSessions.set(session, true)");
     expect(source).toContain("queueMicrotask");
-    expect(source).toMatch(/sessionStore\s*\.leave\(\)/u);
+    expect(source).toMatch(/session\s*\.leave\(\)/u);
   });
 
   it("proxies the narrow local backend without injecting authorization", () => {
@@ -71,7 +72,7 @@ describe("localhost Chalk backend trust boundary", () => {
         },
       },
     };
-    const ids = ["cookie-server", "room-suffix", "participant-server"];
+    const ids = ["cookie-server", "room-suffix", "participant-server", "cookie-guest", "participant-guest"];
     const handler = createLocalChalkHandler({
       chalk,
       apiBaseURL: "http://127.0.0.1:8080",
@@ -133,7 +134,7 @@ describe("localhost Chalk backend trust boundary", () => {
       expect(admitted.status).toBe(201);
       expect(await admitted.json()).toEqual({ source: "admission" });
       const admitCalls = calls.filter((call) => call.operation === "participants.admit");
-      expect(admitCalls[0]?.arguments).toEqual(["room-server", "session-server", { participant_session_id: "participant-server", name: "Ada", initial_role: "participant", eligible_roles: ["participant", "cohost"] }, { idempotencyKey: "local-browser-participant-server" }]);
+      expect(admitCalls[0]?.arguments).toEqual(["room-server", "session-server", { participant_session_id: "participant-server", name: "Ada", initial_role: "host", eligible_roles: ["host", "cohost", "participant"] }, { idempotencyKey: "local-browser-participant-server" }]);
       expect(admitCalls[1]?.arguments).toEqual(admitCalls[0]?.arguments);
       expect(admitCalls).toHaveLength(2);
       expect(calls.filter((call) => call.operation === "participants.issueAccess")).toHaveLength(0);
@@ -146,10 +147,29 @@ describe("localhost Chalk backend trust boundary", () => {
       expect(refreshed.status).toBe(201);
       const accessCall = [...calls].reverse().find((call) => call.operation === "participants.issueAccess");
       expect(accessCall?.arguments).toEqual(["room-server", "session-server", "participant-server", { participantSessionGeneration: 7, currentMediaToken: "opaque-media-token", replaceMediaConnection: true }]);
+
+      const guestSession = await fetch(`${url}/local-chalk/browser-session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070" },
+        body: JSON.stringify({ displayName: "Grace" }),
+      });
+      const guestCookie = (guestSession.headers.get("set-cookie") ?? "").split(";", 1)[0] ?? "";
+      const guestAccess = await fetch(`${url}/local-chalk/access`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070", cookie: guestCookie },
+        body: JSON.stringify({}),
+      });
+      expect(guestAccess.status).toBe(201);
+      expect(calls.filter((call) => call.operation === "participants.admit").at(-1)?.arguments).toEqual([
+        "room-server",
+        "session-server",
+        { participant_session_id: "participant-guest", name: "Grace", initial_role: "participant", eligible_roles: ["participant", "cohost"] },
+        { idempotencyKey: "local-browser-participant-guest" },
+      ]);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
-  });
+  }, 15_000);
 });
 
 function rawPost(url: string, headers: Readonly<Record<string, string>>, body: unknown): Promise<{ readonly status: number }> {
