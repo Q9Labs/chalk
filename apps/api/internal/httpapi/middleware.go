@@ -5,13 +5,19 @@ import (
 	"crypto/subtle"
 	"errors"
 	"net/http"
+	"net/netip"
 	"strings"
 
+	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
 type sessionUserContextKey struct{}
+
+type APIKeyAuthenticator interface {
+	Authenticate(context.Context, apikeys.AuthenticateInput) (authentication.Principal, error)
+}
 
 func acceptLocalSystemToken(rawToken string) func(http.Handler) http.Handler {
 	token := strings.TrimSpace(rawToken)
@@ -65,6 +71,42 @@ func requireAuthentication(service AuthenticationService) func(http.Handler) htt
 			ctx = context.WithValue(ctx, sessionUserContextKey{}, sessionUser)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// requireTenantAuthentication accepts either a tenant API key or the existing
+// user Session credential. A value in the API-key namespace is never handed to
+// Session authentication, even when malformed or unknown.
+func requireTenantAuthentication(service AuthenticationService, apiKeys APIKeyAuthenticator, clientIPs ClientIPOptions) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.IsAuthenticated() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if credential, ok := bearerToken(r.Header.Get("Authorization")); ok && strings.HasPrefix(credential, "chalk_sk_") {
+				if apiKeys == nil {
+					writeServiceUnavailable(w)
+					return
+				}
+				address, _ := netip.ParseAddr(clientIP(r, clientIPs))
+				principal, err := apiKeys.Authenticate(r.Context(), apikeys.AuthenticateInput{RawKey: credential, IPAddress: address})
+				if err != nil {
+					if errors.Is(err, apikeys.ErrUnauthenticated) {
+						writeUnauthenticated(w)
+					} else {
+						writeServiceUnavailable(w)
+					}
+					return
+				}
+				ctx := authentication.ContextWithPrincipal(r.Context(), principal)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			requireAuthentication(service)(next).ServeHTTP(w, r)
 		})
 	}
 }

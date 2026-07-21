@@ -14,11 +14,12 @@ type SessionDescription struct {
 }
 
 type Track struct {
-	Location  string `json:"location"`
-	Mid       string `json:"mid,omitempty"`
-	TrackName string `json:"trackName"`
-	SessionID string `json:"sessionId,omitempty"`
-	Source    string `json:"source,omitempty"`
+	Location      string `json:"location"`
+	Mid           string `json:"mid,omitempty"`
+	TrackName     string `json:"trackName"`
+	SessionID     string `json:"sessionId,omitempty"`
+	Source        string `json:"source,omitempty"`
+	PublicationID string `json:"publication_id,omitempty"`
 }
 
 type TracksRequest struct {
@@ -38,9 +39,33 @@ type RenegotiateRequest struct {
 	SessionDescription SessionDescription
 }
 
+type CloseTracksRequest struct {
+	Provider           Provider
+	ConnectionID       string
+	SessionDescription *SessionDescription
+	Tracks             []CloseTrack
+	Force              bool
+}
+
+type CloseTrack struct {
+	Mid           string `json:"mid"`
+	Source        string `json:"source"`
+	PublicationID string `json:"publication_id"`
+}
+
+type CloseTracksResponse struct {
+	SessionDescription             *SessionDescription `json:"sessionDescription,omitempty"`
+	Tracks                         []CloseTrack        `json:"tracks,omitempty"`
+	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
+}
+
 type SignalingPlane interface {
 	AddTracks(context.Context, TracksRequest) (TracksResponse, error)
 	Renegotiate(context.Context, RenegotiateRequest) error
+}
+
+type TrackClosingPlane interface {
+	CloseTracks(context.Context, CloseTracksRequest) (CloseTracksResponse, error)
 }
 
 func (s Service) AddTracks(ctx context.Context, input TracksRequest) (TracksResponse, error) {
@@ -52,6 +77,18 @@ func (s Service) AddTracks(ctx context.Context, input TracksRequest) (TracksResp
 		return TracksResponse{}, err
 	}
 	return signaling.AddTracks(ctx, input)
+}
+
+func (s Service) CloseTracks(ctx context.Context, input CloseTracksRequest) (CloseTracksResponse, error) {
+	closing, ok := s.plane.(TrackClosingPlane)
+	if !ok {
+		return CloseTracksResponse{}, ErrUnsupportedOperation
+	}
+	if err := requireCloseTracksRequest(&input, s.provider); err != nil {
+		return CloseTracksResponse{}, err
+	}
+
+	return closing.CloseTracks(ctx, input)
 }
 
 func (s Service) Renegotiate(ctx context.Context, input RenegotiateRequest) error {
@@ -93,6 +130,39 @@ func requireTracksRequest(input *TracksRequest) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func requireCloseTracksRequest(input *CloseTracksRequest, provider Provider) error {
+	if !validProvider(input.Provider) || (provider != "" && input.Provider != provider) {
+		return ErrInvalidProvider
+	}
+
+	connectionID, err := requiredString(input.ConnectionID)
+	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 64 {
+		return ErrInvalidSignalRequest
+	}
+	input.ConnectionID = connectionID
+
+	seen := make(map[string]struct{}, len(input.Tracks))
+	for index := range input.Tracks {
+		track := &input.Tracks[index]
+		track.Mid = strings.TrimSpace(track.Mid)
+		track.Source = strings.TrimSpace(track.Source)
+		track.PublicationID = strings.TrimSpace(track.PublicationID)
+		if track.Mid == "" || !validMediaSource(track.Source) || track.PublicationID == "" {
+			return ErrInvalidSignalRequest
+		}
+		if _, exists := seen[track.Mid]; exists {
+			return ErrInvalidSignalRequest
+		}
+		seen[track.Mid] = struct{}{}
+	}
+
+	if input.SessionDescription != nil {
+		return requireSessionDescription(input.SessionDescription)
+	}
+
 	return nil
 }
 

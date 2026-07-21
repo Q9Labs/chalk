@@ -172,6 +172,10 @@ func (p Plane) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput)
 	}, nil
 }
 
+func (p Plane) ResumeJoin(context.Context, mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	return mediaplane.Join{}, mediaplane.ErrUnsupportedOperation
+}
+
 func (p Plane) RemoveParticipant(ctx context.Context, input mediaplane.RemoveParticipantInput) error {
 	if p.client == nil {
 		return mediaplane.ErrPlaneUnavailable

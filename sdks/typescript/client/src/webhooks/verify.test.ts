@@ -131,17 +131,17 @@ describe("verifyWebhook", () => {
   });
 
   it("returns stable failures without payload or secret content", async () => {
-    const cases: Array<[Promise<unknown>, string]> = [
-      [verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: new Headers(), secrets: [vectors.secrets[0]!.value], now }), "missing_headers"],
-      [verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers("bad"), secrets: [vectors.secrets[0]!.value], now }), "malformed_headers"],
-      [verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(), secrets: ["whsec_bad"], now }), "invalid_secret"],
-      [verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(), secrets: [vectors.secrets[0]!.value], now: () => new Date(0) }), "stale_timestamp"],
-      [verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(vectors.secrets[1]!.signature), secrets: [vectors.secrets[0]!.value], now }), "invalid_signature"],
-      [verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(undefined, "00000000-0000-4000-8000-000000000099"), secrets: [vectors.secrets[0]!.value], now }), "invalid_signature"],
+    const cases: Array<[() => Promise<unknown>, string]> = [
+      [() => verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: new Headers(), secrets: [vectors.secrets[0]!.value], now }), "missing_headers"],
+      [() => verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers("bad"), secrets: [vectors.secrets[0]!.value], now }), "malformed_headers"],
+      [() => verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(), secrets: ["whsec_bad"], now }), "invalid_secret"],
+      [() => verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(), secrets: [vectors.secrets[0]!.value], now: () => new Date(0) }), "stale_timestamp"],
+      [() => verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(vectors.secrets[1]!.signature), secrets: [vectors.secrets[0]!.value], now }), "invalid_signature"],
+      [() => verifyWebhook({ rawBody: encoder.encode(vectors.body_utf8), headers: headers(undefined, "00000000-0000-4000-8000-000000000099"), secrets: [vectors.secrets[0]!.value], now }), "invalid_signature"],
     ];
-    for (const [promise, code] of cases) {
+    for (const [verify, code] of cases) {
       try {
-        await promise;
+        await verify();
         expect.fail("verification unexpectedly passed");
       } catch (error) {
         expect(error).toMatchObject({ code });

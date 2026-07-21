@@ -12,6 +12,9 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   require Logger
 
+  alias ChalkSync.Observability
+  alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
+  alias ChalkSync.ProviderBridge.RecordingPlane, as: ProviderBridgeRecordingPlane
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.SessionKey
@@ -93,7 +96,16 @@ defmodule ChalkSync.ExternalOperationConsumer do
       )
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
-    case dispatch(session, operation, media_plane, recording_plane, adapter_timeout_ms) do
+    result =
+      dispatch_with_context(
+        session,
+        operation,
+        media_plane,
+        recording_plane,
+        adapter_timeout_ms
+      )
+
+    case result do
       {:confirmed, authority} ->
         execution_checkpoint(:after_provider_confirmation_before_finalize, session, operation)
         finalize_confirmed(session, operation, authority, finalize)
@@ -146,6 +158,8 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp execute_page(operations, state) do
     Enum.reduce(operations, {%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
       {session, operation}, {counts, failures} ->
+        started_at = System.monotonic_time()
+
         result =
           execute_operation(
             session,
@@ -156,7 +170,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
             state.adapter_timeout_ms
           )
 
-        report_result(operation.name, result)
+        report_result(operation.name, result, started_at)
 
         case result do
           :confirmed ->
@@ -395,12 +409,80 @@ defmodule ChalkSync.ExternalOperationConsumer do
     :finalization_failure
   end
 
-  defp report_result(operation, result) do
+  defp report_result(operation, result, started_at) do
     Telemetry.execute(
       [:external_operation, :execution],
-      %{count: 1},
+      %{
+        count: 1,
+        duration_us:
+          System.convert_time_unit(
+            System.monotonic_time() - started_at,
+            :native,
+            :microsecond
+          )
+      },
       %{operation: operation, outcome: result}
     )
+  end
+
+  defp dispatch_with_context(session, operation, media_plane, recording_plane, timeout_ms) do
+    if provider_bridge_adapter?(media_plane) or provider_bridge_adapter?(recording_plane) do
+      Observability.with_worker_span(
+        persisted_provider_context(operation),
+        "sync.external_operation.provider_bridge",
+        %{operation: operation.name},
+        fn worker_context ->
+          headers = Observability.frame_fields(worker_context)
+
+          dispatch(
+            session,
+            operation,
+            contextual_adapter(media_plane, operation, headers),
+            contextual_adapter(recording_plane, operation, headers),
+            timeout_ms
+          )
+        end
+      )
+    else
+      dispatch(session, operation, media_plane, recording_plane, timeout_ms)
+    end
+  end
+
+  defp provider_bridge_adapter?({module, _adapter})
+       when module in [ProviderBridgeMediaPlane, ProviderBridgeRecordingPlane],
+       do: true
+
+  defp provider_bridge_adapter?(_adapter), do: false
+
+  defp contextual_adapter(nil, _operation, _headers), do: nil
+
+  defp contextual_adapter({ProviderBridgeMediaPlane, adapter}, operation, headers) do
+    adapter =
+      adapter
+      |> ProviderBridgeMediaPlane.with_context(headers)
+      |> ProviderBridgeMediaPlane.with_participant_generation(
+        operation.target_participant_session_id,
+        operation.target_participant_generation
+      )
+
+    {ProviderBridgeMediaPlane, adapter}
+  end
+
+  defp contextual_adapter({ProviderBridgeRecordingPlane, adapter}, _operation, headers) do
+    {ProviderBridgeRecordingPlane, ProviderBridgeRecordingPlane.with_context(adapter, headers)}
+  end
+
+  defp contextual_adapter(adapter, _operation, _headers), do: adapter
+
+  defp persisted_provider_context(operation) do
+    case operation do
+      %{journey_id: journey_id, producing_trace_id: trace_id, producing_span_id: span_id}
+      when is_binary(journey_id) ->
+        Observability.persisted_context(journey_id, trace_id, span_id)
+
+      _other ->
+        nil
+    end
   end
 
   defp increment_counts(state, counts) do

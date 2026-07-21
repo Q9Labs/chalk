@@ -51,4 +51,24 @@ defmodule ChalkSync.Operations.MetricsTest do
     assert snapshot[fanout_metric].count == (get_in(before, [fanout_metric, :count]) || 0) + 3
     refute inspect(snapshot) =~ "must-not-be-retained"
   end
+
+  test "provider execution metrics retain only bounded operation and outcome labels" do
+    metric = "chalk.sync.external_operation.execution.pending.participant_leave"
+    before = get_in(Metrics.snapshot(), [:metrics, metric, :count]) || 0
+
+    Telemetry.execute(
+      [:external_operation, :execution],
+      %{count: 1, duration_us: 23},
+      %{
+        operation: :participant_leave,
+        outcome: :pending,
+        external_operation_id: "must-not-be-retained"
+      }
+    )
+
+    snapshot = Metrics.snapshot()
+    assert get_in(snapshot, [:metrics, metric, :count]) == before + 1
+    assert get_in(snapshot, [:metrics, metric, :total_duration_us]) >= 23
+    refute inspect(snapshot) =~ "must-not-be-retained"
+  end
 end

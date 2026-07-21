@@ -22,6 +22,7 @@ const (
 type ProviderBridgeService interface {
 	Execute(context.Context, provideroperations.OperationInput) (providerbridge.Result, error)
 	ListObservations(context.Context, utilities.ID, utilities.ID, *provideroperations.Cursor, int) (provideroperations.ObservationPage, error)
+	Ready(context.Context) error
 }
 
 type SyncPeerVerifier interface {
@@ -77,7 +78,20 @@ func NewProviderBridgeHandler(service ProviderBridgeService, verifier SyncPeerVe
 	router.Use(requireSyncPeer(verifier))
 	router.Post("/internal/v1/sync/provider-operations/{operation_id}", handleProviderOperation(service))
 	router.Get("/internal/v1/sync/media-observations", handleProviderObservations(service))
+	router.Get("/internal/v1/sync/provider-bridge/ready", handleProviderBridgeReadiness(service))
 	return router
+}
+
+func handleProviderBridgeReadiness(service ProviderBridgeService) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		if service == nil || service.Ready(request.Context()) != nil {
+			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			Status string `json:"status"`
+		}{Status: "ready"})
+	}
 }
 
 func requireSyncPeer(verifier SyncPeerVerifier) func(http.Handler) http.Handler {

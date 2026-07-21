@@ -100,6 +100,15 @@ defmodule ChalkSync.ProviderBridge.Client do
     %{client | headers: Map.merge(client.headers, context_headers(context))}
   end
 
+  @spec ready(t()) :: :ok | {:error, term()}
+  def ready(%__MODULE__{} = client) do
+    case request(client, :get, client.base_url <> "/internal/v1/sync/provider-bridge/ready", <<>>) do
+      {:ok, %{"status" => "ready"} = response} when map_size(response) == 1 -> :ok
+      {:ok, _response} -> {:error, {:retryable_failure, :malformed_response}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @spec post_operation(t(), String.t(), map()) ::
           {:ok, ChalkSync.MediaPlane.outcome()} | {:error, term()}
   def post_operation(%__MODULE__{} = client, operation_id, payload)

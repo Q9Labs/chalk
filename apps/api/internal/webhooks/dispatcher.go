@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"io"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -67,6 +68,7 @@ type Dispatcher struct {
 	repository         DispatchRepository
 	protector          SecretProtector
 	client             DeliverySender
+	logger             *slog.Logger
 	owner              string
 	batch              int
 	poll               time.Duration
@@ -76,8 +78,11 @@ type Dispatcher struct {
 	lastCleanupSuccess time.Time
 }
 
-func NewDispatcher(repository DispatchRepository, protector SecretProtector, client DeliverySender, owner string) *Dispatcher {
-	return &Dispatcher{repository: repository, protector: protector, client: client, owner: owner, batch: DefaultDispatchBatch, poll: time.Second, cleanupEvery: time.Hour, now: time.Now}
+func NewDispatcher(repository DispatchRepository, protector SecretProtector, client DeliverySender, owner string, logger *slog.Logger) *Dispatcher {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return &Dispatcher{repository: repository, protector: protector, client: client, owner: owner, logger: logger, batch: DefaultDispatchBatch, poll: time.Second, cleanupEvery: time.Hour, now: time.Now}
 }
 
 func (d *Dispatcher) Run(ctx context.Context) error {
@@ -95,7 +100,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	d.recordHealth(ctx)
 	for {
 		if err := d.runBatch(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			slog.ErrorContext(ctx, "webhook dispatcher cycle failed", "error", err)
+			d.logger.ErrorContext(ctx, "webhook dispatcher cycle failed", "error", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -112,7 +117,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 func (d *Dispatcher) runCleanup(ctx context.Context) {
 	if err := d.repository.Cleanup(ctx); err != nil {
 		recordCleanupRun(ctx, "failed")
-		slog.ErrorContext(ctx, "webhook dispatcher cleanup failed", "error", err)
+		d.logger.ErrorContext(ctx, "webhook dispatcher cleanup failed", "error", err)
 		return
 	}
 	recordCleanupRun(ctx, "succeeded")
@@ -126,7 +131,7 @@ func (d *Dispatcher) recordHealth(ctx context.Context) {
 	}
 	health, err := repository.Health(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "webhook dispatcher health query failed", "error", err)
+		d.logger.ErrorContext(ctx, "webhook dispatcher health query failed", "error", err)
 		return
 	}
 	lastCleanupReference := d.lastCleanupSuccess
@@ -233,13 +238,13 @@ func (d *Dispatcher) deliver(ctx context.Context, claim Claim) error {
 
 func (d *Dispatcher) completeAttempt(ctx context.Context, span trace.Span, claim Claim, result AttemptResult) error {
 	if err := d.repository.Complete(ctx, claim, result); err != nil {
-		slog.WarnContext(ctx, "webhook delivery completion failed", "journey_id", claim.JourneyID.String(), "event_id", claim.EventID.String(), "delivery_id", claim.DeliveryID.String(), "attempt_id", claim.AttemptID.String(), "attempt_number", claim.AttemptNumber, "error_code", boundedErrorCode(result.ErrorCode), "error", err)
+		d.logger.WarnContext(ctx, "webhook delivery completion failed", "journey_id", claim.JourneyID.String(), "event_id", claim.EventID.String(), "delivery_id", claim.DeliveryID.String(), "attempt_id", claim.AttemptID.String(), "attempt_number", claim.AttemptNumber, "error_code", boundedErrorCode(result.ErrorCode), "error", err)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "complete delivery")
 		return err
 	}
 	recordAttemptMetrics(ctx, claim, result)
-	slog.InfoContext(ctx, "webhook delivery attempt completed", "journey_id", claim.JourneyID.String(), "event_id", claim.EventID.String(), "delivery_id", claim.DeliveryID.String(), "attempt_id", claim.AttemptID.String(), "attempt_number", claim.AttemptNumber, "event_name", boundedMetricEventName(claim.EventName), "api_version", boundedMetricAPIVersion(claim.APIVersion), "outcome", attemptMetricOutcome(result), "error_code", boundedErrorCode(result.ErrorCode), "http_status_class", statusClassMetric(result.HTTPStatus))
+	d.logger.InfoContext(ctx, "webhook delivery attempt completed", "journey_id", claim.JourneyID.String(), "event_id", claim.EventID.String(), "delivery_id", claim.DeliveryID.String(), "attempt_id", claim.AttemptID.String(), "attempt_number", claim.AttemptNumber, "event_name", boundedMetricEventName(claim.EventName), "api_version", boundedMetricAPIVersion(claim.APIVersion), "outcome", attemptMetricOutcome(result), "error_code", boundedErrorCode(result.ErrorCode), "http_status_class", statusClassMetric(result.HTTPStatus))
 	span.SetAttributes(attribute.String("webhook.outcome", attemptMetricOutcome(result)), attribute.String("webhook.error_code", boundedErrorCode(result.ErrorCode)), attribute.String("http.response.status_class", statusClassMetric(result.HTTPStatus)))
 	if !result.Success {
 		span.SetStatus(codes.Error, boundedErrorCode(result.ErrorCode))

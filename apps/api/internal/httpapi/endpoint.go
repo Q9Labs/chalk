@@ -36,6 +36,10 @@ func Post[Request any, Response any](path string, mountPath string, operationID 
 	return newEndpoint(http.MethodPost, path, mountPath, operationID, decode, handle)
 }
 
+func Put[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPut, path, mountPath, operationID, decode, handle)
+}
+
 func Patch[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
 	return newEndpoint(http.MethodPatch, path, mountPath, operationID, decode, handle)
 }
@@ -177,6 +181,10 @@ func (e Endpoint[Request, Response]) successStatus() int {
 func (e Endpoint[Request, Response]) writeResponse(w http.ResponseWriter, r *http.Request, response Response) {
 	if e.write != nil {
 		e.write(w, r, e.successStatus(), response)
+		return
+	}
+	if len(e.contract.Responses) > 0 && e.contract.Responses[0].Schema == nil {
+		w.WriteHeader(e.successStatus())
 		return
 	}
 

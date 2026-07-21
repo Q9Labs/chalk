@@ -1,0 +1,20 @@
+{
+  "name": "@chalk/sdk-web-consumer-e2e",
+  "private": true,
+  "type": "module",
+  "main": "./consumer/app.tsx",
+  "scripts": {
+    "consumer:build": "node ./consumer/build.mjs",
+    "consumer:server": "node ./consumer/server.mjs",
+    "test": "node ./scripts/run.mjs",
+    "test:chromium": "node ./scripts/run.mjs --browsers=chromium"
+  },
+  "dependencies": {
+    "@q9labsai/chalk-client": "workspace:^",
+    "@q9labsai/chalk-react": "workspace:^",
+    "esbuild": "0.28.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "ws": "8.18.3"
+  }
+}

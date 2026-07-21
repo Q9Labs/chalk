@@ -75,6 +75,110 @@ func TestServiceCreateJoinValidatesAndDelegates(t *testing.T) {
 	}
 }
 
+func TestServiceResumeJoinValidatesAndDelegates(t *testing.T) {
+	plane := &resumePlaneStub{
+		planeStub: planeStub{},
+		join: Join{
+			Provider:       ProviderCloudflareSFU,
+			ParticipantRef: "participant_123",
+			ClientPayload:  map[string]any{"connectionId": "connection_123"},
+		},
+	}
+	service := NewServiceForProvider(ProviderCloudflareSFU, plane)
+
+	join, err := service.ResumeJoin(context.Background(), ResumeJoinInput{
+		Provider: ProviderCloudflareSFU,
+		Session: Session{
+			Provider: ProviderCloudflareSFU,
+			Ref:      " session_123 ",
+		},
+		ExternalParticipantID: " participant_123 ",
+		ConnectionRef:         " connection_123 ",
+	})
+	if err != nil {
+		t.Fatalf("resume join: %v", err)
+	}
+	if join.ParticipantRef != "participant_123" {
+		t.Fatalf("participant ref = %q, want participant_123", join.ParticipantRef)
+	}
+	if plane.resumeInput.Session.Ref != "session_123" || plane.resumeInput.ExternalParticipantID != "participant_123" || plane.resumeInput.ConnectionRef != "connection_123" {
+		t.Fatalf("resume input = %#v, want trimmed exact refs", plane.resumeInput)
+	}
+}
+
+func TestServiceResumeJoinRejectsInvalidInputAndUnsupportedPlane(t *testing.T) {
+	tests := []struct {
+		name  string
+		input ResumeJoinInput
+		want  error
+	}{
+		{
+			name: "provider mismatch",
+			input: ResumeJoinInput{
+				Provider:              ProviderCloudflareRTK,
+				Session:               Session{Provider: ProviderCloudflareRTK, Ref: "session_123"},
+				ExternalParticipantID: "participant_123",
+				ConnectionRef:         "connection_123",
+			},
+			want: ErrInvalidProvider,
+		},
+		{
+			name: "session provider mismatch",
+			input: ResumeJoinInput{
+				Provider:              ProviderCloudflareSFU,
+				Session:               Session{Provider: ProviderCloudflareRTK, Ref: "session_123"},
+				ExternalParticipantID: "participant_123",
+				ConnectionRef:         "connection_123",
+			},
+			want: ErrInvalidProvider,
+		},
+		{
+			name: "missing session",
+			input: ResumeJoinInput{
+				Provider:              ProviderCloudflareSFU,
+				Session:               Session{Provider: ProviderCloudflareSFU},
+				ExternalParticipantID: "participant_123",
+				ConnectionRef:         "connection_123",
+			},
+			want: ErrInvalidSessionRef,
+		},
+		{
+			name: "missing participant",
+			input: ResumeJoinInput{
+				Provider:      ProviderCloudflareSFU,
+				Session:       Session{Provider: ProviderCloudflareSFU, Ref: "session_123"},
+				ConnectionRef: "connection_123",
+			},
+			want: ErrInvalidParticipantRef,
+		},
+		{
+			name: "missing connection",
+			input: ResumeJoinInput{
+				Provider:              ProviderCloudflareSFU,
+				Session:               Session{Provider: ProviderCloudflareSFU, Ref: "session_123"},
+				ExternalParticipantID: "participant_123",
+			},
+			want: ErrInvalidConnectionRef,
+		},
+	}
+
+	service := NewServiceForProvider(ProviderCloudflareSFU, &resumePlaneStub{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.ResumeJoin(context.Background(), tt.input)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+
+	unsupported := NewServiceForProvider(ProviderCloudflareSFU, &planeStub{})
+	_, err := unsupported.ResumeJoin(context.Background(), ResumeJoinInput{})
+	if !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("unsupported error = %v, want %v", err, ErrUnsupportedOperation)
+	}
+}
+
 func TestServiceRejectsInvalidInputs(t *testing.T) {
 	service := NewService(&planeStub{})
 	tests := []struct {
@@ -186,6 +290,17 @@ type planeStub struct {
 	joinInput   CreateJoinInput
 	session     Session
 	join        Join
+}
+
+type resumePlaneStub struct {
+	planeStub
+	resumeInput ResumeJoinInput
+	join        Join
+}
+
+func (p *resumePlaneStub) ResumeJoin(_ context.Context, input ResumeJoinInput) (Join, error) {
+	p.resumeInput = input
+	return p.join, nil
 }
 
 func (p *planeStub) EnsureSession(_ context.Context, input EnsureSessionInput) (Session, error) {

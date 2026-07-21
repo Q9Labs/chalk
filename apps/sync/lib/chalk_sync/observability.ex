@@ -167,6 +167,47 @@ defmodule ChalkSync.Observability do
     context
   end
 
+  @doc "Runs crossed-process work in a short child span and exposes its context to the callback."
+  @spec with_worker_span(context() | nil, String.t(), map(), (context() -> result)) :: result
+        when result: term()
+  def with_worker_span(context, name, attributes, callback)
+      when is_function(callback, 1) do
+    context = ensure_context(context)
+    metadata = metadata(context, name, attributes, :phase)
+    safely(fn -> :telemetry.execute(@event, %{count: 1}, metadata) end, :ok)
+
+    if enabled?() do
+      span =
+        :otel_tracer.start_span(
+          context.otel_ctx,
+          :opentelemetry.get_application_tracer(__MODULE__),
+          name,
+          %{kind: :internal, attributes: span_attributes(metadata, attributes)}
+        )
+
+      worker_context = %{
+        context
+        | otel_ctx: :otel_tracer.set_current_span(context.otel_ctx, span)
+      }
+
+      safely(fn -> log(metadata, worker_context) end, :ok)
+      safely(fn -> deliver_to_sink(metadata) end, :ok)
+
+      try do
+        callback.(worker_context)
+      after
+        safely(
+          fn -> :otel_span.add_event(span, name, span_attributes(metadata, attributes)) end,
+          :ok
+        )
+
+        safely(fn -> :otel_span.end_span(span) end, :ok)
+      end
+    else
+      callback.(context)
+    end
+  end
+
   @doc "Returns whether the dependencies that make sync state authoritative are running."
   @spec ready?() :: boolean()
   def ready? do

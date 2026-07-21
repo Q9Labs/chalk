@@ -30,6 +30,13 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
     end
   end
 
+  @spec with_context(t(), map() | keyword()) :: t()
+  def with_context(%__MODULE__{} = adapter, context) when is_list(context),
+    do: with_context(adapter, Map.new(context))
+
+  def with_context(%__MODULE__{} = adapter, context) when is_map(context),
+    do: %{adapter | context: Map.merge(adapter.context, context)}
+
   @impl true
   def start_recording(
         %__MODULE__{} = adapter,

@@ -3,7 +3,9 @@ package config
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -36,6 +38,7 @@ const (
 	SyncTokenIssuer               = "CHALK_SYNC_TOKEN_ISSUER"
 	SyncTokenKeyID                = "CHALK_SYNC_TOKEN_KEY_ID"
 	SyncTokenPrivateKey           = "CHALK_SYNC_TOKEN_PRIVATE_KEY"
+	MediaTokenVerificationKeys    = "CHALK_MEDIA_TOKEN_VERIFICATION_KEYS"
 
 	DatabaseURL                 = "CHALK_DATABASE_URL"
 	DatabaseMaxConns            = "CHALK_DATABASE_MAX_CONNS"
@@ -53,11 +56,18 @@ const (
 	CloudflareAPIToken                 = "CHALK_CLOUDFLARE_API_TOKEN"
 	CloudflareRealtimeAppID            = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
 	CloudflareRealtimeAppSecret        = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
+	CloudflareRealtimeBaseURL          = "CHALK_CLOUDFLARE_REALTIME_BASE_URL"
 	CloudflareRTKAppID                 = "CHALK_CLOUDFLARE_RTK_APP_ID"
 	CloudflareRTKTokenOrgID            = "CHALK_CLOUDFLARE_RTK_TOKEN_ORG_ID"
 	CloudflareRTKPresetFacilitator     = "CHALK_CLOUDFLARE_RTK_PRESET_FACILITATOR"
 	CloudflareRTKPresetContributor     = "CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR"
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
+
+	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
+	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
+	ProviderBridgeServerKeyFile     = "CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE"
+	ProviderBridgeClientCAFile      = "CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE"
+	ProviderBridgeSPIFFETrustDomain = "CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN"
 
 	ComposioAPIKey        = "CHALK_COMPOSIO_API_KEY"
 	ComposioBaseURL       = "CHALK_COMPOSIO_BASE_URL"
@@ -137,11 +147,21 @@ type CloudflareRealtimeConfig struct {
 	APIToken             string
 	RealtimeAppID        string
 	RealtimeAppSecret    string
+	RealtimeBaseURL      string
 	RTKAppID             string
 	RTKTokenOrgID        string
 	RTKPresetFacilitator string
 	RTKPresetContributor string
 	RequestTimeout       time.Duration
+}
+
+type ProviderBridgeConfig struct {
+	Address           string
+	ServerCertFile    string
+	ServerKeyFile     string
+	ClientCAFile      string
+	SPIFFETrustDomain string
+	Enabled           bool
 }
 
 type ComposioConfig struct {
@@ -173,10 +193,11 @@ type AuthConfig struct {
 }
 
 type SyncTokenConfig struct {
-	Audience   string
-	Issuer     string
-	KeyID      string
-	PrivateKey ed25519.PrivateKey
+	Audience         string
+	Issuer           string
+	KeyID            string
+	PrivateKey       ed25519.PrivateKey
+	VerificationKeys map[string]ed25519.PublicKey
 }
 
 type GoogleOAuthConfig struct {
@@ -225,6 +246,7 @@ type Config struct {
 	DeadlineScheduler  DeadlineSchedulerConfig
 	GoogleOAuth        GoogleOAuthConfig
 	Observability      ObservabilityConfig
+	ProviderBridge     ProviderBridgeConfig
 	R2                 R2Config
 	Redis              RedisConfig
 	Resend             ResendConfig
@@ -361,6 +383,22 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	providerBridge, err := loadProviderBridgeConfig(environment)
+	if err != nil {
+		return Config{}, err
+	}
+	realtimeBaseURL := strings.TrimRight(strings.TrimSpace(envOrDefault(CloudflareRealtimeBaseURL, "")), "/")
+	if realtimeBaseURL != "" {
+		if environment != DefaultEnvironment {
+			return Config{}, fmt.Errorf("%s is only supported in local environments", CloudflareRealtimeBaseURL)
+		}
+		parsed, parseErr := url.Parse(realtimeBaseURL)
+		host := parsed.Hostname()
+		ip := net.ParseIP(host)
+		if parseErr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
+			return Config{}, fmt.Errorf("%s must be an absolute localhost URL without query or fragment", CloudflareRealtimeBaseURL)
+		}
+	}
 
 	return Config{
 		API: APIConfig{
@@ -379,6 +417,7 @@ func Load() (Config, error) {
 			APIToken:             envOrDefault(CloudflareAPIToken, ""),
 			RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
 			RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
+			RealtimeBaseURL:      realtimeBaseURL,
 			RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
 			RTKTokenOrgID:        envOrDefault(CloudflareRTKTokenOrgID, ""),
 			RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
@@ -416,6 +455,7 @@ func Load() (Config, error) {
 			SlowRequestThreshold: slowRequestThreshold,
 			Version:              envOrDefault(APIVersion, DefaultVersion),
 		},
+		ProviderBridge: providerBridge,
 		R2: R2Config{
 			AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
 			AccountID:       envOrDefault(R2AccountID, ""),
@@ -439,6 +479,56 @@ func Load() (Config, error) {
 		},
 		Webhooks: webhookConfig,
 	}, nil
+}
+
+func loadProviderBridgeConfig(environment string) (ProviderBridgeConfig, error) {
+	config := ProviderBridgeConfig{
+		Address:           strings.TrimSpace(envOrDefault(ProviderBridgeAddress, "")),
+		ServerCertFile:    strings.TrimSpace(envOrDefault(ProviderBridgeServerCertFile, "")),
+		ServerKeyFile:     strings.TrimSpace(envOrDefault(ProviderBridgeServerKeyFile, "")),
+		ClientCAFile:      strings.TrimSpace(envOrDefault(ProviderBridgeClientCAFile, "")),
+		SPIFFETrustDomain: strings.TrimSpace(envOrDefault(ProviderBridgeSPIFFETrustDomain, "")),
+	}
+	configured := 0
+	for _, value := range []string{config.Address, config.ServerCertFile, config.ServerKeyFile, config.ClientCAFile, config.SPIFFETrustDomain} {
+		if value != "" {
+			configured++
+		}
+	}
+	if configured == 0 {
+		if environment == DefaultEnvironment {
+			return config, nil
+		}
+		return ProviderBridgeConfig{}, fmt.Errorf("%s, %s, %s, %s, and %s must be set outside local environments", ProviderBridgeAddress, ProviderBridgeServerCertFile, ProviderBridgeServerKeyFile, ProviderBridgeClientCAFile, ProviderBridgeSPIFFETrustDomain)
+	}
+	if configured != 5 {
+		return ProviderBridgeConfig{}, fmt.Errorf("%s, %s, %s, %s, and %s must be set together", ProviderBridgeAddress, ProviderBridgeServerCertFile, ProviderBridgeServerKeyFile, ProviderBridgeClientCAFile, ProviderBridgeSPIFFETrustDomain)
+	}
+	if _, _, err := net.SplitHostPort(config.Address); err != nil {
+		return ProviderBridgeConfig{}, fmt.Errorf("%s must be a host:port listener address", ProviderBridgeAddress)
+	}
+	if !validSPIFFETrustDomain(config.SPIFFETrustDomain) {
+		return ProviderBridgeConfig{}, fmt.Errorf("%s must be a SPIFFE trust domain", ProviderBridgeSPIFFETrustDomain)
+	}
+	config.Enabled = true
+	return config, nil
+}
+
+func validSPIFFETrustDomain(value string) bool {
+	if len(value) == 0 || len(value) > 255 || value != strings.ToLower(value) || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func loadWebhookEncryptionKey(environment string) ([]byte, error) {
@@ -501,11 +591,36 @@ func loadSyncTokenConfig(environment string) (SyncTokenConfig, error) {
 	if config.Audience == "" || config.Issuer == "" || config.KeyID == "" || encodedKey == "" {
 		return SyncTokenConfig{}, fmt.Errorf("%s, %s, %s, and %s must be set together", SyncTokenAudience, SyncTokenIssuer, SyncTokenKeyID, SyncTokenPrivateKey)
 	}
+	if config.Audience == "chalk-media" {
+		return SyncTokenConfig{}, fmt.Errorf("%s must differ from the participant media audience", SyncTokenAudience)
+	}
 	key, err := base64.RawURLEncoding.DecodeString(encodedKey)
 	if err != nil || len(key) != ed25519.PrivateKeySize {
 		return SyncTokenConfig{}, fmt.Errorf("%s must be an unpadded base64url Ed25519 private key", SyncTokenPrivateKey)
 	}
 	config.PrivateKey = ed25519.PrivateKey(key)
+	currentPublicKey := append(ed25519.PublicKey(nil), config.PrivateKey.Public().(ed25519.PublicKey)...)
+	config.VerificationKeys = map[string]ed25519.PublicKey{config.KeyID: currentPublicKey}
+	encodedVerificationKeys := strings.TrimSpace(envOrDefault(MediaTokenVerificationKeys, ""))
+	if encodedVerificationKeys == "" {
+		return config, nil
+	}
+	var keyring map[string]string
+	if err := json.Unmarshal([]byte(encodedVerificationKeys), &keyring); err != nil || len(keyring) == 0 {
+		return SyncTokenConfig{}, fmt.Errorf("%s must be a non-empty JSON object of key IDs to unpadded base64url Ed25519 public keys", MediaTokenVerificationKeys)
+	}
+	for keyID, encoded := range keyring {
+		keyID = strings.TrimSpace(keyID)
+		publicKey, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encoded))
+		if keyID == "" || err != nil || len(publicKey) != ed25519.PublicKeySize {
+			return SyncTokenConfig{}, fmt.Errorf("%s contains an invalid Ed25519 public key", MediaTokenVerificationKeys)
+		}
+		config.VerificationKeys[keyID] = ed25519.PublicKey(publicKey)
+	}
+	configuredCurrent, ok := config.VerificationKeys[config.KeyID]
+	if !ok || !configuredCurrent.Equal(currentPublicKey) {
+		return SyncTokenConfig{}, fmt.Errorf("%s must contain the current %s public key", MediaTokenVerificationKeys, SyncTokenKeyID)
+	}
 	return config, nil
 }
 

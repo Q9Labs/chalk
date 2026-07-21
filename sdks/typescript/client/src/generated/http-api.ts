@@ -149,6 +149,45 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.put("closeCloudflareSFUTracks", "/v1/tenants/:tenant_id/rooms/:room_id/sessions/:session_id/participants/:participant_session_id/media/sfu/tracks/close", {
+      params: S.CloseCloudflareSFUTracksPathParamsSchema,
+      payload: S.CloseCloudflareSFUTracksRequestBodySchema,
+      success: S.CloseCloudflareSFUTracksResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.InvalidParticipantSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRoomIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaPlaneUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("createAPIKey", "/v1/tenants/:tenant_id/api-keys", {
+      params: S.CreateAPIKeyPathParamsSchema,
+      payload: S.CreateAPIKeyRequestBodySchema,
+      success: S.CreateAPIKeyResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createWebhookEndpoint", "/v1/tenants/:tenant_id/webhook-endpoints", {
       params: S.CreateWebhookEndpointPathParamsSchema,
       headers: S.CreateWebhookEndpointRequestHeadersSchema,
@@ -277,6 +316,29 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("issueSessionParticipantAccess", "/v1/tenants/:tenant_id/rooms/:room_id/sessions/:session_id/participants/:participant_session_id/access", {
+      params: S.IssueSessionParticipantAccessPathParamsSchema,
+      payload: S.IssueSessionParticipantAccessRequestBodySchema,
+      success: S.IssueSessionParticipantAccessResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.InvalidParticipantSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRoomIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidSessionIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaPlaneUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("issueSessionParticipantSyncToken", "/v1/tenants/:tenant_id/rooms/:room_id/sessions/:session_id/participants/:participant_session_id/sync-token", {
       params: S.IssueSessionParticipantSyncTokenPathParamsSchema,
       success: S.IssueSessionParticipantSyncTokenResponseSchema.pipe(HttpApiSchema.status(201)),
@@ -288,6 +350,22 @@ const defaultGroup = HttpApiGroup.make("default")
         S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("listAPIKeys", "/v1/tenants/:tenant_id/api-keys", {
+      params: S.ListAPIKeysPathParamsSchema,
+      query: S.ListAPIKeysQueryParamsSchema,
+      success: S.ListAPIKeysResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.InvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -436,6 +514,43 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.MediaPlaneUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("revokeAPIKey", "/v1/tenants/:tenant_id/api-keys/:api_key_id", {
+      params: S.RevokeAPIKeyPathParamsSchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.InvalidApiKeyIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ApiKeyInactiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("rotateAPIKey", "/v1/tenants/:tenant_id/api-keys/:api_key_id/rotate", {
+      params: S.RotateAPIKeyPathParamsSchema,
+      payload: S.RotateAPIKeyRequestBodySchema,
+      success: S.RotateAPIKeyResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.InvalidApiKeyIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.NotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ApiKeyInactiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),

@@ -10,7 +10,7 @@ export function FrontDoors() {
           <h2>
             One core. <Chalked>Two front doors.</Chalked>
           </h2>
-          <p className="lede">The SDK foundations are implemented today; the first-party hosted app and turnkey web integration are still being completed.</p>
+          <p className="lede">The managed TypeScript and React web integration is implemented today; the first-party hosted app is still being completed.</p>
         </div>
         <div className="doors-grid">
           <div className="door">

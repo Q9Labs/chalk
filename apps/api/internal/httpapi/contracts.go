@@ -5,7 +5,8 @@ import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
 type APIAuth string
 
 const (
-	APIAuthSessionOrBearer APIAuth = "session_or_bearer"
+	APIAuthSessionOrBearer  APIAuth = "session_or_bearer"
+	APIAuthParticipantMedia APIAuth = "participant_media"
 )
 
 type APISchemaRef struct {
@@ -60,7 +61,9 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, userEndpoints(nil)...)
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
 	endpoints = append(endpoints, roomEndpoints(nil, nil)...)
-	endpoints = append(endpoints, sessionLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil)...)
+	endpoints = append(endpoints, apiKeyEndpoints(nil, nil, nil)...)
+	endpoints = append(endpoints, sessionLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
+	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, recordingPipelineEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil)...)

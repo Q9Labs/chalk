@@ -1,17 +1,15 @@
 # @q9labsai/chalk-react
 
-React UI components for Chalk meeting surfaces.
+React bindings and UI components for Chalk meeting surfaces.
 
-This package is intentionally presentational. It does not own joining, room
-state, transport, permissions, diagnostics, recordings, transcripts, or other
-meeting behavior. Applications pass real data and callbacks into the components.
-Shared meeting behavior belongs in `@q9labsai/chalk-client` or the consuming
-application.
+The provider and hooks project an existing `ChalkSessionStore` from
+`@q9labsai/chalk-client` into React. They never join a room or open network
+connections on their own; the application creates and owns the session store.
 
 ## Installation
 
 ```bash
-pnpm add @q9labsai/chalk-react @q9labsai/chalk-ui
+pnpm add @q9labsai/chalk-client @q9labsai/chalk-react @q9labsai/chalk-ui
 ```
 
 ## Setup
@@ -19,6 +17,39 @@ pnpm add @q9labsai/chalk-react @q9labsai/chalk-ui
 ```tsx
 import "@q9labsai/chalk-ui/styles.css";
 ```
+
+Wrap the part of the application that consumes session state:
+
+```tsx
+import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import { ChalkProvider, useChalkActions, useParticipants } from "@q9labsai/chalk-react";
+
+function Meeting() {
+  const participants = useParticipants();
+  const actions = useChalkActions();
+
+  return (
+    <>
+      <p>{participants.length} participants</p>
+      <button onClick={() => void actions.leave()}>Leave</button>
+    </>
+  );
+}
+
+export function App({ session }: { session: ChalkSessionStore }) {
+  return (
+    <ChalkProvider session={session}>
+      <Meeting />
+    </ChalkProvider>
+  );
+}
+```
+
+`useChalkSnapshot` returns the complete immutable snapshot.
+`useChalkSelector` limits rerenders to the selected value, while
+`useParticipants`, `useLocalMedia`, and `useRemoteMedia` expose the common
+collections. `useChalkActions` delegates commands to the provided store and
+returns each command's original promise.
 
 ## Import Surface
 
@@ -33,9 +64,10 @@ import { EndScreen, LoadingScreen } from "@q9labsai/chalk-react/full";
 The root import is kept for convenience, but bundle-sensitive apps should prefer
 the layer subpaths.
 
-## What Is Not Here
+## Ownership Boundary
 
-There are no React meeting hooks, provider/session facades, turnkey join flows,
-or debug export helpers in this package. The package does include the styled
-`WhiteboardPanel`, backed by `@q9labsai/chalk-whiteboard`; callers still own its
-room state and transport wiring.
+The hooks own React subscriptions only. Joining, transport, permissions,
+diagnostics, and recovery stay in `@q9labsai/chalk-client`. Recording and
+transcription are not part of this launch surface. The styled `WhiteboardPanel`
+is backed by `@q9labsai/chalk-whiteboard`; callers still own its room state and
+transport wiring.

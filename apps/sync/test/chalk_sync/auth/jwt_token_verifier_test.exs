@@ -37,6 +37,20 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
     assert verified.capabilities == ["control:hand"]
   end
 
+  test "accepts only the exact Sync audience", %{private_key: private_key} do
+    assert {:ok, _verified} =
+             private_key
+             |> token(Map.put(claims(), "aud", "chalk-sync"))
+             |> JWTTokenVerifier.verify()
+
+    for audience <- ["chalk-media", ["chalk-sync"], ["chalk-sync", "chalk-media"]] do
+      assert {:error, :invalid_token} =
+               private_key
+               |> token(Map.put(claims(), "aud", audience))
+               |> JWTTokenVerifier.verify()
+    end
+  end
+
   test "verifies a v3 role envelope without authorizing capabilities", %{
     private_key: private_key
   } do

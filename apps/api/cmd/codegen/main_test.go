@@ -68,6 +68,32 @@ func TestMediaPlaneProviderConfigSchemaIsProviderNeutral(t *testing.T) {
 	}
 }
 
+func TestCloudflareSFUPublicationReferencesRemainOpaqueStrings(t *testing.T) {
+	doc := generatedDocument()
+
+	closeRequest := mapValue(t, doc.Components.Schemas["CloudflareSFUCloseTracksRequest"])
+	closeProperties := mapValue(t, closeRequest["properties"])
+	connectionID := mapValue(t, closeProperties["connection_id"])
+	if connectionID["type"] != "string" || connectionID["format"] == "uuid" || connectionID["$ref"] != nil {
+		t.Fatalf("Cloudflare connection id schema = %#v, want opaque string", connectionID)
+	}
+	closeTracks := mapValue(t, closeProperties["tracks"])
+	closeItem := mapValue(t, closeTracks["items"])
+	closeItemProperties := mapValue(t, closeItem["properties"])
+	publicationID := mapValue(t, closeItemProperties["publication_id"])
+	if publicationID["type"] != "string" || publicationID["format"] == "uuid" || publicationID["$ref"] != nil {
+		t.Fatalf("close publication reference schema = %#v, want opaque string", publicationID)
+	}
+
+	publications := mapValue(t, doc.Components.Schemas["CloudflareSFUPublicationsResponse"])
+	publicationProperties := mapValue(t, publications["properties"])
+	publicationItems := mapValue(t, mapValue(t, publicationProperties["publications"])["items"])
+	listedPublicationID := mapValue(t, mapValue(t, publicationItems["properties"])["publication_id"])
+	if listedPublicationID["type"] != "string" || listedPublicationID["format"] == "uuid" || listedPublicationID["$ref"] != nil {
+		t.Fatalf("listed publication reference schema = %#v, want opaque string", listedPublicationID)
+	}
+}
+
 func TestParticipantLifecycleIncludesOpaqueMediaPlane(t *testing.T) {
 	doc := generatedDocument()
 	schema := mapValue(t, doc.Components.Schemas["ParticipantLifecycle"])
@@ -151,6 +177,29 @@ func TestWebhookSchemasExposePublicWireShapes(t *testing.T) {
 		if _, exists := detailProperties[name]; !exists {
 			t.Fatalf("webhook delivery detail missing %s: %#v", name, detailProperties)
 		}
+	}
+}
+
+func TestParticipantMediaOperationsUseDedicatedCredentialScheme(t *testing.T) {
+	doc := generatedDocument()
+	scheme := mapValue(t, doc.Components.SecuritySchemes["participantMediaBearer"])
+	if scheme["type"] != "http" || scheme["scheme"] != "bearer" || scheme["bearerFormat"] != "JWT" {
+		t.Fatalf("participant media security scheme = %#v", scheme)
+	}
+
+	mediaOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks"]["post"])
+	mediaSecurity, ok := mediaOperation["security"].([]map[string][]string)
+	if !ok || len(mediaSecurity) != 1 || mediaSecurity[0]["participantMediaBearer"] == nil {
+		t.Fatalf("participant media security = %#v, want dedicated media bearer", mediaOperation["security"])
+	}
+	if _, exists := mediaSecurity[0]["sessionOrBearer"]; exists {
+		t.Fatalf("participant media route must not accept general auth: %#v", mediaSecurity)
+	}
+
+	accessOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/access"]["post"])
+	accessSecurity, ok := accessOperation["security"].([]map[string][]string)
+	if !ok || len(accessSecurity) != 1 || accessSecurity[0]["sessionOrBearer"] == nil {
+		t.Fatalf("participant access security = %#v, want session or API-key auth", accessOperation["security"])
 	}
 }
 

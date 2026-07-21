@@ -28,6 +28,10 @@ go run ./cmd/trace -scenario tenant-create
 go run ./cmd/trace -scenario integration-execute-action
 go run ./cmd/trace -scenario route:recording-transcribe
 go run ./cmd/trace -scenario route:session-sync-token
+go run ./cmd/trace -scenario route:api-key-customer-flow
+go run ./cmd/trace -scenario edge:api-key-rejected-scope
+go run ./cmd/trace -scenario route:participant-media-sfu-auth
+go run ./cmd/trace -scenario edge:participant-media-wrong-audience
 go run ./cmd/trace -color always
 go run ./cmd/trace -style tree
 go run ./cmd/trace -format json
@@ -112,6 +116,10 @@ Registered scenarios:
 - `route:session-end-member`
 - `route:recording-transcribe`
 - `route:telemetry-journey-event-intake`
+- `route:api-key-customer-flow`
+- `edge:api-key-rejected-scope`
+- `route:participant-media-sfu-auth`
+- `edge:participant-media-wrong-audience`
 - `policy:tenant-system-allow`
 - `policy:tenant-api-key-scope`
 - `policy:tenant-user-role`
@@ -126,6 +134,14 @@ Registered scenarios:
 - `edge:unauthenticated-route`
 - `edge:forbidden-tenant-route`
 - `edge:invalid-route-id`
+
+## Web Launch Authentication Proof
+
+The launch scenarios cover both customer API-key authentication and the participant-only Cloudflare SFU boundary. The accepted API-key trace shows credential parsing, the redacted database lookup, best-effort usage touch, tenant authorization, and the customer resource response. The rejected-scope trace proves the same authenticated key stops at policy before the tenant service runs.
+
+The participant-media pair uses a real Ed25519 issuer and verifier. The accepted `chalk-media` credential reaches the active-participant check and the traced Cloudflare SFU adapter. The wrong-audience credential returns `401` before the active-participant check, media-plane resolver, or adapter runs. Neither trace records API-key material, participant credentials, scopes, network addresses, or SDP.
+
+Operational instrumentation is provided by `observability.NewLaunchTelemetry`. API-key services receive it through `apikeys.Config.Telemetry`; participant access issuers and media verifiers are wrapped with `observability.InstrumentParticipantAccessIssuer` and `observability.InstrumentParticipantMediaVerifier`. The resulting metrics use only bounded `outcome` and `reason` attributes while the wrappers preserve the active journey and W3C trace context.
 
 ## What A Good Trace Shows
 

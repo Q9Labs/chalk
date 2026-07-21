@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { dirname } from "node:path";
 import { createWebhookProcessor, verifyWebhook } from "../../../sdks/typescript/client/dist/webhooks/index.js";
 
+const coreEventTypes = ["room.created", "room.updated", "room.archived", "room.restored", "session.started", "session.ended", "participant.joined", "participant.left"];
+
 async function main() {
   const host = "127.0.0.1";
   const port = Number(required("CHALK_WEBHOOK_RECEIVER_PORT"));
@@ -25,20 +27,25 @@ async function main() {
   const processor = createWebhookProcessor({
     secrets,
     inbox,
-    handlers: Object.fromEntries(
-      ["room.created", "room.updated", "room.archived", "room.restored", "session.started", "session.ended", "participant.joined", "participant.left"].map((eventType) => [
-        eventType,
-        async (event) => {
-          await store.update((state) => ({
-            ...state,
-            side_effect_count: state.side_effect_count + 1,
-            side_effect_count_by_event: { ...(state.side_effect_count_by_event ?? {}), [eventType]: (state.side_effect_count_by_event?.[eventType] ?? 0) + 1 },
-            handled_event_ids_by_type: { ...(state.handled_event_ids_by_type ?? {}), [eventType]: event.id },
-            handled_event_id: event.id,
-          }));
-        },
-      ]),
-    ),
+    handlers: {
+      ...Object.fromEntries(
+        coreEventTypes.map((eventType) => [
+          eventType,
+          async (event) => {
+            await store.update((state) => ({
+              ...state,
+              side_effect_count: state.side_effect_count + 1,
+              side_effect_count_by_event: { ...(state.side_effect_count_by_event ?? {}), [eventType]: (state.side_effect_count_by_event?.[eventType] ?? 0) + 1 },
+              handled_event_ids_by_type: { ...(state.handled_event_ids_by_type ?? {}), [eventType]: event.id },
+              handled_event_id: event.id,
+            }));
+          },
+        ]),
+      ),
+      "endpoint.test": async () => {
+        // A signed canary proves delivery without creating a consumer side effect.
+      },
+    },
     onDiagnostic: async (diagnostic) => {
       await store.update((state) => ({ ...state, diagnostics: [...(state.diagnostics ?? []), diagnostic] }));
     },

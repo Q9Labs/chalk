@@ -5,6 +5,8 @@ defmodule ChalkSync.Operations.Probe do
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Fanout.PostgresNotifications
   alias ChalkSync.LifecycleConsumer
+  alias ChalkSync.ProviderBridge.Client, as: ProviderBridgeClient
+  alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
   alias ChalkSync.Retention.Scheduler, as: RetentionScheduler
   alias ChalkSync.Stateholder.SessionKey
 
@@ -17,10 +19,11 @@ defmodule ChalkSync.Operations.Probe do
     boot? = Keyword.get(options, :boot?, false)
 
     with :ok <- production_modules(),
+         {:ok, provider_bridge} <- provider_bridge_observation(),
          {:ok, database} <- database_observations(),
          :ok <- validate_database(database),
          {:ok, processes} <- process_observations(boot?) do
-      {:ok, %{database: database, processes: processes}}
+      {:ok, %{database: database, processes: processes, provider_bridge: provider_bridge}}
     end
   rescue
     _exception -> {:error, :probe_failed}
@@ -33,6 +36,12 @@ defmodule ChalkSync.Operations.Probe do
     verifier = Application.fetch_env!(:chalk_sync, :token_verifier)
     require_auth? = Application.get_env(:chalk_sync, :require_production_auth, false)
 
+    with :ok <- validate_production_modules(adapter, verifier, require_auth?) do
+      validate_provider_bridge_config(require_auth?)
+    end
+  end
+
+  defp validate_production_modules(adapter, verifier, require_auth?) do
     cond do
       adapter != ChalkSync.Stateholder.Postgres ->
         {:error, :non_production_stateholder}
@@ -47,6 +56,33 @@ defmodule ChalkSync.Operations.Probe do
       true ->
         :ok
     end
+  end
+
+  defp validate_provider_bridge_config(false), do: :ok
+
+  defp validate_provider_bridge_config(true) do
+    if Application.get_env(:chalk_sync, :provider_bridge),
+      do: :ok,
+      else: {:error, :provider_bridge_not_configured}
+  end
+
+  defp provider_bridge_observation do
+    case Application.get_env(:chalk_sync, :provider_bridge) do
+      nil ->
+        {:ok, %{status: "disabled"}}
+
+      options ->
+        client = ProviderBridgeConfig.client!(options, 1_000)
+
+        case ProviderBridgeClient.ready(client) do
+          :ok -> {:ok, %{status: "ready"}}
+          {:error, _reason} -> {:error, :provider_bridge_unavailable}
+        end
+    end
+  rescue
+    _exception -> {:error, :provider_bridge_unavailable}
+  catch
+    :exit, _reason -> {:error, :provider_bridge_unavailable}
   end
 
   defp database_observations do

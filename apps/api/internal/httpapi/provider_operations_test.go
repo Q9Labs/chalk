@@ -131,6 +131,33 @@ func (s *providerBridgeService) ListObservations(_ context.Context, _, _ utiliti
 	return s.page, nil
 }
 
+func (*providerBridgeService) Ready(context.Context) error { return nil }
+
+func TestProviderBridgeReadinessRequiresAuthenticatedSyncPeer(t *testing.T) {
+	service := &providerBridgeService{}
+	verifier := &syncPeerVerifier{}
+	handler := NewProviderBridgeHandler(service, verifier)
+
+	request := httptest.NewRequest(http.MethodGet, "/internal/v1/sync/provider-bridge/ready", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || response.Body.String() != "{\"status\":\"ready\"}\n" {
+		t.Fatalf("readiness response = %d %q", response.Code, response.Body.String())
+	}
+}
+
+func TestPublicRouterDoesNotExposeProviderBridge(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/internal/v1/sync/provider-bridge/ready", nil)
+	response := httptest.NewRecorder()
+
+	NewRouter(Options{}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("public provider bridge status = %d, want 404", response.Code)
+	}
+}
+
 func mustProviderBridgeID(t *testing.T, value string) utilities.ID {
 	t.Helper()
 	id, err := utilities.ParseID(value)

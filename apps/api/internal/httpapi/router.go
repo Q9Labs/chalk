@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -38,6 +39,9 @@ type Options struct {
 	Readiness              ReadinessChecker
 	RecorderHealth         RecorderHealthChecker
 	Authentication         AuthenticationService
+	APIKeys                APIKeyService
+	APIKeyAuthentication   APIKeyAuthenticator
+	APIKeyAudits           APIKeyAuditWriter
 	Integrations           IntegrationService
 	Journeys               JourneyService
 	JourneyMetrics         JourneyMetricRecorder
@@ -45,6 +49,10 @@ type Options struct {
 	MeetingCredentials     MeetingCredentialVerifier
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
+	ParticipantMediaIssuer ParticipantMediaIssuer
+	ParticipantMediaVerify ParticipantMediaVerifier
+	ParticipantMediaActive ActiveParticipantAuthorizer
+	ParticipantGeneration  ParticipantGenerationAuthorizer
 	Memberships            MembershipService
 	AuditLogs              AuditLogService
 	RecordingDownloads     RecordingDownloadService
@@ -169,27 +177,37 @@ func writeReadinessError(w http.ResponseWriter) {
 
 func mountV1Routes(r chi.Router, options Options) {
 	r.Route("/v1", func(r chi.Router) {
-		mountAuthRoutes(r, options.Authentication, options.SessionCookie, options.RateLimit)
-		mountMeRoutes(r, options.Authentication, options.RateLimit)
+		r.Group(func(r chi.Router) {
+			r.Use(rejectTenantAPIKeyCredential)
+			mountAuthRoutes(r, options.Authentication, options.SessionCookie, options.RateLimit)
+		})
 
 		r.Group(func(r chi.Router) {
+			r.Use(rejectTenantAPIKeyCredential)
 			r.Use(requireTelemetryIntakeCredential(options.Authentication, options.MeetingCredentials))
 			mountJourneyIntakeRoutes(r, options.Journeys, options.JourneyMetrics, options.RateLimit)
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(requireAuthentication(options.Authentication))
+			r.Use(requireSessionAuthentication(options.Authentication))
+			mountMeRoutes(r, options.Authentication, options.RateLimit)
 			if options.LocalTelemetry {
 				mountLocalJourneyQueryRoutes(r, options.Journeys, options.RateLimit)
 			}
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(rejectTenantAPIKeyOnUnscopedRoute)
+			r.Use(requireTenantAuthentication(options.Authentication, options.APIKeyAuthentication, options.RateLimit.ClientIP))
 			mountIntegrationRoutes(r, options.Integrations, options.TenantAuthz, options.RateLimit, integrationRouteOptions{
 				CallbackAllowedOrigins: options.CORS.AllowedOrigins,
 			})
+			mountAPIKeyRoutes(r, options.APIKeys, options.TenantAuthz, options.APIKeyAudits, options.RateLimit)
 			mountTenantRoutes(r, options.Tenants, options.TenantAuthz, options.RateLimit)
 			mountUserRoutes(r, options.Users, options.RateLimit)
 			mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
 			mountRoomRoutes(r, options.Rooms, options.TenantAuthz, options.RateLimit)
-			mountSessionLifecycleRoutes(r, options.Rooms, options.Tenants, options.SessionLifecycle, options.SyncTokens, options.SyncTokenRefresh, options.MediaPlane, options.MediaPublications, options.TenantAuthz, options.RateLimit)
+			mountSessionLifecycleRoutes(r, options.Rooms, options.Tenants, options.SessionLifecycle, options.SyncTokens, options.SyncTokenRefresh, options.ParticipantMediaIssuer, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.ParticipantGeneration, options.MediaPlane, options.TenantAuthz, options.RateLimit)
 			mountRecordingRoutes(r, options.Recordings, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
 			mountRecordingPipelineRoutes(r, options.RecordingPipeline, options.RecorderMetrics, options.TenantAuthz, options.RateLimit)
 			if options.TranscriptArtifacts != nil {
@@ -200,5 +218,60 @@ func mountV1Routes(r chi.Router, options Options) {
 			mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)
 			mountWebhookRoutes(r, options.Webhooks, options.TenantAuthz, options.RateLimit)
 		})
+
+		r.Group(func(r chi.Router) {
+			mountParticipantMediaRoutes(r, options.Rooms, options.Tenants, options.MediaPlane, options.MediaPublications, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.RateLimit)
+		})
 	})
+}
+
+// requireSessionAuthentication keeps tenant API keys out of routes without an
+// explicit tenant-and-scope authorization decision. Recognized API-key values
+// never fall through to user Session authentication.
+func requireSessionAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return rejectTenantAPIKeyCredential(requireAuthentication(service)(next))
+	}
+}
+
+func rejectTenantAPIKeyCredential(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hasTenantAPIKeyCredential(r) {
+			writeUnauthenticated(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func rejectTenantAPIKeyOnUnscopedRoute(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tenantScopedAPIPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if hasTenantAPIKeyCredential(r) {
+			writeUnauthenticated(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func hasTenantAPIKeyCredential(r *http.Request) bool {
+	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalAPIKey {
+		return true
+	}
+	credential, ok := sessionTokenFromRequest(r)
+	return ok && strings.HasPrefix(credential, "chalk_sk_")
+}
+
+func tenantScopedAPIPath(path string) bool {
+	remainder, ok := strings.CutPrefix(path, "/v1/tenants/")
+	if !ok {
+		return false
+	}
+	tenantID, _, _ := strings.Cut(remainder, "/")
+	_, err := utilities.ParseID(tenantID)
+	return err == nil
 }

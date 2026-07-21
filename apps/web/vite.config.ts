@@ -21,7 +21,13 @@ const config = defineConfig({
     __SDK_REACT_VERSION__: JSON.stringify((sdkReactPkg as any).version || "0.0.0"),
   },
   server: {
+    host: "127.0.0.1",
     port: 3070,
+    proxy: {
+      "/local-chalk": {
+        target: "http://127.0.0.1:3071",
+      },
+    },
   },
   resolve: {
     alias: [
@@ -36,6 +42,9 @@ const config = defineConfig({
   plugins: [
     tailwindcss(),
     tanstackStart({
+      router: {
+        routeFileIgnorePattern: "\\.test\\.",
+      },
       spa: {
         enabled: true,
       },

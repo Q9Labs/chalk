@@ -13,6 +13,27 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
   @participant "00000000-0000-4000-8000-000000000004"
   @recording "00000000-0000-4000-8000-000000000005"
 
+  test "readiness requires the exact private response contract" do
+    for {body, expected} <- [
+          {JSON.encode!(%{"status" => "ready"}), :ok},
+          {JSON.encode!(%{"status" => "ok"}),
+           {:error, {:retryable_failure, :malformed_response}}},
+          {JSON.encode!(%{"status" => "ready", "detail" => "extra"}),
+           {:error, {:retryable_failure, :malformed_response}}}
+        ] do
+      transport = fn :get, url, _headers, <<>>, _options ->
+        send(self(), {:readiness_request, url})
+        {:ok, 200, [], body}
+      end
+
+      client = Client.new!(base_url: "http://localhost:4101", transport: transport)
+      assert Client.ready(client) == expected
+
+      assert_receive {:readiness_request,
+                      "http://localhost:4101/internal/v1/sync/provider-bridge/ready"}
+    end
+  end
+
   test "media callbacks send exact private paths, bodies, and context headers" do
     transport = fn method, url, headers, body, options ->
       send(self(), {:request, method, url, headers, body, options})

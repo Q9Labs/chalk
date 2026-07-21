@@ -1,5 +1,5 @@
 schema_version: 1
-as_of: "2026-07-18"
+as_of: "2026-07-21"
 product: Chalk
 status_semantics:
   true: "Implemented in this repository with direct code or focused-test evidence."
@@ -75,6 +75,9 @@ domains:
     - capability: "Server-enforced tenant authorization"
       done: true
       evidence: ["apps/api/internal/httpapi", "apps/api/internal/authentication"]
+    - capability: "Tenant-scoped API-key creation, authentication, rotation, redacted listing, and revocation"
+      done: true
+      evidence: ["apps/api/internal/apikeys", "apps/api/internal/httpapi/api_keys.go", "sdks/typescript/client/src/server"]
     - capability: "Complete first-party tenant administration UI"
       done: false
       evidence: ["apps/web/src/routes"]
@@ -89,6 +92,9 @@ domains:
     - capability: "Cloudflare SFU control-plane and TypeScript client adapter"
       done: true
       evidence: ["apps/api/internal/httpapi/sfu_signaling.go", "sdks/typescript/client/src/media/cloudflare-sfu.ts"]
+    - capability: "Short-lived participant media credentials with exact route, generation, provider, and connection binding"
+      done: true
+      evidence: ["apps/api/internal/participantaccess", "apps/api/internal/httpapi/participant_media_auth.go"]
     - capability: "React Native RealtimeKit media adapter and lifecycle"
       done: true
       evidence: ["sdks/typescript/react-native/src/media/realtimekit"]
@@ -199,8 +205,11 @@ domains:
       done: true
       evidence: ["sdks/typescript/react-native/src"]
     - capability: "Turnkey React web provider, hooks, and join flow"
-      done: false
-      evidence: ["sdks/typescript/react/README.md"]
+      done: true
+      evidence: ["sdks/typescript/client/src/session", "sdks/typescript/react/src/session", "tools/sdk-web-consumer-e2e"]
+    - capability: "Server-only Promise SDK for rooms, sessions, participant access, and API keys"
+      done: true
+      evidence: ["sdks/typescript/client/src/server", "sdks/typescript/client/scripts/check-server-package.mjs"]
     - capability: "All public API routes are represented in OpenAPI and generated SDKs"
       done: false
       evidence: ["apps/api/AGENTS.md"]

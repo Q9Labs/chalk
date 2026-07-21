@@ -176,6 +176,58 @@ export interface paths {
     patch: operations["updateTenant"];
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/api-keys": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a p i keys */
+    get: operations["listAPIKeys"];
+    put?: never;
+    /** Create a p i key */
+    post: operations["createAPIKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/api-keys/{api_key_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke a p i key */
+    delete: operations["revokeAPIKey"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Rotate a p i key */
+    post: operations["rotateAPIKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/audit-logs": {
     parameters: {
       query?: never;
@@ -577,6 +629,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/access": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Issue session participant access */
+    post: operations["issueSessionParticipantAccess"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/publications": {
     parameters: {
       query?: never;
@@ -622,6 +691,23 @@ export interface paths {
     put?: never;
     /** Add cloudflare s f u tracks */
     post: operations["addCloudflareSFUTracks"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks/close": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** Close cloudflare s f u tracks */
+    put: operations["closeCloudflareSFUTracks"];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -923,6 +1009,38 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    APIKeyList: {
+      api_keys: {
+        created_at: components["schemas"]["DateTimeString"];
+        created_by_user_id: components["schemas"]["UserId"] | null;
+        expires_at: components["schemas"]["DateTimeString"];
+        id: components["schemas"]["UUID"];
+        key_prefix: string;
+        last_used_at: components["schemas"]["DateTimeString"] | null;
+        name: string;
+        revoked_at: components["schemas"]["DateTimeString"] | null;
+        scopes: string[];
+        tenant_id: components["schemas"]["TenantId"];
+        updated_at: components["schemas"]["DateTimeString"];
+      }[];
+      pagination: components["schemas"]["Pagination"];
+    };
+    APIKeyWithSecret: {
+      api_key: {
+        created_at: components["schemas"]["DateTimeString"];
+        created_by_user_id: components["schemas"]["UserId"] | null;
+        expires_at: components["schemas"]["DateTimeString"];
+        id: components["schemas"]["UUID"];
+        key_prefix: string;
+        last_used_at: components["schemas"]["DateTimeString"] | null;
+        name: string;
+        revoked_at: components["schemas"]["DateTimeString"] | null;
+        scopes: string[];
+        tenant_id: components["schemas"]["TenantId"];
+        updated_at: components["schemas"]["DateTimeString"];
+      };
+      secret: string;
+    };
     AdmitSessionParticipantRequest: {
       eligible_roles: string[];
       initial_role: string;
@@ -997,17 +1115,42 @@ export interface components {
       name: string;
       updated_at: components["schemas"]["DateTimeString"];
     };
+    CloudflareSFUCloseTracksAPIResponse: {
+      requiresImmediateRenegotiation?: boolean;
+      sessionDescription?: {
+        sdp: string;
+        type: string;
+      } | null;
+      tracks?: {
+        mid: string;
+        publication_id: string;
+        source: string;
+      }[];
+    };
+    CloudflareSFUCloseTracksRequest: {
+      connection_id: string;
+      force: boolean;
+      session_description?: {
+        sdp: string;
+        type: string;
+      } | null;
+      tracks: {
+        mid: string;
+        publication_id: string;
+        source: string;
+      }[];
+    };
     CloudflareSFUPublicationsResponse: {
       incarnation: number;
       publications: {
         participant_session_id: components["schemas"]["RoomSessionId"];
-        publication_id: components["schemas"]["UUID"];
+        publication_id: string;
         source: string;
       }[];
       sequence: number;
     };
     CloudflareSFURenegotiateRequest: {
-      connection_id: components["schemas"]["UUID"];
+      connection_id: string;
       session_description: {
         sdp: string;
         type: string;
@@ -1025,13 +1168,14 @@ export interface components {
       tracks?: {
         location: string;
         mid?: string;
+        publication_id?: string;
         sessionId?: string;
         source?: string;
         trackName: string;
       }[];
     };
     CloudflareSFUTracksRequest: {
-      connection_id: components["schemas"]["UUID"];
+      connection_id: string;
       session_description?: {
         sdp: string;
         type: string;
@@ -1039,10 +1183,16 @@ export interface components {
       tracks: {
         location: string;
         mid?: string;
+        publication_id?: string;
         sessionId?: string;
         source?: string;
         trackName: string;
       }[];
+    };
+    CreateAPIKeyRequest: {
+      expires_at: components["schemas"]["DateTimeString"];
+      name: string;
+      scopes: string[];
     };
     CreateMembershipRequest: {
       /** @enum {string} */
@@ -1241,6 +1391,11 @@ export interface components {
         }[];
       }[];
     };
+    IssueParticipantAccessRequest: {
+      current_media_token?: string;
+      participant_session_generation: number;
+      replace_media_connection: boolean;
+    };
     JourneyEventBatch: {
       events: {
         attributes?: {
@@ -1300,7 +1455,37 @@ export interface components {
       next_cursor: string | null;
       page_size: number;
     };
+    ParticipantAccess: {
+      media: {
+        client_payload: {
+          [key: string]:
+            | {
+                [key: string]: unknown;
+              }
+            | unknown[]
+            | string
+            | number
+            | boolean
+            | null;
+        };
+        expires_at: components["schemas"]["DateTimeString"];
+        provider: string;
+        token: string;
+      };
+      subject: {
+        participant_generation: number;
+        participant_session_id: components["schemas"]["RoomSessionId"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      sync: {
+        expires_at: components["schemas"]["DateTimeString"];
+        token: string;
+      };
+    };
     ParticipantLifecycle: {
+      access?: components["schemas"]["ParticipantAccess"] | null;
       admission_request?: {
         expires_at: components["schemas"]["DateTimeString"];
         id: components["schemas"]["UUID"];
@@ -1507,6 +1692,9 @@ export interface components {
     RoomSessionList: {
       pagination: components["schemas"]["Pagination"];
       sessions: components["schemas"]["RoomSession"][];
+    };
+    RotateAPIKeyRequest: {
+      expires_at?: components["schemas"]["DateTimeString"] | null;
     };
     RotateWebhookSecretRequest: {
       revoke_previous_immediately: boolean;
@@ -2633,6 +2821,375 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listAPIKeys: {
+    parameters: {
+      query?: {
+        page_size?: number;
+        cursor?: string;
+      };
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIKeyList"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createAPIKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateAPIKeyRequest"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIKeyWithSecret"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  revokeAPIKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        api_key_id: components["schemas"]["UUID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  rotateAPIKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        api_key_id: components["schemas"]["UUID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RotateAPIKeyRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIKeyWithSecret"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -5721,6 +6278,119 @@ export interface operations {
       };
     };
   };
+  issueSessionParticipantAccess: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+        participant_session_id: components["schemas"]["RoomSessionId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IssueParticipantAccessRequest"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ParticipantAccess"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   listCloudflareSFUPublications: {
     parameters: {
       query?: never;
@@ -5941,6 +6611,110 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CloudflareSFUTracksAPIResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  closeCloudflareSFUTracks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        room_id: components["schemas"]["RoomId"];
+        session_id: components["schemas"]["RoomSessionId"];
+        participant_session_id: components["schemas"]["RoomSessionId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CloudflareSFUCloseTracksRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CloudflareSFUCloseTracksAPIResponse"];
         };
       };
       /** @description Bad Request */

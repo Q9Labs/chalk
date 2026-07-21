@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chalk managed web SDK P0 — specification</title>
+    <style>
+      :root {
+        --bg: #faf9f7;
+        --fg: #37352f;
+        --muted: #9b9a97;
+        --line: #e8e6e1;
+        --card: #f3f1ec;
+        --accent: #2383e2;
+        --amber: #d9730d;
+        --green: #448361;
+        --red: #d44c47;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #191919;
+          --fg: #e3e2e0;
+          --muted: #9b9b9b;
+          --line: #2f2f2f;
+          --card: #232323;
+          --accent: #529cca;
+          --amber: #cb7b37;
+          --green: #4f9768;
+          --red: #de5550;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.55 ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .slide {
+        display: none;
+        min-height: 100dvh;
+        padding: 3rem 1.5rem 5rem;
+        grid-template-columns: 1fr min(920px, 100%) 1fr;
+        align-content: center;
+        row-gap: 0.5rem;
+      }
+      .slide.active {
+        display: grid;
+        overflow-y: auto;
+      }
+      .slide > * {
+        grid-column: 2;
+        min-width: 0;
+      }
+      .slide > .wide {
+        grid-column: 1/-1;
+        width: min(1160px, calc(100% - 3rem));
+        justify-self: center;
+      }
+      .slide.fullbleed {
+        grid-template-columns: 1fr;
+        padding: 2.5rem clamp(1rem, 4vw, 4rem) 5rem;
+        align-content: start;
+        background: var(--card);
+        background-image: radial-gradient(color-mix(in srgb, var(--muted) 18%, transparent) 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+      .slide.fullbleed > * {
+        grid-column: 1;
+      }
+      .kicker {
+        color: var(--muted);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.9rem, 4vw, 3rem);
+        line-height: 1.12;
+        margin: 0.3rem 0 1rem;
+        font-weight: 650;
+      }
+      h2 {
+        font-size: 1.55rem;
+        margin: 0.3rem 0 1rem;
+      }
+      h3 {
+        font-size: 1rem;
+        margin: 0.2rem 0 0.35rem;
+      }
+      .caption {
+        font-size: 0.84rem;
+        color: var(--muted);
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.12rem 0.62rem;
+        border-radius: 999px;
+        font-size: 0.73rem;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        vertical-align: middle;
+      }
+      .badge.amber {
+        color: var(--amber);
+        border-color: var(--amber);
+      }
+      .badge.green {
+        color: var(--green);
+        border-color: var(--green);
+      }
+      .badge.red {
+        color: var(--red);
+        border-color: var(--red);
+      }
+      .tiles,
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 0.75rem;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1rem 1.15rem;
+      }
+      .card p {
+        margin: 0.3rem 0;
+      }
+      .panes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+      .pane {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 1.25rem;
+      }
+      .pane.before {
+        border-style: dashed;
+      }
+      .pane.after {
+        border-color: var(--accent);
+      }
+      .flow {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+        margin: 1.25rem 0;
+      }
+      .stop {
+        border: 1px solid var(--line);
+        background: var(--card);
+        border-radius: 999px;
+        padding: 0.35rem 0.8rem;
+        font-size: 0.86rem;
+      }
+      .stop.new {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .sep {
+        color: var(--muted);
+      }
+      .term {
+        position: relative;
+        border-bottom: 1px dotted var(--muted);
+        cursor: help;
+      }
+      .term:hover:after,
+      .term:focus:after {
+        content: attr(data-def);
+        position: absolute;
+        z-index: 30;
+        left: 0;
+        top: calc(100% + 5px);
+        width: max-content;
+        max-width: 310px;
+        padding: 0.5rem 0.7rem;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font-size: 0.82rem;
+        color: var(--fg);
+        box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+      }
+      .lane {
+        display: grid;
+        grid-template-columns: 9rem 1fr 8rem;
+        gap: 1rem;
+        padding: 0.8rem 0;
+        border-bottom: 1px solid var(--line);
+        align-items: center;
+      }
+      .lane:last-child {
+        border-bottom: 0;
+      }
+      .phase {
+        font-weight: 650;
+      }
+      .status {
+        color: var(--muted);
+        font-size: 0.83rem;
+      }
+      .check {
+        color: var(--green);
+      }
+      .box {
+        display: inline-block;
+        width: 0.85rem;
+        height: 0.85rem;
+        border: 1px solid var(--muted);
+        border-radius: 3px;
+        margin-right: 0.45rem;
+      }
+      .box.done {
+        border-color: var(--green);
+        background: var(--green);
+        box-shadow: inset 0 0 0 2px var(--card);
+      }
+      .hud {
+        position: fixed;
+        inset: auto 0 0 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        padding: 0.55rem 1rem;
+        background: color-mix(in srgb, var(--bg) 90%, transparent);
+        backdrop-filter: blur(8px);
+        border-top: 1px solid var(--line);
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+      .hud .progress {
+        flex: 1;
+        height: 5px;
+        background: var(--line);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .hud .progress i {
+        display: block;
+        height: 100%;
+        background: var(--green);
+      }
+      button,
+      select {
+        font: inherit;
+        color: var(--fg);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 0.38rem 0.8rem;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--muted);
+      }
+      button[aria-pressed="true"] {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .world-head {
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        flex-wrap: wrap;
+        max-width: 1180px;
+        margin: 0 auto 1rem;
+      }
+      .world-head .spacer {
+        flex: 1;
+      }
+      .world {
+        max-width: 1180px;
+        margin: auto;
+        display: grid;
+        grid-template-columns: 1fr 1.15fr;
+        gap: 1rem;
+      }
+      .meeting {
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        min-height: 480px;
+        display: grid;
+        grid-template-rows: 1fr auto;
+      }
+      .videos {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.65rem;
+        padding: 0.8rem;
+      }
+      .video {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        display: grid;
+        place-items: center;
+        min-height: 180px;
+        position: relative;
+      }
+      .video b {
+        font-size: 1.1rem;
+      }
+      .video span {
+        position: absolute;
+        bottom: 0.55rem;
+        left: 0.65rem;
+        font-size: 0.78rem;
+      }
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 0.55rem;
+        padding: 0.8rem;
+        border-top: 1px solid var(--line);
+      }
+      .panel {
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 1rem;
+      }
+      .rail {
+        display: grid;
+        gap: 0.55rem;
+        margin: 1rem 0;
+      }
+      .railrow {
+        display: grid;
+        grid-template-columns: 8rem 1fr auto;
+        gap: 0.7rem;
+        align-items: center;
+      }
+      .bar {
+        height: 8px;
+        background: var(--line);
+        border-radius: 9px;
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: var(--green);
+        transition: width 0.18s;
+      }
+      .log {
+        min-height: 7rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.75rem;
+        background: var(--card);
+        font-size: 0.86rem;
+      }
+      .fail {
+        color: var(--red);
+      }
+      .ok {
+        color: var(--green);
+      }
+      .toc {
+        list-style: none;
+        padding: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.35rem 1.2rem;
+      }
+      .toc a {
+        color: var(--fg);
+      }
+      .callout {
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--amber);
+        border-radius: 8px;
+        padding: 0.8rem 1rem;
+        background: var(--card);
+      }
+      @media (max-width: 760px) {
+        .panes,
+        .world {
+          grid-template-columns: 1fr;
+        }
+        .lane {
+          grid-template-columns: 1fr;
+        }
+        .toc {
+          grid-template-columns: 1fr;
+        }
+        .world {
+          min-width: 0;
+        }
+        .videos {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="slide">
+      <p class="kicker">Chalk · managed web SDK · 2026-07-21</p>
+      <h1>The final P0 path <span class="badge amber">release proof pending</span></h1>
+      <p>A customer backend holds one scoped key. A browser receives short-lived participant access. One meeting object owns media, live state, recovery, and Leave.</p>
+      <div class="tiles">
+        <div class="card">
+          <h3>12 launch cards</h3>
+          <p class="caption">From contract freeze through the verified quickstart.</p>
+        </div>
+        <div class="card">
+          <h3>3 foundation lanes</h3>
+          <p class="caption">API keys, participant access, and media hardening start independently.</p>
+        </div>
+        <div class="card">
+          <h3>2 Chromium contexts verified</h3>
+          <p class="caption">Packed artifacts passed success and forced-failure paths; Firefox/WebKit remain CI-gated.</p>
+        </div>
+        <div class="card">
+          <h3>0 browser secrets</h3>
+          <p class="caption">Tenant authority remains on the customer backend.</p>
+        </div>
+      </div>
+      <ol class="toc">
+        <li><a href="#2" data-goto="2">Background</a></li>
+        <li><a href="#3" data-goto="3">The safe journey</a></li>
+        <li><a href="#4" data-goto="4">Interactive lifecycle</a></li>
+        <li><a href="#5" data-goto="5">System boundaries</a></li>
+        <li><a href="#6" data-goto="6">Failure behavior</a></li>
+        <li><a href="#7" data-goto="7">Orchestration</a></li>
+        <li><a href="#8" data-goto="8">Scope</a></li>
+        <li><a href="#9" data-goto="9">Launch gate</a></li>
+      </ol>
+      <p class="caption"><a href="sdk-web-launch-p0-spec-2026-07-21.md">Open the executor specification</a></p>
+    </section>
+
+    <section class="slide">
+      <p class="kicker">Background · current and desired state</p>
+      <h2>The pieces work; the consumer path does not yet exist</h2>
+      <div class="panes wide">
+        <div class="pane before">
+          <p class="kicker">Today</p>
+          <div class="flow"><span class="stop">Browser</span><span class="sep">→</span><span class="stop">tenant bearer</span><span class="sep">→</span><span class="stop">manual media</span><span class="sep">+</span><span class="stop">manual Sync</span></div>
+          <p>The demo assembles proven lower layers with development credentials and separate owners. Recovery and Leave can disagree because nothing owns the whole meeting.</p>
+        </div>
+        <div class="pane after">
+          <p class="kicker">Launch state</p>
+          <div class="flow"><span class="stop">Backend key</span><span class="sep">→</span><span class="stop new">participant access</span><span class="sep">→</span><span class="stop new">one ChalkSession</span><span class="sep">→</span><span class="stop">React</span></div>
+          <p>The browser receives only replaceable participant credentials. One runtime composes media truth and meeting truth, then React renders its snapshot.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <p class="kicker">Primary workflow · one customer journey</p>
+      <h2>Authority gets narrower at every boundary</h2>
+      <div class="flow wide">
+        <span class="stop">Customer server</span><span class="sep">uses</span><span class="stop new"><span class="term" tabindex="0" data-def="A long-lived secret used only by the customer's backend.">tenant API key</span></span
+        ><span class="sep">→</span> <span class="stop">Chalk API</span><span class="sep">issues</span><span class="stop new"><span class="term" tabindex="0" data-def="A short-lived pair of credentials bound to one person in one meeting.">participant access</span></span
+        ><span class="sep">→</span> <span class="stop">Browser session</span><span class="sep">connects to</span><span class="stop">Sync + media</span><span class="sep">→</span><span class="stop">React view</span>
+      </div>
+      <div class="tiles">
+        <div class="card">
+          <h3>The server key</h3>
+          <p>Creates and controls tenant resources, but never crosses into browser code.</p>
+        </div>
+        <div class="card">
+          <h3>The Sync credential</h3>
+          <p>Can enter one live meeting replica and cannot signal media.</p>
+        </div>
+        <div class="card">
+          <h3>The media credential</h3>
+          <p>Can signal one participant's Cloudflare connection and cannot control tenant resources.</p>
+        </div>
+        <div class="card">
+          <h3>The meeting snapshot</h3>
+          <p>Combines confirmed lower-layer results without inventing success.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide fullbleed" id="world-slide">
+      <div class="world-head">
+        <span><b>Interactive lifecycle</b> · force the paths the release proof must survive</span><span class="spacer"></span><button data-fullscreen="#world-slide">⤢ Fullscreen</button>
+      </div>
+      <div class="world">
+        <div class="meeting">
+          <div class="videos">
+            <div class="video"><b>You</b><span id="local-state">camera off</span></div>
+            <div class="video"><b>Remote</b><span id="remote-state">not connected</span></div>
+          </div>
+          <div class="controls"><button id="join">Join</button><button id="screen">Share screen</button><button id="drop-sync">Drop live state</button><button id="drop-media">Drop media</button><button id="leave">Leave</button></div>
+        </div>
+        <div class="panel">
+          <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap">
+            <label
+              >Credential
+              <select id="credential">
+                <option value="valid">valid participant access</option>
+                <option value="wrong">wrong audience</option>
+                <option value="expired">expired</option>
+                <option value="tenant">tenant key in browser</option>
+              </select></label
+            ><span id="phase" class="badge">idle</span>
+          </div>
+          <div class="rail">
+            <div class="railrow">
+              <span>customer key</span>
+              <div class="bar"><i id="r-key"></i></div>
+              <small id="s-key">server only</small>
+            </div>
+            <div class="railrow">
+              <span>access</span>
+              <div class="bar"><i id="r-access"></i></div>
+              <small id="s-access">not issued</small>
+            </div>
+            <div class="railrow">
+              <span>Sync</span>
+              <div class="bar"><i id="r-sync"></i></div>
+              <small id="s-sync">stopped</small>
+            </div>
+            <div class="railrow">
+              <span>media</span>
+              <div class="bar"><i id="r-media"></i></div>
+              <small id="s-media">stopped</small>
+            </div>
+          </div>
+          <div class="log" id="log">Choose a credential case, then join. Wrong or expired credentials must fail before a socket or media connection starts.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <p class="kicker">System boundaries</p>
+      <h2>Every piece has one authority</h2>
+      <div class="tiles wide">
+        <div class="card">
+          <h3>Go API</h3>
+          <p>Owns customer authentication, participant credential issuance, exact route checks, and the Cloudflare secret.</p>
+        </div>
+        <div class="card">
+          <h3>Sync v3</h3>
+          <p>Owns admitted membership, roles, moderation, live publications, and durable Leave.</p>
+        </div>
+        <div class="card">
+          <h3>Media adapter</h3>
+          <p>Owns what the browser and peer connection actually published or received.</p>
+        </div>
+        <div class="card">
+          <h3>ChalkSession</h3>
+          <p>Coordinates access, permission, both engines, recovery, commands, diagnostics, and cleanup.</p>
+        </div>
+        <div class="card">
+          <h3>React</h3>
+          <p>Subscribes to a snapshot and exposes actions. It owns no networking or meeting policy.</p>
+        </div>
+        <div class="card">
+          <h3>First-party web</h3>
+          <p>Exercises the same public package boundary a customer installs.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <p class="kicker">Failure contract</p>
+      <h2>Recovery never broadens authority or fakes success</h2>
+      <div class="tiles wide">
+        <div class="card">
+          <span class="badge red">reject</span>
+          <h3>Wrong credential family</h3>
+          <p>A recognized API, Sync, or media credential is checked only by its intended verifier. There is no fallback.</p>
+        </div>
+        <div class="card">
+          <span class="badge amber">recover</span>
+          <h3>Sync disconnects</h3>
+          <p>The Session stays durably present, refreshes access when needed, and reconnects within a bounded budget.</p>
+        </div>
+        <div class="card">
+          <span class="badge amber">rebuild</span>
+          <h3>Media peer fails</h3>
+          <p>Fresh access creates a new Cloudflare connection, restores live local tracks, and reconciles remote state.</p>
+        </div>
+        <div class="card">
+          <span class="badge green">clean</span>
+          <h3>Remote publication closes</h3>
+          <p>The API records removal, the browser stops the old track, and the next snapshot no longer contains it.</p>
+        </div>
+        <div class="card">
+          <span class="badge green">finish</span>
+          <h3>Leave times out</h3>
+          <p>Local teardown still completes and exposes the timeout as a stable diagnostic instead of leaking resources.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <p class="kicker">Fleet orchestration</p>
+      <h2>Parallel at clean seams, sequential at shared interfaces</h2>
+      <div class="card wide">
+        <div class="lane"><span class="phase">Phase 1</span><span>Freeze access, snapshot, error, and package contracts</span><span class="status check">done</span></div>
+        <div class="lane"><span class="phase">Phase 2</span><span>API keys · participant access · media hardening</span><span class="status check">done</span></div>
+        <div class="lane"><span class="phase">Phase 3</span><span>Wire shared middleware, router, signaling, contracts, and generated artifacts</span><span class="status check">done</span></div>
+        <div class="lane"><span class="phase">Phase 4</span><span>Server client → ChalkSession → diagnostics + React</span><span class="status check">done</span></div>
+        <div class="lane"><span class="phase">Phase 5</span><span>First-party web · packed Chromium proof · quickstart</span><span class="status check">done</span></div>
+        <div class="lane"><span class="phase">Phase 6</span><span>Performance · full gate · review fixes · commit</span><span class="status check">done</span></div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <p class="kicker">Scope boundary</p>
+      <h2>The launch contract stays narrow enough to prove</h2>
+      <div class="panes wide">
+        <div class="pane after">
+          <p class="kicker">Included</p>
+          <p>Managed web, backend API keys, participant Sync and media access, camera, microphone, screen video, reconnect, Leave, React hooks, first-party proof, diagnostics, and quickstart.</p>
+        </div>
+        <div class="pane before">
+          <p class="kicker">Deferred</p>
+          <p>Recording, transcription, React Native readiness, self-hosted media, production deployment, npm publication, customer migration, and independent screen audio.</p>
+        </div>
+      </div>
+      <div class="callout"><b>Production boundary.</b> The implementation may build and test locally. It may not touch production, publish packages, push commits, or roll out customers without a separate explicit instruction.</div>
+    </section>
+
+    <section class="slide">
+      <p class="kicker">Launch gate</p>
+      <h2>“Ready” means the packaged consumer path survives reality</h2>
+      <div class="cols wide">
+        <div class="card">
+          <p><span class="box done"></span>Raw API key lifecycle and scope rejection</p>
+          <p><span class="box done"></span>Independent Sync and media credentials</p>
+          <p><span class="box done"></span>Exact participant and connection binding</p>
+        </div>
+        <div class="card">
+          <p><span class="box done"></span>Camera, microphone, and screen cycle</p>
+          <p><span class="box done"></span>Remote removal and re-addition</p>
+          <p><span class="box done"></span>Forced Sync and media recovery</p>
+        </div>
+        <div class="card">
+          <p><span class="box done"></span>Durable Leave and zero leaked resources</p>
+          <p><span class="box done"></span>Clean packed-artifact installation</p>
+          <p><span class="box done"></span>Verified quickstart snippets</p>
+        </div>
+        <div class="card">
+          <p><span class="box done"></span>API performance proof</p>
+          <p><span class="box done"></span>Full repository gate</p>
+          <p><span class="box done"></span>Bounded code review with findings fixed</p>
+        </div>
+      </div>
+      <div class="callout"><b>Release remains not done.</b> Firefox/WebKit CI, an explicitly authorized production deployment with live Cloudflare proof, and NPM publication are still outstanding.</div>
+    </section>
+
+    <footer class="hud">
+      <button data-nav="-1" aria-label="Previous slide">←</button><button data-nav="1" aria-label="Next slide">→</button>
+      <div class="progress"><i></i></div>
+      <span class="counter"></span>
+    </footer>
+    <script>
+      const slides = [...document.querySelectorAll(".slide")],
+        bar = document.querySelector(".hud .progress i"),
+        counter = document.querySelector(".counter");
+      let index = -1;
+      function show(n) {
+        const next = Math.max(0, Math.min(slides.length - 1, n));
+        if (next === index) return;
+        index = next;
+        slides.forEach((s, j) => s.classList.toggle("active", j === index));
+        bar.style.width = ((index + 1) / slides.length) * 100 + "%";
+        counter.textContent = `${index + 1} / ${slides.length}`;
+        history.replaceState(null, "", "#" + (index + 1));
+      }
+      addEventListener("keydown", (e) => {
+        if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)) return;
+        if (["ArrowRight", "ArrowDown", " ", "PageDown"].includes(e.key)) {
+          e.preventDefault();
+          show(index + 1);
+        } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) {
+          e.preventDefault();
+          show(index - 1);
+        } else if (e.key === "Home") show(0);
+        else if (e.key === "End") show(slides.length - 1);
+      });
+      document.querySelectorAll("[data-nav]").forEach((b) => (b.onclick = () => show(index + +b.dataset.nav)));
+      document.querySelectorAll("[data-goto]").forEach(
+        (a) =>
+          (a.onclick = (e) => {
+            e.preventDefault();
+            show(+a.dataset.goto - 1);
+          }),
+      );
+      addEventListener("hashchange", () => show((parseInt(location.hash.slice(1), 10) || 1) - 1));
+      show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+      document.querySelectorAll("[data-fullscreen]").forEach((b) => (b.onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.querySelector(b.dataset.fullscreen).requestFullscreen())));
+      const phase = document.querySelector("#phase"),
+        log = document.querySelector("#log"),
+        credential = document.querySelector("#credential");
+      const rails = { key: document.querySelector("#r-key"), access: document.querySelector("#r-access"), sync: document.querySelector("#r-sync"), media: document.querySelector("#r-media") };
+      const labels = { key: document.querySelector("#s-key"), access: document.querySelector("#s-access"), sync: document.querySelector("#s-sync"), media: document.querySelector("#s-media") };
+      const local = document.querySelector("#local-state"),
+        remote = document.querySelector("#remote-state");
+      let live = false,
+        screen = false;
+      function setRail(name, on, text) {
+        rails[name].style.width = on ? "100%" : "0";
+        labels[name].textContent = text;
+      }
+      function setPhase(value, tone = "") {
+        phase.textContent = value;
+        phase.className = "badge " + tone;
+      }
+      function reset() {
+        live = false;
+        screen = false;
+        setPhase("idle");
+        setRail("key", true, "server only");
+        setRail("access", false, "not issued");
+        setRail("sync", false, "stopped");
+        setRail("media", false, "stopped");
+        local.textContent = "camera off";
+        remote.textContent = "not connected";
+      }
+      reset();
+      document.querySelector("#join").onclick = () => {
+        reset();
+        setPhase("joining", "amber");
+        const c = credential.value;
+        if (c === "tenant") {
+          setPhase("failed", "red");
+          log.innerHTML = '<span class="fail">Blocked: tenant authority reached the browser. No connection starts.</span>';
+          return;
+        }
+        setRail("access", true, "short-lived");
+        if (c !== "valid") {
+          setPhase("failed", "red");
+          log.innerHTML = `<span class="fail">Rejected ${c === "wrong" ? "wrong-audience" : "expired"} access before Sync or media starts.</span>`;
+          return;
+        }
+        live = true;
+        setRail("sync", true, "live");
+        setRail("media", true, "live");
+        setPhase("live", "green");
+        local.textContent = "camera + microphone live";
+        remote.textContent = "audio + video received";
+        log.innerHTML = '<span class="ok">Live only after both engines confirm. The backend key remained server-side.</span>';
+      };
+      document.querySelector("#drop-sync").onclick = () => {
+        if (!live) return;
+        setPhase("reconnecting", "amber");
+        setRail("sync", false, "refreshing");
+        log.textContent = "Live state dropped. Durable membership stays active while access refreshes.";
+        setTimeout(() => {
+          if (!live) return;
+          setRail("sync", true, "recovered");
+          setPhase("live", "green");
+          log.innerHTML = '<span class="ok">Sync recovered without calling Leave.</span>';
+        }, 450);
+      };
+      document.querySelector("#drop-media").onclick = () => {
+        if (!live) return;
+        setPhase("reconnecting", "amber");
+        setRail("media", false, "new peer");
+        remote.textContent = "reconnecting";
+        log.textContent = "The dead peer is discarded. Fresh media access creates a new connection.";
+        setTimeout(() => {
+          if (!live) return;
+          setRail("media", true, "recovered");
+          remote.textContent = "audio + video received";
+          setPhase("live", "green");
+          log.innerHTML = '<span class="ok">Media recovered and remote publications were reconciled.</span>';
+        }, 450);
+      };
+      document.querySelector("#screen").onclick = () => {
+        if (!live) return;
+        screen = !screen;
+        document.querySelector("#screen").textContent = screen ? "Stop sharing" : "Share screen";
+        local.textContent = screen ? "camera + screen live" : "camera + microphone live";
+        log.innerHTML = screen ? '<span class="ok">Screen video published after user permission and Sync authorization.</span>' : '<span class="ok">Screen track closed; peers remove it from their next snapshot.</span>';
+      };
+      document.querySelector("#leave").onclick = () => {
+        if (!live) return;
+        setPhase("leaving", "amber");
+        log.textContent = "Waiting for durable Leave, then tearing down both engines.";
+        setTimeout(() => {
+          live = false;
+          screen = false;
+          setRail("sync", false, "stopped");
+          setRail("media", false, "stopped");
+          setRail("access", false, "cleared");
+          setPhase("left", "green");
+          local.textContent = "all tracks stopped";
+          remote.textContent = "disconnected";
+          log.innerHTML = '<span class="ok">Left with no live tracks, sockets, peers, timers, or cached credentials.</span>';
+        }, 450);
+      };
+    </script>
+  </body>
+</html>

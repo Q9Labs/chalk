@@ -1,6 +1,6 @@
 # Product checklist
 
-As of 2026-07-18. This is the human-readable view of [`product.yaml`](./product.yaml), which is the canonical inventory.
+As of 2026-07-21. This is the human-readable view of [`product.yaml`](./product.yaml), which is the canonical inventory.
 
 `[x]` means the capability is implemented in this repository. `[ ]` means it is missing, placeholder-only, incomplete end to end, or still lacks the production proof named by the item. Large capabilities are split so there is no ambiguous “partial” state.
 
@@ -32,6 +32,7 @@ As of 2026-07-18. This is the human-readable view of [`product.yaml`](./product.
 - [x] Authentication and current-user API
 - [x] Tenant and membership APIs
 - [x] Server-enforced tenant authorization
+- [x] Tenant-scoped API-key creation, authentication, rotation, redacted listing, and revocation
 - [ ] Complete first-party tenant administration UI
 - [ ] SSO, SAML, or OIDC
 
@@ -39,6 +40,7 @@ As of 2026-07-18. This is the human-readable view of [`product.yaml`](./product.
 
 - [x] Provider-neutral media-plane boundary
 - [x] Cloudflare SFU control-plane and TypeScript client adapter
+- [x] Short-lived participant media credentials with exact route, generation, provider, and connection binding
 - [x] React Native RealtimeKit media adapter and lifecycle
 - [ ] Real-network browser media end-to-end suite
 - [ ] Real-device native media end-to-end suite
@@ -87,7 +89,8 @@ As of 2026-07-18. This is the human-readable view of [`product.yaml`](./product.
 - [x] TypeScript media, sync, and telemetry client
 - [x] Layered React meeting components
 - [x] React Native provider, hooks, meeting surfaces, and platform bridges
-- [ ] Turnkey React web provider, hooks, and join flow
+- [x] Turnkey React web provider, hooks, and join flow
+- [x] Server-only Promise SDK for rooms, sessions, participant access, and API keys
 - [ ] All public API routes are represented in OpenAPI and generated SDKs
 - [ ] Swift SDK
 - [ ] Kotlin SDK

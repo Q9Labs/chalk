@@ -13,6 +13,7 @@ config :chalk_sync,
   # Sync v3 requires its stateholder tables, constraints, and columns at this
   # floor. Later additive API and recorder migrations remain compatible.
   minimum_compatible_sync_migration: 20_260_713_130_000,
+  provider_bridge: nil,
   retention_cleanup_interval_ms: 1_000,
   require_production_auth: false,
   require_synchronous_standby: false,

@@ -113,6 +113,43 @@ Production requires `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`,
 the unpadded base64url encoding of a 64-byte Ed25519 private key and must be
 supplied through the runtime secret boundary.
 
+## Managed web SDK credentials
+
+Customer backends authenticate tenant API requests with credentials created by
+the API-key lifecycle routes. Raw values use the `chalk_sk_…` namespace and are
+shown only by create and rotate responses. Keep them in the backend secret
+boundary; browsers receive participant access bundles instead.
+
+Participant access contains separate five-minute Sync and media JWTs. The media
+JWT is accepted only by the participant-bound SFU signaling routes and is bound
+to the live participant generation, configured media provider, and exact
+Cloudflare connection. It is never treated as a tenant principal.
+
+The media signer uses `CHALK_SYNC_TOKEN_PRIVATE_KEY` and
+`CHALK_SYNC_TOKEN_KEY_ID`. During signing-key rotation,
+`CHALK_MEDIA_TOKEN_VERIFICATION_KEYS` may contain the current and previous
+Ed25519 public keys as a JSON object whose values are unpadded base64url. The
+entry for the current key ID must match the configured private key. Retain an
+outgoing public key for at least five minutes and 30 seconds so already-issued
+media credentials remain verifiable through their lifetime and clock-skew
+allowance.
+
+Durable Sync media effects use a second, private API listener. Every non-local
+environment must set `CHALK_PROVIDER_BRIDGE_ADDRESS`,
+`CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE`,
+`CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE`,
+`CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE`, and
+`CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN`; partial configuration is rejected.
+The listener requires TLS 1.3 and a verified client certificate whose sole URI
+SAN is
+`spiffe://<trust-domain>/environment/<CHALK_API_ENV>/sync/<sync-node-uuid>`.
+It is separate from the public router and exposes authenticated readiness at
+`GET /internal/v1/sync/provider-bridge/ready`.
+
+`CHALK_CLOUDFLARE_REALTIME_BASE_URL` exists only for deterministic local tests
+against a protocol-faithful Cloudflare endpoint. Non-local environments reject
+it and always use Cloudflare's production SFU endpoint.
+
 ## Runtime Smoke
 
 ```bash

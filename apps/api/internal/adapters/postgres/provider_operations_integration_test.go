@@ -119,9 +119,19 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	if _, err := repository.AppendObservation(ctx, conflictingObservation); !errors.Is(err, provideroperations.ErrObservationConflict) {
 		t.Fatalf("observation conflict = %v", err)
 	}
+	removedObservation := observationInput
+	removedObservation.Sequence = 2
+	removedObservation.Publications = []provideroperations.Publication{{ParticipantSessionID: input.ParticipantSessionID, Source: "camera", Enabled: false, PublicationID: ""}}
+	if _, err := repository.AppendObservation(ctx, removedObservation); err != nil {
+		t.Fatalf("append publication removal: %v", err)
+	}
 	page, err := repository.ListObservations(ctx, tenantID, sessionID, nil, 10)
-	if err != nil || len(page.Observations) != 1 {
+	if err != nil || len(page.Observations) != 2 {
 		t.Fatalf("list observations = %+v, err=%v", page, err)
+	}
+	removedPublication := page.Observations[1].Publications[0]
+	if page.Observations[1].Sequence != 2 || removedPublication.Enabled || removedPublication.PublicationID != "" {
+		t.Fatalf("persisted publication removal = %+v", page.Observations[1])
 	}
 }
 

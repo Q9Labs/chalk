@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
+	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
@@ -42,6 +44,18 @@ func (f syncTokenRefreshIssuerFunc) IssueForParticipant(ctx context.Context, key
 	return f(ctx, key)
 }
 
+type participantMediaVerifierFunc func(context.Context, string) (participantaccess.Subject, error)
+
+func (f participantMediaVerifierFunc) Verify(ctx context.Context, token string) (participantaccess.Subject, error) {
+	return f(ctx, token)
+}
+
+type activeParticipantAuthorizerFunc func(context.Context, participantaccess.Subject) (bool, error)
+
+func (f activeParticipantAuthorizerFunc) AuthorizeActiveParticipant(ctx context.Context, subject participantaccess.Subject) (bool, error) {
+	return f(ctx, subject)
+}
+
 type mediaPlaneResolverFunc func(context.Context, tenants.Tenant, rooms.Room) (*mediaplane.Service, error)
 
 func (f mediaPlaneResolverFunc) Resolve(ctx context.Context, tenant tenants.Tenant, room rooms.Room) (*mediaplane.Service, error) {
@@ -49,12 +63,28 @@ func (f mediaPlaneResolverFunc) Resolve(ctx context.Context, tenant tenants.Tena
 }
 
 type mediaPublicationRegistryStub struct {
-	record func(context.Context, mediapublications.RecordInput) error
-	latest func(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error)
+	record  func(context.Context, mediapublications.RecordInput) ([]mediapublications.PublishedReference, error)
+	prepare func(context.Context, mediapublications.CloseInput) (mediapublications.CloseDecision, error)
+	close   func(context.Context, mediapublications.CloseInput) error
+	latest  func(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error)
 }
 
-func (s mediaPublicationRegistryStub) RecordPublishedTracks(ctx context.Context, input mediapublications.RecordInput) error {
+func (s mediaPublicationRegistryStub) RecordPublishedTracks(ctx context.Context, input mediapublications.RecordInput) ([]mediapublications.PublishedReference, error) {
 	return s.record(ctx, input)
+}
+
+func (s mediaPublicationRegistryStub) PrepareClose(ctx context.Context, input mediapublications.CloseInput) (mediapublications.CloseDecision, error) {
+	if s.prepare == nil {
+		return mediapublications.CloseDecision{ProviderCloseRequired: true}, nil
+	}
+	return s.prepare(ctx, input)
+}
+
+func (s mediaPublicationRegistryStub) RecordClosedPublication(ctx context.Context, input mediapublications.CloseInput) error {
+	if s.close == nil {
+		return nil
+	}
+	return s.close(ctx, input)
 }
 
 func (s mediaPublicationRegistryStub) Latest(ctx context.Context, tenantID, sessionID utilities.ID) (mediapublications.Snapshot, error) {
@@ -65,6 +95,7 @@ type lifecycleMediaPlane struct {
 	ensureInput      mediaplane.EnsureSessionInput
 	joinInput        mediaplane.CreateJoinInput
 	tracksInput      mediaplane.TracksRequest
+	closeTracksInput mediaplane.CloseTracksRequest
 	renegotiateInput mediaplane.RenegotiateRequest
 	removeInput      mediaplane.RemoveParticipantInput
 	endInput         mediaplane.EndSessionInput
@@ -86,6 +117,10 @@ func (p *lifecycleMediaPlane) CreateJoin(_ context.Context, input mediaplane.Cre
 	return mediaplane.Join{Provider: input.Provider, ParticipantRef: "media-participant-ref", ClientPayload: map[string]any{"token": "opaque-token"}}, nil
 }
 
+func (p *lifecycleMediaPlane) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ExternalParticipantID, ClientPayload: map[string]any{"connectionId": input.ConnectionRef}}, nil
+}
+
 func (p *lifecycleMediaPlane) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {
 	p.removeInput = input
 	return p.removeErr
@@ -102,7 +137,12 @@ func (*lifecycleMediaPlane) SessionUsage(context.Context, mediaplane.SessionUsag
 
 func (p *lifecycleMediaPlane) AddTracks(_ context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	p.tracksInput = input
-	return mediaplane.TracksResponse{SessionDescription: &mediaplane.SessionDescription{Type: "answer", SDP: "provider-answer"}}, nil
+	return mediaplane.TracksResponse{SessionDescription: &mediaplane.SessionDescription{Type: "answer", SDP: "provider-answer"}, Tracks: append([]mediaplane.Track(nil), input.Tracks...)}, nil
+}
+
+func (p *lifecycleMediaPlane) CloseTracks(_ context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
+	p.closeTracksInput = input
+	return mediaplane.CloseTracksResponse{Tracks: input.Tracks}, nil
 }
 
 func (p *lifecycleMediaPlane) Renegotiate(_ context.Context, input mediaplane.RenegotiateRequest) error {
@@ -431,9 +471,20 @@ func TestCloudflareSFUSignalingRoutesProxyWithoutExposingSecret(t *testing.T) {
 	sessionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	participantID := mustTenantID(t, "44444444-4444-4444-8444-444444444444")
 	plane := &lifecycleMediaPlane{}
+	publicationID := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"connection_123","m":"0","t":"camera-track","g":1}`))
 	var recorded mediapublications.RecordInput
+	var prepared mediapublications.CloseInput
+	var closed mediapublications.CloseInput
+	var prepareErr error
 	options := authenticatedOptions(t, httpapi.Options{
-		Rooms: mediaRoomService{room: rooms.Room{ID: roomID, TenantID: tenantID, MediaPlane: "cf_sfu"}},
+		ParticipantMediaVerify: participantMediaVerifierFunc(func(context.Context, string) (participantaccess.Subject, error) {
+			return participantaccess.Subject{
+				TenantID: tenantID, RoomID: roomID, SessionID: sessionID, ParticipantSessionID: participantID,
+				ParticipantGeneration: 1, Provider: participantaccess.ProviderCloudflareSFU, CloudflareConnectionID: "connection_123",
+			}, nil
+		}),
+		ParticipantMediaActive: activeParticipantAuthorizerFunc(func(context.Context, participantaccess.Subject) (bool, error) { return true, nil }),
+		Rooms:                  mediaRoomService{room: rooms.Room{ID: roomID, TenantID: tenantID, MediaPlane: "cf_sfu"}},
 		Tenants: tenantService{getTenant: func(context.Context, utilities.ID) (tenants.Tenant, error) {
 			return tenants.Tenant{ID: tenantID}, nil
 		}},
@@ -442,12 +493,23 @@ func TestCloudflareSFUSignalingRoutesProxyWithoutExposingSecret(t *testing.T) {
 			return &service, nil
 		}),
 		MediaPublications: mediaPublicationRegistryStub{
-			record: func(_ context.Context, input mediapublications.RecordInput) error {
+			record: func(_ context.Context, input mediapublications.RecordInput) ([]mediapublications.PublishedReference, error) {
 				recorded = input
+				return []mediapublications.PublishedReference{{Source: "camera", MID: "0", TrackName: "camera-track", PublicationID: publicationID}}, nil
+			},
+			prepare: func(_ context.Context, input mediapublications.CloseInput) (mediapublications.CloseDecision, error) {
+				prepared = input
+				if prepareErr != nil {
+					return mediapublications.CloseDecision{}, prepareErr
+				}
+				return mediapublications.CloseDecision{ProviderCloseRequired: true}, nil
+			},
+			close: func(_ context.Context, input mediapublications.CloseInput) error {
+				closed = input
 				return nil
 			},
 			latest: func(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error) {
-				return mediapublications.Snapshot{Incarnation: 1, Sequence: 2, Publications: []provideroperations.Publication{{ParticipantSessionID: participantID, Source: "camera", Enabled: true, PublicationID: "connection_123|camera-track"}}}, nil
+				return mediapublications.Snapshot{Incarnation: 1, Sequence: 2, Publications: []provideroperations.Publication{{ParticipantSessionID: participantID, Source: "camera", Enabled: true, PublicationID: publicationID}}}, nil
 			},
 		},
 	})
@@ -464,8 +526,27 @@ func TestCloudflareSFUSignalingRoutesProxyWithoutExposingSecret(t *testing.T) {
 	if recorded.ParticipantSessionID != participantID || recorded.Tracks[0].Source != "camera" {
 		t.Fatalf("publication observation = %#v", recorded)
 	}
-	if strings.Contains(tracksResponse.Body.String(), "secret") || !strings.Contains(tracksResponse.Body.String(), "provider-answer") {
+	if strings.Contains(tracksResponse.Body.String(), "secret") || !strings.Contains(tracksResponse.Body.String(), "provider-answer") || !strings.Contains(tracksResponse.Body.String(), `"publication_id":"`+publicationID+`"`) {
 		t.Fatalf("tracks response = %s", tracksResponse.Body.String())
+	}
+
+	closeRequest := bearerRequestWithBody(http.MethodPut, basePath+"tracks/close", "raw-session-token", `{"connection_id":"connection_123","tracks":[{"mid":"0","source":"camera","publication_id":"`+publicationID+`"}],"force":false}`)
+	closeResponse := requestWithOptionsAndRequest(t, closeRequest, options)
+	if closeResponse.Code != http.StatusOK {
+		t.Fatalf("close status = %d, want 200; body=%s", closeResponse.Code, closeResponse.Body.String())
+	}
+	if plane.closeTracksInput.ConnectionID != "connection_123" || len(plane.closeTracksInput.Tracks) != 1 || prepared.PublicationID != publicationID || prepared.ParticipantGeneration != 1 || closed != prepared {
+		t.Fatalf("close input/authorization/observation = %#v / %#v / %#v", plane.closeTracksInput, prepared, closed)
+	}
+
+	prepareErr = mediapublications.ErrInvalidPublication
+	plane.closeTracksInput = mediaplane.CloseTracksRequest{}
+	staleCloseResponse := requestWithOptionsAndRequest(t, closeRequest, options)
+	if staleCloseResponse.Code != http.StatusBadRequest {
+		t.Fatalf("stale close status = %d, want 400; body=%s", staleCloseResponse.Code, staleCloseResponse.Body.String())
+	}
+	if plane.closeTracksInput.ConnectionID != "" {
+		t.Fatalf("stale close reached provider: %#v", plane.closeTracksInput)
 	}
 
 	renegotiateRequest := bearerRequestWithBody(http.MethodPost, basePath+"renegotiate", "raw-session-token", `{"connection_id":"connection_123","session_description":{"type":"answer","sdp":"browser-answer"}}`)
@@ -479,7 +560,7 @@ func TestCloudflareSFUSignalingRoutesProxyWithoutExposingSecret(t *testing.T) {
 
 	publicationsRequest := bearerRequestWithBody(http.MethodGet, basePath+"publications", "raw-session-token", "")
 	publicationsResponse := requestWithOptionsAndRequest(t, publicationsRequest, options)
-	if publicationsResponse.Code != http.StatusOK || !strings.Contains(publicationsResponse.Body.String(), `"publication_id":"connection_123|camera-track"`) {
+	if publicationsResponse.Code != http.StatusOK || !strings.Contains(publicationsResponse.Body.String(), `"publication_id":"`+publicationID+`"`) {
 		t.Fatalf("publications status = %d; body=%s", publicationsResponse.Code, publicationsResponse.Body.String())
 	}
 }

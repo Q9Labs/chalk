@@ -20,6 +20,63 @@ export const AIProviderConfigSchema = Schema.StructWithRest(
 );
 export type AIProviderConfig = typeof AIProviderConfigSchema.Type;
 
+export const DateTimeStringSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString"));
+export type DateTimeString = typeof DateTimeStringSchema.Type;
+
+export const UserIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UserId"));
+export type UserId = typeof UserIdSchema.Type;
+
+export const UUIDSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UUID"));
+export type UUID = typeof UUIDSchema.Type;
+
+export const TenantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TenantId"));
+export type TenantId = typeof TenantIdSchema.Type;
+
+export const PaginationSchema = Schema.Struct({
+  has_more: Schema.Boolean,
+  next_cursor: Schema.NullOr(Schema.String),
+  page_size: Schema.Number,
+});
+export type Pagination = typeof PaginationSchema.Type;
+
+export const APIKeyListSchema = Schema.Struct({
+  api_keys: Schema.Array(
+    Schema.Struct({
+      created_at: DateTimeStringSchema,
+      created_by_user_id: Schema.NullOr(UserIdSchema),
+      expires_at: DateTimeStringSchema,
+      id: UUIDSchema,
+      key_prefix: Schema.String,
+      last_used_at: Schema.NullOr(DateTimeStringSchema),
+      name: Schema.String,
+      revoked_at: Schema.NullOr(DateTimeStringSchema),
+      scopes: Schema.Array(Schema.String),
+      tenant_id: TenantIdSchema,
+      updated_at: DateTimeStringSchema,
+    }),
+  ),
+  pagination: PaginationSchema,
+});
+export type APIKeyList = typeof APIKeyListSchema.Type;
+
+export const APIKeyWithSecretSchema = Schema.Struct({
+  api_key: Schema.Struct({
+    created_at: DateTimeStringSchema,
+    created_by_user_id: Schema.NullOr(UserIdSchema),
+    expires_at: DateTimeStringSchema,
+    id: UUIDSchema,
+    key_prefix: Schema.String,
+    last_used_at: Schema.NullOr(DateTimeStringSchema),
+    name: Schema.String,
+    revoked_at: Schema.NullOr(DateTimeStringSchema),
+    scopes: Schema.Array(Schema.String),
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+  }),
+  secret: Schema.String,
+});
+export type APIKeyWithSecret = typeof APIKeyWithSecretSchema.Type;
+
 export const RoomSessionIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomSessionId"));
 export type RoomSessionId = typeof RoomSessionIdSchema.Type;
 
@@ -32,20 +89,8 @@ export const AdmitSessionParticipantRequestSchema = Schema.Struct({
 });
 export type AdmitSessionParticipantRequest = typeof AdmitSessionParticipantRequestSchema.Type;
 
-export const UserIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UserId"));
-export type UserId = typeof UserIdSchema.Type;
-
-export const DateTimeStringSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString"));
-export type DateTimeString = typeof DateTimeStringSchema.Type;
-
 export const AuditLogIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId"));
 export type AuditLogId = typeof AuditLogIdSchema.Type;
-
-export const UUIDSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UUID"));
-export type UUID = typeof UUIDSchema.Type;
-
-export const TenantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TenantId"));
-export type TenantId = typeof TenantIdSchema.Type;
 
 export const AuditLogSchema = Schema.Struct({
   action: Schema.String,
@@ -65,13 +110,6 @@ export const AuditLogSchema = Schema.Struct({
   updated_at: DateTimeStringSchema,
 });
 export type AuditLog = typeof AuditLogSchema.Type;
-
-export const PaginationSchema = Schema.Struct({
-  has_more: Schema.Boolean,
-  next_cursor: Schema.NullOr(Schema.String),
-  page_size: Schema.Number,
-});
-export type Pagination = typeof PaginationSchema.Type;
 
 export const AuditLogListSchema = Schema.Struct({
   audit_logs: Schema.Array(AuditLogSchema),
@@ -98,12 +136,55 @@ export const AuthSchema = Schema.Struct({
 });
 export type Auth = typeof AuthSchema.Type;
 
+export const CloudflareSFUCloseTracksAPIResponseSchema = Schema.Struct({
+  requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
+  sessionDescription: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        sdp: Schema.String,
+        type: Schema.String,
+      }),
+    ),
+  ),
+  tracks: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        mid: Schema.String,
+        publication_id: Schema.String,
+        source: Schema.String,
+      }),
+    ),
+  ),
+});
+export type CloudflareSFUCloseTracksAPIResponse = typeof CloudflareSFUCloseTracksAPIResponseSchema.Type;
+
+export const CloudflareSFUCloseTracksRequestSchema = Schema.Struct({
+  connection_id: Schema.String.check(Schema.isMinLength(1)),
+  force: Schema.Boolean,
+  session_description: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        sdp: Schema.String.check(Schema.isMinLength(1)),
+        type: Schema.String.check(Schema.isMinLength(1)),
+      }),
+    ),
+  ),
+  tracks: Schema.Array(
+    Schema.Struct({
+      mid: Schema.String.check(Schema.isMinLength(1)),
+      publication_id: Schema.String.check(Schema.isMinLength(1)),
+      source: Schema.String.check(Schema.isMinLength(1)),
+    }),
+  ),
+});
+export type CloudflareSFUCloseTracksRequest = typeof CloudflareSFUCloseTracksRequestSchema.Type;
+
 export const CloudflareSFUPublicationsResponseSchema = Schema.Struct({
   incarnation: Schema.Number,
   publications: Schema.Array(
     Schema.Struct({
       participant_session_id: RoomSessionIdSchema,
-      publication_id: UUIDSchema,
+      publication_id: Schema.String,
       source: Schema.String,
     }),
   ),
@@ -112,7 +193,7 @@ export const CloudflareSFUPublicationsResponseSchema = Schema.Struct({
 export type CloudflareSFUPublicationsResponse = typeof CloudflareSFUPublicationsResponseSchema.Type;
 
 export const CloudflareSFURenegotiateRequestSchema = Schema.Struct({
-  connection_id: UUIDSchema,
+  connection_id: Schema.String.check(Schema.isMinLength(1)),
   session_description: Schema.Struct({
     sdp: Schema.String.check(Schema.isMinLength(1)),
     type: Schema.String.check(Schema.isMinLength(1)),
@@ -140,6 +221,7 @@ export const CloudflareSFUTracksAPIResponseSchema = Schema.Struct({
       Schema.Struct({
         location: Schema.String,
         mid: Schema.optional(Schema.String),
+        publication_id: Schema.optional(Schema.String),
         sessionId: Schema.optional(Schema.String),
         source: Schema.optional(Schema.String),
         trackName: Schema.String,
@@ -150,7 +232,7 @@ export const CloudflareSFUTracksAPIResponseSchema = Schema.Struct({
 export type CloudflareSFUTracksAPIResponse = typeof CloudflareSFUTracksAPIResponseSchema.Type;
 
 export const CloudflareSFUTracksRequestSchema = Schema.Struct({
-  connection_id: UUIDSchema,
+  connection_id: Schema.String.check(Schema.isMinLength(1)),
   session_description: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
@@ -163,6 +245,7 @@ export const CloudflareSFUTracksRequestSchema = Schema.Struct({
     Schema.Struct({
       location: Schema.String.check(Schema.isMinLength(1)),
       mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       trackName: Schema.String.check(Schema.isMinLength(1)),
@@ -170,6 +253,13 @@ export const CloudflareSFUTracksRequestSchema = Schema.Struct({
   ),
 });
 export type CloudflareSFUTracksRequest = typeof CloudflareSFUTracksRequestSchema.Type;
+
+export const CreateAPIKeyRequestSchema = Schema.Struct({
+  expires_at: DateTimeStringSchema,
+  name: Schema.String.check(Schema.isMinLength(1)),
+  scopes: Schema.Array(Schema.String),
+});
+export type CreateAPIKeyRequest = typeof CreateAPIKeyRequestSchema.Type;
 
 export const CreateMembershipRequestSchema = Schema.Struct({
   role: Schema.Literals(["owner", "admin", "member", "viewer"]),
@@ -378,6 +468,13 @@ export const IntegrationServicesSchema = Schema.Struct({
 });
 export type IntegrationServices = typeof IntegrationServicesSchema.Type;
 
+export const IssueParticipantAccessRequestSchema = Schema.Struct({
+  current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  participant_session_generation: Schema.Number,
+  replace_media_connection: Schema.Boolean,
+});
+export type IssueParticipantAccessRequest = typeof IssueParticipantAccessRequestSchema.Type;
+
 export const JourneyEventBatchSchema = Schema.Struct({
   events: Schema.Array(
     Schema.Struct({
@@ -435,7 +532,29 @@ export type MembershipList = typeof MembershipListSchema.Type;
 export const RoomIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomId"));
 export type RoomId = typeof RoomIdSchema.Type;
 
+export const ParticipantAccessSchema = Schema.Struct({
+  media: Schema.Struct({
+    client_payload: Schema.Record(Schema.String, Schema.Unknown),
+    expires_at: DateTimeStringSchema,
+    provider: Schema.String,
+    token: Schema.String,
+  }),
+  subject: Schema.Struct({
+    participant_generation: Schema.Number,
+    participant_session_id: RoomSessionIdSchema,
+    room_id: RoomIdSchema,
+    session_id: RoomSessionIdSchema,
+    tenant_id: TenantIdSchema,
+  }),
+  sync: Schema.Struct({
+    expires_at: DateTimeStringSchema,
+    token: Schema.String,
+  }),
+});
+export type ParticipantAccess = typeof ParticipantAccessSchema.Type;
+
 export const ParticipantLifecycleSchema = Schema.Struct({
+  access: Schema.optional(Schema.NullOr(ParticipantAccessSchema)),
   admission_request: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
@@ -633,6 +752,11 @@ export const RoomSessionListSchema = Schema.Struct({
   sessions: Schema.Array(RoomSessionSchema),
 });
 export type RoomSessionList = typeof RoomSessionListSchema.Type;
+
+export const RotateAPIKeyRequestSchema = Schema.Struct({
+  expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+});
+export type RotateAPIKeyRequest = typeof RotateAPIKeyRequestSchema.Type;
 
 export const RotateWebhookSecretRequestSchema = Schema.Struct({
   revoke_previous_immediately: Schema.Boolean,
@@ -988,6 +1112,27 @@ export const AdmitSessionParticipant429ResponseHeadersSchema = Schema.Struct({
 });
 export type AdmitSessionParticipant429ResponseHeaders = typeof AdmitSessionParticipant429ResponseHeadersSchema.Type;
 
+export const CloseCloudflareSFUTracksPathParamsSchema = Schema.Struct({
+  participant_session_id: RoomSessionIdSchema,
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type CloseCloudflareSFUTracksPathParams = typeof CloseCloudflareSFUTracksPathParamsSchema.Type;
+
+export const CloseCloudflareSFUTracksRequestBodySchema = CloudflareSFUCloseTracksRequestSchema;
+export type CloseCloudflareSFUTracksRequestBody = typeof CloseCloudflareSFUTracksRequestBodySchema.Type;
+
+export const CloseCloudflareSFUTracksResponseSchema = CloudflareSFUCloseTracksAPIResponseSchema;
+export type CloseCloudflareSFUTracksResponse = typeof CloseCloudflareSFUTracksResponseSchema.Type;
+
+export const CloseCloudflareSFUTracks429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CloseCloudflareSFUTracks429ResponseHeaders = typeof CloseCloudflareSFUTracks429ResponseHeadersSchema.Type;
+
 export const CompleteGoogleSignInQueryParamsSchema = Schema.Struct({
   code: Schema.String,
   state: Schema.String,
@@ -1003,6 +1148,24 @@ export const CompleteGoogleSignIn429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type CompleteGoogleSignIn429ResponseHeaders = typeof CompleteGoogleSignIn429ResponseHeadersSchema.Type;
+
+export const CreateAPIKeyPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type CreateAPIKeyPathParams = typeof CreateAPIKeyPathParamsSchema.Type;
+
+export const CreateAPIKeyRequestBodySchema = CreateAPIKeyRequestSchema;
+export type CreateAPIKeyRequestBody = typeof CreateAPIKeyRequestBodySchema.Type;
+
+export const CreateAPIKeyResponseSchema = APIKeyWithSecretSchema;
+export type CreateAPIKeyResponse = typeof CreateAPIKeyResponseSchema.Type;
+
+export const CreateAPIKey429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CreateAPIKey429ResponseHeaders = typeof CreateAPIKey429ResponseHeadersSchema.Type;
 
 export const CreateMembershipPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -1452,6 +1615,27 @@ export const IntakeJourneyEvents429ResponseHeadersSchema = Schema.Struct({
 });
 export type IntakeJourneyEvents429ResponseHeaders = typeof IntakeJourneyEvents429ResponseHeadersSchema.Type;
 
+export const IssueSessionParticipantAccessPathParamsSchema = Schema.Struct({
+  participant_session_id: RoomSessionIdSchema,
+  room_id: RoomIdSchema,
+  session_id: RoomSessionIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type IssueSessionParticipantAccessPathParams = typeof IssueSessionParticipantAccessPathParamsSchema.Type;
+
+export const IssueSessionParticipantAccessRequestBodySchema = IssueParticipantAccessRequestSchema;
+export type IssueSessionParticipantAccessRequestBody = typeof IssueSessionParticipantAccessRequestBodySchema.Type;
+
+export const IssueSessionParticipantAccessResponseSchema = ParticipantAccessSchema;
+export type IssueSessionParticipantAccessResponse = typeof IssueSessionParticipantAccessResponseSchema.Type;
+
+export const IssueSessionParticipantAccess429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type IssueSessionParticipantAccess429ResponseHeaders = typeof IssueSessionParticipantAccess429ResponseHeadersSchema.Type;
+
 export const IssueSessionParticipantSyncTokenPathParamsSchema = Schema.Struct({
   participant_session_id: RoomSessionIdSchema,
   room_id: RoomIdSchema,
@@ -1469,6 +1653,20 @@ export const IssueSessionParticipantSyncToken429ResponseHeadersSchema = Schema.S
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type IssueSessionParticipantSyncToken429ResponseHeaders = typeof IssueSessionParticipantSyncToken429ResponseHeadersSchema.Type;
+
+export const ListAPIKeysPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type ListAPIKeysPathParams = typeof ListAPIKeysPathParamsSchema.Type;
+
+export const ListAPIKeysQueryParamsSchema = Schema.Struct({
+  cursor: Schema.optional(Schema.String),
+  page_size: Schema.optional(Schema.NumberFromString),
+});
+export type ListAPIKeysQueryParams = typeof ListAPIKeysQueryParamsSchema.Type;
+
+export const ListAPIKeysResponseSchema = APIKeyListSchema;
+export type ListAPIKeysResponse = typeof ListAPIKeysResponseSchema.Type;
 
 export const ListAuditLogsPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -1860,6 +2058,38 @@ export const RequestTranscript429ResponseHeadersSchema = Schema.Struct({
 });
 export type RequestTranscript429ResponseHeaders = typeof RequestTranscript429ResponseHeadersSchema.Type;
 
+export const RevokeAPIKeyPathParamsSchema = Schema.Struct({
+  api_key_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RevokeAPIKeyPathParams = typeof RevokeAPIKeyPathParamsSchema.Type;
+
+export const RevokeAPIKey429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RevokeAPIKey429ResponseHeaders = typeof RevokeAPIKey429ResponseHeadersSchema.Type;
+
+export const RotateAPIKeyPathParamsSchema = Schema.Struct({
+  api_key_id: UUIDSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RotateAPIKeyPathParams = typeof RotateAPIKeyPathParamsSchema.Type;
+
+export const RotateAPIKeyRequestBodySchema = RotateAPIKeyRequestSchema;
+export type RotateAPIKeyRequestBody = typeof RotateAPIKeyRequestBodySchema.Type;
+
+export const RotateAPIKeyResponseSchema = APIKeyWithSecretSchema;
+export type RotateAPIKeyResponse = typeof RotateAPIKeyResponseSchema.Type;
+
+export const RotateAPIKey429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RotateAPIKey429ResponseHeaders = typeof RotateAPIKey429ResponseHeadersSchema.Type;
+
 export const RotateWebhookEndpointSecretPathParamsSchema = Schema.Struct({
   endpoint_id: UUIDSchema,
   tenant_id: TenantIdSchema,
@@ -2079,6 +2309,25 @@ export const UpdateWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type UpdateWebhookEndpoint429ResponseHeaders = typeof UpdateWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export class ApiKeyInactiveError extends Schema.TaggedErrorClass<ApiKeyInactiveError>()("ApiKeyInactiveError", {
+  error: Schema.Struct({
+    code: Schema.Literal("api_key_inactive"),
+    message: Schema.String,
+  }),
+}) {}
+export const ApiKeyInactiveErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("api_key_inactive"),
+    message: Schema.String,
+  }),
+});
+export const ApiKeyInactiveErrorSchema = ApiKeyInactiveErrorWireSchema.pipe(
+  Schema.decodeTo(ApiKeyInactiveError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ApiKeyInactiveError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
 
 export class EmailAlreadyRegisteredError extends Schema.TaggedErrorClass<EmailAlreadyRegisteredError>()("EmailAlreadyRegisteredError", {
   error: Schema.Struct({
@@ -2361,6 +2610,25 @@ export const InternalErrorWireSchema = Schema.Struct({
 export const InternalErrorSchema = InternalErrorWireSchema.pipe(
   Schema.decodeTo(InternalError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InternalError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidApiKeyIdError extends Schema.TaggedErrorClass<InvalidApiKeyIdError>()("InvalidApiKeyIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_api_key_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidApiKeyIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_api_key_id"),
+    message: Schema.String,
+  }),
+});
+export const InvalidApiKeyIdErrorSchema = InvalidApiKeyIdErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidApiKeyIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidApiKeyIdError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -3828,8 +4096,28 @@ export const AdmitSessionParticipantErrorSchema = Schema.Union([
 ]);
 export type AdmitSessionParticipantError = typeof AdmitSessionParticipantErrorSchema.Type;
 
+export const CloseCloudflareSFUTracksErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  MediaPlaneUnavailableErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type CloseCloudflareSFUTracksError = typeof CloseCloudflareSFUTracksErrorSchema.Type;
+
 export const CompleteGoogleSignInErrorSchema = Schema.Union([InternalErrorSchema, InvalidOauthStateErrorSchema, OauthEmailConflictErrorSchema, OauthEmailNotVerifiedErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
 export type CompleteGoogleSignInError = typeof CompleteGoogleSignInErrorSchema.Type;
+
+export const CreateAPIKeyErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidRequestErrorSchema, InvalidTenantIdErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type CreateAPIKeyError = typeof CreateAPIKeyErrorSchema.Type;
 
 export const CreateMembershipErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -4155,6 +4443,24 @@ export type GetWebhookEndpointError = typeof GetWebhookEndpointErrorSchema.Type;
 export const IntakeJourneyEventsErrorSchema = Schema.Union([InternalErrorSchema, InvalidJourneyEventErrorSchema, InvalidRequestErrorSchema, JourneyLedgerUnavailableErrorSchema, PayloadTooLargeErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type IntakeJourneyEventsError = typeof IntakeJourneyEventsErrorSchema.Type;
 
+export const IssueSessionParticipantAccessErrorSchema = Schema.Union([
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidParticipantSessionIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidRoomIdErrorSchema,
+  InvalidSessionIdErrorSchema,
+  InvalidTenantIdErrorSchema,
+  MediaPlaneUnavailableErrorSchema,
+  ParticipantGenerationMismatchErrorSchema,
+  ParticipantNotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type IssueSessionParticipantAccessError = typeof IssueSessionParticipantAccessErrorSchema.Type;
+
 export const IssueSessionParticipantSyncTokenErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   InvalidParticipantSessionIdErrorSchema,
@@ -4166,6 +4472,9 @@ export const IssueSessionParticipantSyncTokenErrorSchema = Schema.Union([
   UnauthenticatedErrorSchema,
 ]);
 export type IssueSessionParticipantSyncTokenError = typeof IssueSessionParticipantSyncTokenErrorSchema.Type;
+
+export const ListAPIKeysErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, InvalidTenantIdErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type ListAPIKeysError = typeof ListAPIKeysErrorSchema.Type;
 
 export const ListAuditLogsErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, InvalidTenantIdErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type ListAuditLogsError = typeof ListAuditLogsErrorSchema.Type;
@@ -4412,6 +4721,24 @@ export const RequestTranscriptErrorSchema = Schema.Union([
 ]);
 export type RequestTranscriptError = typeof RequestTranscriptErrorSchema.Type;
 
+export const RevokeAPIKeyErrorSchema = Schema.Union([ApiKeyInactiveErrorSchema, ForbiddenErrorSchema, InternalErrorSchema, InvalidApiKeyIdErrorSchema, InvalidTenantIdErrorSchema, NotFoundErrorSchema, RateLimitedErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type RevokeAPIKeyError = typeof RevokeAPIKeyErrorSchema.Type;
+
+export const RotateAPIKeyErrorSchema = Schema.Union([
+  ApiKeyInactiveErrorSchema,
+  ForbiddenErrorSchema,
+  InternalErrorSchema,
+  InvalidApiKeyIdErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantIdErrorSchema,
+  NotFoundErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type RotateAPIKeyError = typeof RotateAPIKeyErrorSchema.Type;
+
 export const RotateWebhookEndpointSecretErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   IdempotencyKeyConflictErrorSchema,
@@ -4623,7 +4950,9 @@ export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema
 export const ChalkOperationPolicies = {
   addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
+  createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createRecordingDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -4644,6 +4973,7 @@ export const ChalkOperationPolicies = {
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   intakeJourneyEvents: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
+  issueSessionParticipantAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueSessionParticipantSyncToken: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
@@ -4656,6 +4986,8 @@ export const ChalkOperationPolicies = {
   removeSessionParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  revokeAPIKey: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  rotateAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   setRoomSessionDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },

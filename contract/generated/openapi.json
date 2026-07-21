@@ -1284,6 +1284,577 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/api-keys": {
+      "get": {
+        "operationId": "listAPIKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKeyList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_cursor", "invalid_page_size", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "List a p i keys"
+      },
+      "post": {
+        "operationId": "createAPIKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAPIKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKeyWithSecret"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_request", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Create a p i key",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/api-keys/{api_key_id}": {
+      "delete": {
+        "operationId": "revokeAPIKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "api_key_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_api_key_id", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["api_key_inactive"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Revoke a p i key",
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate": {
+      "post": {
+        "operationId": "rotateAPIKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "api_key_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotateAPIKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKeyWithSecret"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_api_key_id", "invalid_request", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["api_key_inactive"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Rotate a p i key",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/audit-logs": {
       "get": {
         "operationId": "listAuditLogs",
@@ -6031,6 +6602,198 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/access": {
+      "post": {
+        "operationId": "issueSessionParticipantAccess",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueParticipantAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantAccess"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_participant_session_id", "invalid_request", "invalid_room_id", "invalid_session_id", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["participant_not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["participant_generation_mismatch"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["media_plane_unavailable", "service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Issue session participant access",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/publications": {
       "get": {
         "operationId": "listCloudflareSFUPublications",
@@ -6179,7 +6942,7 @@
         },
         "security": [
           {
-            "sessionOrBearer": []
+            "participantMediaBearer": []
           }
         ],
         "summary": "List cloudflare s f u publications"
@@ -6354,7 +7117,7 @@
         },
         "security": [
           {
-            "sessionOrBearer": []
+            "participantMediaBearer": []
           }
         ],
         "summary": "Renegotiate cloudflare s f u",
@@ -6535,10 +7298,191 @@
         },
         "security": [
           {
-            "sessionOrBearer": []
+            "participantMediaBearer": []
           }
         ],
         "summary": "Add cloudflare s f u tracks",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks/close": {
+      "put": {
+        "operationId": "closeCloudflareSFUTracks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_session_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomSessionId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudflareSFUCloseTracksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareSFUCloseTracksAPIResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_participant_session_id", "invalid_request", "invalid_room_id", "invalid_session_id", "invalid_tenant_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["not_found"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["media_plane_unavailable", "service_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Close cloudflare s f u tracks",
         "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           "limit": 60,
@@ -10027,6 +10971,12 @@
   },
   "components": {
     "securitySchemes": {
+      "participantMediaBearer": {
+        "bearerFormat": "JWT",
+        "description": "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
+        "scheme": "bearer",
+        "type": "http"
+      },
       "sessionOrBearer": {
         "description": "Preview placeholder for routes accepted by Chalk session auth or bearer/API-key auth.",
         "scheme": "bearer",
@@ -10072,6 +11022,157 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "APIKeyList": {
+        "additionalProperties": false,
+        "properties": {
+          "api_keys": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "created_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                },
+                "created_by_user_id": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UserId"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "expires_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                },
+                "id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "key_prefix": {
+                  "type": "string"
+                },
+                "last_used_at": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DateTimeString"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "revoked_at": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DateTimeString"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "scopes": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "tenant_id": {
+                  "$ref": "#/components/schemas/TenantId"
+                },
+                "updated_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                }
+              },
+              "required": ["created_at", "created_by_user_id", "expires_at", "id", "key_prefix", "last_used_at", "name", "revoked_at", "scopes", "tenant_id", "updated_at"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": ["api_keys", "pagination"],
+        "type": "object"
+      },
+      "APIKeyWithSecret": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "created_by_user_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/UserId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "expires_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "key_prefix": {
+                "type": "string"
+              },
+              "last_used_at": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DateTimeString"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "revoked_at": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DateTimeString"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scopes": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tenant_id": {
+                "$ref": "#/components/schemas/TenantId"
+              },
+              "updated_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              }
+            },
+            "required": ["created_at", "created_by_user_id", "expires_at", "id", "key_prefix", "last_used_at", "name", "revoked_at", "scopes", "tenant_id", "updated_at"],
+            "type": "object"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": ["api_key", "secret"],
         "type": "object"
       },
       "AdmitSessionParticipantRequest": {
@@ -10236,6 +11337,98 @@
         "required": ["created_at", "email", "id", "name", "updated_at"],
         "type": "object"
       },
+      "CloudflareSFUCloseTracksAPIResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "requiresImmediateRenegotiation": {
+            "type": "boolean"
+          },
+          "sessionDescription": {
+            "additionalProperties": false,
+            "properties": {
+              "sdp": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": ["sdp", "type"],
+            "type": ["object", "null"]
+          },
+          "tracks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "mid": {
+                  "type": "string"
+                },
+                "publication_id": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": ["mid", "publication_id", "source"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CloudflareSFUCloseTracksRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "session_description": {
+            "additionalProperties": false,
+            "properties": {
+              "sdp": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["sdp", "type"],
+            "type": ["object", "null"]
+          },
+          "tracks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "mid": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "publication_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["mid", "publication_id", "source"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["connection_id", "force", "tracks"],
+        "type": "object"
+      },
       "CloudflareSFUPublicationsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -10250,7 +11443,7 @@
                   "$ref": "#/components/schemas/RoomSessionId"
                 },
                 "publication_id": {
-                  "$ref": "#/components/schemas/UUID"
+                  "type": "string"
                 },
                 "source": {
                   "type": "string"
@@ -10272,7 +11465,8 @@
         "additionalProperties": false,
         "properties": {
           "connection_id": {
-            "$ref": "#/components/schemas/UUID"
+            "minLength": 1,
+            "type": "string"
           },
           "session_description": {
             "additionalProperties": false,
@@ -10332,6 +11526,9 @@
                 "mid": {
                   "type": "string"
                 },
+                "publication_id": {
+                  "type": "string"
+                },
                 "sessionId": {
                   "type": "string"
                 },
@@ -10354,7 +11551,8 @@
         "additionalProperties": false,
         "properties": {
           "connection_id": {
-            "$ref": "#/components/schemas/UUID"
+            "minLength": 1,
+            "type": "string"
           },
           "session_description": {
             "additionalProperties": false,
@@ -10383,6 +11581,10 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "publication_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "sessionId": {
                   "minLength": 1,
                   "type": "string"
@@ -10403,6 +11605,26 @@
           }
         },
         "required": ["connection_id", "tracks"],
+        "type": "object"
+      },
+      "CreateAPIKeyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "$ref": "#/components/schemas/DateTimeString"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["expires_at", "name", "scopes"],
         "type": "object"
       },
       "CreateMembershipRequest": {
@@ -11005,6 +12227,23 @@
         "required": ["families"],
         "type": "object"
       },
+      "IssueParticipantAccessRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "current_media_token": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "participant_session_generation": {
+            "type": "integer"
+          },
+          "replace_media_connection": {
+            "type": "boolean"
+          }
+        },
+        "required": ["participant_session_generation", "replace_media_connection"],
+        "type": "object"
+      },
       "JourneyEventBatch": {
         "additionalProperties": false,
         "properties": {
@@ -11215,9 +12454,85 @@
         "required": ["has_more", "next_cursor", "page_size"],
         "type": "object"
       },
+      "ParticipantAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "media": {
+            "additionalProperties": false,
+            "properties": {
+              "client_payload": {
+                "additionalProperties": {
+                  "additionalProperties": true,
+                  "items": {},
+                  "type": ["object", "array", "string", "number", "boolean", "null"]
+                },
+                "type": "object"
+              },
+              "expires_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": ["client_payload", "expires_at", "provider", "token"],
+            "type": "object"
+          },
+          "subject": {
+            "additionalProperties": false,
+            "properties": {
+              "participant_generation": {
+                "type": "integer"
+              },
+              "participant_session_id": {
+                "$ref": "#/components/schemas/RoomSessionId"
+              },
+              "room_id": {
+                "$ref": "#/components/schemas/RoomId"
+              },
+              "session_id": {
+                "$ref": "#/components/schemas/RoomSessionId"
+              },
+              "tenant_id": {
+                "$ref": "#/components/schemas/TenantId"
+              }
+            },
+            "required": ["participant_generation", "participant_session_id", "room_id", "session_id", "tenant_id"],
+            "type": "object"
+          },
+          "sync": {
+            "additionalProperties": false,
+            "properties": {
+              "expires_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": ["expires_at", "token"],
+            "type": "object"
+          }
+        },
+        "required": ["media", "subject", "sync"],
+        "type": "object"
+      },
       "ParticipantLifecycle": {
         "additionalProperties": false,
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParticipantAccess"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "admission_request": {
             "additionalProperties": false,
             "properties": {
@@ -11819,6 +13134,22 @@
           }
         },
         "required": ["pagination", "sessions"],
+        "type": "object"
+      },
+      "RotateAPIKeyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
         "type": "object"
       },
       "RotateWebhookSecretRequest": {

@@ -90,6 +90,12 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"scheme":      "bearer",
 						"description": "Preview placeholder for routes accepted by Chalk session auth or bearer/API-key auth.",
 					},
+					"participantMediaBearer": map[string]any{
+						"type":         "http",
+						"scheme":       "bearer",
+						"bearerFormat": "JWT",
+						"description":  "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
+					},
 				},
 				Schemas: make(map[string]map[string]any),
 			},
@@ -133,11 +139,16 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		"responses":   g.responses(route),
 	}
 
-	if route.Auth != "" {
+	switch route.Auth {
+	case httpapi.APIAuthSessionOrBearer:
 		operation["security"] = []map[string][]string{
 			{"sessionOrBearer": {}},
 		}
-	} else {
+	case httpapi.APIAuthParticipantMedia:
+		operation["security"] = []map[string][]string{
+			{"participantMediaBearer": {}},
+		}
+	default:
 		operation["security"] = []map[string][]string{}
 	}
 
@@ -498,7 +509,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 	if enum := fieldEnum(schemaName, fieldName); len(enum) > 0 {
 		schema["enum"] = enum
 	}
-	if isUUIDField(fieldName) {
+	if isUUIDField(fieldName) && !isOpaqueIDField(schemaName, fieldName) {
 		schema["format"] = "uuid"
 		schema["minLength"] = 36
 		schema["maxLength"] = 36
@@ -814,6 +825,9 @@ func idSchemaNames() []string {
 }
 
 func idSchemaName(schemaName string, fieldName string) (string, bool) {
+	if isOpaqueIDField(schemaName, fieldName) {
+		return "", false
+	}
 	if fieldName == "id" {
 		switch schemaName {
 		case "AuditLog":
@@ -899,6 +913,13 @@ func isUUIDField(fieldName string) bool {
 		return false
 	}
 	return fieldName == "id" || strings.HasSuffix(fieldName, "_id")
+}
+
+func isOpaqueIDField(schemaName string, fieldName string) bool {
+	if fieldName == "publication_id" {
+		return true
+	}
+	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "CloudflareSFU")
 }
 
 func schemaTypeIs(schema map[string]any, value string) bool {

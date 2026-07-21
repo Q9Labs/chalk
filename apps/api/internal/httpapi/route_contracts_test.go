@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,10 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPatch, "/v1/tenants/{tenant_id}"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/audit-logs"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/audit-logs/{audit_log_id}"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/api-keys"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/api-keys"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate"},
+		{http.MethodDelete, "/v1/tenants/{tenant_id}/api-keys/{api_key_id}"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/memberships"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/memberships"},
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/memberships/{membership_id}"},
@@ -85,7 +90,9 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/host/recover"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/access"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks"},
+		{http.MethodPut, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks/close"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/renegotiate"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/publications"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token"},
@@ -123,8 +130,11 @@ func TestPreviewRouteContracts(t *testing.T) {
 		if len(contract.Errors) == 0 {
 			t.Fatalf("%s %s has no error metadata", contract.Method, contract.Path)
 		}
-		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer {
-			t.Fatalf("%s %s should advertise session or bearer auth", contract.Method, contract.Path)
+		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer && contract.Auth != httpapi.APIAuthParticipantMedia {
+			t.Fatalf("%s %s should advertise a supported auth family", contract.Method, contract.Path)
+		}
+		if strings.Contains(contract.Path, "/media/sfu/") && contract.Auth != httpapi.APIAuthParticipantMedia {
+			t.Fatalf("%s %s should advertise participant media auth", contract.Method, contract.Path)
 		}
 
 		if seenRoutes[contract.Path] == nil {

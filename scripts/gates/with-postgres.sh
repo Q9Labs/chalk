@@ -25,7 +25,6 @@ trap cleanup EXIT INT TERM
 
 "${docker_bin}" run \
   --name "${container}" \
-  --rm \
   -e POSTGRES_DB=chalk_gate \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \

@@ -7,6 +7,7 @@ defmodule ChalkSync.Operations.ProbeTest do
     previous_stateholder = Application.fetch_env!(:chalk_sync, :stateholder)
     previous_verifier = Application.fetch_env!(:chalk_sync, :token_verifier)
     previous_requirement = Application.fetch_env!(:chalk_sync, :require_production_auth)
+    previous_provider_bridge = Application.get_env(:chalk_sync, :provider_bridge)
 
     previous_poll_interval =
       Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms)
@@ -15,6 +16,10 @@ defmodule ChalkSync.Operations.ProbeTest do
       Application.put_env(:chalk_sync, :stateholder, previous_stateholder)
       Application.put_env(:chalk_sync, :token_verifier, previous_verifier)
       Application.put_env(:chalk_sync, :require_production_auth, previous_requirement)
+
+      if previous_provider_bridge,
+        do: Application.put_env(:chalk_sync, :provider_bridge, previous_provider_bridge),
+        else: Application.delete_env(:chalk_sync, :provider_bridge)
 
       Application.put_env(
         :chalk_sync,
@@ -39,6 +44,15 @@ defmodule ChalkSync.Operations.ProbeTest do
     Application.put_env(:chalk_sync, :require_production_auth, true)
 
     assert Probe.run(boot?: true) == {:error, :development_token_verifier}
+  end
+
+  test "refuses production readiness without the private provider bridge" do
+    Application.put_env(:chalk_sync, :stateholder, ChalkSync.Stateholder.Postgres)
+    Application.put_env(:chalk_sync, :token_verifier, ChalkSync.Auth.JWTTokenVerifier)
+    Application.put_env(:chalk_sync, :require_production_auth, true)
+    Application.delete_env(:chalk_sync, :provider_bridge)
+
+    assert Probe.run(boot?: true) == {:error, :provider_bridge_not_configured}
   end
 
   test "requires the declared PostgreSQL durability settings" do

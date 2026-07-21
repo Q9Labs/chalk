@@ -14,6 +14,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Managed web SDK launch surface with scoped tenant API-key lifecycle, distinct
+  short-lived Sync and media credentials, a server-only Promise client, the
+  framework-neutral `ChalkSession` runtime, and React provider and hooks.
+- Clean packed-artifact browser proof covering two-party media, screen sharing,
+  credential refresh, Sync and SFU recovery, denied access, remote removal, and
+  leak-free Leave, plus a public server/browser quickstart.
+- Participant-media-only Cloudflare SFU authorization with exact tenant, room,
+  session, participant generation, provider, and connection binding.
+- A private mutual-TLS Sync-to-API provider bridge that makes participant Leave
+  close active Cloudflare publications before Sync finalizes the participant.
 - Implementation-ready web SDK launch board with frozen consumer contracts,
   file-level pseudodiffs, dependency-ordered task cards, an interactive
   lifecycle companion, and a packed two-browser release gate.
@@ -101,6 +111,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Replaced the first-party web room's direct token, Sync, and SFU orchestration
+  with the public Chalk client and React SDK surfaces and a localhost-only
+  server boundary that keeps tenant credentials out of the browser.
+- Made Cloudflare track closure idempotent and authoritative: provider-confirmed
+  removals update publication observations, while incomplete provider responses
+  fail closed.
 - Replaced the always-full local gate and partial PR checks with one
   context-aware contract that reports its decisions, follows affected
   workspace dependents, includes Go and Elixir service-backed gates, runs tests

@@ -146,6 +146,7 @@ func (r Registry) tenantManagedConfig(providerName string, providerConfig provid
 
 	resolved := config.CloudflareRealtimeConfig{}
 	resolved.RequestTimeout = r.processConfig.RequestTimeout
+	resolved.RealtimeBaseURL = r.processConfig.RealtimeBaseURL
 	resolved.AccountID = providerConfig.Cloudflare.AccountID
 	resolved.APIToken = providerConfig.Cloudflare.APIToken
 	if providerName == RoomProviderCloudflareRTK {

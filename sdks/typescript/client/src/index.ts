@@ -1,7 +1,6 @@
-export * from "./client";
-export * from "./generated/http-api";
-export * from "./generated/schemas";
-export * from "./generated/sync";
 export * from "./media";
+export * from "./session";
 export * from "./telemetry";
 export * from "./sync";
+export type { TelemetryDeliveryOptions, TelemetryExporterHealth, TelemetryTimelineEntry } from "./telemetry/delivery";
+export type { TelemetryEventSource } from "./telemetry/random";

@@ -1,8 +1,10 @@
 defmodule ChalkSync.ExternalOperationConsumerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Live.MediaPlaneTestAdapter
+  alias ChalkSync.ProviderBridge.Client
+  alias ChalkSync.ProviderBridge.MediaPlane
   alias ChalkSync.RecordingPlaneTestAdapter
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.SessionKey
@@ -10,6 +12,9 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
   @operation_id "00000000-0000-4000-8000-000000000010"
   @participant_id "00000000-0000-4000-8000-000000000011"
   @recording_id "00000000-0000-4000-8000-000000000012"
+  @journey_id "00000000-0000-4000-8000-000000000013"
+  @trace_id "4bf92f3577b34da6a3ce929d0e0e4736"
+  @span_id "00f067aa0ba902b7"
 
   test "dispatches every local operation through authoritative local confirmation" do
     for name <- [
@@ -47,6 +52,67 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       assert {^callback, @operation_id, _arguments} =
                List.last(MediaPlaneTestAdapter.calls(adapter))
     end
+  end
+
+  test "propagates each durable operation's persisted journey and trace through the bridge" do
+    test = self()
+    handler_id = "provider-bridge-context-#{System.unique_integer()}"
+    previous_observability = Application.get_env(:chalk_sync, :observability)
+    Application.put_env(:chalk_sync, :observability, enabled: true)
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:chalk_sync, :observability, :event],
+        fn _event, _measurements, metadata, destination ->
+          send(destination, {:bridge_span, metadata})
+        end,
+        test
+      )
+
+    on_exit(fn ->
+      :telemetry.detach(handler_id)
+      Application.put_env(:chalk_sync, :observability, previous_observability)
+    end)
+
+    transport = fn _method, _url, headers, body, _options ->
+      payload = JSON.decode!(body)
+      send(test, {:bridge_request, headers, payload})
+
+      {:ok, 200, [],
+       JSON.encode!(%{
+         "operation_id" => @operation_id,
+         "effect" => payload["effect"],
+         "outcome" => "confirmed"
+       })}
+    end
+
+    adapter =
+      MediaPlane.new!(Client.new!(base_url: "http://localhost:4101", transport: transport))
+
+    traced = %{
+      operation(:participant_leave)
+      | journey_id: @journey_id,
+        producing_trace_id: @trace_id,
+        producing_span_id: @span_id
+    }
+
+    assert :confirmed = execute(traced, {MediaPlane, adapter}, nil)
+    assert_receive {:bridge_request, headers, payload}
+    assert {"x-chalk-journey-id", @journey_id} in headers
+    {"traceparent", traceparent} = List.keyfind!(headers, "traceparent", 0)
+    assert traceparent =~ "00-#{@trace_id}-"
+    refute traceparent == "00-#{@trace_id}-#{@span_id}-01"
+    assert payload["participant_session_generation"] == 1
+    refute inspect(headers) =~ @operation_id
+
+    assert_receive {:bridge_span,
+                    %{
+                      event: "sync.external_operation.provider_bridge",
+                      stage: "phase",
+                      journey_id: @journey_id,
+                      attributes: %{operation: :participant_leave}
+                    }}
   end
 
   test "dispatches recording operations through the recording port" do

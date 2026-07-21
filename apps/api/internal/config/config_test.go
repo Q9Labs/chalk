@@ -39,6 +39,49 @@ func TestLoadAcceptsEd25519SyncTokenSigningConfig(t *testing.T) {
 	if cfg.SyncToken.KeyID != "launch-1" || len(cfg.SyncToken.PrivateKey) != ed25519.PrivateKeySize {
 		t.Fatalf("sync token config = %#v", cfg.SyncToken)
 	}
+	if key := cfg.SyncToken.VerificationKeys["launch-1"]; !key.Equal(privateKey.Public()) {
+		t.Fatalf("current verification key = %#v", key)
+	}
+}
+
+func TestLoadAcceptsPreviousMediaVerificationKey(t *testing.T) {
+	currentPublic, currentPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousPublic, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.SyncTokenAudience, "chalk-sync")
+	t.Setenv(config.SyncTokenIssuer, "https://api.chalk.test")
+	t.Setenv(config.SyncTokenKeyID, "launch-2")
+	t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(currentPrivate))
+	t.Setenv(config.MediaTokenVerificationKeys, `{"launch-2":"`+base64.RawURLEncoding.EncodeToString(currentPublic)+`","launch-1":"`+base64.RawURLEncoding.EncodeToString(previousPublic)+`"}`)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.SyncToken.VerificationKeys) != 2 || !cfg.SyncToken.VerificationKeys["launch-1"].Equal(previousPublic) {
+		t.Fatalf("verification keys = %#v", cfg.SyncToken.VerificationKeys)
+	}
+}
+
+func TestLoadRejectsMediaAudienceForSyncCredentials(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.SyncTokenAudience, "chalk-media")
+	t.Setenv(config.SyncTokenIssuer, "https://api.chalk.test")
+	t.Setenv(config.SyncTokenKeyID, "launch-1")
+	t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(privateKey))
+
+	_, err = config.Load()
+	if err == nil || !strings.Contains(err.Error(), "participant media audience") {
+		t.Fatalf("error = %v", err)
+	}
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -98,6 +141,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.CloudflareRealtime.RealtimeAppSecret != "" {
 		t.Fatalf("cloudflare realtime app secret = %q, want empty", cfg.CloudflareRealtime.RealtimeAppSecret)
+	}
+	if cfg.CloudflareRealtime.RealtimeBaseURL != "" {
+		t.Fatalf("cloudflare realtime base url = %q, want empty", cfg.CloudflareRealtime.RealtimeBaseURL)
+	}
+	if cfg.ProviderBridge.Enabled {
+		t.Fatal("provider bridge enabled = true, want false")
 	}
 	if cfg.CloudflareRealtime.RTKAppID != "" {
 		t.Fatalf("cloudflare rtk app id = %q, want empty", cfg.CloudflareRealtime.RTKAppID)
@@ -328,6 +377,7 @@ func TestLoadCloudflareRealtime(t *testing.T) {
 	t.Setenv(config.CloudflareRTKPresetFacilitator, "host-preset")
 	t.Setenv(config.CloudflareRTKPresetContributor, "participant-preset")
 	t.Setenv(config.CloudflareRealtimeRequestTimeoutMS, "2500")
+	t.Setenv(config.CloudflareRealtimeBaseURL, "http://127.0.0.1:9090/")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -346,6 +396,9 @@ func TestLoadCloudflareRealtime(t *testing.T) {
 	if cfg.CloudflareRealtime.RealtimeAppSecret != "sfu-app-secret" {
 		t.Fatalf("cloudflare realtime app secret = %q, want sfu-app-secret", cfg.CloudflareRealtime.RealtimeAppSecret)
 	}
+	if cfg.CloudflareRealtime.RealtimeBaseURL != "http://127.0.0.1:9090" {
+		t.Fatalf("cloudflare realtime base url = %q, want local endpoint", cfg.CloudflareRealtime.RealtimeBaseURL)
+	}
 	if cfg.CloudflareRealtime.RTKAppID != "rtk-app-id" {
 		t.Fatalf("cloudflare rtk app id = %q, want rtk-app-id", cfg.CloudflareRealtime.RTKAppID)
 	}
@@ -360,6 +413,82 @@ func TestLoadCloudflareRealtime(t *testing.T) {
 	}
 	if cfg.CloudflareRealtime.RequestTimeout != 2500*time.Millisecond {
 		t.Fatalf("cloudflare realtime request timeout = %s, want 2500ms", cfg.CloudflareRealtime.RequestTimeout)
+	}
+}
+
+func TestLoadProviderBridgeRequiresCompleteConfig(t *testing.T) {
+	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8444")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), config.ProviderBridgeServerCertFile) {
+		t.Fatalf("error = %v, want incomplete provider bridge config", err)
+	}
+}
+
+func TestLoadProviderBridgeConfig(t *testing.T) {
+	setProviderBridgeConfig(t)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.ProviderBridge.Enabled || cfg.ProviderBridge.Address != "127.0.0.1:8444" || cfg.ProviderBridge.SPIFFETrustDomain != "chalk.test" {
+		t.Fatalf("provider bridge config = %#v", cfg.ProviderBridge)
+	}
+}
+
+func TestLoadRejectsInvalidProviderBridgeIdentityAndAddress(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		address     string
+		trustDomain string
+	}{
+		{name: "invalid address", address: "private-listener", trustDomain: "chalk.test"},
+		{name: "invalid trust domain", address: "127.0.0.1:8444", trustDomain: "Chalk Test"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setProviderBridgeConfig(t)
+			t.Setenv(config.ProviderBridgeAddress, test.address)
+			t.Setenv(config.ProviderBridgeSPIFFETrustDomain, test.trustDomain)
+			if _, err := config.Load(); err == nil {
+				t.Fatal("invalid provider bridge config accepted")
+			}
+		})
+	}
+}
+
+func TestLoadRequiresProviderBridgeOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), config.ProviderBridgeAddress) {
+		t.Fatalf("error = %v, want missing provider bridge config", err)
+	}
+}
+
+func TestLoadRejectsLocalCloudflareBaseURLOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	setProviderBridgeConfig(t)
+	t.Setenv(config.CloudflareRealtimeBaseURL, "http://127.0.0.1:9090")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "only supported in local") {
+		t.Fatalf("error = %v, want local-only Cloudflare endpoint rejection", err)
+	}
+}
+
+func TestLoadRejectsRemoteCloudflareBaseURLInLocal(t *testing.T) {
+	t.Setenv(config.CloudflareRealtimeBaseURL, "https://example.com")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "localhost") {
+		t.Fatalf("error = %v, want localhost Cloudflare endpoint rejection", err)
 	}
 }
 
@@ -453,6 +582,7 @@ func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIService, "chalk-api-test")
 	t.Setenv(config.APISlowRequestMS, "75")
 	t.Setenv(config.APIVersion, "2026.07.01")
+	setProviderBridgeConfig(t)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -545,6 +675,7 @@ func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	setProviderBridgeConfig(t)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -635,6 +766,15 @@ func TestLoadOperationLogsDefaultToAllRequestLogs(t *testing.T) {
 	if cfg.Observability.RequestLogs != "all" {
 		t.Fatalf("request logs = %q, want all", cfg.Observability.RequestLogs)
 	}
+}
+
+func setProviderBridgeConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv(config.ProviderBridgeAddress, "127.0.0.1:8444")
+	t.Setenv(config.ProviderBridgeServerCertFile, "/run/secrets/provider-bridge-server.crt")
+	t.Setenv(config.ProviderBridgeServerKeyFile, "/run/secrets/provider-bridge-server.key")
+	t.Setenv(config.ProviderBridgeClientCAFile, "/run/secrets/provider-bridge-client-ca.crt")
+	t.Setenv(config.ProviderBridgeSPIFFETrustDomain, "chalk.test")
 }
 
 func TestLoadRejectsInvalidDatabasePoolSettings(t *testing.T) {

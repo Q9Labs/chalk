@@ -90,6 +90,15 @@ func TestCreateJoinAddsParticipantAndReturnsToken(t *testing.T) {
 	}
 }
 
+func TestResumeJoinIsUnsupported(t *testing.T) {
+	plane := testPlane(t, &roundTripStub{statusCode: http.StatusOK})
+
+	_, err := plane.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{})
+	if !errors.Is(err, mediaplane.ErrUnsupportedOperation) {
+		t.Fatalf("error = %v, want %v", err, mediaplane.ErrUnsupportedOperation)
+	}
+}
+
 func TestLifecycleRequestsUseRTKPaths(t *testing.T) {
 	client := &roundTripStub{statusCode: http.StatusOK}
 	plane := testPlane(t, client)

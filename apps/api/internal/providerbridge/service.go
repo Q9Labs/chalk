@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var (
@@ -21,6 +22,10 @@ var (
 const maxReasonCodeBytes = 64
 
 var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/providerbridge")
+var operationCounter, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/providerbridge").Int64Counter(
+	"chalk.api.provider_bridge.operations",
+	metric.WithDescription("Provider bridge operations by bounded effect and outcome"),
+)
 
 type Executor interface {
 	Dispatch(context.Context, provideroperations.OperationInput) ExecutionResult
@@ -49,17 +54,34 @@ func NewService(repository provideroperations.Repository, executor Executor) Ser
 	return Service{repository: repository, executor: executor}
 }
 
+func (s Service) Ready(context.Context) error {
+	if s.repository == nil || s.executor == nil {
+		return ErrUnavailable
+	}
+	return nil
+}
+
 func (s Service) Execute(ctx context.Context, input provideroperations.OperationInput) (result Result, err error) {
 	ctx, span := tracer.Start(ctx, "provider_bridge.execute")
 	defer func() {
+		outcome := string(result.Outcome)
+		if outcome == "" {
+			outcome = "internal_error"
+		}
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "provider operation failed")
+		} else if result.Outcome == provideroperations.OutcomeRetryableFailure || result.Outcome == provideroperations.OutcomeTerminalFailure || result.Outcome == provideroperations.OutcomeAmbiguous {
+			span.SetStatus(codes.Error, "provider operation was not confirmed")
 		}
 		span.SetAttributes(
 			attribute.String("chalk.provider.effect", string(input.Effect)),
-			attribute.String("chalk.provider.outcome", string(result.Outcome)),
+			attribute.String("chalk.provider.outcome", outcome),
 		)
+		operationCounter.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("chalk.provider.effect", string(input.Effect)),
+			attribute.String("chalk.provider.outcome", outcome),
+		))
 		span.End()
 	}()
 

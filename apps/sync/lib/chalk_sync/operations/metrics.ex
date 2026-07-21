@@ -19,6 +19,7 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :queue, :overflow],
     [:chalk, :sync, :lifecycle, :decision],
     [:chalk, :sync, :lifecycle, :poll],
+    [:chalk, :sync, :external_operation, :execution],
     [:chalk, :sync, :external_operation, :finalization],
     [:chalk, :sync, :external_operation, :poll],
     [:chalk, :sync, :webhook, :production],
@@ -30,6 +31,13 @@ defmodule ChalkSync.Operations.Metrics do
     accepted overloaded server_draining released committed duplicate rejected retryable error
     snapshot replay up_to_date terminal valid malformed event_limit byte_limit age_limit
     replay_page_limit applied already_applied superseded success failure operation_failure queued
+    confirmed terminal_failure pending finalization_failure
+  )
+  @external_operations ~w(
+    mute_participant stop_participant_camera stop_participant_screen_share
+    remove_participant participant_leave role_transition_source_stop
+    end_session tenant_end_session maximum_duration_expired
+    start_recording stop_recording
   )
   @handler_id __MODULE__
 
@@ -120,6 +128,14 @@ defmodule ChalkSync.Operations.Metrics do
             ] and event_name in ["participant.joined", "participant.left", "session.ended"] and
               api_version == 1,
        do: [String.replace(event_name, ".", "_"), "v1"]
+
+  defp metric_labels(
+         [:chalk, :sync, :external_operation, :execution],
+         %{operation: operation}
+       ) do
+    operation = if is_atom(operation), do: Atom.to_string(operation), else: operation
+    if operation in @external_operations, do: [operation], else: ["other"]
+  end
 
   defp metric_labels(_event, _metadata), do: []
 

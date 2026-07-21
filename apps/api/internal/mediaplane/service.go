@@ -14,6 +14,7 @@ var (
 	ErrInvalidParticipantName   = errors.New("invalid media participant name")
 	ErrInvalidParticipantRef    = errors.New("invalid media participant ref")
 	ErrInvalidParticipantPreset = errors.New("invalid media participant preset")
+	ErrInvalidConnectionRef     = errors.New("invalid media connection ref")
 	ErrPlaneUnavailable         = errors.New("media plane unavailable")
 	ErrUnsupportedOperation     = errors.New("media plane operation unsupported")
 	ErrSessionNotFound          = errors.New("media session not found")
@@ -40,6 +41,10 @@ type Plane interface {
 	SessionUsage(ctx context.Context, input SessionUsageInput) (Usage, error)
 }
 
+type JoinResumer interface {
+	ResumeJoin(ctx context.Context, input ResumeJoinInput) (Join, error)
+}
+
 type Service struct {
 	plane    Plane
 	provider Provider
@@ -59,6 +64,13 @@ type CreateJoinInput struct {
 	ExternalParticipantID string
 	ParticipantPreset     string
 	Metadata              map[string]string
+}
+
+type ResumeJoinInput struct {
+	Provider              Provider
+	Session               Session
+	ExternalParticipantID string
+	ConnectionRef         string
 }
 
 type RemoveParticipantInput struct {
@@ -130,6 +142,21 @@ func (s Service) CreateJoin(ctx context.Context, input CreateJoinInput) (Join, e
 	}
 
 	return s.plane.CreateJoin(ctx, input)
+}
+
+func (s Service) ResumeJoin(ctx context.Context, input ResumeJoinInput) (Join, error) {
+	if s.plane == nil {
+		return Join{}, ErrPlaneUnavailable
+	}
+	resumer, ok := s.plane.(JoinResumer)
+	if !ok {
+		return Join{}, ErrUnsupportedOperation
+	}
+	if err := requireResumeJoinInput(&input, s.provider); err != nil {
+		return Join{}, err
+	}
+
+	return resumer.ResumeJoin(ctx, input)
 }
 
 func (s Service) RemoveParticipant(ctx context.Context, input RemoveParticipantInput) error {
@@ -217,6 +244,32 @@ func requireJoinInput(input *CreateJoinInput) error {
 		return ErrInvalidParticipantPreset
 	}
 	input.ParticipantPreset = preset
+
+	return nil
+}
+
+func requireResumeJoinInput(input *ResumeJoinInput, provider Provider) error {
+	if !validProvider(input.Provider) || input.Session.Provider != input.Provider || (provider != "" && input.Provider != provider) {
+		return ErrInvalidProvider
+	}
+
+	sessionRef, err := requiredString(input.Session.Ref)
+	if err != nil {
+		return ErrInvalidSessionRef
+	}
+	input.Session.Ref = sessionRef
+
+	participantID, err := requiredString(input.ExternalParticipantID)
+	if err != nil {
+		return ErrInvalidParticipantRef
+	}
+	input.ExternalParticipantID = participantID
+
+	connectionRef, err := requiredString(input.ConnectionRef)
+	if err != nil {
+		return ErrInvalidConnectionRef
+	}
+	input.ConnectionRef = connectionRef
 
 	return nil
 }

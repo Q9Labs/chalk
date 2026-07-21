@@ -85,6 +85,14 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteRecordingTranscribe(ctx)
 	case RouteJourneyEventIntakeScenario:
 		return runRouteJourneyEventIntake(ctx)
+	case RouteAPIKeyCustomerFlowScenario:
+		return runRouteAPIKeyCustomerFlow(ctx)
+	case EdgeAPIKeyRejectedScopeScenario:
+		return runEdgeAPIKeyRejectedScope(ctx)
+	case RouteParticipantMediaSFUAuthScenario:
+		return runRouteParticipantMediaSFUAuth(ctx)
+	case EdgeParticipantMediaAudienceScenario:
+		return runEdgeParticipantMediaAudience(ctx)
 	case PolicyTenantSystemAllowScenario:
 		return runPolicyTenantSystemAllow(ctx)
 	case PolicyTenantAPIKeyScopeScenario:

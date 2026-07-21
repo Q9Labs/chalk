@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { Effect } from "effect";
-import { createBrowserWebSocketFactory, createChalkEffectClient, createTelemetryClient, V3SyncClient } from "../../../sdks/typescript/client/dist/index.js";
+import { createChalkEffectClient } from "../../../sdks/typescript/client/dist/effect.js";
+import { createBrowserWebSocketFactory, createTelemetryClient, V3SyncClient } from "../../../sdks/typescript/client/dist/index.js";
 import { waitFor } from "./poll.mjs";
 
 const apiBaseUrl = required("CHALK_E2E_API_URL");
@@ -114,7 +115,17 @@ const session = await Effect.runPromise(
   client.roomSessions.createRoomSession({
     params: { tenant_id: tenant.id, room_id: room.id },
     headers: { "Idempotency-Key": idempotencyKey("session") },
-    payload: { started_at: new Date().toISOString() },
+    payload: {
+      started_at: new Date().toISOString(),
+      admission_policy: "open",
+      host_exit_policy: "require_transfer",
+      role_capabilities: {
+        host: ["publishAudio", "subscribe", "transferHost", "endMeeting"],
+        cohost: ["publishAudio", "subscribe"],
+        participant: ["subscribe"],
+      },
+      maximum_duration_seconds: 3600,
+    },
   }),
 );
 const hostParticipantSessionId = crypto.randomUUID();
@@ -122,17 +133,22 @@ const hostAdmission = await Effect.runPromise(
   client.default.admitSessionParticipant({
     params: { tenant_id: tenant.id, room_id: room.id, session_id: session.id },
     headers: { "Idempotency-Key": idempotencyKey("host-admit") },
-    payload: { participant_session_id: hostParticipantSessionId, name: "Webhook host", capabilities: ["control:hand"] },
+    payload: {
+      participant_session_id: hostParticipantSessionId,
+      name: "Webhook host",
+      initial_role: "host",
+      eligible_roles: ["host", "cohost", "participant"],
+    },
   }),
 );
 await writeFile(hostSeedRequestFile, `${JSON.stringify({ tenant_id: tenant.id, room_id: room.id, session_id: session.id, participant_session_id: hostParticipantSessionId })}\n`, { mode: 0o600 });
 let hostSeed;
 await waitFor(
-  "disposable E2E Host role seed and production-mode Sync startup",
+  "public Session bootstrap verification and production-mode Sync startup",
   async () => {
     try {
       hostSeed = JSON.parse(await readFile(hostSeedCompleteFile, "utf8"));
-      return hostSeed.local_seeded_host_role === true && hostSeed.local_seeded_v3_control_policy === true;
+      return hostSeed.api_created_host_role === true && hostSeed.api_created_v3_control_policy === true;
     } catch {
       return false;
     }
@@ -152,7 +168,12 @@ const guestAdmission = await Effect.runPromise(
   client.default.admitSessionParticipant({
     params: { tenant_id: tenant.id, room_id: room.id, session_id: session.id },
     headers: { "Idempotency-Key": idempotencyKey("guest-admit") },
-    payload: { participant_session_id: guestParticipantSessionId, name: "Webhook guest", capabilities: ["control:hand"] },
+    payload: {
+      participant_session_id: guestParticipantSessionId,
+      name: "Webhook guest",
+      initial_role: "participant",
+      eligible_roles: ["participant"],
+    },
   }),
 );
 const hostSync = await startV3Client(hostAdmission.sync_token, "host");
@@ -252,9 +273,8 @@ console.log(
       processor_verified_retry: true,
       first_failure_signature_verified: firstReceiverState.first_failure_signature_verified,
       processor_diagnostic_phases: [...processorPhases],
-      local_seeded_host_role: hostSeed.local_seeded_host_role,
-      local_seeded_v3_control_policy: hostSeed.local_seeded_v3_control_policy,
-      public_v3_bootstrap_blocker: "The public API currently creates a schema-v1 control projection and persists every admitted participant as role=participant with eligible_roles=[participant]; v3 requires a schema-v3 policy projection and exactly one Host.",
+      api_created_host_role: hostSeed.api_created_host_role,
+      api_created_v3_control_policy: hostSeed.api_created_v3_control_policy,
       surfaces: ["receiver", "public_sdk", "postgres", "tempo", "prometheus", "loki", "grafana"],
     },
     null,

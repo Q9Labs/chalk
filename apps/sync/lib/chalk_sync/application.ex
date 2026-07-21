@@ -3,6 +3,8 @@ defmodule ChalkSync.Application do
 
   use Application
 
+  alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
+
   @impl true
   def start(_type, _args) do
     children =
@@ -67,16 +69,25 @@ defmodule ChalkSync.Application do
   defp external_operation_consumer_child do
     case Application.fetch_env!(:chalk_sync, :stateholder) do
       ChalkSync.Stateholder.Postgres ->
+        adapter_timeout_ms =
+          Application.fetch_env!(:chalk_sync, :external_operation_adapter_timeout_ms)
+
         {ChalkSync.ExternalOperationConsumer,
-         adapter_timeout_ms:
-           Application.fetch_env!(:chalk_sync, :external_operation_adapter_timeout_ms),
+         adapter_timeout_ms: adapter_timeout_ms,
          poll_interval_ms:
            Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms),
-         media_plane: Application.get_env(:chalk_sync, :media_plane),
+         media_plane: media_plane(adapter_timeout_ms),
          recording_plane: Application.get_env(:chalk_sync, :recording_plane)}
 
       _adapter ->
         nil
+    end
+  end
+
+  defp media_plane(adapter_timeout_ms) do
+    case Application.get_env(:chalk_sync, :provider_bridge) do
+      nil -> Application.get_env(:chalk_sync, :media_plane)
+      options -> ProviderBridgeConfig.media_plane!(options, adapter_timeout_ms)
     end
   end
 

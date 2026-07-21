@@ -33,6 +33,10 @@ type httpClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+type responseValidator interface {
+	providerError() error
+}
+
 type Adapter struct {
 	appID     string
 	appSecret string
@@ -74,6 +78,31 @@ type renegotiateRequest struct {
 	SessionDescription mediaplane.SessionDescription `json:"sessionDescription"`
 }
 
+type closeTracksRequest struct {
+	SessionDescription *mediaplane.SessionDescription `json:"sessionDescription,omitempty"`
+	Tracks             []closeTrack                   `json:"tracks"`
+	Force              bool                           `json:"force"`
+}
+
+type closeTracksResponse struct {
+	ErrorCode                      string                         `json:"errorCode"`
+	ErrorDescription               string                         `json:"errorDescription"`
+	SessionDescription             *mediaplane.SessionDescription `json:"sessionDescription,omitempty"`
+	Tracks                         []closeTrackResult             `json:"tracks"`
+	RequiresImmediateRenegotiation bool                           `json:"requiresImmediateRenegotiation"`
+	requestedTracks                []mediaplane.CloseTrack
+}
+
+type closeTrack struct {
+	Mid string `json:"mid"`
+}
+
+type closeTrackResult struct {
+	Mid              string `json:"mid"`
+	ErrorCode        string `json:"errorCode"`
+	ErrorDescription string `json:"errorDescription"`
+}
+
 func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 	appID := strings.TrimSpace(cfg.RealtimeAppID)
 	appSecret := strings.TrimSpace(cfg.RealtimeAppSecret)
@@ -81,10 +110,15 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 		return Adapter{}, ErrMissingConfig
 	}
 
+	endpoint := defaultEndpoint
+	if strings.TrimSpace(cfg.RealtimeBaseURL) != "" {
+		endpoint = strings.TrimRight(strings.TrimSpace(cfg.RealtimeBaseURL), "/")
+	}
+
 	return Adapter{
 		appID:     appID,
 		appSecret: appSecret,
-		endpoint:  defaultEndpoint,
+		endpoint:  endpoint,
 		client:    &http.Client{Timeout: cfg.RequestTimeout},
 	}, nil
 }
@@ -130,18 +164,15 @@ func (a Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInpu
 		participantRef = input.ParticipantName
 	}
 
-	return mediaplane.Join{
-		Provider:       mediaplane.ProviderCloudflareSFU,
-		ParticipantRef: participantRef,
-		ClientPayload: map[string]any{
-			"connectionId": connectionID,
-			"provider":     string(mediaplane.ProviderCloudflareSFU),
-			"sessionRef":   input.Session.Ref,
-			"stunServer":   stunServer,
-			"syncOwner":    syncOwner,
-		},
-		Metadata: a.providerMetadata(),
-	}, nil
+	return a.joinForConnection(input.Session.Ref, participantRef, connectionID), nil
+}
+
+func (a Adapter) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+	if input.Provider != mediaplane.ProviderCloudflareSFU {
+		return mediaplane.Join{}, mediaplane.ErrInvalidProvider
+	}
+
+	return a.joinForConnection(input.Session.Ref, input.ExternalParticipantID, input.ConnectionRef), nil
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
@@ -155,6 +186,32 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 		Tracks:             tracks,
 	}, &response, "add_tracks")
 	return response, err
+}
+
+func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
+	if input.Provider != mediaplane.ProviderCloudflareSFU {
+		return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidProvider
+	}
+
+	providerTracks := make([]closeTrack, 0, len(input.Tracks))
+	for _, track := range input.Tracks {
+		providerTracks = append(providerTracks, closeTrack{Mid: track.Mid})
+	}
+
+	providerResponse := closeTracksResponse{requestedTracks: input.Tracks}
+	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(input.ConnectionID)), closeTracksRequest{
+		SessionDescription: input.SessionDescription,
+		Tracks:             providerTracks,
+		Force:              input.Force,
+	}, &providerResponse, "close_tracks")
+	if err != nil {
+		return mediaplane.CloseTracksResponse{}, err
+	}
+	return mediaplane.CloseTracksResponse{
+		SessionDescription:             providerResponse.SessionDescription,
+		Tracks:                         input.Tracks,
+		RequiresImmediateRenegotiation: providerResponse.RequiresImmediateRenegotiation,
+	}, nil
 }
 
 func (a Adapter) Renegotiate(ctx context.Context, input mediaplane.RenegotiateRequest) error {
@@ -189,7 +246,7 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu."+operation, trace.WithSpanKind(trace.SpanKindClient))
 	defer func() {
 		if err != nil {
-			span.RecordError(err)
+			span.RecordError(sfuSpanError(err))
 			span.SetStatus(codes.Error, "Cloudflare SFU request failed")
 		}
 		span.End()
@@ -221,8 +278,68 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 		if err := json.Unmarshal(payload, output); err != nil {
 			return fmt.Errorf("decode sfu response: %w", errors.Join(mediaplane.ErrProviderFailed, err))
 		}
+		if validator, ok := output.(responseValidator); ok {
+			if err := validator.providerError(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+func (r *closeTracksResponse) providerError() error {
+	if strings.TrimSpace(r.ErrorCode) != "" {
+		return fmt.Errorf("close sfu tracks: provider rejected request: %w", mediaplane.ErrProviderFailed)
+	}
+
+	requestedMids := make(map[string]struct{}, len(r.requestedTracks))
+	for _, track := range r.requestedTracks {
+		requestedMids[track.Mid] = struct{}{}
+	}
+	seenMids := make(map[string]struct{}, len(r.Tracks))
+	for _, track := range r.Tracks {
+		track.Mid = strings.TrimSpace(track.Mid)
+		if _, ok := requestedMids[track.Mid]; !ok || track.Mid == "" {
+			return fmt.Errorf("close sfu tracks: provider returned unexpected track: %w", mediaplane.ErrProviderFailed)
+		}
+		if _, duplicate := seenMids[track.Mid]; duplicate {
+			return fmt.Errorf("close sfu tracks: provider returned duplicate track: %w", mediaplane.ErrProviderFailed)
+		}
+		seenMids[track.Mid] = struct{}{}
+		if strings.TrimSpace(track.ErrorCode) == "" || closedTrackAbsent(track.ErrorCode) {
+			continue
+		}
+		return fmt.Errorf("close sfu tracks: provider rejected track: %w", mediaplane.ErrProviderFailed)
+	}
+	if len(seenMids) != len(requestedMids) {
+		return fmt.Errorf("close sfu tracks: provider omitted requested track result: %w", mediaplane.ErrProviderFailed)
+	}
+
+	return nil
+}
+
+func closedTrackAbsent(code string) bool {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "track_already_closed", "track_not_found":
+		return true
+	default:
+		return false
+	}
+}
+
+func sfuSpanError(err error) error {
+	switch {
+	case errors.Is(err, mediaplane.ErrPlaneUnavailable):
+		return mediaplane.ErrPlaneUnavailable
+	case errors.Is(err, mediaplane.ErrProviderUnauthorized):
+		return mediaplane.ErrProviderUnauthorized
+	case errors.Is(err, mediaplane.ErrProviderRateLimited):
+		return mediaplane.ErrProviderRateLimited
+	case errors.Is(err, mediaplane.ErrSessionNotFound):
+		return mediaplane.ErrSessionNotFound
+	default:
+		return mediaplane.ErrProviderFailed
+	}
 }
 
 func (a Adapter) RemoveParticipant(context.Context, mediaplane.RemoveParticipantInput) error {
@@ -294,6 +411,21 @@ func (a Adapter) providerMetadata() map[string]string {
 		"app_id":      a.appID,
 		"stun_server": stunServer,
 		"sync_owner":  syncOwner,
+	}
+}
+
+func (a Adapter) joinForConnection(sessionRef string, participantRef string, connectionID string) mediaplane.Join {
+	return mediaplane.Join{
+		Provider:       mediaplane.ProviderCloudflareSFU,
+		ParticipantRef: participantRef,
+		ClientPayload: map[string]any{
+			"connectionId": connectionID,
+			"provider":     string(mediaplane.ProviderCloudflareSFU),
+			"sessionRef":   sessionRef,
+			"stunServer":   stunServer,
+			"syncOwner":    syncOwner,
+		},
+		Metadata: a.providerMetadata(),
 	}
 }
 

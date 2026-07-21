@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/rooms"
 	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -141,6 +140,7 @@ type participantLifecycleResponse struct {
 	Participant      participantSessionResponse `json:"participant"`
 	Intent           lifecycleIntentResponse    `json:"lifecycle_intent"`
 	AdmissionRequest *admissionRequestResponse  `json:"admission_request,omitempty"`
+	Access           *participantAccessResponse `json:"access,omitempty"`
 	SyncToken        string                     `json:"sync_token,omitempty"`
 	ExpiresAt        string                     `json:"expires_at,omitempty"`
 	MediaPlane       *mediaPlaneResponse        `json:"media_plane,omitempty"`
@@ -185,23 +185,23 @@ type sessionControlResponse struct {
 	Operation externalOperationResponse `json:"external_operation"`
 }
 
-func mountSessionLifecycleRoutes(r chi.Router, rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, media MediaPlaneResolver, publications mediapublications.Registry, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range sessionLifecycleEndpoints(rooms, tenants, lifecycle, tokens, refresh, media, publications, authorizer) {
+func mountSessionLifecycleRoutes(r chi.Router, rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range sessionLifecycleEndpoints(rooms, tenants, lifecycle, tokens, refresh, mediaTokens, mediaVerifier, active, generations, media, authorizer) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func sessionLifecycleEndpoints(rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, media MediaPlaneResolver, publications mediapublications.Registry, authorizer TenantAuthorizer) []RouteEndpoint {
-	endpoints := []RouteEndpoint{
+func sessionLifecycleEndpoints(rooms RoomService, tenants TenantService, lifecycle SessionLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
+	return []RouteEndpoint{
 		createLifecycleSessionEndpoint(rooms, lifecycle, authorizer),
-		admitParticipantEndpoint(lifecycle, tokens, rooms, tenants, media, authorizer),
+		admitParticipantEndpoint(lifecycle, tokens, mediaTokens, rooms, tenants, media, authorizer),
 		issueSyncTokenEndpoint(refresh, authorizer),
+		issueParticipantAccessEndpoint(refresh, mediaTokens, mediaVerifier, active, generations, rooms, tenants, media, authorizer),
 		removeParticipantEndpoint(lifecycle, authorizer),
 		transferHostEndpoint(lifecycle, authorizer),
 		setDeadlineEndpoint(lifecycle, authorizer),
 		endSessionEndpoint(lifecycle, authorizer),
 	}
-	return append(endpoints, sfuSignalingEndpoints(rooms, tenants, media, publications, authorizer)...)
 }
 
 func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAuthorizer) Endpoint[issueSyncTokenEndpointRequest, syncTokenResponse] {
@@ -264,7 +264,7 @@ func createLifecycleSessionEndpoint(rooms RoomService, lifecycle SessionLifecycl
 		MapErrors(sessionLifecycleEndpointAPIError)
 }
 
-func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenIssuer, rooms RoomService, tenants TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
+func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenIssuer, mediaTokens ParticipantMediaIssuer, rooms RoomService, tenants TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
 	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants", "admitSessionParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSessionsPermission); err != nil {
 			return participantLifecycleResponse{}, err
@@ -293,6 +293,7 @@ func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenI
 		if err != nil {
 			return participantLifecycleResponse{}, err
 		}
+		var mediaJoin mediaplane.Join
 		if mediaService != nil {
 			provider := mediaService.Provider()
 			if provider == "" {
@@ -325,8 +326,10 @@ func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenI
 			if join.ClientPayload == nil {
 				join.ClientPayload = map[string]any{}
 			}
+			mediaJoin = join
 			response.MediaPlane = &mediaPlaneResponse{Provider: string(join.Provider), ClientPayload: join.ClientPayload}
 		}
+		var syncCredential synctokens.Token
 		if tokens != nil {
 			token, err := tokens.Issue(ctx, synctokens.Input{
 				TenantID: admission.Participant.TenantID, RoomID: admission.Participant.RoomID,
@@ -340,6 +343,24 @@ func admitParticipantEndpoint(service SessionLifecycleService, tokens SyncTokenI
 			}
 			response.SyncToken = token.Value
 			response.ExpiresAt = token.ExpiresAt.UTC().Format(time.RFC3339)
+			syncCredential = token
+		}
+		if mediaTokens != nil && syncCredential.Value != "" && mediaJoin.Provider == mediaplane.ProviderCloudflareSFU {
+			accessRequest := issueParticipantAccessRequest{
+				TenantID: admission.Participant.TenantID, RoomID: admission.Participant.RoomID,
+				SessionID: admission.Participant.SessionID, ParticipantID: admission.Participant.ID,
+				Body: issueParticipantAccessBody{ParticipantGeneration: admission.Participant.Generation},
+			}
+			subject, err := participantSubjectForJoin(accessRequest, mediaJoin)
+			if err != nil {
+				return participantLifecycleResponse{}, err
+			}
+			mediaCredential, err := mediaTokens.Issue(ctx, subject)
+			if err != nil {
+				return participantLifecycleResponse{}, err
+			}
+			access := newParticipantAccessResponse(subject, syncCredential, mediaCredential, mediaJoin)
+			response.Access = &access
 		}
 		return response, nil
 	}).

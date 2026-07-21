@@ -34,6 +34,30 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
     end
   end
 
+  @spec with_context(t(), map() | keyword()) :: t()
+  def with_context(%__MODULE__{} = adapter, context) when is_list(context),
+    do: with_context(adapter, Map.new(context))
+
+  def with_context(%__MODULE__{} = adapter, context) when is_map(context),
+    do: %{adapter | context: Map.merge(adapter.context, context)}
+
+  @spec with_participant_generation(t(), String.t() | nil, pos_integer() | nil) :: t()
+  def with_participant_generation(
+        %__MODULE__{} = adapter,
+        participant_session_id,
+        generation
+      )
+      when is_binary(participant_session_id) and is_integer(generation) and generation > 0 do
+    resolver = fn _session, candidate_id ->
+      if candidate_id == participant_session_id, do: generation
+    end
+
+    %{adapter | participant_generation_resolver: resolver}
+  end
+
+  def with_participant_generation(%__MODULE__{} = adapter, _participant_session_id, _generation),
+    do: %{adapter | participant_generation_resolver: nil}
+
   @impl true
   def grant_publication(adapter, operation_id, session, participant_session_id, source) do
     operation(adapter, operation_id, session, "media.grant_publication",

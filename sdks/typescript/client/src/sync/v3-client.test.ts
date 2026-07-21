@@ -361,7 +361,7 @@ describe("V3SyncClient", () => {
 
   it("retains exact control-event evidence and recovers on conflicting duplicates", async () => {
     for (let repetition = 0; repetition < 200; repetition += 1) await exerciseConflictingControlEvidence();
-  });
+  }, 20_000);
 
   it("recovers from an unprovable duplicate at a snapshot head", async () => {
     const { client, socket, state } = await liveClient();

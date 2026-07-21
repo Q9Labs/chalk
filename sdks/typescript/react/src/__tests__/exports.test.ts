@@ -12,9 +12,11 @@ describe("React SDK public UI exports", () => {
     expect(full.LoadingScreen).toBeDefined();
   });
 
-  it("keeps the root package as a UI-only export surface", () => {
+  it("exports the UI layers and managed-session React bindings from the package root", () => {
     expect(sdk.atomic).toBeDefined();
     expect(sdk.composite).toBeDefined();
     expect(sdk.full).toBeDefined();
+    expect(sdk.ChalkProvider).toBeDefined();
+    expect(sdk.useChalkSession).toBeDefined();
   });
 });

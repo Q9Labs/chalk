@@ -1,232 +1,213 @@
-import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "@q9labsai/chalk-client/media";
-import { createV3SyncClient, type V3SessionSnapshot } from "@q9labsai/chalk-client/sync";
+import { ChalkSession, type ChalkParticipant, type ChalkRemoteMedia, type ChalkSessionStore } from "@q9labsai/chalk-client";
+import { ChalkProvider, useChalkActions, useChalkSession, useChalkSnapshot, useLocalMedia, useParticipants, useRemoteMedia } from "@q9labsai/chalk-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { beaconLocalBrowserSessionCleanup, cleanupLocalBrowserSession, createLocalAccessProvider, createLocalBrowserSession } from "../lib/chalk-access";
+
 export const Route = createFileRoute("/room")({ component: LocalRoomPage });
 
-type AdmissionResponse = {
-  participant: { id: string; generation: number };
-  lifecycle_intent: { id: string };
-  media_plane: {
-    provider: string;
-    client_payload: { connectionId: string; stunServer: string };
-  };
-};
-
-type Runtime = {
-  media: CloudflareSFUClient;
-  participantSessionId: string;
-  sync: ReturnType<typeof createV3SyncClient>;
-  local: MediaStream;
-  unsubscribe: () => void;
-};
-
-type RemoteFeed = { participantSessionId: string; stream: MediaStream };
-
-const localConfig = {
-  apiURL: import.meta.env.VITE_CHALK_API_URL ?? "http://localhost:8080",
-  apiToken: import.meta.env.VITE_CHALK_LOCAL_API_TOKEN ?? "",
-  syncURL: import.meta.env.VITE_CHALK_SYNC_URL ?? "ws://localhost:4100/v3/sync",
-  tenantId: import.meta.env.VITE_CHALK_TENANT_ID ?? "",
-  roomId: import.meta.env.VITE_CHALK_ROOM_ID ?? "",
-  sessionId: import.meta.env.VITE_CHALK_SESSION_ID ?? "",
+type ActiveSession = {
+  readonly displayName: string;
+  readonly session: ChalkSessionStore;
 };
 
 function LocalRoomPage() {
   const initialName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "Hasan", []);
   const [displayName, setDisplayName] = useState(initialName);
-  const [phase, setPhase] = useState<"lobby" | "joining" | "live" | "failed">("lobby");
-  const [status, setStatus] = useState("Ready for a real localhost call");
+  const [active, setActive] = useState<ActiveSession | null>(null);
+  const [isCreating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const [isMuted, setMuted] = useState(false);
-  const [isCameraEnabled, setCameraEnabled] = useState(true);
-  const [remoteFeeds, setRemoteFeeds] = useState<RemoteFeed[]>([]);
-  const [syncSnapshot, setSyncSnapshot] = useState<V3SessionSnapshot | null>(null);
-  const localVideo = useRef<HTMLVideoElement>(null);
-  const runtime = useRef<Runtime | null>(null);
-
-  useEffect(() => () => stopRuntime(runtime.current), []);
-
-  const participantName = (participantSessionId: string) => syncSnapshot?.control?.participants.find((participant) => participant.participantSessionId === participantSessionId)?.displayName ?? `Guest ${participantSessionId.slice(0, 5)}`;
 
   const join = async () => {
-    let local: MediaStream | null = null;
-    setPhase("joining");
+    setCreating(true);
     setError("");
-    setStatus("Requesting camera and microphone…");
     try {
-      requireLocalConfig();
-      local = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
-      if (localVideo.current) localVideo.current.srcObject = local;
-      setStatus("Admitting this tab through Chalk API…");
-      const participantSessionId = crypto.randomUUID();
-      const admission = await admitParticipant(participantSessionId, displayName.trim() || "Guest");
-      if (admission.media_plane.provider !== "cloudflare_sfu") throw new Error(`Expected cloudflare_sfu, received ${admission.media_plane.provider}`);
-
-      const transport = createCloudflareSFUHTTPTransport({
-        apiBaseURL: localConfig.apiURL,
-        bearerToken: localConfig.apiToken,
-        tenantId: localConfig.tenantId,
-        roomId: localConfig.roomId,
-        sessionId: localConfig.sessionId,
-        participantSessionId,
+      const browserSession = await createLocalBrowserSession(displayName.trim() || "Guest");
+      const session = new ChalkSession({
+        access: createLocalAccessProvider(),
+        apiBaseURL: browserSession.apiBaseURL,
+        syncURL: browserSession.syncURL,
       });
-      const media = new CloudflareSFUClient({
-        bootstrap: admission.media_plane.client_payload,
-        participantSessionId,
-        transport,
-        onError: (cause) => setError(cause instanceof Error ? cause.message : "Cloudflare SFU refresh failed"),
-        onRemoteTrack: ({ participantSessionId: remoteParticipantId, track }) => {
-          setRemoteFeeds((current) => {
-            const existing = current.find((feed) => feed.participantSessionId === remoteParticipantId);
-            if (existing) {
-              if (!existing.stream.getTracks().some((candidate) => candidate.id === track.id)) existing.stream.addTrack(track);
-              return [...current];
-            }
-            return [...current, { participantSessionId: remoteParticipantId, stream: new MediaStream([track]) }];
-          });
-        },
-      });
-      setStatus("Publishing this tab to Cloudflare SFU…");
-      await media.start(local);
-
-      const syncToken = createDevSyncToken({ admission, participantSessionId, displayName: displayName.trim() || "Guest" });
-      const sync = createV3SyncClient({ url: localConfig.syncURL, token: async () => syncToken, mediaPlane: media, persistenceScope: `room-proof:${participantSessionId}` });
-      const unsubscribe = sync.subscribe((snapshot) => {
-        setSyncSnapshot(snapshot);
-        if (snapshot.connection.phase === "live") setStatus("Live — API + Sync + Cloudflare SFU");
-      });
-      runtime.current = { media, participantSessionId, sync, local, unsubscribe };
-      await sync.start();
-      setPhase("live");
-      setStatus("Connecting to Chalk Sync…");
+      setActive({ displayName: displayName.trim() || "Guest", session });
     } catch (cause) {
-      const activeRuntime = runtime.current;
-      stopRuntime(activeRuntime);
-      if (!activeRuntime) for (const track of local?.getTracks() ?? []) track.stop();
-      runtime.current = null;
-      setPhase("failed");
-      setError(cause instanceof Error ? cause.message : "Unable to join the room");
-      setStatus("Join failed");
+      setError(message(cause, "Unable to create the local browser session"));
+    } finally {
+      setCreating(false);
     }
   };
 
-  const toggleMicrophone = async () => {
-    const activeRuntime = runtime.current;
-    if (!activeRuntime) return;
-    const next = !isMuted;
-    try {
-      const result = await activeRuntime.media.setLocalPublicationTarget({ operationId: crypto.randomUUID(), participantSessionId: activeRuntime.participantSessionId, source: "microphone", enabled: !next });
-      if (result.outcome !== "confirmed" && result.outcome !== "satisfied") throw new Error(result.errorCode ?? "Microphone update failed");
-      setMuted(next);
-      setError("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Microphone update failed");
-    }
-  };
-
-  const toggleCamera = async () => {
-    const activeRuntime = runtime.current;
-    if (!activeRuntime) return;
-    const next = !isCameraEnabled;
-    try {
-      const result = await activeRuntime.media.setLocalPublicationTarget({ operationId: crypto.randomUUID(), participantSessionId: activeRuntime.participantSessionId, source: "camera", enabled: next });
-      if (result.outcome !== "confirmed" && result.outcome !== "satisfied") throw new Error(result.errorCode ?? "Camera update failed");
-      setCameraEnabled(next);
-      setError("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Camera update failed");
-    }
-  };
-
-  const leave = () => {
-    stopRuntime(runtime.current);
-    runtime.current = null;
-    setRemoteFeeds([]);
-    setSyncSnapshot(null);
-    setPhase("lobby");
-    setStatus("Left the room cleanly");
-  };
+  if (active) {
+    return (
+      <ChalkProvider session={active.session}>
+        <LiveRoom displayName={active.displayName} onLeave={() => setActive(null)} />
+      </ChalkProvider>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#09090b] text-white">
       <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 py-4 md:px-7">
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-emerald-300">Local proof room</p>
-            <h1 className="mt-1 text-2xl font-semibold">Cloudflare SFU · two-tab test</h1>
-          </div>
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm">
-            <span className={`h-2.5 w-2.5 rounded-full ${syncSnapshot?.connection.phase === "live" ? "bg-emerald-400 shadow-[0_0_14px_#34d399]" : phase === "failed" ? "bg-red-400" : "bg-amber-300"}`} />
-            {status}
-          </div>
-        </header>
-
-        {phase === "lobby" || phase === "failed" ? (
-          <section className="grid flex-1 place-items-center py-10">
-            <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-7 shadow-2xl backdrop-blur-xl">
-              <div className="mb-7 rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.06] p-4 text-sm leading-6 text-emerald-50">This is not the SDK preview. Joining creates a Chalk participant, a real Cloudflare peer session, and a Sync v3 connection.</div>
-              <label className="text-sm text-zinc-300" htmlFor="room-display-name">
-                Your name in this tab
-              </label>
-              <input id="room-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-white/10 bg-black/30 px-4 outline-none ring-emerald-300/40 focus:ring-2" />
-              {error && (
-                <p role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200">
-                  {error}
-                </p>
-              )}
-              <button type="button" onClick={join} className="mt-6 h-12 w-full rounded-full bg-white font-semibold text-zinc-950 transition hover:bg-emerald-200">
-                Join real room
-              </button>
-              <p className="mt-4 text-center text-xs text-zinc-500">Open this URL in a second tab with a different name.</p>
-            </div>
-          </section>
-        ) : (
-          <section className="flex min-h-0 flex-1 flex-col py-4">
-            <div className="grid min-h-0 flex-1 auto-rows-[minmax(260px,1fr)] grid-cols-1 gap-3 lg:grid-cols-2">
-              <VideoTile videoRef={localVideo} label={`${displayName} · this tab`} muted mirrored cameraEnabled={isCameraEnabled} />
-              {remoteFeeds.map((feed) => (
-                <RemoteVideoTile key={feed.participantSessionId} feed={feed} label={participantName(feed.participantSessionId)} />
-              ))}
-              {remoteFeeds.length === 0 && (
-                <div className="grid min-h-[320px] place-items-center rounded-[1.75rem] border border-dashed border-white/15 bg-white/[0.025] p-8 text-center text-zinc-400">
-                  <div>
-                    <p className="text-lg text-zinc-200">Waiting for the second tab</p>
-                    <p className="mt-2 text-sm">Join the same localhost URL, then its media appears here.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-zinc-950/90 p-3">
-              <div className="flex gap-2">
-                <ControlButton active={!isMuted} onClick={toggleMicrophone}>
-                  {isMuted ? "Unmute" : "Mute"}
-                </ControlButton>
-                <ControlButton active={isCameraEnabled} onClick={toggleCamera}>
-                  {isCameraEnabled ? "Stop camera" : "Start camera"}
-                </ControlButton>
-              </div>
-              <div className="font-mono text-xs text-zinc-500">
-                {syncSnapshot?.presence?.items.length ?? 0} tab(s) in Sync · {remoteFeeds.length} remote feed(s)
-              </div>
-              <button type="button" onClick={leave} className="h-10 rounded-full bg-red-500 px-6 text-sm font-semibold hover:bg-red-400">
-                Leave
-              </button>
-            </div>
+        <RoomHeader status={isCreating ? "Creating a browser session…" : "Ready for a real localhost call"} phase={isCreating ? "pending" : error ? "failed" : "idle"} />
+        <section className="grid flex-1 place-items-center py-10">
+          <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-7 shadow-2xl backdrop-blur-xl">
+            <div className="mb-7 rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.06] p-4 text-sm leading-6 text-emerald-50">This room is a thin consumer of the public Chalk browser and React SDKs. A localhost-only backend keeps the API key and participant identity out of this tab.</div>
+            <label className="text-sm text-zinc-300" htmlFor="room-display-name">
+              Your name in this tab
+            </label>
+            <input id="room-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-white/10 bg-black/30 px-4 outline-none ring-emerald-300/40 focus:ring-2" />
             {error && (
-              <p role="alert" className="mt-3 text-center text-sm text-red-300">
+              <p role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200">
                 {error}
               </p>
             )}
-          </section>
-        )}
+            <button type="button" onClick={() => void join()} disabled={isCreating} className="mt-6 h-12 w-full rounded-full bg-white font-semibold text-zinc-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-60">
+              {isCreating ? "Creating session…" : "Join real room"}
+            </button>
+            <p className="mt-4 text-center text-xs text-zinc-500">Open this URL in a second tab with a different name.</p>
+          </div>
+        </section>
       </div>
     </main>
   );
 }
 
-function VideoTile({ videoRef, label, muted, mirrored, cameraEnabled }: { videoRef: React.RefObject<HTMLVideoElement | null>; label: string; muted: boolean; mirrored: boolean; cameraEnabled: boolean }) {
+function LiveRoom({ displayName, onLeave }: { readonly displayName: string; readonly onLeave: () => void }) {
+  const sessionStore = useChalkSession();
+  const session = useChalkSnapshot();
+  const participants = useParticipants();
+  const localMedia = useLocalMedia();
+  const remoteMedia = useRemoteMedia();
+  const actions = useChalkActions();
+  const [commandError, setCommandError] = useState("");
+  const didStart = useRef(false);
+
+  useEffect(() => {
+    if (didStart.current) return;
+    didStart.current = true;
+    void actions.join().catch(() => undefined);
+  }, [actions]);
+
+  useEffect(() => {
+    const cleanup = () => beaconLocalBrowserSessionCleanup();
+    globalThis.addEventListener?.("pagehide", cleanup, { once: true });
+    return () => globalThis.removeEventListener?.("pagehide", cleanup);
+  }, []);
+
+  useEffect(() => {
+    mountedSessions.set(sessionStore, true);
+    return () => {
+      mountedSessions.delete(sessionStore);
+      queueMicrotask(() => {
+        if (mountedSessions.get(sessionStore)) return;
+        void sessionStore
+          .leave()
+          .catch(() => undefined)
+          .finally(() => cleanupLocalBrowserSession().catch(() => undefined));
+      });
+    };
+  }, [sessionStore]);
+
+  const remoteFeeds = useMemo(() => groupRemoteMedia(remoteMedia), [remoteMedia]);
+  const localTracks = [localMedia.microphone.track, localMedia.camera.track].filter(isMediaTrack);
+  const microphoneEnabled = localMedia.microphone.state === "enabled" || localMedia.microphone.state === "requesting";
+  const cameraEnabled = localMedia.camera.state === "enabled" || localMedia.camera.state === "requesting";
+  const status = sessionStatus(session.state, session.connection.sync, session.connection.media);
+
+  const run = async (operation: () => Promise<void>, fallback: string) => {
+    try {
+      await operation();
+      setCommandError("");
+    } catch (cause) {
+      setCommandError(message(cause, fallback));
+    }
+  };
+
+  const leave = async () => {
+    try {
+      await actions.leave();
+    } catch (cause) {
+      setCommandError(message(cause, "The SDK could not confirm the remote leave"));
+    } finally {
+      await cleanupLocalBrowserSession().catch(() => undefined);
+      onLeave();
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-[#09090b] text-white">
+      <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 py-4 md:px-7">
+        <RoomHeader status={status} phase={session.state === "failed" ? "failed" : session.state === "live" ? "live" : "pending"} />
+        <section className="flex min-h-0 flex-1 flex-col py-4">
+          <div className="grid min-h-0 flex-1 auto-rows-[minmax(260px,1fr)] grid-cols-1 gap-3 lg:grid-cols-2">
+            <VideoTile tracks={localTracks} label={`${displayName} · this tab`} muted mirrored cameraEnabled={cameraEnabled} />
+            {remoteFeeds.map((feed) => (
+              <VideoTile key={feed.participantSessionId} tracks={feed.tracks} label={participantName(participants, feed.participantSessionId)} muted={false} mirrored={false} cameraEnabled={feed.tracks.some((track) => track.kind === "video")} />
+            ))}
+            {remoteFeeds.length === 0 && (
+              <div className="grid min-h-[320px] place-items-center rounded-[1.75rem] border border-dashed border-white/15 bg-white/[0.025] p-8 text-center text-zinc-400">
+                <div>
+                  <p className="text-lg text-zinc-200">Waiting for the second tab</p>
+                  <p className="mt-2 text-sm">Join the same localhost URL, then its media appears here.</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-zinc-950/90 p-3">
+            <div className="flex gap-2">
+              <ControlButton active={microphoneEnabled} onClick={() => void run(() => actions.setMicrophoneEnabled(!microphoneEnabled), "Microphone update failed")}>
+                {microphoneEnabled ? "Mute" : "Unmute"}
+              </ControlButton>
+              <ControlButton active={cameraEnabled} onClick={() => void run(() => actions.setCameraEnabled(!cameraEnabled), "Camera update failed")}>
+                {cameraEnabled ? "Stop camera" : "Start camera"}
+              </ControlButton>
+            </div>
+            <div className="font-mono text-xs text-zinc-500">
+              {participants.length} participant(s) in Sync · {remoteFeeds.length} remote feed(s)
+            </div>
+            <button type="button" onClick={() => void leave()} className="h-10 rounded-full bg-red-500 px-6 text-sm font-semibold hover:bg-red-400">
+              Leave
+            </button>
+          </div>
+          {(commandError || session.failure) && (
+            <p role="alert" className="mt-3 text-center text-sm text-red-300">
+              {commandError || session.failure?.message}
+            </p>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+const mountedSessions = new WeakMap<ChalkSessionStore, true>();
+
+function RoomHeader({ status, phase }: { readonly status: string; readonly phase: "idle" | "pending" | "live" | "failed" }) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+      <div>
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-emerald-300">Public SDK consumer</p>
+        <h1 className="mt-1 text-2xl font-semibold">Cloudflare SFU · two-tab test</h1>
+      </div>
+      <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm">
+        <span className={`h-2.5 w-2.5 rounded-full ${phase === "live" ? "bg-emerald-400 shadow-[0_0_14px_#34d399]" : phase === "failed" ? "bg-red-400" : phase === "pending" ? "bg-amber-300" : "bg-zinc-500"}`} />
+        {status}
+      </div>
+    </header>
+  );
+}
+
+function VideoTile({ tracks, label, muted, mirrored, cameraEnabled }: { readonly tracks: readonly MediaStreamTrack[]; readonly label: string; readonly muted: boolean; readonly mirrored: boolean; readonly cameraEnabled: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const stream = useMemo(() => new MediaStream([...tracks]), [tracks]);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = stream;
+    return () => {
+      if (videoRef.current?.srcObject === stream) videoRef.current.srcObject = null;
+    };
+  }, [stream]);
+
   return (
     <div className="relative min-h-[320px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-900">
       <video ref={videoRef} autoPlay playsInline muted={muted} className={`h-full w-full object-cover ${mirrored ? "-scale-x-100" : ""} ${cameraEnabled ? "" : "opacity-0"}`} />
@@ -235,15 +216,7 @@ function VideoTile({ videoRef, label, muted, mirrored, cameraEnabled }: { videoR
   );
 }
 
-function RemoteVideoTile({ feed, label }: { feed: RemoteFeed; label: string }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.srcObject = feed.stream;
-  }, [feed.stream]);
-  return <VideoTile videoRef={ref} label={label} muted={false} mirrored={false} cameraEnabled />;
-}
-
-function ControlButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function ControlButton({ active, onClick, children }: { readonly active: boolean; readonly onClick: () => void; readonly children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} className={`h-10 rounded-full border px-5 text-sm font-medium ${active ? "border-white/15 bg-white/10 hover:bg-white/15" : "border-red-400/20 bg-red-400/10 text-red-100"}`}>
       {children}
@@ -251,50 +224,32 @@ function ControlButton({ active, onClick, children }: { active: boolean; onClick
   );
 }
 
-async function admitParticipant(participantSessionId: string, name: string): Promise<AdmissionResponse> {
-  const response = await fetch(`${localConfig.apiURL}/v1/tenants/${localConfig.tenantId}/rooms/${localConfig.roomId}/sessions/${localConfig.sessionId}/participants`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${localConfig.apiToken}`, "Content-Type": "application/json", "Idempotency-Key": `local-room-${participantSessionId}` },
-    body: JSON.stringify({ participant_session_id: participantSessionId, name, initial_role: "participant", eligible_roles: ["participant"] }),
-  });
-  if (!response.ok) throw new Error(`Chalk admission failed with HTTP ${response.status}: ${await response.text()}`);
-  return (await response.json()) as AdmissionResponse;
+function groupRemoteMedia(media: readonly ChalkRemoteMedia[]): readonly { readonly participantSessionId: string; readonly tracks: readonly MediaStreamTrack[] }[] {
+  const grouped = new Map<string, MediaStreamTrack[]>();
+  for (const publication of media) {
+    const tracks = grouped.get(publication.participantSessionId) ?? [];
+    tracks.push(publication.track);
+    grouped.set(publication.participantSessionId, tracks);
+  }
+  return [...grouped].map(([participantSessionId, tracks]) => ({ participantSessionId, tracks }));
 }
 
-function createDevSyncToken({ admission, participantSessionId, displayName }: { admission: AdmissionResponse; participantSessionId: string; displayName: string }): string {
-  const now = Math.floor(Date.now() / 1_000);
-  const claims = JSON.stringify({
-    tenant_id: localConfig.tenantId,
-    room_id: localConfig.roomId,
-    session_id: localConfig.sessionId,
-    participant_id: participantSessionId,
-    participant_session_id: participantSessionId,
-    participant_session_generation: admission.participant.generation,
-    admission_lifecycle_intent_id: admission.lifecycle_intent.id,
-    display_name: displayName,
-    initial_role: "participant",
-    eligible_roles: ["participant"],
-    issued_at: now,
-    expires_at: now + 3_600,
-  });
-  const bytes = new TextEncoder().encode(claims);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+function participantName(participants: readonly ChalkParticipant[], participantSessionId: string): string {
+  return participants.find((participant) => participant.participantSessionId === participantSessionId)?.displayName ?? `Guest ${participantSessionId.slice(0, 5)}`;
 }
 
-function requireLocalConfig(): void {
-  const missing = Object.entries(localConfig)
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
-  if (missing.length > 0) throw new Error(`Local room configuration is missing: ${missing.join(", ")}`);
-  if (!localConfig.apiURL.includes("localhost") && !localConfig.apiURL.includes("127.0.0.1")) throw new Error("The proof room is restricted to a localhost API");
+function sessionStatus(state: string, sync: string, media: string): string {
+  if (state === "live") return "Live — API + Sync + Cloudflare SFU";
+  if (state === "reconnecting") return `Recovering — Sync ${sync}, media ${media}`;
+  if (state === "failed") return "Join failed";
+  if (state === "leaving" || state === "left") return "Leaving the room…";
+  return "Joining through the public Chalk SDK…";
 }
 
-function stopRuntime(runtime: Runtime | null): void {
-  if (!runtime) return;
-  runtime.unsubscribe();
-  runtime.sync.stop();
-  runtime.media.stop();
-  for (const track of runtime.local.getTracks()) track.stop();
+function isMediaTrack(track: MediaStreamTrack | null): track is MediaStreamTrack {
+  return track !== null;
+}
+
+function message(cause: unknown, fallback: string): string {
+  return cause instanceof Error ? cause.message : fallback;
 }

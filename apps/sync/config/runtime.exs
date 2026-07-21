@@ -100,10 +100,43 @@ if config_env() == :prod do
         end
     end
 
+  provider_bridge =
+    [
+      base_url: "CHALK_SYNC_PROVIDER_BRIDGE_URL",
+      certfile: "CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE",
+      keyfile: "CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE",
+      cacertfile: "CHALK_SYNC_PROVIDER_BRIDGE_CAFILE"
+    ]
+    |> Enum.map(fn {key, environment_name} ->
+      value =
+        System.get_env(environment_name) ||
+          raise "#{environment_name} must be set in prod"
+
+      if String.trim(value) == "", do: raise("#{environment_name} must not be empty")
+      {key, value}
+    end)
+
+  case URI.parse(Keyword.fetch!(provider_bridge, :base_url)) do
+    %URI{
+      scheme: "https",
+      host: host,
+      userinfo: nil,
+      query: nil,
+      fragment: nil,
+      path: path
+    }
+    when is_binary(host) and host != "" and path in [nil, "", "/"] ->
+      :ok
+
+    _other ->
+      raise "CHALK_SYNC_PROVIDER_BRIDGE_URL must be an HTTPS origin without credentials, path, query, or fragment"
+  end
+
   config :chalk_sync,
     enable_v1: false,
     enforce_production_boot_checks: true,
     max_synchronous_wal_lag_bytes: max_wal_lag_bytes,
+    provider_bridge: provider_bridge,
     require_production_auth: not local_proof?,
     require_synchronous_standby: not local_proof?,
     token_verifier: verifier

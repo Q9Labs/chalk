@@ -1,0 +1,69 @@
+name: Packed web SDK consumer
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/sdk-web-consumer-e2e.yml"
+      - "packages/assets/**"
+      - "packages/facehash/**"
+      - "packages/ui/**"
+      - "packages/whiteboard/**"
+      - "sdks/typescript/client/**"
+      - "sdks/typescript/react/**"
+      - "tools/sdk-web-consumer-e2e/**"
+  push:
+    branches: [main, master]
+    paths:
+      - ".github/workflows/sdk-web-consumer-e2e.yml"
+      - "packages/assets/**"
+      - "packages/facehash/**"
+      - "packages/ui/**"
+      - "packages/whiteboard/**"
+      - "sdks/typescript/client/**"
+      - "sdks/typescript/react/**"
+      - "tools/sdk-web-consumer-e2e/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packed-web-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packed-consumer:
+    name: Packed artifacts in real browsers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+
+      - name: Install repository dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browser runtimes
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Build package artifacts
+        run: |
+          pnpm --dir packages/assets run build
+          pnpm --dir packages/facehash run build
+          pnpm --dir packages/ui run build
+          pnpm --dir packages/whiteboard run build
+          pnpm --dir sdks/typescript/client run build
+          pnpm --dir sdks/typescript/react run build
+
+      - name: Prove the clean packed consumer
+        run: node tools/sdk-web-consumer-e2e/scripts/run.mjs --skip-build --browsers=chromium,firefox,webkit

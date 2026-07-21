@@ -11,6 +11,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "paths": {
+      "@q9labsai/chalk-client": ["../client/dist/index.d.ts"],
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.ts"],
       "@q9labsai/facehash/react": ["../../../packages/facehash/src/react.ts"],
       "@q9labsai/chalk-ui/button": ["../../../packages/ui/dist/button.d.ts"],

@@ -97,6 +97,16 @@ Production protocol-v3 admission verifies API-issued Ed25519 JWTs locally. Set
 accepted `kid` to an unpadded base64url 32-byte Ed25519 public key. Rotation
 renders both public keys before the API begins signing with the new `kid`.
 
+Production durable media operations use the API's private provider bridge over
+TLS 1.3 with mutual certificate verification. Set
+`CHALK_SYNC_PROVIDER_BRIDGE_URL` to the private HTTPS origin and provide the
+client certificate, unencrypted private key, and trusted CA PEM paths through
+`CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE`, `CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE`, and
+`CHALK_SYNC_PROVIDER_BRIDGE_CAFILE`. Production startup fails when any value or
+PEM file is missing or malformed, and readiness actively verifies the mTLS-only
+bridge endpoint. The four-second bridge request budget remains shorter than the
+five-second durable-operation consumer budget.
+
 ## Observability v1 compatibility
 
 `ChalkSync.Observability` provides the legacy v1 compatibility observability

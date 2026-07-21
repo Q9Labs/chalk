@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { createChalkEffectClient } from "../../../sdks/typescript/client/dist/index.js";
+import { createChalkEffectClient } from "../../../sdks/typescript/client/dist/effect.js";
 import { waitFor } from "./poll.mjs";
 
 const apiBaseUrl = required("CHALK_WEBHOOK_CANARY_API_URL");
