@@ -6,7 +6,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   const apiKey = required(options.apiKey, "apiKey");
   const tenantId = required(options.tenantId, "tenantId");
   const apiBaseURL = normalizedBaseURL(options.apiBaseURL);
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const fetchImplementation = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   if (typeof fetchImplementation !== "function") throw new TypeError("A fetch implementation is required");
 
   const tenantPath = `/v1/tenants/${segment(tenantId)}`;

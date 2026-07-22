@@ -8,6 +8,22 @@ const sessionId = "33333333-3333-4333-8333-333333333333";
 const participantId = "44444444-4444-4444-8444-444444444444";
 
 describe("createChalkServerClient", () => {
+  it("preserves the global receiver required by edge-runtime fetch", async () => {
+    const edgeFetch = vi.fn(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(jsonResponse(room(), 201));
+    });
+    vi.stubGlobal("fetch", edgeFetch);
+
+    try {
+      const client = createChalkServerClient({ apiKey: "chalk_sk_edge.secret", tenantId, apiBaseURL: "https://api.example.test" });
+      await expect(client.rooms.create({ media_plane: "cf_sfu", name: "Room", slug: "room", status: "active" })).resolves.toMatchObject({ id: roomId });
+      expect(edgeFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("maps routes, bodies, telemetry, authorization, and participant access", async () => {
     const requests: Array<{ init?: RequestInit; url: string }> = [];
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
