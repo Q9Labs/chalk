@@ -19,7 +19,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   artifacts for the API and Sync services, and canonical web, API, Sync, and
   broker availability monitors.
 - Production Podman 4.9 Quadlet compatibility for the managed runtime,
-  including complete Redis no-snapshot command rendering.
+  including complete Redis no-snapshot command rendering and a watchdog
+  sandbox that runs under the rootless user manager.
 - A meeting-only production API profile that preserves fail-closed defaults
   while allowing unrelated integrations and transcription capabilities to be
   explicitly disabled for the initial hosted meeting release.

@@ -10,7 +10,6 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ProtectKernelTunables=true
-ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=true
