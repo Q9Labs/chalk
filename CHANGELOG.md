@@ -128,6 +128,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Made the scratch-based production API healthcheck use Podman's exec-form
+  array so container health runs without requiring `/bin/sh` in the image.
 - Made legacy Session deadline claiming compatible with Sessions created before
   Sync control records existed, and updated affected Go and Elixir dependencies
   to patched releases.

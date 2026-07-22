@@ -24,7 +24,7 @@ DropCapability=all
 NoNewPrivileges=true
 PidsLimit=512
 PodmanArgs=--memory=1g
-HealthCmd=/usr/local/bin/chalk-healthcheck http://127.0.0.1:8080/readyz
+HealthCmd=["/usr/local/bin/chalk-healthcheck","http://127.0.0.1:8080/readyz"]
 HealthInterval=10s
 HealthRetries=3
 HealthStartPeriod=30s

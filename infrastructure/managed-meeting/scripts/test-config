@@ -14,6 +14,7 @@ for argument in --entrypoint=/usr/local/bin/cloudflared --log-opt=tag=chalk-api 
   grep -Fq "PodmanArgs=${argument}" "${managed_root}/quadlet/"* || { echo "missing production-compatible Quadlet argument: ${argument}" >&2; exit 1; }
 done
 grep -Fq "Exec=redis-server --save '\"\"' --appendonly no" "${managed_root}/quadlet/chalk-redis.container.in" || { echo "Redis persistence disablement is not generator-safe" >&2; exit 1; }
+grep -Fq 'HealthCmd=["/usr/local/bin/chalk-healthcheck","http://127.0.0.1:8080/readyz"]' "${managed_root}/quadlet/chalk-api.container.in" || { echo "scratch API image healthcheck must use exec form" >&2; exit 1; }
 if grep -Fqx 'ProtectKernelModules=true' "${managed_root}/systemd/chalk-runtime-watchdog.service"; then
   echo "watchdog uses a capability sandbox unsupported by the rootless production user manager" >&2
   exit 1
