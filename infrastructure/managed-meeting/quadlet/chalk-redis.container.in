@@ -8,8 +8,8 @@ Image=__REDIS_IMAGE_REFERENCE__
 Pull=never
 ContainerName=chalk-redis
 Network=chalk-runtime.network
-NetworkAlias=redis
-Exec=redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru --protected-mode no --bind 0.0.0.0
+PodmanArgs=--network-alias=redis
+Exec=redis-server --save '""' --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru --protected-mode no --bind 0.0.0.0
 User=999
 Group=999
 ReadOnly=true
@@ -18,7 +18,7 @@ Tmpfs=/data:rw,nosuid,nodev,noexec,size=320m
 DropCapability=all
 NoNewPrivileges=true
 PidsLimit=128
-Memory=320m
+PodmanArgs=--memory=320m
 HealthCmd=redis-cli ping
 HealthInterval=10s
 HealthRetries=3
@@ -27,9 +27,9 @@ HealthTimeout=2s
 HealthOnFailure=kill
 Notify=healthy
 LogDriver=journald
-LogOpt=tag=chalk-redis
-StopSignal=SIGTERM
-StopTimeout=10
+PodmanArgs=--log-opt=tag=chalk-redis
+PodmanArgs=--stop-signal=SIGTERM
+PodmanArgs=--stop-timeout=10
 
 [Service]
 Restart=on-failure

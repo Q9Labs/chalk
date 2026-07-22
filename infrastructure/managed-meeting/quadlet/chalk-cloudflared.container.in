@@ -10,7 +10,7 @@ Pull=never
 ContainerName=chalk-cloudflared
 Network=chalk-runtime.network
 Secret=chalk-cloudflare-tunnel-token,type=mount,target=/run/secrets/tunnel-token,uid=65532,gid=65532,mode=0400
-Entrypoint=/usr/local/bin/cloudflared
+PodmanArgs=--entrypoint=/usr/local/bin/cloudflared
 Exec=tunnel --no-autoupdate --loglevel info --metrics 0.0.0.0:2000 run --token-file /run/secrets/tunnel-token
 PublishPort=127.0.0.1:12000:2000
 User=65532
@@ -21,11 +21,11 @@ DropCapability=all
 NoNewPrivileges=true
 Ulimit=nofile=70000:70000
 PidsLimit=256
-Memory=384m
+PodmanArgs=--memory=384m
 LogDriver=journald
-LogOpt=tag=chalk-cloudflared
-StopSignal=SIGTERM
-StopTimeout=30
+PodmanArgs=--log-opt=tag=chalk-cloudflared
+PodmanArgs=--stop-signal=SIGTERM
+PodmanArgs=--stop-timeout=30
 
 [Service]
 Restart=on-failure

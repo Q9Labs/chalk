@@ -6,6 +6,15 @@ repo_root="$(cd "${managed_root}/../.." && pwd)"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "${fixture_root}"' EXIT
 
+if grep -ERq '^(Entrypoint|LogOpt|Memory|NetworkAlias|StopSignal|StopTimeout)=' "${managed_root}/quadlet"; then
+  echo "Quadlet templates use keys unsupported by the production Podman 4.9 generator" >&2
+  exit 1
+fi
+for argument in --entrypoint=/usr/local/bin/cloudflared --log-opt=tag=chalk-api --memory=1g --network-alias=chalk-api --stop-signal=SIGTERM --stop-timeout=20; do
+  grep -Fq "PodmanArgs=${argument}" "${managed_root}/quadlet/"* || { echo "missing production-compatible Quadlet argument: ${argument}" >&2; exit 1; }
+done
+grep -Fq "Exec=redis-server --save '\"\"' --appendonly no" "${managed_root}/quadlet/chalk-redis.container.in" || { echo "Redis persistence disablement is not generator-safe" >&2; exit 1; }
+
 mkdir -p "${fixture_root}/env" "${fixture_root}/secrets/provider-bridge" "${fixture_root}/secrets/cloudflare"
 
 render_example_env() {

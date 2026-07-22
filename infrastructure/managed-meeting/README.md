@@ -135,6 +135,10 @@ The runtime shapes follow the current official [Podman Quadlet
 contract](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html)
 and Cloudflare's documented [Tunnel readiness
 endpoint](https://developers.cloudflare.com/tunnel/deployment-guides/kubernetes/).
+The templates use `PodmanArgs` for options that are unavailable as native
+Quadlet keys in the production Ubuntu Podman 4.9 generator; the config smoke
+test rejects those unsupported keys and preserves Redis's no-snapshot argument
+without triggering the older generator's empty-argument truncation.
 
 The production image build consumes the checked-in Sync lockfile. Keep the
 patched `hpax` and `plug` releases current and rerun the Sync gate before every

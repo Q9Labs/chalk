@@ -9,7 +9,7 @@ Image=__API_IMAGE_REFERENCE__
 Pull=never
 ContainerName=chalk-api
 Network=chalk-runtime.network
-NetworkAlias=chalk-api
+PodmanArgs=--network-alias=chalk-api
 EnvironmentFile=/run/chalk/env/api.env
 Secret=chalk-api-provider-server-cert,type=mount,target=/run/chalk/provider-bridge/server.crt,uid=65532,gid=65532,mode=0400
 Secret=chalk-api-provider-server-key,type=mount,target=/run/chalk/provider-bridge/server.key,uid=65532,gid=65532,mode=0400
@@ -23,7 +23,7 @@ Tmpfs=/tmp:rw,nosuid,nodev,noexec,size=64m
 DropCapability=all
 NoNewPrivileges=true
 PidsLimit=512
-Memory=1g
+PodmanArgs=--memory=1g
 HealthCmd=/usr/local/bin/chalk-healthcheck http://127.0.0.1:8080/readyz
 HealthInterval=10s
 HealthRetries=3
@@ -32,9 +32,9 @@ HealthTimeout=3s
 HealthOnFailure=kill
 Notify=healthy
 LogDriver=journald
-LogOpt=tag=chalk-api
-StopSignal=SIGTERM
-StopTimeout=20
+PodmanArgs=--log-opt=tag=chalk-api
+PodmanArgs=--stop-signal=SIGTERM
+PodmanArgs=--stop-timeout=20
 
 [Service]
 Restart=on-failure

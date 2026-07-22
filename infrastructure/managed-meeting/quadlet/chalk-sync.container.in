@@ -9,7 +9,7 @@ Image=__SYNC_IMAGE_REFERENCE__
 Pull=never
 ContainerName=chalk-sync
 Network=chalk-runtime.network
-NetworkAlias=chalk-sync
+PodmanArgs=--network-alias=chalk-sync
 EnvironmentFile=/run/chalk/env/sync.env
 Secret=chalk-sync-provider-client-cert,type=mount,target=/run/chalk/provider-bridge/client.crt,uid=65532,gid=65532,mode=0400
 Secret=chalk-sync-provider-client-key,type=mount,target=/run/chalk/provider-bridge/client.key,uid=65532,gid=65532,mode=0400
@@ -23,7 +23,7 @@ Tmpfs=/tmp:rw,nosuid,nodev,noexec,size=128m
 DropCapability=all
 NoNewPrivileges=true
 PidsLimit=2048
-Memory=2g
+PodmanArgs=--memory=2g
 HealthCmd=/usr/local/bin/chalk-healthcheck http://127.0.0.1:4100/readyz
 HealthInterval=10s
 HealthRetries=3
@@ -32,9 +32,9 @@ HealthTimeout=3s
 HealthOnFailure=kill
 Notify=healthy
 LogDriver=journald
-LogOpt=tag=chalk-sync
-StopSignal=SIGTERM
-StopTimeout=15
+PodmanArgs=--log-opt=tag=chalk-sync
+PodmanArgs=--stop-signal=SIGTERM
+PodmanArgs=--stop-timeout=15
 
 [Service]
 Restart=on-failure

@@ -3,7 +3,7 @@ set -euo pipefail
 
 managed_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_root="$(cd "${managed_root}/../.." && pwd)"
-cloudflared_image="cloudflare/cloudflared@sha256:5e49861633763e8933475477c20bae6039ed47f32c1d267a34babc347f28f0df"
+cloudflared_image="docker.io/cloudflare/cloudflared@sha256:5e49861633763e8933475477c20bae6039ed47f32c1d267a34babc347f28f0df"
 redis_image="docker.io/library/redis@sha256:82db05459fb850cc3fe2bfa510a054323247bbd0ecb8831272e41fe14b9ead82"
 api_image=""
 sync_image=""
