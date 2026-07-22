@@ -1,5 +1,5 @@
 schema_version: 1
-as_of: "2026-07-21"
+as_of: "2026-07-22"
 product: Chalk
 status_semantics:
   true: "Implemented in this repository with direct code or focused-test evidence."
@@ -15,14 +15,14 @@ domains:
       done: true
       evidence: ["apps/api", "apps/sync", "infrastructure"]
     - capability: "App-tier self-hosting has a documented, repeatable production deployment qualification"
-      done: false
-      evidence: ["docs/redesign/north-star.md", "architecture.html"]
+      done: true
+      evidence: ["infrastructure/managed-meeting/README.md", "infrastructure/managed-meeting/scripts/validate-runtime", "scratchpad/ship-restored-meeting-ui-session-log-2026-07-22.md"]
     - capability: "Cloudflare-free media self-hosting"
       done: false
       evidence: ["docs/redesign/north-star.md"]
     - capability: "Managed production deployment is qualified in this repository"
-      done: false
-      evidence: ["architecture.html", "infrastructure/README.md"]
+      done: true
+      evidence: ["infrastructure/managed-meeting", "infrastructure/meeting-broker", "scratchpad/ship-restored-meeting-ui-session-log-2026-07-22.md"]
     - capability: "Public product documentation app"
       done: false
       evidence: ["AGENTS.md"]
@@ -44,11 +44,11 @@ domains:
       done: true
       evidence: ["apps/web/src/routes/room.tsx"]
     - capability: "Public web create-room flow"
-      done: false
-      evidence: ["apps/web/src/routes/new.tsx"]
+      done: true
+      evidence: ["apps/web/src/routes/room.tsx", "infrastructure/meeting-broker/src/meeting-session.ts"]
     - capability: "Production-ready hosted web meeting experience"
-      done: false
-      evidence: ["apps/web/src/routes/room.tsx", "architecture.html"]
+      done: true
+      evidence: ["apps/web/src/routes/room.tsx", "infrastructure/meeting-broker", "scratchpad/ship-restored-meeting-ui-session-log-2026-07-22.md"]
     - capability: "Mobile invite-link join flow"
       done: true
       evidence: ["apps/mobile/App.tsx", "apps/mobile/src/screens/HomeScreen.shared.tsx"]

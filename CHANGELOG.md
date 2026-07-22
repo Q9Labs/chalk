@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- A public Pages meeting entry that starts a capability-secured meeting from the
+  restored React SDK lobby and supports invite-link guests, host refresh, live
+  participant updates, Cloudflare media, and terminal Leave cleanup.
 - Production meeting launch infrastructure for the restored web experience,
   including a capability-secured Cloudflare broker, rootless managed runtime
   artifacts for the API and Sync services, and canonical web, API, Sync, and

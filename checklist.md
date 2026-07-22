@@ -1,15 +1,15 @@
 # Product checklist
 
-As of 2026-07-21. This is the human-readable view of [`product.yaml`](./product.yaml), which is the canonical inventory.
+As of 2026-07-22. This is the human-readable view of [`product.yaml`](./product.yaml), which is the canonical inventory.
 
 `[x]` means the capability is implemented in this repository. `[ ]` means it is missing, placeholder-only, incomplete end to end, or still lacks the production proof named by the item. Large capabilities are split so there is no ambiguous “partial” state.
 
 ## Product Delivery
 
 - [x] App-tier self-hosting source is available for API, sync, and Postgres
-- [ ] App-tier self-hosting has a documented, repeatable production deployment qualification
+- [x] App-tier self-hosting has a documented, repeatable production deployment qualification
 - [ ] Cloudflare-free media self-hosting
-- [ ] Managed production deployment is qualified in this repository
+- [x] Managed production deployment is qualified in this repository
 - [ ] Public product documentation app
 
 ## Meeting Core
@@ -19,8 +19,8 @@ As of 2026-07-21. This is the human-readable view of [`product.yaml`](./product.
 - [x] Anonymous and token-based participant admission
 - [x] Lobby, admission, role, host-succession, and screen-share control semantics
 - [x] Local web room proof with camera, microphone, SFU media, and Sync v3
-- [ ] Public web create-room flow
-- [ ] Production-ready hosted web meeting experience
+- [x] Public web create-room flow
+- [x] Production-ready hosted web meeting experience
 - [x] Mobile invite-link join flow
 - [ ] Mobile meeting creation is enabled consistently in release builds
 - [ ] Iframe meeting embed
