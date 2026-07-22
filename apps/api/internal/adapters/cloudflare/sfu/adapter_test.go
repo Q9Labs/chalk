@@ -205,12 +205,7 @@ func TestCloseTracksMapsProviderContractWithoutLeakingChalkIdentity(t *testing.T
 	}
 }
 
-func TestCloseTracksTreatsOnlyTrackLevelAbsenceAsIdempotentSuccess(t *testing.T) {
-	client := &roundTripStub{
-		statusCode: http.StatusOK,
-		body:       `{"tracks":[{"mid":"0","errorCode":"track_not_found","errorDescription":"track is already absent"}]}`,
-	}
-	adapter := testAdapter(t, client)
+func TestCloseTracksTreatsTrackOrSessionAbsenceAsIdempotentSuccess(t *testing.T) {
 	request := mediaplane.CloseTracksRequest{
 		Provider:     mediaplane.ProviderCloudflareSFU,
 		ConnectionID: "connection_123",
@@ -218,17 +213,22 @@ func TestCloseTracksTreatsOnlyTrackLevelAbsenceAsIdempotentSuccess(t *testing.T)
 		Force:        true,
 	}
 
-	for attempt := 1; attempt <= 2; attempt++ {
-		response, err := adapter.CloseTracks(context.Background(), request)
-		if err != nil {
-			t.Fatalf("close tracks attempt %d: %v", attempt, err)
-		}
-		if len(response.Tracks) != 1 || response.Tracks[0] != request.Tracks[0] {
-			t.Fatalf("attempt %d response tracks = %#v, want requested identity", attempt, response.Tracks)
-		}
-	}
-	if client.calls != 2 {
-		t.Fatalf("provider calls = %d, want 2 idempotent attempts", client.calls)
+	for _, errorCode := range []string{"session_not_found", "track_already_closed", "track_not_found"} {
+		t.Run(errorCode, func(t *testing.T) {
+			client := &roundTripStub{
+				statusCode: http.StatusOK,
+				body:       fmt.Sprintf(`{"tracks":[{"mid":"0","errorCode":%q,"errorDescription":"already absent"}]}`, errorCode),
+			}
+			adapter := testAdapter(t, client)
+
+			response, err := adapter.CloseTracks(context.Background(), request)
+			if err != nil {
+				t.Fatalf("close tracks: %v", err)
+			}
+			if len(response.Tracks) != 1 || response.Tracks[0] != request.Tracks[0] {
+				t.Fatalf("response tracks = %#v, want requested identity", response.Tracks)
+			}
+		})
 	}
 }
 
@@ -251,6 +251,18 @@ func TestCloseTracksRejectsProviderFailuresAndUnexpectedResults(t *testing.T) {
 			want:       mediaplane.ErrSessionNotFound,
 		},
 		{
+			name:       "expired session status",
+			statusCode: http.StatusGone,
+			body:       `{"errorCode":"session_error","errorDescription":"could not find session","tracks":[]}`,
+			want:       mediaplane.ErrSessionNotFound,
+		},
+		{
+			name:       "unrelated provider status",
+			statusCode: http.StatusBadGateway,
+			body:       `{"errorCode":"upstream_error","errorDescription":"provider unavailable"}`,
+			want:       mediaplane.ErrProviderFailed,
+		},
+		{
 			name:       "top level provider error",
 			statusCode: http.StatusOK,
 			body:       `{"errorCode":"invalid_request","errorDescription":"request rejected"}`,
@@ -259,7 +271,7 @@ func TestCloseTracksRejectsProviderFailuresAndUnexpectedResults(t *testing.T) {
 		{
 			name:       "unrelated per track error",
 			statusCode: http.StatusOK,
-			body:       `{"tracks":[{"mid":"0","errorCode":"session_not_found","errorDescription":"session missing"}]}`,
+			body:       `{"tracks":[{"mid":"0","errorCode":"invalid_track","errorDescription":"track rejected"}]}`,
 			want:       mediaplane.ErrProviderFailed,
 		},
 		{
@@ -393,6 +405,7 @@ func TestVerifySessionMetadataMapsProviderErrors(t *testing.T) {
 	}{
 		{name: "unauthorized", statusCode: http.StatusForbidden, want: mediaplane.ErrProviderUnauthorized},
 		{name: "not found", statusCode: http.StatusNotFound, want: mediaplane.ErrSessionNotFound},
+		{name: "gone", statusCode: http.StatusGone, want: mediaplane.ErrSessionNotFound},
 		{name: "rate limited", statusCode: http.StatusTooManyRequests, want: mediaplane.ErrProviderRateLimited},
 		{name: "provider failed", statusCode: http.StatusBadGateway, want: mediaplane.ErrProviderFailed},
 	}

@@ -263,12 +263,28 @@ defmodule ChalkSync.Operations.Probe do
       is_nil(health.last_success_at_ms) ->
         {:error, :external_operation_consumer_initializing}
 
-      now - health.last_success_at_ms > external_operation_staleness_timeout_ms() ->
+      external_operation_stale?(health, now) and active_external_operation_work?(health) ->
+        :ok
+
+      external_operation_stale?(health, now) ->
         {:error, :external_operation_consumer_stale}
 
       true ->
         :ok
     end
+  end
+
+  defp external_operation_stale?(health, now) do
+    now - health.last_success_at_ms > external_operation_staleness_timeout_ms()
+  end
+
+  defp active_external_operation_work?(health) do
+    active_work_age_ms = Map.get(health, :active_work_age_ms)
+    active_work_timeout_ms = Map.get(health, :active_work_timeout_ms)
+
+    Map.get(health, :active_work, false) and is_integer(active_work_age_ms) and
+      is_integer(active_work_timeout_ms) and active_work_timeout_ms > 0 and
+      active_work_age_ms <= active_work_timeout_ms
   end
 
   @doc false

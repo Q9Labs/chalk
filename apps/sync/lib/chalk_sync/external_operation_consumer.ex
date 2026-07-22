@@ -23,6 +23,8 @@ defmodule ChalkSync.ExternalOperationConsumer do
   @default_page_size 32
   @default_max_backoff_ms 5_000
   @default_adapter_timeout_ms 5_000
+  @health_timeout_ms 500
+  @worker_completion_grace_ms 5_000
   @max_attempts 100
   @local_operations [
     :admit_participant,
@@ -43,7 +45,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   @spec health(GenServer.server()) :: map()
-  def health(server \\ __MODULE__), do: GenServer.call(server, :health)
+  def health(server \\ __MODULE__), do: GenServer.call(server, :health, @health_timeout_ms)
 
   @impl GenServer
   def init(options) do
@@ -54,13 +56,15 @@ defmodule ChalkSync.ExternalOperationConsumer do
       adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
+      claim_operations: Keyword.get(options, :claim_operations, &Stateholder.claim_operations/1),
       media_plane: Keyword.get(options, :media_plane),
       recording_plane: Keyword.get(options, :recording_plane),
       last_success_at_ms: nil,
       consecutive_failures: 0,
       confirmed_count: 0,
       terminal_failure_count: 0,
-      retained_pending_count: 0
+      retained_pending_count: 0,
+      active_work: nil
     }
 
     send(self(), :poll)
@@ -68,13 +72,62 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   @impl GenServer
-  def handle_call(:health, _from, state), do: {:reply, state, state}
+  def handle_call(:health, _from, state), do: {:reply, health_snapshot(state), state}
 
   @impl GenServer
-  def handle_info(:poll, state) do
-    {delay, state} = poll(state)
+  def handle_info(:poll, %{active_work: nil} = state) do
+    owner = self()
+    work_id = make_ref()
+    worker_state = %{state | active_work: nil}
+
+    {pid, monitor_ref} =
+      spawn_monitor(fn ->
+        send(owner, {:poll_result, work_id, self(), poll(worker_state)})
+      end)
+
+    active_work = %{
+      id: work_id,
+      pid: pid,
+      monitor_ref: monitor_ref,
+      started_at_ms: System.monotonic_time(:millisecond)
+    }
+
+    {:noreply, %{state | active_work: active_work}}
+  end
+
+  def handle_info(:poll, state), do: {:noreply, state}
+
+  def handle_info(
+        {:poll_result, work_id, pid, {delay, next}},
+        %{active_work: %{id: work_id, pid: pid, monitor_ref: monitor_ref}}
+      ) do
+    Process.demonitor(monitor_ref, [:flush])
     Process.send_after(self(), :poll, delay)
-    {:noreply, state}
+    {:noreply, %{next | active_work: nil}}
+  end
+
+  def handle_info(
+        {:DOWN, monitor_ref, :process, pid, reason},
+        %{active_work: %{pid: pid, monitor_ref: monitor_ref}} = state
+      ) do
+    Telemetry.execute([:external_operation, :poll], %{}, %{outcome: :failure})
+    Logger.warning("sync external operation worker stopped: reason=#{inspect(reason)}")
+
+    next = %{state | active_work: nil, consecutive_failures: state.consecutive_failures + 1}
+    Process.send_after(self(), :poll, backoff(next))
+    {:noreply, next}
+  end
+
+  def handle_info({:poll_result, _work_id, _pid, _result}, state), do: {:noreply, state}
+  def handle_info({:DOWN, _monitor_ref, :process, _pid, _reason}, state), do: {:noreply, state}
+
+  @impl GenServer
+  def terminate(_reason, %{active_work: nil}), do: :ok
+
+  def terminate(_reason, %{active_work: %{pid: pid, monitor_ref: monitor_ref}}) do
+    Process.demonitor(monitor_ref, [:flush])
+    Process.exit(pid, :shutdown)
+    :ok
   end
 
   @doc false
@@ -122,7 +175,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp poll(state) do
-    case Stateholder.claim_operations(state.page_size) do
+    case state.claim_operations.(state.page_size) do
       {:ok, operations} ->
         {counts, failures} = execute_page(operations, state)
 
@@ -492,6 +545,28 @@ defmodule ChalkSync.ExternalOperationConsumer do
         terminal_failure_count: state.terminal_failure_count + counts.terminal_failure,
         retained_pending_count: state.retained_pending_count + counts.pending
     }
+  end
+
+  defp health_snapshot(state) do
+    now_ms = System.monotonic_time(:millisecond)
+
+    %{
+      last_success_at_ms: state.last_success_at_ms,
+      consecutive_failures: state.consecutive_failures,
+      confirmed_count: state.confirmed_count,
+      terminal_failure_count: state.terminal_failure_count,
+      retained_pending_count: state.retained_pending_count,
+      active_work: not is_nil(state.active_work),
+      active_work_age_ms: active_work_age_ms(state.active_work, now_ms),
+      active_work_timeout_ms:
+        state.page_size * state.adapter_timeout_ms + @worker_completion_grace_ms
+    }
+  end
+
+  defp active_work_age_ms(nil, _now_ms), do: nil
+
+  defp active_work_age_ms(active_work, now_ms) do
+    max(now_ms - active_work.started_at_ms, 0)
   end
 
   defp backoff(state) do

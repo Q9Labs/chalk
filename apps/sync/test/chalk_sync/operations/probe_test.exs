@@ -114,7 +114,13 @@ defmodule ChalkSync.Operations.ProbeTest do
         Probe.external_operation_staleness_timeout_ms() - 1
 
     assert Probe.validate_external_operation_health(
-             %{consecutive_failures: 0, last_success_at_ms: stale_at},
+             %{
+               consecutive_failures: 0,
+               last_success_at_ms: stale_at,
+               active_work: false,
+               active_work_age_ms: nil,
+               active_work_timeout_ms: 165_000
+             },
              false
            ) ==
              {:error, :external_operation_consumer_stale}
@@ -123,6 +129,32 @@ defmodule ChalkSync.Operations.ProbeTest do
              %{consecutive_failures: 0, last_success_at_ms: stale_at},
              true
            ) == :ok
+  end
+
+  test "accepts only bounded active external operation work beyond the idle threshold" do
+    stale_at =
+      System.monotonic_time(:millisecond) -
+        Probe.external_operation_staleness_timeout_ms() - 1
+
+    health = %{
+      consecutive_failures: 0,
+      last_success_at_ms: stale_at,
+      active_work: true,
+      active_work_age_ms: 4_000,
+      active_work_timeout_ms: 5_000
+    }
+
+    assert Probe.validate_external_operation_health(health, false) == :ok
+
+    assert Probe.validate_external_operation_health(
+             %{health | active_work_age_ms: 5_001},
+             false
+           ) == {:error, :external_operation_consumer_stale}
+
+    assert Probe.validate_external_operation_health(
+             %{health | consecutive_failures: 2},
+             false
+           ) == {:error, :external_operation_consumer_unavailable}
   end
 
   test "derives external operation staleness from the poll interval within bounds" do

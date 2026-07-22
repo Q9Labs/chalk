@@ -390,6 +390,87 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
     assert ExternalOperationConsumer.backoff_delay(100, 5_000, 100) == 5_000
   end
 
+  test "keeps health responsive while one monitored poll worker executes provider work" do
+    test = self()
+
+    claim_operations = fn _page_size ->
+      send(test, {:claim_started, self()})
+      {:ok, [{session(), operation(:remove_participant)}]}
+    end
+
+    name = unique_consumer_name()
+
+    consumer =
+      start_supervised!(
+        {ExternalOperationConsumer,
+         name: name,
+         poll_interval_ms: 10_000,
+         page_size: 2,
+         adapter_timeout_ms: 200,
+         claim_operations: claim_operations,
+         media_plane: {__MODULE__.BlockingMediaPlane, test}}
+      )
+
+    assert_receive {:claim_started, _worker}
+    assert_receive :adapter_started
+
+    health = ExternalOperationConsumer.health(consumer)
+    assert health.active_work
+    assert is_integer(health.active_work_age_ms)
+    assert health.active_work_age_ms < health.active_work_timeout_ms
+
+    send(consumer, :poll)
+    refute_receive {:claim_started, _other_worker}, 50
+
+    eventually(fn ->
+      health = ExternalOperationConsumer.health(consumer)
+      refute health.active_work
+      assert health.retained_pending_count == 1
+      assert is_integer(health.last_success_at_ms)
+    end)
+  end
+
+  test "records a monitored poll worker crash and continues serving health" do
+    name = unique_consumer_name()
+
+    consumer =
+      start_supervised!(
+        {ExternalOperationConsumer,
+         name: name,
+         poll_interval_ms: 10_000,
+         claim_operations: fn _page_size -> exit(:claim_failed) end}
+      )
+
+    eventually(fn ->
+      health = ExternalOperationConsumer.health(consumer)
+      refute health.active_work
+      assert health.consecutive_failures == 1
+    end)
+  end
+
+  test "terminating the consumer stops its active poll worker" do
+    test = self()
+
+    claim_operations = fn _page_size ->
+      send(test, {:blocking_claim_started, self()})
+      Process.sleep(:infinity)
+    end
+
+    {:ok, consumer} =
+      ExternalOperationConsumer.start_link(
+        name: unique_consumer_name(),
+        poll_interval_ms: 10_000,
+        claim_operations: claim_operations
+      )
+
+    assert_receive {:blocking_claim_started, worker}
+    worker_monitor = Process.monitor(worker)
+
+    GenServer.stop(consumer)
+
+    assert_receive {:DOWN, ^worker_monitor, :process, ^worker, :shutdown}
+  end
+
   defp execute(
          operation,
          media_plane,
@@ -440,6 +521,22 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       session_id: "00000000-0000-4000-8000-000000000003"
     }
   end
+
+  defp unique_consumer_name do
+    {:global, {__MODULE__, make_ref()}}
+  end
+
+  defp eventually(assertion, attempts \\ 50)
+
+  defp eventually(assertion, attempts) when attempts > 0 do
+    assertion.()
+  rescue
+    ExUnit.AssertionError ->
+      Process.sleep(10)
+      eventually(assertion, attempts - 1)
+  end
+
+  defp eventually(assertion, 0), do: assertion.()
 
   defmodule RaisingMediaPlane do
     def remove_participant(_adapter, _operation_id, _session, _participant_id),

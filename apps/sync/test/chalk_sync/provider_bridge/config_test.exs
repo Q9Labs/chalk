@@ -33,7 +33,7 @@ defmodule ChalkSync.ProviderBridge.ConfigTest do
 
   test "refuses a bridge timeout that can consume the durable consumer timeout" do
     assert_raise ArgumentError, ~r/request timeout must be shorter/, fn ->
-      Config.media_plane!([], 4_000)
+      Config.media_plane!([], 7_000)
     end
   end
 
@@ -48,7 +48,7 @@ defmodule ChalkSync.ProviderBridge.ConfigTest do
         cacertfile: paths.cacertfile
       )
 
-    assert client.request_timeout == 4_000
+    assert client.request_timeout == 7_000
     assert client.tls[:certfile] == paths.certfile
     assert client.tls[:keyfile] == paths.keyfile
     assert client.tls[:cacertfile] == paths.cacertfile

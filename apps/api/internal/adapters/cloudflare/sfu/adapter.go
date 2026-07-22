@@ -320,7 +320,7 @@ func (r *closeTracksResponse) providerError() error {
 
 func closedTrackAbsent(code string) bool {
 	switch strings.ToLower(strings.TrimSpace(code)) {
-	case "track_already_closed", "track_not_found":
+	case "session_not_found", "track_already_closed", "track_not_found":
 		return true
 	default:
 		return false
@@ -434,7 +434,7 @@ func sfuStatusError(statusCode int, payload []byte) error {
 	switch statusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		providerErr = mediaplane.ErrProviderUnauthorized
-	case http.StatusNotFound:
+	case http.StatusNotFound, http.StatusGone:
 		providerErr = mediaplane.ErrSessionNotFound
 	case http.StatusTooManyRequests:
 		providerErr = mediaplane.ErrProviderRateLimited

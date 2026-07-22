@@ -128,6 +128,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Made terminal Cloudflare SFU cleanup production-safe by accepting expired
+  sessions as already absent, allowing the provider's documented connection
+  wait, and keeping Sync readiness responsive during durable provider work.
 - Made the scratch-based production API healthcheck use Podman's exec-form
   array so container health runs without requiring `/bin/sh` in the image.
 - Made legacy Session deadline claiming compatible with Sessions created before
