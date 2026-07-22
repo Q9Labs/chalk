@@ -200,7 +200,19 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
       apiKey: this.environment.CHALK_API_KEY,
       tenantId: this.environment.CHALK_TENANT_ID,
       apiBaseURL: this.environment.CHALK_API_URL,
-      ...(this.environment.CHALK_API_SERVICE ? { fetch: (input, init) => this.environment.CHALK_API_SERVICE!.fetch(new Request(input, init)) } : {}),
+      fetch: this.environment.CHALK_API_SERVICE
+        ? (input, init) => this.environment.CHALK_API_SERVICE!.fetch(new Request(input, init))
+        : async (input, init) => {
+            try {
+              return await fetch(input, init);
+            } catch (error) {
+              this.log("api_fetch_failed", {
+                errorName: error instanceof Error ? error.name : "UnknownError",
+                errorMessage: error instanceof Error ? error.message.slice(0, 160) : "Unknown fetch failure",
+              });
+              throw error;
+            }
+          },
       headers: { "x-chalk-root-journey-id": trace.rootJourneyId },
       telemetry: trace,
     });
