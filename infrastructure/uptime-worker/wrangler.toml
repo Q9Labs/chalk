@@ -9,6 +9,8 @@ crons = ["*/5 * * * *"]
 API_BASE_URL = "https://chalk-api.q9labs.ai"
 
 # Optional private deployment configuration:
+# - API_MONITOR_BASE_URL, BROKER_BASE_URL, SYNC_BASE_URL, and WEB_BASE_URL
+#   override the public production monitor targets for another environment.
 # - ATLAS_BASE_URL adds an anonymous access-boundary synthetic for the protected
 #   architecture Worker. Configure it at deploy time; do not commit the live URL.
 

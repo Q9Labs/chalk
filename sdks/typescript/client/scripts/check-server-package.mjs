@@ -32,6 +32,7 @@ try {
   await assertGuard("browser", "require", "cjs");
   await assertGuard("react-native", "import", "esm");
   await assertGuard("react-native", "require", "cjs");
+  await assertWorkerd();
 
   const packageJson = JSON.parse(await readFile(new URL("package.json", packageDirectory), "utf8"));
   const forbiddenDependencies = ["express", "hono", "next"].filter((dependency) => dependency in (packageJson.dependencies ?? {}));
@@ -63,6 +64,20 @@ async function assertGuard(condition, syntax, format) {
   } catch (error) {
     if (error?.name !== "ChalkServerOnlyError") throw error;
   }
+}
+
+async function assertWorkerd() {
+  const bundled = await build({
+    absWorkingDir: consumerDirectory,
+    bundle: true,
+    conditions: ["workerd", "import"],
+    format: "esm",
+    platform: "neutral",
+    stdin: { contents: 'export { createChalkServerClient } from "@q9labsai/chalk-client/server";', resolveDir: consumerDirectory },
+    write: false,
+  });
+  const output = bundled.outputFiles[0]?.text ?? "";
+  if (!output.includes("createChalkServerClient") || output.includes("ChalkServerOnlyError")) throw new Error("workerd did not resolve to the server client.");
 }
 
 function serverTestSource() {

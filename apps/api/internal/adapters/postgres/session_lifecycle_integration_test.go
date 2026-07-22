@@ -610,6 +610,10 @@ func TestSessionLifecycleRepositoryProducesTenantControlAndMaximumDurationOperat
 	if _, err := fixture.pool.Exec(ctx, `insert into sync_publication_grant_reservations (tenant_id, room_id, session_id, reservation_id, operation_id, participant_session_id, participant_generation, source, expires_at) values ($1, $2, $3, $4, 'grant-reservation-0001', $5, 1, 'microphone', now() + interval '1 minute')`, fixture.tenantID.String(), fixture.roomID.String(), session.ID.String(), reservationID.String(), participantID.String()); err != nil {
 		t.Fatalf("seed active publication reservation: %v", err)
 	}
+	legacySessionID := newLifecycleTestID(t)
+	if _, err := fixture.pool.Exec(ctx, `insert into room_sessions (id, status, room_id, tenant_id, created_at, deadline_at, maximum_duration_seconds) values ($1, 'active', $2, $3, now() - interval '2 minutes', now() - interval '1 second', 119)`, legacySessionID.String(), fixture.roomID.String(), fixture.tenantID.String()); err != nil {
+		t.Fatalf("seed due legacy session without sync control: %v", err)
+	}
 	if count, err := repository.EnqueueDueSessionDeadlines(ctx, 10); err != nil || count != 1 {
 		t.Fatalf("scheduler did not accept end authority across active grant reservation: count %d err %v", count, err)
 	}

@@ -42,10 +42,39 @@ load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
 Redis-backed rate limiting through `CHALK_REDIS_URL`.
 
+### Production capabilities
+
+Integrations and transcription are explicit runtime capabilities:
+
+- `CHALK_INTEGRATIONS_ENABLED=true|false`
+- `CHALK_TRANSCRIPTION_ENABLED=true|false`
+
+Both default to `true` outside `local`, preserving fail-closed production
+startup. Local development defaults both to `false`. A meeting-only deployment
+must set both flags to `false`; omitting provider credentials never disables a
+capability implicitly.
+
+```bash
+CHALK_INTEGRATIONS_ENABLED=false
+CHALK_TRANSCRIPTION_ENABLED=false
+```
+
+When disabled, the API does not construct the provider or worker services.
+Authenticated public routes for that capability return the bounded
+`503 service_unavailable` response, and private transcription worker routes are
+not mounted. `/readyz` reports each capability as `enabled` or `disabled` on
+both ready and dependency-failure responses. The `api.starting` structured log
+records the same two booleans without logging credentials or provider config.
+
+When integrations are enabled, startup requires `CHALK_COMPOSIO_API_KEY`. When
+transcription is enabled, startup requires a workload secret of at least 32
+bytes, a dispatcher Lambda function name, and complete R2 credentials. Invalid
+or non-boolean capability flag values are rejected.
+
 ## Transcription artifacts
 
 Asynchronous transcription is enabled only when the API can mount the complete
-worker boundary. Non-local startup requires R2 and Redis plus
+worker boundary. Enabled startup requires R2 and Redis plus
 `CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET`,
 `CHALK_TRANSCRIPTION_CONTROL_AUDIENCE`, and
 `CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME`. The HMAC secret must match the

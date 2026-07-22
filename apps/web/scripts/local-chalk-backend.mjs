@@ -58,6 +58,15 @@ export function createLocalChalkHandler(options) {
           sharedRoomPromise = undefined;
           hostParticipantSessionId = undefined;
         } else {
+          if (browserSession.roomId && browserSession.sessionId && browserSession.participantSessionId && browserSession.participantSessionGeneration !== undefined) {
+            await options.chalk.participants.remove(
+              browserSession.roomId,
+              browserSession.sessionId,
+              browserSession.participantSessionId,
+              { participantSessionGeneration: browserSession.participantSessionGeneration },
+              { idempotencyKey: `local-browser-remove-${browserSession.participantSessionId}-${browserSession.participantSessionGeneration}` },
+            );
+          }
           browserSessions.delete(browserSessionId);
         }
         response.setHeader("set-cookie", expiredSessionCookie());
@@ -101,7 +110,7 @@ export function createLocalChalkHandler(options) {
           participant_session_id: participantSessionId,
           name: browserSession.displayName,
           initial_role: isHost ? "host" : "participant",
-          eligible_roles: isHost ? ["host", "cohost", "participant"] : ["participant", "cohost"],
+          eligible_roles: isHost ? ["host", "cohost", "participant"] : ["host", "cohost", "participant"],
         },
         { idempotencyKey: `local-browser-${participantSessionId}` },
       );

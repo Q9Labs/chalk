@@ -1,0 +1,45 @@
+name = "chalk-meeting-broker"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = false
+preview_urls = false
+
+[[routes]]
+pattern = "chalkmeet.com/local-chalk/*"
+zone_name = "chalkmeet.com"
+
+[vars]
+CHALK_APP_ORIGIN = "https://chalkmeet.com"
+CHALK_API_URL = "https://api.chalkmeet.com"
+CHALK_MEETING_LIFETIME_SECONDS = "3600"
+CHALK_SYNC_URL = "wss://sync.chalkmeet.com/v3/sync"
+
+[secrets]
+required = ["CHALK_API_KEY", "CHALK_ROOM_ID", "CHALK_TENANT_ID"]
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "MEETING_SESSIONS"
+class_name = "MeetingSession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MeetingSession"]
+
+[[ratelimits]]
+name = "CREATE_RATE_LIMITER"
+namespace_id = "2026072201"
+
+[ratelimits.simple]
+limit = 20
+period = 60
+
+[[ratelimits]]
+name = "SESSION_RATE_LIMITER"
+namespace_id = "2026072202"
+
+[ratelimits.simple]
+limit = 120
+period = 60

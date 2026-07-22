@@ -4,11 +4,15 @@ const localBackendPath = "/local-chalk";
 
 export type LocalBrowserSession = {
   readonly apiBaseURL: string;
+  readonly inviteToken?: string;
   readonly syncURL: string;
 };
 
-export async function createLocalBrowserSession(displayName: string): Promise<LocalBrowserSession> {
-  return request<LocalBrowserSession>("/browser-session", { displayName });
+export async function createLocalBrowserSession(displayName: string, inviteToken?: string): Promise<LocalBrowserSession> {
+  return request<LocalBrowserSession>("/browser-session", {
+    displayName,
+    ...(!isLocalBrowser() && inviteToken ? { inviteToken } : {}),
+  });
 }
 
 export function createLocalAccessProvider(): ChalkSessionAccessProvider {
@@ -52,5 +56,10 @@ async function errorMessage(response: Response): Promise<string> {
   } catch {
     // The HTTP status remains useful when a proxy returns a non-JSON error page.
   }
-  return `The local Chalk backend returned HTTP ${response.status}`;
+  return `The Chalk meeting backend returned HTTP ${response.status}`;
+}
+
+function isLocalBrowser(): boolean {
+  const hostname = globalThis.location?.hostname;
+  return hostname === "localhost" || hostname === "127.0.0.1";
 }

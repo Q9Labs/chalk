@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+failures=()
+
+check_url() {
+  local name="$1"
+  local url="$2"
+  if ! curl --fail --silent --show-error --max-time 3 --output /dev/null "${url}"; then
+    failures+=("${name}")
+  fi
+}
+
+for unit in chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service; do
+  if ! systemctl --user is-active --quiet "${unit}"; then
+    failures+=("unit:${unit}")
+  fi
+done
+
+check_url api http://127.0.0.1:18080/readyz
+check_url sync http://127.0.0.1:14100/readyz
+check_url tunnel http://127.0.0.1:12000/ready
+
+release_manifest=/run/chalk/release/release-manifest.json
+release_checksum=/run/chalk/release/release-manifest.sha256
+if [[ ! -s "${release_manifest}" || ! -s "${release_checksum}" ]]; then
+  failures+=(release-identity)
+elif command -v sha256sum >/dev/null; then
+  if ! (cd "$(dirname "${release_manifest}")" && sha256sum --check --status "$(basename "${release_checksum}")"); then
+    failures+=(release-identity)
+  fi
+fi
+
+disk_used="$(df -P / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"
+if [[ ! "${disk_used}" =~ ^[0-9]+$ ]] || ((disk_used >= 90)); then
+  failures+=(disk-pressure)
+fi
+if [[ -r /proc/meminfo ]]; then
+  memory_total="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+  memory_available="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+  if [[ -z "${memory_total}" || -z "${memory_available}" ]] || ((memory_available * 100 / memory_total < 5)); then
+    failures+=(memory-pressure)
+  fi
+fi
+
+if ((${#failures[@]} > 0)); then
+  printf 'chalk runtime unhealthy: %s\n' "${failures[*]}" >&2
+  exit 1
+fi
+
+echo "chalk runtime healthy"

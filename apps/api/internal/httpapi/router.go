@@ -30,7 +30,13 @@ type MeetingCredentialVerifier interface {
 	Verify(ctx context.Context, credential string) error
 }
 
+type CapabilityStatus struct {
+	Integrations  bool
+	Transcription bool
+}
+
 type Options struct {
+	Capabilities           CapabilityStatus
 	CORS                   CORSOptions
 	LocalSystemToken       string
 	Middleware             []func(http.Handler) http.Handler
@@ -107,7 +113,7 @@ func NewRouter(options Options) http.Handler {
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
-	r.Get("/readyz", handleReady(options.Readiness))
+	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}
@@ -139,10 +145,10 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReady(checker ReadinessChecker) http.HandlerFunc {
+func handleReady(checker ReadinessChecker, capabilities CapabilityStatus) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if checker == nil {
-			writeReadinessError(w)
+			writeReadinessError(w, capabilities)
 			return
 		}
 
@@ -150,7 +156,7 @@ func handleReady(checker ReadinessChecker) http.HandlerFunc {
 		defer cancel()
 
 		if err := checker.Check(ctx); err != nil {
-			writeReadinessError(w)
+			writeReadinessError(w, capabilities)
 			return
 		}
 
@@ -159,11 +165,12 @@ func handleReady(checker ReadinessChecker) http.HandlerFunc {
 			"dependencies": map[string]string{
 				"postgres": "ok",
 			},
+			"capabilities": capabilityReadiness(capabilities),
 		})
 	}
 }
 
-func writeReadinessError(w http.ResponseWriter) {
+func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus) {
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 		"error": map[string]string{
 			"code":    "service_unavailable",
@@ -172,7 +179,22 @@ func writeReadinessError(w http.ResponseWriter) {
 		"dependencies": map[string]string{
 			"postgres": "unavailable",
 		},
+		"capabilities": capabilityReadiness(capabilities),
 	})
+}
+
+func capabilityReadiness(capabilities CapabilityStatus) map[string]string {
+	return map[string]string{
+		"integrations":  enabledStatus(capabilities.Integrations),
+		"transcription": enabledStatus(capabilities.Transcription),
+	}
+}
+
+func enabledStatus(enabled bool) string {
+	if enabled {
+		return "enabled"
+	}
+	return "disabled"
 }
 
 func mountV1Routes(r chi.Router, options Options) {

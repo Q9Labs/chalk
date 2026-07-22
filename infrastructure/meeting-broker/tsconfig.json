@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"],
+    "noEmit": true,
+    "paths": {
+      "@q9labsai/chalk-client/server": ["../../sdks/typescript/client/src/server/index.ts"]
+    },
+    "types": ["vitest/globals"]
+  }
+}

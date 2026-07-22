@@ -73,6 +73,7 @@ const (
 	ComposioBaseURL       = "CHALK_COMPOSIO_BASE_URL"
 	ComposioTimeoutMS     = "CHALK_COMPOSIO_TIMEOUT_MS"
 	ComposioWebhookSecret = "CHALK_COMPOSIO_WEBHOOK_SECRET"
+	IntegrationsEnabled   = "CHALK_INTEGRATIONS_ENABLED"
 
 	R2AccessKeyID                   = "CHALK_R2_ACCESS_KEY_ID"
 	R2AccountID                     = "CHALK_R2_ACCOUNT_ID"
@@ -83,6 +84,7 @@ const (
 	TranscriptionWorkloadAuthSecret = "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET"
 	TranscriptionControlAudience    = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
+	TranscriptionEnabled            = "CHALK_TRANSCRIPTION_ENABLED"
 
 	ResendAPIKey                    = "CHALK_RESEND_API_KEY"
 	ResendTimeoutMS                 = "CHALK_RESEND_TIMEOUT_MS"
@@ -130,6 +132,11 @@ type APIConfig struct {
 	CORSAllowedOrigins []string
 	LocalSystemToken   string
 	TrustedProxyCIDRs  []string
+}
+
+type CapabilityConfig struct {
+	Integrations  bool
+	Transcription bool
 }
 
 type DatabaseConfig struct {
@@ -240,6 +247,7 @@ type DeadlineSchedulerConfig struct {
 type Config struct {
 	API                APIConfig
 	Auth               AuthConfig
+	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
 	Composio           ComposioConfig
 	Database           DatabaseConfig
@@ -287,6 +295,10 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("deadline scheduler interval and batch must be greater than zero")
 	}
 	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
+	capabilities, err := loadCapabilityConfig(environment)
+	if err != nil {
+		return Config{}, err
+	}
 	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
 	if err := validateDatabaseURL(environment, databaseURL); err != nil {
 		return Config{}, err
@@ -368,8 +380,8 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("%s must be greater than zero", ComposioTimeoutMS)
 	}
 	composioAPIKey := envOrDefault(ComposioAPIKey, "")
-	if environment != DefaultEnvironment && strings.TrimSpace(composioAPIKey) == "" {
-		return Config{}, fmt.Errorf("%s must be set outside local environments", ComposioAPIKey)
+	if capabilities.Integrations && strings.TrimSpace(composioAPIKey) == "" {
+		return Config{}, fmt.Errorf("%s must be set when %s=true", ComposioAPIKey, IntegrationsEnabled)
 	}
 	localSystemToken := strings.TrimSpace(envOrDefault(APILocalSystemToken, ""))
 	if environment != DefaultEnvironment && localSystemToken != "" {
@@ -399,6 +411,24 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("%s must be an absolute localhost URL without query or fragment", CloudflareRealtimeBaseURL)
 		}
 	}
+	r2Config := R2Config{
+		AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
+		AccountID:       envOrDefault(R2AccountID, ""),
+		Bucket:          envOrDefault(R2Bucket, ""),
+		Endpoint:        envOrDefault(R2Endpoint, ""),
+		SecretAccessKey: envOrDefault(R2SecretAccessKey, ""),
+		RequestTimeout:  r2RequestTimeout,
+	}
+	transcriptionConfig := TranscriptionConfig{
+		WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
+		ControlAudience:    envOrDefault(TranscriptionControlAudience, DefaultTranscriptionControlAudience),
+		DispatcherFunction: envOrDefault(TranscriptionDispatcherFunction, ""),
+	}
+	if capabilities.Transcription {
+		if err := validateTranscriptionConfig(transcriptionConfig, r2Config); err != nil {
+			return Config{}, err
+		}
+	}
 
 	return Config{
 		API: APIConfig{
@@ -412,6 +442,7 @@ func Load() (Config, error) {
 			OAuthStateTTL:             oauthStateTTL,
 			SessionTTL:                sessionTTL,
 		},
+		Capabilities: capabilities,
 		CloudflareRealtime: CloudflareRealtimeConfig{
 			AccountID:            envOrDefault(CloudflareAccountID, ""),
 			APIToken:             envOrDefault(CloudflareAPIToken, ""),
@@ -456,14 +487,7 @@ func Load() (Config, error) {
 			Version:              envOrDefault(APIVersion, DefaultVersion),
 		},
 		ProviderBridge: providerBridge,
-		R2: R2Config{
-			AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
-			AccountID:       envOrDefault(R2AccountID, ""),
-			Bucket:          envOrDefault(R2Bucket, ""),
-			Endpoint:        envOrDefault(R2Endpoint, ""),
-			SecretAccessKey: envOrDefault(R2SecretAccessKey, ""),
-			RequestTimeout:  r2RequestTimeout,
-		},
+		R2:             r2Config,
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),
 		},
@@ -471,14 +495,36 @@ func Load() (Config, error) {
 			APIKey:  envOrDefault(ResendAPIKey, ""),
 			Timeout: resendTimeout,
 		},
-		SyncToken: syncToken,
-		Transcription: TranscriptionConfig{
-			WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
-			ControlAudience:    envOrDefault(TranscriptionControlAudience, DefaultTranscriptionControlAudience),
-			DispatcherFunction: envOrDefault(TranscriptionDispatcherFunction, ""),
-		},
-		Webhooks: webhookConfig,
+		SyncToken:     syncToken,
+		Transcription: transcriptionConfig,
+		Webhooks:      webhookConfig,
 	}, nil
+}
+
+func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
+	defaultEnabled := environment != DefaultEnvironment
+	integrations, err := envStrictBool(IntegrationsEnabled, defaultEnabled)
+	if err != nil {
+		return CapabilityConfig{}, err
+	}
+	transcription, err := envStrictBool(TranscriptionEnabled, defaultEnabled)
+	if err != nil {
+		return CapabilityConfig{}, err
+	}
+	return CapabilityConfig{Integrations: integrations, Transcription: transcription}, nil
+}
+
+func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config) error {
+	if len(transcription.WorkloadAuthSecret) < 32 {
+		return fmt.Errorf("%s must contain at least 32 bytes when %s=true", TranscriptionWorkloadAuthSecret, TranscriptionEnabled)
+	}
+	if strings.TrimSpace(transcription.DispatcherFunction) == "" {
+		return fmt.Errorf("%s must be set when %s=true", TranscriptionDispatcherFunction, TranscriptionEnabled)
+	}
+	if strings.TrimSpace(r2.Bucket) == "" || (strings.TrimSpace(r2.AccountID) == "" && strings.TrimSpace(r2.Endpoint) == "") || strings.TrimSpace(r2.AccessKeyID) == "" || strings.TrimSpace(r2.SecretAccessKey) == "" {
+		return fmt.Errorf("%s, either %s or %s, %s, and %s must be set when %s=true", R2Bucket, R2AccountID, R2Endpoint, R2AccessKeyID, R2SecretAccessKey, TranscriptionEnabled)
+	}
+	return nil
 }
 
 func loadProviderBridgeConfig(environment string) (ProviderBridgeConfig, error) {
@@ -778,5 +824,21 @@ func envBool(name string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func envStrictBool(name string, fallback bool) (bool, error) {
+	value, ok := os.LookupEnv(name)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback, nil
+	}
+
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s must be true or false", name)
 	}
 }

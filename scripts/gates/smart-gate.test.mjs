@@ -7,6 +7,7 @@ const workspaces = [
   { name: "@q9labsai/chalk-client", directory: "sdks/typescript/client", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: [], isPublic: true },
   { name: "@q9labsai/chalk-react", directory: "sdks/typescript/react", scripts: { build: "build", "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-client"], isPublic: true },
   { name: "web", directory: "apps/web", scripts: { build: "build" }, dependencies: ["@q9labsai/chalk-react"], isPublic: false },
+  { name: "@chalk/meeting-broker", directory: "infrastructure/meeting-broker", scripts: { "check-types": "types", test: "test" }, dependencies: ["@q9labsai/chalk-client"], isPublic: false },
 ];
 
 function selected(plan, id) {
@@ -33,6 +34,15 @@ test("client changes include transitive workspace dependents and one test task",
     ["tests"],
   );
   assert.equal(testTask.command.at(-1), "--coverage");
+});
+
+test("meeting broker changes select its type check and coverage tests", () => {
+  const plan = createGatePlan(["infrastructure/meeting-broker/src/worker.ts"], { workspaces });
+  const typeTask = plan.tasks.find((task) => task.id === "types");
+  const testTask = plan.tasks.find((task) => task.id === "tests");
+  assert.equal(plan.full, false);
+  assert.deepEqual(typeTask.command, ["pnpm", "--filter", "@chalk/meeting-broker", "run", "check-types"]);
+  assert.deepEqual(testTask.command, ["pnpm", "--filter", "@chalk/meeting-broker", "run", "test", "--coverage"]);
 });
 
 test("API changes select migrated service gates and contracts", () => {

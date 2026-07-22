@@ -1,0 +1,17 @@
+[Unit]
+Description=Validate Chalk runtime health outside application containers
+After=chalk-cloudflared.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/chalk-runtime-health
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true

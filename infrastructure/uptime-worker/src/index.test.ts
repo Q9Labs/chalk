@@ -82,6 +82,63 @@ describe("chalk ops monitor worker", () => {
     expect(ingestCalls).toHaveLength(__internal.DEFAULT_MONITORS.length);
   });
 
+  it("checks the launch surfaces and supports environment-specific target overrides", () => {
+    expect(__internal.DEFAULT_MONITORS).toEqual([
+      expect.objectContaining({ key: "web.room", url: "https://chalkmeet.com/room", method: "GET" }),
+      expect.objectContaining({ key: "api.health", url: "https://api.chalkmeet.com/healthz", method: "GET" }),
+      expect.objectContaining({ key: "api.readiness", url: "https://api.chalkmeet.com/readyz", method: "GET" }),
+      expect.objectContaining({ key: "sync.health", url: "https://sync.chalkmeet.com/healthz", method: "GET" }),
+      expect.objectContaining({ key: "sync.readiness", url: "https://sync.chalkmeet.com/readyz", method: "GET" }),
+      expect.objectContaining({ key: "broker.health", url: "https://chalkmeet.com/local-chalk/health", method: "GET" }),
+    ]);
+
+    const overridden = __internal.monitorDefinitions({
+      API_MONITOR_BASE_URL: "https://api.staging.example/base?secret=redacted",
+      BROKER_BASE_URL: "https://broker.staging.example/private#fragment",
+      SYNC_BASE_URL: "https://sync.staging.example/ignored",
+      WEB_BASE_URL: "https://web.staging.example/ignored",
+    });
+    expect(overridden.map(({ key, url }) => ({ key, url }))).toEqual([
+      { key: "web.room", url: "https://web.staging.example/room" },
+      { key: "api.health", url: "https://api.staging.example/healthz" },
+      { key: "api.readiness", url: "https://api.staging.example/readyz" },
+      { key: "sync.health", url: "https://sync.staging.example/healthz" },
+      { key: "sync.readiness", url: "https://sync.staging.example/readyz" },
+      { key: "broker.health", url: "https://broker.staging.example/local-chalk/health" },
+    ]);
+  });
+
+  it("ingests failed and recovered component status without exposing it from the public worker response", async () => {
+    let syncReady = false;
+    const ingestedStatuses: Array<{ monitor_key: string; status: string; error_code?: string }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("/api/v1/ops/ingest/monitor-results")) {
+        ingestedStatuses.push(JSON.parse(String(init?.body)) as { monitor_key: string; status: string; error_code?: string });
+        return createResponse(202, JSON.stringify({ ok: true }));
+      }
+      if (url === "https://sync.chalkmeet.com/readyz" && !syncReady) {
+        return createResponse(503, "not ready");
+      }
+      return createResponse(200, "ok");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const env = createEnv({ CHECK_RETRIES: "0" });
+    const failed = await runMonitorCycle(env, new Date("2026-04-14T12:00:00Z"));
+    expect(failed).toMatchObject({ checked_count: 6, healthy_count: 5, failed_count: 1 });
+    expect(ingestedStatuses).toContainEqual(expect.objectContaining({ monitor_key: "sync.readiness", status: "failed", error_code: "unexpected_status" }));
+
+    syncReady = true;
+    ingestedStatuses.length = 0;
+    const recovered = await runMonitorCycle(env, new Date("2026-04-14T12:05:00Z"));
+    expect(recovered).toMatchObject({ checked_count: 6, healthy_count: 6, failed_count: 0 });
+    expect(ingestedStatuses).toContainEqual(expect.objectContaining({ monitor_key: "sync.readiness", status: "healthy" }));
+
+    const publicResponse = await worker.fetch(new Request("https://chalk-uptime-worker.example/"), env);
+    await expect(publicResponse.json()).resolves.toEqual({ ok: true, worker: "chalk-uptime-worker" });
+  });
+
   it("buffers failed ingests when an R2 bucket binding is present", async () => {
     const { bucket, stored } = createInMemoryBucket();
 

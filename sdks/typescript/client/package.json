@@ -84,6 +84,10 @@
       "default": "./dist/sync/index.js"
     },
     "./server": {
+      "workerd": {
+        "types": "./dist/server/index.d.ts",
+        "default": "./dist/server/index.js"
+      },
       "browser": {
         "import": {
           "types": "./dist/server/server-only.d.ts",

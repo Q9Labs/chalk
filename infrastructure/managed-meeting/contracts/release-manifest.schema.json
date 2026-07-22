@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chalkmeet.com/schemas/managed-meeting-release-manifest-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "release_id", "generated_at", "source_revision", "source_tree_state", "architectures", "images", "database_compatibility", "protocol_compatibility", "runtime_artifacts"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "release_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "source_tree_state": { "enum": ["clean", "dirty"] },
+    "architectures": {
+      "oneOf": [{ "const": ["linux/arm64"] }, { "const": ["linux/amd64", "linux/arm64"] }]
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api", "sync", "redis", "cloudflared"],
+      "properties": {
+        "api": { "$ref": "#/$defs/image" },
+        "sync": { "$ref": "#/$defs/image" },
+        "redis": { "$ref": "#/$defs/image" },
+        "cloudflared": { "$ref": "#/$defs/image" }
+      }
+    },
+    "database_compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "major", "minimum_migration", "maximum_migration"],
+      "properties": {
+        "engine": { "const": "postgresql" },
+        "major": { "const": 18 },
+        "minimum_migration": { "const": 20260713130000 },
+        "maximum_migration": { "type": "null" }
+      }
+    },
+    "protocol_compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sync"],
+      "properties": { "sync": { "const": 3 } }
+    },
+    "runtime_artifacts": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    }
+  },
+  "$defs": {
+    "image": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"
+    }
+  }
+}

@@ -126,6 +126,28 @@ export type ParticipantAdmission = {
   readonly sync_token?: string;
 };
 
+export type RemoveParticipantInput = { readonly participantSessionGeneration: number };
+
+export type ParticipantRemoval = {
+  readonly lifecycle_intent: {
+    readonly created_at: string;
+    readonly id: string;
+    readonly intent_name: string;
+    readonly participant_session_generation: number | null;
+    readonly participant_session_id: string | null;
+    readonly request_key: string;
+    readonly status: string;
+  };
+  readonly participant: {
+    readonly generation: number;
+    readonly id: string;
+    readonly room_id: string;
+    readonly session_id: string;
+    readonly status: string;
+    readonly tenant_id: string;
+  };
+};
+
 export type IssueParticipantAccessInput = { readonly participantSessionGeneration: number; readonly currentMediaToken: string; readonly replaceMediaConnection?: false } | { readonly participantSessionGeneration: number; readonly currentMediaToken?: never; readonly replaceMediaConnection: true };
 
 export type APIKey = {
@@ -161,6 +183,7 @@ export type ChalkServerClient = {
   readonly participants: {
     admit(roomId: string, sessionId: string, input: AdmitParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantAdmission>;
     issueAccess(roomId: string, sessionId: string, participantSessionId: string, input: IssueParticipantAccessInput): Promise<ParticipantAccess>;
+    remove(roomId: string, sessionId: string, participantSessionId: string, input: RemoveParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantRemoval>;
   };
   readonly apiKeys: {
     create(input: CreateAPIKeyInput): Promise<APIKeyWithSecret>;

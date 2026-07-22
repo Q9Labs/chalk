@@ -19,6 +19,10 @@ select
     sessions.deadline_at,
     sessions.deadline_generation
 from room_sessions sessions
+join sync_session_control control on
+    control.tenant_id = sessions.tenant_id
+    and control.room_id = sessions.room_id
+    and control.session_id = sessions.id
 where
     sessions.status = 'active'
     and sessions.deadline_at <= now()

@@ -32,6 +32,24 @@ describe("local Chalk access client", () => {
     expectRequest(fetchMock, "/local-chalk/browser-session", { displayName: "Ada" });
   });
 
+  it("forwards the URL-fragment invite only to the production same-origin broker", async () => {
+    vi.stubGlobal("location", { hostname: "chalkmeet.com" });
+    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", inviteToken: "i".repeat(43), syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
+
+    await createLocalBrowserSession("Grace", "i".repeat(43));
+
+    expectRequest(fetchMock, "/local-chalk/browser-session", { displayName: "Grace", inviteToken: "i".repeat(43) });
+  });
+
+  it("does not send production invite state to the localhost Node BFF", async () => {
+    vi.stubGlobal("location", { hostname: "127.0.0.1" });
+    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "http://127.0.0.1:8080", syncURL: "ws://127.0.0.1:4100/v3/sync" }, 201));
+
+    await createLocalBrowserSession("Ada", "i".repeat(43));
+
+    expectRequest(fetchMock, "/local-chalk/browser-session", { displayName: "Ada" });
+  });
+
   it("does not request participant access until the SDK invokes the provider", async () => {
     const fetchMock = stubFetch(jsonResponse(access, 201));
 

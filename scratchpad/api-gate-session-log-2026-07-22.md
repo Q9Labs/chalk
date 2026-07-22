@@ -1,0 +1,9 @@
+# API gate session log — 2026-07-22
+
+- 2026-07-22: Started the canonical `apps/api/scripts/gate.sh` completion lane against the shared production-launch tree. Scope is limited to the failing session-lifecycle repository test setup and any directly required Go dependency patch.
+- 2026-07-22: Reproduced the deadline scheduler failure exactly: `sync_external_operations_tenant_id_room_id_session_id_fkey` rejected `maximum_duration_expired`. The local database contained overdue pre-sync sessions with no `sync_session_control`; the global claim query selected those rows and then tried to create an operation that correctly requires sync control.
+- 2026-07-22: Restricted `ClaimDueSessionDeadlines` to sessions joined to `sync_session_control`, regenerated sqlc, and added a focused legacy-session case to the repository integration test. The scheduler now ignores sessions it cannot own and processes the v3-controlled session.
+- 2026-07-22: Removed the transcription source integration test's dead `127.0.0.1:56432` fallback. It still honors `CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL`, then uses `CHALK_DATABASE_URL`, then the canonical local API database.
+- 2026-07-22: Upgraded `golang.org/x/text` from v0.38.0 to the fixed v0.39.0 release, including its required `x/mod`, `x/telemetry`, and `x/tools` dependency floor. `govulncheck` now reports zero reachable vulnerabilities.
+- 2026-07-22: `apps/api/scripts/gate.sh` passed in full: tests, lifecycle smoke, `go vet`, staticcheck, and govulncheck all green. The focused repository tests also passed uncached.
+- 2026-07-22: Ran `apps/api/scripts/perf-local.sh` against a freshly migrated isolated local database and removed that database afterward. The run completed successfully at 11,545.7 req/s load and 12,305.9 req/s stress; raw artifacts remain untracked under `apps/api/.private/`.

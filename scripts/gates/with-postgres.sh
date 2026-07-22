@@ -31,14 +31,22 @@ trap cleanup EXIT INT TERM
   -p 127.0.0.1::5432 \
   -d postgres:18.3-alpine >/dev/null
 
+postgres_ready() {
+  # pg_isready can succeed against the entrypoint's temporary bootstrap server
+  # immediately before that server shuts down. Wait until PostgreSQL is PID 1,
+  # then prove the configured database accepts a real query.
+  "${docker_bin}" exec "${container}" sh -c 'test "$(cat /proc/1/comm)" = postgres' >/dev/null 2>&1 &&
+    "${docker_bin}" exec "${container}" psql -U postgres -d chalk_gate -v ON_ERROR_STOP=1 -Atqc 'select 1' >/dev/null 2>&1
+}
+
 for _ in {1..60}; do
-  if "${docker_bin}" exec "${container}" pg_isready -U postgres -d chalk_gate >/dev/null 2>&1; then
+  if postgres_ready; then
     break
   fi
   sleep 0.5
 done
 
-if ! "${docker_bin}" exec "${container}" pg_isready -U postgres -d chalk_gate >/dev/null 2>&1; then
+if ! postgres_ready; then
   echo "Gate PostgreSQL service did not become ready" >&2
   "${docker_bin}" logs "${container}" >&2 || true
   exit 1

@@ -14,6 +14,7 @@ describe("createChalkServerClient", () => {
       requests.push({ init, url: String(input) });
       if (String(input).endsWith("/participants")) return jsonResponse({ ...lifecycle(), access: accessWire() }, 201);
       if (String(input).endsWith("/access")) return jsonResponse(accessWire(), 201);
+      if (String(input).endsWith("/remove")) return jsonResponse(removal(), 202);
       return jsonResponse(room(), 201);
     });
     const client = createChalkServerClient({
@@ -36,19 +37,24 @@ describe("createChalkServerClient", () => {
       participantSessionGeneration: 2,
       currentMediaToken: "current-media-token",
     });
+    const removed = await client.participants.remove(roomId, sessionId, participantId, { participantSessionGeneration: 2 }, { idempotencyKey: "remove-participant" });
 
     expect(requests.map(({ url }) => url)).toEqual([
       `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms`,
       `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms/${roomId}/sessions/${sessionId}/participants`,
       `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms/${roomId}/sessions/${sessionId}/participants/${participantId}/access`,
+      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms/${roomId}/sessions/${sessionId}/participants/${participantId}/remove`,
     ]);
     const headers = new Headers(requests[0]?.init?.headers);
     expect(headers.get("authorization")).toBe("Bearer chalk_sk_sentinel.secret");
     expect(headers.get("x-chalk-journey-id")).toBe("journey");
     expect(headers.get("traceparent")).toContain("11111111111111111111111111111111");
     expect(JSON.parse(String(requests[2]?.init?.body))).toEqual({ current_media_token: "current-media-token", participant_session_generation: 2, replace_media_connection: false });
+    expect(JSON.parse(String(requests[3]?.init?.body))).toEqual({ participant_session_generation: 2 });
+    expect(new Headers(requests[3]?.init?.headers).get("idempotency-key")).toBe("remove-participant");
     expect(admission.access).toEqual(access);
     expect(access.subject).toEqual({ tenantId, roomId, sessionId, participantSessionId: participantId, participantGeneration: 2 });
+    expect(removed.participant.status).toBe("removing");
   });
 
   it("uses the exact bounded retry matrix and preserves a supplied idempotency key", async () => {
@@ -154,6 +160,10 @@ function lifecycle() {
     lifecycle_intent: { created_at: "2026-01-01T00:00:00Z", id: "55555555-5555-4555-8555-555555555555", intent_name: "join", participant_session_generation: 2, participant_session_id: participantId, request_key: "request", status: "applied" },
     participant: { generation: 2, id: participantId, room_id: roomId, session_id: sessionId, status: "active", tenant_id: tenantId },
   };
+}
+
+function removal() {
+  return { lifecycle_intent: lifecycle().lifecycle_intent, participant: { ...lifecycle().participant, status: "removing" } };
 }
 
 function accessWire() {

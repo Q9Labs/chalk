@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "management": "remote",
+  "environment": "production",
+  "routes": [
+    {
+      "hostname": "api.chalkmeet.com",
+      "service": "http://chalk-api:8080"
+    },
+    {
+      "hostname": "sync.chalkmeet.com",
+      "service": "http://chalk-sync:4100",
+      "websocket": true
+    },
+    {
+      "service": "http_status:404"
+    }
+  ]
+}

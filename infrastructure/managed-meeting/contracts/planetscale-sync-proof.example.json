@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "provider": "planetscale-postgresql",
+  "postgresql_major": 18,
+  "connection_mode": "direct",
+  "role_query_supported": false,
+  "pg_stat_replication_visible": false,
+  "synchronous_standby_names_configured": false,
+  "synchronous_standbys": 0,
+  "evidence_id": "",
+  "verified_at": ""
+}

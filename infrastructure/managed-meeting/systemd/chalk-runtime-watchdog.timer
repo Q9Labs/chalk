@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Chalk host watchdog every 15 seconds
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=15s
+AccuracySec=1s
+Unit=chalk-runtime-watchdog.service
+
+[Install]
+WantedBy=timers.target

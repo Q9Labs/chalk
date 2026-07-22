@@ -14,6 +14,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Production meeting launch infrastructure for the restored web experience,
+  including a capability-secured Cloudflare broker, rootless managed runtime
+  artifacts for the API and Sync services, and canonical web, API, Sync, and
+  broker availability monitors.
+- A meeting-only production API profile that preserves fail-closed defaults
+  while allowing unrelated integrations and transcription capabilities to be
+  explicitly disabled for the initial hosted meeting release.
 - Connected React SDK meeting experience restored from the original Chalk design,
   including a device-aware prejoin lobby, responsive live meeting shell, layout
   controls, participant list, invitations, remote audio playback, camera-independent
@@ -115,6 +122,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Made legacy Session deadline claiming compatible with Sessions created before
+  Sync control records existed, and updated affected Go and Elixir dependencies
+  to patched releases.
 - Made the localhost web demo assign the first participant as host and made SFU
   track responses project authoritative local locations so SDK publishing can
   complete against Cloudflare's location-less provider response.

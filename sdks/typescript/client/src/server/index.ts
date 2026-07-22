@@ -18,6 +18,8 @@ export type {
   ListAPIKeysInput,
   ParticipantAccess,
   ParticipantAdmission,
+  ParticipantRemoval,
+  RemoveParticipantInput,
   Room,
   RoomSession,
   RotateAPIKeyInput,

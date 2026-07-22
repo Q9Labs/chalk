@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+manifest="${1:-}"
+output="${2:-}"
+
+if [[ -z "${manifest}" || -z "${output}" ]]; then
+  echo "usage: render-runtime <release-manifest.json> <empty-output-directory>" >&2
+  exit 2
+fi
+command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+if [[ ! -f "${manifest}" ]]; then
+  echo "release manifest is not a regular file" >&2
+  exit 1
+fi
+if [[ -e "${output}" && -n "$(find "${output}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+  echo "refusing to render into a non-empty directory" >&2
+  exit 1
+fi
+
+api_image="$(jq -er '.images.api' "${manifest}")"
+sync_image="$(jq -er '.images.sync' "${manifest}")"
+redis_image="$(jq -er '.images.redis' "${manifest}")"
+cloudflared_image="$(jq -er '.images.cloudflared' "${manifest}")"
+image_pattern='^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$'
+for image in "${api_image}" "${sync_image}" "${redis_image}" "${cloudflared_image}"; do
+  [[ "${image}" =~ ${image_pattern} ]] || { echo "manifest contains a non-digest image reference" >&2; exit 1; }
+done
+
+mkdir -p "${output}/quadlet" "${output}/systemd"
+for template in "${managed_root}"/quadlet/*; do
+  name="$(basename "${template}" .in)"
+  contents="$(<"${template}")"
+  contents="${contents//__API_IMAGE_REFERENCE__/${api_image}}"
+  contents="${contents//__SYNC_IMAGE_REFERENCE__/${sync_image}}"
+  contents="${contents//__REDIS_IMAGE_REFERENCE__/${redis_image}}"
+  contents="${contents//__CLOUDFLARED_IMAGE_REFERENCE__/${cloudflared_image}}"
+  if [[ "${contents}" == *'__'* ]]; then
+    echo "unresolved placeholder in ${name}" >&2
+    exit 1
+  fi
+  printf '%s\n' "${contents}" >"${output}/quadlet/${name}"
+done
+cp "${managed_root}"/systemd/* "${output}/systemd/"
+cp "${manifest}" "${output}/release-manifest.json"
+
+echo "PASS runtime=${output}"

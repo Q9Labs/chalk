@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+env_root=""
+secret_root=""
+manifest=""
+sync_proof=""
+rendered_root=""
+allow_dirty=false
+
+usage() {
+  echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--rendered-root <dir>] [--allow-dirty]" >&2
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --env-root) env_root="${2:-}"; shift 2 ;;
+    --secret-root) secret_root="${2:-}"; shift 2 ;;
+    --manifest) manifest="${2:-}"; shift 2 ;;
+    --sync-proof) sync_proof="${2:-}"; shift 2 ;;
+    --rendered-root) rendered_root="${2:-}"; shift 2 ;;
+    --allow-dirty) allow_dirty=true; shift ;;
+    *) usage; exit 2 ;;
+  esac
+done
+
+command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
+if [[ -z "${env_root}" || -z "${secret_root}" || -z "${manifest}" || -z "${sync_proof}" ]]; then
+  usage
+  exit 2
+fi
+
+fail() {
+  echo "FAIL $1" >&2
+  exit 1
+}
+
+secure_regular_file() {
+  local file="$1"
+  [[ -f "${file}" && ! -L "${file}" ]] || fail "required input is not a regular file: ${file}"
+  [[ -s "${file}" ]] || fail "required input is empty: ${file}"
+  local mode
+  if stat -f '%Lp' "${file}" >/dev/null 2>&1; then
+    mode="$(stat -f '%Lp' "${file}")"
+  else
+    mode="$(stat -c '%a' "${file}")"
+  fi
+  if ((8#${mode} & 077)); then
+    fail "required input must not grant group or other permissions: ${file}"
+  fi
+}
+
+env_value() {
+  local file="$1"
+  local name="$2"
+  awk -v name="${name}" '
+    index($0, name "=") == 1 { count++; value=substr($0, length(name) + 2) }
+    END { if (count == 1 && length(value) > 0) print value; else exit 1 }
+  ' "${file}"
+}
+
+require_env() {
+  local file="$1"
+  local name="$2"
+  env_value "${file}" "${name}" >/dev/null || fail "${name} must occur exactly once with a non-empty value in ${file}"
+}
+
+api_env="${env_root}/api.env"
+sync_env="${env_root}/sync.env"
+secure_regular_file "${api_env}"
+secure_regular_file "${sync_env}"
+if grep -Eq '__[A-Z0-9_]+__' "${api_env}" "${sync_env}"; then
+  fail "runtime environment files contain unresolved placeholders"
+fi
+
+api_required=(
+  CHALK_API_ADDR CHALK_API_CORS_ALLOWED_ORIGINS CHALK_API_ENV
+  CHALK_API_TRUSTED_PROXY_CIDRS CHALK_API_VERSION
+  CHALK_DATABASE_URL CHALK_REDIS_URL CHALK_SYNC_TOKEN_ISSUER
+  CHALK_SYNC_TOKEN_AUDIENCE CHALK_SYNC_TOKEN_KEY_ID CHALK_SYNC_TOKEN_PRIVATE_KEY
+  CHALK_PROVIDER_BRIDGE_ADDRESS CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE
+  CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE
+  CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN CHALK_CLOUDFLARE_ACCOUNT_ID
+  CHALK_CLOUDFLARE_API_TOKEN CHALK_CLOUDFLARE_REALTIME_APP_ID
+  CHALK_CLOUDFLARE_REALTIME_APP_SECRET CHALK_INTEGRATIONS_ENABLED
+  CHALK_TRANSCRIPTION_ENABLED CHALK_WEBHOOK_ENCRYPTION_KEY
+)
+sync_required=(
+  PORT CHALK_SYNC_BIND_IP CHALK_DATABASE_URL CHALK_SYNC_DATABASE_POOL_SIZE
+  CHALK_SYNC_TOKEN_ISSUER CHALK_SYNC_TOKEN_AUDIENCE CHALK_SYNC_TOKEN_PUBLIC_KEYS
+  CHALK_SYNC_MAX_WAL_LAG_BYTES CHALK_SYNC_PROVIDER_BRIDGE_URL
+  CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE
+  CHALK_SYNC_PROVIDER_BRIDGE_CAFILE
+)
+for name in "${api_required[@]}"; do require_env "${api_env}" "${name}"; done
+for name in "${sync_required[@]}"; do require_env "${sync_env}" "${name}"; done
+
+case "$(env_value "${api_env}" CHALK_INTEGRATIONS_ENABLED)" in
+  true) require_env "${api_env}" CHALK_COMPOSIO_API_KEY ;;
+  false) ;;
+  *) fail "CHALK_INTEGRATIONS_ENABLED must be true or false" ;;
+esac
+case "$(env_value "${api_env}" CHALK_TRANSCRIPTION_ENABLED)" in
+  true)
+    for name in CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME CHALK_R2_ACCOUNT_ID CHALK_R2_ACCESS_KEY_ID CHALK_R2_SECRET_ACCESS_KEY CHALK_R2_BUCKET; do
+      require_env "${api_env}" "${name}"
+    done
+    ;;
+  false) ;;
+  *) fail "CHALK_TRANSCRIPTION_ENABLED must be true or false" ;;
+esac
+
+[[ "$(env_value "${api_env}" CHALK_API_ENV)" == production ]] || fail "CHALK_API_ENV must be production"
+[[ "$(env_value "${api_env}" CHALK_API_ADDR)" == 0.0.0.0:8080 ]] || fail "CHALK_API_ADDR must match the Quadlet port"
+[[ "$(env_value "${sync_env}" PORT)" == 4100 ]] || fail "Sync PORT must match the Quadlet port"
+[[ "$(env_value "${api_env}" CHALK_REDIS_URL)" == redis://redis:6379/0 ]] || fail "CHALK_REDIS_URL must use the private Redis network alias"
+[[ "$(env_value "${sync_env}" CHALK_SYNC_PROVIDER_BRIDGE_URL)" == https://chalk-api:8443 ]] || fail "Sync provider bridge URL must use the private API alias"
+for file in "${api_env}" "${sync_env}"; do
+  database_url="$(env_value "${file}" CHALK_DATABASE_URL)"
+  [[ "${database_url}" =~ ^postgres(ql)?:// ]] || fail "CHALK_DATABASE_URL must be a PostgreSQL URL"
+  [[ "${database_url}" == *'sslmode=verify-full'* ]] || fail "CHALK_DATABASE_URL must use sslmode=verify-full"
+done
+
+certificates=(
+  provider-bridge/api-server.crt
+  provider-bridge/sync-client-ca.crt
+  provider-bridge/sync-client.crt
+  provider-bridge/api-server-ca.crt
+)
+keys=(provider-bridge/api-server.key provider-bridge/sync-client.key)
+for relative in "${certificates[@]}"; do
+  file="${secret_root}/${relative}"
+  secure_regular_file "${file}"
+  openssl x509 -in "${file}" -noout >/dev/null 2>&1 || fail "invalid X.509 input: ${file}"
+done
+for relative in "${keys[@]}"; do
+  file="${secret_root}/${relative}"
+  secure_regular_file "${file}"
+  openssl pkey -in "${file}" -noout >/dev/null 2>&1 || fail "invalid private-key input: ${file}"
+done
+secure_regular_file "${secret_root}/cloudflare/tunnel-token"
+
+secure_regular_file "${sync_proof}"
+jq -e '
+  .schema_version == 1 and
+  .provider == "planetscale-postgresql" and
+  .postgresql_major == 18 and
+  .connection_mode == "direct" and
+  .role_query_supported == true and
+  .pg_stat_replication_visible == true and
+  .synchronous_standby_names_configured == true and
+  .synchronous_standbys >= 1 and
+  (.evidence_id | type == "string" and length > 0) and
+  (.verified_at | type == "string" and length > 0)
+' "${sync_proof}" >/dev/null || fail "PlanetScale does not have an accepted Sync production-probe proof"
+
+[[ -f "${manifest}" && ! -L "${manifest}" ]] || fail "release manifest is not a regular file"
+image_pattern='^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$'
+for component in api sync redis cloudflared; do
+  image="$(jq -er ".images.${component}" "${manifest}")" || fail "manifest is missing the ${component} image"
+  [[ "${image}" =~ ${image_pattern} ]] || fail "manifest ${component} image is not digest-addressed"
+done
+jq -e '
+  .schema_version == 1 and
+  (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
+  .database_compatibility == {
+    engine: "postgresql", major: 18, minimum_migration: 20260713130000, maximum_migration: null
+  } and
+  .protocol_compatibility.sync == 3
+' "${manifest}" >/dev/null || fail "release manifest compatibility contract is invalid"
+if [[ "${allow_dirty}" != true && "$(jq -r '.source_tree_state' "${manifest}")" != clean ]]; then
+  fail "dirty source manifests cannot be promoted"
+fi
+
+while IFS=$'\t' read -r relative expected; do
+  [[ "${relative}" != /* && "${relative}" != *'..'* ]] || fail "manifest contains an unsafe artifact path"
+  file="${managed_root}/${relative}"
+  [[ -f "${file}" ]] || fail "manifest artifact is missing: ${relative}"
+  if command -v sha256sum >/dev/null; then
+    actual="$(sha256sum "${file}" | awk '{print $1}')"
+  else
+    actual="$(shasum -a 256 "${file}" | awk '{print $1}')"
+  fi
+  [[ "${actual}" == "${expected}" ]] || fail "manifest artifact digest mismatch: ${relative}"
+done < <(jq -r '.runtime_artifacts | to_entries[] | [.key, .value] | @tsv' "${manifest}")
+
+jq -e '
+  .schema_version == 1 and .management == "remote" and .environment == "production" and
+  .routes == [
+    {hostname:"api.chalkmeet.com", service:"http://chalk-api:8080"},
+    {hostname:"sync.chalkmeet.com", service:"http://chalk-sync:4100", websocket:true},
+    {service:"http_status:404"}
+  ]
+' "${managed_root}/cloudflare/ingress.production.json" >/dev/null || fail "Cloudflare ingress contract is invalid"
+
+if [[ -n "${rendered_root}" ]]; then
+  for file in chalk-api.container chalk-sync.container chalk-redis.container chalk-cloudflared.container; do
+    [[ -f "${rendered_root}/quadlet/${file}" ]] || fail "rendered Quadlet is missing: ${file}"
+    grep -Eq '^Image=[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' "${rendered_root}/quadlet/${file}" || fail "rendered Quadlet image is not immutable: ${file}"
+    ! grep -q '__' "${rendered_root}/quadlet/${file}" || fail "rendered Quadlet contains a placeholder: ${file}"
+  done
+  [[ -f "${rendered_root}/quadlet/chalk-runtime.network" ]] || fail "rendered network Quadlet is missing"
+  [[ -f "${rendered_root}/systemd/chalk-runtime.target" ]] || fail "rendered runtime target is missing"
+  expected_rendered_root="$(mktemp -d)"
+  trap 'rm -rf "${expected_rendered_root}"' EXIT
+  "${managed_root}/scripts/render-runtime" "${manifest}" "${expected_rendered_root}" >/dev/null
+  diff -qr "${expected_rendered_root}/quadlet" "${rendered_root}/quadlet" >/dev/null || fail "rendered Quadlets differ from the release templates"
+  diff -qr "${expected_rendered_root}/systemd" "${rendered_root}/systemd" >/dev/null || fail "rendered systemd units differ from the release templates"
+  cmp -s "${expected_rendered_root}/release-manifest.json" "${rendered_root}/release-manifest.json" || fail "rendered release manifest differs from the promoted manifest"
+fi
+
+echo "PASS runtime inputs, release manifest, route contract, and rendered units"

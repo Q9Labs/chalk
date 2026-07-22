@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "${managed_root}/../.." && pwd)"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "${fixture_root}"' EXIT
+
+mkdir -p "${fixture_root}/env" "${fixture_root}/secrets/provider-bridge" "${fixture_root}/secrets/cloudflare"
+
+render_example_env() {
+  local source="$1"
+  local output="$2"
+  sed -E \
+    -e 's|__SECRET_PLANETSCALE_PGBOUNCER_URL_WITH_SSLMODE_VERIFY_FULL__|postgresql://test:test@pgbouncer.example.com:6432/chalk?sslmode=verify-full|' \
+    -e 's|__SECRET_PLANETSCALE_DIRECT_URL_WITH_SSLMODE_VERIFY_FULL__|postgresql://test:test@primary.example.com:5432/chalk?sslmode=verify-full|' \
+    -e 's|__SECRET_JSON_KEYRING__|{"test":"dGVzdA"}|' \
+    -e 's|__SECRET_AT_LEAST_32_BYTES__|test-only-32-byte-workload-secret|' \
+    -e 's|__SECRET_BASE64_32_BYTES__|MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=|' \
+    -e 's|__RELEASE_ID__|test-release|' \
+    -e 's|__SECRET[A-Z0-9_]*__|test-value|g' \
+    "${source}" >"${output}"
+}
+
+render_example_env "${managed_root}/env/api.env.example" "${fixture_root}/env/api.env"
+render_example_env "${managed_root}/env/sync.env.example" "${fixture_root}/env/sync.env"
+
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=chalk-runtime-test' \
+  -keyout "${fixture_root}/test.key" -out "${fixture_root}/test.crt" >/dev/null 2>&1
+for name in api-server.crt sync-client-ca.crt sync-client.crt api-server-ca.crt; do
+  cp "${fixture_root}/test.crt" "${fixture_root}/secrets/provider-bridge/${name}"
+done
+for name in api-server.key sync-client.key; do
+  cp "${fixture_root}/test.key" "${fixture_root}/secrets/provider-bridge/${name}"
+done
+printf 'test-only-tunnel-token\n' >"${fixture_root}/secrets/cloudflare/tunnel-token"
+
+jq -n '{
+  schema_version: 1,
+  provider: "planetscale-postgresql",
+  postgresql_major: 18,
+  connection_mode: "direct",
+  role_query_supported: true,
+  pg_stat_replication_visible: true,
+  synchronous_standby_names_configured: true,
+  synchronous_standbys: 1,
+  evidence_id: "test-only-evidence",
+  verified_at: "2026-07-22T00:00:00Z"
+}' >"${fixture_root}/sync-proof.json"
+chmod 600 "${fixture_root}/env/"* "${fixture_root}/secrets/provider-bridge/"* \
+  "${fixture_root}/secrets/cloudflare/tunnel-token" "${fixture_root}/sync-proof.json"
+
+digest_a="$(printf 'a%.0s' {1..64})"
+digest_b="$(printf 'b%.0s' {1..64})"
+"${managed_root}/scripts/generate-release-manifest" \
+  --api-image "ghcr.io/q9labs/chalk-api@sha256:${digest_a}" \
+  --sync-image "ghcr.io/q9labs/chalk-sync@sha256:${digest_b}" \
+  --output "${fixture_root}/release-manifest.json" \
+  --source-revision "$(git -C "${repo_root}" rev-parse HEAD)" \
+  --allow-dirty >/dev/null
+
+"${managed_root}/scripts/render-runtime" \
+  "${fixture_root}/release-manifest.json" "${fixture_root}/rendered" >/dev/null
+"${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null
+
+cp "${managed_root}/contracts/planetscale-sync-proof.example.json" "${fixture_root}/unverified-sync-proof.json"
+chmod 600 "${fixture_root}/unverified-sync-proof.json"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/unverified-sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "unverified PlanetScale proof was accepted" >&2
+  exit 1
+fi
+
+cp -R "${fixture_root}/rendered" "${fixture_root}/tampered-rendered"
+sed -i.bak 's/^ReadOnly=true$/ReadOnly=false/' "${fixture_root}/tampered-rendered/quadlet/chalk-api.container"
+rm "${fixture_root}/tampered-rendered/quadlet/chalk-api.container.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/tampered-rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "tampered rendered runtime was accepted" >&2
+  exit 1
+fi
+
+echo "PASS managed-meeting config smoke"

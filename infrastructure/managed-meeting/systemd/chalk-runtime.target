@@ -1,0 +1,7 @@
+[Unit]
+Description=Chalk managed meeting runtime
+Wants=chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service chalk-runtime-watchdog.timer
+After=chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service
+
+[Install]
+WantedBy=default.target

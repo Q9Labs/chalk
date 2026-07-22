@@ -109,6 +109,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Auth.SessionTTL != config.DefaultSessionTTL {
 		t.Fatalf("session ttl = %s, want %s", cfg.Auth.SessionTTL, config.DefaultSessionTTL)
 	}
+	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription {
+		t.Fatalf("local capabilities = %#v, want disabled", cfg.Capabilities)
+	}
 	if cfg.Database.URL != config.DefaultDatabaseURL {
 		t.Fatalf("database url = %q, want %q", cfg.Database.URL, config.DefaultDatabaseURL)
 	}
@@ -543,6 +546,7 @@ func TestLoadResend(t *testing.T) {
 }
 
 func TestLoadComposio(t *testing.T) {
+	t.Setenv(config.IntegrationsEnabled, "true")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.ComposioBaseURL, "https://composio.test/api/v3.1")
 	t.Setenv(config.ComposioTimeoutMS, "2500")
@@ -569,6 +573,7 @@ func TestLoadComposio(t *testing.T) {
 
 func TestLoadObservability(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.TranscriptionEnabled, "false")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=require")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
@@ -672,6 +677,7 @@ func TestLoadRejectsInsecureDatabaseURLOutsideLocal(t *testing.T) {
 
 func TestLoadAcceptsTLSDatabaseURLOutsideLocal(t *testing.T) {
 	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.TranscriptionEnabled, "false")
 	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
 	t.Setenv(config.ComposioAPIKey, "composio-key")
 	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
@@ -755,6 +761,95 @@ func TestLoadRejectsMissingComposioAPIKeyOutsideLocal(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsCapabilitiesToEnabledOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+	t.Setenv(config.ComposioAPIKey, "composio-key")
+	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	setProviderBridgeConfig(t)
+	setTranscriptionConfig(t)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Capabilities.Integrations || !cfg.Capabilities.Transcription {
+		t.Fatalf("non-local capabilities = %#v, want enabled", cfg.Capabilities)
+	}
+}
+
+func TestLoadAcceptsExplicitMeetingOnlyCapabilitiesOutsideLocal(t *testing.T) {
+	t.Setenv(config.APIEnvironment, "staging")
+	t.Setenv(config.DatabaseURL, "postgres://db.internal/chalk?sslmode=verify-full")
+	t.Setenv(config.IntegrationsEnabled, "false")
+	t.Setenv(config.TranscriptionEnabled, "false")
+	t.Setenv(config.WebhookEncryptionKey, base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	setProviderBridgeConfig(t)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription {
+		t.Fatalf("meeting-only capabilities = %#v, want disabled", cfg.Capabilities)
+	}
+}
+
+func TestLoadRejectsIncompleteEnabledTranscription(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{
+			name: "missing workload secret",
+			want: config.TranscriptionWorkloadAuthSecret,
+		},
+		{
+			name: "short workload secret",
+			env:  map[string]string{config.TranscriptionWorkloadAuthSecret: "short"},
+			want: config.TranscriptionWorkloadAuthSecret,
+		},
+		{
+			name: "missing dispatcher",
+			env:  map[string]string{config.TranscriptionWorkloadAuthSecret: strings.Repeat("s", 32)},
+			want: config.TranscriptionDispatcherFunction,
+		},
+		{
+			name: "missing object storage",
+			env: map[string]string{
+				config.TranscriptionWorkloadAuthSecret: strings.Repeat("s", 32),
+				config.TranscriptionDispatcherFunction: "chalk-transcription-dispatcher",
+			},
+			want: config.R2Bucket,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(config.TranscriptionEnabled, "true")
+			for name, value := range test.env {
+				t.Setenv(name, value)
+			}
+			_, err := config.Load()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %s rejection", err, test.want)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidCapabilityFlags(t *testing.T) {
+	for _, name := range []string{config.IntegrationsEnabled, config.TranscriptionEnabled} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "sometimes")
+			_, err := config.Load()
+			if err == nil || !strings.Contains(err.Error(), name+" must be true or false") {
+				t.Fatalf("error = %v, want strict boolean rejection", err)
+			}
+		})
+	}
+}
+
 func TestLoadOperationLogsDefaultToAllRequestLogs(t *testing.T) {
 	t.Setenv(config.APIOperationLogs, "1")
 
@@ -775,6 +870,16 @@ func setProviderBridgeConfig(t *testing.T) {
 	t.Setenv(config.ProviderBridgeServerKeyFile, "/run/secrets/provider-bridge-server.key")
 	t.Setenv(config.ProviderBridgeClientCAFile, "/run/secrets/provider-bridge-client-ca.crt")
 	t.Setenv(config.ProviderBridgeSPIFFETrustDomain, "chalk.test")
+}
+
+func setTranscriptionConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv(config.TranscriptionWorkloadAuthSecret, strings.Repeat("s", 32))
+	t.Setenv(config.TranscriptionDispatcherFunction, "chalk-transcription-dispatcher")
+	t.Setenv(config.R2Bucket, "chalk-transcription")
+	t.Setenv(config.R2Endpoint, "https://storage.chalk.test")
+	t.Setenv(config.R2AccessKeyID, "access-key")
+	t.Setenv(config.R2SecretAccessKey, "secret-key")
 }
 
 func TestLoadRejectsInvalidDatabasePoolSettings(t *testing.T) {

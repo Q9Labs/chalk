@@ -129,6 +129,10 @@ export interface Env {
   API_BASE_URL?: string;
   CHALK_OPS_API_BASE_URL?: string;
   ATLAS_BASE_URL?: string;
+  API_MONITOR_BASE_URL?: string;
+  BROKER_BASE_URL?: string;
+  SYNC_BASE_URL?: string;
+  WEB_BASE_URL?: string;
   OPS_INGEST_TOKEN?: string;
   CHALK_OPS_INGEST_TOKEN?: string;
   CHECK_TIMEOUT_MS?: string;
@@ -153,46 +157,86 @@ export interface Env {
   OPS_MANUAL_RUN_TOKEN?: string;
 }
 
-const DEFAULT_MONITORS: readonly MonitorDefinition[] = [
-  {
-    key: "api.health",
-    method: "GET",
-    url: "https://chalk-api.q9labs.ai/health",
-    severity: "critical",
-    expectedStatusCodes: [200],
-  },
-  {
-    key: "api.debug_ping",
-    method: "HEAD",
-    url: "https://chalk-api.q9labs.ai/api/v1/debug/ping",
-    severity: "major",
-    expectedStatusCodes: [200, 204],
-  },
-  {
-    key: "web.home",
-    method: "GET",
-    url: "https://chalkmeet.com/",
-    severity: "critical",
-    expectedStatusCodes: [200],
-  },
-  {
-    key: "web.status",
-    method: "GET",
-    url: "https://chalkmeet.com/status",
-    severity: "major",
-    expectedStatusCodes: [200],
-  },
-];
+const DEFAULT_API_MONITOR_BASE_URL = "https://api.chalkmeet.com";
+const DEFAULT_BROKER_BASE_URL = "https://chalkmeet.com";
+const DEFAULT_SYNC_BASE_URL = "https://sync.chalkmeet.com";
+const DEFAULT_WEB_BASE_URL = "https://chalkmeet.com";
+
+function monitorURL(rawBaseURL: string, pathname: string, variableName: string): string {
+  const url = new URL(rawBaseURL);
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new Error(`${variableName} must be a public HTTPS URL without credentials`);
+  }
+  url.pathname = pathname;
+  url.search = "";
+  url.hash = "";
+  return url.href;
+}
+
+function serviceMonitorDefinitions(env: Env): readonly MonitorDefinition[] {
+  const apiBaseURL = env.API_MONITOR_BASE_URL || DEFAULT_API_MONITOR_BASE_URL;
+  const brokerBaseURL = env.BROKER_BASE_URL || env.WEB_BASE_URL || DEFAULT_BROKER_BASE_URL;
+  const syncBaseURL = env.SYNC_BASE_URL || DEFAULT_SYNC_BASE_URL;
+  const webBaseURL = env.WEB_BASE_URL || DEFAULT_WEB_BASE_URL;
+
+  return [
+    {
+      key: "web.room",
+      method: "GET",
+      url: monitorURL(webBaseURL, "/room", "WEB_BASE_URL"),
+      severity: "critical",
+      expectedStatusCodes: [200],
+    },
+    {
+      key: "api.health",
+      method: "GET",
+      url: monitorURL(apiBaseURL, "/healthz", "API_MONITOR_BASE_URL"),
+      severity: "major",
+      expectedStatusCodes: [200],
+    },
+    {
+      key: "api.readiness",
+      method: "GET",
+      url: monitorURL(apiBaseURL, "/readyz", "API_MONITOR_BASE_URL"),
+      severity: "critical",
+      expectedStatusCodes: [200],
+    },
+    {
+      key: "sync.health",
+      method: "GET",
+      url: monitorURL(syncBaseURL, "/healthz", "SYNC_BASE_URL"),
+      severity: "major",
+      expectedStatusCodes: [200],
+    },
+    {
+      key: "sync.readiness",
+      method: "GET",
+      url: monitorURL(syncBaseURL, "/readyz", "SYNC_BASE_URL"),
+      severity: "critical",
+      expectedStatusCodes: [200],
+    },
+    {
+      key: "broker.health",
+      method: "GET",
+      url: monitorURL(brokerBaseURL, "/local-chalk/health", "BROKER_BASE_URL"),
+      severity: "critical",
+      expectedStatusCodes: [200],
+    },
+  ];
+}
+
+const DEFAULT_MONITORS: readonly MonitorDefinition[] = serviceMonitorDefinitions({});
 
 function monitorDefinitions(env: Env): readonly MonitorDefinition[] {
-  if (!env.ATLAS_BASE_URL) return DEFAULT_MONITORS;
+  const serviceMonitors = serviceMonitorDefinitions(env);
+  if (!env.ATLAS_BASE_URL) return serviceMonitors;
   const atlasURL = new URL(env.ATLAS_BASE_URL);
   if (atlasURL.protocol !== "https:") throw new Error("ATLAS_BASE_URL must use https");
   atlasURL.pathname = "/";
   atlasURL.search = "";
   atlasURL.hash = "";
   return [
-    ...DEFAULT_MONITORS,
+    ...serviceMonitors,
     {
       key: "architecture.access_boundary",
       method: "GET",

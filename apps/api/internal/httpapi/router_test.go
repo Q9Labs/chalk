@@ -559,6 +559,7 @@ func TestHealth(t *testing.T) {
 
 func TestReady(t *testing.T) {
 	res := requestWithOptions(t, http.MethodGet, "/readyz", httpapi.Options{
+		Capabilities: httpapi.CapabilityStatus{Integrations: true},
 		Readiness: readinessCheckerFunc(func(context.Context) error {
 			return nil
 		}),
@@ -571,6 +572,7 @@ func TestReady(t *testing.T) {
 	var body struct {
 		Status       string            `json:"status"`
 		Dependencies map[string]string `json:"dependencies"`
+		Capabilities map[string]string `json:"capabilities"`
 	}
 	decodeJSON(t, res, &body)
 
@@ -580,10 +582,14 @@ func TestReady(t *testing.T) {
 	if body.Dependencies["postgres"] != "ok" {
 		t.Fatalf("postgres readiness = %q, want ok", body.Dependencies["postgres"])
 	}
+	if body.Capabilities["integrations"] != "enabled" || body.Capabilities["transcription"] != "disabled" {
+		t.Fatalf("capabilities = %#v, want integrations enabled and transcription disabled", body.Capabilities)
+	}
 }
 
 func TestReadyUnavailable(t *testing.T) {
 	res := requestWithOptions(t, http.MethodGet, "/readyz", httpapi.Options{
+		Capabilities: httpapi.CapabilityStatus{Transcription: true},
 		Readiness: readinessCheckerFunc(func(context.Context) error {
 			return errors.New("database unavailable")
 		}),
@@ -599,6 +605,9 @@ func TestReadyUnavailable(t *testing.T) {
 	}
 	if body.Dependencies["postgres"] != "unavailable" {
 		t.Fatalf("postgres readiness = %q, want unavailable", body.Dependencies["postgres"])
+	}
+	if body.Capabilities["integrations"] != "disabled" || body.Capabilities["transcription"] != "enabled" {
+		t.Fatalf("capabilities = %#v, want integrations disabled and transcription enabled", body.Capabilities)
 	}
 }
 
@@ -1914,6 +1923,24 @@ func TestListIntegrationServices(t *testing.T) {
 	if len(body.Families[0].Services[0].Actions) != 1 || body.Families[0].Services[0].Actions[0].ID != "send_message" {
 		t.Fatalf("actions = %#v", body.Families[0].Services[0].Actions)
 	}
+}
+
+func TestDisabledIntegrationsReturnServiceUnavailable(t *testing.T) {
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/services", httpapi.Options{})
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusServiceUnavailable)
+	}
+	assertErrorCode(t, res, "service_unavailable")
+}
+
+func TestDisabledTranscriptionReturnsServiceUnavailable(t *testing.T) {
+	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/11111111-1111-1111-1111-111111111111/transcripts", httpapi.Options{})
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusServiceUnavailable)
+	}
+	assertErrorCode(t, res, "service_unavailable")
 }
 
 func TestStartIntegrationConnection(t *testing.T) {
@@ -3659,6 +3686,7 @@ type errorResponseBody struct {
 		Code string `json:"code"`
 	} `json:"error"`
 	Dependencies map[string]string `json:"dependencies"`
+	Capabilities map[string]string `json:"capabilities"`
 }
 
 func mustTenantID(t *testing.T, value string) utilities.ID {

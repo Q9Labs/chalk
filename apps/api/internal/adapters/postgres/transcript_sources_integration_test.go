@@ -8,11 +8,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
-
-const transcriptionSourceTestDatabaseURL = "postgres://postgres:postgres@127.0.0.1:56432/chalk_sync_overhaul?sslmode=disable"
 
 func createTranscriptionSourceTestTables(ctx context.Context, pool *pgxpool.Conn) error {
 	_, err := pool.Exec(ctx, `
@@ -51,7 +50,10 @@ create temp table recording_transcription_source_chunks (
 func TestSeedSourceReplacesPriorChunkGenerations(t *testing.T) {
 	databaseURL := os.Getenv("CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = transcriptionSourceTestDatabaseURL
+		databaseURL = os.Getenv(config.DatabaseURL)
+	}
+	if databaseURL == "" {
+		databaseURL = config.DefaultDatabaseURL
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

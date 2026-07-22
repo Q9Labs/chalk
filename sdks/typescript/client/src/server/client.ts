@@ -1,6 +1,6 @@
 import { ChalkAPIError } from "./errors.js";
 import { createServerRequester } from "./transport.js";
-import type { APIKeyList, APIKeyWithSecret, ChalkServerClient, ChalkServerClientOptions, CreateAPIKeyInput, IssueParticipantAccessInput, ListAPIKeysInput, ParticipantAccess, ParticipantAdmission } from "./types.js";
+import type { APIKeyList, APIKeyWithSecret, ChalkServerClient, ChalkServerClientOptions, CreateAPIKeyInput, IssueParticipantAccessInput, ListAPIKeysInput, ParticipantAccess, ParticipantAdmission, ParticipantRemoval } from "./types.js";
 
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
   const apiKey = required(options.apiKey, "apiKey");
@@ -42,6 +42,15 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
         });
         return participantAccess(access);
       },
+      remove: (roomId, sessionId, participantSessionId, input, idempotency) =>
+        request<ParticipantRemoval>({
+          method: "POST",
+          path: `${tenantPath}/rooms/${segment(roomId)}/sessions/${segment(sessionId)}/participants/${segment(participantSessionId)}/remove`,
+          body: { participant_session_generation: input.participantSessionGeneration },
+          expectedStatus: 202,
+          idempotency,
+          retry: "caller_idempotency",
+        }),
     },
     apiKeys: {
       create: (input) => request<APIKeyWithSecret>({ method: "POST", path: `${tenantPath}/api-keys`, body: apiKeyCreateRequest(input), expectedStatus: 201, retry: "never" }),

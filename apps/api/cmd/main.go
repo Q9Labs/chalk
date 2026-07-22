@@ -100,12 +100,14 @@ func run() error {
 	logger.Info("api starting",
 		"event", "api.starting",
 		"address", cfg.API.Address,
+		"integrations_enabled", cfg.Capabilities.Integrations,
 		"log_format", cfg.Observability.LogFormat,
 		"log_level", cfg.Observability.LogLevel,
 		"otlp_endpoint_configured", cfg.Observability.OTLPEndpoint != "",
 		"operation_logs", cfg.Observability.OperationLogs,
 		"profiler", cfg.Observability.Profiler,
 		"request_logs", cfg.Observability.RequestLogs,
+		"transcription_enabled", cfg.Capabilities.Transcription,
 	)
 
 	pool, err := postgres.Open(context.Background(), cfg.Database)
@@ -197,8 +199,7 @@ func run() error {
 	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries)
 	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
-	transcriptRepository := postgres.NewTranscriptRepositoryWithPool(operationQueries, pool)
-	transcriptService := transcripts.NewService(transcriptRepository)
+	var transcriptService transcripts.Service
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
 	journeyRepository := postgres.NewJourneyRepository(pool)
@@ -245,13 +246,13 @@ func run() error {
 		recordingObjects = recordingStorage
 		transcriptionStorage = &recordingStorage
 	}
-	integrationCatalog, err := integrations.DefaultCatalog()
-	if err != nil {
-		return fmt.Errorf("configure integration catalog: %w", err)
-	}
-	integrationRepository := postgres.NewIntegrationRepository(operationQueries, pool)
-	var integrationProvider integrations.Provider
-	if cfg.Composio.APIKey != "" {
+	var integrationService httpapi.IntegrationService
+	if cfg.Capabilities.Integrations {
+		integrationCatalog, err := integrations.DefaultCatalog()
+		if err != nil {
+			return fmt.Errorf("configure integration catalog: %w", err)
+		}
+		integrationRepository := postgres.NewIntegrationRepository(operationQueries, pool)
 		provider, err := composioadapter.NewAdapter(composioadapter.Config{
 			APIKey:         cfg.Composio.APIKey,
 			BaseURL:        cfg.Composio.BaseURL,
@@ -261,9 +262,9 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure composio: %w", err)
 		}
-		integrationProvider = provider
+		service := integrations.NewService(integrationRepository, provider, integrationCatalog)
+		integrationService = service
 	}
-	integrationService := integrations.NewService(integrationRepository, integrationProvider, integrationCatalog)
 	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)
 	if err != nil {
 		return fmt.Errorf("configure webhook encryption: %w", err)
@@ -280,15 +281,11 @@ func run() error {
 	var transcriptWorker httpapi.TranscriptWorkerService
 	var workloadAuthorizer httpapi.WorkloadAuthorizer
 	var transcriptionAuthority *transcriptionObjectAuthority
-	if cfg.Transcription.WorkloadAuthSecret != "" {
-		if len(cfg.Transcription.WorkloadAuthSecret) < 32 {
-			return fmt.Errorf("%s must contain at least 32 bytes", config.TranscriptionWorkloadAuthSecret)
-		}
+	if cfg.Capabilities.Transcription {
+		transcriptRepository := postgres.NewTranscriptRepositoryWithPool(operationQueries, pool)
+		transcriptService = transcripts.NewService(transcriptRepository)
 		if redisClient == nil || transcriptionStorage == nil {
 			return errors.New("transcription workload auth requires Redis and R2")
-		}
-		if cfg.Transcription.DispatcherFunction == "" {
-			return fmt.Errorf("%s must be set with %s", config.TranscriptionDispatcherFunction, config.TranscriptionWorkloadAuthSecret)
 		}
 		waker, err := lambdawaker.New(context.Background(), cfg.Transcription.DispatcherFunction, logger)
 		if err != nil {
@@ -308,10 +305,12 @@ func run() error {
 		transcriptArtifacts = transcriptService
 		transcriptWorker = transcriptService
 		workloadAuthorizer = authorizer
-	} else if cfg.Observability.Environment != config.DefaultEnvironment {
-		return fmt.Errorf("%s must be set outside local environments", config.TranscriptionWorkloadAuthSecret)
 	}
 	routerOptions := httpapi.Options{
+		Capabilities: httpapi.CapabilityStatus{
+			Integrations:  cfg.Capabilities.Integrations,
+			Transcription: cfg.Capabilities.Transcription,
+		},
 		CORS: httpapi.CORSOptions{
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 		},
@@ -366,6 +365,7 @@ func run() error {
 		Users:                  userService,
 		Webhooks:               webhookService,
 	}
+	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	diagnostics.ApplyHTTP(&routerOptions)
 
 	handler := httpapi.NewRouter(routerOptions)
@@ -476,4 +476,28 @@ func run() error {
 
 func r2Configured(cfg config.R2Config) bool {
 	return cfg.Bucket != "" || cfg.AccountID != "" || cfg.Endpoint != "" || cfg.AccessKeyID != "" || cfg.SecretAccessKey != ""
+}
+
+func applyCapabilityProfile(options *httpapi.Options, capabilities config.CapabilityConfig) {
+	options.Capabilities = httpapi.CapabilityStatus{
+		Integrations:  capabilities.Integrations,
+		Transcription: capabilities.Transcription,
+	}
+	if !capabilities.Integrations {
+		options.Integrations = nil
+	}
+	if capabilities.Transcription {
+		return
+	}
+	options.Transcripts = nil
+	options.TranscriptArtifacts = nil
+	options.TranscriptWorker = nil
+	options.WorkloadAuthorizer = nil
+	options.ChunkAuthority = nil
+	options.ManifestAuthority = nil
+	options.ResultAuthority = nil
+	options.CleanupWorker = nil
+	options.CleanupDeleteAuthority = nil
+	options.FinalizerWorker = nil
+	options.FinalizerAuthority = nil
 }

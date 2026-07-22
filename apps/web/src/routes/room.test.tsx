@@ -30,6 +30,23 @@ describe("public SDK room", () => {
     expect(source).toMatch(/session\s*\.leave\(\)/u);
   });
 
+  it("keeps refresh and navigation teardown separate from an explicit meeting cleanup", () => {
+    const source = roomSource();
+    expect(source).not.toContain("pagehide");
+    expect(source).not.toContain("beaconLocalBrowserSessionCleanup");
+    expect(source.match(/cleanupLocalBrowserSession\(\)/gu)).toHaveLength(1);
+    expect(source).toMatch(/const leave = async \(\) => \{[\s\S]*?await cleanupLocalBrowserSession\(\);[\s\S]*?onLeave\(\);[\s\S]*?\};/u);
+  });
+
+  it("keeps the production invite capability in the URL fragment", () => {
+    const source = roomSource();
+    expect(source).toContain("hash.slice(1)");
+    expect(source).toContain("url.hash = new URLSearchParams({ meeting: inviteToken })");
+    expect(source).not.toContain('searchParams.set("meeting"');
+    expect(source).toContain('url.hash = ""');
+    expect(source).toMatch(/await cleanupLocalBrowserSession\(\);\s*clearMeetingInviteToken\(\);/u);
+  });
+
   it("proxies the narrow local backend without injecting authorization", () => {
     const source = readFileSync(joinPath(process.cwd(), "vite.config.ts"), "utf8");
     expect(source).toContain('"/local-chalk"');
@@ -73,6 +90,10 @@ describe("localhost Chalk backend trust boundary", () => {
         issueAccess: async (...arguments_: unknown[]) => {
           calls.push({ operation: "participants.issueAccess", arguments: arguments_ });
           return { source: "refresh" };
+        },
+        remove: async (...arguments_: unknown[]) => {
+          calls.push({ operation: "participants.remove", arguments: arguments_ });
+          return { participant: { status: "removing" } };
         },
       },
     };
@@ -169,9 +190,24 @@ describe("localhost Chalk backend trust boundary", () => {
       expect(calls.filter((call) => call.operation === "participants.admit").at(-1)?.arguments).toEqual([
         "room-server",
         "session-server",
-        { participant_session_id: "participant-guest", name: "Grace", initial_role: "participant", eligible_roles: ["participant", "cohost"] },
+        { participant_session_id: "participant-guest", name: "Grace", initial_role: "participant", eligible_roles: ["host", "cohost", "participant"] },
         { idempotencyKey: "local-browser-participant-guest" },
       ]);
+
+      const guestCleanup = await fetch(`${url}/local-chalk/cleanup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070", cookie: guestCookie },
+        body: JSON.stringify({}),
+      });
+      expect(guestCleanup.status).toBe(204);
+      expect(calls.find((call) => call.operation === "participants.remove")?.arguments).toEqual(["room-server", "session-server", "participant-guest", { participantSessionGeneration: 7 }, { idempotencyKey: "local-browser-remove-participant-guest-7" }]);
+
+      const staleGuest = await fetch(`${url}/local-chalk/access`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070", cookie: guestCookie },
+        body: JSON.stringify({}),
+      });
+      expect(staleGuest.status).toBe(401);
 
       const cleanup = await fetch(`${url}/local-chalk/cleanup`, {
         method: "POST",
@@ -180,13 +216,6 @@ describe("localhost Chalk backend trust boundary", () => {
       });
       expect(cleanup.status).toBe(204);
       expect(calls.find((call) => call.operation === "sessions.end")?.arguments).toEqual(["room-server", "session-server", { idempotencyKey: "local-browser-end-session-server" }]);
-
-      const staleGuest = await fetch(`${url}/local-chalk/access`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070", cookie: guestCookie },
-        body: JSON.stringify({}),
-      });
-      expect(staleGuest.status).toBe(401);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
