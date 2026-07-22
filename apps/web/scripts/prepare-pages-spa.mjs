@@ -6,6 +6,8 @@ const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
 const indexPath = resolve(clientDir, "index.html");
 const fallback404Path = resolve(clientDir, "404.html");
+const roomDirPath = resolve(clientDir, "room");
+const roomIndexPath = resolve(roomDirPath, "index.html");
 const statusDirPath = resolve(clientDir, "status");
 const statusIndexPath = resolve(statusDirPath, "index.html");
 const serviceWorkerPath = resolve(clientDir, "sw.js");
@@ -22,6 +24,8 @@ if (!existsSync(shellPath)) {
 // Cloudflare Pages: ensure deep-link loads SPA shell (even if rewrites are not applied).
 cpSync(shellPath, indexPath);
 cpSync(shellPath, fallback404Path);
+mkdirSync(roomDirPath, { recursive: true });
+cpSync(shellPath, roomIndexPath);
 mkdirSync(statusDirPath, { recursive: true });
 cpSync(shellPath, statusIndexPath);
 const statusHtml = readFileSync(statusIndexPath, "utf8");
