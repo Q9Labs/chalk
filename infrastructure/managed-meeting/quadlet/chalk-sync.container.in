@@ -29,7 +29,6 @@ HealthInterval=10s
 HealthRetries=3
 HealthStartPeriod=45s
 HealthTimeout=3s
-HealthOnFailure=kill
 Notify=healthy
 LogDriver=journald
 PodmanArgs=--log-opt=tag=chalk-sync
