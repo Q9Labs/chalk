@@ -21,6 +21,23 @@ describe("Cloudflare SFU HTTP transport failures", () => {
     expect(response.tracks?.[0]?.publicationId).toBe(publicationId);
   });
 
+  it("sends force close explicitly so muting does not require an SDP renegotiation", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({ tracks: [{ mid: "0" }] }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const transport = createCloudflareSFUHTTPTransport({ ...routeOptions(), credential: () => "media-token", fetch });
+
+    await transport.closeTracks({
+      connectionId: "connection-1",
+      tracks: [{ mid: "0", source: "camera", publicationId: "publication-1" }],
+      force: true,
+    });
+
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      connection_id: "connection-1",
+      tracks: [{ mid: "0", source: "camera", publication_id: "publication-1" }],
+      force: true,
+    });
+  });
+
   it("requires an explicit media credential source", () => {
     expect(() => createCloudflareSFUHTTPTransport(routeOptions())).toThrowError(expect.objectContaining({ code: "signaling_failed" }));
   });

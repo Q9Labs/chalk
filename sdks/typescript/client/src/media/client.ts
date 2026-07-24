@@ -30,6 +30,7 @@ type LocalTrackState = {
 
 const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
+const CONNECTION_TIMEOUT_MS = 8_000;
 
 export class CloudflareSFUClient implements V3ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly V3MediaPublication[]) => void>();
@@ -292,11 +293,12 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
         await connection.setLocalDescription(offer);
         const requests = transceivers.map(({ state, transceiver }): CloudflareSFUTrackRequest => {
           if (transceiver.mid === null) throw new CloudflareSFUError("Browser did not assign a media section", "media_failed");
-          return { location: "local", mid: transceiver.mid, trackName: state.track.id, source: state.source };
+          return { location: "local", mid: transceiver.mid, trackName: `${state.source}-${globalThis.crypto.randomUUID()}`, source: state.source };
         });
         const response = await this.#requireTransport().addTracks({ connectionId: bootstrap.connectionId, sessionDescription: requireDescription(offer), tracks: requests });
         this.#requireGeneration(generation);
         await connection.setRemoteDescription(requireSFUDescription(response.sessionDescription));
+        await this.#waitForConnection(connection, generation);
         this.#requireGeneration(generation);
         for (const { state, transceiver } of transceivers) {
           const authoritative = response.tracks?.find((track) => track.location === "local" && track.mid === transceiver.mid && track.source === state.source);
@@ -326,7 +328,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     const connectionId = this.#bootstrap.connectionId;
     await this.#serializeSDP(async () => {
       this.#requireGeneration(generation);
-      const response = await this.#requireTransport().closeTracks({ connectionId, tracks });
+      const response = await this.#requireTransport().closeTracks({ connectionId, tracks, force: true });
       this.#requireGeneration(generation);
       await this.#completeRenegotiation(response, connection, connectionId, generation);
     });
@@ -371,6 +373,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
         this.#requireGeneration(generation);
         const responseTracks = response.tracks ?? [];
         await this.#completeRenegotiation(response, connection, connectionId, generation);
+        await this.#waitForConnection(connection, generation);
         await waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5_000);
         this.#requireGeneration(generation);
         return publications.map((publication, index) => {
@@ -405,6 +408,17 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
       () => undefined,
     );
     return result;
+  }
+
+  #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
+    return waitFor(
+      () => {
+        this.#requireGeneration(generation);
+        return connectionIsLive(connection);
+      },
+      CONNECTION_TIMEOUT_MS,
+      "Timed out waiting for the Cloudflare SFU peer connection",
+    );
   }
 
   #observeConnection(connection: RTCPeerConnection, generation: number): void {
@@ -611,6 +625,10 @@ function observeConnectionState(peerState: RTCPeerConnectionState, iceState: RTC
   if (peerState === "disconnected" || iceState === "disconnected") return { phase: "recovering", failure: null };
   if (started && peerState === "connected" && (iceState === "connected" || iceState === "completed")) return { phase: "live", failure: null };
   return null;
+}
+
+function connectionIsLive(connection: RTCPeerConnection): boolean {
+  return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
 }
 
 function safeStopTrack(track: MediaStreamTrack, onError: (error: unknown) => void): void {

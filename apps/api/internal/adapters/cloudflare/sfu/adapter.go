@@ -50,14 +50,6 @@ type SessionMetadata struct {
 	Metadata map[string]string
 }
 
-type apiError struct {
-	Message string `json:"message"`
-}
-
-type apiEnvelope struct {
-	Errors []apiError `json:"errors"`
-}
-
 type createSessionResponse struct {
 	SessionID string `json:"sessionId"`
 }
@@ -72,6 +64,24 @@ type providerTrack struct {
 	Mid       string `json:"mid,omitempty"`
 	TrackName string `json:"trackName"`
 	SessionID string `json:"sessionId,omitempty"`
+}
+
+type addTracksResponse struct {
+	ErrorCode                      string                         `json:"errorCode"`
+	ErrorDescription               string                         `json:"errorDescription"`
+	SessionDescription             *mediaplane.SessionDescription `json:"sessionDescription,omitempty"`
+	Tracks                         []addTrackResult               `json:"tracks"`
+	RequiresImmediateRenegotiation bool                           `json:"requiresImmediateRenegotiation"`
+	requestedLocalTracks           []providerTrack
+}
+
+type addTrackResult struct {
+	Location         string `json:"location"`
+	Mid              string `json:"mid"`
+	TrackName        string `json:"trackName"`
+	SessionID        string `json:"sessionId"`
+	ErrorCode        string `json:"errorCode"`
+	ErrorDescription string `json:"errorDescription"`
 }
 
 type renegotiateRequest struct {
@@ -176,16 +186,24 @@ func (a Adapter) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput)
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
-	var response mediaplane.TracksResponse
 	tracks := make([]providerTrack, 0, len(input.Tracks))
+	localTracks := make([]providerTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
-		tracks = append(tracks, providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID})
+		providerTrack := providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID}
+		tracks = append(tracks, providerTrack)
+		if track.Location == "local" {
+			localTracks = append(localTracks, providerTrack)
+		}
 	}
+	response := addTracksResponse{requestedLocalTracks: localTracks}
 	err := a.request(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), tracksRequest{
 		SessionDescription: input.SessionDescription,
 		Tracks:             tracks,
 	}, &response, "add_tracks")
-	return response, err
+	if err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	return response.toMediaPlane(), nil
 }
 
 func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
@@ -318,6 +336,63 @@ func (r *closeTracksResponse) providerError() error {
 	return nil
 }
 
+func (r *addTracksResponse) providerError() error {
+	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
+		return fmt.Errorf("add sfu tracks: provider rejected request: %w", mediaplane.ErrProviderFailed)
+	}
+
+	type localTrackIdentity struct {
+		mid       string
+		trackName string
+	}
+	requested := make(map[localTrackIdentity]struct{}, len(r.requestedLocalTracks))
+	for _, track := range r.requestedLocalTracks {
+		requested[localTrackIdentity{mid: track.Mid, trackName: track.TrackName}] = struct{}{}
+	}
+
+	seen := make(map[localTrackIdentity]struct{}, len(requested))
+	for _, track := range r.Tracks {
+		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
+			return fmt.Errorf("add sfu tracks: provider rejected track: %w", mediaplane.ErrProviderFailed)
+		}
+		if track.SessionID != "" || track.Location == "remote" {
+			continue
+		}
+
+		identity := localTrackIdentity{mid: track.Mid, trackName: track.TrackName}
+		if _, ok := requested[identity]; !ok || track.Mid == "" || track.TrackName == "" {
+			return fmt.Errorf("add sfu tracks: provider returned unexpected local track: %w", mediaplane.ErrProviderFailed)
+		}
+		if _, duplicate := seen[identity]; duplicate {
+			return fmt.Errorf("add sfu tracks: provider returned duplicate local track: %w", mediaplane.ErrProviderFailed)
+		}
+		seen[identity] = struct{}{}
+	}
+	if len(seen) != len(requested) {
+		return fmt.Errorf("add sfu tracks: provider omitted local track result: %w", mediaplane.ErrProviderFailed)
+	}
+
+	return nil
+}
+
+func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
+	tracks := make([]mediaplane.Track, 0, len(r.Tracks))
+	for _, track := range r.Tracks {
+		tracks = append(tracks, mediaplane.Track{
+			Location:  track.Location,
+			Mid:       track.Mid,
+			TrackName: track.TrackName,
+			SessionID: track.SessionID,
+		})
+	}
+
+	return mediaplane.TracksResponse{
+		SessionDescription:             r.SessionDescription,
+		Tracks:                         tracks,
+		RequiresImmediateRenegotiation: r.RequiresImmediateRenegotiation,
+	}
+}
+
 func closedTrackAbsent(code string) bool {
 	switch strings.ToLower(strings.TrimSpace(code)) {
 	case "session_not_found", "track_already_closed", "track_not_found":
@@ -429,7 +504,7 @@ func (a Adapter) joinForConnection(sessionRef string, participantRef string, con
 	}
 }
 
-func sfuStatusError(statusCode int, payload []byte) error {
+func sfuStatusError(statusCode int, _ []byte) error {
 	providerErr := mediaplane.ErrProviderFailed
 	switch statusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
@@ -440,19 +515,5 @@ func sfuStatusError(statusCode int, payload []byte) error {
 		providerErr = mediaplane.ErrProviderRateLimited
 	}
 
-	message := providerMessage(payload)
-	if message == "" {
-		return fmt.Errorf("sfu provider status %d: %w", statusCode, providerErr)
-	}
-
-	return fmt.Errorf("sfu provider status %d: %s: %w", statusCode, message, providerErr)
-}
-
-func providerMessage(payload []byte) string {
-	var envelope apiEnvelope
-	if err := json.Unmarshal(payload, &envelope); err != nil || len(envelope.Errors) == 0 {
-		return ""
-	}
-
-	return strings.TrimSpace(envelope.Errors[0].Message)
+	return fmt.Errorf("sfu provider status %d: %w", statusCode, providerErr)
 }

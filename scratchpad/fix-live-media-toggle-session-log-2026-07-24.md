@@ -33,3 +33,33 @@
   preflight omitted `PUT`, so the client could not close active SFU tracks after
   disabling a publication. Added `PUT` to the public API CORS contract and a
   regression assertion that preflights the same method.
+- 2026-07-24 14:04 PKT — The CORS release passed production preflight, but the
+  next live attempt exposed a third failure: Cloudflare rejected an add-track
+  operation after 5.335 seconds and the SDK exhausted its media recovery
+  budget. Production was using the expected ten-second provider timeout, and a
+  host-side provider probe ruled out DNS, TLS, credentials, and outbound
+  connectivity.
+- 2026-07-24 14:06 PKT — Cloudflare's current session contract explains the
+  five-second signature: follow-up track operations wait up to five seconds for
+  a connected PeerConnection. The SDK had marked media live immediately after
+  applying the first SDP answer, while peer and ICE state could still be new.
+  It also sent a false-mode close without the required SDP offer. Implemented a
+  bounded connection barrier, explicit force-close signaling, and fresh opaque
+  track names for every publication attempt. All 237 TypeScript client tests
+  and package type checks passed.
+- 2026-07-24 14:09 PKT — Hardened the API's add-track adapter after confirming
+  that Cloudflare error fields were previously discarded during JSON decoding.
+  The adapter now validates top-level and per-track failures and exact local
+  result identity, rejects malformed, duplicate, missing, and unexpected
+  results, and keeps provider descriptions and media identifiers out of
+  returned errors. Focused Go tests and diagnostics passed.
+- 2026-07-24 14:12 PKT — The full canonical repository gate passed with the
+  connection-readiness, forced-close, publication-identity, and provider-
+  response fixes. Verification included API and Sync service gates, all affected
+  workspace tests and builds, contract drift checks, security analysis,
+  recorder infrastructure validation, and package publication checks.
+- 2026-07-24 14:29 PKT — The final bounded Codex review launched but its stream
+  was interrupted before it returned findings; the process did not remain
+  running. This is a failed review, not review coverage, and the two-run handoff
+  limit prevents another attempt. The implementation remains covered by the
+  focused tests and complete green repository gate.

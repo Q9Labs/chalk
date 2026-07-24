@@ -33,7 +33,7 @@ describe("Cloudflare SFU HTTP signaling", () => {
       tracks: [{ location: "local", mid: "0", trackName: "camera-track", source: "camera" }],
     });
     expect(added.tracks?.[0]?.publicationId).toBe(authoritativePublicationId);
-    await transport.closeTracks({ connectionId: "connection-1", tracks: [{ mid: "0", source: "camera", publicationId: authoritativePublicationId }] });
+    await transport.closeTracks({ connectionId: "connection-1", tracks: [{ mid: "0", source: "camera", publicationId: authoritativePublicationId }], force: true });
     await transport.renegotiate({ connectionId: "connection-1", sessionDescription: { type: "answer", sdp: "browser-answer" } });
     await expect(transport.listPublications()).resolves.toEqual({
       incarnation: 1,
@@ -50,6 +50,7 @@ describe("Cloudflare SFU HTTP signaling", () => {
       "http://localhost:8080/v1/tenants/tenant-1/rooms/room-1/sessions/session-1/participants/participant-1/media/sfu/publications",
     ]);
     expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain(`"publication_id":"${authoritativePublicationId}"`);
+    expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain(`"force":true`);
     expect(String(fetch.mock.calls[0]?.[1]?.body)).not.toContain("app_secret");
   });
 
@@ -94,13 +95,20 @@ describe("Cloudflare SFU client", () => {
     await expect(harness.client.setLocalPublicationTarget({ operationId: "wrong", participantSessionId: "participant-2", source: "camera", enabled: false })).resolves.toEqual({ outcome: "terminal_failure", errorCode: "invalid_participant" });
     await expect(harness.client.setLocalPublicationTarget({ operationId: "disable", participantSessionId: "participant-1", source: "camera", enabled: false })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
     expect(harness.transport.closeInputs).toHaveLength(1);
-    expect(harness.transport.closeInputs[0]?.tracks).toEqual([{ mid: "1", source: "camera", publicationId: versionedPublicationID("connection-1", "1", "camera-track") }]);
+    const initialCamera = harness.transport.addInputs[0]?.tracks.find((track) => track.source === "camera");
+    expect(harness.transport.closeInputs[0]).toEqual({
+      connectionId: "connection-1",
+      tracks: [{ mid: "1", source: "camera", publicationId: versionedPublicationID("connection-1", "1", initialCamera?.trackName ?? "") }],
+      force: true,
+    });
     expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "camera")).toMatchObject({ enabled: false, publicationId: null });
 
     await expect(harness.client.setLocalPublicationTarget({ operationId: "enable", participantSessionId: "participant-1", source: "camera", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    const republishedCamera = harness.transport.addInputs.at(-1)?.tracks.find((track) => track.source === "camera");
+    expect(republishedCamera?.trackName).not.toBe(initialCamera?.trackName);
     expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "camera")).toMatchObject({
       enabled: true,
-      publicationId: versionedPublicationID("connection-1", "2", "camera-track"),
+      publicationId: versionedPublicationID("connection-1", "2", republishedCamera?.trackName ?? ""),
     });
     expect(changes).toHaveBeenCalled();
     harness.client.stop();
@@ -146,6 +154,21 @@ describe("Cloudflare SFU client", () => {
       ).toBe(true);
     }
 
+    expect(new Set(harness.transport.addInputs.flatMap((input) => input.tracks.map((track) => track.trackName))).size).toBe(4);
+    harness.client.stop();
+  });
+
+  it("does not finish initial publication or become live before the peer connection is connected", async () => {
+    const harness = createHarness({ autoConnect: false });
+    const start = harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+
+    await vi.waitFor(() => expect(harness.transport.addInputs).toHaveLength(1));
+    expect(harness.client.getSnapshot().connection.phase).toBe("connecting");
+
+    const peer = harness.peers[0] as FakePeerConnection;
+    peer.setStates("connected", "connected");
+    await start;
+    expect(harness.client.getSnapshot().connection.phase).toBe("live");
     harness.client.stop();
   });
 
@@ -260,7 +283,8 @@ describe("Cloudflare SFU client", () => {
     await secondRestart;
     expect(harness.transport.addInputs.at(-1)?.connectionId).toBe("connection-3");
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
-    expect(harness.client.getSnapshot().localTracks[0]?.publicationId).toBe(versionedPublicationID("connection-3", "0", "camera-track"));
+    const restartedTrackName = harness.transport.addInputs.at(-1)?.tracks[0]?.trackName ?? "";
+    expect(harness.client.getSnapshot().localTracks[0]?.publicationId).toBe(versionedPublicationID("connection-3", "0", restartedTrackName));
     harness.client.stop();
   });
 
@@ -310,7 +334,7 @@ function fakeStream(...tracks: readonly FakeTrack[]): MediaStream {
   return { getTracks: () => tracks as unknown as MediaStreamTrack[] } as MediaStream;
 }
 
-function createHarness(options: { readonly onError?: (error: unknown) => void; readonly onScreenEnded?: () => void } = {}) {
+function createHarness(options: { readonly autoConnect?: boolean; readonly onError?: (error: unknown) => void; readonly onScreenEnded?: () => void } = {}) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
   const client = new CloudflareSFUClient({
@@ -321,7 +345,7 @@ function createHarness(options: { readonly onError?: (error: unknown) => void; r
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
     peerConnectionFactory: () => {
-      const peer = new FakePeerConnection();
+      const peer = new FakePeerConnection(options.autoConnect ?? true);
       peers.push(peer);
       return peer as unknown as RTCPeerConnection;
     },
@@ -331,7 +355,12 @@ function createHarness(options: { readonly onError?: (error: unknown) => void; r
 
 class FakeTransport implements CloudflareSFUSignalingTransport {
   readonly addInputs: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[] }[] = [];
-  readonly closeInputs: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUCloseTrackRequest[] }[] = [];
+  readonly closeInputs: {
+    readonly connectionId: string;
+    readonly sessionDescription?: CloudflareSFUSessionDescription;
+    readonly tracks: readonly CloudflareSFUCloseTrackRequest[];
+    readonly force: boolean;
+  }[] = [];
   blockClose = false;
   failNextRemotePull = false;
   failRenegotiation = false;
@@ -358,10 +387,11 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
       }
       const tracks = input.tracks.map((track, index) => ({ ...track, mid: `remote-${index}` }));
       tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${index}`, track.trackName.includes("microphone") ? "audio" : "video")));
+      const requiresImmediateRenegotiation = this.immediateRenegotiation || this.#peer()?.connectionState !== "connected";
       return {
         tracks,
-        requiresImmediateRenegotiation: this.immediateRenegotiation,
-        sessionDescription: this.immediateRenegotiation ? { type: "offer", sdp: "remote-offer" } : undefined,
+        requiresImmediateRenegotiation,
+        sessionDescription: requiresImmediateRenegotiation ? { type: "offer", sdp: "remote-offer" } : undefined,
       };
     }
     return {
@@ -370,7 +400,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     };
   }
 
-  async closeTracks(input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUCloseTrackRequest[] }): Promise<CloudflareSFUTracksResponse> {
+  async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
     this.closeInputs.push(input);
     this.#activeClose++;
     this.maximumConcurrentClose = Math.max(this.maximumConcurrentClose, this.#activeClose);
@@ -434,7 +464,13 @@ class FakePeerConnection extends EventTarget {
   closed = false;
   throwOnCleanup = false;
   readonly #activeTransceivers = new Set<RTCRtpTransceiver>();
+  readonly #autoConnect: boolean;
   readonly #transceivers: RTCRtpTransceiver[] = [];
+
+  constructor(autoConnect: boolean) {
+    super();
+    this.#autoConnect = autoConnect;
+  }
 
   addTransceiver(track: MediaStreamTrack): RTCRtpTransceiver {
     let senderTrack: MediaStreamTrack | null = track;
@@ -474,7 +510,9 @@ class FakePeerConnection extends EventTarget {
 
   async setLocalDescription(): Promise<void> {}
 
-  async setRemoteDescription(): Promise<void> {}
+  async setRemoteDescription(): Promise<void> {
+    if (this.#autoConnect && this.connectionState === "new") this.setStates("connected", "connected");
+  }
 
   getSenders(): RTCRtpSender[] {
     return this.#transceivers.map((transceiver) => transceiver.sender);

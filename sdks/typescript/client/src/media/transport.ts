@@ -37,7 +37,9 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         method: "PUT",
         body: JSON.stringify({
           connection_id: input.connectionId,
+          session_description: input.sessionDescription,
           tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
+          force: input.force,
         }),
       }),
     renegotiate: async (input) => {

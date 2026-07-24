@@ -113,10 +113,10 @@ function publicationSignature(publications: readonly CloudflareSFUPublication[])
     .join("\u0001");
 }
 
-export async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+export async function waitFor(predicate: () => boolean, timeoutMs: number, timeoutMessage = "Timed out waiting for a remote media track"): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
-    if (Date.now() >= deadline) throw new CloudflareSFUError("Timed out waiting for a remote media track", "media_failed");
+    if (Date.now() >= deadline) throw new CloudflareSFUError(timeoutMessage, "media_failed");
     await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
   }
 }

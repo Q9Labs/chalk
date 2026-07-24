@@ -195,7 +195,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Made live camera and microphone controls reach the configured provider bridge,
   carry the active participant generation, and confirm browser-owned publication
   grants without an unnecessary Cloudflare mutation. Browser preflight now also
-  permits the `PUT` requests used to close active SFU tracks.
+  permits the `PUT` requests used to close active SFU tracks. The web client
+  waits for Cloudflare peer and ICE connectivity before issuing follow-up media
+  operations, uses explicit no-renegotiation track closure, and assigns a fresh
+  provider track identity to every publication attempt. Cloudflare add-track
+  responses now fail closed on sanitized provider, per-track, duplicate,
+  missing, or unexpected results instead of discarding provider error fields.
 
 ### Removed
 

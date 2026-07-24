@@ -122,7 +122,7 @@ func TestResumeJoinRejectsWrongProvider(t *testing.T) {
 func TestAddTracksProxiesTypedSignalingRequest(t *testing.T) {
 	client := &roundTripStub{
 		statusCode: http.StatusOK,
-		body:       `{"sessionDescription":{"type":"answer","sdp":"answer-sdp"},"tracks":[{"location":"local","mid":"0","trackName":"camera-track"}]}`,
+		body:       `{"sessionDescription":{"type":"answer","sdp":"answer-sdp"},"tracks":[{"location":"local","mid":"0","trackName":"camera-track"}],"requiresImmediateRenegotiation":true}`,
 	}
 	adapter := testAdapter(t, client)
 
@@ -142,6 +142,92 @@ func TestAddTracksProxiesTypedSignalingRequest(t *testing.T) {
 	}
 	if response.SessionDescription == nil || response.SessionDescription.SDP != "answer-sdp" {
 		t.Fatalf("response = %#v, want provider SDP answer", response)
+	}
+	if len(response.Tracks) != 1 || response.Tracks[0].Location != "local" || response.Tracks[0].Mid != "0" || response.Tracks[0].TrackName != "camera-track" {
+		t.Fatalf("response tracks = %#v, want validated provider result", response.Tracks)
+	}
+	if !response.RequiresImmediateRenegotiation {
+		t.Fatal("requires immediate renegotiation = false, want true")
+	}
+}
+
+func TestAddTracksRejectsProviderFailuresAndInvalidLocalResults(t *testing.T) {
+	request := mediaplane.TracksRequest{
+		ConnectionID:       "private-connection",
+		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "private-offer-sdp"},
+		Tracks:             []mediaplane.Track{{Location: "local", Mid: "private-mid", TrackName: "private-track-name"}},
+	}
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+	}{
+		{
+			name:       "too early remains a provider failure",
+			statusCode: http.StatusTooEarly,
+			body:       `{"errors":[{"message":"private provider session state"}]}`,
+		},
+		{
+			name:       "top level provider error",
+			statusCode: http.StatusOK,
+			body:       `{"errorCode":"private-code","errorDescription":"private-offer-sdp was rejected"}`,
+		},
+		{
+			name:       "top level provider description without code",
+			statusCode: http.StatusOK,
+			body:       `{"errorDescription":"private provider detail"}`,
+		},
+		{
+			name:       "per track provider error",
+			statusCode: http.StatusOK,
+			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-track-name","errorCode":"private-code","errorDescription":"private provider detail"}]}`,
+		},
+		{
+			name:       "per track provider description without code",
+			statusCode: http.StatusOK,
+			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-track-name","errorDescription":"private provider detail"}]}`,
+		},
+		{
+			name:       "malformed response",
+			statusCode: http.StatusOK,
+			body:       `{"tracks":[{"mid":`,
+		},
+		{
+			name:       "malformed local identity",
+			statusCode: http.StatusOK,
+			body:       `{"tracks":[{"mid":"private-mid"}]}`,
+		},
+		{
+			name:       "missing local result",
+			statusCode: http.StatusOK,
+			body:       `{"tracks":[]}`,
+		},
+		{
+			name:       "duplicate local result",
+			statusCode: http.StatusOK,
+			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-track-name"},{"mid":"private-mid","trackName":"private-track-name"}]}`,
+		},
+		{
+			name:       "unexpected local result",
+			statusCode: http.StatusOK,
+			body:       `{"tracks":[{"mid":"private-mid","trackName":"private-unexpected-track"}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := testAdapter(t, &roundTripStub{statusCode: tt.statusCode, body: tt.body})
+
+			_, err := adapter.AddTracks(context.Background(), request)
+			if !errors.Is(err, mediaplane.ErrProviderFailed) {
+				t.Fatalf("error = %v, want %v", err, mediaplane.ErrProviderFailed)
+			}
+			for _, forbidden := range []string{"private-connection", "private-offer-sdp", "private-mid", "private-track-name", "private-unexpected-track", "private provider"} {
+				if strings.Contains(err.Error(), forbidden) {
+					t.Fatalf("error contains %q: %v", forbidden, err)
+				}
+			}
+		})
 	}
 }
 
