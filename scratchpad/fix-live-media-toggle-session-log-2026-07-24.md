@@ -63,3 +63,21 @@
   running. This is a failed review, not review coverage, and the two-run handoff
   limit prevents another attempt. The implementation remains covered by the
   focused tests and complete green repository gate.
+- 2026-07-24 14:39 PKT — Published clean, immutable ARM64 API and Sync images
+  from source revision `3866ae51`, rendered a digest-pinned runtime manifest,
+  and promoted it through the production installer. Image architecture,
+  revision labels, service readiness, tunnel readiness, and the runtime
+  watchdog all passed. The promotion briefly logged an image-not-known failure
+  after installing the new Quadlets and before pulling their digests; the
+  installer then pulled the images and completed successfully.
+- 2026-07-24 14:42 PKT — Deployed the matching web bundle to the `chalk`
+  Cloudflare Pages production project. The custom-domain landing page, room
+  route, and meeting-broker health endpoint returned HTTP 200, and the deployed
+  room asset contained the new peer-connection barrier.
+- 2026-07-24 14:45 PKT — Exercised the production React meeting flow in Chrome:
+  joined with live media, confirmed camera off and back on, confirmed microphone
+  mute and unmute, and left the room cleanly. The controls returned to their
+  opposite confirmed states after every operation, and the browser emitted no
+  warning or error logs. Public API and Sync health and readiness returned HTTP
+  200, and the real `PUT` media preflight returned HTTP 204 with the expected
+  origin, headers, and method.
