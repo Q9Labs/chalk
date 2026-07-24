@@ -64,6 +64,7 @@ const (
 	AdapterRedisRateLimitScenario         = "adapter:redis-rate-limit"
 	AdapterCloudflareR2SignedURLScenario  = "adapter:cloudflare-r2-signed-url"
 	AdapterCloudflareSFUBootstrapScenario = "adapter:cloudflare-sfu-bootstrap"
+	AdapterProviderBridgeGrantScenario    = "adapter:provider-bridge-publication-grant"
 	AdapterCloudflareRTKJoinScenario      = "adapter:cloudflare-rtk-join"
 	AdapterResendSendEmailScenario        = "adapter:resend-send-email"
 
@@ -113,6 +114,7 @@ func ScenarioNames() []string {
 		AdapterRedisRateLimitScenario,
 		AdapterCloudflareR2SignedURLScenario,
 		AdapterCloudflareSFUBootstrapScenario,
+		AdapterProviderBridgeGrantScenario,
 		AdapterCloudflareRTKJoinScenario,
 		AdapterResendSendEmailScenario,
 		EdgeUnauthenticatedRouteScenario,

@@ -104,8 +104,8 @@ client certificate, unencrypted private key, and trusted CA PEM paths through
 `CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE`, `CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE`, and
 `CHALK_SYNC_PROVIDER_BRIDGE_CAFILE`. Production startup fails when any value or
 PEM file is missing or malformed, and readiness actively verifies the mTLS-only
-bridge endpoint. The four-second bridge request budget remains shorter than the
-five-second durable-operation consumer budget.
+bridge endpoint. The seven-second bridge request budget remains shorter than the
+eight-second durable-operation consumer budget.
 
 ## Observability v1 compatibility
 

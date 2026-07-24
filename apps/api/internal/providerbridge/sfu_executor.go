@@ -32,19 +32,24 @@ func (e SFUExecutor) Reconcile(ctx context.Context, input provideroperations.Ope
 }
 
 func (e SFUExecutor) execute(ctx context.Context, input provideroperations.OperationInput) ExecutionResult {
-	if e.publications == nil || e.tracks == nil {
-		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
-	}
 	switch input.Effect {
+	case provideroperations.EffectGrantPublication:
+		if input.ParticipantSessionGeneration <= 0 {
+			return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "participant_generation_required"}
+		}
+		return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 	case provideroperations.EffectRevokePublication, provideroperations.EffectRemoveParticipant:
 		if input.ParticipantSessionGeneration <= 0 {
 			return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "participant_generation_required"}
 		}
 	case provideroperations.EffectEndSession:
-	case provideroperations.EffectGrantPublication, provideroperations.EffectStartRecording, provideroperations.EffectStopRecording:
+	case provideroperations.EffectStartRecording, provideroperations.EffectStopRecording:
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_effect"}
 	default:
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_effect"}
+	}
+	if e.publications == nil || e.tracks == nil {
+		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 	}
 
 	snapshot, err := e.publications.Latest(ctx, input.TenantID, input.SessionID)

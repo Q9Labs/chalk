@@ -190,6 +190,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Replaced internal agent/runbook guidance with public contributor guidance.
 - Renamed public package scopes from `@q9labs/*` to `@q9labsai/*` for npm.
 
+### Fixed
+
+- Made live camera and microphone controls reach the configured provider bridge,
+  carry the active participant generation, and confirm browser-owned publication
+  grants without an unnecessary Cloudflare mutation.
+
 ### Removed
 
 - Unpublished SyncEngine v2 routes, generated contracts, server transport,

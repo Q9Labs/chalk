@@ -6,6 +6,7 @@ defmodule ChalkSync.Live.Session do
   alias ChalkSync.Live.MediaPlaneCall
   alias ChalkSync.Live.Projection
   alias ChalkSync.Live.ScreenShareLease
+  alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.SessionKey
@@ -287,7 +288,7 @@ defmodule ChalkSync.Live.Session do
   end
 
   defp apply_live_target(state, _identity, authority, source, target) do
-    case media_plane() do
+    case media_plane(authority) do
       nil ->
         {state, live_result(target, :retryable_failure, :dependency_unavailable)}
 
@@ -310,7 +311,7 @@ defmodule ChalkSync.Live.Session do
   end
 
   defp enable_publication(state, identity, authority, source, target) do
-    with {module, adapter} <- media_plane() || {:error, :dependency_unavailable},
+    with {module, adapter} <- media_plane(authority) || {:error, :dependency_unavailable},
          {:ok, reservation} <-
            Stateholder.reserve_publication_grant(identity, target.operation_id, source) do
       enable_reserved_publication(
@@ -677,4 +678,19 @@ defmodule ChalkSync.Live.Session do
   end
 
   defp media_plane, do: Application.get_env(:chalk_sync, :media_plane)
+
+  defp media_plane(authority) do
+    case media_plane() do
+      {ProviderBridgeMediaPlane, adapter} ->
+        {ProviderBridgeMediaPlane,
+         ProviderBridgeMediaPlane.with_participant_generation(
+           adapter,
+           authority.participant_session_id,
+           authority.generation
+         )}
+
+      configured ->
+        configured
+    end
+  end
 end

@@ -60,6 +60,35 @@ func TestSFUExecutorPreservesNewParticipantGeneration(t *testing.T) {
 	}
 }
 
+func TestSFUExecutorAuthorizesClientOwnedPublicationGrant(t *testing.T) {
+	registry := &publicationRegistryStub{}
+	closer := &trackCloserStub{}
+	executor := NewSFUExecutor(registry, closer)
+	input := provideroperations.OperationInput{
+		Effect: provideroperations.EffectGrantPublication, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
+		SessionID:                    mustID(t, "22222222-2222-4222-8222-222222222222"),
+		ParticipantSessionID:         mustID(t, "33333333-3333-4333-8333-333333333333"),
+		ParticipantSessionGeneration: 1, PublicationSource: "camera",
+	}
+
+	result := executor.Dispatch(context.Background(), input)
+	if result.Outcome != provideroperations.OutcomeConfirmed || result.Reason != "" {
+		t.Fatalf("grant result = %#v", result)
+	}
+	if registry.latestCalls != 0 || len(registry.closed) != 0 || len(closer.inputs) != 0 {
+		t.Fatalf("grant touched media state: latest calls = %d closes = %#v tracks = %#v", registry.latestCalls, registry.closed, closer.inputs)
+	}
+
+	input.ParticipantSessionGeneration = 0
+	result = executor.Dispatch(context.Background(), input)
+	if result.Outcome != provideroperations.OutcomeTerminalFailure || result.Reason != "participant_generation_required" {
+		t.Fatalf("grant without generation result = %#v", result)
+	}
+	if registry.latestCalls != 0 || len(registry.closed) != 0 || len(closer.inputs) != 0 {
+		t.Fatalf("invalid grant touched media state: latest calls = %d closes = %#v tracks = %#v", registry.latestCalls, registry.closed, closer.inputs)
+	}
+}
+
 func TestSFUExecutorEndsSessionAcrossConnections(t *testing.T) {
 	firstParticipant := mustID(t, "33333333-3333-4333-8333-333333333333")
 	secondParticipant := mustID(t, "44444444-4444-4444-8444-444444444444")
@@ -116,10 +145,11 @@ func TestSFUExecutorKeepsAmbiguousProviderResultForReconciliation(t *testing.T) 
 }
 
 type publicationRegistryStub struct {
-	snapshot  mediapublications.Snapshot
-	latestErr error
-	closeErr  error
-	closed    []mediapublications.CloseInput
+	snapshot    mediapublications.Snapshot
+	latestErr   error
+	latestCalls int
+	closeErr    error
+	closed      []mediapublications.CloseInput
 }
 
 func (*publicationRegistryStub) RecordPublishedTracks(context.Context, mediapublications.RecordInput) ([]mediapublications.PublishedReference, error) {
@@ -146,6 +176,7 @@ func (r *publicationRegistryStub) RecordClosedPublication(_ context.Context, inp
 }
 
 func (r *publicationRegistryStub) Latest(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error) {
+	r.latestCalls++
 	return r.snapshot, r.latestErr
 }
 

@@ -87,7 +87,7 @@ defmodule ChalkSync.Application do
   defp media_plane(adapter_timeout_ms) do
     case Application.get_env(:chalk_sync, :provider_bridge) do
       nil -> Application.get_env(:chalk_sync, :media_plane)
-      options -> ProviderBridgeConfig.media_plane!(options, adapter_timeout_ms)
+      options -> ProviderBridgeConfig.install_media_plane!(options, adapter_timeout_ms)
     end
   end
 

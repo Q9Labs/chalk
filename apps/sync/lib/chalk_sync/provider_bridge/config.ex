@@ -22,6 +22,13 @@ defmodule ChalkSync.ProviderBridge.Config do
     {MediaPlane, MediaPlane.new!(client)}
   end
 
+  @spec install_media_plane!(keyword(), pos_integer()) :: {module(), MediaPlane.t()}
+  def install_media_plane!(options, consumer_timeout_ms) do
+    media_plane = media_plane!(options, consumer_timeout_ms)
+    :ok = Application.put_env(:chalk_sync, :media_plane, media_plane)
+    media_plane
+  end
+
   @spec client!(keyword(), pos_integer()) :: Client.t()
   def client!(options, request_timeout_ms \\ @request_timeout_ms)
 

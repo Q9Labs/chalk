@@ -3,6 +3,8 @@ defmodule ChalkSync.Live.SessionTest do
 
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Live.Session
+  alias ChalkSync.ProviderBridge.Client
+  alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.SessionKey
 
@@ -108,6 +110,56 @@ defmodule ChalkSync.Live.SessionTest do
       end)
 
     assert length(grants) == 2
+  end
+
+  test "provider bridge disable and enable requests include the live authority generation" do
+    test = self()
+
+    transport = fn _method, url, _headers, body, _options ->
+      payload = JSON.decode!(body)
+      operation_id = url |> String.split("/") |> List.last()
+      send(test, {:provider_request, operation_id, payload})
+
+      {:ok, 200, [],
+       JSON.encode!(%{
+         "operation_id" => operation_id,
+         "effect" => payload["effect"],
+         "outcome" => "confirmed"
+       })}
+    end
+
+    adapter =
+      ProviderBridgeMediaPlane.new!(
+        Client.new!(base_url: "http://localhost", transport: transport)
+      )
+
+    Application.put_env(
+      :chalk_sync,
+      :media_plane,
+      {ProviderBridgeMediaPlane, adapter}
+    )
+
+    identity = identity()
+    state = Session.new(identity.session)
+    disabled = %{target("camera-generation-revoke-01") | enabled: false}
+
+    assert {state, %{"outcome" => "confirmed"}} =
+             Session.live_target(state, identity, disabled)
+
+    assert_receive {:provider_request, "camera-generation-revoke-01",
+                    %{
+                      "effect" => "media.revoke_publication",
+                      "participant_session_generation" => 1
+                    }}
+
+    assert {_state, %{"outcome" => "confirmed"}} =
+             Session.live_target(state, identity, target("camera-generation-grant-01"))
+
+    assert_receive {:provider_request, "camera-generation-grant-01",
+                    %{
+                      "effect" => "media.grant_publication",
+                      "participant_session_generation" => 1
+                    }}
   end
 
   test "blocking and raising live provider callbacks return within the configured bound" do
