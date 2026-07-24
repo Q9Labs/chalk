@@ -93,14 +93,11 @@ describe("Cloudflare SFU client", () => {
     expect(Object.isFrozen(harness.client.getSnapshot().localTracks)).toBe(true);
 
     await expect(harness.client.setLocalPublicationTarget({ operationId: "wrong", participantSessionId: "participant-2", source: "camera", enabled: false })).resolves.toEqual({ outcome: "terminal_failure", errorCode: "invalid_participant" });
+    const cameraSender = harness.peers[0]?.getSenders().find((sender) => sender.track === camera);
     await expect(harness.client.setLocalPublicationTarget({ operationId: "disable", participantSessionId: "participant-1", source: "camera", enabled: false })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
-    expect(harness.transport.closeInputs).toHaveLength(1);
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(cameraSender?.track).toBeNull();
     const initialCamera = harness.transport.addInputs[0]?.tracks.find((track) => track.source === "camera");
-    expect(harness.transport.closeInputs[0]).toEqual({
-      connectionId: "connection-1",
-      tracks: [{ mid: "1", source: "camera", publicationId: versionedPublicationID("connection-1", "1", initialCamera?.trackName ?? "") }],
-      force: true,
-    });
     expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "camera")).toMatchObject({ enabled: false, publicationId: null });
 
     await expect(harness.client.setLocalPublicationTarget({ operationId: "enable", participantSessionId: "participant-1", source: "camera", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
@@ -114,22 +111,18 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("serializes concurrent SDP close operations", async () => {
+  it("disables concurrent local publications without repeating the server-confirmed provider close", async () => {
     const harness = createHarness();
     await harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio"), new FakeTrack("camera-track", "video")));
-    harness.transport.blockClose = true;
 
     const microphone = harness.client.setLocalPublicationTarget({ operationId: "mic-off", participantSessionId: "participant-1", source: "microphone", enabled: false });
     const camera = harness.client.setLocalPublicationTarget({ operationId: "cam-off", participantSessionId: "participant-1", source: "camera", enabled: false });
-    await vi.waitFor(() => expect(harness.transport.closeInputs).toHaveLength(1));
-    harness.transport.releaseClose();
-    await vi.waitFor(() => expect(harness.transport.closeInputs).toHaveLength(2));
-    harness.transport.releaseClose();
     await expect(Promise.all([microphone, camera])).resolves.toEqual([
       { outcome: "confirmed", errorCode: null },
       { outcome: "confirmed", errorCode: null },
     ]);
-    expect(harness.transport.maximumConcurrentClose).toBe(1);
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(harness.peers[0]?.getSenders().every((sender) => sender.track === null)).toBe(true);
     harness.client.stop();
   });
 
@@ -264,7 +257,7 @@ describe("Cloudflare SFU client", () => {
     screen.endFromBrowser();
     expect(onScreenEnded).toHaveBeenCalledOnce();
     await expect(setScreenTarget(harness.client, "screen-ended", false)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
-    expect(harness.transport.closeInputs.at(-1)?.tracks).toHaveLength(1);
+    expect(harness.transport.closeInputs).toHaveLength(0);
     expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: false, publicationId: null });
     await harness.client.clearPreparedLocalTrack("screen");
     expect(harness.client.getSnapshot().localTracks.some((publication) => publication.source === "screen")).toBe(false);
@@ -443,18 +436,14 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     readonly tracks: readonly CloudflareSFUCloseTrackRequest[];
     readonly force: boolean;
   }[] = [];
-  blockClose = false;
   blockPublicationList = false;
   failNextLocalPublish = false;
   failNextRemotePull = false;
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
-  maximumConcurrentClose = 0;
   snapshot: CloudflareSFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
-  #activeClose = 0;
   readonly #blockedConnections = new Map<string, () => void>();
-  readonly #closeResolvers: (() => void)[] = [];
   readonly #publicationListResolvers: (() => void)[] = [];
   readonly #peer: () => FakePeerConnection | undefined;
 
@@ -492,10 +481,6 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
 
   async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
     this.closeInputs.push(input);
-    this.#activeClose++;
-    this.maximumConcurrentClose = Math.max(this.maximumConcurrentClose, this.#activeClose);
-    if (this.blockClose) await new Promise<void>((resolve) => this.#closeResolvers.push(resolve));
-    this.#activeClose--;
     return {};
   }
 
@@ -516,10 +501,6 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   releaseConnection(connectionId: string): void {
     this.#blockedConnections.get(connectionId)?.();
     this.#blockedConnections.delete(connectionId);
-  }
-
-  releaseClose(): void {
-    this.#closeResolvers.shift()?.();
   }
 
   releasePublicationList(): void {

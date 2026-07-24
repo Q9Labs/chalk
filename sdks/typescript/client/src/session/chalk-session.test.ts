@@ -288,6 +288,30 @@ describe("ChalkSession", () => {
     await harness.session.leave();
   });
 
+  it.each([
+    { source: "microphone", action: "setMicrophoneEnabled", syncName: "set_microphone_enabled" },
+    { source: "camera", action: "setCameraEnabled", syncName: "set_camera_enabled" },
+  ] as const)("publishes a new immutable snapshot after $action is confirmed", async ({ source, action, syncName }) => {
+    const harness = createHarness();
+    await harness.session.join();
+    const before = harness.session.getSnapshot();
+    const applyTarget = async (enabled: boolean) => {
+      await harness.media.setLocalPublicationTarget({ source, enabled });
+      return mediaTargetResult(syncName);
+    };
+    if (source === "microphone") harness.sync.setMicrophoneEnabled.mockImplementationOnce(applyTarget);
+    else harness.sync.setCameraEnabled.mockImplementationOnce(applyTarget);
+
+    await harness.session[action](false);
+
+    const after = harness.session.getSnapshot();
+    expect(after).not.toBe(before);
+    expect(Object.isFrozen(after)).toBe(true);
+    expect(after.localMedia[source]).toMatchObject({ state: "disabled", track: harness.tracks[source === "microphone" ? 0 : 1] });
+    expect(harness.media.setLocalPublicationTarget).toHaveBeenCalledWith({ source, enabled: false });
+    await harness.session.leave();
+  });
+
   it("acquires a disabled source on demand and maps rejected commands to a stable error", async () => {
     const harness = createHarness({ initialMicrophoneEnabled: false, initialCameraEnabled: false });
     await harness.session.join();

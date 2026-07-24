@@ -209,6 +209,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   provider track identity to every publication attempt. Cloudflare add-track
   responses now fail closed on sanitized provider, per-track, duplicate,
   missing, or unexpected results instead of discarding provider error fields.
+- Kept microphone and camera commands pending through bounded transient Sync
+  provider failures instead of rejecting them after a few hundred milliseconds.
+  Confirmed disables now retire the browser sender without repeating the
+  provider close that Sync already completed, and the server-confirmation
+  deadline no longer races authorized local media work.
 
 ### Removed
 

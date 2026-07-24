@@ -448,12 +448,54 @@ describe("V3SyncClient", () => {
     const retry = await liveClient({ mediaPlane: retryMediaPlane, retryDelayMs: 0 });
     const retryResult = retry.client.setCameraEnabled(true, { requestId: commandIds[1] });
     const retryRejected = expect(retryResult).rejects.toMatchObject({ code: "retry_exhausted" });
-    for (let attempt = 0; attempt <= 3; attempt += 1) {
+    for (let attempt = 0; attempt <= 16; attempt += 1) {
       retry.socket.receive({ type: "live_target_result", operation_id: commandIds[1], name: "set_camera_enabled", outcome: "retryable_failure", error_code: "lease_pending" });
       await settle();
     }
     await retryRejected;
     expect(retryMediaPlane.targets).toEqual([]);
+  });
+
+  it("keeps a self-media target pending through transient server failures and confirms it once", async () => {
+    const { client, socket, mediaPlane } = await liveClient({ retryDelayMs: 0 });
+    const result = client.setMicrophoneEnabled(false, { requestId: commandIds[0] });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "retryable_failure", error_code: "dependency_unavailable" });
+      await settle();
+    }
+    socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
+
+    await expect(result).resolves.toMatchObject({ serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" });
+    expect(mediaPlane.targets).toEqual([{ operationId: commandIds[0], participantSessionId: hostId, source: "microphone", enabled: false }]);
+  });
+
+  it("bounds self-media confirmation when the server never responds", async () => {
+    const clock = new TestClock();
+    const { client, mediaPlane } = await liveClient({ clock });
+    const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
+    const rejected = expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
+
+    clock.advance(15_000);
+
+    await rejected;
+    expect(mediaPlane.targets).toEqual([]);
+  });
+
+  it("does not apply the server-confirmation deadline to authorized local media work", async () => {
+    const clock = new TestClock();
+    const mediaPlane = new BlockingMediaPlane();
+    const { client, socket } = await liveClient({ clock, mediaPlane });
+    const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
+    clock.advance(14_999);
+    socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
+    await settle();
+    expect(mediaPlane.targets).toHaveLength(1);
+
+    clock.advance(1);
+    mediaPlane.complete({ outcome: "confirmed", errorCode: null });
+
+    await expect(result).resolves.toMatchObject({ serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" });
   });
 
   it("projects bounded local and remote MediaPlane observations without a remote control surface", async () => {

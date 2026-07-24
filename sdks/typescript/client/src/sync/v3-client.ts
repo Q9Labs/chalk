@@ -34,6 +34,9 @@ const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_RETRIES = 3;
+const MAX_LIVE_SERVER_RETRIES = 16;
+const LIVE_TARGET_RETRY_BUDGET_MS = 15_000;
+const MAX_LIVE_TARGET_RETRY_DELAY_MS = 1_000;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const OPERATION_PENDING_POLL_INTERVAL_MS = 1_000;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
@@ -43,6 +46,7 @@ type LiveTargetClientFrame = Extract<SyncV3ClientFrame, { readonly type: "live_t
 type SuccessfulLiveTargetResult = Omit<V3LiveTargetResult, "outcome"> & { readonly outcome: "confirmed" | "satisfied" };
 type LiveDeferred = Deferred<V3SelfMediaTargetResult> & {
   readonly frame: LiveTargetClientFrame;
+  readonly createdAt: number;
   serverRetries: number;
   localRetries: number;
   localInFlight: boolean;
@@ -83,6 +87,7 @@ export class V3SyncClient {
   readonly #requests = new Map<string, RequestDeferred>();
   readonly #commandRetryTimers = new Map<string, unknown>();
   readonly #liveRetryTimers = new Map<string, unknown>();
+  readonly #liveDeadlineTimers = new Map<string, unknown>();
   readonly #pendingRemovalRetryTimers = new Map<string, unknown>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
@@ -327,7 +332,27 @@ export class V3SyncClient {
     if (this.#liveTargets.has(operationId) || this.#requests.has(operationId)) throw new V3SyncError("request ID is already pending", "request_id_conflict");
     const frame: LiveTargetClientFrame = { type: "live_target", operation_id: operationId, name, enabled };
     encodeV3ClientFrame(frame);
-    const promise = new Promise<V3SelfMediaTargetResult>((resolve, reject) => this.#liveTargets.set(operationId, { resolve, reject, settled: false, frame, serverRetries: 0, localRetries: 0, localInFlight: false, source, enabled }));
+    let deferred!: LiveDeferred;
+    const promise = new Promise<V3SelfMediaTargetResult>((resolve, reject) => {
+      deferred = {
+        resolve,
+        reject,
+        settled: false,
+        frame,
+        createdAt: this.#now(),
+        serverRetries: 0,
+        localRetries: 0,
+        localInFlight: false,
+        source,
+        enabled,
+      };
+      this.#liveTargets.set(operationId, deferred);
+    });
+    const deadlineTimer = this.#clock().setTimeout(() => {
+      this.#liveDeadlineTimers.delete(operationId);
+      if (this.#liveTargets.get(operationId) === deferred) this.#failLiveTarget(operationId, deferred, new V3SyncError("self-media target confirmation timed out", "retry_exhausted"));
+    }, LIVE_TARGET_RETRY_BUDGET_MS);
+    this.#liveDeadlineTimers.set(operationId, deadlineTimer);
     this.#localMedia[source] = "requesting";
     this.#sendIfLive(frame);
     this.#emit();
@@ -628,17 +653,22 @@ export class V3SyncClient {
     }
     deferred.serverResult = { ...frame, outcome: frame.outcome } as SuccessfulLiveTargetResult;
     deferred.serverResultSignature = frameSignature(frame);
+    this.#clearLiveRetryTimer(frame.operation_id);
+    this.#clearLiveDeadlineTimer(frame.operation_id);
     this.#executeLocalMediaTarget(frame.operation_id, deferred);
   }
 
   #retryLiveServer(operationId: string, deferred: LiveDeferred, errorCode: string): void {
     if (this.#liveRetryTimers.has(operationId)) return;
-    if (deferred.serverRetries >= MAX_RETRIES) {
+    const remainingBudget = LIVE_TARGET_RETRY_BUDGET_MS - (this.#now() - deferred.createdAt);
+    if (deferred.serverRetries >= MAX_LIVE_SERVER_RETRIES || remainingBudget <= 0) {
       this.#failLiveTarget(operationId, deferred, new V3SyncError(errorCode, "retry_exhausted"));
       return;
     }
     deferred.serverRetries += 1;
-    this.#scheduleLiveRetry(operationId, () => this.#sendIfLive(deferred.frame));
+    const baseDelay = this.#options.retryDelayMs ?? 100;
+    const delay = Math.min(remainingBudget, MAX_LIVE_TARGET_RETRY_DELAY_MS, baseDelay * 2 ** Math.min(deferred.serverRetries - 1, 4));
+    this.#scheduleLiveRetry(operationId, () => this.#sendIfLive(deferred.frame), delay);
   }
 
   #executeLocalMediaTarget(operationId: string, deferred: LiveDeferred): void {
@@ -678,22 +708,24 @@ export class V3SyncClient {
     if (!serverResult) throw new V3ReplicaError("local MediaPlane completed before server authorization");
     this.#liveTargets.delete(operationId);
     this.#clearLiveRetryTimer(operationId);
+    this.#clearLiveDeadlineTimer(operationId);
     this.#localMedia[deferred.source] = deferred.enabled ? "enabled" : "disabled";
     resolveDeferred(deferred, { operationId, name: deferred.frame.name, serverOutcome: serverResult.outcome, mediaPlaneOutcome: result.outcome });
     this.#emit();
   }
 
-  #scheduleLiveRetry(operationId: string, retry: () => void): void {
+  #scheduleLiveRetry(operationId: string, retry: () => void, delay = this.#options.retryDelayMs ?? 100): void {
     const timer = this.#clock().setTimeout(() => {
       this.#liveRetryTimers.delete(operationId);
       retry();
-    }, this.#options.retryDelayMs ?? 100);
+    }, delay);
     this.#liveRetryTimers.set(operationId, timer);
   }
 
   #failLiveTarget(operationId: string, deferred: LiveDeferred, error: V3SyncError): void {
     this.#liveTargets.delete(operationId);
     this.#clearLiveRetryTimer(operationId);
+    this.#clearLiveDeadlineTimer(operationId);
     this.#localMedia[deferred.source] = "failed";
     rejectDeferred(deferred, error);
     this.#emit();
@@ -959,8 +991,10 @@ export class V3SyncClient {
   #clearRetryTimers(): void {
     for (const timer of this.#commandRetryTimers.values()) this.#clock().clearTimeout(timer);
     for (const timer of this.#liveRetryTimers.values()) this.#clock().clearTimeout(timer);
+    for (const timer of this.#liveDeadlineTimers.values()) this.#clock().clearTimeout(timer);
     this.#commandRetryTimers.clear();
     this.#liveRetryTimers.clear();
+    this.#liveDeadlineTimers.clear();
   }
 
   #clearPendingRemovalRetryTimers(): void {
@@ -980,6 +1014,13 @@ export class V3SyncClient {
     if (timer === undefined) return;
     this.#clock().clearTimeout(timer);
     this.#liveRetryTimers.delete(operationId);
+  }
+
+  #clearLiveDeadlineTimer(operationId: string): void {
+    const timer = this.#liveDeadlineTimers.get(operationId);
+    if (timer === undefined) return;
+    this.#clock().clearTimeout(timer);
+    this.#liveDeadlineTimers.delete(operationId);
   }
 
   #clearCommandRetryTimer(commandId: string): void {

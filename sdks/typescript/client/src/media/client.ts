@@ -4,7 +4,6 @@ import { CloudflareSFUError } from "./types";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
-  CloudflareSFUCloseTrackRequest,
   CloudflareSFUFailureCode,
   CloudflareSFULocalTrack,
   CloudflareSFUPublication,
@@ -271,16 +270,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     const transceiver = state.transceiver;
     state.desiredEnabled = false;
     state.track.enabled = false;
-    try {
-      if (transceiver?.mid !== null && transceiver?.mid !== undefined && state.providerPublicationId) {
-        await this.#closeTracks([{ mid: transceiver.mid, source: state.source, publicationId: state.providerPublicationId }], this.#generation);
-        await this.#retireLocalTransceiver(transceiver, state.track);
-      }
-    } catch (error) {
-      state.desiredEnabled = true;
-      state.track.enabled = true;
-      throw error;
-    }
+    if (transceiver) await this.#retireLocalTransceiver(transceiver, state.track);
     state.enabled = false;
     state.transceiver = null;
     state.providerPublicationId = null;
@@ -387,17 +377,6 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     } catch (error) {
       this.#reportError(error);
     }
-  }
-
-  async #closeTracks(tracks: readonly CloudflareSFUCloseTrackRequest[], generation: number): Promise<void> {
-    const connection = this.#connection;
-    const connectionId = this.#bootstrap.connectionId;
-    await this.#serializeSDP(async () => {
-      this.#requireGeneration(generation);
-      const response = await this.#requireTransport().closeTracks({ connectionId, tracks, force: true });
-      this.#requireGeneration(generation);
-      await this.#completeRenegotiation(response, connection, connectionId, generation);
-    });
   }
 
   async #reconcileRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
