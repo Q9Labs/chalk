@@ -26,3 +26,10 @@
   including security scans, service-backed API and Sync checks, generated
   contract drift, workspace tests and builds, recorder validation, Publint, and
   package TypeScript resolution.
+- 2026-07-24 13:04 PKT — Deployed the generation-bound media-target fix to the
+  production managed meeting runtime. The immutable API and Sync images passed
+  source-revision, ARM64, service-readiness, and watchdog checks.
+- 2026-07-24 13:08 PKT — Live browser output exposed a second failure: API CORS
+  preflight omitted `PUT`, so the client could not close active SFU tracks after
+  disabling a publication. Added `PUT` to the public API CORS contract and a
+  regression assertion that preflights the same method.

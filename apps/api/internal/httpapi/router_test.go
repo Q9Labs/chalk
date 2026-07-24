@@ -1158,7 +1158,7 @@ func TestProfilerMount(t *testing.T) {
 func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodOptions, "/v1/tenants", nil)
 	req.Header.Set("Origin", "https://app.chalk.test")
-	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Method", http.MethodPut)
 	res := httptest.NewRecorder()
 	httpapi.NewRouter(httpapi.Options{
 		CORS: httpapi.CORSOptions{
@@ -1175,8 +1175,10 @@ func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	if res.Header().Get("Access-Control-Allow-Methods") == "" {
 		t.Fatal("allow methods header was empty")
 	}
-	if !strings.Contains(res.Header().Get("Access-Control-Allow-Methods"), http.MethodDelete) {
-		t.Fatalf("allow methods = %q, want DELETE", res.Header().Get("Access-Control-Allow-Methods"))
+	for _, method := range []string{http.MethodDelete, http.MethodPut} {
+		if !strings.Contains(res.Header().Get("Access-Control-Allow-Methods"), method) {
+			t.Fatalf("allow methods = %q, want %s", res.Header().Get("Access-Control-Allow-Methods"), method)
+		}
 	}
 	for _, header := range []string{"Idempotency-Key", "Traceparent", "Tracestate", "X-Chalk-Journey-ID"} {
 		if !strings.Contains(res.Header().Get("Access-Control-Allow-Headers"), header) {
