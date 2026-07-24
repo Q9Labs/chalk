@@ -88,10 +88,7 @@ describe("ChalkSession", () => {
   });
 
   it("reuses one media client and requests replacement access only for SFU recovery", async () => {
-    const initial = participantAccess("connection-1", "initial");
-    const replacement = participantAccess("connection-2", "replacement");
-    const harness = createHarness({ access: [initial, replacement] });
-    await harness.session.join();
+    const { harness, initial, replacement } = await joinedRecoveryHarness();
 
     harness.media.failRecoverably();
     await vi.waitFor(() => expect(harness.media.restart).toHaveBeenCalledWith(replacement.media.clientPayload));
@@ -103,6 +100,31 @@ describe("ChalkSession", () => {
       replaceMediaConnection: true,
       currentMediaToken: initial.media.token,
     } satisfies Partial<ChalkSessionAccessRequest>);
+    await harness.session.leave();
+  });
+
+  it("handles one failed immutable media snapshot once when subscription and onFailure both deliver it", async () => {
+    const { harness } = await joinedRecoveryHarness();
+
+    harness.media.failRecoverablyThroughBothSignals();
+    await waitForLive(harness.session);
+
+    expect(harness.media.restart).toHaveBeenCalledTimes(1);
+    expect(harness.access).toHaveBeenCalledTimes(2);
+    await harness.session.leave();
+  });
+
+  it("keeps local-publication and remote-poll errors operation-scoped when onFailure re-reads the live snapshot", async () => {
+    const harness = createHarness();
+    await harness.session.join();
+
+    harness.media.reportOperationError("local publication failed");
+    harness.media.reportOperationError("remote publication poll failed");
+    await Promise.resolve();
+
+    expect(harness.session.getSnapshot()).toMatchObject({ state: "live", connection: { media: "healthy" } });
+    expect(harness.media.restart).not.toHaveBeenCalled();
+    expect(harness.access).toHaveBeenCalledTimes(1);
     await harness.session.leave();
   });
 
@@ -381,6 +403,14 @@ function createHarness(
   return { session, access, media, sync, createMediaClient, createSyncClient, getUserMedia, getDisplayMedia, tracks };
 }
 
+async function joinedRecoveryHarness() {
+  const initial = participantAccess("connection-1", "initial");
+  const replacement = participantAccess("connection-2", "replacement");
+  const harness = createHarness({ access: [initial, replacement] });
+  await harness.session.join();
+  return { harness, initial, replacement };
+}
+
 function expectLowerLayersStopped(harness: ReturnType<typeof createHarness>): void {
   expect(harness.sync.stop).toHaveBeenCalledTimes(1);
   expect(harness.media.stop).toHaveBeenCalledTimes(1);
@@ -462,6 +492,13 @@ class FakeMedia {
   failRecoverably() {
     this.snapshot = { ...mediaSnapshot("failed"), failure: { code: "peer_connection_failed", recoverable: true } };
     this.emit();
+  }
+  failRecoverablyThroughBothSignals() {
+    this.failRecoverably();
+    this.callbacks.onFailure(new TypeError("peer connection failed"));
+  }
+  reportOperationError(message: string) {
+    this.callbacks.onFailure(new TypeError(message));
   }
   makeLive() {
     this.snapshot = mediaSnapshot("live", this.localTracks);

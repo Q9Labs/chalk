@@ -383,6 +383,7 @@ export class ChalkSession implements ChalkSessionStore {
   }
 
   #handleMediaSnapshot(snapshot: CloudflareSFUSnapshot): void {
+    if (snapshot === this.#mediaSnapshot) return;
     this.#mediaSnapshot = snapshot;
     this.#handleMediaConnection(snapshot);
     this.#publish();

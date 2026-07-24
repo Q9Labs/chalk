@@ -23,9 +23,17 @@ type LocalTrackState = {
   readonly track: MediaStreamTrack;
   transceiver: RTCRtpTransceiver | null;
   providerPublicationId: string | null;
+  pendingOperationId: string | null;
+  pendingTrackName: string | null;
   desiredEnabled: boolean;
   enabled: boolean;
   endedListener: (() => void) | null;
+};
+
+type PendingLocalPublication = {
+  readonly state: LocalTrackState;
+  readonly transceiver: RTCRtpTransceiver;
+  readonly trackName: string;
 };
 
 const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
@@ -90,7 +98,17 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     this.#requireActive();
     validateTrackSource(source, track);
     if (this.#localTracks.has(source)) throw new CloudflareSFUError(`A ${source} track is already prepared`, "media_failed");
-    const state: LocalTrackState = { source, track, transceiver: null, providerPublicationId: null, desiredEnabled: false, enabled: false, endedListener: null };
+    const state: LocalTrackState = {
+      source,
+      track,
+      transceiver: null,
+      providerPublicationId: null,
+      pendingOperationId: null,
+      pendingTrackName: null,
+      desiredEnabled: false,
+      enabled: false,
+      endedListener: null,
+    };
     if (source === "screen") {
       state.endedListener = () => {
         if (this.#localTracks.get("screen") === state) this.#invokeListener(() => this.#onScreenEnded?.());
@@ -136,7 +154,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
       this.#requireGeneration(generation);
       await this.#reconcileRemotePublications(authoritative, generation);
     } catch (error) {
-      if (generation === this.#generation && !this.#stopped) this.#setFailure(error, "signaling_failed");
+      if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       throw error;
     } finally {
       if (generation === this.#generation) this.#polling = false;
@@ -150,10 +168,10 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     if (!state) return { outcome: "terminal_failure", errorCode: "source_unavailable" };
     if (state.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
     try {
-      await this.#setPreparedTrackEnabled(state, target.enabled);
+      await this.#setPreparedTrackEnabled(state, target.enabled, target.operationId);
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
-      if (!this.#stopped) this.#setFailure(error, "signaling_failed");
+      if (!this.#stopped) this.#reportError(error);
       return { outcome: "retryable_failure", errorCode: error instanceof CloudflareSFUError ? error.code : "media_failed" };
     }
   }
@@ -199,8 +217,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
       this.#requireGeneration(generation);
       this.#started = true;
       this.#setPhase("live", null);
-      await this.refreshRemotePublications();
-      this.#schedulePoll();
+      this.#schedulePoll(0);
     } catch (error) {
       if (generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
       throw error;
@@ -228,19 +245,29 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     this.#snapshotListeners.clear();
   }
 
-  async #setPreparedTrackEnabled(state: LocalTrackState, enabled: boolean): Promise<void> {
-    if (enabled) {
-      state.desiredEnabled = true;
-      state.track.enabled = true;
-      try {
-        await this.#publishPreparedTracks([state], this.#generation);
-      } catch (error) {
-        state.enabled = false;
-        state.track.enabled = false;
-        throw error;
-      }
-      return;
+  async #setPreparedTrackEnabled(state: LocalTrackState, enabled: boolean, operationId?: string): Promise<void> {
+    if (enabled) return this.#enablePreparedTrack(state, operationId);
+    return this.#disablePreparedTrack(state);
+  }
+
+  async #enablePreparedTrack(state: LocalTrackState, operationId?: string): Promise<void> {
+    if (operationId && state.pendingOperationId !== operationId) {
+      state.pendingOperationId = operationId;
+      state.pendingTrackName = `${state.source}-${operationId}`;
     }
+    state.desiredEnabled = true;
+    state.track.enabled = true;
+    try {
+      await this.#publishPreparedTracks([state], this.#generation);
+    } catch (error) {
+      state.desiredEnabled = false;
+      state.enabled = false;
+      state.track.enabled = false;
+      throw error;
+    }
+  }
+
+  async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
     const transceiver = state.transceiver;
     state.desiredEnabled = false;
     state.track.enabled = false;
@@ -256,6 +283,9 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     }
     state.enabled = false;
     state.transceiver = null;
+    state.providerPublicationId = null;
+    state.pendingOperationId = null;
+    state.pendingTrackName = null;
     this.#publishSnapshot();
     this.#emitLocal();
   }
@@ -281,46 +311,82 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     if (states.length === 0) return;
     const connection = this.#connection;
     const bootstrap = this.#bootstrap;
-    await this.#serializeSDP(async () => {
+    await this.#serializeSDP(() => this.#publishPreparedTracksSerialized(states, generation, connection, bootstrap.connectionId));
+  }
+
+  async #publishPreparedTracksSerialized(states: readonly LocalTrackState[], generation: number, connection: RTCPeerConnection, connectionId: string): Promise<void> {
+    this.#requireGeneration(generation);
+    const pendingStates = states.filter((state) => !state.enabled);
+    if (pendingStates.length === 0) return;
+    const wasLive = connectionIsLive(connection);
+    const publications = pendingStates.map((state) => this.#addLocalTransceiver(connection, state));
+    try {
+      const response = await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
+      if (!wasLive) await this.#waitForConnection(connection, generation);
       this.#requireGeneration(generation);
-      const transceivers = states.map((state) => {
-        const transceiver = connection.addTransceiver(state.track, { direction: "sendonly" });
-        state.transceiver = transceiver;
-        return { state, transceiver };
-      });
+      this.#confirmLocalPublications(publications, response.tracks);
+      this.#publishSnapshot();
+      this.#emitLocal();
+    } catch (error) {
+      await this.#rollbackLocalOffer(connection);
+      this.#discardLocalPublications(publications);
+      throw error;
+    }
+  }
+
+  #addLocalTransceiver(connection: RTCPeerConnection, state: LocalTrackState): PendingLocalPublication {
+    const transceiver = connection.addTransceiver(state.track, { direction: "sendonly" });
+    state.transceiver = transceiver;
+    return { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}` };
+  }
+
+  async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly PendingLocalPublication[], generation: number): Promise<CloudflareSFUTracksResponse> {
+    const offer = await connection.createOffer();
+    await connection.setLocalDescription(offer);
+    const tracks = publications.map(
+      ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
+        location: "local",
+        mid: requireTransceiverMid(transceiver),
+        trackName,
+        source: state.source,
+      }),
+    );
+    const response = await this.#requireTransport().addTracks({ connectionId, sessionDescription: requireDescription(offer), tracks });
+    this.#requireGeneration(generation);
+    await connection.setRemoteDescription(requireSFUDescription(response.sessionDescription));
+    return response;
+  }
+
+  #confirmLocalPublications(publications: readonly PendingLocalPublication[], tracks: readonly CloudflareSFUTrackRequest[] | undefined): void {
+    for (const { state, transceiver } of publications) {
+      const authoritative = tracks?.find((track) => track.location === "local" && track.mid === transceiver.mid && track.source === state.source);
+      if (!authoritative?.publicationId) throw new CloudflareSFUError("Chalk did not return an authoritative local publication ID", "invalid_publication");
+      state.desiredEnabled = true;
+      state.enabled = true;
+      state.providerPublicationId = authoritative.publicationId;
+      state.pendingOperationId = null;
+      state.pendingTrackName = null;
+    }
+  }
+
+  #discardLocalPublications(publications: readonly PendingLocalPublication[]): void {
+    for (const { state, transceiver } of publications) {
       try {
-        const offer = await connection.createOffer();
-        await connection.setLocalDescription(offer);
-        const requests = transceivers.map(({ state, transceiver }): CloudflareSFUTrackRequest => {
-          if (transceiver.mid === null) throw new CloudflareSFUError("Browser did not assign a media section", "media_failed");
-          return { location: "local", mid: transceiver.mid, trackName: `${state.source}-${globalThis.crypto.randomUUID()}`, source: state.source };
-        });
-        const response = await this.#requireTransport().addTracks({ connectionId: bootstrap.connectionId, sessionDescription: requireDescription(offer), tracks: requests });
-        this.#requireGeneration(generation);
-        await connection.setRemoteDescription(requireSFUDescription(response.sessionDescription));
-        await this.#waitForConnection(connection, generation);
-        this.#requireGeneration(generation);
-        for (const { state, transceiver } of transceivers) {
-          const authoritative = response.tracks?.find((track) => track.location === "local" && track.mid === transceiver.mid && track.source === state.source);
-          if (!authoritative?.publicationId) throw new CloudflareSFUError("Chalk did not return an authoritative local publication ID", "invalid_publication");
-          state.desiredEnabled = true;
-          state.enabled = true;
-          state.providerPublicationId = authoritative.publicationId;
-        }
-        this.#publishSnapshot();
-        this.#emitLocal();
+        transceiver.stop();
       } catch (error) {
-        for (const { state, transceiver } of transceivers) {
-          try {
-            transceiver.stop();
-          } catch (stopError) {
-            this.#reportError(stopError);
-          }
-          if (state.transceiver === transceiver) state.transceiver = null;
-        }
-        throw error;
+        this.#reportError(error);
       }
-    });
+      if (state.transceiver === transceiver) state.transceiver = null;
+    }
+  }
+
+  async #rollbackLocalOffer(connection: RTCPeerConnection): Promise<void> {
+    if (connection.signalingState !== "have-local-offer") return;
+    try {
+      await connection.setLocalDescription({ type: "rollback" });
+    } catch (error) {
+      this.#reportError(error);
+    }
   }
 
   async #closeTracks(tracks: readonly CloudflareSFUCloseTrackRequest[], generation: number): Promise<void> {
@@ -463,6 +529,9 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     state.enabled = false;
     state.desiredEnabled = false;
     state.transceiver = null;
+    state.providerPublicationId = null;
+    state.pendingOperationId = null;
+    state.pendingTrackName = null;
     state.endedListener = null;
   }
 
@@ -473,18 +542,18 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     this.#emitRemote();
   }
 
-  #schedulePoll(): void {
+  #schedulePoll(delayMs = this.#pollIntervalMs): void {
     if (this.#stopped || !this.#started || this.#pollTimer !== undefined) return;
     this.#pollTimer = globalThis.setTimeout(async () => {
       this.#pollTimer = undefined;
       try {
         await this.refreshRemotePublications();
-      } catch (error) {
-        this.#reportError(error);
+      } catch {
+        // Remote discovery reports its own operation-scoped error and retries on the next poll.
       } finally {
         this.#schedulePoll();
       }
-    }, this.#pollIntervalMs);
+    }, delayMs);
   }
 
   #clearPoll(): void {
@@ -629,6 +698,11 @@ function observeConnectionState(peerState: RTCPeerConnectionState, iceState: RTC
 
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
+}
+
+function requireTransceiverMid(transceiver: RTCRtpTransceiver): string {
+  if (transceiver.mid === null) throw new CloudflareSFUError("Browser did not assign a media section", "media_failed");
+  return transceiver.mid;
 }
 
 function safeStopTrack(track: MediaStreamTrack, onError: (error: unknown) => void): void {

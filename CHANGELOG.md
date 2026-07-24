@@ -192,6 +192,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Kept incremental screen-share publication and remote-track discovery failures
+  scoped to the affected media operation so an SFU signaling rejection no
+  longer forces every participant into whole-session recovery. Screen retries
+  now reuse one logical provider track identity, roll back failed local offers,
+  and skip initial-connection waits on an already-live peer. Cloudflare SFU
+  failures now expose only bounded stage, status, and provider-code telemetry
+  while keeping SDP, provider descriptions, secrets, and media identifiers out
+  of logs, spans, metrics, and consumer responses.
 - Made live camera and microphone controls reach the configured provider bridge,
   carry the active participant generation, and confirm browser-owned publication
   grants without an unnecessary Cloudflare mutation. Browser preflight now also

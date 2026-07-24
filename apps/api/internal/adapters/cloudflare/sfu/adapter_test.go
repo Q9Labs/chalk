@@ -1,10 +1,12 @@
 package sfu
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,6 +14,8 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -148,6 +152,122 @@ func TestAddTracksProxiesTypedSignalingRequest(t *testing.T) {
 	}
 	if !response.RequiresImmediateRenegotiation {
 		t.Fatal("requires immediate renegotiation = false, want true")
+	}
+}
+
+func TestAddTracksAddsSecondLocalTrackToEstablishedSession(t *testing.T) {
+	client := &roundTripStub{
+		statusCode: http.StatusOK,
+		body:       `{"sessionDescription":{"type":"answer","sdp":"answer-sdp"},"tracks":[{"mid":"2","trackName":"screen-track"}]}`,
+	}
+	adapter := testAdapter(t, client)
+
+	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID:       "established-connection",
+		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "second-local-track-offer"},
+		Tracks:             []mediaplane.Track{{Location: "local", Mid: "2", TrackName: "screen-track"}},
+	})
+	if err != nil {
+		t.Fatalf("add second local track: %v", err)
+	}
+	if len(response.Tracks) != 1 || response.Tracks[0].Mid != "2" || response.Tracks[0].TrackName != "screen-track" {
+		t.Fatalf("response tracks = %#v, want added screen track", response.Tracks)
+	}
+	if !strings.Contains(client.requestBody, `"mid":"2","trackName":"screen-track"`) {
+		t.Fatalf("request body = %s, want new screen track", client.requestBody)
+	}
+}
+
+func TestAddTracksReturnsBoundedProviderFailureClassifications(t *testing.T) {
+	request := mediaplane.TracksRequest{
+		ConnectionID:       "private-connection",
+		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "private-offer-sdp"},
+		Tracks:             []mediaplane.Track{{Location: "local", Mid: "private-mid", TrackName: "private-screen-track"}},
+	}
+	tests := []struct {
+		name       string
+		client     *roundTripStub
+		wantStage  providerFailureStage
+		wantStatus int
+		wantClass  string
+		wantCode   string
+	}{
+		{
+			name: "non-2xx JSON envelope",
+			client: &roundTripStub{
+				statusCode: http.StatusTooEarly,
+				body:       `{"errorCode":"SESSION_NOT_CONNECTED","errorDescription":"private-offer-sdp rejected private-screen-track"}`,
+			},
+			wantStage:  failureStageHTTPStatus,
+			wantStatus: http.StatusTooEarly,
+			wantClass:  "4xx",
+			wantCode:   "session_not_connected",
+		},
+		{
+			name:       "top-level error",
+			client:     &roundTripStub{statusCode: http.StatusOK, body: `{"errorCode":"invalid_request","errorDescription":"private-offer-sdp rejected"}`},
+			wantStage:  failureStageTopLevel,
+			wantStatus: http.StatusOK,
+			wantClass:  "2xx",
+			wantCode:   "invalid_request",
+		},
+		{
+			name:       "per-track error",
+			client:     &roundTripStub{statusCode: http.StatusOK, body: `{"tracks":[{"mid":"private-mid","trackName":"private-screen-track","errorCode":"invalid_track","errorDescription":"private-screen-track rejected"}]}`},
+			wantStage:  failureStageTrack,
+			wantStatus: http.StatusOK,
+			wantClass:  "2xx",
+			wantCode:   "invalid_track",
+		},
+		{
+			name:       "timeout",
+			client:     &roundTripStub{err: fmt.Errorf("private transport detail: %w", context.DeadlineExceeded)},
+			wantStage:  failureStageTransport,
+			wantStatus: 0,
+			wantClass:  "none",
+			wantCode:   "timeout",
+		},
+		{
+			name:       "contract validation",
+			client:     &roundTripStub{statusCode: http.StatusOK, body: `{"tracks":[]}`},
+			wantStage:  failureStageContract,
+			wantStatus: http.StatusOK,
+			wantClass:  "2xx",
+			wantCode:   "invalid_contract",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := testAdapter(t, tt.client)
+			_, err := adapter.AddTracks(context.Background(), request)
+			if !errors.Is(err, mediaplane.ErrProviderFailed) {
+				t.Fatalf("error = %v, want %v", err, mediaplane.ErrProviderFailed)
+			}
+			var failure providerFailure
+			if !errors.As(err, &failure) {
+				t.Fatalf("error type = %T, want providerFailure", err)
+			}
+			if failure.operation != "add_tracks" || failure.stage != tt.wantStage || failure.statusCode != tt.wantStatus ||
+				failure.statusClass != tt.wantClass || failure.providerCode != tt.wantCode {
+				t.Fatalf("failure = %#v, want stage=%s status=%d class=%s code=%s", failure, tt.wantStage, tt.wantStatus, tt.wantClass, tt.wantCode)
+			}
+			wantText := fmt.Sprintf(
+				"cloudflare sfu add_tracks failed: stage=%s status=%d status_class=%s provider_code=%s",
+				tt.wantStage,
+				tt.wantStatus,
+				tt.wantClass,
+				tt.wantCode,
+			)
+			if err.Error() != wantText {
+				t.Fatalf("error = %q, want %q", err, wantText)
+			}
+			for _, forbidden := range []string{"private-connection", "private-offer-sdp", "private-mid", "private-screen-track", "private transport detail"} {
+				if strings.Contains(err.Error(), forbidden) {
+					t.Fatalf("error contains %q: %v", forbidden, err)
+				}
+			}
+		})
 	}
 }
 
@@ -434,6 +554,81 @@ func TestCloseTracksSpanRedactsSecretsAndMediaIdentifiers(t *testing.T) {
 	}
 }
 
+func TestAddTracksFailureTelemetryIsBounded(t *testing.T) {
+	var logs bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(originalLogger)
+	})
+
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	originalTracer := sfuTracer
+	sfuTracer = tracerProvider.Tracer("cloudflare-sfu-failure-test")
+	t.Cleanup(func() {
+		sfuTracer = originalTracer
+		_ = tracerProvider.Shutdown(context.Background())
+	})
+
+	metricReader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader))
+	originalCounter := sfuFailureCounter
+	sfuFailureCounter, _ = meterProvider.Meter("cloudflare-sfu-failure-test").Int64Counter("chalk.api.cloudflare_sfu.failures")
+	t.Cleanup(func() {
+		sfuFailureCounter = originalCounter
+		_ = meterProvider.Shutdown(context.Background())
+	})
+
+	adapter := testAdapter(t, &roundTripStub{
+		statusCode: http.StatusTooEarly,
+		body:       `{"errorCode":"SESSION_NOT_CONNECTED","errorDescription":"sfu-app-secret rejected private-offer-sdp for private-screen-track"}`,
+	})
+	_, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID:       "private-connection",
+		SessionDescription: &mediaplane.SessionDescription{Type: "offer", SDP: "private-offer-sdp"},
+		Tracks:             []mediaplane.Track{{Location: "local", Mid: "private-mid", TrackName: "private-screen-track"}},
+	})
+	if !errors.Is(err, mediaplane.ErrProviderFailed) {
+		t.Fatalf("error = %v, want %v", err, mediaplane.ErrProviderFailed)
+	}
+
+	spans := spanRecorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(spans))
+	}
+	var metrics metricdata.ResourceMetrics
+	if err := metricReader.Collect(context.Background(), &metrics); err != nil {
+		t.Fatalf("collect metrics: %v", err)
+	}
+	telemetry := fmt.Sprint(logs.String(), spans[0].Attributes(), spans[0].Events(), spans[0].Status(), metrics.ScopeMetrics)
+	for _, required := range []string{
+		"cloudflare_sfu.request_failed",
+		"add_tracks",
+		"http_status",
+		"425",
+		"4xx",
+		"session_not_connected",
+		"chalk.api.cloudflare_sfu.failures",
+	} {
+		if !strings.Contains(telemetry, required) {
+			t.Fatalf("telemetry missing %q: %s", required, telemetry)
+		}
+	}
+	for _, forbidden := range []string{
+		"sfu-app-secret",
+		"private-connection",
+		"private-offer-sdp",
+		"private-mid",
+		"private-screen-track",
+		"rejected",
+	} {
+		if strings.Contains(telemetry, forbidden) {
+			t.Fatalf("telemetry contains %q: %s", forbidden, telemetry)
+		}
+	}
+}
+
 func TestSFULifecycleOperationsStayOutOfGoMediaPlane(t *testing.T) {
 	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK})
 
@@ -528,6 +723,7 @@ func testAdapter(t *testing.T, client *roundTripStub) Adapter {
 type roundTripStub struct {
 	statusCode    int
 	body          string
+	err           error
 	method        string
 	path          string
 	requestBody   string
@@ -543,6 +739,9 @@ func (s *roundTripStub) Do(request *http.Request) (*http.Response, error) {
 	if request.Body != nil {
 		payload, _ := io.ReadAll(request.Body)
 		s.requestBody = string(payload)
+	}
+	if s.err != nil {
+		return nil, s.err
 	}
 
 	return &http.Response{

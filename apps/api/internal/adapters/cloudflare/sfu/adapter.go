@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -27,14 +29,73 @@ const (
 
 var ErrMissingConfig = errors.New("missing cloudflare sfu config")
 
-var sfuTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu")
+const (
+	failureStageTransport  providerFailureStage = "transport"
+	failureStageHTTPStatus providerFailureStage = "http_status"
+	failureStageDecode     providerFailureStage = "decode"
+	failureStageTopLevel   providerFailureStage = "top_level"
+	failureStageTrack      providerFailureStage = "track"
+	failureStageContract   providerFailureStage = "contract"
+)
+
+var (
+	sfuTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu")
+
+	sfuFailureCounter, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu").Int64Counter(
+		"chalk.api.cloudflare_sfu.failures",
+		metric.WithDescription("Cloudflare SFU request failures by bounded operation and failure classification"),
+	)
+)
+
+type providerFailureStage string
+
+type providerFailure struct {
+	operation    string
+	stage        providerFailureStage
+	statusCode   int
+	statusClass  string
+	providerCode string
+}
+
+func (e providerFailure) Error() string {
+	return fmt.Sprintf(
+		"cloudflare sfu %s failed: stage=%s status=%d status_class=%s provider_code=%s",
+		e.operation,
+		e.stage,
+		e.statusCode,
+		e.statusClass,
+		e.providerCode,
+	)
+}
+
+func (e providerFailure) Unwrap() error {
+	switch {
+	case e.providerCode == "plane_unavailable":
+		return mediaplane.ErrPlaneUnavailable
+	case e.statusCode == http.StatusUnauthorized, e.statusCode == http.StatusForbidden:
+		return mediaplane.ErrProviderUnauthorized
+	case e.statusCode == http.StatusNotFound, e.statusCode == http.StatusGone:
+		return mediaplane.ErrSessionNotFound
+	case e.statusCode == http.StatusTooManyRequests:
+		return mediaplane.ErrProviderRateLimited
+	default:
+		return mediaplane.ErrProviderFailed
+	}
+}
 
 type httpClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
 type responseValidator interface {
-	providerError() error
+	providerError(operation string) error
+}
+
+type providerErrorEnvelope struct {
+	ErrorCode string `json:"errorCode"`
+	Errors    []struct {
+		Code string `json:"code"`
+	} `json:"errors"`
 }
 
 type Adapter struct {
@@ -251,28 +312,30 @@ func (a Adapter) createConnection(ctx context.Context) (string, error) {
 }
 
 func (a Adapter) request(ctx context.Context, method string, path string, body any, output any, operation string) (err error) {
-	if a.client == nil {
-		return mediaplane.ErrPlaneUnavailable
-	}
-	var encoded []byte
-	if body != nil {
-		encoded, err = json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("encode sfu request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
-		}
-	}
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu."+operation, trace.WithSpanKind(trace.SpanKindClient))
 	defer func() {
 		if err != nil {
 			span.RecordError(sfuSpanError(err))
 			span.SetStatus(codes.Error, "Cloudflare SFU request failed")
+			recordProviderFailure(ctx, span, err)
 		}
 		span.End()
 	}()
 	span.SetAttributes(attribute.String("http.request.method", method), attribute.String("server.address", "rtc.live.cloudflare.com"))
+
+	if a.client == nil {
+		return newProviderFailure(operation, failureStageTransport, 0, "plane_unavailable")
+	}
+	var encoded []byte
+	if body != nil {
+		encoded, err = json.Marshal(body)
+		if err != nil {
+			return newProviderFailure(operation, failureStageContract, 0, "invalid_request")
+		}
+	}
 	request, err := http.NewRequestWithContext(ctx, method, fmt.Sprintf("%s/apps/%s%s", a.endpoint, url.PathEscape(a.appID), path), bytes.NewReader(encoded))
 	if err != nil {
-		return fmt.Errorf("build sfu request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
+		return newProviderFailure(operation, failureStageContract, 0, "invalid_request")
 	}
 	request.Header.Set("Authorization", "Bearer "+a.appSecret)
 	request.Header.Set("Accept", "application/json")
@@ -281,23 +344,27 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 	}
 	providerResponse, err := a.client.Do(request)
 	if err != nil {
-		return fmt.Errorf("send sfu request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
+		code := "transport_error"
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			code = "timeout"
+		}
+		return newProviderFailure(operation, failureStageTransport, 0, code)
 	}
 	defer providerResponse.Body.Close()
 	span.SetAttributes(attribute.Int("http.response.status_code", providerResponse.StatusCode))
 	payload, err := io.ReadAll(io.LimitReader(providerResponse.Body, 1<<20))
 	if err != nil {
-		return fmt.Errorf("read sfu response: %w", errors.Join(mediaplane.ErrProviderFailed, err))
+		return newProviderFailure(operation, failureStageTransport, providerResponse.StatusCode, "transport_error")
 	}
 	if providerResponse.StatusCode < 200 || providerResponse.StatusCode >= 300 {
-		return sfuStatusError(providerResponse.StatusCode, payload)
+		return sfuStatusError(operation, providerResponse.StatusCode, payload)
 	}
 	if output != nil {
 		if err := json.Unmarshal(payload, output); err != nil {
-			return fmt.Errorf("decode sfu response: %w", errors.Join(mediaplane.ErrProviderFailed, err))
+			return newProviderFailure(operation, failureStageDecode, providerResponse.StatusCode, "invalid_json")
 		}
 		if validator, ok := output.(responseValidator); ok {
-			if err := validator.providerError(); err != nil {
+			if err := validator.providerError(operation); err != nil {
 				return err
 			}
 		}
@@ -305,9 +372,9 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 	return nil
 }
 
-func (r *closeTracksResponse) providerError() error {
-	if strings.TrimSpace(r.ErrorCode) != "" {
-		return fmt.Errorf("close sfu tracks: provider rejected request: %w", mediaplane.ErrProviderFailed)
+func (r *closeTracksResponse) providerError(operation string) error {
+	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
+		return newProviderFailure(operation, failureStageTopLevel, http.StatusOK, providerRejectionCode(r.ErrorCode))
 	}
 
 	requestedMids := make(map[string]struct{}, len(r.requestedTracks))
@@ -318,27 +385,29 @@ func (r *closeTracksResponse) providerError() error {
 	for _, track := range r.Tracks {
 		track.Mid = strings.TrimSpace(track.Mid)
 		if _, ok := requestedMids[track.Mid]; !ok || track.Mid == "" {
-			return fmt.Errorf("close sfu tracks: provider returned unexpected track: %w", mediaplane.ErrProviderFailed)
+			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
 		}
 		if _, duplicate := seenMids[track.Mid]; duplicate {
-			return fmt.Errorf("close sfu tracks: provider returned duplicate track: %w", mediaplane.ErrProviderFailed)
+			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
 		}
 		seenMids[track.Mid] = struct{}{}
-		if strings.TrimSpace(track.ErrorCode) == "" || closedTrackAbsent(track.ErrorCode) {
+		if closedTrackAbsent(track.ErrorCode) {
 			continue
 		}
-		return fmt.Errorf("close sfu tracks: provider rejected track: %w", mediaplane.ErrProviderFailed)
+		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
+			return newProviderFailure(operation, failureStageTrack, http.StatusOK, providerRejectionCode(track.ErrorCode))
+		}
 	}
 	if len(seenMids) != len(requestedMids) {
-		return fmt.Errorf("close sfu tracks: provider omitted requested track result: %w", mediaplane.ErrProviderFailed)
+		return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
 	}
 
 	return nil
 }
 
-func (r *addTracksResponse) providerError() error {
+func (r *addTracksResponse) providerError(operation string) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return fmt.Errorf("add sfu tracks: provider rejected request: %w", mediaplane.ErrProviderFailed)
+		return newProviderFailure(operation, failureStageTopLevel, http.StatusOK, providerRejectionCode(r.ErrorCode))
 	}
 
 	type localTrackIdentity struct {
@@ -353,7 +422,7 @@ func (r *addTracksResponse) providerError() error {
 	seen := make(map[localTrackIdentity]struct{}, len(requested))
 	for _, track := range r.Tracks {
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			return fmt.Errorf("add sfu tracks: provider rejected track: %w", mediaplane.ErrProviderFailed)
+			return newProviderFailure(operation, failureStageTrack, http.StatusOK, providerRejectionCode(track.ErrorCode))
 		}
 		if track.SessionID != "" || track.Location == "remote" {
 			continue
@@ -361,15 +430,15 @@ func (r *addTracksResponse) providerError() error {
 
 		identity := localTrackIdentity{mid: track.Mid, trackName: track.TrackName}
 		if _, ok := requested[identity]; !ok || track.Mid == "" || track.TrackName == "" {
-			return fmt.Errorf("add sfu tracks: provider returned unexpected local track: %w", mediaplane.ErrProviderFailed)
+			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
 		}
 		if _, duplicate := seen[identity]; duplicate {
-			return fmt.Errorf("add sfu tracks: provider returned duplicate local track: %w", mediaplane.ErrProviderFailed)
+			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
 		}
 		seen[identity] = struct{}{}
 	}
 	if len(seen) != len(requested) {
-		return fmt.Errorf("add sfu tracks: provider omitted local track result: %w", mediaplane.ErrProviderFailed)
+		return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
 	}
 
 	return nil
@@ -400,6 +469,108 @@ func closedTrackAbsent(code string) bool {
 	default:
 		return false
 	}
+}
+
+func newProviderFailure(operation string, stage providerFailureStage, statusCode int, providerCode string) providerFailure {
+	return providerFailure{
+		operation:    normalizedOperation(operation),
+		stage:        stage,
+		statusCode:   statusCode,
+		statusClass:  providerStatusClass(statusCode),
+		providerCode: normalizedProviderCode(providerCode),
+	}
+}
+
+func normalizedOperation(operation string) string {
+	switch operation {
+	case "add_tracks", "close_tracks", "create_connection", "renegotiate", "verify_session":
+		return operation
+	default:
+		return "unknown"
+	}
+}
+
+func providerStatusClass(statusCode int) string {
+	if statusCode < 100 || statusCode > 599 {
+		return "none"
+	}
+	return fmt.Sprintf("%dxx", statusCode/100)
+}
+
+func providerRejectionCode(code string) string {
+	if strings.TrimSpace(code) == "" {
+		return "provider_rejected"
+	}
+	return code
+}
+
+func normalizedProviderCode(code string) string {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "invalid_request", "bad_request":
+		return "invalid_request"
+	case "invalid_track":
+		return "invalid_track"
+	case "session_not_found":
+		return "session_not_found"
+	case "session_not_connected", "not_connected", "connection_not_ready", "session_not_ready":
+		return "session_not_connected"
+	case "track_not_found":
+		return "track_not_found"
+	case "track_already_closed":
+		return "track_already_closed"
+	case "unauthorized", "forbidden":
+		return "unauthorized"
+	case "rate_limited", "too_many_requests":
+		return "rate_limited"
+	case "timeout", "request_timeout", "deadline_exceeded":
+		return "timeout"
+	case "transport_error":
+		return "transport_error"
+	case "plane_unavailable":
+		return "plane_unavailable"
+	case "invalid_json":
+		return "invalid_json"
+	case "invalid_contract":
+		return "invalid_contract"
+	case "provider_rejected":
+		return "provider_rejected"
+	case "internal_error", "upstream_error":
+		return "provider_internal"
+	default:
+		return "unknown"
+	}
+}
+
+func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
+	var failure providerFailure
+	if !errors.As(err, &failure) {
+		return
+	}
+	attributes := []attribute.KeyValue{
+		attribute.String("chalk.provider.operation", failure.operation),
+		attribute.String("chalk.provider.failure_stage", string(failure.stage)),
+		attribute.Int("http.response.status_code", failure.statusCode),
+		attribute.String("http.response.status_class", failure.statusClass),
+		attribute.String("chalk.provider.error_code", failure.providerCode),
+	}
+	span.SetAttributes(attributes...)
+	sfuFailureCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
+
+	level := slog.LevelWarn
+	if failure.stage == failureStageTransport || failure.statusClass == "5xx" {
+		level = slog.LevelError
+	}
+	slog.Default().Log(
+		ctx,
+		level,
+		"Cloudflare SFU request failed",
+		"event", "cloudflare_sfu.request_failed",
+		"operation", failure.operation,
+		"failure_stage", failure.stage,
+		"http_status", failure.statusCode,
+		"http_status_class", failure.statusClass,
+		"provider_code", failure.providerCode,
+	)
 }
 
 func sfuSpanError(err error) error {
@@ -438,39 +609,44 @@ func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (
 	if sessionRef == "" {
 		return SessionMetadata{}, mediaplane.ErrInvalidSessionRef
 	}
-	if a.client == nil {
-		return SessionMetadata{}, mediaplane.ErrPlaneUnavailable
-	}
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu.verify_session", trace.WithSpanKind(trace.SpanKindClient))
 	defer func() {
 		if err != nil {
-			span.RecordError(err)
+			span.RecordError(sfuSpanError(err))
 			span.SetStatus(codes.Error, "Cloudflare SFU request failed")
+			recordProviderFailure(ctx, span, err)
 		}
 		span.End()
 	}()
 	span.SetAttributes(attribute.String("http.request.method", http.MethodGet), attribute.String("server.address", "rtc.live.cloudflare.com"))
 
+	if a.client == nil {
+		return SessionMetadata{}, newProviderFailure("verify_session", failureStageTransport, 0, "plane_unavailable")
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/apps/%s/sessions/%s", a.endpoint, url.PathEscape(a.appID), url.PathEscape(sessionRef)), nil)
 	if err != nil {
-		return SessionMetadata{}, fmt.Errorf("build sfu request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
+		return SessionMetadata{}, newProviderFailure("verify_session", failureStageContract, 0, "invalid_request")
 	}
 	request.Header.Set("Authorization", "Bearer "+a.appSecret)
 	request.Header.Set("Accept", "application/json")
 
 	response, err := a.client.Do(request)
 	if err != nil {
-		return SessionMetadata{}, fmt.Errorf("send sfu request: %w", errors.Join(mediaplane.ErrProviderFailed, err))
+		code := "transport_error"
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			code = "timeout"
+		}
+		return SessionMetadata{}, newProviderFailure("verify_session", failureStageTransport, 0, code)
 	}
 	defer response.Body.Close()
 	span.SetAttributes(attribute.Int("http.response.status_code", response.StatusCode))
 
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return SessionMetadata{}, fmt.Errorf("read sfu response: %w", errors.Join(mediaplane.ErrProviderFailed, err))
+		return SessionMetadata{}, newProviderFailure("verify_session", failureStageTransport, response.StatusCode, "transport_error")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return SessionMetadata{}, sfuStatusError(response.StatusCode, payload)
+		return SessionMetadata{}, sfuStatusError("verify_session", response.StatusCode, payload)
 	}
 
 	return SessionMetadata{
@@ -504,16 +680,34 @@ func (a Adapter) joinForConnection(sessionRef string, participantRef string, con
 	}
 }
 
-func sfuStatusError(statusCode int, _ []byte) error {
-	providerErr := mediaplane.ErrProviderFailed
-	switch statusCode {
-	case http.StatusUnauthorized, http.StatusForbidden:
-		providerErr = mediaplane.ErrProviderUnauthorized
-	case http.StatusNotFound, http.StatusGone:
-		providerErr = mediaplane.ErrSessionNotFound
-	case http.StatusTooManyRequests:
-		providerErr = mediaplane.ErrProviderRateLimited
+func sfuStatusError(operation string, statusCode int, payload []byte) error {
+	var envelope providerErrorEnvelope
+	_ = json.Unmarshal(payload, &envelope)
+	code := envelope.ErrorCode
+	if strings.TrimSpace(code) == "" {
+		for _, providerError := range envelope.Errors {
+			if strings.TrimSpace(providerError.Code) != "" {
+				code = providerError.Code
+				break
+			}
+		}
+	}
+	if strings.TrimSpace(code) == "" {
+		switch statusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			code = "unauthorized"
+		case http.StatusNotFound, http.StatusGone:
+			code = "session_not_found"
+		case http.StatusTooManyRequests:
+			code = "rate_limited"
+		case http.StatusTooEarly:
+			code = "session_not_connected"
+		case http.StatusRequestTimeout, http.StatusGatewayTimeout:
+			code = "timeout"
+		default:
+			code = "unknown"
+		}
 	}
 
-	return fmt.Errorf("sfu provider status %d: %w", statusCode, providerErr)
+	return newProviderFailure(operation, failureStageHTTPStatus, statusCode, code)
 }
