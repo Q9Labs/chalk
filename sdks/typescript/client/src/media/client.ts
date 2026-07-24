@@ -33,6 +33,7 @@ type PendingLocalPublication = {
   readonly state: LocalTrackState;
   readonly transceiver: RTCRtpTransceiver;
   readonly trackName: string;
+  readonly reusedTransceiver: boolean;
 };
 
 const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
@@ -50,6 +51,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
   readonly #remoteListeners = new Set<(publications: readonly V3MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
   readonly #localTracks = new Map<V3MediaSource, LocalTrackState>();
+  readonly #reusableLocalTransceivers = new Map<V3MediaSource, RTCRtpTransceiver>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -100,7 +102,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     const state: LocalTrackState = {
       source,
       track,
-      transceiver: null,
+      transceiver: this.#reusableLocalTransceivers.get(source) ?? null,
       providerPublicationId: null,
       pendingOperationId: null,
       pendingTrackName: null,
@@ -108,6 +110,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
       enabled: false,
       endedListener: null,
     };
+    this.#reusableLocalTransceivers.delete(source);
     if (source === "screen") {
       state.endedListener = () => {
         if (this.#localTracks.get("screen") === state) this.#invokeListener(() => this.#onScreenEnded?.());
@@ -123,6 +126,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     const state = this.#localTracks.get(source);
     if (!state) return;
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
+    if (state.transceiver) this.#reusableLocalTransceivers.set(source, state.transceiver);
     this.#removeOwnedLocalTrack(state);
     this.#localTracks.delete(source);
     this.#publishSnapshot();
@@ -195,6 +199,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     this.#polling = false;
     this.#clearPoll();
     this.#disposeConnection(false);
+    this.#reusableLocalTransceivers.clear();
     this.#clearRemoteTracks();
     this.#cursor = null;
     this.#bootstrap = options.bootstrap;
@@ -230,6 +235,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     this.#clearPoll();
     this.#polling = false;
     this.#disposeConnection(true);
+    this.#reusableLocalTransceivers.clear();
     this.#clearRemoteTracks();
     for (const state of this.#localTracks.values()) this.#removeOwnedLocalTrack(state);
     this.#localTracks.clear();
@@ -270,31 +276,19 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     const transceiver = state.transceiver;
     state.desiredEnabled = false;
     state.track.enabled = false;
-    if (transceiver) await this.#retireLocalTransceiver(transceiver, state.track);
+    try {
+      if (transceiver) await transceiver.sender.replaceTrack(null);
+    } catch (error) {
+      state.desiredEnabled = true;
+      state.track.enabled = true;
+      throw error;
+    }
     state.enabled = false;
-    state.transceiver = null;
     state.providerPublicationId = null;
     state.pendingOperationId = null;
     state.pendingTrackName = null;
     this.#publishSnapshot();
     this.#emitLocal();
-  }
-
-  async #retireLocalTransceiver(transceiver: RTCRtpTransceiver, ownedTrack: MediaStreamTrack): Promise<void> {
-    let retired = false;
-    try {
-      await transceiver.sender.replaceTrack(null);
-      retired = true;
-    } catch (error) {
-      this.#reportError(error);
-    }
-    try {
-      transceiver.stop();
-      retired = true;
-    } catch (error) {
-      this.#reportError(error);
-    }
-    if (!retired) safeStopTrack(ownedTrack, this.#reportError.bind(this));
   }
 
   async #publishPreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
@@ -309,8 +303,9 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     const pendingStates = states.filter((state) => !state.enabled);
     if (pendingStates.length === 0) return;
     const wasLive = connectionIsLive(connection);
-    const publications = pendingStates.map((state) => this.#addLocalTransceiver(connection, state));
+    const publications: PendingLocalPublication[] = [];
     try {
+      for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state));
       const response = await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
       if (!wasLive) await this.#waitForConnection(connection, generation);
       this.#requireGeneration(generation);
@@ -319,15 +314,17 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
       this.#emitLocal();
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
-      this.#discardLocalPublications(publications);
+      await this.#discardLocalPublications(publications);
       throw error;
     }
   }
 
-  #addLocalTransceiver(connection: RTCPeerConnection, state: LocalTrackState): PendingLocalPublication {
-    const transceiver = connection.addTransceiver(state.track, { direction: "sendonly" });
+  async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState): Promise<PendingLocalPublication> {
+    const reusedTransceiver = state.transceiver !== null;
+    const transceiver = state.transceiver ?? connection.addTransceiver(state.track, { direction: "sendonly" });
+    if (reusedTransceiver) await transceiver.sender.replaceTrack(state.track);
     state.transceiver = transceiver;
-    return { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}` };
+    return { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}`, reusedTransceiver };
   }
 
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly PendingLocalPublication[], generation: number): Promise<CloudflareSFUTracksResponse> {
@@ -359,8 +356,16 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     }
   }
 
-  #discardLocalPublications(publications: readonly PendingLocalPublication[]): void {
-    for (const { state, transceiver } of publications) {
+  async #discardLocalPublications(publications: readonly PendingLocalPublication[]): Promise<void> {
+    for (const { state, transceiver, reusedTransceiver } of publications) {
+      if (reusedTransceiver) {
+        try {
+          await transceiver.sender.replaceTrack(null);
+        } catch (error) {
+          this.#reportError(error);
+        }
+        continue;
+      }
       try {
         transceiver.stop();
       } catch (error) {

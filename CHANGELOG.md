@@ -214,6 +214,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Confirmed disables now retire the browser sender without repeating the
   provider close that Sync already completed, and the server-confirmation
   deadline no longer races authorized local media work.
+- Reused each local media source's transceiver and MID across microphone,
+  camera, and screen-share disable and re-enable cycles. Temporary disables now
+  detach the sender without accumulating stopped SDP media sections, while
+  every republish still receives a fresh provider track identity and failed
+  attempts roll back to a detached reusable sender.
 
 ### Removed
 

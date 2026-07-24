@@ -105,7 +105,7 @@ describe("Cloudflare SFU client", () => {
     expect(republishedCamera?.trackName).not.toBe(initialCamera?.trackName);
     expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "camera")).toMatchObject({
       enabled: true,
-      publicationId: versionedPublicationID("connection-1", "2", republishedCamera?.trackName ?? ""),
+      publicationId: versionedPublicationID("connection-1", "1", republishedCamera?.trackName ?? ""),
     });
     expect(changes).toHaveBeenCalled();
     harness.client.stop();
@@ -126,28 +126,48 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("retires every closed sender across repeated disable and enable cycles", async () => {
+  it("reuses one transceiver and MID across repeated disable and enable cycles", async () => {
     const harness = createHarness();
     await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
     const peer = harness.peers[0] as FakePeerConnection;
+    const transceiver = peer.getTransceivers()[0];
+    harness.transport.maxLocalMids = 1;
 
     for (let cycle = 0; cycle < 3; cycle++) {
-      const closingSender = peer.getSenders().at(-1);
       await expect(harness.client.setLocalPublicationTarget({ operationId: `disable-${cycle}`, participantSessionId: "participant-1", source: "camera", enabled: false })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
-      expect(closingSender?.track).toBeNull();
-      expect(peer.activeTransceiverCount()).toBe(0);
+      expect(transceiver?.sender.track).toBeNull();
+      expect(peer.getTransceivers()).toEqual([transceiver]);
+      expect(peer.activeTransceiverCount()).toBe(1);
 
       await expect(harness.client.setLocalPublicationTarget({ operationId: `enable-${cycle}`, participantSessionId: "participant-1", source: "camera", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      expect(transceiver?.sender.track?.id).toBe("camera-track");
+      expect(peer.getTransceivers()).toEqual([transceiver]);
       expect(peer.activeTransceiverCount()).toBe(1);
-      expect(
-        peer
-          .getSenders()
-          .slice(0, -1)
-          .every((sender) => sender.track === null),
-      ).toBe(true);
+      expect(harness.transport.addInputs.at(-1)?.tracks[0]?.mid).toBe("0");
     }
 
     expect(new Set(harness.transport.addInputs.flatMap((input) => input.tracks.map((track) => track.trackName))).size).toBe(4);
+    harness.client.stop();
+  });
+
+  it("detaches a reused sender after a failed republish and retries on the same MID", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    const peer = harness.peers[0] as FakePeerConnection;
+    const transceiver = peer.getTransceivers()[0];
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "disable", participantSessionId: "participant-1", source: "camera", enabled: false })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    harness.transport.failNextLocalPublish = true;
+
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "enable", participantSessionId: "participant-1", source: "camera", enabled: true })).resolves.toEqual({
+      outcome: "retryable_failure",
+      errorCode: "signaling_failed",
+    });
+    expect(transceiver?.sender.track).toBeNull();
+    expect(peer.getTransceivers()).toEqual([transceiver]);
+
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "enable", participantSessionId: "participant-1", source: "camera", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    expect(transceiver?.sender.track?.id).toBe("camera-track");
+    expect(harness.transport.addInputs.at(-1)?.tracks[0]?.mid).toBe("0");
     harness.client.stop();
   });
 
@@ -262,6 +282,29 @@ describe("Cloudflare SFU client", () => {
     await harness.client.clearPreparedLocalTrack("screen");
     expect(harness.client.getSnapshot().localTracks.some((publication) => publication.source === "screen")).toBe(false);
     expect(screen.readyState).toBe("ended");
+    harness.client.stop();
+  });
+
+  it("reuses the screen transceiver after capture is cleared and prepared again", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+    const peer = harness.peers[0] as FakePeerConnection;
+    const firstScreen = new FakeTrack("screen-track-1", "video");
+    harness.client.prepareLocalTrack("screen", firstScreen as unknown as MediaStreamTrack);
+    await expect(setScreenTarget(harness.client, "screen-start-1", true)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    const screenTransceiver = peer.getTransceivers()[1];
+
+    await expect(setScreenTarget(harness.client, "screen-stop-1", false)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    await harness.client.clearPreparedLocalTrack("screen");
+    const secondScreen = new FakeTrack("screen-track-2", "video");
+    harness.client.prepareLocalTrack("screen", secondScreen as unknown as MediaStreamTrack);
+    await expect(setScreenTarget(harness.client, "screen-start-2", true)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+    expect(peer.getTransceivers()).toHaveLength(2);
+    expect(peer.getTransceivers()[1]).toBe(screenTransceiver);
+    expect(screenTransceiver?.sender.track?.id).toBe("screen-track-2");
+    expect(harness.transport.addInputs.at(-1)?.tracks[0]).toMatchObject({ source: "screen", mid: "1" });
+    expect(harness.transport.addInputs.at(-1)?.tracks[0]?.trackName).not.toBe(harness.transport.addInputs.at(-2)?.tracks[0]?.trackName);
     harness.client.stop();
   });
 
@@ -442,8 +485,10 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
+  maxLocalMids: number | null = null;
   snapshot: CloudflareSFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
   readonly #blockedConnections = new Map<string, () => void>();
+  readonly #localMids = new Set<string>();
   readonly #publicationListResolvers: (() => void)[] = [];
   readonly #peer: () => FakePeerConnection | undefined;
 
@@ -473,6 +518,10 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
       this.failNextLocalPublish = false;
       throw new CloudflareSFUError("local publish failed", "signaling_failed");
     }
+    const localMids = input.tracks.flatMap((track) => (track.location === "local" && track.mid !== undefined ? [track.mid] : []));
+    const nextLocalMids = new Set([...this.#localMids, ...localMids]);
+    if (this.maxLocalMids !== null && nextLocalMids.size > this.maxLocalMids) throw new CloudflareSFUError("local media-section budget exceeded", "signaling_failed");
+    for (const mid of localMids) this.#localMids.add(mid);
     return {
       sessionDescription: { type: "answer", sdp: `answer:${input.connectionId}` },
       tracks: input.tracks.map((track) => ({ ...track, publicationId: versionedPublicationID(input.connectionId, track.mid ?? "", track.trackName) })),
