@@ -1100,6 +1100,119 @@
         min-width: 8rem;
       }
 
+      .stack,
+      .types {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: var(--s2) var(--s3);
+        margin: var(--s2) 0;
+      }
+      .stack figcaption,
+      .types figcaption {
+        color: var(--muted);
+        font: 500 var(--t-chrome)/1.4 var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-bottom: var(--s1);
+      }
+      .frames {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        font: 400 var(--t-support)/1.8 var(--mono);
+      }
+      .frames .frames {
+        margin-left: 0.35rem;
+        padding-left: 1.1rem;
+        border-left: 1px solid var(--line);
+      }
+      .frames .frames:empty {
+        display: none;
+      }
+      .frame > .fn {
+        font-weight: 600;
+      }
+      .frame > .fmeta {
+        color: var(--muted);
+        font-size: var(--t-chrome);
+        margin-left: 0.6rem;
+      }
+      .frame > .fnote {
+        font: 400 var(--t-support)/1.5 var(--text);
+        color: var(--muted);
+        margin-left: 0.6rem;
+      }
+      .frame > .fmeta:empty,
+      .frame > .fnote:empty,
+      .sig > .sig-note:empty {
+        display: none;
+      }
+      .frame.new > .fn {
+        color: var(--accent);
+      }
+      .frame.amber > .fn {
+        color: var(--amber);
+      }
+      .frame.gone > .fn,
+      .frame.gone > .fmeta {
+        color: var(--muted);
+        text-decoration: line-through;
+      }
+      .sigs {
+        display: grid;
+        gap: 0;
+      }
+      .sig {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.1rem 0.85rem;
+        padding: var(--s1) 0;
+        border-top: 1px solid var(--line);
+        font: 400 var(--t-support)/1.6 var(--mono);
+      }
+      .sig:first-child {
+        border-top: none;
+      }
+      .sig code {
+        background: none;
+        border: 0;
+        padding: 0;
+      }
+      .sig-name {
+        font-weight: 600;
+      }
+      .sig-shape {
+        white-space: pre-wrap;
+      }
+      .sig-note {
+        grid-column: 2;
+        font: 400 var(--t-support)/1.5 var(--text);
+        color: var(--muted);
+      }
+      .sig.new .sig-name {
+        color: var(--accent);
+      }
+      .sig.amber .sig-name {
+        color: var(--amber);
+      }
+      .sig.gone .sig-name,
+      .sig.gone .sig-shape {
+        color: var(--muted);
+        text-decoration: line-through;
+      }
+      @media (max-width: 640px) {
+        .sig {
+          grid-template-columns: 1fr;
+        }
+        .sig-note {
+          grid-column: 1;
+        }
+      }
+
       .card {
         background: var(--surface);
         border: 1px solid var(--line);
@@ -1165,11 +1278,22 @@
   </head>
   <body>
     <svg style="display: none" aria-hidden="true">
+      <symbol id="i-chip" viewBox="0 0 24 24">
+        <rect x="5" y="5" width="14" height="14" rx="2" />
+        <rect x="10" y="10" width="4" height="4" />
+        <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
+      </symbol>
       <symbol id="i-warning" viewBox="0 0 24 24">
         <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
         <path d="M12 9v4M12 17h.01" />
       </symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-branch" viewBox="0 0 24 24">
+        <path d="M6 3v12" />
+        <circle cx="18" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <path d="M18 9a9 9 0 0 1-9 9" />
+      </symbol>
       <symbol id="i-route" viewBox="0 0 24 24">
         <path d="M5 20h7.5a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h6" />
         <circle cx="5" cy="20" r="1.8" />
@@ -1310,6 +1434,154 @@
           <div class="beat" data-mark=""><p>Existing moderation remains authoritative Sync v3 control state. Whiteboard files require participant-authenticated object access or the image tool remains disabled.</p></div>
         </section>
 
+        <section class="slide" data-spine="API">
+          <div class="slide-head">
+            <h2 class="slide-title">One public Session, typed outcomes</h2>
+            <span class="slide-kicker klabel"></span>
+          </div>
+          <div class="cols2">
+            <figure class="types">
+              <figcaption>
+                <svg class="icon"><use href="#i-chip" /></svg> Room actions
+              </figcaption>
+              <div class="sigs">
+                <div class="sig new">
+                  <code class="sig-name">sendReaction</code>
+                  <code class="sig-shape">(ChalkReaction) → Promise&lt;ChalkRoomReaction&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">sendChatMessage</code>
+                  <code class="sig-shape">(ChalkSendChatMessageInput) → Promise&lt;ChalkChatMessage&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">retryChatMessage</code>
+                  <code class="sig-shape">(clientMessageId) → Promise&lt;ChalkChatMessage&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">requestUnmute</code>
+                  <code class="sig-shape">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">requestStartCamera</code>
+                  <code class="sig-shape">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+              </div>
+            </figure>
+            <figure class="types">
+              <figcaption>
+                <svg class="icon"><use href="#i-chip" /></svg> Whiteboard port
+              </figcaption>
+              <div class="sigs">
+                <div class="sig new">
+                  <code class="sig-name">startSceneSubscription</code>
+                  <code class="sig-shape">() → Promise&lt;void&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">subscribe</code>
+                  <code class="sig-shape">(ChalkWhiteboardEvent listener) → unsubscribe</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">submitUpdate</code>
+                  <code class="sig-shape">(ChalkWhiteboardUpdateInput) → Promise&lt;ChalkWhiteboardCommit&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">sendCursor</code>
+                  <code class="sig-shape">({ x, y }) → void</code>
+                  <span class="sig-note"></span>
+                </div>
+                <div class="sig new">
+                  <code class="sig-name">requestSnapshot</code>
+                  <code class="sig-shape">() → Promise&lt;void&gt;</code>
+                  <span class="sig-note"></span>
+                </div>
+              </div>
+            </figure>
+          </div>
+          <div class="beat" data-mark="">
+            <p><code>ChalkSessionStore</code> remains snapshot + actions + subscribe, with one nullable whiteboard port. Room actions reject as <code>ChalkSessionError</code>; transport operations use <code>ChalkWhiteboardTransportError</code>.</p>
+          </div>
+        </section>
+
+        <section class="slide" data-spine="Calls">
+          <div class="slide-head">
+            <h2 class="slide-title">Two primary call-stack excerpts</h2>
+            <span class="slide-kicker klabel"></span>
+          </div>
+          <div class="cols2">
+            <figure class="stack">
+              <figcaption>
+                <svg class="icon"><use href="#i-branch" /></svg> Durable chat
+              </figcaption>
+              <ul class="frames">
+                <li class="frame amber">
+                  <span class="fn">ChatPanel.onSend</span><span class="fmeta">chalk-react</span><span class="fnote"></span>
+                  <ul class="frames">
+                    <li class="frame new">
+                      <span class="fn">ChalkSession.sendChatMessage</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
+                      <ul class="frames">
+                        <li class="frame new">
+                          <span class="fn">ChalkSessionCollaborationClient.sendChatMessage</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
+                          <ul class="frames">
+                            <li class="frame new">
+                              <span class="fn">Collaboration.Session.send_chat</span><span class="fmeta">apps/sync</span><span class="fnote"></span>
+                              <ul class="frames">
+                                <li class="frame new">
+                                  <span class="fn">ChatRepository.append</span><span class="fmeta">apps/sync</span><span class="fnote">commit, then fan out</span>
+                                  <ul class="frames"></ul>
+                                </li>
+                              </ul>
+                            </li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </figure>
+            <figure class="stack">
+              <figcaption>
+                <svg class="icon"><use href="#i-branch" /></svg> Excalidraw update
+              </figcaption>
+              <ul class="frames">
+                <li class="frame">
+                  <span class="fn">WhiteboardCanvas.onChange</span><span class="fmeta">chalk-whiteboard</span><span class="fnote"></span>
+                  <ul class="frames">
+                    <li class="frame amber">
+                      <span class="fn">ExcalidrawCollabEngine.handleChange</span><span class="fmeta">chalk-whiteboard</span><span class="fnote"></span>
+                      <ul class="frames">
+                        <li class="frame new">
+                          <span class="fn">WhiteboardTransport.submitUpdate</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
+                          <ul class="frames">
+                            <li class="frame new">
+                              <span class="fn">WhiteboardReducer.merge</span><span class="fmeta">apps/sync</span><span class="fnote"></span>
+                              <ul class="frames">
+                                <li class="frame new">
+                                  <span class="fn">WhiteboardRepository.commit</span><span class="fmeta">apps/sync</span><span class="fnote">receipt + revision</span>
+                                  <ul class="frames"></ul>
+                                </li>
+                              </ul>
+                            </li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </figure>
+          </div>
+          <div class="beat" data-mark=""><p>Moderation and directed requests keep the existing React → Session → Sync v3 path. The Markdown also traces reconnect, paging, request acceptance, board reset, and the native adapter.</p></div>
+        </section>
+
         <section class="slide" data-spine="Decided">
           <div class="slide-head">
             <h2 class="slide-title">Chat and platform scope are settled</h2>
@@ -1349,6 +1621,23 @@
           <div class="beat" data-mark="">
             <div class="callout amber"><b>D5 · Excalidraw images — Recommend:</b> staged, participant-authenticated upload with server verification and cleanup. Alternative: disable the image tool and reject image elements.</div>
           </div>
+        </section>
+
+        <section class="slide" data-spine="Execution">
+          <div class="slide-head">
+            <h2 class="slide-title">Seven gated phases, types first</h2>
+            <span class="slide-kicker klabel"></span>
+          </div>
+          <ol class="phases">
+            <li class="now">0 · Decisions<span class="caption">Close D3–D5 and numeric defaults</span></li>
+            <li class="">1 · Contract + types<span class="caption">Public, wire, repository, reducer, fan-out ports and compile tests</span></li>
+            <li class="">2 · Foundations<span class="caption">Database and reducer first; then SyncEngine and conditional files</span></li>
+            <li class="">3 · Client core<span class="caption">Session, collaboration client, adapters, integration</span></li>
+            <li class="">4 · Product<span class="caption">Web room and iOS/Android non-whiteboard actions</span></li>
+            <li class="">5 · Hardening<span class="caption">Two replicas, restart, quotas, overload, retention</span></li>
+            <li class="">6 · Handoff<span class="caption">Release notes, bounded review, root gate, commit</span></li>
+          </ol>
+          <div class="beat" data-mark=""><p>Each fan-out rejoins at an explicit integration gate. First-party UI cannot begin against private protocol shapes; it consumes the compiled Session API.</p></div>
         </section>
 
         <section class="slide" data-spine="Done">

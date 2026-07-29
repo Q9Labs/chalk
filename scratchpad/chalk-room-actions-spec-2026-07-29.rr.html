@@ -80,6 +80,58 @@
       </rr-beat>
     </rr-slide>
 
+    <rr-slide spine="API" title="One public Session, typed outcomes">
+      <rr-cols2>
+        <rr-types label="Room actions">
+          <rr-sig name="sendReaction" tone="new">(ChalkReaction) → Promise&lt;ChalkRoomReaction&gt;</rr-sig>
+          <rr-sig name="sendChatMessage" tone="new">(ChalkSendChatMessageInput) → Promise&lt;ChalkChatMessage&gt;</rr-sig>
+          <rr-sig name="retryChatMessage" tone="new">(clientMessageId) → Promise&lt;ChalkChatMessage&gt;</rr-sig>
+          <rr-sig name="requestUnmute" tone="new">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</rr-sig>
+          <rr-sig name="requestStartCamera" tone="new">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</rr-sig>
+        </rr-types>
+        <rr-types label="Whiteboard port">
+          <rr-sig name="startSceneSubscription" tone="new">() → Promise&lt;void&gt;</rr-sig>
+          <rr-sig name="subscribe" tone="new">(ChalkWhiteboardEvent listener) → unsubscribe</rr-sig>
+          <rr-sig name="submitUpdate" tone="new">(ChalkWhiteboardUpdateInput) → Promise&lt;ChalkWhiteboardCommit&gt;</rr-sig>
+          <rr-sig name="sendCursor" tone="new">({ x, y }) → void</rr-sig>
+          <rr-sig name="requestSnapshot" tone="new">() → Promise&lt;void&gt;</rr-sig>
+        </rr-types>
+      </rr-cols2>
+      <rr-beat>
+        <p><code>ChalkSessionStore</code> remains snapshot + actions + subscribe, with one nullable whiteboard port. Room actions reject as <code>ChalkSessionError</code>; transport operations use <code>ChalkWhiteboardTransportError</code>.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Calls" title="Two primary call-stack excerpts">
+      <rr-cols2>
+        <rr-stack label="Durable chat">
+          <rr-frame fn="ChatPanel.onSend" file="chalk-react" tone="amber">
+            <rr-frame fn="ChalkSession.sendChatMessage" file="chalk-client" tone="new">
+              <rr-frame fn="ChalkSessionCollaborationClient.sendChatMessage" file="chalk-client" tone="new">
+                <rr-frame fn="Collaboration.Session.send_chat" file="apps/sync" tone="new">
+                  <rr-frame fn="ChatRepository.append" file="apps/sync" note="commit, then fan out" tone="new" />
+                </rr-frame>
+              </rr-frame>
+            </rr-frame>
+          </rr-frame>
+        </rr-stack>
+        <rr-stack label="Excalidraw update">
+          <rr-frame fn="WhiteboardCanvas.onChange" file="chalk-whiteboard">
+            <rr-frame fn="ExcalidrawCollabEngine.handleChange" file="chalk-whiteboard" tone="amber">
+              <rr-frame fn="WhiteboardTransport.submitUpdate" file="chalk-client" tone="new">
+                <rr-frame fn="WhiteboardReducer.merge" file="apps/sync" tone="new">
+                  <rr-frame fn="WhiteboardRepository.commit" file="apps/sync" note="receipt + revision" tone="new" />
+                </rr-frame>
+              </rr-frame>
+            </rr-frame>
+          </rr-frame>
+        </rr-stack>
+      </rr-cols2>
+      <rr-beat>
+        <p>Moderation and directed requests keep the existing React → Session → Sync v3 path. The Markdown also traces reconnect, paging, request acceptance, board reset, and the native adapter.</p>
+      </rr-beat>
+    </rr-slide>
+
     <rr-slide spine="Decided" title="Chat and platform scope are settled">
       <rr-cols2>
         <rr-callout tone="green">
@@ -110,6 +162,21 @@
       </rr-cols2>
       <rr-beat>
         <rr-callout tone="amber"><b>D5 · Excalidraw images — Recommend:</b> staged, participant-authenticated upload with server verification and cleanup. Alternative: disable the image tool and reject image elements.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Execution" title="Seven gated phases, types first">
+      <rr-phases>
+        <rr-phase label="0 · Decisions" caption="Close D3–D5 and numeric defaults" state="now" />
+        <rr-phase label="1 · Contract + types" caption="Public, wire, repository, reducer, fan-out ports and compile tests" />
+        <rr-phase label="2 · Foundations" caption="Database and reducer first; then SyncEngine and conditional files" />
+        <rr-phase label="3 · Client core" caption="Session, collaboration client, adapters, integration" />
+        <rr-phase label="4 · Product" caption="Web room and iOS/Android non-whiteboard actions" />
+        <rr-phase label="5 · Hardening" caption="Two replicas, restart, quotas, overload, retention" />
+        <rr-phase label="6 · Handoff" caption="Release notes, bounded review, root gate, commit" />
+      </rr-phases>
+      <rr-beat>
+        <p>Each fan-out rejoins at an explicit integration gate. First-party UI cannot begin against private protocol shapes; it consumes the compiled Session API.</p>
       </rr-beat>
     </rr-slide>
 
