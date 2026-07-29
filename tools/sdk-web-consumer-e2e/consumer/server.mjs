@@ -12,6 +12,7 @@ const syncSockets = new Map();
 const mediaSockets = new Map();
 const participants = new Map();
 const publications = new Map();
+const chatMessages = [];
 const connectionIds = new Map();
 const metrics = { accessRequests: 0, syncConnections: 0, mediaConnections: 0, accessReasons: [], mediaReplacements: 0 };
 const socketServers = new Map([
@@ -22,11 +23,17 @@ const mediaMessageHandlers = new Map([
   ["signal", relaySignal],
   ["publications", updatePublications],
 ]);
-const syncCommandHandlers = new Map([
+const syncOperationHandlers = new Map([
   ["participant_leave", leaveParticipant],
   ["remove_participant", removeParticipant],
 ]);
+const syncMessageHandlers = new Map([
+  ["room_action", handleRoomActionMessage],
+  ["directed_request", handleDirectedRequestMessage],
+  ["command", handleCommandMessage],
+]);
 let revision = 0;
+let chatSequence = 0;
 
 const httpRoutes = new Map([
   ["GET /", serveHTML],
@@ -124,23 +131,37 @@ server.listen(0, "127.0.0.1", () => {
   process.stdout.write(`${JSON.stringify({ type: "listening", url: `http://localhost:${address.port}` })}\n`);
 });
 
-async function issueAccess(request, response) {
+async function issueAccess(request, response, url) {
   metrics.accessRequests += 1;
-  const user = cookie(request.headers.cookie ?? "", "chalk_fixture_user");
+  const user = accessUser(request, url);
   if (!canIssueAccess(user)) return sendJSON(response, 403, { error: "access_denied" });
   const body = await readJSON(request);
-  const reason = accessReason(body);
-  metrics.accessReasons.push(reason);
-  const replaceMedia = body.replaceMediaConnection === true;
-  const connectionId = mediaConnectionId(user, replaceMedia);
-  if (replaceMedia) metrics.mediaReplacements += 1;
-  connectionIds.set(user, connectionId);
-  const expiresAt = accessExpiration(reason);
-  return sendJSON(response, 200, {
+  return sendJSON(response, 200, participantAccess(user, body));
+}
+
+function participantAccess(user, body) {
+  const { connectionId, expiresAt } = recordAccessRequest(user, body);
+  return {
     subject: { tenantId: "fixture-tenant", roomId: "fixture-room", sessionId: "fixture-session", participantSessionId: user, participantGeneration: 1 },
     sync: { token: token("chalk-sync", user), expiresAt },
     media: { token: token("chalk-media", user), expiresAt, provider: "cloudflare_sfu", clientPayload: { connectionId, stunServer: "stun:localhost:9" } },
-  });
+  };
+}
+
+function accessUser(request, url) {
+  const fixtureUser = url.searchParams.get("fixtureUser");
+  if (fixtureUser !== null) return fixtureUser;
+  return cookie(request.headers.cookie ?? "", "chalk_fixture_user");
+}
+
+function recordAccessRequest(user, body) {
+  const reason = accessReason(body);
+  const replaceMedia = body.replaceMediaConnection === true;
+  const connectionId = mediaConnectionId(user, replaceMedia);
+  metrics.accessReasons.push(reason);
+  metrics.mediaReplacements += Number(replaceMedia);
+  connectionIds.set(user, connectionId);
+  return { connectionId, expiresAt: accessExpiration(reason) };
 }
 
 function canIssueAccess(user) {
@@ -167,9 +188,100 @@ function accessExpiration(reason) {
 }
 
 function handleSyncCommand(socket, actor, message) {
-  if (message.type !== "command" || typeof message.id !== "string") return;
-  const handler = syncCommandHandlers.get(message.name) ?? acknowledgeCommand;
+  syncMessageHandlers.get(message.type)?.(socket, actor, message);
+}
+
+function handleRoomActionMessage(socket, actor, message) {
+  if (typeof message.id !== "string") return;
+  handleRoomAction(socket, actor, message);
+}
+
+function handleDirectedRequestMessage(socket, actor, message) {
+  if (typeof message.id !== "string") return;
+  handleDirectedRequest(socket, actor, message);
+}
+
+function handleCommandMessage(socket, actor, message) {
+  if (typeof message.id !== "string") return;
+  const handler = syncOperationHandlers.get(message.name) ?? acknowledgeCommand;
   handler(socket, actor, message);
+}
+
+function handleDirectedRequest(socket, actor, message) {
+  const target = syncSockets.get(message.participantSessionId);
+  if (!target || target.readyState !== target.OPEN) {
+    socket.send(JSON.stringify({ type: "directed_request_result", id: message.id, result: { type: "directed_request_result", request_id: message.id, result: "target_unavailable" } }));
+    return;
+  }
+  target.send(
+    JSON.stringify({
+      type: "directed_request",
+      request: {
+        type: "directed_request",
+        request_id: message.id,
+        name: message.name,
+        actor_participant_session_id: actor,
+        expires_at_ms: Date.now() + 30_000,
+      },
+    }),
+  );
+  socket.send(JSON.stringify({ type: "directed_request_result", id: message.id, result: { type: "directed_request_result", request_id: message.id, result: "delivered" } }));
+}
+
+function handleRoomAction(socket, actor, message) {
+  if (message.name === "send_reaction") return sendReaction(socket, actor, message);
+  if (message.name === "send_chat") return sendChat(socket, actor, message);
+  if (message.name === "read_chat_page") return readChatPage(socket, message);
+}
+
+function sendReaction(socket, actor, request) {
+  const occurredAt = new Date().toISOString();
+  const reaction = {
+    eventId: crypto.randomUUID(),
+    participantSessionId: actor,
+    displayName: actor,
+    reaction: request.payload?.reaction,
+    occurredAt,
+    expiresAt: new Date(Date.now() + 5_000).toISOString(),
+  };
+  broadcastSync({ type: "room_action_event", event: { type: "reaction", reaction } });
+  socket.send(JSON.stringify({ type: "room_action_result", id: request.id, reaction }));
+}
+
+function sendChat(socket, actor, request) {
+  chatSequence += 1;
+  const message = {
+    messageId: crypto.randomUUID(),
+    clientMessageId: String(request.payload?.clientMessageId),
+    sequence: String(chatSequence),
+    participantSessionId: actor,
+    displayName: actor,
+    text: String(request.payload?.text),
+    createdAt: new Date().toISOString(),
+  };
+  chatMessages.push(message);
+  broadcastSync({ type: "room_action_event", event: { type: "chat_message", message } });
+  socket.send(JSON.stringify({ type: "room_action_result", id: request.id, message }));
+}
+
+function readChatPage(socket, request) {
+  const payload = isObject(request.payload) ? request.payload : {};
+  const afterSequence = numericValue(payload.afterSequence, 0);
+  const beforeSequence = numericValue(payload.beforeSequence, Number.POSITIVE_INFINITY);
+  const limit = numericValue(payload.limit, 100);
+  const messages = chatMessages.filter((message) => isWithinChatPage(message, afterSequence, beforeSequence)).slice(-limit);
+  socket.send(JSON.stringify({ type: "room_action_result", id: request.id, messages }));
+}
+
+function numericValue(value, fallback) {
+  if (value === undefined || value === null) return fallback;
+  return Number(value);
+}
+
+function isWithinChatPage(message, afterSequence, beforeSequence) {
+  const sequence = Number(message.sequence);
+  if (sequence <= afterSequence) return false;
+  return sequence < beforeSequence;
 }
 
 function leaveParticipant(socket, actor, message) {
@@ -230,6 +342,11 @@ function isActorPublication(actor, item) {
 function broadcastState() {
   const message = JSON.stringify({ type: "state", state: meetingState() });
   for (const socket of [...syncSockets.values(), ...mediaSockets.values()]) if (socket.readyState === socket.OPEN) socket.send(message);
+}
+
+function broadcastSync(message) {
+  const encoded = JSON.stringify(message);
+  for (const socket of syncSockets.values()) if (socket.readyState === socket.OPEN) socket.send(encoded);
 }
 
 function broadcastPeers() {

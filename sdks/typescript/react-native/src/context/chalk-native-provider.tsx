@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
+import type { ChalkSessionStore } from "@q9labsai/chalk-client";
 import { ChalkSession, type ChalkIncident, type ConferenceClientConfig, type IncidentReporter, type JoinOptions } from "../internal/core";
 import type { MediaPlaneAdapter } from "../media/media-plane-port";
 import { realtimeKitMediaPlaneAdapter, type NativeRealtimeKitMeeting } from "../media/realtimekit";
@@ -26,6 +27,7 @@ export interface ChalkNativeProviderProps<TMeeting = NativeRealtimeKitMeeting> {
   incidentMaxBreadcrumbs?: number;
   telemetry?: NativeTelemetryJourney;
   mediaPlane?: MediaPlaneAdapter<TMeeting>;
+  sessionStore?: ChalkSessionStore;
 }
 
 interface ChalkNativeContextValue<TMeeting = NativeRealtimeKitMeeting> {
@@ -40,6 +42,7 @@ interface ChalkNativeContextValue<TMeeting = NativeRealtimeKitMeeting> {
   isConnected: boolean;
   rtkMeeting: TMeeting | null;
   telemetry: NativeTelemetry | undefined;
+  sessionStore: ChalkSessionStore | null;
 }
 
 const ChalkNativeContext = createContext<ChalkNativeContextValue<unknown> | null>(null);
@@ -71,6 +74,7 @@ function ConfiguredChalkNativeProvider<TMeeting>({
   incidentMaxBreadcrumbs,
   telemetry: telemetryJourney,
   mediaPlane,
+  sessionStore,
 }: ConfiguredChalkNativeProviderProps<TMeeting>): React.JSX.Element {
   const [wideEventsEnabled, wideEventsIncludeDebugInfo, wideEventsHandler] = getWideEventsMemoDependencies(wideEvents);
   const telemetry = useMemo(() => (telemetryJourney ? createNativeTelemetry(telemetryJourney) : undefined), [telemetryJourney]);
@@ -135,8 +139,9 @@ function ConfiguredChalkNativeProvider<TMeeting>({
       isConnected: snapshot.isConnected,
       rtkMeeting: snapshot.meeting ?? null,
       telemetry,
+      sessionStore: sessionStore ?? null,
     }),
-    [session, join, leave, createSession, endSession, removeParticipant, muteParticipant, unmuteParticipant, snapshot, telemetry],
+    [session, join, leave, createSession, endSession, removeParticipant, muteParticipant, unmuteParticipant, snapshot, telemetry, sessionStore],
   );
   const content = <ChalkNativeContext.Provider value={value}>{children}</ChalkNativeContext.Provider>;
 
@@ -156,4 +161,8 @@ export function useChalkSession(): ChalkNativeContextValue<unknown> {
   const context = useContext(ChalkNativeContext);
   if (!context) throw new Error("useChalkSession must be used within ChalkNativeProvider");
   return context;
+}
+
+export function useChalkSessionStore(): ChalkSessionStore | null {
+  return useChalkSession().sessionStore;
 }

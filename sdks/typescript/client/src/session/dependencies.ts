@@ -1,5 +1,7 @@
 import type { CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
 import type { V3AdmissionPolicy, V3AssignableRole, V3CommandResult, V3SelfMediaTargetResult, V3SessionSnapshot, V3ClientMediaPlane } from "../sync";
+import type { V3DirectedRequest, V3DirectedRequestResult, V3RoomActionsClient } from "../sync/v3-types";
+import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParticipantAccess, ParticipantMediaCredential } from "./access";
 
 export type ChalkSessionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery";
@@ -24,7 +26,7 @@ export type ChalkSessionMediaDevices = {
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
 };
 
-export type ChalkSessionSyncClient = {
+export type ChalkSessionSyncClient = V3RoomActionsClient & {
   readonly start: () => Promise<void>;
   readonly stop: () => void;
   readonly getSnapshot: () => V3SessionSnapshot;
@@ -45,6 +47,9 @@ export type ChalkSessionSyncClient = {
   readonly stopParticipantScreenShare: (participantSessionId: string) => Promise<V3CommandResult>;
   readonly removeParticipant: (participantSessionId: string) => Promise<V3CommandResult>;
   readonly endSession: () => Promise<V3CommandResult>;
+  readonly onDirectedRequest: (listener: (request: V3DirectedRequest) => void) => () => void;
+  readonly requestUnmute: (participantSessionId: string) => Promise<V3DirectedRequestResult>;
+  readonly requestStartCamera: (participantSessionId: string) => Promise<V3DirectedRequestResult>;
 };
 
 export type ChalkSessionMediaClient = V3ClientMediaPlane & {
@@ -70,9 +75,15 @@ export type ChalkSessionSyncFactoryInput = {
   readonly media: ChalkSessionMediaClient;
 };
 
+export type ChalkSessionWhiteboardFactoryInput = {
+  readonly token: () => Promise<string>;
+  readonly onSummary: (summary: ChalkWhiteboardSummary) => void;
+};
+
 export type ChalkSessionDependencies = {
   readonly clock: ChalkSessionClock;
   readonly mediaDevices: ChalkSessionMediaDevices;
   readonly createMediaClient: (input: ChalkSessionMediaFactoryInput) => ChalkSessionMediaClient;
   readonly createSyncClient: (input: ChalkSessionSyncFactoryInput) => ChalkSessionSyncClient;
+  readonly createWhiteboardClient?: (input: ChalkSessionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null;
 };

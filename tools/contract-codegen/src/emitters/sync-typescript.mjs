@@ -120,6 +120,7 @@ function renderV3TypeScript(contract) {
     streams: contract.streams,
     externalIntents: contract.externalIntents,
     limits,
+    roomActions: contract.roomActions,
     continuity: contract.continuity,
     idempotency: contract.idempotency,
     closeCodes: contract.closeCodes,
@@ -156,10 +157,21 @@ function renderV3TypeScript(contract) {
     "    default: return false;",
     "  }",
     "}",
+    "function strictRoomActionsHelloExtension(value: unknown): boolean {",
+    "  return exactObject(value, ['name', 'chat_cursor']) && value.name === 'room_actions_v1' && exactObject(value.chat_cursor, ['after_sequence', 'retained_floor_sequence']);",
+    "}",
     "function strictHello(value: Record<string, unknown>): boolean {",
-    "  if (!exactObject(value, ['type', 'protocol', 'token', 'streams']) || !exactObject(value.streams, ['control', 'media', 'presence', 'requests'])) return false;",
+    "  const legacy = exactObject(value, ['type', 'protocol', 'token', 'streams']);",
+    "  const extended = exactObject(value, ['type', 'protocol', 'token', 'streams', 'extensions']) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictRoomActionsHelloExtension(value.extensions[0]);",
+    "  if ((!legacy && !extended) || !exactObject(value.streams, ['control', 'media', 'presence', 'requests'])) return false;",
     "  const streams = value.streams;",
     "  return exactObject(streams.control, ['cursor']) && (streams.control.cursor === null || strictCursor(streams.control.cursor)) && exactObject(streams.media, ['cursor']) && streams.media.cursor === null && exactObject(streams.presence, ['cursor']) && streams.presence.cursor === null && exactObject(streams.requests, ['cursor']) && streams.requests.cursor === null;",
+    "}",
+    "function strictChatMessage(value: unknown): boolean {",
+    "  return exactObject(value, ['type', 'message_id', 'client_message_id', 'sequence', 'participant_session_id', 'display_name', 'text', 'created_at']);",
+    "}",
+    "function strictRoomReaction(value: unknown): boolean {",
+    "  return exactObject(value, ['type', 'event_id', 'participant_session_id', 'display_name', 'reaction', 'occurred_at', 'expires_at']);",
     "}",
     "function strictOperation(value: Record<string, unknown>): boolean {",
     "  if (!exactObject(value, ['type', 'command_id', 'name', 'payload']) || !isObject(value.payload)) return false;",
@@ -177,6 +189,9 @@ function renderV3TypeScript(contract) {
     "    case 'live_target': return exactObject(value, " + JSON.stringify(contract.liveTargetFrames.request.exactFields) + ");",
     "    case 'directed_request': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.send.exactFields) + ");",
     "    case 'request_ack': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.acknowledge.exactFields) + ");",
+    "    case 'room_reaction_send': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.sendReaction.exactFields) + ");",
+    "    case 'chat_send': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.sendChat.exactFields) + ");",
+    "    case 'chat_page_request': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.readChatPage.exactFields) + ");",
     "    case 'delivery_ack': return exactObject(value, ['type', 'stream', 'revision', 'state_digest']);",
     "    case 'recovery_ack': return exactObject(value, ['type', 'recovery_id', 'revision', 'state_digest']);",
     "    case 'ping': return exactObject(value, ['type']);",
@@ -238,10 +253,12 @@ function renderV3TypeScript(contract) {
     "}",
     "function strictWelcome(value: Record<string, unknown>): boolean {",
     "  const base = ['type', 'protocol', 'participant_session_id', 'participant_session_generation', 'recovery_id', 'head', 'mode'];",
+    "  const extensionValid = Array.isArray(value.extensions) && value.extensions.length === 1 && exactObject(value.extensions[0], ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence']);",
+    "  const fields = extensionValid ? [...base, 'extensions'] : base;",
     "  if (!strictCursor(value.head)) return false;",
-    "  if (value.mode === 'snapshot') return exactObject(value, [...base, 'snapshot']) && strictSnapshot(value.snapshot);",
-    "  if (value.mode === 'terminal') return exactObject(value, [...base, 'reason']);",
-    "  return (value.mode === 'replay' || value.mode === 'up_to_date') && exactObject(value, base);",
+    "  if (value.mode === 'snapshot') return exactObject(value, [...fields, 'snapshot']) && strictSnapshot(value.snapshot);",
+    "  if (value.mode === 'terminal') return exactObject(value, [...fields, 'reason']);",
+    "  return (value.mode === 'replay' || value.mode === 'up_to_date') && exactObject(value, fields);",
     "}",
     "function strictServerFrame(value: unknown): boolean {",
     "  if (!isObject(value)) return false;",
@@ -264,6 +281,24 @@ function renderV3TypeScript(contract) {
     "    case 'live_target_result': return exactObject(value, " + JSON.stringify(contract.liveTargetFrames.result.exactFields) + ");",
     "    case 'directed_request': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.deliver.exactFields) + ");",
     "    case 'directed_request_result': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.result.exactFields) + ");",
+    "    case 'room_reaction': return strictRoomReaction(value);",
+    "    case 'room_reaction_result': return value.outcome === 'accepted' ? exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.reactionResult.acceptedFields) +
+      ") && strictRoomReaction(value.reaction) : value.outcome === 'rejected' && exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.reactionResult.rejectedFields) +
+      ");",
+    "    case 'chat_message': return strictChatMessage(value);",
+    "    case 'chat_send_result': return value.outcome === 'accepted' ? exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.chatSendResult.acceptedFields) +
+      ") && strictChatMessage(value.message) : value.outcome === 'rejected' && exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.chatSendResult.rejectedFields) +
+      ");",
+    "    case 'chat_page': return value.outcome === 'loaded' ? exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.chatPage.loadedFields) +
+      ") && Array.isArray(value.messages) && value.messages.every(strictChatMessage) : value.outcome === 'cursor_reset' && exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.chatPage.resetFields) +
+      ");",
+    "    case 'chat_head': return exactObject(value, " + JSON.stringify(contract.roomActions.serverFrames.chatHead.exactFields) + ");",
     "    case 'retryable_error': return exactObject(value, ['type', 'command_id', 'code']);",
     "    case 'error': return exactObject(value, ['type', 'code', 'detail']);",
     "    case 'pong': return exactObject(value, ['type']);",
@@ -275,6 +310,7 @@ function renderV3TypeScript(contract) {
     "export const PositiveIntegerSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));",
     "export const UuidSchema = Schema.String.check(Schema.makeFilter((value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value) ? undefined : { path: [], issue: 'must be an RFC 4122 UUID' }));",
     "export const StateDigestSchema = Schema.String.check(Schema.makeFilter((value) => /^[0-9a-f]{64}$/u.test(value) ? undefined : { path: [], issue: 'must be a lowercase hexadecimal SHA-256 digest' }));",
+    "export const UnsignedDecimalSchema = Schema.String.check(Schema.makeFilter((value) => /^(?:0|[1-9][0-9]*)$/u.test(value) ? undefined : { path: [], issue: 'must be an unsigned decimal integer' }));",
     `export const CommandIdSchema = boundedUtf8String(${limits.commandIdMaxBytes}).check(Schema.makeFilter((value) => textEncoder.encode(value).byteLength >= ${limits.commandIdMinBytes} ? undefined : { path: [], issue: 'must meet the command ID minimum byte length' }));`,
     `export const RequestIdSchema = boundedUtf8String(${limits.requestIdMaxBytes}).check(Schema.makeFilter((value) => textEncoder.encode(value).byteLength >= ${limits.requestIdMinBytes} ? undefined : { path: [], issue: 'must meet the request ID minimum byte length' }));`,
     "export const ControlCursorSchema = Schema.Struct({ revision: NonNegativeIntegerSchema, state_schema_version: PositiveIntegerSchema, state_digest: StateDigestSchema }).check(exactKeys(['revision', 'state_schema_version', 'state_digest']));",
@@ -310,6 +346,9 @@ function renderV3TypeScript(contract) {
     "const NullCursorStreamSchema = Schema.Struct({ cursor: Schema.Null }).check(exactKeys(['cursor']));",
     "const StreamsSchema = Schema.Struct({ control: Schema.Struct({ cursor: Schema.NullOr(ControlCursorSchema) }).check(exactKeys(['cursor'])), media: NullCursorStreamSchema, presence: NullCursorStreamSchema, requests: NullCursorStreamSchema });",
     `export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(3), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
+    "export const ChatCursorSchema = Schema.Struct({ after_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(['after_sequence', 'retained_floor_sequence']));",
+    "export const RoomActionsHelloExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v1'), chat_cursor: ChatCursorSchema }).check(exactKeys(['name', 'chat_cursor']));",
+    `export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(3), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema, extensions: Schema.Tuple([RoomActionsHelloExtensionSchema]) }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
     "export const DeliveryAckFrameSchema = Schema.Struct({ type: Schema.Literal('delivery_ack'), stream: Schema.Literal('control'), revision: PositiveIntegerSchema, state_digest: StateDigestSchema });",
     "export const RecoveryAckFrameSchema = Schema.Struct({ type: Schema.Literal('recovery_ack'), recovery_id: UuidSchema, revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });",
     "",
@@ -333,6 +372,14 @@ function renderV3TypeScript(contract) {
   lines.push(`export const DirectedRequestNameSchema = ${renderLiteralUnion(contract.directedRequestFrames.send.name)};`);
   lines.push("export const DirectedRequestSendFrameSchema = Schema.Struct({ type: Schema.Literal('directed_request'), request_id: RequestIdSchema, name: DirectedRequestNameSchema, target_participant_session_id: UuidSchema });");
   lines.push("export const RequestAckFrameSchema = Schema.Struct({ type: Schema.Literal('request_ack'), request_id: RequestIdSchema });");
+  lines.push(`export const RoomReactionSchema = ${renderLiteralUnion(contract.roomActions.reactions)};`);
+  lines.push("export const RoomReactionSendFrameSchema = Schema.Struct({ type: Schema.Literal('room_reaction_send'), operation_id: RequestIdSchema, reaction: RoomReactionSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));");
+  lines.push(`export const ChatTextSchema = boundedUtf8String(${limits.chatMessageUtf8Bytes}, 1).check(Schema.makeFilter((value) => Array.from(value).length <= ${limits.chatMessageUnicodeScalars} ? undefined : { path: ['text'], issue: 'must fit the Unicode scalar limit' }));`);
+  lines.push("export const ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send'), client_message_id: RequestIdSchema, text: ChatTextSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));");
+  lines.push(`export const ChatPageDirectionSchema = ${renderLiteralUnion(contract.roomActions.clientFrames.readChatPage.directions)};`);
+  lines.push(
+    "export const ChatPageRequestFrameSchema = Schema.Struct({ type: Schema.Literal('chat_page_request'), request_id: RequestIdSchema, direction: ChatPageDirectionSchema, cursor_sequence: Schema.NullOr(UnsignedDecimalSchema), limit: PositiveIntegerSchema }).check(Schema.makeFilter((frame) => frame.limit <= SyncProtocolLimits.chatPageMaxMessages ? undefined : { path: ['limit'], issue: 'must fit the chat page limit' }), boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
+  );
   lines.push("");
 
   const eventOrigins = [];
@@ -360,12 +407,24 @@ function renderV3TypeScript(contract) {
   );
   lines.push(`export const EventFrameSchema = Schema.Union([${eventSchemaNames.join(", ")}]);`);
   lines.push("");
+  lines.push(`export const RoomActionCapabilitySchema = ${renderLiteralUnion(contract.roomActions.capabilities)};`);
+  lines.push("const RoomActionCapabilitiesSchema = Schema.Array(RoomActionCapabilitySchema).check(Schema.isMaxLength(2), Schema.makeFilter((capabilities) => uniqueStrings(capabilities) ? undefined : { path: [], issue: 'must contain unique room-action capabilities' }));");
+  lines.push(
+    "export const RoomActionsWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v1'), capabilities: RoomActionCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, RoomActionCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence']));",
+  );
   lines.push("const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(3), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema };");
+  lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([RoomActionsWelcomeExtensionSchema]) };");
   lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));");
   lines.push("export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('replay') });");
   lines.push("export const WelcomeUpToDateFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('up_to_date') });");
   lines.push("export const WelcomeTerminalFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('terminal'), reason: TerminalRecoveryReasonSchema });");
-  lines.push("export const WelcomeFrameSchema = Schema.Union([WelcomeSnapshotFrameSchema, WelcomeReplayFrameSchema, WelcomeUpToDateFrameSchema, WelcomeTerminalFrameSchema]);");
+  lines.push("export const ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));");
+  lines.push("export const ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('replay') });");
+  lines.push("export const ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('up_to_date') });");
+  lines.push("export const ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('terminal'), reason: TerminalRecoveryReasonSchema });");
+  lines.push(
+    "export const WelcomeFrameSchema = Schema.Union([ExtendedWelcomeSnapshotFrameSchema, ExtendedWelcomeReplayFrameSchema, ExtendedWelcomeUpToDateFrameSchema, ExtendedWelcomeTerminalFrameSchema, WelcomeSnapshotFrameSchema, WelcomeReplayFrameSchema, WelcomeUpToDateFrameSchema, WelcomeTerminalFrameSchema]);",
+  );
   lines.push(
     "export const ReplayPageFrameSchema = Schema.Struct({ type: Schema.Literal('replay_page'), recovery_id: UuidSchema, first_revision: PositiveIntegerSchema, last_revision: PositiveIntegerSchema, events: Schema.Array(EventFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.replayPageMaxEvents)) }).check(Schema.makeFilter((frame) => { const first = frame.events[0]; const last = frame.events.at(-1); return encodedSyncFrameBytes(frame) <= SyncProtocolLimits.replayPageEncodedBytes && first !== undefined && last !== undefined && first.revision === frame.first_revision && last.revision === frame.last_revision && frame.events.every((event, index) => index === 0 || event.base_revision === frame.events[index - 1]!.revision) ? undefined : { path: [], issue: 'must declare one bounded contiguous replay page' }; }));",
   );
@@ -412,17 +471,36 @@ function renderV3TypeScript(contract) {
   lines.push("export const DirectedRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal('directed_request'), request_id: RequestIdSchema, name: DirectedRequestNameSchema, actor_participant_session_id: UuidSchema, expires_at_ms: PositiveIntegerSchema });");
   lines.push(`export const DirectedRequestResultSchema = ${renderLiteralUnion(contract.directedRequestFrames.result.result)};`);
   lines.push("export const DirectedRequestResultFrameSchema = Schema.Struct({ type: Schema.Literal('directed_request_result'), request_id: RequestIdSchema, result: DirectedRequestResultSchema });");
+  lines.push(
+    "export const RoomReactionEventFrameSchema = Schema.Struct({ type: Schema.Literal('room_reaction'), event_id: UuidSchema, participant_session_id: UuidSchema, display_name: boundedUtf8String(256, 1), reaction: RoomReactionSchema, occurred_at: boundedUtf8String(64, 1), expires_at: boundedUtf8String(64, 1) }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
+  );
+  lines.push(`export const RoomActionErrorCodeSchema = ${renderLiteralUnion(contract.roomActions.errorCodes)};`);
+  lines.push("export const AcceptedRoomReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal('room_reaction_result'), operation_id: RequestIdSchema, outcome: Schema.Literal('accepted'), reaction: RoomReactionEventFrameSchema });");
+  lines.push("export const RejectedRoomReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal('room_reaction_result'), operation_id: RequestIdSchema, outcome: Schema.Literal('rejected'), error_code: RoomActionErrorCodeSchema });");
+  lines.push("export const RoomReactionResultFrameSchema = Schema.Union([AcceptedRoomReactionResultFrameSchema, RejectedRoomReactionResultFrameSchema]);");
+  lines.push(
+    "export const ChatMessageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_message'), message_id: UuidSchema, client_message_id: RequestIdSchema, sequence: UnsignedDecimalSchema, participant_session_id: UuidSchema, display_name: boundedUtf8String(256, 1), text: ChatTextSchema, created_at: boundedUtf8String(64, 1) }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
+  );
+  lines.push("export const AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send_result'), client_message_id: RequestIdSchema, outcome: Schema.Literal('accepted'), message: ChatMessageFrameSchema });");
+  lines.push("export const RejectedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send_result'), client_message_id: RequestIdSchema, outcome: Schema.Literal('rejected'), error_code: RoomActionErrorCodeSchema });");
+  lines.push("export const ChatSendResultFrameSchema = Schema.Union([AcceptedChatSendResultFrameSchema, RejectedChatSendResultFrameSchema]);");
+  lines.push(
+    "export const LoadedChatPageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_page'), request_id: RequestIdSchema, outcome: Schema.Literal('loaded'), messages: Schema.Array(ChatMessageFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatPageMaxMessages)), has_more: Schema.Boolean, head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(boundedFrame(SyncProtocolLimits.chatPageEncodedBytes));",
+  );
+  lines.push("export const ResetChatPageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_page'), request_id: RequestIdSchema, outcome: Schema.Literal('cursor_reset'), retained_floor_sequence: UnsignedDecimalSchema });");
+  lines.push("export const ChatPageFrameSchema = Schema.Union([LoadedChatPageFrameSchema, ResetChatPageFrameSchema]);");
+  lines.push("export const ChatHeadFrameSchema = Schema.Struct({ type: Schema.Literal('chat_head'), head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) });");
   lines.push("export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal('retryable_error'), command_id: CommandIdSchema, code: RetryableErrorCodeSchema });");
   lines.push(`export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal('error'), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(${limits.protocolErrorDetailBytes}) });`);
   lines.push("export const PingFrameSchema = Schema.Struct({ type: Schema.Literal('ping') });");
   lines.push("export const PongFrameSchema = Schema.Struct({ type: Schema.Literal('pong') });");
   lines.push("");
   lines.push(
-    `export const SyncV3ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
+    `export const SyncV3ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, RoomReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
   );
   lines.push("export type SyncV3ClientFrame = typeof SyncV3ClientFrameSchema.Type;");
   lines.push(
-    `export const SyncV3ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, PongFrameSchema])));`,
+    `export const SyncV3ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, RoomReactionEventFrameSchema, RoomReactionResultFrameSchema, ChatMessageFrameSchema, ChatSendResultFrameSchema, ChatPageFrameSchema, ChatHeadFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, PongFrameSchema])));`,
   );
   lines.push("export type SyncV3ServerFrame = typeof SyncV3ServerFrameSchema.Type;");
   lines.push("export function encodeSyncFrame(frame: SyncV3ClientFrame | SyncV3ServerFrame): string { return JSON.stringify(frame); }");

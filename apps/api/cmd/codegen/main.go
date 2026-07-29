@@ -96,6 +96,12 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"bearerFormat": "JWT",
 						"description":  "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
 					},
+					"participantSyncBearer": map[string]any{
+						"type":         "http",
+						"scheme":       "bearer",
+						"bearerFormat": "JWT",
+						"description":  "Short-lived Sync participant credential bound to one room Session and participant generation.",
+					},
 				},
 				Schemas: make(map[string]map[string]any),
 			},
@@ -147,6 +153,10 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 	case httpapi.APIAuthParticipantMedia:
 		operation["security"] = []map[string][]string{
 			{"participantMediaBearer": {}},
+		}
+	case httpapi.APIAuthParticipantSync:
+		operation["security"] = []map[string][]string{
+			{"participantSyncBearer": {}},
 		}
 	default:
 		operation["security"] = []map[string][]string{}

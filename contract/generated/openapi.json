@@ -10967,6 +10967,479 @@
         ],
         "summary": "Get user"
       }
+    },
+    "/v1/whiteboard/files/uploads": {
+      "post": {
+        "operationId": "initiateWhiteboardFileUpload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateWhiteboardFileUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardFileUpload"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_whiteboard_file"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["whiteboard_file_not_found", "whiteboard_upload_not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["whiteboard_file_exists", "whiteboard_scene_changed", "whiteboard_upload_not_ready"]
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Gone",
+            "x-chalk-error-codes": ["whiteboard_upload_expired"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-chalk-error-codes": ["whiteboard_file_transfer_failed"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable", "whiteboard_storage_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantSyncBearer": []
+          }
+        ],
+        "summary": "Initiate whiteboard file upload",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/whiteboard/files/uploads/{uploadId}/finalize": {
+      "post": {
+        "operationId": "finalizeWhiteboardFileUpload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uploadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_whiteboard_file"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["whiteboard_file_not_found", "whiteboard_upload_not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["whiteboard_file_exists", "whiteboard_scene_changed", "whiteboard_upload_not_ready"]
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Gone",
+            "x-chalk-error-codes": ["whiteboard_upload_expired"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-chalk-error-codes": ["whiteboard_file_transfer_failed"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable", "whiteboard_storage_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantSyncBearer": []
+          }
+        ],
+        "summary": "Finalize whiteboard file upload",
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/whiteboard/files/{fileId}/download": {
+      "get": {
+        "operationId": "getWhiteboardFileDownload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fileId",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardFileDownload"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["invalid_whiteboard_file"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["whiteboard_file_not_found", "whiteboard_upload_not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["whiteboard_file_exists", "whiteboard_scene_changed", "whiteboard_upload_not_ready"]
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Gone",
+            "x-chalk-error-codes": ["whiteboard_upload_expired"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["rate_limited"]
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-chalk-error-codes": ["whiteboard_file_transfer_failed"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service_unavailable", "whiteboard_storage_unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantSyncBearer": []
+          }
+        ],
+        "summary": "Get whiteboard file download"
+      }
     }
   },
   "components": {
@@ -10974,6 +11447,12 @@
       "participantMediaBearer": {
         "bearerFormat": "JWT",
         "description": "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "participantSyncBearer": {
+        "bearerFormat": "JWT",
+        "description": "Short-lived Sync participant credential bound to one room Session and participant generation.",
         "scheme": "bearer",
         "type": "http"
       },
@@ -11945,6 +12424,32 @@
           }
         },
         "required": ["max_duration_minutes"],
+        "type": "object"
+      },
+      "InitiateWhiteboardFileUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "byteLength": {
+            "type": "integer"
+          },
+          "fileId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "mimeType": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sceneId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["byteLength", "fileId", "mimeType", "sceneId", "sha256"],
         "type": "object"
       },
       "IntegrationActionExecution": {
@@ -14150,6 +14655,44 @@
           }
         },
         "required": ["api_version", "created_at", "enabled", "event_types", "id", "name", "revision", "secret", "tenant_id", "updated_at", "url_redacted"],
+        "type": "object"
+      },
+      "WhiteboardFileDownload": {
+        "additionalProperties": false,
+        "properties": {
+          "downloadUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": ["downloadUrl", "expiresAt"],
+        "type": "object"
+      },
+      "WhiteboardFileUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "method": {
+            "type": "string"
+          },
+          "uploadId": {
+            "type": "string"
+          },
+          "uploadUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["expiresAt", "headers", "method", "uploadId", "uploadUrl"],
         "type": "object"
       }
     }

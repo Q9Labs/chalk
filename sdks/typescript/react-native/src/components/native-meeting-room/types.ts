@@ -15,7 +15,7 @@ export interface NativeMeetingBottomDockProps {
   onToggleVideo: () => void;
   onToggleHand?: () => void;
   onToggleScreenShare?: () => void;
-  onOpenChat: () => void;
+  onOpenChat?: () => void;
   onOpenParticipants?: () => void;
   onOpenReactions?: () => void;
   onOpenMore: () => void;
@@ -27,6 +27,7 @@ export interface NativeMeetingActionsSheetProps {
   isHandRaised: boolean;
   isScreenSharing: boolean;
   chatEnabled: boolean;
+  reactionsEnabled: boolean;
   peopleEnabled: boolean;
   transcriptsEnabled: boolean;
   whiteboardEnabled?: boolean;

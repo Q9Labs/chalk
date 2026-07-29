@@ -1,0 +1,145 @@
+{
+  "excalidrawVersion": "0.18.1",
+  "current": [
+    {
+      "id": "kept",
+      "type": "rectangle",
+      "version": 3,
+      "version_nonce": 20,
+      "index": "a0",
+      "is_deleted": false,
+      "payload": {
+        "id": "kept",
+        "type": "rectangle",
+        "version": 3,
+        "versionNonce": 20,
+        "index": "a0",
+        "isDeleted": false,
+        "x": 10
+      }
+    },
+    {
+      "id": "tie",
+      "type": "ellipse",
+      "version": 4,
+      "version_nonce": 90,
+      "index": "a2",
+      "is_deleted": false,
+      "payload": {
+        "id": "tie",
+        "type": "ellipse",
+        "version": 4,
+        "versionNonce": 90,
+        "index": "a2",
+        "isDeleted": false,
+        "x": 20
+      }
+    }
+  ],
+  "incoming": [
+    {
+      "id": "kept",
+      "type": "rectangle",
+      "version": 2,
+      "version_nonce": 1,
+      "index": "a0",
+      "is_deleted": false,
+      "payload": {
+        "id": "kept",
+        "type": "rectangle",
+        "version": 2,
+        "versionNonce": 1,
+        "index": "a0",
+        "isDeleted": false,
+        "x": 99
+      }
+    },
+    {
+      "id": "tie",
+      "type": "ellipse",
+      "version": 4,
+      "version_nonce": 10,
+      "index": "a2",
+      "is_deleted": true,
+      "payload": {
+        "id": "tie",
+        "type": "ellipse",
+        "version": 4,
+        "versionNonce": 10,
+        "index": "a2",
+        "isDeleted": true,
+        "x": 20
+      }
+    },
+    {
+      "id": "new",
+      "type": "text",
+      "version": 1,
+      "version_nonce": 50,
+      "index": "a1",
+      "is_deleted": false,
+      "payload": {
+        "id": "new",
+        "type": "text",
+        "version": 1,
+        "versionNonce": 50,
+        "index": "a1",
+        "isDeleted": false,
+        "text": "hello"
+      }
+    }
+  ],
+  "expected": [
+    {
+      "id": "kept",
+      "type": "rectangle",
+      "version": 3,
+      "version_nonce": 20,
+      "index": "a0",
+      "is_deleted": false,
+      "payload": {
+        "id": "kept",
+        "type": "rectangle",
+        "version": 3,
+        "versionNonce": 20,
+        "index": "a0",
+        "isDeleted": false,
+        "x": 10
+      }
+    },
+    {
+      "id": "new",
+      "type": "text",
+      "version": 1,
+      "version_nonce": 50,
+      "index": "a1",
+      "is_deleted": false,
+      "payload": {
+        "id": "new",
+        "type": "text",
+        "version": 1,
+        "versionNonce": 50,
+        "index": "a1",
+        "isDeleted": false,
+        "text": "hello"
+      }
+    },
+    {
+      "id": "tie",
+      "type": "ellipse",
+      "version": 4,
+      "version_nonce": 10,
+      "index": "a2",
+      "is_deleted": true,
+      "payload": {
+        "id": "tie",
+        "type": "ellipse",
+        "version": 4,
+        "versionNonce": 10,
+        "index": "a2",
+        "isDeleted": true,
+        "x": 20
+      }
+    }
+  ]
+}

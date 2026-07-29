@@ -23,6 +23,7 @@ function NativeMeetingActionsSheetIosPhoneBase({
   isHandRaised,
   isScreenSharing,
   chatEnabled,
+  reactionsEnabled,
   peopleEnabled,
   transcriptsEnabled,
   whiteboardEnabled,
@@ -57,7 +58,7 @@ function NativeMeetingActionsSheetIosPhoneBase({
                   <View style={styles.grid}>
                     <ActionTile icon={Link01Icon} label="Invite" onPress={onInviteParticipants} />
                     <ActionTile badge={chatUnreadCount > 0 ? formatBadge(chatUnreadCount) : null} disabled={!chatEnabled} icon={Chat01Icon} label="Chat" onPress={onOpenChat} />
-                    <ActionTile icon={SmileIcon} label="Reactions" onPress={onOpenReactions} />
+                    <ActionTile disabled={!reactionsEnabled} icon={SmileIcon} label="Reactions" onPress={onOpenReactions} />
                   </View>
                 </View>
 

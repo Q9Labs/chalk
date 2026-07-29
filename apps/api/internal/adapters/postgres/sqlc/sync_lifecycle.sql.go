@@ -463,7 +463,7 @@ from rooms
 where
     rooms.tenant_id = $10
     and rooms.id = $11
-returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation
+returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
 `
 
 type CreateLifecycleRoomSessionParams struct {
@@ -512,6 +512,8 @@ func (q *Queries) CreateLifecycleRoomSession(ctx context.Context, arg CreateLife
 		&i.MaximumDurationCeilingSeconds,
 		&i.DeadlineAt,
 		&i.DeadlineGeneration,
+		&i.WhiteboardRoleCapabilities,
+		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }
@@ -1067,7 +1069,7 @@ func (q *Queries) LockAdmissionRequestForParticipant(ctx context.Context, arg Lo
 }
 
 const lockDeadlineSessionForUpdate = `-- name: LockDeadlineSessionForUpdate :one
-select id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation
+select id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
 from room_sessions
 where
     tenant_id = $1
@@ -1102,6 +1104,8 @@ func (q *Queries) LockDeadlineSessionForUpdate(ctx context.Context, arg LockDead
 		&i.MaximumDurationCeilingSeconds,
 		&i.DeadlineAt,
 		&i.DeadlineGeneration,
+		&i.WhiteboardRoleCapabilities,
+		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }
@@ -1328,7 +1332,7 @@ func (q *Queries) LockLifecycleParticipantForUpdate(ctx context.Context, arg Loc
 }
 
 const lockLifecycleRoomSessionForUpdate = `-- name: LockLifecycleRoomSessionForUpdate :one
-select id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation
+select id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
 from room_sessions
 where
     tenant_id = $1
@@ -1363,6 +1367,8 @@ func (q *Queries) LockLifecycleRoomSessionForUpdate(ctx context.Context, arg Loc
 		&i.MaximumDurationCeilingSeconds,
 		&i.DeadlineAt,
 		&i.DeadlineGeneration,
+		&i.WhiteboardRoleCapabilities,
+		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }
@@ -1668,7 +1674,7 @@ where
     and room_id = $2
     and id = $3
     and status = 'active'
-returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation
+returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
 `
 
 type MarkLifecycleSessionEndingParams struct {
@@ -1697,6 +1703,8 @@ func (q *Queries) MarkLifecycleSessionEnding(ctx context.Context, arg MarkLifecy
 		&i.MaximumDurationCeilingSeconds,
 		&i.DeadlineAt,
 		&i.DeadlineGeneration,
+		&i.WhiteboardRoleCapabilities,
+		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }
@@ -1709,7 +1717,7 @@ where
     and room_id = $2
     and id = $3
     and status = 'active'
-returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation
+returning id, status, metadata, room_id, tenant_id, created_by_user_id, started_at, ended_at, updated_at, created_at, host_exit_policy, role_capabilities, maximum_duration_seconds, maximum_duration_ceiling_seconds, deadline_at, deadline_generation, whiteboard_role_capabilities, room_action_role_capabilities
 `
 
 type MarkTenantExternalSessionEndingParams struct {
@@ -1738,6 +1746,8 @@ func (q *Queries) MarkTenantExternalSessionEnding(ctx context.Context, arg MarkT
 		&i.MaximumDurationCeilingSeconds,
 		&i.DeadlineAt,
 		&i.DeadlineGeneration,
+		&i.WhiteboardRoleCapabilities,
+		&i.RoomActionRoleCapabilities,
 	)
 	return i, err
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ChalkSessionStore } from "@q9labsai/chalk-client";
 import { describe, expect, it, vi } from "vitest";
 import type { MediaPlaneAdapter, MeetingProviderProps } from "../media/media-plane-port";
 
@@ -42,6 +43,15 @@ describe("ChalkNativeProvider media plane selection", () => {
 
     expect(mediaPlaneFromElement(element)).toBe(fakeAdapter);
   });
+
+  it("passes an injected canonical session store to the configured provider", async () => {
+    const { ChalkNativeProvider } = await import("./chalk-native-provider");
+    const sessionStore = {} as ChalkSessionStore;
+
+    const element = ChalkNativeProvider({ apiUrl: "https://api.test", children: null, sessionStore });
+
+    expect(propFromElement(element, "sessionStore")).toBe(sessionStore);
+  });
 });
 
 function FakeMeetingProvider({ children }: MeetingProviderProps<{ readonly id: string }>): React.JSX.Element {
@@ -49,8 +59,12 @@ function FakeMeetingProvider({ children }: MeetingProviderProps<{ readonly id: s
 }
 
 function mediaPlaneFromElement(element: unknown): unknown {
+  return propFromElement(element, "mediaPlane");
+}
+
+function propFromElement(element: unknown, key: string): unknown {
   if (typeof element !== "object" || element === null || !("props" in element)) return undefined;
   const props = element.props;
-  if (typeof props !== "object" || props === null || !("mediaPlane" in props)) return undefined;
-  return props.mediaPlane;
+  if (typeof props !== "object" || props === null || !(key in props)) return undefined;
+  return (props as Record<string, unknown>)[key];
 }

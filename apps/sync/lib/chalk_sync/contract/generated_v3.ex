@@ -63,6 +63,16 @@ defmodule ChalkSync.Contract.GeneratedV3 do
     "projectionMaxItems" => 1500,
     "directedRequestTtlMs" => 30_000,
     "directedRequestsPerActorTarget" => 4,
+    "roomActionFrameBytes" => 32_768,
+    "roomActionQueueMaxFrames" => 256,
+    "roomActionBurstMax" => 8,
+    "chatMessageUtf8Bytes" => 16_384,
+    "chatMessageUnicodeScalars" => 4000,
+    "chatPageMaxMessages" => 100,
+    "chatPageEncodedBytes" => 131_072,
+    "reactionTtlMs" => 5000,
+    "reactionRateWindowMs" => 10_000,
+    "reactionRateMax" => 10,
     "protocolErrorDetailBytes" => 1024
   }
   @close_codes %{
@@ -190,7 +200,119 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       "projectionMaxItems" => 1500,
       "directedRequestTtlMs" => 30_000,
       "directedRequestsPerActorTarget" => 4,
+      "roomActionFrameBytes" => 32_768,
+      "roomActionQueueMaxFrames" => 256,
+      "roomActionBurstMax" => 8,
+      "chatMessageUtf8Bytes" => 16_384,
+      "chatMessageUnicodeScalars" => 4000,
+      "chatPageMaxMessages" => 100,
+      "chatPageEncodedBytes" => 131_072,
+      "reactionTtlMs" => 5000,
+      "reactionRateWindowMs" => 10_000,
+      "reactionRateMax" => 10,
       "protocolErrorDetailBytes" => 1024
+    },
+    "roomActions" => %{
+      "extension" => "room_actions_v1",
+      "capabilities" => ["sendReaction", "sendChat"],
+      "reactions" => ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+      "chatCursor" => %{
+        "exactFields" => ["after_sequence", "retained_floor_sequence"],
+        "afterSequence" => "nullableUnsignedDecimal",
+        "retainedFloorSequence" => "nullableUnsignedDecimal"
+      },
+      "helloExtension" => %{"exactFields" => ["name", "chat_cursor"]},
+      "welcomeExtension" => %{
+        "exactFields" => [
+          "name",
+          "capabilities",
+          "participant_capabilities",
+          "chat_head_sequence",
+          "retained_floor_sequence"
+        ]
+      },
+      "clientFrames" => %{
+        "sendReaction" => %{
+          "type" => "room_reaction_send",
+          "exactFields" => ["type", "operation_id", "reaction"]
+        },
+        "sendChat" => %{
+          "type" => "chat_send",
+          "exactFields" => ["type", "client_message_id", "text"]
+        },
+        "readChatPage" => %{
+          "type" => "chat_page_request",
+          "exactFields" => ["type", "request_id", "direction", "cursor_sequence", "limit"],
+          "directions" => ["older", "newer"]
+        }
+      },
+      "serverFrames" => %{
+        "reaction" => %{
+          "type" => "room_reaction",
+          "exactFields" => [
+            "type",
+            "event_id",
+            "participant_session_id",
+            "display_name",
+            "reaction",
+            "occurred_at",
+            "expires_at"
+          ]
+        },
+        "reactionResult" => %{
+          "type" => "room_reaction_result",
+          "acceptedFields" => ["type", "operation_id", "outcome", "reaction"],
+          "rejectedFields" => ["type", "operation_id", "outcome", "error_code"],
+          "outcomes" => ["accepted", "rejected"]
+        },
+        "chatMessage" => %{
+          "type" => "chat_message",
+          "exactFields" => [
+            "type",
+            "message_id",
+            "client_message_id",
+            "sequence",
+            "participant_session_id",
+            "display_name",
+            "text",
+            "created_at"
+          ]
+        },
+        "chatSendResult" => %{
+          "type" => "chat_send_result",
+          "acceptedFields" => ["type", "client_message_id", "outcome", "message"],
+          "rejectedFields" => ["type", "client_message_id", "outcome", "error_code"],
+          "outcomes" => ["accepted", "rejected"]
+        },
+        "chatPage" => %{
+          "type" => "chat_page",
+          "loadedFields" => [
+            "type",
+            "request_id",
+            "outcome",
+            "messages",
+            "has_more",
+            "head_sequence",
+            "retained_floor_sequence"
+          ],
+          "resetFields" => ["type", "request_id", "outcome", "retained_floor_sequence"],
+          "outcomes" => ["loaded", "cursor_reset"]
+        },
+        "chatHead" => %{
+          "type" => "chat_head",
+          "exactFields" => ["type", "head_sequence", "retained_floor_sequence"]
+        }
+      },
+      "errorCodes" => [
+        "capability_denied",
+        "invalid_payload",
+        "rate_limited",
+        "overloaded",
+        "session_ended",
+        "participant_stale",
+        "client_message_id_conflict",
+        "dependency_unavailable"
+      ]
     },
     "continuity" => %{
       "cursor" => %{
@@ -307,6 +429,18 @@ defmodule ChalkSync.Contract.GeneratedV3 do
     "rejected",
     "rate_limited"
   ]
+  @room_action_capabilities ["sendReaction", "sendChat"]
+  @room_reactions ["👍", "❤️", "😂", "😮", "😢", "🎉"]
+  @room_action_error_codes [
+    "capability_denied",
+    "invalid_payload",
+    "rate_limited",
+    "overloaded",
+    "session_ended",
+    "participant_stale",
+    "client_message_id_conflict",
+    "dependency_unavailable"
+  ]
   @media_sources ["microphone", "camera", "screen"]
   @presence_states ["connected", "disconnected"]
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
@@ -341,6 +475,15 @@ defmodule ChalkSync.Contract.GeneratedV3 do
         "request_ack" ->
           decode_request_ack(frame)
 
+        "room_reaction_send" ->
+          decode_room_reaction_send(frame)
+
+        "chat_send" ->
+          decode_chat_send(frame)
+
+        "chat_page_request" ->
+          decode_chat_page_request(frame)
+
         "delivery_ack" ->
           decode_delivery_ack(frame)
 
@@ -371,10 +514,19 @@ defmodule ChalkSync.Contract.GeneratedV3 do
            "streams" => streams
          } = frame
        ) do
-    if exact_keys?(frame, ["type", "protocol", "token", "streams"]) and valid_token?(token) and
-         valid_streams?(streams),
-       do: {:ok, {:hello, %{token: token, streams: streams}}},
-       else: {:error, :invalid_hello}
+    cond do
+      exact_keys?(frame, ["type", "protocol", "token", "streams"]) and valid_token?(token) and
+          valid_streams?(streams) ->
+        {:ok, {:hello, %{token: token, streams: streams, extensions: []}}}
+
+      exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
+        valid_token?(token) and valid_streams?(streams) and
+          valid_room_actions_hello_extensions?(frame["extensions"]) ->
+        {:ok, {:hello, %{token: token, streams: streams, extensions: frame["extensions"]}}}
+
+      true ->
+        {:error, :invalid_hello}
+    end
   end
 
   defp decode_hello(%{"protocol" => protocol}) when is_integer(protocol),
@@ -535,6 +687,47 @@ defmodule ChalkSync.Contract.GeneratedV3 do
 
   defp decode_request_ack(_frame), do: {:error, :invalid_request_ack}
 
+  defp decode_room_reaction_send(
+         %{"operation_id" => operation_id, "reaction" => reaction} = frame
+       ) do
+    if exact_keys?(frame, ["type", "operation_id", "reaction"]) and
+         valid_request_id?(operation_id) and reaction in @room_reactions,
+       do: {:ok, {:room_reaction_send, %{operation_id: operation_id, reaction: reaction}}},
+       else: {:error, :invalid_room_reaction}
+  end
+
+  defp decode_room_reaction_send(_frame), do: {:error, :invalid_room_reaction}
+
+  defp decode_chat_send(%{"client_message_id" => client_message_id, "text" => text} = frame) do
+    if exact_keys?(frame, ["type", "client_message_id", "text"]) and
+         valid_request_id?(client_message_id) and valid_chat_text?(text),
+       do: {:ok, {:chat_send, %{client_message_id: client_message_id, text: text}}},
+       else: {:error, :invalid_chat_message}
+  end
+
+  defp decode_chat_send(_frame), do: {:error, :invalid_chat_message}
+
+  defp decode_chat_page_request(
+         %{
+           "request_id" => request_id,
+           "direction" => direction,
+           "cursor_sequence" => cursor,
+           "limit" => limit
+         } = frame
+       ) do
+    if exact_keys?(frame, ["type", "request_id", "direction", "cursor_sequence", "limit"]) and
+         valid_request_id?(request_id) and direction in ["older", "newer"] and
+         valid_nullable_unsigned_decimal?(cursor) and valid_positive_integer?(limit) and
+         limit <= @limits["chatPageMaxMessages"],
+       do:
+         {:ok,
+          {:chat_page_request,
+           %{request_id: request_id, direction: direction, cursor_sequence: cursor, limit: limit}}},
+       else: {:error, :invalid_chat_page_request}
+  end
+
+  defp decode_chat_page_request(_frame), do: {:error, :invalid_chat_page_request}
+
   defp decode_delivery_ack(
          %{"stream" => "control", "revision" => revision, "state_digest" => digest} = frame
        ) do
@@ -584,6 +777,19 @@ defmodule ChalkSync.Contract.GeneratedV3 do
   def valid_server_frame?(%{"type" => "directed_request_result"} = frame),
     do: valid_directed_request_result?(frame)
 
+  def valid_server_frame?(%{"type" => "room_reaction"} = frame), do: valid_room_reaction?(frame)
+
+  def valid_server_frame?(%{"type" => "room_reaction_result"} = frame),
+    do: valid_room_reaction_result?(frame)
+
+  def valid_server_frame?(%{"type" => "chat_message"} = frame), do: valid_chat_message?(frame)
+
+  def valid_server_frame?(%{"type" => "chat_send_result"} = frame),
+    do: valid_chat_send_result?(frame)
+
+  def valid_server_frame?(%{"type" => "chat_page"} = frame), do: valid_chat_page?(frame)
+  def valid_server_frame?(%{"type" => "chat_head"} = frame), do: valid_chat_head?(frame)
+
   def valid_server_frame?(
         %{"type" => "retryable_error", "command_id" => id, "code" => code} = frame
       ),
@@ -613,6 +819,14 @@ defmodule ChalkSync.Contract.GeneratedV3 do
 
   defp valid_streams?(_streams), do: false
 
+  defp valid_room_actions_hello_extensions?([
+         %{"name" => "room_actions_v1", "chat_cursor" => cursor} = extension
+       ]) do
+    exact_keys?(extension, ["name", "chat_cursor"]) and valid_chat_cursor?(cursor)
+  end
+
+  defp valid_room_actions_hello_extensions?(_extensions), do: false
+
   defp valid_welcome?(
          %{
            "protocol" => @protocol_version,
@@ -633,9 +847,15 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       "mode"
     ]
 
+    base = if Map.has_key?(frame, "extensions"), do: base ++ ["extensions"], else: base
+
+    valid_extensions =
+      not Map.has_key?(frame, "extensions") or
+        valid_room_actions_welcome_extensions?(frame["extensions"])
+
     valid_base =
       valid_uuid?(participant_id) and valid_positive_integer?(generation) and
-        valid_uuid?(recovery_id) and valid_cursor?(head)
+        valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions
 
     case mode do
       "snapshot" ->
@@ -655,6 +875,34 @@ defmodule ChalkSync.Contract.GeneratedV3 do
   end
 
   defp valid_welcome?(_frame), do: false
+
+  defp valid_room_actions_welcome_extensions?([
+         %{
+           "name" => "room_actions_v1",
+           "capabilities" => capabilities,
+           "participant_capabilities" => participant_capabilities,
+           "chat_head_sequence" => head,
+           "retained_floor_sequence" => floor
+         } = extension
+       ]) do
+    exact_keys?(extension, [
+      "name",
+      "capabilities",
+      "participant_capabilities",
+      "chat_head_sequence",
+      "retained_floor_sequence"
+    ]) and valid_room_action_capabilities?(capabilities) and is_map(participant_capabilities) and
+      Enum.all?(participant_capabilities, fn {participant_id, values} ->
+        valid_uuid?(participant_id) and valid_room_action_capabilities?(values)
+      end) and valid_nullable_unsigned_decimal?(head) and valid_nullable_unsigned_decimal?(floor)
+  end
+
+  defp valid_room_actions_welcome_extensions?(_extensions), do: false
+
+  defp valid_room_action_capabilities?(capabilities),
+    do:
+      unique_list?(capabilities) and length(capabilities) <= 2 and
+        Enum.all?(capabilities, &(&1 in @room_action_capabilities))
 
   defp valid_snapshot?(
          %{
@@ -1228,6 +1476,168 @@ defmodule ChalkSync.Contract.GeneratedV3 do
         result in @directed_request_results
 
   defp valid_directed_request_result?(_frame), do: false
+
+  defp valid_room_reaction?(
+         %{
+           "event_id" => event_id,
+           "participant_session_id" => participant_id,
+           "display_name" => display_name,
+           "reaction" => reaction,
+           "occurred_at" => occurred_at,
+           "expires_at" => expires_at
+         } = frame
+       ),
+       do:
+         exact_keys?(frame, [
+           "type",
+           "event_id",
+           "participant_session_id",
+           "display_name",
+           "reaction",
+           "occurred_at",
+           "expires_at"
+         ]) and valid_uuid?(event_id) and valid_uuid?(participant_id) and
+           bounded_string?(display_name, 1, 256) and reaction in @room_reactions and
+           valid_iso_timestamp?(occurred_at) and valid_iso_timestamp?(expires_at) and
+           frame_within_limit?(frame, @limits["roomActionFrameBytes"])
+
+  defp valid_room_reaction?(_frame), do: false
+
+  defp valid_room_reaction_result?(
+         %{"outcome" => "accepted", "operation_id" => operation_id, "reaction" => reaction} =
+           frame
+       ),
+       do:
+         exact_keys?(frame, ["type", "operation_id", "outcome", "reaction"]) and
+           valid_request_id?(operation_id) and valid_room_reaction?(reaction)
+
+  defp valid_room_reaction_result?(
+         %{"outcome" => "rejected", "operation_id" => operation_id, "error_code" => error_code} =
+           frame
+       ),
+       do:
+         exact_keys?(frame, ["type", "operation_id", "outcome", "error_code"]) and
+           valid_request_id?(operation_id) and error_code in @room_action_error_codes
+
+  defp valid_room_reaction_result?(_frame), do: false
+
+  defp valid_chat_message?(
+         %{
+           "message_id" => message_id,
+           "client_message_id" => client_message_id,
+           "sequence" => sequence,
+           "participant_session_id" => participant_id,
+           "display_name" => display_name,
+           "text" => text,
+           "created_at" => created_at
+         } = frame
+       ),
+       do:
+         exact_keys?(frame, [
+           "type",
+           "message_id",
+           "client_message_id",
+           "sequence",
+           "participant_session_id",
+           "display_name",
+           "text",
+           "created_at"
+         ]) and valid_uuid?(message_id) and valid_request_id?(client_message_id) and
+           valid_unsigned_decimal?(sequence) and valid_uuid?(participant_id) and
+           bounded_string?(display_name, 1, 256) and valid_chat_text?(text) and
+           valid_iso_timestamp?(created_at) and
+           frame_within_limit?(frame, @limits["roomActionFrameBytes"])
+
+  defp valid_chat_message?(_frame), do: false
+
+  defp valid_chat_send_result?(
+         %{
+           "outcome" => "accepted",
+           "client_message_id" => client_message_id,
+           "message" => message
+         } = frame
+       ),
+       do:
+         exact_keys?(frame, ["type", "client_message_id", "outcome", "message"]) and
+           valid_request_id?(client_message_id) and valid_chat_message?(message)
+
+  defp valid_chat_send_result?(
+         %{
+           "outcome" => "rejected",
+           "client_message_id" => client_message_id,
+           "error_code" => error_code
+         } = frame
+       ),
+       do:
+         exact_keys?(frame, ["type", "client_message_id", "outcome", "error_code"]) and
+           valid_request_id?(client_message_id) and error_code in @room_action_error_codes
+
+  defp valid_chat_send_result?(_frame), do: false
+
+  defp valid_chat_page?(
+         %{
+           "outcome" => "loaded",
+           "request_id" => request_id,
+           "messages" => messages,
+           "has_more" => has_more,
+           "head_sequence" => head,
+           "retained_floor_sequence" => floor
+         } = frame
+       ),
+       do:
+         exact_keys?(frame, [
+           "type",
+           "request_id",
+           "outcome",
+           "messages",
+           "has_more",
+           "head_sequence",
+           "retained_floor_sequence"
+         ]) and valid_request_id?(request_id) and is_list(messages) and
+           length(messages) <= @limits["chatPageMaxMessages"] and
+           Enum.all?(messages, &valid_chat_message?/1) and is_boolean(has_more) and
+           valid_nullable_unsigned_decimal?(head) and valid_nullable_unsigned_decimal?(floor) and
+           frame_within_limit?(frame, @limits["chatPageEncodedBytes"])
+
+  defp valid_chat_page?(
+         %{
+           "outcome" => "cursor_reset",
+           "request_id" => request_id,
+           "retained_floor_sequence" => floor
+         } = frame
+       ),
+       do:
+         exact_keys?(frame, ["type", "request_id", "outcome", "retained_floor_sequence"]) and
+           valid_request_id?(request_id) and valid_unsigned_decimal?(floor)
+
+  defp valid_chat_page?(_frame), do: false
+
+  defp valid_chat_head?(%{"head_sequence" => head, "retained_floor_sequence" => floor} = frame),
+    do:
+      exact_keys?(frame, ["type", "head_sequence", "retained_floor_sequence"]) and
+        valid_nullable_unsigned_decimal?(head) and valid_nullable_unsigned_decimal?(floor)
+
+  defp valid_chat_head?(_frame), do: false
+
+  defp valid_chat_cursor?(
+         %{"after_sequence" => after_sequence, "retained_floor_sequence" => floor} = cursor
+       ),
+       do:
+         exact_keys?(cursor, ["after_sequence", "retained_floor_sequence"]) and
+           valid_nullable_unsigned_decimal?(after_sequence) and
+           valid_nullable_unsigned_decimal?(floor)
+
+  defp valid_chat_cursor?(_cursor), do: false
+  defp valid_nullable_unsigned_decimal?(nil), do: true
+  defp valid_nullable_unsigned_decimal?(value), do: valid_unsigned_decimal?(value)
+  defp valid_unsigned_decimal?(value), do: is_binary(value) and value =~ ~r/\A(?:0|[1-9][0-9]*)\z/
+
+  defp valid_chat_text?(value),
+    do:
+      bounded_string?(value, 1, @limits["chatMessageUtf8Bytes"]) and
+        String.length(value) <= @limits["chatMessageUnicodeScalars"]
+
+  defp valid_iso_timestamp?(value), do: bounded_string?(value, 1, 64)
 
   defp valid_cursor?(nil), do: true
 

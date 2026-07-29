@@ -258,6 +258,27 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("finalizeWhiteboardFileUpload", "/v1/whiteboard/files/uploads/:uploadId/finalize", {
+      params: S.FinalizeWhiteboardFileUploadPathParamsSchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.InvalidWhiteboardFileErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardFileExistsErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardSceneChangedErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getWebhookDelivery", "/v1/tenants/:tenant_id/webhook-endpoints/:endpoint_id/deliveries/:delivery_id", {
       params: S.GetWebhookDeliveryPathParamsSchema,
       success: S.GetWebhookDeliveryResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -296,6 +317,49 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getWhiteboardFileDownload", "/v1/whiteboard/files/:fileId/download", {
+      params: S.GetWhiteboardFileDownloadPathParamsSchema,
+      success: S.GetWhiteboardFileDownloadResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.InvalidWhiteboardFileErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardFileExistsErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardSceneChangedErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("initiateWhiteboardFileUpload", "/v1/whiteboard/files/uploads", {
+      payload: S.InitiateWhiteboardFileUploadRequestBodySchema,
+      success: S.InitiateWhiteboardFileUploadResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.InvalidWhiteboardFileErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.WhiteboardFileExistsErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardSceneChangedErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.WhiteboardUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
   )

@@ -203,6 +203,23 @@ func TestParticipantMediaOperationsUseDedicatedCredentialScheme(t *testing.T) {
 	}
 }
 
+func TestWhiteboardFileOperationsUseSyncParticipantCredentialScheme(t *testing.T) {
+	doc := generatedDocument()
+	scheme := mapValue(t, doc.Components.SecuritySchemes["participantSyncBearer"])
+	if scheme["type"] != "http" || scheme["scheme"] != "bearer" || scheme["bearerFormat"] != "JWT" {
+		t.Fatalf("participant sync security scheme = %#v", scheme)
+	}
+
+	operation := mapValue(t, doc.Paths["/v1/whiteboard/files/uploads"]["post"])
+	security, ok := operation["security"].([]map[string][]string)
+	if !ok || len(security) != 1 || security[0]["participantSyncBearer"] == nil {
+		t.Fatalf("whiteboard file security = %#v, want dedicated Sync participant bearer", operation["security"])
+	}
+	if _, exists := security[0]["sessionOrBearer"]; exists {
+		t.Fatalf("whiteboard file route must not accept general auth: %#v", security)
+	}
+}
+
 func generatedDocument() openAPIDoc {
 	routes := httpapi.PreviewRouteContracts()
 	gen := newGenerator(routes)

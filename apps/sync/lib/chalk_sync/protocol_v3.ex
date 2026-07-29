@@ -33,7 +33,16 @@ defmodule ChalkSync.ProtocolV3 do
 
   def recovery_id, do: UUID.generate()
 
-  def recovery_welcome(%Identity{} = identity, %Recovery{} = recovery, recovery_id) do
+  def recovery_welcome(%Identity{} = identity, %Recovery{} = recovery, recovery_id),
+    do: recovery_welcome(identity, recovery, recovery_id, %{})
+
+  def recovery_welcome(
+        %Identity{} = identity,
+        %Recovery{} = recovery,
+        recovery_id,
+        options
+      )
+      when is_map(options) do
     base = %{
       "type" => "welcome",
       "protocol" => 3,
@@ -58,6 +67,15 @@ defmodule ChalkSync.ProtocolV3 do
 
         mode when mode in [:replay, :up_to_date] ->
           base
+      end
+
+    frame =
+      case options do
+        %{room_actions_extension: extension} when is_map(extension) ->
+          Map.put(frame, "extensions", [extension])
+
+        _options ->
+          frame
       end
 
     encode!(frame)
@@ -191,28 +209,30 @@ defmodule ChalkSync.ProtocolV3 do
       else: raise(ArgumentError, "invalid protocol-v3 server frame")
   end
 
-  defp normalize({:hello, %{token: token, streams: streams}}) do
-    cursor = streams["control"]["cursor"]
-
-    case cursor do
-      nil ->
-        {:ok, {:hello, %{token: token, cursor: nil}}}
-
-      cursor ->
-        with {:ok, decoded} <- Base.decode16(cursor["state_digest"], case: :lower) do
-          {:ok,
-           {:hello,
-            %{
-              token: token,
-              cursor: %{
-                revision: cursor["revision"],
-                state_schema_version: cursor["state_schema_version"],
-                digest: decoded
+  defp normalize(
+         {:hello,
+          %{
+            token: token,
+            streams: streams,
+            extensions: [
+              %{
+                "name" => "room_actions_v1",
+                "chat_cursor" => %{
+                  "after_sequence" => after_sequence,
+                  "retained_floor_sequence" => retained_floor_sequence
+                }
               }
-            }}}
-        end
-    end
+            ]
+          }}
+       ) do
+    normalize_hello(token, streams, %{
+      after_sequence: after_sequence,
+      retained_floor_sequence: retained_floor_sequence
+    })
   end
+
+  defp normalize({:hello, %{token: token, streams: streams}}),
+    do: normalize_hello(token, streams, nil)
 
   defp normalize({:operation, operation}) do
     {:ok,
@@ -226,6 +246,31 @@ defmodule ChalkSync.ProtocolV3 do
   end
 
   defp normalize(frame), do: {:ok, frame}
+
+  defp normalize_hello(token, streams, room_actions) do
+    cursor = streams["control"]["cursor"]
+
+    case cursor do
+      nil ->
+        {:ok, {:hello, hello(token, nil, room_actions)}}
+
+      cursor ->
+        with {:ok, decoded} <- Base.decode16(cursor["state_digest"], case: :lower) do
+          normalized_cursor = %{
+            revision: cursor["revision"],
+            state_schema_version: cursor["state_schema_version"],
+            digest: decoded
+          }
+
+          {:ok, {:hello, hello(token, normalized_cursor, room_actions)}}
+        end
+    end
+  end
+
+  defp hello(token, cursor, nil), do: %{token: token, cursor: cursor}
+
+  defp hello(token, cursor, room_actions),
+    do: %{token: token, cursor: cursor, room_actions: room_actions}
 
   defp normalize_operation_payload(name, %{"participant_session_id" => id})
        when name in [

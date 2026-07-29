@@ -1,4 +1,5 @@
 import type { SyncV3ServerFrame } from "../generated/sync-v3";
+import type { ChalkChatMessage, ChalkChatPageResult, ChalkReaction, ChalkRoomReaction, ChalkSendChatMessageInput, ChalkSyncV3RoomActionCapability } from "../room-actions/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
 
 export type V3Capability =
@@ -144,6 +145,34 @@ export type V3LiveTargetResult = Extract<SyncV3ServerFrame, { readonly type: "li
 export type V3DirectedRequestResult = Extract<SyncV3ServerFrame, { readonly type: "directed_request_result" }>;
 export type V3DirectedRequest = Extract<SyncV3ServerFrame, { readonly type: "directed_request" }>;
 
+export type V3ChatCursor = {
+  readonly afterSequence: string | null;
+  readonly retainedFloorSequence: string | null;
+};
+
+export type V3RoomActionsExtensionRequest = {
+  readonly name: "room_actions_v1";
+  readonly chatCursor: V3ChatCursor;
+};
+
+export type V3RoomActionsExtensionState = {
+  readonly negotiated: boolean;
+  readonly capabilities: readonly ChalkSyncV3RoomActionCapability[];
+  readonly chatHeadSequence: string | null;
+  readonly retainedFloorSequence: string | null;
+};
+
+export type V3RoomActionClientEvent = { readonly type: "reaction"; readonly reaction: ChalkRoomReaction } | { readonly type: "chat_message"; readonly message: ChalkChatMessage } | { readonly type: "chat_cursor_reset"; readonly retainedFloorSequence: string };
+
+export type V3RoomActionsClient = {
+  readonly getRoomActionsExtensionState: () => V3RoomActionsExtensionState;
+  readonly getParticipantRoomActionCapabilities: () => Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>>;
+  readonly subscribeRoomActions: (listener: (event: V3RoomActionClientEvent) => void) => () => void;
+  readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkRoomReaction>;
+  readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
+  readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
+};
+
 export type V3SyncClientOptions = {
   readonly url: string;
   readonly token: () => Promise<string>;
@@ -160,6 +189,8 @@ export type V3SyncClientOptions = {
   readonly maxPendingAgeMs?: number;
   readonly maxOperationPendingAgeMs?: number;
   readonly retryDelayMs?: number;
+  readonly roomActions?: V3RoomActionsExtensionRequest | false;
+  readonly maxPendingRoomActions?: number;
 };
 
 export type V3Socket = SyncSocket;

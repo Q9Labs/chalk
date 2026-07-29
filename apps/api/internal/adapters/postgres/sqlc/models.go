@@ -377,6 +377,8 @@ type RoomSession struct {
 	MaximumDurationCeilingSeconds int32              `json:"maximum_duration_ceiling_seconds"`
 	DeadlineAt                    pgtype.Timestamptz `json:"deadline_at"`
 	DeadlineGeneration            int64              `json:"deadline_generation"`
+	WhiteboardRoleCapabilities    []byte             `json:"whiteboard_role_capabilities"`
+	RoomActionRoleCapabilities    []byte             `json:"room_action_role_capabilities"`
 }
 
 type SessionCreateRequest struct {
@@ -404,6 +406,34 @@ type SyncAdmissionRequest struct {
 	RequestedAt                 pgtype.Timestamptz `json:"requested_at"`
 	ExpiresAt                   pgtype.Timestamptz `json:"expires_at"`
 	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
+}
+
+type SyncChatMessage struct {
+	TenantID                     pgtype.UUID        `json:"tenant_id"`
+	RoomID                       pgtype.UUID        `json:"room_id"`
+	SessionID                    pgtype.UUID        `json:"session_id"`
+	Sequence                     int64              `json:"sequence"`
+	MessageID                    pgtype.UUID        `json:"message_id"`
+	ParticipantSessionID         pgtype.UUID        `json:"participant_session_id"`
+	ParticipantSessionGeneration int64              `json:"participant_session_generation"`
+	ClientMessageID              string             `json:"client_message_id"`
+	RequestFingerprint           []byte             `json:"request_fingerprint"`
+	DisplayName                  string             `json:"display_name"`
+	MessageText                  string             `json:"message_text"`
+	EncodedBytes                 int64              `json:"encoded_bytes"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncChatStream struct {
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	RoomID                pgtype.UUID        `json:"room_id"`
+	SessionID             pgtype.UUID        `json:"session_id"`
+	HeadSequence          int64              `json:"head_sequence"`
+	RetainedFloorSequence pgtype.Int8        `json:"retained_floor_sequence"`
+	MessageCount          int64              `json:"message_count"`
+	MessageBytes          int64              `json:"message_bytes"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }
 
 type SyncCommandReceipt struct {
@@ -609,6 +639,87 @@ type SyncSessionControl struct {
 	RetentionDeletedPublicationGrantReservationRows  int64              `json:"retention_deleted_publication_grant_reservation_rows"`
 	RetentionDeletedPublicationGrantReservationBytes int64              `json:"retention_deleted_publication_grant_reservation_bytes"`
 	HostParticipantSessionID                         pgtype.UUID        `json:"host_participant_session_id"`
+}
+
+type SyncWhiteboardElement struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	RoomID       pgtype.UUID        `json:"room_id"`
+	SessionID    pgtype.UUID        `json:"session_id"`
+	SceneID      pgtype.UUID        `json:"scene_id"`
+	ElementID    string             `json:"element_id"`
+	ElementType  string             `json:"element_type"`
+	Version      int64              `json:"version"`
+	VersionNonce int64              `json:"version_nonce"`
+	ElementIndex string             `json:"element_index"`
+	IsDeleted    bool               `json:"is_deleted"`
+	Payload      []byte             `json:"payload"`
+	EncodedBytes int32              `json:"encoded_bytes"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncWhiteboardFile struct {
+	UploadID                pgtype.UUID        `json:"upload_id"`
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	RoomID                  pgtype.UUID        `json:"room_id"`
+	SessionID               pgtype.UUID        `json:"session_id"`
+	SceneID                 pgtype.UUID        `json:"scene_id"`
+	ParticipantSessionID    pgtype.UUID        `json:"participant_session_id"`
+	ParticipantGeneration   int64              `json:"participant_generation"`
+	FileID                  string             `json:"file_id"`
+	ObjectKey               string             `json:"object_key"`
+	MimeType                string             `json:"mime_type"`
+	ByteLength              int64              `json:"byte_length"`
+	Sha256                  []byte             `json:"sha256"`
+	Status                  string             `json:"status"`
+	ImmutableObjectIdentity pgtype.Text        `json:"immutable_object_identity"`
+	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
+	FinalizedAt             pgtype.Timestamptz `json:"finalized_at"`
+	CleanupClaimToken       pgtype.UUID        `json:"cleanup_claim_token"`
+	CleanupClaimedUntil     pgtype.Timestamptz `json:"cleanup_claimed_until"`
+	CleanupAttempts         int32              `json:"cleanup_attempts"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncWhiteboardOperationReceipt struct {
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	RoomID               pgtype.UUID        `json:"room_id"`
+	SessionID            pgtype.UUID        `json:"session_id"`
+	ParticipantSessionID pgtype.UUID        `json:"participant_session_id"`
+	SubmittedGeneration  int64              `json:"submitted_generation"`
+	OperationID          string             `json:"operation_id"`
+	RequestFingerprint   []byte             `json:"request_fingerprint"`
+	OperationName        string             `json:"operation_name"`
+	Outcome              string             `json:"outcome"`
+	SceneID              pgtype.UUID        `json:"scene_id"`
+	Revision             int64              `json:"revision"`
+	EventElements        []byte             `json:"event_elements"`
+	EventEncodedBytes    int32              `json:"event_encoded_bytes"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+}
+
+type SyncWhiteboardPermission struct {
+	TenantID                      pgtype.UUID        `json:"tenant_id"`
+	RoomID                        pgtype.UUID        `json:"room_id"`
+	SessionID                     pgtype.UUID        `json:"session_id"`
+	ParticipantSessionID          pgtype.UUID        `json:"participant_session_id"`
+	CanDraw                       bool               `json:"can_draw"`
+	GrantedByParticipantSessionID pgtype.UUID        `json:"granted_by_participant_session_id"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncWhiteboardScene struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	RoomID       pgtype.UUID        `json:"room_id"`
+	SessionID    pgtype.UUID        `json:"session_id"`
+	SceneID      pgtype.UUID        `json:"scene_id"`
+	IsCurrent    bool               `json:"is_current"`
+	Revision     int64              `json:"revision"`
+	AppState     []byte             `json:"app_state"`
+	ElementCount int32              `json:"element_count"`
+	EncodedBytes int64              `json:"encoded_bytes"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tenant struct {

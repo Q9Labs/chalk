@@ -1,8 +1,9 @@
 defmodule ChalkSync.Transport.Router do
   @moduledoc """
   HTTP surface. Operational routes stay unversioned; the sync WebSocket lives
-  under the `/v3/sync` boundary. The disabled `/v1/sync` route is retained only
-  as a local compatibility surface.
+  under the `/v3/sync` boundary. Whiteboard collaboration uses the independent
+  `/v1/whiteboard` WebSocket. The disabled `/v1/sync` route is retained only as
+  a local compatibility surface.
   """
 
   use Plug.Router
@@ -54,6 +55,22 @@ defmodule ChalkSync.Transport.Router do
       conn
       |> WebSockAdapter.upgrade(
         ChalkSync.Transport.SocketV3,
+        %{observability: observability},
+        timeout: 60_000
+      )
+      |> halt()
+    else
+      send_json(conn, 503, %{"error" => "server_draining"})
+    end
+  end
+
+  get "/v1/whiteboard" do
+    if Operations.accepting_connections?() do
+      observability = ChalkSync.Observability.context(conn.req_headers)
+
+      conn
+      |> WebSockAdapter.upgrade(
+        ChalkSync.Transport.SocketWhiteboardV1,
         %{observability: observability},
         timeout: 60_000
       )

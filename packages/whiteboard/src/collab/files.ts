@@ -1,6 +1,7 @@
 import { CaptureUpdateAction, MIME_TYPES, newElementWith } from "@excalidraw/excalidraw";
 
 import type { BinaryFileData, BinaryFiles, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types.js";
+import type { WhiteboardUploadInstructions } from "./wire.js";
 
 export type WhiteboardFileSyncPhase = "idle" | "uploading" | "awaiting_remote_upload" | "downloading" | "error";
 
@@ -31,6 +32,11 @@ const blobToDataURL = (blob: Blob) =>
     reader.onload = () => resolve(String(reader.result));
     reader.readAsDataURL(blob);
   });
+
+const sha256Hex = async (blob: Blob) => {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
 
 type OrderedImageElement = Extract<OrderedExcalidrawElement, { type: "image" }>;
 
@@ -81,7 +87,8 @@ export class WhiteboardFilesSync {
   constructor(
     private readonly opts: {
       excalidrawAPI: ExcalidrawImperativeAPI;
-      presignUpload: (fileId: string, mimeType: string) => Promise<{ uploadUrl: string }>;
+      initiateUpload: (input: { fileId: string; mimeType: string; byteLength: number; sha256: string }) => Promise<WhiteboardUploadInstructions>;
+      finalizeUpload: (uploadId: string) => Promise<void>;
       presignDownload: (fileId: string) => Promise<{ downloadUrl: string }>;
       uploadThrottleMs?: number;
       downloadThrottleMs?: number;
@@ -185,16 +192,22 @@ export class WhiteboardFilesSync {
     this.uploading.add(fileId);
     this.emitState();
     try {
-      const { uploadUrl } = await this.opts.presignUpload(fileId, file.mimeType);
       const blob = dataURLToBlob(file.dataURL);
+      const instructions = await this.opts.initiateUpload({
+        fileId,
+        mimeType: file.mimeType,
+        byteLength: blob.size,
+        sha256: await sha256Hex(blob),
+      });
 
-      const res = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.mimeType },
+      const res = await fetch(instructions.uploadUrl, {
+        method: instructions.method,
+        headers: instructions.headers,
         body: blob,
       });
       if (!res.ok) throw new Error(`upload failed: ${res.status}`);
 
+      await this.opts.finalizeUpload(instructions.uploadId);
       updateImageStatus(this.opts.excalidrawAPI, fileId, "saved");
     } catch {
       this.lastErrorAtMs = Date.now();

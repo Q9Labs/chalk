@@ -7,6 +7,7 @@ type APIAuth string
 const (
 	APIAuthSessionOrBearer  APIAuth = "session_or_bearer"
 	APIAuthParticipantMedia APIAuth = "participant_media"
+	APIAuthParticipantSync  APIAuth = "participant_sync"
 )
 
 type APISchemaRef struct {
@@ -64,6 +65,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, apiKeyEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, sessionLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil)...)
+	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, recordingPipelineEndpoints(nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil)...)

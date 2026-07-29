@@ -373,6 +373,40 @@ export const ControlBar = React.memo(
                   <ThumbsUpIcon className="w-5 h-5" />
                 </button>
               )}
+              {buttonsToRender.includes("whiteboard") && onToggleWhiteboard && (
+                <button
+                  type="button"
+                  onClick={onToggleWhiteboard}
+                  className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isWhiteboardOpen ? "bg-primary text-primary-foreground" : "")}
+                  aria-label="Whiteboard"
+                  aria-pressed={isWhiteboardOpen}
+                >
+                  <Edit02Icon className="w-5 h-5" />
+                </button>
+              )}
+              {buttonsToRender.includes("participants") && onToggleParticipants && (
+                <button
+                  type="button"
+                  onClick={onToggleParticipants}
+                  className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isParticipantsOpen ? "bg-primary text-primary-foreground" : "")}
+                  aria-label="People"
+                  aria-pressed={isParticipantsOpen}
+                >
+                  <UserGroupIcon className="w-5 h-5" />
+                </button>
+              )}
+              {buttonsToRender.includes("chat") && onToggleChat && (
+                <button
+                  type="button"
+                  onClick={onToggleChat}
+                  className={cn("relative flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isChatOpen ? "bg-primary text-primary-foreground" : "")}
+                  aria-label="Chat"
+                  aria-pressed={isChatOpen}
+                >
+                  <Message01Icon className="w-5 h-5" />
+                  {unreadChatCount > 0 && !isChatOpen ? <span className="absolute -top-1 -right-1 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span> : null}
+                </button>
+              )}
             </div>
 
             {/* Group 3: More & Leave */}

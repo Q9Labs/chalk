@@ -87,6 +87,8 @@ type Options struct {
 	FinalizerAuthority     FinalizerAuthority
 	Users                  UserService
 	Webhooks               WebhookService
+	WhiteboardFiles        WhiteboardFileService
+	WhiteboardParticipants WhiteboardParticipantVerifier
 }
 
 func NewRouter(options Options) http.Handler {
@@ -243,6 +245,10 @@ func mountV1Routes(r chi.Router, options Options) {
 
 		r.Group(func(r chi.Router) {
 			mountParticipantMediaRoutes(r, options.Rooms, options.Tenants, options.MediaPlane, options.MediaPublications, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.RateLimit)
+		})
+
+		r.Group(func(r chi.Router) {
+			mountWhiteboardFileRoutes(r, options.WhiteboardFiles, options.WhiteboardParticipants, options.RateLimit)
 		})
 	})
 }

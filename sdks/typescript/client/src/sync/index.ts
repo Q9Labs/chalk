@@ -17,6 +17,7 @@ export {
 export { V3SyncClient, V3SyncError } from "./v3-client";
 export { createV3SyncClient, type CreateV3SyncClientOptions } from "./v3-create";
 export { decodeV3ClientFrame, decodeV3ServerFrame, encodeV3ClientFrame } from "./v3-codec";
+export type { V3ChatCursor, V3RoomActionClientEvent, V3RoomActionsClient, V3RoomActionsExtensionRequest, V3RoomActionsExtensionState } from "./v3-room-actions";
 export { InMemoryV3PendingTargetStore } from "./v3-persistence";
 export { AsyncStorageV3PendingTargetStore, IndexedDbV3PendingTargetStore, type AsyncStorageV3PendingTargetStoreOptions, type IndexedDbV3PendingTargetStoreOptions } from "./v3-platform-persistence";
 export { applyV3Event, assertV3ControlSemantics, computeV3StateDigest, optimisticV3Control, restoreV3Snapshot, V3ReplicaError } from "./v3-reducer";

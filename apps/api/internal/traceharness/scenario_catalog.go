@@ -101,6 +101,7 @@ func ScenarioNames() []string {
 		RouteSessionSyncTokenScenario,
 		RouteRecordingTranscribeScenario,
 		RouteJourneyEventIntakeScenario,
+		RouteWhiteboardFileUploadScenario,
 		RouteAPIKeyCustomerFlowScenario,
 		EdgeAPIKeyRejectedScopeScenario,
 		RouteParticipantMediaSFUAuthScenario,

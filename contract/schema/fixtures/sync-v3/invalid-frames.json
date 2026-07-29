@@ -4,13 +4,25 @@
     { "type": "command", "command_id": "command-00000001", "name": "set_hand_raised", "payload": { "raised": true, "extra": false } },
     { "type": "command", "command_id": "short", "name": "set_display_name", "payload": { "display_name": "Ada" } },
     { "type": "directed_request", "request_id": "request-000000001", "name": "request_unmute", "target_participant_session_id": "not-a-uuid" },
-    { "type": "command", "command_id": "command-00000003", "name": "set_display_name", "payload": { "display_name": " Ada " } }
+    { "type": "command", "command_id": "command-00000003", "name": "set_display_name", "payload": { "display_name": " Ada " } },
+    {
+      "type": "hello",
+      "protocol": 3,
+      "token": "signed-token",
+      "streams": { "control": { "cursor": null }, "media": { "cursor": null }, "presence": { "cursor": null }, "requests": { "cursor": null } },
+      "extensions": [{ "name": "room_actions_v1", "chat_cursor": { "after_sequence": null, "retained_floor_sequence": null }, "unexpected": true }]
+    },
+    { "type": "room_reaction_send", "operation_id": "reaction-op-00001", "reaction": "🔥" },
+    { "type": "chat_send", "client_message_id": "chat-message-0001", "text": "" },
+    { "type": "chat_page_request", "request_id": "chat-page-req-001", "direction": "newer", "cursor_sequence": null, "limit": 101 }
   ],
   "server_frames": [
     { "type": "ack", "command_id": "command-00000002", "delivery": "duplicate", "outcome": "satisfied", "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23", "revision": 1, "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
     { "type": "projection_snapshot", "stream": "media", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25", "sequence": 1, "items": [] },
     { "type": "projection_event", "stream": "media", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25", "sequence": 1, "item": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "source": "microphone", "enabled": false, "publication_id": "publication-1" } },
-    { "type": "projection_event", "stream": "presence", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26", "sequence": 1, "item": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "state": "disconnected", "speaking": true, "active_speaker": false } }
+    { "type": "projection_event", "stream": "presence", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26", "sequence": 1, "item": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "state": "disconnected", "speaking": true, "active_speaker": false } },
+    { "type": "room_reaction", "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c80", "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "display_name": "Ada", "reaction": "🔥", "occurred_at": "2026-07-29T14:00:00.000Z", "expires_at": "2026-07-29T14:00:05.000Z" },
+    { "type": "chat_page", "request_id": "chat-page-req-002", "outcome": "cursor_reset", "retained_floor_sequence": "-1" }
   ],
   "snapshot_mutations": [
     { "name": "participant_eligible_roles_empty", "changes": [{ "path": ["participants", 0, "eligible_roles"], "value": [] }] },

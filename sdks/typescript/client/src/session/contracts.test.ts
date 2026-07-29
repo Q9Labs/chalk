@@ -10,7 +10,11 @@ import {
   parseParticipantAccess,
   requireParticipantAccess,
   type ChalkSessionActionName,
+  type ChalkSessionActions,
+  type ChalkSessionErrorCode,
   type ChalkSessionSnapshot,
+  type ChalkSessionStore,
+  type ChalkWhiteboardV1Transport,
   type ParticipantAccess,
   type ParticipantMediaCredential,
   type ParticipantSyncCredential,
@@ -68,14 +72,85 @@ describe("public session contract", () => {
 
   it("freezes states, errors, and actions without recording", () => {
     expect(CHALK_SESSION_STATES).toEqual(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"]);
+    expect(CHALK_SESSION_ACTIONS).toEqual([
+      "join",
+      "leave",
+      "setMicrophoneEnabled",
+      "setCameraEnabled",
+      "startScreenShare",
+      "stopScreenShare",
+      "setHandRaised",
+      "setDisplayName",
+      "setAdmissionPolicy",
+      "setParticipantRole",
+      "transferHost",
+      "admitParticipant",
+      "denyAdmission",
+      "muteParticipant",
+      "stopParticipantCamera",
+      "stopParticipantScreenShare",
+      "removeParticipant",
+      "endSession",
+      "sendReaction",
+      "sendChatMessage",
+      "retryChatMessage",
+      "loadOlderChatMessages",
+      "markChatRead",
+      "requestUnmute",
+      "requestStartCamera",
+      "acceptMediaRequest",
+      "declineMediaRequest",
+    ]);
     expect(CHALK_SESSION_ACTIONS).not.toContain("startRecording");
     expect(CHALK_SESSION_ACTIONS).not.toContain("stopRecording");
-    expect(CHALK_SESSION_ERROR_CODES).toContain("join_cleanup_unconfirmed");
-    expect(CHALK_SESSION_ERROR_CODES).toContain("leave_unconfirmed");
+    expect(CHALK_SESSION_ERROR_CODES).toEqual([
+      "invalid_state",
+      "invalid_access",
+      "access_unavailable",
+      "permission_denied",
+      "sync_start_failed",
+      "media_start_failed",
+      "join_cleanup_unconfirmed",
+      "sync_recovery_exhausted",
+      "media_recovery_exhausted",
+      "command_rejected",
+      "leave_unconfirmed",
+      "session_ended",
+      "unsupported_environment",
+      "internal_error",
+      "room_actions_unavailable",
+      "chat_cursor_reset_required",
+      "rate_limited",
+      "invalid_payload",
+    ]);
     expectTypeOf<"recording" extends keyof ChalkSessionSnapshot ? true : false>().toEqualTypeOf<false>();
     expectTypeOf<"startRecording" extends ChalkSessionActionName ? true : false>().toEqualTypeOf<false>();
   });
+
+  it("freezes room-action snapshot, action, and store seams", () => {
+    assertRoomActionTypes();
+  });
 });
+
+function assertRoomActionTypes(): void {
+  expectTypeOf<ChalkSessionSnapshot["roomActions"]>().toEqualTypeOf<{
+    readonly phase: "disabled" | "negotiating" | "healthy" | "recovering" | "failed" | "stopped";
+    readonly capabilities: readonly ("sendReaction" | "sendChat")[];
+    readonly error: {
+      readonly code: ChalkSessionErrorCode;
+      readonly action: ChalkSessionActionName | null;
+      readonly recoverable: boolean;
+      readonly message: string;
+    } | null;
+  }>();
+  expectTypeOf<ChalkSessionSnapshot["chat"]["messages"][number]["sequence"]>().toEqualTypeOf<string>();
+  expectTypeOf<ChalkSessionSnapshot["chat"]["pending"][number]["state"]>().toEqualTypeOf<"sending" | "failed">();
+  expectTypeOf<ChalkSessionSnapshot["incomingMediaRequests"][number]["kind"]>().toEqualTypeOf<"unmute" | "start_camera">();
+  expectTypeOf<Parameters<ChalkSessionActions["sendReaction"]>[0]>().toEqualTypeOf<"👍" | "❤️" | "😂" | "😮" | "😢" | "🎉">();
+  expectTypeOf<Awaited<ReturnType<ChalkSessionActions["loadOlderChatMessages"]>>["status"]>().toEqualTypeOf<"loaded" | "cursor_reset">();
+  expectTypeOf<Awaited<ReturnType<ChalkSessionActions["requestUnmute"]>>["status"]>().toEqualTypeOf<"delivered" | "target_unavailable" | "expired" | "rejected" | "rate_limited">();
+  expectTypeOf<ChalkSessionStore["whiteboard"]>().toEqualTypeOf<ChalkWhiteboardV1Transport | null>();
+}
 
 function validAccess() {
   return {

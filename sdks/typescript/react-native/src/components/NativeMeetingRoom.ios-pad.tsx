@@ -69,16 +69,18 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
         onChatDraftChange={controller.setChatDraft}
         onClearWhiteboard={controller.whiteboard.clear}
         onClose={controller.closePanel}
-        onMuteParticipant={controller.muteParticipant}
+        onMuteParticipant={controller.canMuteParticipants ? controller.muteParticipant : undefined}
+        onRequestStartParticipantCamera={controller.canRequestMedia ? controller.requestStartParticipantCamera : undefined}
+        onRequestUnmuteParticipant={controller.canRequestMedia ? controller.requestUnmuteParticipant : undefined}
         onRefreshDevices={controller.refreshDevices}
-        onRemoveParticipant={controller.removeParticipant}
+        onRemoveParticipant={controller.canRemoveParticipants ? controller.removeParticipant : undefined}
         onRequestWhiteboardSync={controller.whiteboard.requestSync}
         onSelectCamera={controller.selectCamera}
         onSelectMicrophone={controller.selectMicrophone}
         onSelectSpeaker={controller.selectSpeaker}
         onSendMessage={controller.sendChatMessage}
         onToggleWhiteboard={controller.whiteboard.toggle}
-        onUnmuteParticipant={controller.unmuteParticipant}
+        onStopParticipantCamera={controller.canStopParticipantCamera ? controller.stopParticipantCamera : undefined}
         panel={controller.panel}
         participants={controller.participants.participants}
         selectedCamera={controller.devices.selectedCamera}
@@ -102,9 +104,9 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
         unreadChatCount={controller.chat.unreadCount}
         participantCount={controller.participantCount}
         onLeave={controller.handleLeave}
-        onOpenChat={() => controller.openPanel("chat")}
+        onOpenChat={controller.canChat ? () => controller.openPanel("chat") : undefined}
         onOpenParticipants={() => controller.openPanel("participants")}
-        onOpenReactions={() => controller.setReactionPickerOpen(true)}
+        onOpenReactions={controller.canReactions ? () => controller.setReactionPickerOpen(true) : undefined}
         onOpenMore={() => controller.setActionsOpen(true)}
         onToggleHand={controller.toggleHand}
         onToggleScreenShare={controller.toggleScreenShare}
@@ -126,6 +128,7 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
 
       <NativeMeetingActionsSheet
         chatEnabled={controller.canChat}
+        reactionsEnabled={controller.canReactions}
         chatUnreadCount={controller.chat.unreadCount}
         isHandRaised={controller.handRaised}
         isScreenSharing={controller.screenShare.isLocalSharing}

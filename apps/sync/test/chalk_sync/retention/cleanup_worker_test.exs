@@ -133,6 +133,66 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     assert Enum.all?(fixtures, &checkpointed?(connection, &1))
   end
 
+  test "deletes durable chat and whiteboard collaboration rows before checkpointing", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = seed_ended_session(connection, @retention_seconds + 1)
+    cleanup_fixture(connection, fixture)
+    seed_collaboration_rows(connection, fixture)
+
+    assert collaboration_counts(connection, fixture) == [1, 1, 1, 1, 1, 1]
+    assert {:ok, %Result{sessions: 1}} = run_cleanup(connection)
+    assert collaboration_counts(connection, fixture) == [0, 0, 0, 0, 0, 0]
+    assert checkpointed?(connection, fixture)
+  end
+
+  test "waits for provider-backed whiteboard files to be removed", %{connections: connections} do
+    connection = hd(connections)
+    fixture = seed_ended_session(connection, @retention_seconds + 1)
+    cleanup_fixture(connection, fixture)
+    scene_id = seed_whiteboard_scene(connection, fixture)
+    file_id = UUID.generate()
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_whiteboard_files (
+        upload_id, tenant_id, room_id, session_id, scene_id,
+        participant_session_id, participant_generation, file_id, object_key,
+        mime_type, byte_length, sha256, status, immutable_object_identity,
+        expires_at, finalized_at
+      ) values (
+        $1, $2, $3, $4, $5, $6, $7, 'image-1', 'whiteboard-v1/test-object',
+        'image/png', 1, decode(repeat('01', 32), 'hex'), 'ready', 'etag-1',
+        $8, $8
+      )
+      """,
+      [
+        UUID.dump!(file_id)
+        | session_scope(fixture) ++
+            [
+              UUID.dump!(scene_id),
+              UUID.dump!(fixture.identity.participant_session_id),
+              fixture.identity.participant_session_generation,
+              @now
+            ]
+      ]
+    )
+
+    assert {:ok, %Result{sessions: 0}} = run_cleanup(connection)
+    refute checkpointed?(connection, fixture)
+
+    Postgrex.query!(
+      connection,
+      "delete from sync_whiteboard_files where upload_id = $1",
+      [UUID.dump!(file_id)]
+    )
+
+    assert {:ok, %Result{sessions: 1}} = run_cleanup(connection)
+    assert checkpointed?(connection, fixture)
+  end
+
   test "skips a concurrently locked eligible control row", %{connections: connections} do
     [locker, worker | _rest] = connections
     locked = seed_ended_session(locker, @retention_seconds + 2)
@@ -893,6 +953,117 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
       ).rows
 
     [events, receipts, intents]
+  end
+
+  defp seed_collaboration_rows(connection, fixture) do
+    scene_id = seed_whiteboard_scene(connection, fixture)
+    scope = session_scope(fixture)
+    participant_id = UUID.dump!(fixture.identity.participant_session_id)
+    generation = fixture.identity.participant_session_generation
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_streams (
+        tenant_id, room_id, session_id, head_sequence, retained_floor_sequence,
+        message_count, message_bytes
+      ) values ($1, $2, $3, 1, 1, 1, 128)
+      """,
+      scope
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_messages (
+        tenant_id, room_id, session_id, sequence, message_id,
+        participant_session_id, participant_session_generation,
+        client_message_id, request_fingerprint, display_name, message_text,
+        encoded_bytes, created_at
+      ) values (
+        $1, $2, $3, 1, $4, $5, $6, 'client-message-01',
+        decode(repeat('02', 32), 'hex'), 'Ada', 'hello', 128, $7
+      )
+      """,
+      scope ++ [UUID.dump!(UUID.generate()), participant_id, generation, @now]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_whiteboard_elements (
+        tenant_id, room_id, session_id, scene_id, element_id, element_type,
+        version, version_nonce, element_index, is_deleted, payload, encoded_bytes
+      ) values (
+        $1, $2, $3, $4, 'shape-1', 'rectangle', 1, 1, 'a0', false,
+        '{"id":"shape-1"}'::jsonb, 16
+      )
+      """,
+      scope ++ [UUID.dump!(scene_id)]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_whiteboard_permissions (
+        tenant_id, room_id, session_id, participant_session_id, can_draw,
+        granted_by_participant_session_id
+      ) values ($1, $2, $3, $4, true, $4)
+      """,
+      scope ++ [participant_id]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_whiteboard_operation_receipts (
+        tenant_id, room_id, session_id, participant_session_id,
+        submitted_generation, operation_id, request_fingerprint,
+        operation_name, outcome, scene_id, revision, event_elements,
+        event_encoded_bytes
+      ) values (
+        $1, $2, $3, $4, $5, 'operation-000001',
+        decode(repeat('03', 32), 'hex'), 'submit_update', 'committed',
+        $6, 1, '[]'::jsonb, 2
+      )
+      """,
+      scope ++ [participant_id, generation, UUID.dump!(scene_id)]
+    )
+  end
+
+  defp seed_whiteboard_scene(connection, fixture) do
+    scene_id = UUID.generate()
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_whiteboard_scenes (
+        tenant_id, room_id, session_id, scene_id, app_state
+      ) values ($1, $2, $3, $4, '{"view_background_color":"#ffffff"}'::jsonb)
+      """,
+      session_scope(fixture) ++ [UUID.dump!(scene_id)]
+    )
+
+    scene_id
+  end
+
+  defp collaboration_counts(connection, fixture) do
+    [[chat_messages, chat_streams, receipts, permissions, elements, scenes]] =
+      Postgrex.query!(
+        connection,
+        """
+        select
+          (select count(*) from sync_chat_messages where tenant_id = $1 and session_id = $2),
+          (select count(*) from sync_chat_streams where tenant_id = $1 and session_id = $2),
+          (select count(*) from sync_whiteboard_operation_receipts where tenant_id = $1 and session_id = $2),
+          (select count(*) from sync_whiteboard_permissions where tenant_id = $1 and session_id = $2),
+          (select count(*) from sync_whiteboard_elements where tenant_id = $1 and session_id = $2),
+          (select count(*) from sync_whiteboard_scenes where tenant_id = $1 and session_id = $2)
+        """,
+        session_ids(fixture)
+      ).rows
+
+    [chat_messages, chat_streams, receipts, permissions, elements, scenes]
   end
 
   defp mark_intent_pending(connection, fixture) do

@@ -11,6 +11,9 @@ export interface ParticipantRowProps {
   variant: ParticipantListVariant;
   canManageParticipants: boolean;
   onMuteParticipant?: (id: string) => void;
+  onRequestUnmute?: (id: string) => void;
+  onStopParticipantCamera?: (id: string) => void;
+  onRequestStartCamera?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
   onMakeHost?: (id: string) => void;
   onMakeCoHost?: (id: string) => void;
@@ -28,6 +31,9 @@ export function ParticipantRow({
   variant,
   canManageParticipants,
   onMuteParticipant,
+  onRequestUnmute,
+  onStopParticipantCamera,
+  onRequestStartCamera,
   onRemoveParticipant,
   onMakeHost,
   onMakeCoHost,
@@ -145,6 +151,9 @@ export function ParticipantRow({
                     canManageParticipants={canManageParticipants}
                     onClose={onMenuClose}
                     onMuteParticipant={onMuteParticipant}
+                    onRequestUnmute={onRequestUnmute}
+                    onStopParticipantCamera={onStopParticipantCamera}
+                    onRequestStartCamera={onRequestStartCamera}
                     onRemoveParticipant={onRemoveParticipant}
                     onMakeHost={onMakeHost}
                     onMakeCoHost={onMakeCoHost}

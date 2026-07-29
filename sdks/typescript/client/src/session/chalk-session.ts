@@ -1,5 +1,6 @@
 import type { CloudflareSFUSnapshot } from "../media";
 import type { V3SessionSnapshot } from "../sync";
+import type { V3DirectedRequest, V3RoomActionClientEvent, V3RoomActionsExtensionState } from "../sync/v3-types";
 import { ParticipantAccessError } from "./access";
 import type { ParticipantAccessSubject } from "./access";
 import { ChalkSessionAccessManager } from "./access-manager";
@@ -10,20 +11,59 @@ import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "./media-
 import { createDefaultChalkSessionDependencies } from "./production";
 import { initialChalkSessionSnapshot, projectChalkSessionSnapshot } from "./snapshot";
 import { ChalkSessionError } from "./types";
-import type { ChalkAdmissionPolicy, ChalkAssignableParticipantRole, ChalkMediaSource, ChalkSessionActionName, ChalkSessionErrorCode, ChalkSessionFailure, ChalkSessionSnapshot, ChalkSessionState, ChalkSessionStore } from "./types";
+import type {
+  ChalkAdmissionPolicy,
+  ChalkAssignableParticipantRole,
+  ChalkChatMessage,
+  ChalkChatPageResult,
+  ChalkChatState,
+  ChalkDirectedRequestResult,
+  ChalkIncomingMediaRequest,
+  ChalkMediaSource,
+  ChalkReaction,
+  ChalkRoomReaction,
+  ChalkSendChatMessageInput,
+  ChalkSessionActionName,
+  ChalkSessionErrorCode,
+  ChalkSessionFailure,
+  ChalkSessionSnapshot,
+  ChalkSessionState,
+  ChalkSessionStore,
+  ChalkWhiteboardV1Transport,
+  ChalkWhiteboardSummary,
+} from "./types";
 
 const START_TIMEOUT_MS = 10_000;
 const LEAVE_TIMEOUT_MS = 5_000;
 const RECOVERY_BUDGET_MS = 10_000;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5_000;
+const DEFAULT_CHAT_PAGE_SIZE = 50;
+const MAX_CHAT_PAGE_SIZE = 100;
+const MAX_LOADED_CHAT_MESSAGES = 500;
+const MAX_VISIBLE_REACTIONS = 24;
 
 type RecoveryKind = "sync" | "media";
+type SyncRuntimeFailure = {
+  readonly code: "invalid_access" | "session_ended";
+  readonly message: string;
+};
+type ChatCatchUpRequest =
+  | {
+      readonly kind: "initial";
+      readonly input: { readonly limit: number };
+    }
+  | {
+      readonly kind: "newer";
+      readonly input: { readonly afterSequence: string; readonly limit: number };
+    };
+type ChatCatchUpStep = "continue" | "stop";
 
 export type ChalkSessionOptions = {
   readonly access: ChalkSessionAccessProvider;
   readonly syncURL: string;
   readonly apiBaseURL: string;
+  readonly whiteboardURL?: string | null;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
   readonly accessRefreshWindowMs?: number;
@@ -40,6 +80,7 @@ export type ChalkSessionOptions = {
 };
 
 export class ChalkSession implements ChalkSessionStore {
+  readonly whiteboard: ChalkWhiteboardV1Transport | null;
   readonly #access: ChalkSessionAccessManager;
   readonly #dependencies: ChalkSessionDependencies;
   readonly #diagnostics: ChalkSessionDiagnostics;
@@ -70,13 +111,24 @@ export class ChalkSession implements ChalkSessionStore {
   #syncSnapshot: V3SessionSnapshot | null = null;
   #teardownPromise: Promise<boolean> | null = null;
   #unsubscribeMedia: (() => void) | null = null;
+  #unsubscribeRequests: (() => void) | null = null;
+  #unsubscribeRoomActions: (() => void) | null = null;
   #unsubscribeSync: (() => void) | null = null;
+  #reactions: readonly ChalkRoomReaction[] = [];
+  #chat: ChalkChatState = emptyChatState();
+  #chatCatchUpPromise: Promise<void> | null = null;
+  #chatCatchUpRequested = false;
+  #incomingMediaRequests: readonly ChalkIncomingMediaRequest[] = [];
+  #whiteboardSummary: ChalkWhiteboardSummary = emptyWhiteboardSummary();
+  readonly #reactionTimers = new Map<string, unknown>();
+  readonly #mediaRequestTimers = new Map<string, unknown>();
 
   constructor(options: ChalkSessionOptions) {
     if (!options.access) throw new TypeError("A participant access provider is required");
-    const defaults = createDefaultChalkSessionDependencies({ apiBaseURL: options.apiBaseURL, syncURL: options.syncURL });
+    const defaults = createDefaultChalkSessionDependencies({ apiBaseURL: options.apiBaseURL, syncURL: options.syncURL, whiteboardURL: options.whiteboardURL });
     this.#dependencies = { ...defaults, ...options.dependencies };
     this.#access = new ChalkSessionAccessManager(options.access, this.#dependencies.clock.now, options.accessRefreshWindowMs);
+    this.whiteboard = this.#createWhiteboardClient();
     this.#localIntent = {
       microphone: options.initialMicrophoneEnabled ?? true,
       camera: options.initialCameraEnabled ?? true,
@@ -85,6 +137,18 @@ export class ChalkSession implements ChalkSessionStore {
     this.#recoveryBudgetMs = boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000);
     this.#recoveryBackoffMs = options.recovery?.backoffMs?.length ? [...options.recovery.backoffMs] : [100, 250, 500];
     this.#diagnostics = new ChalkSessionDiagnostics({ now: this.#dependencies.clock.now, ...options.diagnostics });
+  }
+
+  #createWhiteboardClient(): ChalkWhiteboardV1Transport | null {
+    const create = this.#dependencies.createWhiteboardClient;
+    if (!create) return null;
+    return create({
+      token: () => this.#access.getSyncToken(),
+      onSummary: (summary) => {
+        this.#whiteboardSummary = summary;
+        this.#publish();
+      },
+    });
   }
 
   getSnapshot = (): ChalkSessionSnapshot => this.#snapshot;
@@ -202,6 +266,87 @@ export class ChalkSession implements ChalkSessionStore {
   stopParticipantScreenShare = (participantSessionId: string): Promise<void> => this.#runCommand("stopParticipantScreenShare", () => this.#sync!.stopParticipantScreenShare(participantSessionId));
   removeParticipant = (participantSessionId: string): Promise<void> => this.#runCommand("removeParticipant", () => this.#sync!.removeParticipant(participantSessionId));
   endSession = (): Promise<void> => this.#runCommand("endSession", () => this.#sync!.endSession());
+
+  sendReaction = (reaction: ChalkReaction): Promise<ChalkRoomReaction> =>
+    this.#runRoomAction("sendReaction", async () => {
+      const accepted = await this.#sync!.sendReaction(reaction);
+      this.#observeReaction(accepted);
+      return accepted;
+    });
+
+  sendChatMessage = (input: ChalkSendChatMessageInput): Promise<ChalkChatMessage> => {
+    const clientMessageId = input.clientMessageId ?? roomActionId();
+    this.#upsertPendingChat(clientMessageId, input.text, "sending", null);
+    return this.#runRoomAction("sendChatMessage", () => this.#sync!.sendChatMessage({ text: input.text, clientMessageId }))
+      .then((message) => {
+        this.#removePendingChat(clientMessageId);
+        this.#observeChatMessage(message, false);
+        return message;
+      })
+      .catch((cause) => {
+        const failure = failureFrom(cause instanceof ChalkSessionError ? cause : this.#roomActionError("sendChatMessage", cause));
+        this.#upsertPendingChat(clientMessageId, input.text, "failed", failure);
+        throw cause instanceof ChalkSessionError ? cause : new ChalkSessionError(failure, { cause });
+      });
+  };
+
+  retryChatMessage = (clientMessageId: string): Promise<ChalkChatMessage> => {
+    const pending = this.#chat.pending.find((message) => message.clientMessageId === clientMessageId);
+    if (!pending) return Promise.reject(this.#error("invalid_payload", "retryChatMessage", false, "The failed chat message is no longer available"));
+    return this.sendChatMessage({ clientMessageId, text: pending.text });
+  };
+
+  loadOlderChatMessages = (limit = DEFAULT_CHAT_PAGE_SIZE): Promise<ChalkChatPageResult> =>
+    this.#runRoomAction("loadOlderChatMessages", async () => {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_CHAT_PAGE_SIZE) {
+        throw this.#error("invalid_payload", "loadOlderChatMessages", false, `Chat page size must be between 1 and ${MAX_CHAT_PAGE_SIZE}`);
+      }
+      const beforeSequence = this.#chat.messages[0]?.sequence;
+      this.#chat = { ...this.#chat, status: "loading", error: null };
+      this.#publish();
+      const result = await this.#sync!.readChatPage({ beforeSequence, limit });
+      if (result.status === "cursor_reset") {
+        this.#chat = {
+          ...this.#chat,
+          status: "ready",
+          historyTruncated: true,
+          retainedFloorSequence: result.retainedFloorSequence,
+          hasOlder: false,
+        };
+      } else {
+        this.#chat = { ...this.#chat, status: "ready", hasOlder: result.hasOlder };
+      }
+      this.#publish();
+      return result;
+    }).catch((cause) => {
+      const failure = failureFrom(cause instanceof ChalkSessionError ? cause : this.#roomActionError("loadOlderChatMessages", cause));
+      this.#chat = { ...this.#chat, status: "failed", error: failure };
+      this.#publish();
+      throw cause instanceof ChalkSessionError ? cause : new ChalkSessionError(failure, { cause });
+    });
+
+  markChatRead = (): void => {
+    if (this.#chat.unreadCount === 0) return;
+    this.#chat = { ...this.#chat, unreadCount: 0 };
+    this.#publish();
+  };
+
+  requestUnmute = (participantSessionId: string): Promise<ChalkDirectedRequestResult> => this.#runRoomAction("requestUnmute", async () => directedRequestResult(await this.#sync!.requestUnmute(participantSessionId)));
+
+  requestStartCamera = (participantSessionId: string): Promise<ChalkDirectedRequestResult> => this.#runRoomAction("requestStartCamera", async () => directedRequestResult(await this.#sync!.requestStartCamera(participantSessionId)));
+
+  acceptMediaRequest = (requestId: string): Promise<void> =>
+    this.#runRoomAction("acceptMediaRequest", async () => {
+      const request = this.#incomingMediaRequests.find((candidate) => candidate.requestId === requestId);
+      if (!request) throw this.#error("invalid_payload", "acceptMediaRequest", false, "The media request is no longer active");
+      if (request.kind === "unmute") await this.setMicrophoneEnabled(true);
+      else await this.setCameraEnabled(true);
+      this.#removeMediaRequest(requestId);
+    });
+
+  declineMediaRequest = (requestId: string): void => {
+    this.#removeMediaRequest(requestId);
+  };
 
   async #performJoin(epoch: number): Promise<void> {
     let stream: MediaStream | null = null;
@@ -343,28 +488,230 @@ export class ChalkSession implements ChalkSessionStore {
     }
   }
 
+  async #runRoomAction<T>(action: ChalkSessionActionName, operation: () => Promise<T>): Promise<T> {
+    if (this.#state !== "live" || !this.#sync) throw this.#error("invalid_state", action, false, `Cannot ${action} while ${this.#state}`);
+    try {
+      return await operation();
+    } catch (cause) {
+      if (cause instanceof ChalkSessionError) throw cause;
+      throw this.#roomActionError(action, cause);
+    }
+  }
+
+  #roomActionError(action: ChalkSessionActionName, cause: unknown): ChalkSessionError {
+    const upstreamCode = errorCode(cause);
+    const code: ChalkSessionErrorCode = upstreamCode === "room_actions_unavailable" ? "room_actions_unavailable" : upstreamCode === "rate_limited" ? "rate_limited" : upstreamCode === "invalid_payload" || upstreamCode === "request_id_conflict" ? "invalid_payload" : "command_rejected";
+    return this.#error(code, action, code !== "invalid_payload", `${action} was not confirmed`, cause);
+  }
+
   #subscribeLowerLayers(): void {
     this.#unsubscribeSync?.();
     this.#unsubscribeMedia?.();
+    this.#unsubscribeRequests?.();
+    this.#unsubscribeRoomActions?.();
     const sync = this.#sync!;
     const media = this.#media!;
     this.#unsubscribeSync = sync.subscribe((snapshot) => this.#handleSyncSnapshot(snapshot));
+    this.#unsubscribeRequests = sync.onDirectedRequest((request) => this.#handleDirectedRequest(request));
+    this.#unsubscribeRoomActions = sync.subscribeRoomActions((event) => this.#handleRoomActionEvent(event));
     this.#unsubscribeMedia = media.subscribe(() => this.#handleMediaSnapshot(media.getSnapshot()));
     this.#handleMediaSnapshot(media.getSnapshot());
   }
 
+  #handleRoomActionEvent(event: V3RoomActionClientEvent): void {
+    if (event.type === "reaction") {
+      this.#observeReaction(event.reaction);
+      return;
+    }
+    if (event.type === "chat_message") {
+      this.#observeChatMessage(event.message, this.#state === "live");
+      return;
+    }
+    this.#chat = {
+      ...this.#chat,
+      status: "ready",
+      historyTruncated: true,
+      retainedFloorSequence: event.retainedFloorSequence,
+      hasOlder: false,
+    };
+    this.#publish();
+  }
+
+  #observeReaction(reaction: ChalkRoomReaction): void {
+    if (this.#reactions.some((candidate) => candidate.eventId === reaction.eventId)) return;
+    this.#reactions = [...this.#reactions, reaction].slice(-MAX_VISIBLE_REACTIONS);
+    const previous = this.#reactionTimers.get(reaction.eventId);
+    if (previous !== undefined) this.#dependencies.clock.clearTimeout(previous);
+    const delay = Math.max(0, Date.parse(reaction.expiresAt) - this.#dependencies.clock.now());
+    const timer = this.#dependencies.clock.setTimeout(() => {
+      this.#reactionTimers.delete(reaction.eventId);
+      this.#reactions = this.#reactions.filter((candidate) => candidate.eventId !== reaction.eventId);
+      this.#publish();
+    }, delay);
+    this.#reactionTimers.set(reaction.eventId, timer);
+    this.#publish();
+  }
+
+  #observeChatMessage(message: ChalkChatMessage, countUnread: boolean): void {
+    const existing = this.#chat.messages.find((candidate) => candidate.messageId === message.messageId || candidate.sequence === message.sequence);
+    const messages = existing ? this.#chat.messages : [...this.#chat.messages, message].sort((left, right) => compareSequence(left.sequence, right.sequence)).slice(-MAX_LOADED_CHAT_MESSAGES);
+    const isLocal = message.participantSessionId === this.#access.current?.subject.participantSessionId;
+    this.#chat = {
+      ...this.#chat,
+      status: "ready",
+      messages,
+      pending: this.#chat.pending.filter((pending) => pending.clientMessageId !== message.clientMessageId),
+      unreadCount: countUnread && !isLocal && !existing ? this.#chat.unreadCount + 1 : this.#chat.unreadCount,
+      error: null,
+    };
+    this.#publish();
+  }
+
+  #upsertPendingChat(clientMessageId: string, text: string, state: "sending" | "failed", error: ChalkSessionFailure | null): void {
+    const pending = this.#chat.pending.filter((message) => message.clientMessageId !== clientMessageId);
+    this.#chat = {
+      ...this.#chat,
+      status: "ready",
+      pending: [...pending, { clientMessageId, text, state, error }],
+    };
+    this.#publish();
+  }
+
+  #removePendingChat(clientMessageId: string): void {
+    if (!this.#chat.pending.some((message) => message.clientMessageId === clientMessageId)) return;
+    this.#chat = {
+      ...this.#chat,
+      pending: this.#chat.pending.filter((message) => message.clientMessageId !== clientMessageId),
+    };
+    this.#publish();
+  }
+
+  #handleDirectedRequest(request: V3DirectedRequest): void {
+    const expiresAtMs = request.expires_at_ms;
+    if (expiresAtMs <= this.#dependencies.clock.now()) return;
+    const incoming: ChalkIncomingMediaRequest = {
+      requestId: request.request_id,
+      kind: request.name === "request_unmute" ? "unmute" : "start_camera",
+      actorParticipantSessionId: request.actor_participant_session_id,
+      actorDisplayName: this.#syncSnapshot?.control?.participants.find((participant) => participant.participantSessionId === request.actor_participant_session_id)?.displayName ?? null,
+      expiresAt: new Date(expiresAtMs).toISOString(),
+    };
+    const collapsed = this.#incomingMediaRequests.filter((candidate) => candidate.requestId !== incoming.requestId && !(candidate.actorParticipantSessionId === incoming.actorParticipantSessionId && candidate.kind === incoming.kind));
+    for (const candidate of this.#incomingMediaRequests) {
+      if (!collapsed.includes(candidate)) this.#clearMediaRequestTimer(candidate.requestId);
+    }
+    this.#incomingMediaRequests = [...collapsed, incoming];
+    const timer = this.#dependencies.clock.setTimeout(() => this.#removeMediaRequest(incoming.requestId), Math.max(0, expiresAtMs - this.#dependencies.clock.now()));
+    this.#mediaRequestTimers.set(incoming.requestId, timer);
+    this.#publish();
+  }
+
+  #removeMediaRequest(requestId: string): void {
+    const next = this.#incomingMediaRequests.filter((request) => request.requestId !== requestId);
+    if (next.length === this.#incomingMediaRequests.length) return;
+    this.#incomingMediaRequests = next;
+    this.#clearMediaRequestTimer(requestId);
+    this.#publish();
+  }
+
+  #clearMediaRequestTimer(requestId: string): void {
+    const timer = this.#mediaRequestTimers.get(requestId);
+    if (timer !== undefined) this.#dependencies.clock.clearTimeout(timer);
+    this.#mediaRequestTimers.delete(requestId);
+  }
+
   #handleSyncSnapshot(snapshot: V3SessionSnapshot): void {
     this.#syncSnapshot = snapshot;
-    if (syncSubjectMismatch(snapshot, this.#access.current?.subject ?? null)) {
-      this.#failRuntime("invalid_access", "Sync authenticated a different participant subject");
+    const failure = syncRuntimeFailure(snapshot, this.#access.current?.subject ?? null);
+    if (failure) {
+      this.#failRuntime(failure.code, failure.message);
       return;
     }
-    if (syncSessionEnded(snapshot)) {
-      this.#failRuntime("session_ended", "The session has ended");
-      return;
-    }
+    this.#removeRequestsFromMissingParticipants(snapshot);
     if (this.#isRuntimeActive()) this.#handleSyncConnection(snapshot.connection.phase);
+    this.#scheduleChatCatchUp();
     this.#publish();
+  }
+
+  #removeRequestsFromMissingParticipants(snapshot: V3SessionSnapshot): void {
+    const participantIds = new Set((snapshot.optimisticControl?.participants ?? snapshot.control?.participants ?? []).map((participant) => participant.participantSessionId));
+    for (const request of this.#incomingMediaRequests) {
+      if (!participantIds.has(request.actorParticipantSessionId)) this.#removeMediaRequest(request.requestId);
+    }
+  }
+
+  #scheduleChatCatchUp(): void {
+    const sync = this.#eligibleChatCatchUpSync();
+    if (!sync) return;
+    if (this.#chatCatchUpPromise) {
+      this.#chatCatchUpRequested = true;
+      return;
+    }
+    this.#startChatCatchUp(sync);
+  }
+
+  #eligibleChatCatchUpSync(): ChalkSessionSyncClient | null {
+    const sync = this.#sync;
+    if (!sync || sync.getSnapshot().connection.phase !== "live") return null;
+    const request = chatCatchUpRequest(this.#latestChatSequence(), sync.getRoomActionsExtensionState());
+    return request ? sync : null;
+  }
+
+  #startChatCatchUp(sync: ChalkSessionSyncClient): void {
+    const promise = this.#catchUpChat(sync)
+      .catch((cause) => {
+        if (this.#sync !== sync) return;
+        const failure = failureFrom(this.#roomActionError("loadOlderChatMessages", cause));
+        this.#chat = { ...this.#chat, status: "failed", error: failure };
+        this.#publish();
+      })
+      .finally(() => {
+        if (this.#chatCatchUpPromise !== promise) return;
+        this.#chatCatchUpPromise = null;
+        if (this.#chatCatchUpRequested) {
+          this.#chatCatchUpRequested = false;
+          this.#scheduleChatCatchUp();
+        }
+      });
+    this.#chatCatchUpPromise = promise;
+  }
+
+  async #catchUpChat(sync: ChalkSessionSyncClient): Promise<void> {
+    while (this.#isCurrentLiveSync(sync)) {
+      const request = chatCatchUpRequest(this.#latestChatSequence(), sync.getRoomActionsExtensionState());
+      if (!request) return;
+      const result = await sync.readChatPage(request.input);
+      if (this.#sync !== sync) return;
+      if ((await this.#applyChatCatchUpResult(sync, request, result)) === "stop") return;
+    }
+  }
+
+  async #applyChatCatchUpResult(sync: ChalkSessionSyncClient, request: ChatCatchUpRequest, result: ChalkChatPageResult): Promise<ChatCatchUpStep> {
+    if (result.status === "cursor_reset") {
+      await this.#reloadChatAfterCursorReset(sync);
+      return "stop";
+    }
+    if (request.kind === "initial") this.#setChatHasOlder(result.hasOlder);
+    return result.hasOlder ? "continue" : "stop";
+  }
+
+  async #reloadChatAfterCursorReset(sync: ChalkSessionSyncClient): Promise<void> {
+    const reset = await sync.readChatPage({ limit: MAX_CHAT_PAGE_SIZE });
+    if (this.#sync !== sync || reset.status === "cursor_reset") return;
+    this.#setChatHasOlder(reset.hasOlder);
+  }
+
+  #setChatHasOlder(hasOlder: boolean): void {
+    this.#chat = { ...this.#chat, hasOlder };
+    this.#publish();
+  }
+
+  #latestChatSequence(): string | null {
+    return this.#chat.messages.at(-1)?.sequence ?? null;
+  }
+
+  #isCurrentLiveSync(sync: ChalkSessionSyncClient): boolean {
+    return this.#sync === sync && sync.getSnapshot().connection.phase === "live";
   }
 
   #handleSyncConnection(phase: V3SessionSnapshot["connection"]["phase"]): void {
@@ -484,11 +831,15 @@ export class ChalkSession implements ChalkSessionStore {
     await this.#access.getSyncToken("sync_recovery");
     this.#assertEpoch(epoch);
     this.#unsubscribeSync?.();
+    this.#unsubscribeRequests?.();
+    this.#unsubscribeRoomActions?.();
     this.#sync?.stop();
     const access = this.#access.current!;
     const sync = this.#dependencies.createSyncClient({ access, token: () => this.#access.getSyncToken(), media: this.#media! });
     this.#sync = sync;
     this.#unsubscribeSync = sync.subscribe((snapshot) => this.#handleSyncSnapshot(snapshot));
+    this.#unsubscribeRequests = sync.onDirectedRequest((request) => this.#handleDirectedRequest(request));
+    this.#unsubscribeRoomActions = sync.subscribeRoomActions((event) => this.#handleRoomActionEvent(event));
     await sync.start();
     await this.#waitForSyncLive(sync, this.#recoveryBudgetMs);
     this.#assertEpoch(epoch);
@@ -547,6 +898,15 @@ export class ChalkSession implements ChalkSessionStore {
     this.#screenEndedPending = false;
     this.#unsubscribeSync?.();
     this.#unsubscribeSync = null;
+    this.#unsubscribeRequests?.();
+    this.#unsubscribeRequests = null;
+    this.#unsubscribeRoomActions?.();
+    this.#unsubscribeRoomActions = null;
+    this.whiteboard?.stopSceneSubscription();
+    this.#whiteboardSummary = emptyWhiteboardSummary();
+    this.#clearRoomActionTimers();
+    this.#reactions = [];
+    this.#incomingMediaRequests = [];
     this.#unsubscribeMedia?.();
     this.#unsubscribeMedia = null;
   }
@@ -688,6 +1048,12 @@ export class ChalkSession implements ChalkSessionStore {
       localTracks: this.#localTracks,
       localIntent: this.#localIntent,
       failure: this.#failure,
+      roomActions: this.#roomActionsSnapshot(),
+      participantRoomActionCapabilities: this.#sync?.getParticipantRoomActionCapabilities() ?? {},
+      reactions: this.#reactions,
+      chat: this.#chat,
+      whiteboard: this.#whiteboardSummary,
+      incomingMediaRequests: this.#incomingMediaRequests,
     });
     for (const listener of this.#listeners) {
       try {
@@ -706,6 +1072,32 @@ export class ChalkSession implements ChalkSessionStore {
     this.#joinCleanupConfirmed = null;
     this.#screenEndedPending = false;
     this.#failedCleanupRequired = false;
+    this.#clearRoomActionTimers();
+    this.#reactions = [];
+    this.#chat = emptyChatState();
+    this.#whiteboardSummary = emptyWhiteboardSummary();
+    this.#incomingMediaRequests = [];
+  }
+
+  #roomActionsSnapshot(): ChalkSessionSnapshot["roomActions"] {
+    const extension = this.#sync?.getRoomActionsExtensionState();
+    if (!extension) {
+      return {
+        phase: this.#state === "idle" || this.#state === "left" ? "disabled" : "stopped",
+        capabilities: [],
+        error: null,
+      };
+    }
+    const syncPhase = this.#syncSnapshot?.connection.phase;
+    const phase = syncPhase === "connecting" ? "negotiating" : syncPhase === "recovering" ? "recovering" : syncPhase === "stopped" ? "stopped" : extension.negotiated && syncPhase === "live" ? "healthy" : "disabled";
+    return { phase, capabilities: extension.capabilities, error: null };
+  }
+
+  #clearRoomActionTimers(): void {
+    for (const timer of this.#reactionTimers.values()) this.#dependencies.clock.clearTimeout(timer);
+    this.#reactionTimers.clear();
+    for (const timer of this.#mediaRequestTimers.values()) this.#dependencies.clock.clearTimeout(timer);
+    this.#mediaRequestTimers.clear();
   }
 
   #assertEpoch(epoch: number): void {
@@ -834,6 +1226,23 @@ function syncSessionEnded(snapshot: V3SessionSnapshot): boolean {
   return snapshot.control?.status === "ended" || snapshot.optimisticControl?.status === "ended";
 }
 
+function syncRuntimeFailure(snapshot: V3SessionSnapshot, subject: ParticipantAccessSubject | null): SyncRuntimeFailure | null {
+  if (syncSubjectMismatch(snapshot, subject)) {
+    return { code: "invalid_access", message: "Sync authenticated a different participant subject" };
+  }
+  if (syncSessionEnded(snapshot)) {
+    return { code: "session_ended", message: "The session has ended" };
+  }
+  return null;
+}
+
+function chatCatchUpRequest(latestSequence: string | null, extension: V3RoomActionsExtensionState): ChatCatchUpRequest | null {
+  const head = extension.chatHeadSequence;
+  if (!extension.negotiated || head === null || (latestSequence !== null && compareSequence(latestSequence, head) >= 0)) return null;
+  if (latestSequence === null) return { kind: "initial", input: { limit: MAX_CHAT_PAGE_SIZE } };
+  return { kind: "newer", input: { afterSequence: latestSequence, limit: MAX_CHAT_PAGE_SIZE } };
+}
+
 function isPermissionDenied(error: unknown): boolean {
   return error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError");
 }
@@ -842,4 +1251,47 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
   if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new TypeError(`Expected an integer between ${minimum} and ${maximum}`);
   return value;
+}
+
+function emptyChatState(): ChalkChatState {
+  return {
+    status: "idle",
+    messages: [],
+    pending: [],
+    hasOlder: false,
+    historyTruncated: false,
+    retainedFloorSequence: null,
+    unreadCount: 0,
+    error: null,
+  };
+}
+
+function emptyWhiteboardSummary(): ChalkWhiteboardSummary {
+  return {
+    status: "unsubscribed",
+    sceneId: null,
+    revision: null,
+    capabilities: [],
+    canDraw: false,
+    canClear: false,
+    error: null,
+  };
+}
+
+function roomActionId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function directedRequestResult(result: Awaited<ReturnType<ChalkSessionSyncClient["requestUnmute"]>>): ChalkDirectedRequestResult {
+  return { status: result.result, requestId: result.request_id };
+}
+
+function compareSequence(left: string, right: string): number {
+  if (left.length !== right.length) return left.length - right.length;
+  return left.localeCompare(right);
+}
+
+function errorCode(cause: unknown): string | null {
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) return null;
+  return typeof cause.code === "string" ? cause.code : null;
 }

@@ -1,0 +1,718 @@
+import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
+import type { SyncSocket } from "../sync/types";
+import {
+  ChalkWhiteboardV1Error,
+  type ChalkSharedWhiteboardAppState,
+  type ChalkWhiteboardV1Capability,
+  type ChalkWhiteboardV1ClientOptions,
+  type ChalkWhiteboardV1Commit,
+  type ChalkWhiteboardV1Element,
+  type ChalkWhiteboardV1Event,
+  type ChalkWhiteboardV1Failure,
+  type ChalkWhiteboardV1Operation,
+  type ChalkWhiteboardV1PendingOperation,
+  type ChalkWhiteboardSummary,
+  type ChalkWhiteboardV1Transport,
+  type ChalkWhiteboardV1UpdateInput,
+} from "./types";
+import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
+import { compareChalkWhiteboardV1PendingOperations, InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
+
+const CLIENT_RESTART_CLOSE_CODE = 4000;
+const DEPENDENCY_UNAVAILABLE_CLOSE_CODE = 1012;
+const HEARTBEAT_INTERVAL_MS = 20_000;
+const MAX_MISSED_HEARTBEATS = 2;
+const encoder = new TextEncoder();
+
+type Deferred<T> = {
+  readonly resolve: (value: T) => void;
+  readonly reject: (error: Error) => void;
+  settled: boolean;
+};
+
+type OperationEntry = {
+  readonly pending: ChalkWhiteboardV1PendingOperation;
+  readonly deferred?: Deferred<ChalkWhiteboardV1Commit>;
+  retries: number;
+};
+
+type SnapshotAssembly = {
+  readonly requestId: string;
+  readonly deferred: Deferred<void>;
+  sceneId?: string;
+  revision?: string;
+  pageCount?: number;
+  appState?: ChalkSharedWhiteboardAppState;
+  readonly pages: Map<number, readonly ChalkWhiteboardV1Element[]>;
+};
+
+type SnapshotPageFrame = Extract<WhiteboardV1ServerFrame, { readonly type: "snapshot_page" }>;
+
+export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
+  readonly files;
+  readonly #options: ChalkWhiteboardV1ClientOptions;
+  readonly #store;
+  readonly #listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
+  readonly #operations = new Map<string, OperationEntry>();
+  readonly #reservedOperationIds = new Set<string>();
+  readonly #operationRetryTimers = new Map<string, unknown>();
+  readonly #snapshots = new Map<string, SnapshotAssembly>();
+  #socket: SyncSocket | null = null;
+  #started = false;
+  #startupGeneration = 0;
+  #phase: "idle" | "connecting" | "authenticating" | "live" | "stopped" = "idle";
+  #participantSessionId: string | null = null;
+  #sceneId: string | null;
+  #revision: string | null;
+  #capabilities: readonly ChalkWhiteboardV1Capability[] = [];
+  #canDraw = false;
+  #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
+  #summaryError: ChalkWhiteboardV1Failure | null = null;
+  #initialSnapshot: Deferred<void> | null = null;
+  #startPromise: Promise<void> | null = null;
+  #reconnectTimer: unknown;
+  #heartbeatTimer: unknown;
+  #missedHeartbeats = 0;
+  #lastCursorAt = Number.NEGATIVE_INFINITY;
+  #unsubscribeLifecycle: (() => void) | undefined;
+  #transportAvailable = true;
+  #online = true;
+  #active = true;
+  #inbound = Promise.resolve();
+
+  constructor(options: ChalkWhiteboardV1ClientOptions) {
+    assertWhiteboardV1Url(options.url);
+    this.#options = options;
+    this.files = options.files;
+    this.#store = options.pendingStore ?? new InMemoryChalkWhiteboardV1PendingOperationStore();
+    this.#sceneId = options.cursor?.sceneId ?? null;
+    this.#revision = options.cursor?.revision ?? null;
+  }
+
+  startSceneSubscription(): Promise<void> {
+    if (this.#started && this.#startPromise) return this.#startPromise;
+    this.#started = true;
+    this.#phase = "connecting";
+    this.#publishSummary("loading", null);
+    const generation = ++this.#startupGeneration;
+    this.#startPromise = new Promise<void>((resolve, reject) => {
+      this.#initialSnapshot = { resolve, reject, settled: false };
+    });
+    void this.#restoreAndConnect(generation);
+    return this.#startPromise;
+  }
+
+  stopSceneSubscription(): void {
+    this.#started = false;
+    this.#startupGeneration += 1;
+    this.#unsubscribeLifecycle?.();
+    this.#unsubscribeLifecycle = undefined;
+    this.#clearReconnect();
+    this.#clearHeartbeat();
+    this.#clearOperationRetryTimers();
+    this.#socket?.close(1000, "whiteboard subscription stopped");
+    this.#socket = null;
+    this.#phase = "stopped";
+    this.#rejectSnapshots(failure("request_snapshot", "unavailable", true, "Whiteboard subscription stopped."));
+    this.#rejectOperationCallers(failure("submit_update", "unavailable", true, "Whiteboard subscription stopped."));
+    if (this.#initialSnapshot) rejectDeferred(this.#initialSnapshot, error(failure("start_scene_subscription", "unavailable", true, "Whiteboard subscription stopped.")));
+    this.#initialSnapshot = null;
+    this.#startPromise = null;
+    this.#participantSessionId = null;
+    this.#capabilities = [];
+    this.#canDraw = false;
+    this.#publishSummary("unsubscribed", null);
+  }
+
+  subscribe(listener: (event: ChalkWhiteboardV1Event) => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  submitUpdate(input: ChalkWhiteboardV1UpdateInput): Promise<ChalkWhiteboardV1Commit> {
+    this.#assertLive("submit_update");
+    if (!this.#canDraw || !this.#capabilities.includes("drawWhiteboard")) {
+      throw error(failure("submit_update", "permission_denied", false, "Whiteboard draw permission is required."));
+    }
+    const operationId = this.#nextId();
+    return this.#queueOperation({
+      type: "submit_update",
+      operation_id: operationId,
+      scene_id: input.sceneId,
+      sync_all: input.syncAll,
+      elements: input.elements.map(elementToFrame),
+    });
+  }
+
+  sendCursor(input: { readonly x: number; readonly y: number }): void {
+    if (this.#phase !== "live" || !this.#canDraw) return;
+    const now = this.#now();
+    if (now - this.#lastCursorAt < 1000 / WhiteboardV1ProtocolLimits.cursorRatePerSecond) return;
+    const frame = { type: "cursor", x: input.x, y: input.y } as const;
+    encodeWhiteboardV1ClientFrame(frame);
+    this.#lastCursorAt = now;
+    this.#send(frame);
+  }
+
+  requestSnapshot(): Promise<void> {
+    this.#assertLive("request_snapshot");
+    return this.#requestSnapshot();
+  }
+
+  clear(): Promise<ChalkWhiteboardV1Commit> {
+    this.#assertLive("clear");
+    if (!this.#sceneId || !this.#capabilities.includes("manageWhiteboard")) {
+      throw error(failure("clear", "permission_denied", false, "Whiteboard management permission is required."));
+    }
+    const operationId = this.#nextId();
+    return this.#queueOperation({ type: "clear", operation_id: operationId, scene_id: this.#sceneId });
+  }
+
+  async setDrawPermission(participantSessionId: string, canDraw: boolean): Promise<void> {
+    this.#assertLive("set_draw_permission");
+    if (!this.#capabilities.includes("manageWhiteboard")) {
+      throw error(failure("set_draw_permission", "permission_denied", false, "Whiteboard management permission is required."));
+    }
+    const operationId = this.#nextId();
+    await this.#queueOperation({
+      type: "set_draw_permission",
+      operation_id: operationId,
+      participant_session_id: participantSessionId,
+      can_draw: canDraw,
+    });
+  }
+
+  async #restoreAndConnect(generation: number): Promise<void> {
+    try {
+      const stored = await this.#store.load();
+      if (!this.#isCurrentStartup(generation)) return;
+      this.#restorePendingOperations(stored);
+      this.#unsubscribeLifecycle = this.#options.lifecycle?.subscribe((event) => this.#handleLifecycle(event));
+      this.#connect();
+    } catch (cause) {
+      if (this.#isCurrentStartup(generation)) this.#failStartup(cause);
+    }
+  }
+
+  #isCurrentStartup(generation: number): boolean {
+    return this.#started && generation === this.#startupGeneration;
+  }
+
+  #restorePendingOperations(stored: readonly ChalkWhiteboardV1PendingOperation[]): void {
+    for (const pending of [...stored].sort(compareChalkWhiteboardV1PendingOperations)) {
+      if (!this.#validRestoredOperation(pending)) {
+        void this.#store.remove(pending.operationId).catch(() => undefined);
+        continue;
+      }
+      if (this.#operations.size >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) return;
+      this.#operations.set(pending.operationId, { pending, retries: 0 });
+    }
+  }
+
+  #validRestoredOperation(pending: ChalkWhiteboardV1PendingOperation): boolean {
+    const wire = encodeWhiteboardV1ClientFrame(pending.frame);
+    return pending.operationId === pending.frame.operation_id && pending.bytes === encoder.encode(wire).byteLength;
+  }
+
+  #failStartup(cause: unknown): void {
+    const startupFailure = failure("start_scene_subscription", "unavailable", true, "Unable to restore whiteboard retry state.");
+    this.#started = false;
+    this.#phase = "idle";
+    this.#publishSummary("failed", startupFailure);
+    if (this.#initialSnapshot) rejectDeferred(this.#initialSnapshot, error(startupFailure, cause));
+  }
+
+  #connect(): void {
+    if (!this.#started || !this.#transportAvailable || this.#socket) return;
+    this.#phase = "connecting";
+    const socket = this.#options.webSocket.connect(this.#options.url);
+    this.#socket = socket;
+    socket.onopen = () => void this.#authenticate(socket);
+    socket.onmessage = (event) => {
+      this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
+    };
+    socket.onclose = (event) => this.#disconnected(socket, event.code);
+    socket.onerror = () => socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard transport error");
+  }
+
+  async #authenticate(socket: SyncSocket): Promise<void> {
+    try {
+      const token = await this.#options.token();
+      if (socket !== this.#socket) return;
+      this.#phase = "authenticating";
+      this.#send({
+        type: "hello",
+        protocol: "whiteboard-v1",
+        token,
+        cursor: this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null,
+      });
+    } catch {
+      socket.close(1008, "whiteboard authentication failed");
+    }
+  }
+
+  async #receive(socket: SyncSocket, data: unknown): Promise<void> {
+    if (socket !== this.#socket) return;
+    try {
+      if (typeof data !== "string" || encoder.encode(data).byteLength > WhiteboardV1ProtocolLimits.encodedOutboundFrameBytes) {
+        throw new Error("invalid whiteboard frame size");
+      }
+      this.#handleFrame(decodeWhiteboardV1ServerFrame(data));
+    } catch {
+      socket.close(1009, "invalid whiteboard frame");
+    }
+  }
+
+  // This switch exhausts the generated whiteboard-v1 discriminated union.
+  // fallow-ignore-next-line complexity
+  #handleFrame(frame: WhiteboardV1ServerFrame): void {
+    switch (frame.type) {
+      case "welcome":
+        this.#welcome(frame);
+        return;
+      case "snapshot_page":
+        this.#snapshotPage(frame);
+        return;
+      case "update":
+        this.#requireLive();
+        this.#sceneId = frame.scene_id;
+        this.#revision = frame.revision;
+        this.#publishSummary("ready", null);
+        this.#emit({
+          type: "update",
+          sceneId: frame.scene_id,
+          revision: frame.revision,
+          elements: frame.elements.map(elementFromFrame),
+        });
+        return;
+      case "commit":
+        this.#commit(frame);
+        return;
+      case "cursor":
+        this.#requireLive();
+        this.#emit({
+          type: "cursor",
+          participantSessionId: frame.participant_session_id,
+          displayName: frame.display_name,
+          x: frame.x,
+          y: frame.y,
+          occurredAt: frame.occurred_at,
+        });
+        return;
+      case "permission_updated":
+        this.#requireLive();
+        if (frame.participant_session_id === this.#participantSessionId) this.#canDraw = frame.can_draw;
+        this.#publishSummary("ready", null);
+        return;
+      case "reset_required":
+        this.#requireLive();
+        this.#sceneId = frame.scene_id;
+        this.#revision = null;
+        this.#publishSummary("recovering", failure("request_snapshot", "cursor_reset_required", true, "Whiteboard snapshot recovery is required."));
+        this.#emit({ type: "reset_required", sceneId: frame.scene_id, reason: frame.reason });
+        return;
+      case "operation_error":
+        this.#operationError(frame);
+        return;
+      case "pong":
+        this.#requireLive();
+        this.#missedHeartbeats = 0;
+        return;
+    }
+  }
+
+  #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
+    if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
+    this.#phase = "live";
+    this.#participantSessionId = frame.participant_session_id;
+    this.#sceneId = frame.scene_id;
+    this.#revision = frame.revision;
+    this.#capabilities = [...frame.capabilities];
+    this.#canDraw = frame.can_draw;
+    this.#publishSummary("loading", null);
+    this.#missedHeartbeats = 0;
+    for (const entry of [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending))) {
+      this.#send(entry.pending.frame);
+    }
+    void this.#requestSnapshot().catch(() => undefined);
+    this.#startHeartbeat();
+  }
+
+  #requestSnapshot(): Promise<void> {
+    const requestId = this.#nextId();
+    const frame = { type: "request_snapshot", request_id: requestId } as const;
+    encodeWhiteboardV1ClientFrame(frame);
+    let deferred!: Deferred<void>;
+    const promise = new Promise<void>((resolve, reject) => {
+      deferred = { resolve, reject, settled: false };
+    });
+    this.#snapshots.set(requestId, { requestId, deferred, pages: new Map() });
+    this.#send(frame);
+    return promise;
+  }
+
+  #snapshotPage(frame: SnapshotPageFrame): void {
+    this.#requireLive();
+    const assembly = this.#snapshots.get(frame.request_id);
+    if (!assembly) return;
+    assertConsistentSnapshotPage(assembly, frame);
+    assembly.sceneId = frame.scene_id;
+    assembly.revision = frame.revision;
+    assembly.pageCount = frame.page_count;
+    if (frame.app_state) assembly.appState = { viewBackgroundColor: frame.app_state.view_background_color };
+    assembly.pages.set(frame.page, frame.elements.map(elementFromFrame));
+    this.#ackSnapshotPage(frame);
+    if (assembly.pages.size !== frame.page_count) return;
+    this.#completeSnapshot(frame, assembly, assembleSnapshotElements(assembly, frame.page_count));
+  }
+
+  #ackSnapshotPage(frame: SnapshotPageFrame): void {
+    this.#send({
+      type: "snapshot_ack",
+      request_id: frame.request_id,
+      scene_id: frame.scene_id,
+      revision: frame.revision,
+      page: frame.page,
+    });
+  }
+
+  #completeSnapshot(frame: SnapshotPageFrame, assembly: SnapshotAssembly, elements: readonly ChalkWhiteboardV1Element[]): void {
+    this.#snapshots.delete(frame.request_id);
+    this.#sceneId = frame.scene_id;
+    this.#revision = frame.revision;
+    this.#publishSummary("ready", null);
+    this.#emit({
+      type: "snapshot",
+      sceneId: frame.scene_id,
+      revision: frame.revision,
+      elements,
+      ...(assembly.appState ? { appState: assembly.appState } : {}),
+    });
+    resolveDeferred(assembly.deferred, undefined);
+    if (this.#initialSnapshot) {
+      resolveDeferred(this.#initialSnapshot, undefined);
+      this.#initialSnapshot = null;
+    }
+  }
+
+  async #queueOperation(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>): Promise<ChalkWhiteboardV1Commit> {
+    this.#assertOperationCapacity();
+    const wire = encodeWhiteboardV1ClientFrame(frame);
+    const pending = {
+      operationId: frame.operation_id,
+      frame,
+      createdAt: this.#now(),
+      bytes: encoder.encode(wire).byteLength,
+    } satisfies ChalkWhiteboardV1PendingOperation;
+    const queuedBytes = [...this.#operations.values()].reduce((total, entry) => total + entry.pending.bytes, 0);
+    if (queuedBytes + pending.bytes > WhiteboardV1ProtocolLimits.socketQueueMaxBytes) {
+      throw error(failure("submit_update", "unavailable", true, "Whiteboard operation byte capacity is full."));
+    }
+    this.#reservedOperationIds.add(frame.operation_id);
+    try {
+      await this.#store.put(pending);
+    } catch (cause) {
+      throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
+    } finally {
+      this.#reservedOperationIds.delete(frame.operation_id);
+    }
+    let deferred!: Deferred<ChalkWhiteboardV1Commit>;
+    const promise = new Promise<ChalkWhiteboardV1Commit>((resolve, reject) => {
+      deferred = { resolve, reject, settled: false };
+    });
+    this.#operations.set(frame.operation_id, { pending, deferred, retries: 0 });
+    this.#send(frame);
+    return promise;
+  }
+
+  #commit(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "commit" }>): void {
+    this.#requireLive();
+    const entry = this.#operations.get(frame.operation_id);
+    if (!entry) return;
+    this.#operations.delete(frame.operation_id);
+    this.#clearOperationRetryTimer(frame.operation_id);
+    this.#sceneId = frame.scene_id;
+    this.#revision = frame.revision;
+    this.#publishSummary("ready", null);
+    entry.deferred &&
+      resolveDeferred(entry.deferred, {
+        operationId: frame.operation_id,
+        sceneId: frame.scene_id,
+        revision: frame.revision,
+      });
+    void this.#store.remove(frame.operation_id).catch(() => undefined);
+  }
+
+  #operationError(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>): void {
+    this.#requireLive();
+    const entry = this.#operations.get(frame.correlation_id);
+    if (entry) {
+      if (frame.recoverable && retryableOperationCode(frame.code)) {
+        this.#scheduleOperationRetry(frame.correlation_id, entry);
+        return;
+      }
+      this.#operations.delete(frame.correlation_id);
+      this.#clearOperationRetryTimer(frame.correlation_id);
+      entry.deferred && rejectDeferred(entry.deferred, error(failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message)));
+      this.#publishSummary("ready", failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message));
+      void this.#store.remove(frame.correlation_id).catch(() => undefined);
+      return;
+    }
+    const snapshot = this.#snapshots.get(frame.correlation_id);
+    if (!snapshot) return;
+    this.#snapshots.delete(frame.correlation_id);
+    const snapshotError = error(failure("request_snapshot", mapErrorCode(frame.code), frame.recoverable, frame.message));
+    this.#publishSummary(frame.recoverable ? "recovering" : "failed", failure("request_snapshot", mapErrorCode(frame.code), frame.recoverable, frame.message));
+    rejectDeferred(snapshot.deferred, snapshotError);
+    if (this.#initialSnapshot) {
+      rejectDeferred(this.#initialSnapshot, snapshotError);
+      this.#initialSnapshot = null;
+    }
+  }
+
+  #scheduleOperationRetry(operationId: string, entry: OperationEntry): void {
+    if (this.#operationRetryTimers.has(operationId)) return;
+    entry.retries += 1;
+    const timer = this.#clock().setTimeout(
+      () => {
+        this.#operationRetryTimers.delete(operationId);
+        if (this.#phase === "live" && this.#operations.get(operationId) === entry) this.#send(entry.pending.frame);
+      },
+      this.#options.retryDelayMs ?? Math.min(100 * 2 ** Math.min(entry.retries - 1, 4), 2_000),
+    );
+    this.#operationRetryTimers.set(operationId, timer);
+  }
+
+  #disconnected(socket: SyncSocket, closeCode: number): void {
+    if (socket !== this.#socket) return;
+    this.#socket = null;
+    this.#clearHeartbeat();
+    this.#phase = "connecting";
+    this.#participantSessionId = null;
+    this.#capabilities = [];
+    this.#canDraw = false;
+    this.#rejectSnapshots(failure("request_snapshot", "unavailable", true, "Whiteboard connection interrupted."));
+    this.#publishSummary("recovering", failure("start_scene_subscription", "unavailable", true, "Whiteboard connection interrupted."));
+    if (!this.#started || !this.#transportAvailable) return;
+    if (closeCode === 1008 || closeCode === 1009) {
+      const terminalFailure = failure("start_scene_subscription", closeCode === 1008 ? "permission_denied" : "invalid_payload", false, "Whiteboard connection was rejected.");
+      this.#started = false;
+      this.#publishSummary("failed", terminalFailure);
+      if (this.#initialSnapshot) rejectDeferred(this.#initialSnapshot, error(terminalFailure));
+      this.#rejectOperationCallers(terminalFailure);
+      return;
+    }
+    this.#clearReconnect();
+    this.#reconnectTimer = this.#clock().setTimeout(() => {
+      this.#reconnectTimer = undefined;
+      this.#connect();
+    }, this.#options.reconnectDelayMs ?? 250);
+  }
+
+  #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {
+    if (event === "online" || event === "offline") this.#online = event === "online";
+    else this.#active = event === "active";
+    this.#transportAvailable = this.#online && this.#active;
+    if (!this.#transportAvailable) this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard lifecycle unavailable");
+    else this.#connect();
+  }
+
+  #assertLive(operation: ChalkWhiteboardV1Operation): void {
+    if (this.#phase !== "live") throw error(failure(operation, "unavailable", true, "Whiteboard is not connected."));
+  }
+
+  #requireLive(): void {
+    if (this.#phase !== "live") throw new Error("whiteboard frame arrived before welcome");
+  }
+
+  #assertOperationCapacity(): void {
+    if (this.#operations.size + this.#reservedOperationIds.size >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) {
+      throw error(failure("submit_update", "unavailable", true, "Whiteboard operation capacity is full."));
+    }
+  }
+
+  #nextId(): string {
+    const id = this.#options.ids?.next() ?? crypto.randomUUID();
+    if (this.#operations.has(id) || this.#reservedOperationIds.has(id) || this.#snapshots.has(id)) {
+      throw error(failure("submit_update", "invalid_payload", false, "Whiteboard operation ID is already pending."));
+    }
+    return id;
+  }
+
+  #send(frame: WhiteboardV1ClientFrame): void {
+    this.#socket?.send(encodeWhiteboardV1ClientFrame(frame));
+  }
+
+  #emit(event: ChalkWhiteboardV1Event): void {
+    for (const listener of this.#listeners) listener(event);
+  }
+
+  #publishSummary(status: ChalkWhiteboardSummary["status"], summaryError: ChalkWhiteboardV1Failure | null): void {
+    this.#summaryStatus = status;
+    this.#summaryError = summaryError;
+    const summary: ChalkWhiteboardSummary = {
+      status: this.#summaryStatus,
+      sceneId: this.#sceneId,
+      revision: this.#revision,
+      capabilities: [...this.#capabilities],
+      canDraw: this.#canDraw,
+      canClear: this.#capabilities.includes("manageWhiteboard"),
+      error: this.#summaryError,
+    };
+    try {
+      this.#options.onSummary?.(summary);
+    } catch {
+      // Consumer summary callbacks cannot interfere with transport ownership.
+    }
+  }
+
+  #startHeartbeat(): void {
+    this.#clearHeartbeat();
+    this.#heartbeatTimer = this.#clock().setTimeout(() => {
+      this.#heartbeatTimer = undefined;
+      if (this.#phase !== "live") return;
+      this.#missedHeartbeats += 1;
+      if (this.#missedHeartbeats > MAX_MISSED_HEARTBEATS) {
+        this.#socket?.close(DEPENDENCY_UNAVAILABLE_CLOSE_CODE, "whiteboard heartbeat timeout");
+        return;
+      }
+      this.#send({ type: "ping" });
+      this.#startHeartbeat();
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  #rejectSnapshots(value: ChalkWhiteboardV1Failure): void {
+    for (const assembly of this.#snapshots.values()) rejectDeferred(assembly.deferred, error(value));
+    this.#snapshots.clear();
+  }
+
+  #rejectOperationCallers(value: ChalkWhiteboardV1Failure): void {
+    for (const entry of this.#operations.values()) entry.deferred && rejectDeferred(entry.deferred, error({ ...value, operation: operationName(entry.pending.frame) }));
+  }
+
+  #clearOperationRetryTimers(): void {
+    for (const timer of this.#operationRetryTimers.values()) this.#clock().clearTimeout(timer);
+    this.#operationRetryTimers.clear();
+  }
+
+  #clearOperationRetryTimer(operationId: string): void {
+    const timer = this.#operationRetryTimers.get(operationId);
+    if (timer === undefined) return;
+    this.#clock().clearTimeout(timer);
+    this.#operationRetryTimers.delete(operationId);
+  }
+
+  #clearReconnect(): void {
+    if (this.#reconnectTimer === undefined) return;
+    this.#clock().clearTimeout(this.#reconnectTimer);
+    this.#reconnectTimer = undefined;
+  }
+
+  #clearHeartbeat(): void {
+    if (this.#heartbeatTimer === undefined) return;
+    this.#clock().clearTimeout(this.#heartbeatTimer);
+    this.#heartbeatTimer = undefined;
+  }
+
+  #clock(): NonNullable<ChalkWhiteboardV1ClientOptions["clock"]> {
+    return (
+      this.#options.clock ?? {
+        now: Date.now,
+        setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
+        clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+      }
+    );
+  }
+
+  #now(): number {
+    return this.#clock().now();
+  }
+}
+
+function assertConsistentSnapshotPage(assembly: SnapshotAssembly, frame: SnapshotPageFrame): void {
+  const coordinates = [
+    [assembly.sceneId, frame.scene_id],
+    [assembly.revision, frame.revision],
+    [assembly.pageCount, frame.page_count],
+  ] as const;
+  const changedCoordinate = coordinates.some(([current, incoming]) => current !== undefined && current !== incoming);
+  if (changedCoordinate || assembly.pages.has(frame.page)) {
+    throw new Error("inconsistent whiteboard snapshot page");
+  }
+}
+
+function assembleSnapshotElements(assembly: SnapshotAssembly, pageCount: number): readonly ChalkWhiteboardV1Element[] {
+  const elements: ChalkWhiteboardV1Element[] = [];
+  for (let pageNumber = 0; pageNumber < pageCount; pageNumber += 1) {
+    const page = assembly.pages.get(pageNumber);
+    if (!page) throw new Error("invalid whiteboard snapshot assembly");
+    elements.push(...page);
+  }
+  if (elements.length > WhiteboardV1ProtocolLimits.sceneElementMaxItems) {
+    throw new Error("invalid whiteboard snapshot assembly");
+  }
+  return elements;
+}
+
+function elementToFrame(element: ChalkWhiteboardV1Element): WhiteboardV1Element {
+  return {
+    id: element.id,
+    type: element.type,
+    version: element.version,
+    version_nonce: element.versionNonce,
+    index: element.index,
+    is_deleted: element.isDeleted,
+    payload: element.payload,
+  };
+}
+
+function elementFromFrame(element: WhiteboardV1Element): ChalkWhiteboardV1Element {
+  return {
+    id: element.id,
+    type: element.type,
+    version: element.version,
+    versionNonce: element.version_nonce,
+    index: element.index,
+    isDeleted: element.is_deleted,
+    payload: element.payload,
+  };
+}
+
+function operationName(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>): ChalkWhiteboardV1Operation {
+  return frame.type;
+}
+
+function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>["code"]): boolean {
+  return code === "unavailable" || code === "overloaded" || code === "rate_limited" || code === "storage_unavailable";
+}
+
+function mapErrorCode(code: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>["code"]): ChalkWhiteboardV1Failure["code"] {
+  return code === "overloaded" || code === "rate_limited" ? "unavailable" : code;
+}
+
+function failure(operation: ChalkWhiteboardV1Operation, code: ChalkWhiteboardV1Failure["code"], recoverable: boolean, message: string): ChalkWhiteboardV1Failure {
+  return { operation, code, recoverable, message };
+}
+
+function error(value: ChalkWhiteboardV1Failure, cause?: unknown): ChalkWhiteboardV1Error {
+  return new ChalkWhiteboardV1Error(value, cause === undefined ? undefined : { cause });
+}
+
+function resolveDeferred<T>(deferred: Deferred<T>, value: T): void {
+  if (deferred.settled) return;
+  deferred.settled = true;
+  deferred.resolve(value);
+}
+
+function rejectDeferred<T>(deferred: Deferred<T>, value: Error): void {
+  if (deferred.settled) return;
+  deferred.settled = true;
+  deferred.reject(value);
+}
+
+function assertWhiteboardV1Url(url: string): void {
+  const parsed = new URL(url);
+  if ((parsed.protocol !== "ws:" && parsed.protocol !== "wss:") || parsed.pathname !== "/v1/whiteboard") {
+    throw new TypeError("whiteboard-v1 URL must use ws(s) and the /v1/whiteboard route");
+  }
+}

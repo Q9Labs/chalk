@@ -282,13 +282,16 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((er
           refs.engineRef.current = new ExcalidrawCollabEngine({
             excalidrawAPI: api,
             canDraw: refs.canDrawRef.current,
-            sendUpdateV2: collab.sendUpdateV2,
+            submitUpdate: collab.submitUpdate,
             sendCursor: collab.sendCursor,
-            requestSync: collab.requestSync,
-            sendClear: collab.sendClear,
-            presignUpload: collab.presignUpload,
+            requestSnapshot: collab.requestSnapshot,
+            clear: collab.clear,
+            initiateUpload: collab.initiateUpload,
+            finalizeUpload: collab.finalizeUpload,
             presignDownload: collab.presignDownload,
+            subscribe: collab.subscribe,
             onFileSyncStateChange: collab.onFileSyncStateChange,
+            onSubmissionError: collab.onSubmissionError,
           });
         })
         .catch((reason: unknown) => {

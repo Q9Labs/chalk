@@ -1,4 +1,4 @@
-import { Crown01Icon, Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, Shield01Icon, UserRemove01Icon } from "../../../utils/icons";
+import { Crown01Icon, Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, Shield01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../../utils/icons";
 import { cn } from "../../../utils/cn";
 import { VolumeSlider } from "../../atomic";
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantList";
@@ -9,6 +9,9 @@ export interface ParticipantOptionsMenuProps {
   canManageParticipants: boolean;
   onClose: () => void;
   onMuteParticipant?: (id: string) => void;
+  onRequestUnmute?: (id: string) => void;
+  onStopParticipantCamera?: (id: string) => void;
+  onRequestStartCamera?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
   onMakeHost?: (id: string) => void;
   onMakeCoHost?: (id: string) => void;
@@ -17,10 +20,25 @@ export interface ParticipantOptionsMenuProps {
   onParticipantVolumeChange?: (id: string, volume: number) => void;
 }
 
-export function ParticipantOptionsMenu({ participant, variant, canManageParticipants, onClose, onMuteParticipant, onRemoveParticipant, onMakeHost, onMakeCoHost, onEditName, participantVolumes, onParticipantVolumeChange }: ParticipantOptionsMenuProps) {
+export function ParticipantOptionsMenu({
+  participant,
+  variant,
+  canManageParticipants,
+  onClose,
+  onMuteParticipant,
+  onRequestUnmute,
+  onStopParticipantCamera,
+  onRequestStartCamera,
+  onRemoveParticipant,
+  onMakeHost,
+  onMakeCoHost,
+  onEditName,
+  participantVolumes,
+  onParticipantVolumeChange,
+}: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
-  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRemoveParticipant || (!!onMakeHost && participant.role !== "host") || (!!onMakeCoHost && participant.role === "participant"));
+  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant || (!!onMakeHost && participant.role !== "host") || (!!onMakeCoHost && participant.role === "participant"));
 
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
@@ -69,7 +87,7 @@ export function ParticipantOptionsMenu({ participant, variant, canManageParticip
 
       {hasManageActions ? (
         <>
-          {onMuteParticipant ? (
+          {!participant.isMuted && onMuteParticipant ? (
             <button
               type="button"
               onClick={() => {
@@ -78,8 +96,50 @@ export function ParticipantOptionsMenu({ participant, variant, canManageParticip
               }}
               className={menuItemClassName}
             >
-              {participant.isMuted ? <Microphone01Icon className="h-4 w-4" /> : <MicrophoneOff01Icon className="h-4 w-4" />}
-              {participant.isMuted ? "Unmute" : "Mute"}
+              <MicrophoneOff01Icon className="h-4 w-4" />
+              Mute
+            </button>
+          ) : null}
+
+          {participant.isMuted && onRequestUnmute ? (
+            <button
+              type="button"
+              onClick={() => {
+                onRequestUnmute(participant.id);
+                onClose();
+              }}
+              className={menuItemClassName}
+            >
+              <Microphone01Icon className="h-4 w-4" />
+              Ask to unmute
+            </button>
+          ) : null}
+
+          {participant.isVideoEnabled && onStopParticipantCamera ? (
+            <button
+              type="button"
+              onClick={() => {
+                onStopParticipantCamera(participant.id);
+                onClose();
+              }}
+              className={menuItemClassName}
+            >
+              <VideoOffIcon className="h-4 w-4" />
+              Stop camera
+            </button>
+          ) : null}
+
+          {!participant.isVideoEnabled && onRequestStartCamera ? (
+            <button
+              type="button"
+              onClick={() => {
+                onRequestStartCamera(participant.id);
+                onClose();
+              }}
+              className={menuItemClassName}
+            >
+              <Video01Icon className="h-4 w-4" />
+              Ask to start camera
             </button>
           ) : null}
 

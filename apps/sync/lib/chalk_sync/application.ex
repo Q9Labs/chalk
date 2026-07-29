@@ -19,8 +19,11 @@ defmodule ChalkSync.Application do
         observability_child(),
         {Task.Supervisor, name: ChalkSync.CommandTaskSupervisor},
         {ChalkSync.Sessions.CommandAdmission, []},
+        {ChalkSync.RoomActions.Admission, []},
+        room_actions_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),
+        whiteboard_fanout_child(),
         lifecycle_consumer_child(),
         external_operation_consumer_child(),
         retention_scheduler_child(),
@@ -96,6 +99,29 @@ defmodule ChalkSync.Application do
       ChalkSync.Stateholder.Postgres ->
         {ChalkSync.Fanout.PostgresNotifications,
          url: Application.fetch_env!(:chalk_sync, :database_url)}
+
+      _adapter ->
+        nil
+    end
+  end
+
+  defp room_actions_fanout_child do
+    transport =
+      case Application.fetch_env!(:chalk_sync, :stateholder) do
+        ChalkSync.Stateholder.Postgres ->
+          {ChalkSync.RoomActions.Fanout.PostgresNotifications, nil}
+
+        _adapter ->
+          nil
+      end
+
+    {ChalkSync.RoomActions.Fanout, transport: transport}
+  end
+
+  defp whiteboard_fanout_child do
+    case Application.fetch_env!(:chalk_sync, :stateholder) do
+      ChalkSync.Stateholder.Postgres ->
+        {ChalkSync.WhiteboardV1.Fanout, url: Application.fetch_env!(:chalk_sync, :database_url)}
 
       _adapter ->
         nil

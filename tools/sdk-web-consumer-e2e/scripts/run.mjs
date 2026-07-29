@@ -94,6 +94,8 @@ async function runChromiumMatrix(browser, baseURL, secretMarker) {
   const bob = await openParticipant(browser, baseURL, "bob");
   try {
     await verifyPairJoined(alice.page, bob.page);
+    await verifyRoomActions(alice.page, bob.page);
+    await verifyDirectedRequests(alice.page, bob.page);
     await verifyScreenShare(alice.page, bob.page);
     await verifyRecovery(alice.page, bob.page, baseURL);
     await verifyRemovalAndLeave(alice.page, bob.page);
@@ -102,6 +104,28 @@ async function runChromiumMatrix(browser, baseURL, secretMarker) {
   } finally {
     await Promise.all([alice.context.close(), bob.context.close()]);
   }
+}
+
+async function verifyDirectedRequests(alice, bob) {
+  const unmute = await invoke(alice, "requestUnmute", "bob");
+  if (unmute.status !== "delivered") throw new TypeError("Packed SDK unmute request was not delivered");
+  await waitFor(bob, (snapshot, expected) => snapshot.incomingMediaRequests.some((request) => request.requestId === expected.requestId && request.kind === "unmute"), unmute);
+  await invoke(bob, "declineMediaRequest", unmute.requestId);
+
+  const camera = await invoke(alice, "requestStartCamera", "bob");
+  if (camera.status !== "delivered") throw new TypeError("Packed SDK camera request was not delivered");
+  await waitFor(bob, (snapshot, expected) => snapshot.incomingMediaRequests.some((request) => request.requestId === expected.requestId && request.kind === "start_camera"), camera);
+  await invoke(bob, "declineMediaRequest", camera.requestId);
+}
+
+async function verifyRoomActions(alice, bob) {
+  const chatMessage = await invoke(alice, "sendChatMessage", { clientMessageId: "packed-chat-1", text: "Hello from the packed SDK" });
+  if (chatMessage.text !== "Hello from the packed SDK") throw new TypeError("Packed SDK chat action returned the wrong message");
+  await waitFor(bob, (snapshot) => snapshot.chat.messages.some((message) => message.clientMessageId === "packed-chat-1" && message.participantSessionId === "alice"));
+
+  const reaction = await invoke(bob, "sendReaction", "🎉");
+  if (reaction.reaction !== "🎉") throw new TypeError("Packed SDK reaction action returned the wrong reaction");
+  await waitFor(alice, (snapshot, expected) => snapshot.reactions.some((item) => item.eventId === expected.eventId), reaction);
 }
 
 async function verifyPairJoined(alice, bob) {

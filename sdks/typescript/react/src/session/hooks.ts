@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChalkLocalMedia, ChalkMediaSource, ChalkParticipant, ChalkRemoteMedia, ChalkSessionActions, ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkLocalMedia, ChalkMediaSource, ChalkParticipant, ChalkRemoteMedia, ChalkSessionActions, ChalkSessionSnapshot, ChalkSessionStore, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
 import { useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { ChalkSessionContext } from "./context";
@@ -92,7 +92,24 @@ export function useChalkActions(): ChalkSessionActions {
       stopParticipantScreenShare: (participantSessionId) => session.stopParticipantScreenShare(participantSessionId),
       removeParticipant: (participantSessionId) => session.removeParticipant(participantSessionId),
       endSession: () => session.endSession(),
+      sendReaction: (reaction) => session.sendReaction(reaction),
+      sendChatMessage: (input) => session.sendChatMessage(input),
+      retryChatMessage: (clientMessageId) => session.retryChatMessage(clientMessageId),
+      loadOlderChatMessages: (limit) => session.loadOlderChatMessages(limit),
+      markChatRead: () => session.markChatRead(),
+      requestUnmute: (participantSessionId) => session.requestUnmute(participantSessionId),
+      requestStartCamera: (participantSessionId) => session.requestStartCamera(participantSessionId),
+      acceptMediaRequest: (requestId) => session.acceptMediaRequest(requestId),
+      declineMediaRequest: (requestId) => session.declineMediaRequest(requestId),
     }),
     [session],
   );
+}
+
+export function useChalkWhiteboardTransport(): ChalkWhiteboardV1Transport {
+  const session = useChalkSession();
+  if (!session.whiteboard) {
+    throw new Error("The whiteboard-v1 transport is not available in this environment.");
+  }
+  return session.whiteboard;
 }

@@ -62,7 +62,7 @@ export function NativeMeetingRoomAndroid(props: NativeMeetingRoomProps): React.J
         simulatorMediaDisabled={controller.simulatorMediaDisabled}
         unreadChatCount={controller.chat.unreadCount}
         onLeave={controller.handleLeave}
-        onOpenChat={() => controller.openPanel("chat")}
+        onOpenChat={controller.canChat ? () => controller.openPanel("chat") : undefined}
         onOpenMore={() => controller.setActionsOpen(true)}
         onToggleAudio={() => {
           if (controller.simulatorMediaDisabled) {
@@ -82,6 +82,7 @@ export function NativeMeetingRoomAndroid(props: NativeMeetingRoomProps): React.J
 
       <NativeMeetingActionsSheet
         chatEnabled={controller.canChat}
+        reactionsEnabled={controller.canReactions}
         chatUnreadCount={controller.chat.unreadCount}
         isHandRaised={controller.handRaised}
         isScreenSharing={controller.screenShare.isLocalSharing}
@@ -99,7 +100,6 @@ export function NativeMeetingRoomAndroid(props: NativeMeetingRoomProps): React.J
         }}
         onOpenSettings={() => controller.openPanel("settings")}
         onOpenTranscripts={() => controller.openPanel("transcripts")}
-        onOpenWhiteboard={() => controller.openPanel("whiteboard")}
         onToggleHand={() => {
           controller.setActionsOpen(false);
           controller.toggleHand();
@@ -128,16 +128,18 @@ export function NativeMeetingRoomAndroid(props: NativeMeetingRoomProps): React.J
         onChatDraftChange={controller.setChatDraft}
         onClearWhiteboard={controller.whiteboard.clear}
         onClose={controller.closePanel}
-        onMuteParticipant={controller.muteParticipant}
+        onMuteParticipant={controller.canMuteParticipants ? controller.muteParticipant : undefined}
+        onRequestStartParticipantCamera={controller.canRequestMedia ? controller.requestStartParticipantCamera : undefined}
+        onRequestUnmuteParticipant={controller.canRequestMedia ? controller.requestUnmuteParticipant : undefined}
         onRefreshDevices={controller.refreshDevices}
-        onRemoveParticipant={controller.removeParticipant}
+        onRemoveParticipant={controller.canRemoveParticipants ? controller.removeParticipant : undefined}
         onRequestWhiteboardSync={controller.whiteboard.requestSync}
         onSelectCamera={controller.selectCamera}
         onSelectMicrophone={controller.selectMicrophone}
         onSelectSpeaker={controller.selectSpeaker}
         onSendMessage={controller.sendChatMessage}
         onToggleWhiteboard={controller.whiteboard.toggle}
-        onUnmuteParticipant={controller.unmuteParticipant}
+        onStopParticipantCamera={controller.canStopParticipantCamera ? controller.stopParticipantCamera : undefined}
         panel={controller.panel}
         participants={controller.participants.participants}
         selectedCamera={controller.devices.selectedCamera}

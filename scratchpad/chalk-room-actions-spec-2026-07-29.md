@@ -518,7 +518,7 @@ type ChalkWhiteboardV1Commit = {
   readonly revision: string;
 };
 
-type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download";
+type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download";
 
 type ChalkWhiteboardV1ErrorCode = "unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "storage_unavailable" | "file_transfer_failed";
 
@@ -536,7 +536,12 @@ declare class ChalkWhiteboardV1Error extends Error {
 }
 
 type ChalkWhiteboardV1FileTransport = {
-  readonly initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => Promise<{ readonly uploadId: string; readonly uploadUrl: string; readonly expiresAt: string }>;
+  readonly initiateUpload: (input: {
+    readonly fileId: string;
+    readonly mimeType: string;
+    readonly byteLength: number;
+    readonly sha256: string;
+  }) => Promise<{ readonly uploadId: string; readonly method: "PUT"; readonly uploadUrl: string; readonly headers: Readonly<Record<string, string>>; readonly expiresAt: string }>;
   readonly finalizeUpload: (uploadId: string) => Promise<void>;
   readonly getDownloadUrl: (fileId: string) => Promise<{ readonly downloadUrl: string; readonly expiresAt: string }>;
 };

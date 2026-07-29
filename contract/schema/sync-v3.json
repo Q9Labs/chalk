@@ -29,6 +29,16 @@
     "projectionMaxItems": 1500,
     "directedRequestTtlMs": 30000,
     "directedRequestsPerActorTarget": 4,
+    "roomActionFrameBytes": 32768,
+    "roomActionQueueMaxFrames": 256,
+    "roomActionBurstMax": 8,
+    "chatMessageUtf8Bytes": 16384,
+    "chatMessageUnicodeScalars": 4000,
+    "chatPageMaxMessages": 100,
+    "chatPageEncodedBytes": 131072,
+    "reactionTtlMs": 5000,
+    "reactionRateWindowMs": 10000,
+    "reactionRateMax": 10,
     "protocolErrorDetailBytes": 1024
   },
   "stateDigest": {
@@ -465,6 +475,70 @@
       "requestId": "requestId",
       "result": ["delivered", "target_unavailable", "expired", "rejected", "rate_limited"]
     }
+  },
+  "roomActions": {
+    "extension": "room_actions_v1",
+    "capabilities": ["sendReaction", "sendChat"],
+    "reactions": ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+    "chatCursor": {
+      "exactFields": ["after_sequence", "retained_floor_sequence"],
+      "afterSequence": "nullableUnsignedDecimal",
+      "retainedFloorSequence": "nullableUnsignedDecimal"
+    },
+    "helloExtension": {
+      "exactFields": ["name", "chat_cursor"]
+    },
+    "welcomeExtension": {
+      "exactFields": ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence"]
+    },
+    "clientFrames": {
+      "sendReaction": {
+        "type": "room_reaction_send",
+        "exactFields": ["type", "operation_id", "reaction"]
+      },
+      "sendChat": {
+        "type": "chat_send",
+        "exactFields": ["type", "client_message_id", "text"]
+      },
+      "readChatPage": {
+        "type": "chat_page_request",
+        "exactFields": ["type", "request_id", "direction", "cursor_sequence", "limit"],
+        "directions": ["older", "newer"]
+      }
+    },
+    "serverFrames": {
+      "reaction": {
+        "type": "room_reaction",
+        "exactFields": ["type", "event_id", "participant_session_id", "display_name", "reaction", "occurred_at", "expires_at"]
+      },
+      "reactionResult": {
+        "type": "room_reaction_result",
+        "acceptedFields": ["type", "operation_id", "outcome", "reaction"],
+        "rejectedFields": ["type", "operation_id", "outcome", "error_code"],
+        "outcomes": ["accepted", "rejected"]
+      },
+      "chatMessage": {
+        "type": "chat_message",
+        "exactFields": ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "created_at"]
+      },
+      "chatSendResult": {
+        "type": "chat_send_result",
+        "acceptedFields": ["type", "client_message_id", "outcome", "message"],
+        "rejectedFields": ["type", "client_message_id", "outcome", "error_code"],
+        "outcomes": ["accepted", "rejected"]
+      },
+      "chatPage": {
+        "type": "chat_page",
+        "loadedFields": ["type", "request_id", "outcome", "messages", "has_more", "head_sequence", "retained_floor_sequence"],
+        "resetFields": ["type", "request_id", "outcome", "retained_floor_sequence"],
+        "outcomes": ["loaded", "cursor_reset"]
+      },
+      "chatHead": {
+        "type": "chat_head",
+        "exactFields": ["type", "head_sequence", "retained_floor_sequence"]
+      }
+    },
+    "errorCodes": ["capability_denied", "invalid_payload", "rate_limited", "overloaded", "session_ended", "participant_stale", "client_message_id_conflict", "dependency_unavailable"]
   },
   "externalIntents": [
     "admit_participant",

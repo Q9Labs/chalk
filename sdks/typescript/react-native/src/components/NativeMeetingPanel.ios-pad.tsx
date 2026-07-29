@@ -48,9 +48,11 @@ export interface NativeMeetingPanelProps {
   onToggleWhiteboard: () => void;
   onRequestWhiteboardSync: () => void;
   onClearWhiteboard: () => void;
-  onMuteParticipant: (participantId: string) => void;
-  onUnmuteParticipant: (participantId: string) => void;
-  onRemoveParticipant: (participantId: string) => void;
+  onMuteParticipant?: (participantId: string) => void;
+  onRequestUnmuteParticipant?: (participantId: string) => void;
+  onRequestStartParticipantCamera?: (participantId: string) => void;
+  onStopParticipantCamera?: (participantId: string) => void;
+  onRemoveParticipant?: (participantId: string) => void;
 }
 
 export function NativeMeetingPanelIosPad({
@@ -83,7 +85,9 @@ export function NativeMeetingPanelIosPad({
   onRequestWhiteboardSync,
   onClearWhiteboard,
   onMuteParticipant,
-  onUnmuteParticipant,
+  onRequestUnmuteParticipant,
+  onRequestStartParticipantCamera,
+  onStopParticipantCamera,
   onRemoveParticipant,
 }: NativeMeetingPanelProps): React.JSX.Element | null {
   if (!panel) return null;
@@ -162,12 +166,29 @@ export function NativeMeetingPanelIosPad({
                               </View>
                               {isHost && !isLocal && (
                                 <View style={styles.pActions}>
-                                  <Pressable onPress={() => (participant.audioEnabled ? onMuteParticipant(participant.id) : onUnmuteParticipant(participant.id))} style={styles.pActionBtn}>
-                                    <HugeiconsIcon icon={participant.audioEnabled ? MicOff01Icon : Mic01Icon} size={16} color="white" />
-                                  </Pressable>
-                                  <Pressable onPress={() => onRemoveParticipant(participant.id)} style={[styles.pActionBtn, styles.dangerActionBtn]}>
-                                    <HugeiconsIcon icon={Cancel01Icon} size={16} color={Theme.colors.error} />
-                                  </Pressable>
+                                  {(participant.audioEnabled && onMuteParticipant) || (!participant.audioEnabled && onRequestUnmuteParticipant) ? (
+                                    <Pressable
+                                      accessibilityLabel={participant.audioEnabled ? `Mute ${participant.displayName}` : `Ask ${participant.displayName} to unmute`}
+                                      onPress={() => (participant.audioEnabled ? onMuteParticipant?.(participant.id) : onRequestUnmuteParticipant?.(participant.id))}
+                                      style={styles.pActionBtn}
+                                    >
+                                      <HugeiconsIcon icon={participant.audioEnabled ? MicOff01Icon : Mic01Icon} size={16} color="white" />
+                                    </Pressable>
+                                  ) : null}
+                                  {(participant.videoEnabled && onStopParticipantCamera) || (!participant.videoEnabled && onRequestStartParticipantCamera) ? (
+                                    <Pressable
+                                      accessibilityLabel={participant.videoEnabled ? `Stop ${participant.displayName}'s camera` : `Ask ${participant.displayName} to start camera`}
+                                      onPress={() => (participant.videoEnabled ? onStopParticipantCamera?.(participant.id) : onRequestStartParticipantCamera?.(participant.id))}
+                                      style={styles.pActionBtn}
+                                    >
+                                      <HugeiconsIcon icon={participant.videoEnabled ? VideoOffIcon : Video01Icon} size={16} color="white" />
+                                    </Pressable>
+                                  ) : null}
+                                  {onRemoveParticipant ? (
+                                    <Pressable onPress={() => onRemoveParticipant(participant.id)} style={[styles.pActionBtn, styles.dangerActionBtn]}>
+                                      <HugeiconsIcon icon={Cancel01Icon} size={16} color={Theme.colors.error} />
+                                    </Pressable>
+                                  ) : null}
                                 </View>
                               )}
                             </View>

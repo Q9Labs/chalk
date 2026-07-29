@@ -1,4 +1,6 @@
 import { SyncProtocolLimits, type SyncV3ClientFrame, type SyncV3ServerFrame } from "../generated/sync-v3";
+import type { ChalkChatMessage, ChalkChatPageResult, ChalkReaction, ChalkRoomReaction, ChalkSendChatMessageInput, ChalkSyncV3RoomActionCapability } from "../room-actions/types";
+import { chatMessageFromFrame, roomReactionFromFrame } from "../room-actions/wire";
 import { canonicalJsonBytesFromUnknown } from "./canonical";
 import { encodeV3ClientFrame, decodeV3ServerFrame } from "./v3-codec";
 import { InMemoryV3PendingTargetStore, compareV3PendingTargets } from "./v3-persistence";
@@ -20,6 +22,9 @@ import type {
   V3PendingTargetStore,
   V3Presence,
   V3Projection,
+  V3RoomActionClientEvent,
+  V3RoomActionsClient,
+  V3RoomActionsExtensionState,
   V3SessionSnapshot,
   V3SelfMediaTargetResult,
   V3Socket,
@@ -40,6 +45,8 @@ const MAX_LIVE_TARGET_RETRY_DELAY_MS = 1_000;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const OPERATION_PENDING_POLL_INTERVAL_MS = 1_000;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
+const LEGACY_STRICT_FRAME_CLOSE_CODE = 1009;
+const MAX_ROOM_ACTIONS_IN_FLIGHT = 64;
 
 type CommandDeferred = Deferred<V3CommandResult> & { readonly frame: SyncV3ClientFrame; retries: number; readonly durableTarget: boolean; readonly createdAt: number };
 type LiveTargetClientFrame = Extract<SyncV3ClientFrame, { readonly type: "live_target" }>;
@@ -56,6 +63,9 @@ type LiveDeferred = Deferred<V3SelfMediaTargetResult> & {
   serverResultSignature?: string;
 };
 type RequestDeferred = Deferred<V3DirectedRequestResult> & { readonly frame: SyncV3ClientFrame };
+type ReactionDeferred = Deferred<ChalkRoomReaction>;
+type ChatSendDeferred = Deferred<ChalkChatMessage>;
+type ChatPageDeferred = Deferred<ChalkChatPageResult>;
 type Deferred<T> = { readonly resolve: (value: T) => void; readonly reject: (error: Error) => void; settled: boolean };
 type Recovery = { readonly id: string; readonly head: { readonly revision: number; readonly state_schema_version: number; readonly state_digest: string }; replayEvents: number; replayBytes: number; controlComplete: boolean };
 type CommandOptions = { readonly commandId?: string };
@@ -71,11 +81,12 @@ export class V3SyncError extends Error {
   }
 }
 
-export class V3SyncClient {
+export class V3SyncClient implements V3RoomActionsClient {
   readonly #options: V3SyncClientOptions;
   readonly #store: V3PendingTargetStore;
   readonly #listeners = new Set<(snapshot: V3SessionSnapshot) => void>();
   readonly #requestListeners = new Set<(request: V3DirectedRequest) => void>();
+  readonly #roomActionListeners = new Set<(event: V3RoomActionClientEvent) => void>();
   readonly #pendingTargets = new Map<string, V3PendingTarget>();
   readonly #reservedCommandIds = new Set<string>();
   readonly #commands = new Map<string, CommandDeferred>();
@@ -85,6 +96,9 @@ export class V3SyncClient {
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets = new Map<string, LiveDeferred>();
   readonly #requests = new Map<string, RequestDeferred>();
+  readonly #reactions = new Map<string, ReactionDeferred>();
+  readonly #chatSends = new Map<string, ChatSendDeferred>();
+  readonly #chatPages = new Map<string, ChatPageDeferred>();
   readonly #commandRetryTimers = new Map<string, unknown>();
   readonly #liveRetryTimers = new Map<string, unknown>();
   readonly #liveDeadlineTimers = new Map<string, unknown>();
@@ -113,12 +127,28 @@ export class V3SyncClient {
   #unsubscribeRemoteMedia: (() => void) | undefined;
   #localPublications: readonly V3MediaPublication[] = [];
   #remotePublications: readonly V3MediaPublication[] = [];
+  #roomActions: V3RoomActionsExtensionState;
+  #participantRoomActionCapabilities: Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> = {};
+  #chatAfterSequence: string | null;
+  #legacyRoomActions: boolean;
+  #legacyFallbackAttempted = false;
+  #sentExtendedHello = false;
+  #welcomedOnSocket = false;
   readonly #localMedia: Record<V3MediaSource, "unknown" | "requesting" | "enabled" | "disabled" | "failed"> = { microphone: "unknown", camera: "unknown", screen: "unknown" };
 
   constructor(options: V3SyncClientOptions) {
     assertV3Url(options.url);
     this.#options = options;
     this.#store = options.pendingStore ?? new InMemoryV3PendingTargetStore();
+    const cursor = options.roomActions === false ? { afterSequence: null, retainedFloorSequence: null } : (options.roomActions?.chatCursor ?? { afterSequence: null, retainedFloorSequence: null });
+    this.#chatAfterSequence = cursor.afterSequence;
+    this.#legacyRoomActions = options.roomActions === false;
+    this.#roomActions = {
+      negotiated: false,
+      capabilities: [],
+      chatHeadSequence: null,
+      retainedFloorSequence: cursor.retainedFloorSequence,
+    };
   }
 
   async start(): Promise<void> {
@@ -174,6 +204,9 @@ export class V3SyncClient {
     this.#socket = null;
     this.#phase = { phase: "stopped" };
     this.#rejectEphemeral("client_stopped");
+    this.#rejectRoomActions("client_stopped");
+    this.#roomActions = { ...this.#roomActions, negotiated: false, capabilities: [] };
+    this.#participantRoomActionCapabilities = {};
     this.#localPublications = [];
     this.#remotePublications = [];
     for (const source of ["microphone", "camera", "screen"] as const) this.#localMedia[source] = "unknown";
@@ -209,6 +242,60 @@ export class V3SyncClient {
   onDirectedRequest(listener: (request: V3DirectedRequest) => void): () => void {
     this.#requestListeners.add(listener);
     return () => this.#requestListeners.delete(listener);
+  }
+
+  getRoomActionsExtensionState(): V3RoomActionsExtensionState {
+    return { ...this.#roomActions, capabilities: [...this.#roomActions.capabilities] };
+  }
+
+  getParticipantRoomActionCapabilities(): Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> {
+    return Object.fromEntries(Object.entries(this.#participantRoomActionCapabilities).map(([participantSessionId, capabilities]) => [participantSessionId, [...capabilities]]));
+  }
+
+  subscribeRoomActions(listener: (event: V3RoomActionClientEvent) => void): () => void {
+    this.#roomActionListeners.add(listener);
+    return () => this.#roomActionListeners.delete(listener);
+  }
+
+  sendReaction(reaction: ChalkReaction): Promise<ChalkRoomReaction> {
+    this.#assertRoomActionReady("sendReaction");
+    this.#assertRoomActionCapacity();
+    const operationId = this.#nextRoomActionId();
+    const frame = { type: "room_reaction_send", operation_id: operationId, reaction } as const;
+    encodeV3ClientFrame(frame);
+    const promise = new Promise<ChalkRoomReaction>((resolve, reject) => this.#reactions.set(operationId, { resolve, reject, settled: false }));
+    this.#send(frame);
+    return promise;
+  }
+
+  sendChatMessage(input: ChalkSendChatMessageInput): Promise<ChalkChatMessage> {
+    this.#assertRoomActionReady("sendChat");
+    this.#assertRoomActionCapacity();
+    const clientMessageId = input.clientMessageId ?? this.#nextRoomActionId();
+    this.#assertRoomActionIdAvailable(clientMessageId);
+    const frame = { type: "chat_send", client_message_id: clientMessageId, text: input.text } as const;
+    encodeV3ClientFrame(frame);
+    const promise = new Promise<ChalkChatMessage>((resolve, reject) => this.#chatSends.set(clientMessageId, { resolve, reject, settled: false }));
+    this.#send(frame);
+    return promise;
+  }
+
+  readChatPage(input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }): Promise<ChalkChatPageResult> {
+    this.#assertRoomActionReady();
+    this.#assertRoomActionCapacity();
+    if (input.beforeSequence !== undefined && input.afterSequence !== undefined) throw new V3SyncError("a chat page cannot declare both cursors", "invalid_payload");
+    const requestId = this.#nextRoomActionId();
+    const frame = {
+      type: "chat_page_request",
+      request_id: requestId,
+      direction: input.afterSequence === undefined ? ("older" as const) : ("newer" as const),
+      cursor_sequence: input.afterSequence ?? input.beforeSequence ?? null,
+      limit: input.limit,
+    } as const;
+    encodeV3ClientFrame(frame);
+    const promise = new Promise<ChalkChatPageResult>((resolve, reject) => this.#chatPages.set(requestId, { resolve, reject, settled: false }));
+    this.#send(frame);
+    return promise;
   }
 
   setHandRaised(raised: boolean, options?: CommandOptions): Promise<V3CommandResult> {
@@ -379,6 +466,8 @@ export class V3SyncClient {
   #connect(): void {
     if (!this.#started || !this.#transportAvailable || this.#socket) return;
     this.#phase = { phase: "connecting" };
+    this.#welcomedOnSocket = false;
+    this.#sentExtendedHello = false;
     this.#emit();
     const socket = this.#options.webSocket.connect(this.#options.url);
     this.#socket = socket;
@@ -386,7 +475,7 @@ export class V3SyncClient {
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
-    socket.onclose = () => this.#disconnected(socket);
+    socket.onclose = (event) => this.#disconnected(socket, event.code);
     socket.onerror = () => socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
   }
 
@@ -395,7 +484,7 @@ export class V3SyncClient {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = { phase: "recovering" };
-      this.#send({
+      const hello = {
         type: "hello",
         protocol: 3,
         token,
@@ -405,7 +494,24 @@ export class V3SyncClient {
           presence: { cursor: null },
           requests: { cursor: null },
         },
-      });
+      } as const;
+      if (this.#legacyRoomActions) {
+        this.#send(hello);
+      } else {
+        this.#sentExtendedHello = true;
+        this.#send({
+          ...hello,
+          extensions: [
+            {
+              name: "room_actions_v1",
+              chat_cursor: {
+                after_sequence: this.#chatAfterSequence,
+                retained_floor_sequence: this.#roomActions.retainedFloorSequence,
+              },
+            },
+          ],
+        });
+      }
       this.#emit();
     } catch {
       socket.close(CLIENT_RESTART_CLOSE_CODE, "authentication failed");
@@ -472,7 +578,38 @@ export class V3SyncClient {
       case "directed_request":
         this.#directedRequest(frame);
         return;
+      case "room_reaction":
+        this.#requireLive();
+        this.#requireRoomActionsNegotiated();
+        this.#emitRoomAction({ type: "reaction", reaction: roomReactionFromFrame(frame) });
+        return;
+      case "room_reaction_result":
+        this.#roomReactionResult(frame);
+        return;
+      case "chat_message":
+        this.#requireRoomActionsNegotiated();
+        this.#observeChatMessage(frame);
+        return;
+      case "chat_send_result":
+        this.#chatSendResult(frame);
+        return;
+      case "chat_page":
+        this.#chatPageResult(frame);
+        return;
+      case "chat_head":
+        this.#requireRoomActionsNegotiated();
+        this.#roomActions = {
+          ...this.#roomActions,
+          chatHeadSequence: frame.head_sequence,
+          retainedFloorSequence: frame.retained_floor_sequence,
+        };
+        this.#emit();
+        return;
       case "error":
+        if ((frame.code === "invalid_frame" || frame.code === "unsupported_protocol") && this.#canFallbackToLegacyRoomActions()) {
+          this.#fallbackToLegacyRoomActions();
+          return;
+        }
         throw new V3ReplicaError(frame.code);
       case "pong":
         this.#requireLive();
@@ -483,6 +620,23 @@ export class V3SyncClient {
 
   async #welcome(frame: Extract<SyncV3ServerFrame, { readonly type: "welcome" }>): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V3ReplicaError("unexpected welcome");
+    this.#welcomedOnSocket = true;
+    if ("extensions" in frame) {
+      if (this.#legacyRoomActions) throw new V3ReplicaError("legacy hello received an extended welcome");
+      const extension = frame.extensions[0];
+      this.#roomActions = {
+        negotiated: true,
+        capabilities: [...extension.capabilities],
+        chatHeadSequence: extension.chat_head_sequence,
+        retainedFloorSequence: extension.retained_floor_sequence,
+      };
+      this.#participantRoomActionCapabilities = copyRoomActionCapabilities(extension.participant_capabilities);
+    } else {
+      this.#legacyRoomActions = true;
+      this.#legacyFallbackAttempted = true;
+      this.#roomActions = { ...this.#roomActions, negotiated: false, capabilities: [] };
+      this.#participantRoomActionCapabilities = {};
+    }
     this.#participantSessionId = frame.participant_session_id;
     this.#participantSessionGeneration = frame.participant_session_generation;
     this.#updateLocalMediaStates();
@@ -746,6 +900,72 @@ export class V3SyncClient {
     for (const listener of this.#requestListeners) listener(frame);
   }
 
+  #roomReactionResult(frame: Extract<SyncV3ServerFrame, { readonly type: "room_reaction_result" }>): void {
+    this.#requireLive();
+    this.#requireRoomActionsNegotiated();
+    const deferred = this.#reactions.get(frame.operation_id);
+    if (!deferred) return;
+    this.#reactions.delete(frame.operation_id);
+    if (frame.outcome === "accepted") {
+      resolveDeferred(deferred, roomReactionFromFrame(frame.reaction));
+    } else {
+      rejectDeferred(deferred, new V3SyncError(frame.error_code, frame.error_code));
+    }
+  }
+
+  #chatSendResult(frame: Extract<SyncV3ServerFrame, { readonly type: "chat_send_result" }>): void {
+    this.#requireLive();
+    this.#requireRoomActionsNegotiated();
+    const deferred = this.#chatSends.get(frame.client_message_id);
+    if (!deferred) return;
+    this.#chatSends.delete(frame.client_message_id);
+    if (frame.outcome === "accepted") {
+      const message = chatMessageFromFrame(frame.message);
+      this.#rememberChatSequence(message.sequence);
+      resolveDeferred(deferred, message);
+    } else {
+      rejectDeferred(deferred, new V3SyncError(frame.error_code, frame.error_code));
+    }
+  }
+
+  #chatPageResult(frame: Extract<SyncV3ServerFrame, { readonly type: "chat_page" }>): void {
+    this.#requireRoomActionsNegotiated();
+    const deferred = this.#chatPages.get(frame.request_id);
+    if (!deferred) return;
+    this.#chatPages.delete(frame.request_id);
+    if (frame.outcome === "cursor_reset") {
+      this.#roomActions = { ...this.#roomActions, retainedFloorSequence: frame.retained_floor_sequence };
+      const result = { status: "cursor_reset", retainedFloorSequence: frame.retained_floor_sequence } as const;
+      this.#emitRoomAction({ type: "chat_cursor_reset", retainedFloorSequence: frame.retained_floor_sequence });
+      resolveDeferred(deferred, result);
+      return;
+    }
+    this.#roomActions = {
+      ...this.#roomActions,
+      chatHeadSequence: frame.head_sequence,
+      retainedFloorSequence: frame.retained_floor_sequence,
+    };
+    for (const message of frame.messages) this.#observeChatMessage(message);
+    resolveDeferred(deferred, { status: "loaded", count: frame.messages.length, hasOlder: frame.has_more });
+  }
+
+  #observeChatMessage(frame: Extract<SyncV3ServerFrame, { readonly type: "chat_message" }>): void {
+    const message = chatMessageFromFrame(frame);
+    this.#rememberChatSequence(message.sequence);
+    this.#emitRoomAction({ type: "chat_message", message });
+  }
+
+  #rememberChatSequence(sequence: string): void {
+    if (this.#chatAfterSequence === null || compareUnsignedDecimals(sequence, this.#chatAfterSequence) > 0) this.#chatAfterSequence = sequence;
+    if (this.#roomActions.chatHeadSequence === null || compareUnsignedDecimals(sequence, this.#roomActions.chatHeadSequence) > 0) {
+      this.#roomActions = { ...this.#roomActions, chatHeadSequence: sequence };
+    }
+  }
+
+  #emitRoomAction(event: V3RoomActionClientEvent): void {
+    for (const listener of this.#roomActionListeners) listener(event);
+  }
+
   async #finishCommand(commandId: string, result: V3CommandResult): Promise<void> {
     const deferred = this.#commands.get(commandId);
     if (!deferred) return;
@@ -842,8 +1062,12 @@ export class V3SyncClient {
     return true;
   }
 
-  #disconnected(socket: V3Socket): void {
+  #disconnected(socket: V3Socket, closeCode?: number): void {
     if (socket !== this.#socket) return;
+    if (closeCode === LEGACY_STRICT_FRAME_CLOSE_CODE && this.#canFallbackToLegacyRoomActions()) {
+      this.#legacyRoomActions = true;
+      this.#legacyFallbackAttempted = true;
+    }
     this.#socket = null;
     this.#recovery = null;
     this.#clearHeartbeat();
@@ -851,6 +1075,9 @@ export class V3SyncClient {
     this.#media = null;
     this.#presence = null;
     this.#rejectRequests("disconnected_before_delivery");
+    this.#rejectRoomActions("disconnected_before_delivery");
+    this.#roomActions = { ...this.#roomActions, negotiated: false, capabilities: [] };
+    this.#participantRoomActionCapabilities = {};
     if (!this.#started || !this.#transportAvailable || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
@@ -868,6 +1095,18 @@ export class V3SyncClient {
     this.#disconnected(socket);
   }
 
+  #canFallbackToLegacyRoomActions(): boolean {
+    return this.#sentExtendedHello && !this.#welcomedOnSocket && !this.#legacyFallbackAttempted;
+  }
+
+  #fallbackToLegacyRoomActions(): void {
+    const socket = this.#socket;
+    if (!socket || !this.#canFallbackToLegacyRoomActions()) return;
+    this.#legacyRoomActions = true;
+    this.#legacyFallbackAttempted = true;
+    socket.close(CLIENT_RESTART_CLOSE_CODE, "room actions unsupported");
+  }
+
   #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {
     if (event === "online" || event === "offline") this.#online = event === "online";
     else this.#active = event === "active";
@@ -880,6 +1119,15 @@ export class V3SyncClient {
     this.#rejectRequests(code);
     for (const deferred of this.#liveTargets.values()) rejectDeferred(deferred, new V3SyncError(code, code));
     this.#liveTargets.clear();
+  }
+
+  #rejectRoomActions(code: string): void {
+    for (const deferred of this.#reactions.values()) rejectDeferred(deferred, new V3SyncError(code, code));
+    for (const deferred of this.#chatSends.values()) rejectDeferred(deferred, new V3SyncError(code, code));
+    for (const deferred of this.#chatPages.values()) rejectDeferred(deferred, new V3SyncError(code, code));
+    this.#reactions.clear();
+    this.#chatSends.clear();
+    this.#chatPages.clear();
   }
 
   #rejectRequests(code: string): void {
@@ -899,6 +1147,10 @@ export class V3SyncClient {
     if (this.#phase.phase !== "live") throw new V3ReplicaError("live frame arrived before four-stream recovery completed");
   }
 
+  #requireRoomActionsNegotiated(): void {
+    if (!this.#roomActions.negotiated) throw new V3ReplicaError("room-actions frame arrived without a negotiated extension");
+  }
+
   #requireControl(): V3ControlState {
     if (!this.#control) throw new V3ReplicaError("control replica is unavailable");
     return this.#control;
@@ -911,6 +1163,27 @@ export class V3SyncClient {
 
   #assertCapacity(): void {
     if (this.#commands.size + this.#pendingRemovals.size + this.#reservedCommandIds.size + this.#liveTargets.size + this.#requests.size >= this.#maxPending()) throw new V3SyncError("in-flight request capacity exceeded", "capacity");
+  }
+
+  #assertRoomActionReady(capability?: ChalkSyncV3RoomActionCapability): void {
+    if (!this.#roomActions.negotiated || this.#legacyRoomActions) throw new V3SyncError("room actions are unavailable", "room_actions_unavailable");
+    if (this.#phase.phase !== "live") throw new V3SyncError("room actions require a live connection", "not_live");
+    if (capability && !this.#roomActions.capabilities.includes(capability)) throw new V3SyncError("room action capability denied", "capability_denied");
+  }
+
+  #assertRoomActionCapacity(): void {
+    const maximum = Math.min(this.#options.maxPendingRoomActions ?? MAX_ROOM_ACTIONS_IN_FLIGHT, MAX_ROOM_ACTIONS_IN_FLIGHT);
+    if (this.#reactions.size + this.#chatSends.size + this.#chatPages.size >= maximum) throw new V3SyncError("room-action in-flight capacity exceeded", "capacity");
+  }
+
+  #assertRoomActionIdAvailable(id: string): void {
+    if (this.#reactions.has(id) || this.#chatSends.has(id) || this.#chatPages.has(id)) throw new V3SyncError("room-action ID is already pending", "request_id_conflict");
+  }
+
+  #nextRoomActionId(): string {
+    const id = this.#nextRequestId();
+    this.#assertRoomActionIdAvailable(id);
+    return id;
   }
 
   #maxPending(): number {
@@ -1090,6 +1363,15 @@ function copyProjection<T>(projection: V3Projection<T> | null): V3Projection<T> 
 
 function frameSignature(frame: unknown): string {
   return new TextDecoder().decode(canonicalJsonBytesFromUnknown(frame));
+}
+
+function copyRoomActionCapabilities(capabilities: Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>>): Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> {
+  return Object.fromEntries(Object.entries(capabilities).map(([participantSessionId, values]) => [participantSessionId, [...values]]));
+}
+
+function compareUnsignedDecimals(left: string, right: string): number {
+  if (left.length !== right.length) return left.length - right.length;
+  return left.localeCompare(right);
 }
 
 function rememberBoundedEvidence(evidence: Map<number, string>, sequence: number, signature: string, capacity: number): void {

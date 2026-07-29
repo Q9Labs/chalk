@@ -1,4 +1,50 @@
 import type { ParticipantAccessSubject } from "./access";
+import type {
+  ChalkChatMessage,
+  ChalkChatPageResult,
+  ChalkChatStateSnapshot,
+  ChalkDirectedRequestResult,
+  ChalkIncomingMediaRequest,
+  ChalkParticipantMediaState,
+  ChalkPendingChatMessageState,
+  ChalkReaction,
+  ChalkRoomActionCapability,
+  ChalkRoomActionsPhase,
+  ChalkRoomReaction,
+  ChalkSendChatMessageInput,
+  ChalkSyncV3RoomActionCapability,
+} from "../room-actions/types";
+import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
+
+export { ChalkWhiteboardV1Error } from "../whiteboard/types";
+export type {
+  ChalkChatMessage,
+  ChalkChatPageResult,
+  ChalkDirectedRequestResult,
+  ChalkIncomingMediaRequest,
+  ChalkParticipantMediaState,
+  ChalkReaction,
+  ChalkRoomActionCapability,
+  ChalkRoomActionsPhase,
+  ChalkRoomReaction,
+  ChalkSendChatMessageInput,
+  ChalkSyncV3RoomActionCapability,
+} from "../room-actions/types";
+export type {
+  ChalkJsonValue,
+  ChalkSharedWhiteboardAppState,
+  ChalkWhiteboardSummary,
+  ChalkWhiteboardV1Capability,
+  ChalkWhiteboardV1Commit,
+  ChalkWhiteboardV1Element,
+  ChalkWhiteboardV1ErrorCode,
+  ChalkWhiteboardV1Event,
+  ChalkWhiteboardV1Failure,
+  ChalkWhiteboardV1FileTransport,
+  ChalkWhiteboardV1Operation,
+  ChalkWhiteboardV1Transport,
+  ChalkWhiteboardV1UpdateInput,
+} from "../whiteboard/types";
 
 export const CHALK_SESSION_STATES = ["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"] as const;
 
@@ -23,6 +69,15 @@ export const CHALK_SESSION_ACTIONS = [
   "stopParticipantScreenShare",
   "removeParticipant",
   "endSession",
+  "sendReaction",
+  "sendChatMessage",
+  "retryChatMessage",
+  "loadOlderChatMessages",
+  "markChatRead",
+  "requestUnmute",
+  "requestStartCamera",
+  "acceptMediaRequest",
+  "declineMediaRequest",
 ] as const;
 
 export type ChalkSessionActionName = (typeof CHALK_SESSION_ACTIONS)[number];
@@ -42,6 +97,10 @@ export const CHALK_SESSION_ERROR_CODES = [
   "session_ended",
   "unsupported_environment",
   "internal_error",
+  "room_actions_unavailable",
+  "chat_cursor_reset_required",
+  "rate_limited",
+  "invalid_payload",
 ] as const;
 
 export type ChalkSessionErrorCode = (typeof CHALK_SESSION_ERROR_CODES)[number];
@@ -52,6 +111,10 @@ export type ChalkSessionFailure = {
   readonly recoverable: boolean;
   readonly message: string;
 };
+
+export type ChalkPendingChatMessage = ChalkPendingChatMessageState<ChalkSessionFailure>;
+
+export type ChalkChatState = ChalkChatStateSnapshot<ChalkSessionFailure, ChalkPendingChatMessage>;
 
 export class ChalkSessionError extends Error {
   readonly code: ChalkSessionErrorCode;
@@ -134,6 +197,17 @@ export type ChalkSessionSnapshot = {
   readonly localMedia: Readonly<Record<ChalkMediaSource, ChalkLocalMedia>>;
   readonly remoteMedia: readonly ChalkRemoteMedia[];
   readonly failure: ChalkSessionFailure | null;
+  readonly roomActions: {
+    readonly phase: ChalkRoomActionsPhase;
+    readonly capabilities: readonly ChalkSyncV3RoomActionCapability[];
+    readonly error: ChalkSessionFailure | null;
+  };
+  readonly participantRoomActionCapabilities: Readonly<Record<string, readonly ChalkRoomActionCapability[]>>;
+  readonly participantMedia: Readonly<Record<string, ChalkParticipantMediaState>>;
+  readonly reactions: readonly ChalkRoomReaction[];
+  readonly chat: ChalkChatState;
+  readonly whiteboard: ChalkWhiteboardSummary;
+  readonly incomingMediaRequests: readonly ChalkIncomingMediaRequest[];
 };
 
 export type ChalkSessionActions = {
@@ -155,9 +229,19 @@ export type ChalkSessionActions = {
   readonly stopParticipantScreenShare: (participantSessionId: string) => Promise<void>;
   readonly removeParticipant: (participantSessionId: string) => Promise<void>;
   readonly endSession: () => Promise<void>;
+  readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkRoomReaction>;
+  readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
+  readonly retryChatMessage: (clientMessageId: string) => Promise<ChalkChatMessage>;
+  readonly loadOlderChatMessages: (limit?: number) => Promise<ChalkChatPageResult>;
+  readonly markChatRead: () => void;
+  readonly requestUnmute: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
+  readonly requestStartCamera: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
+  readonly acceptMediaRequest: (requestId: string) => Promise<void>;
+  readonly declineMediaRequest: (requestId: string) => void;
 };
 
 export type ChalkSessionStore = ChalkSessionActions & {
   readonly getSnapshot: () => ChalkSessionSnapshot;
   readonly subscribe: (listener: () => void) => () => void;
+  readonly whiteboard: ChalkWhiteboardV1Transport | null;
 };

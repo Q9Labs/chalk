@@ -15,6 +15,11 @@ type Harness = {
   readonly startScreenShare: () => Promise<void>;
   readonly stopScreenShare: () => Promise<void>;
   readonly removeParticipant: (participantSessionId: string) => Promise<void>;
+  readonly sendReaction: ReturnType<typeof useChalkActions>["sendReaction"];
+  readonly sendChatMessage: ReturnType<typeof useChalkActions>["sendChatMessage"];
+  readonly requestUnmute: ReturnType<typeof useChalkActions>["requestUnmute"];
+  readonly requestStartCamera: ReturnType<typeof useChalkActions>["requestStartCamera"];
+  readonly declineMediaRequest: ReturnType<typeof useChalkActions>["declineMediaRequest"];
   readonly snapshot: () => ReturnType<typeof publicSnapshot>;
   readonly resources: typeof resourceCounts;
   readonly diagnostics: () => ReturnType<ChalkSession["getDiagnostics"]>;
@@ -29,10 +34,12 @@ declare global {
 
 let accessRequests = 0;
 const socketBaseURL = location.origin.replace(/^http/u, "ws");
+const fixtureUser = new URL(location.href).searchParams.get("fixtureUser");
 const session = new ChalkSession({
   access: async (request?: ChalkSessionAccessRequest) => {
     accessRequests += 1;
-    const response = await fetch("/api/chalk/access", {
+    const accessURL = fixtureUser ? `/api/chalk/access?fixtureUser=${encodeURIComponent(fixtureUser)}` : "/api/chalk/access";
+    const response = await fetch(accessURL, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(accessRequestBody(request)),
@@ -81,9 +88,31 @@ function Meeting(): React.JSX.Element {
   return (
     <main>
       <h1>Packed Chalk SDK consumer</h1>
+      <button data-testid="join" onClick={() => void actions.join()}>
+        Join
+      </button>
+      <button data-testid="send-chat" onClick={() => void actions.sendChatMessage({ clientMessageId: "helium-chat", text: "Hello from Helium" })}>
+        Send chat
+      </button>
+      <button data-testid="send-reaction" onClick={() => void actions.sendReaction("🎉")}>
+        React
+      </button>
+      <button data-testid="request-unmute" onClick={() => void actions.requestUnmute("bob")}>
+        Ask Bob to unmute
+      </button>
+      <button data-testid="request-camera" onClick={() => void actions.requestStartCamera("bob")}>
+        Ask Bob to start camera
+      </button>
+      <button data-testid="decline-request" onClick={() => snapshot.incomingMediaRequests[0] && actions.declineMediaRequest(snapshot.incomingMediaRequests[0].requestId)}>
+        Decline request
+      </button>
       <output data-testid="state">{snapshot.state}</output>
       <output data-testid="participants">{snapshot.participants.length}</output>
       <output data-testid="remote-media">{snapshot.remoteMedia.map((item) => `${item.participantSessionId}:${item.source}`).join(",")}</output>
+      <output data-testid="room-actions">{snapshot.roomActions.phase}</output>
+      <output data-testid="chat">{snapshot.chat.messages.map((message) => `${message.participantSessionId}:${message.text}`).join("|")}</output>
+      <output data-testid="reactions">{snapshot.reactions.map((reaction) => `${reaction.participantSessionId}:${reaction.reaction}`).join("|")}</output>
+      <output data-testid="requests">{snapshot.incomingMediaRequests.map((request) => `${request.actorParticipantSessionId}:${request.kind}`).join("|")}</output>
     </main>
   );
 }
@@ -96,6 +125,10 @@ function publicSnapshot(snapshot: ChalkSessionSnapshot) {
     participants: snapshot.participants.map((participant) => participant.participantSessionId),
     localMedia: Object.fromEntries(Object.entries(snapshot.localMedia).map(([source, media]) => [source, { state: media.state, readyState: media.track?.readyState ?? null }])),
     remoteMedia: snapshot.remoteMedia.map((media) => ({ participantSessionId: media.participantSessionId, source: media.source, readyState: media.track.readyState })),
+    roomActions: snapshot.roomActions,
+    reactions: snapshot.reactions,
+    chat: snapshot.chat,
+    incomingMediaRequests: snapshot.incomingMediaRequests,
     failure: snapshot.failure,
   };
 }

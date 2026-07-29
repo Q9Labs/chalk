@@ -9,6 +9,8 @@ defmodule ChalkSync.Transport.SocketV3 do
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV3
+  alias ChalkSync.RoomActions
+  alias ChalkSync.RoomActions.OutboundQueue, as: RoomActionQueue
   alias ChalkSync.Sessions.CommandAdmission
   alias ChalkSync.Sessions.Coordinator
   alias ChalkSync.Stateholder
@@ -42,6 +44,8 @@ defmodule ChalkSync.Transport.SocketV3 do
        identity: nil,
        coordinator: nil,
        commands: %{},
+       room_actions_negotiated: false,
+       room_actions_queue: RoomActionQueue.new(),
        observability: observability
      }}
   end
@@ -113,15 +117,25 @@ defmodule ChalkSync.Transport.SocketV3 do
         {:sync_v3_live_frame, coordinator, frame},
         %{coordinator: coordinator} = state
       ) do
-    {:push, {:text, ProtocolV3.encode!(frame)}, state}
+    {:push, {:text, ProtocolV3.encode!(frame)}, mark_control_checked(state)}
   end
 
   def handle_info(
         {:directed_request, frame},
         %{phase: :live} = state
       ) do
-    {:push, {:text, ProtocolV3.encode!(frame)}, state}
+    {:push, {:text, ProtocolV3.encode!(frame)}, mark_control_checked(state)}
   end
+
+  def handle_info(
+        {:room_action_frame, frame},
+        %{phase: :live, room_actions_negotiated: true} = state
+      ),
+      do: enqueue_room_action(frame, state)
+
+  def handle_info({:room_action_frame, _frame}, state), do: {:ok, state}
+
+  def handle_info(:room_actions_drain, state), do: push_room_action(state)
 
   def handle_info(
         {:sync_recovery_advance, coordinator},
@@ -157,16 +171,35 @@ defmodule ChalkSync.Transport.SocketV3 do
   @impl true
   def terminate(_reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
     cancel_timer(state.heartbeat_timer)
+    unsubscribe_room_actions(state)
+    RoomActionQueue.close(state.room_actions_queue)
     Coordinator.unsubscribe(coordinator, self())
+
+    Observability.terminal(state.observability, "sync.websocket.closed", %{
+      protocol: 3,
+      phase: state.phase
+    })
+
     :ok
   end
 
   def terminate(_reason, state) do
     cancel_timer(state.heartbeat_timer)
+    unsubscribe_room_actions(state)
+    RoomActionQueue.close(state.room_actions_queue)
+
+    Observability.terminal(state.observability, "sync.websocket.closed", %{
+      protocol: 3,
+      phase: state.phase
+    })
+
     :ok
   end
 
-  defp handle_frame({:hello, %{token: token, cursor: cursor}}, %{phase: :awaiting_hello} = state) do
+  defp handle_frame(
+         {:hello, %{token: token, cursor: cursor} = hello},
+         %{phase: :awaiting_hello} = state
+       ) do
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
          {:ok, _lifecycle} <-
@@ -174,8 +207,17 @@ defmodule ChalkSync.Transport.SocketV3 do
              identity.session,
              identity.admission_lifecycle_intent_id
            ),
-         {:ok, coordinator} <- Coordinator.begin_recovery(identity, self()) do
-      start_registered_recovery(state, identity, cursor, coordinator)
+         {:ok, protocol_options, negotiated?} <-
+           negotiate_room_actions(identity, Map.get(hello, :room_actions)),
+         {:ok, coordinator} <-
+           Coordinator.begin_recovery(identity, self(), protocol_options) do
+      start_registered_recovery(
+        state,
+        identity,
+        cursor,
+        coordinator,
+        negotiated?
+      )
     else
       {:error, :invalid_token} ->
         {:stop, :normal, {1008, "invalid token"}, state}
@@ -328,9 +370,54 @@ defmodule ChalkSync.Transport.SocketV3 do
   defp handle_frame({:request_ack, _request_id}, state),
     do: protocol_error(:recovery_required, state)
 
+  defp handle_frame(
+         {:room_reaction_send, input},
+         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+       ) do
+    with {:ok, frame} <- RoomActions.send_reaction(identity, input) do
+      state = observe_room_action(state, "reaction.send", frame["outcome"])
+      enqueue_room_action(frame, state)
+    end
+  end
+
+  defp handle_frame(
+         {:chat_send, input},
+         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+       ) do
+    with {:ok, frame} <- RoomActions.send_chat(identity, input) do
+      state = observe_room_action(state, "chat.send", frame["outcome"])
+      enqueue_room_action(frame, state)
+    end
+  end
+
+  defp handle_frame(
+         {:chat_page_request, input},
+         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+       ) do
+    case RoomActions.read_chat_page(identity, input) do
+      {:ok, frame} ->
+        state = observe_room_action(state, "chat.page", frame["outcome"])
+        enqueue_room_action(frame, state, :chat_page)
+
+      {:error, reason} ->
+        state = observe_room_action(state, "chat.page", "failed")
+        protocol_error(reason, state)
+    end
+  end
+
+  defp handle_frame({name, _input}, state)
+       when name in [:room_reaction_send, :chat_send, :chat_page_request],
+       do: protocol_error(:room_actions_not_negotiated, state)
+
   defp handle_frame(:ping, state), do: {:push, {:text, ProtocolV3.pong()}, state}
 
-  defp start_registered_recovery(state, identity, cursor, coordinator) do
+  defp start_registered_recovery(
+         state,
+         identity,
+         cursor,
+         coordinator,
+         room_actions_negotiated
+       ) do
     with {:ok, recovery} <- Stateholder.recover(identity, cursor),
          :ok <-
            Coordinator.activate_recovery(
@@ -347,8 +434,10 @@ defmodule ChalkSync.Transport.SocketV3 do
          | phase: :recovering,
            hello_timer: nil,
            identity: identity,
-           coordinator: coordinator
-       }}
+           coordinator: coordinator,
+           room_actions_negotiated: room_actions_negotiated
+       }
+       |> observe_room_action("extension.negotiate", negotiation_outcome(room_actions_negotiated))}
     else
       {:error, reason} ->
         Coordinator.unsubscribe(coordinator, self())
@@ -440,7 +529,7 @@ defmodule ChalkSync.Transport.SocketV3 do
   defp pop_outbound(%{coordinator: coordinator} = state) do
     case Coordinator.pop(coordinator, self()) do
       {:ok, encoded, false} ->
-        {:push, {:text, encoded}, state}
+        {:push, {:text, encoded}, mark_control_checked(state)}
 
       {:ok, encoded, true} ->
         {:stop, :normal, {1000, "terminal event drained"}, {:text, encoded},
@@ -472,4 +561,79 @@ defmodule ChalkSync.Transport.SocketV3 do
   defp recovery_timeout do
     Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5_000) + 1_000
   end
+
+  defp negotiate_room_actions(_identity, nil), do: {:ok, %{}, false}
+
+  defp negotiate_room_actions(identity, chat_cursor) do
+    case RoomActions.negotiate(identity, chat_cursor, self()) do
+      {:ok, extension} ->
+        {:ok, %{room_actions_extension: extension}, true}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp enqueue_room_action(frame, state, kind \\ :frame) do
+    encoded = ProtocolV3.encode!(frame)
+
+    case RoomActionQueue.push(state.room_actions_queue, encoded, kind: kind) do
+      :ok ->
+        push_room_action(state)
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+    end
+  end
+
+  defp push_room_action(state) do
+    case RoomActionQueue.take(state.room_actions_queue, false) do
+      {:ok, %{encoded: encoded}} ->
+        case RoomActionQueue.stats(state.room_actions_queue) do
+          {:ok, %{queued_frames: queued}} when queued > 0 ->
+            send(self(), :room_actions_drain)
+
+          _other ->
+            :ok
+        end
+
+        {:push, {:text, encoded}, state}
+
+      :empty ->
+        {:ok, state}
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+
+      :control_required ->
+        {:ok, state}
+    end
+  end
+
+  defp mark_control_checked(state) do
+    _result = RoomActionQueue.control_checked(state.room_actions_queue)
+    state
+  end
+
+  defp unsubscribe_room_actions(%{
+         identity: %Identity{} = identity,
+         room_actions_negotiated: true
+       }) do
+    RoomActions.unsubscribe(identity, self())
+  end
+
+  defp unsubscribe_room_actions(_state), do: :ok
+
+  defp observe_room_action(state, operation, outcome) do
+    observability =
+      Observability.phase(state.observability, "sync.room_action", %{
+        operation: operation,
+        outcome: outcome
+      })
+
+    %{state | observability: observability}
+  end
+
+  defp negotiation_outcome(true), do: "negotiated"
+  defp negotiation_outcome(false), do: "not_requested"
 end

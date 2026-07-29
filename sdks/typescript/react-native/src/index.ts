@@ -1,4 +1,4 @@
-export { ChalkNativeProvider, ChalkNativeProvider as ChalkProvider, useChalkSession, useSession } from "./context/chalk-native-provider";
+export { ChalkNativeProvider, ChalkNativeProvider as ChalkProvider, useChalkSession, useChalkSessionStore, useSession } from "./context/chalk-native-provider";
 export type { ChalkNativeProviderProps, ChalkNativeProviderProps as ChalkProviderProps } from "./context/chalk-native-provider";
 export { createNativeTelemetry } from "./telemetry";
 export type { NativeSessionTelemetry, NativeTelemetry, NativeTelemetryJourney } from "./telemetry";
@@ -19,6 +19,8 @@ export { NativeVideoConference } from "./components/NativeVideoConference";
 export type { NativeMeetingJoinedData, NativeVideoConferenceDiagnosticsSnapshot, NativeVideoConferencePhase, NativeVideoConferenceProps } from "./components/NativeVideoConference";
 export { useChat } from "./hooks/useChat";
 export type { UseChatReturn } from "./hooks/useChat";
+export { useChalkActions, useChalkSelector } from "./hooks/useChalkRoomActions";
+export type { ChalkSelector } from "./hooks/useChalkRoomActions";
 export { useConnection } from "./hooks/useConnection";
 export type { UseConnectionReturn } from "./hooks/useConnection";
 export { useDevices } from "./hooks/useDevices";

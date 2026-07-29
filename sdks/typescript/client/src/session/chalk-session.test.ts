@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CloudflareSFUSnapshot } from "../media";
 import type { V3MediaPlaneResult, V3SessionSnapshot } from "../sync";
+import type { V3DirectedRequest, V3RoomActionClientEvent } from "../sync/v3-types";
 import type { ParticipantAccess } from "./access";
 import { ChalkSession } from "./chalk-session";
 import type { ChalkSessionAccessRequest, ChalkSessionClock, ChalkSessionDependencies, ChalkSessionMediaFactoryInput, ChalkSessionSyncClient } from "./dependencies";
@@ -39,6 +40,148 @@ describe("ChalkSession", () => {
     await expect(harness.session.join()).rejects.toMatchObject({ code: "permission_denied" });
     expect(harness.access).not.toHaveBeenCalled();
     expect(harness.session.getSnapshot()).toMatchObject({ state: "failed", localMedia: { microphone: { state: "failed" }, camera: { state: "failed" } }, failure: { code: "permission_denied" } });
+  });
+
+  it("projects negotiated reactions and acknowledged chat through the canonical Session", async () => {
+    const harness = createHarness();
+    await harness.session.join();
+
+    await expect(harness.session.sendReaction("🎉")).resolves.toMatchObject({
+      eventId: "reaction-1",
+      reaction: "🎉",
+    });
+    await expect(harness.session.sendChatMessage({ text: "Hello" })).resolves.toMatchObject({
+      messageId: "message-1",
+      text: "Hello",
+    });
+
+    expect(harness.session.getSnapshot()).toMatchObject({
+      roomActions: {
+        phase: "healthy",
+        capabilities: ["sendReaction", "sendChat"],
+      },
+      reactions: [{ eventId: "reaction-1", reaction: "🎉" }],
+      chat: {
+        status: "ready",
+        messages: [{ messageId: "message-1", text: "Hello" }],
+        pending: [],
+      },
+    });
+    await harness.session.leave();
+  });
+
+  it("loads initial chat and follows later chat heads without counting history as unread", async () => {
+    const harness = createHarness();
+    harness.sync.chatHeadSequence = "2";
+    harness.sync.readChatPage.mockImplementation(async (input) => {
+      const sequence = input.afterSequence === undefined ? "2" : "3";
+      harness.sync.emitRoomAction({
+        type: "chat_message",
+        message: {
+          messageId: `message-${sequence}`,
+          clientMessageId: `client-message-${sequence}`,
+          sequence,
+          participantSessionId: "participant-2",
+          displayName: "Grace",
+          text: `Message ${sequence}`,
+          createdAt: "2026-07-29T12:00:00.000Z",
+        },
+      });
+      return { status: "loaded", count: 1, hasOlder: input.afterSequence === undefined };
+    });
+
+    await harness.session.join();
+    await vi.waitFor(() => expect(harness.sync.readChatPage).toHaveBeenCalledWith({ limit: 100 }));
+    expect(harness.session.getSnapshot().chat).toMatchObject({
+      messages: [{ sequence: "2" }],
+      hasOlder: true,
+      unreadCount: 0,
+    });
+
+    harness.sync.chatHeadSequence = "3";
+    harness.sync.emit();
+    await vi.waitFor(() => expect(harness.sync.readChatPage).toHaveBeenCalledWith({ afterSequence: "2", limit: 100 }));
+    expect(harness.session.getSnapshot().chat).toMatchObject({
+      messages: [{ sequence: "2" }, { sequence: "3" }],
+      unreadCount: 1,
+    });
+    await harness.session.leave();
+  });
+
+  it("reads bounded newer pages until it reaches the advertised chat head", async () => {
+    const harness = createHarness();
+    harness.sync.chatHeadSequence = "2";
+    harness.sync.readChatPage.mockImplementation(async (input) => {
+      const sequence = input.afterSequence === undefined ? "2" : input.afterSequence === "2" ? "3" : "5";
+      harness.sync.emitRoomAction(chatMessageEvent(sequence));
+      return loadedChatPage(input.afterSequence === "2");
+    });
+
+    await joinWithInitialChat(harness, "2");
+
+    harness.sync.chatHeadSequence = "5";
+    harness.sync.emit();
+    await vi.waitFor(() => expect(harness.sync.readChatPage.mock.calls.map(([input]) => input)).toEqual([{ limit: 100 }, { afterSequence: "2", limit: 100 }, { afterSequence: "3", limit: 100 }]));
+    expect(harness.session.getSnapshot().chat).toMatchObject({
+      messages: [{ sequence: "2" }, { sequence: "3" }, { sequence: "5" }],
+      hasOlder: false,
+      unreadCount: 2,
+    });
+    await harness.session.leave();
+  });
+
+  it("reloads the latest chat page after a retained-floor cursor reset", async () => {
+    const harness = createHarness();
+    let latestPageReads = 0;
+    harness.sync.chatHeadSequence = "2";
+    harness.sync.readChatPage.mockImplementation(async (input) => {
+      if (input.afterSequence !== undefined) {
+        harness.sync.emitRoomAction({ type: "chat_cursor_reset", retainedFloorSequence: "8" });
+        return { status: "cursor_reset", retainedFloorSequence: "8" };
+      }
+      latestPageReads += 1;
+      harness.sync.emitRoomAction(chatMessageEvent(latestPageReads === 1 ? "2" : "9"));
+      return loadedChatPage(latestPageReads === 2);
+    });
+
+    await joinWithInitialChat(harness, "2");
+
+    harness.sync.chatHeadSequence = "9";
+    harness.sync.emit();
+    await vi.waitFor(() => expect(latestPageReads).toBe(2));
+    expect(harness.session.getSnapshot().chat).toMatchObject({
+      messages: [{ sequence: "2" }, { sequence: "9" }],
+      hasOlder: true,
+      historyTruncated: true,
+      retainedFloorSequence: "8",
+      unreadCount: 1,
+    });
+    await harness.session.leave();
+  });
+
+  it("surfaces and accepts a directed start-camera request through confirmed local media", async () => {
+    const harness = createHarness({ initialCameraEnabled: false });
+    await harness.session.join();
+    harness.sync.emitRequest({
+      type: "directed_request",
+      request_id: "request-000000001",
+      name: "request_start_camera",
+      actor_participant_session_id: "participant-host",
+      expires_at_ms: Date.now() + 30_000,
+    });
+
+    expect(harness.session.getSnapshot().incomingMediaRequests).toMatchObject([
+      {
+        requestId: "request-000000001",
+        kind: "start_camera",
+        actorParticipantSessionId: "participant-host",
+      },
+    ]);
+
+    await harness.session.acceptMediaRequest("request-000000001");
+    expect(harness.sync.setCameraEnabled).toHaveBeenCalledWith(true);
+    expect(harness.session.getSnapshot().incomingMediaRequests).toEqual([]);
+    await harness.session.leave();
   });
 
   it("lets Leave cancel permission acquisition without creating participant access", async () => {
@@ -377,6 +520,15 @@ describe("ChalkSession", () => {
   });
 });
 
+function loadedChatPage(hasOlder: boolean) {
+  return { status: "loaded" as const, count: 1, hasOlder };
+}
+
+async function joinWithInitialChat(harness: ReturnType<typeof createHarness>, sequence: string): Promise<void> {
+  await harness.session.join();
+  await vi.waitFor(() => expect(harness.session.getSnapshot().chat.messages).toMatchObject([{ sequence }]));
+}
+
 function createHarness(
   options: {
     readonly failMediaStart?: boolean;
@@ -466,6 +618,21 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function chatMessageEvent(sequence: string): V3RoomActionClientEvent {
+  return {
+    type: "chat_message",
+    message: {
+      messageId: `message-${sequence}`,
+      clientMessageId: `client-message-${sequence}`,
+      sequence,
+      participantSessionId: "participant-2",
+      displayName: "Grace",
+      text: `Message ${sequence}`,
+      createdAt: "2026-07-29T12:00:00.000Z",
+    },
+  };
+}
+
 class FakeMedia {
   callbacks!: ChalkSessionMediaFactoryInput;
   readonly restart = vi.fn(async () => {
@@ -538,7 +705,10 @@ class FakeMedia {
 
 class FakeSync implements ChalkSessionSyncClient {
   readonly listeners = new Set<(snapshot: V3SessionSnapshot) => void>();
+  readonly requestListeners = new Set<(request: V3DirectedRequest) => void>();
+  readonly roomActionListeners = new Set<(event: V3RoomActionClientEvent) => void>();
   snapshot = syncSnapshot("idle");
+  chatHeadSequence: string | null = null;
   constructor(readonly failLeave: boolean) {}
   start = vi.fn(async () => {
     this.snapshot = syncSnapshot("live");
@@ -553,6 +723,49 @@ class FakeSync implements ChalkSessionSyncClient {
     listener(this.snapshot);
     return () => this.listeners.delete(listener);
   };
+  getRoomActionsExtensionState = () => ({
+    negotiated: this.snapshot.connection.phase === "live",
+    capabilities: ["sendReaction", "sendChat"] as const,
+    chatHeadSequence: this.chatHeadSequence,
+    retainedFloorSequence: null,
+  });
+  getParticipantRoomActionCapabilities = () => ({
+    "participant-1": ["sendReaction", "sendChat"] as const,
+  });
+  subscribeRoomActions = (listener: (event: V3RoomActionClientEvent) => void) => {
+    this.roomActionListeners.add(listener);
+    return () => this.roomActionListeners.delete(listener);
+  };
+  sendReaction = vi.fn(async (reaction: "👍" | "❤️" | "😂" | "😮" | "😢" | "🎉") => ({
+    eventId: "reaction-1",
+    participantSessionId: "participant-1",
+    displayName: "Ada",
+    reaction,
+    occurredAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 5_000).toISOString(),
+  }));
+  sendChatMessage = vi.fn(async (input: { readonly text: string; readonly clientMessageId?: string }) => ({
+    messageId: "message-1",
+    clientMessageId: input.clientMessageId ?? "chat-message-1",
+    sequence: "1",
+    participantSessionId: "participant-1",
+    displayName: "Ada",
+    text: input.text,
+    createdAt: new Date().toISOString(),
+  }));
+  readChatPage = vi.fn(async () => ({ status: "loaded" as const, count: 0, hasOlder: false }));
+  onDirectedRequest = (listener: (request: V3DirectedRequest) => void) => {
+    this.requestListeners.add(listener);
+    return () => this.requestListeners.delete(listener);
+  };
+  requestUnmute = vi.fn(async () => ({ type: "directed_request_result" as const, request_id: "request-1", result: "delivered" as const }));
+  requestStartCamera = vi.fn(async () => ({ type: "directed_request_result" as const, request_id: "request-1", result: "delivered" as const }));
+  emitRequest(request: V3DirectedRequest) {
+    for (const listener of this.requestListeners) listener(request);
+  }
+  emitRoomAction(event: V3RoomActionClientEvent) {
+    for (const listener of this.roomActionListeners) listener(event);
+  }
   leave = vi.fn(async () => {
     if (this.failLeave) throw new TypeError("leave failed");
     return commandResult();

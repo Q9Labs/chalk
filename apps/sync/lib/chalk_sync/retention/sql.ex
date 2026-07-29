@@ -78,6 +78,11 @@ defmodule ChalkSync.Retention.SQL do
           and reservation.session_id = control.session_id
           and reservation.status in ('pending', 'ambiguous')
       )
+      and not exists (
+        select 1 from sync_whiteboard_files file
+        where file.tenant_id = control.tenant_id
+          and file.session_id = control.session_id
+      )
     order by session.ended_at, control.tenant_id, control.session_id
     limit $3
     for update of control skip locked
@@ -157,6 +162,16 @@ defmodule ChalkSync.Retention.SQL do
 
   def delete_publication_grant_reservations,
     do: delete_rows("sync_publication_grant_reservations")
+
+  def delete_chat_messages, do: delete_rows("sync_chat_messages")
+  def delete_chat_streams, do: delete_rows("sync_chat_streams")
+
+  def delete_whiteboard_operation_receipts,
+    do: delete_rows("sync_whiteboard_operation_receipts")
+
+  def delete_whiteboard_permissions, do: delete_rows("sync_whiteboard_permissions")
+  def delete_whiteboard_elements, do: delete_rows("sync_whiteboard_elements")
+  def delete_whiteboard_scenes, do: delete_rows("sync_whiteboard_scenes")
 
   def delete_terminal_external_operations do
     """

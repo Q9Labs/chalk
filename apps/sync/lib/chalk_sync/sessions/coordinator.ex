@@ -43,10 +43,20 @@ defmodule ChalkSync.Sessions.Coordinator do
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
 
-  @spec begin_recovery(Identity.t(), pid()) :: {:ok, pid()} | {:error, atom()}
-  def begin_recovery(%Identity{} = identity, socket \\ self()) when is_pid(socket) do
+  @spec begin_recovery(Identity.t(), pid(), map()) :: {:ok, pid()} | {:error, atom()}
+  def begin_recovery(
+        %Identity{} = identity,
+        socket \\ self(),
+        protocol_options \\ %{}
+      )
+      when is_pid(socket) and is_map(protocol_options) do
     with {:ok, coordinator} <- ensure_started(identity.session),
-         :ok <- GenServer.call(coordinator, {:begin_recovery, socket, identity}, 3_000) do
+         :ok <-
+           GenServer.call(
+             coordinator,
+             {:begin_recovery, socket, identity, protocol_options},
+             3_000
+           ) do
       {:ok, coordinator}
     end
   catch
@@ -259,7 +269,7 @@ defmodule ChalkSync.Sessions.Coordinator do
     end
   end
 
-  def handle_call({:begin_recovery, socket, identity}, _from, state) do
+  def handle_call({:begin_recovery, socket, identity, protocol_options}, _from, state) do
     state = remove_socket(state, socket)
 
     subscriber = %{
@@ -267,6 +277,7 @@ defmodule ChalkSync.Sessions.Coordinator do
       monitor: Process.monitor(socket),
       mode: :recovering,
       identity: identity,
+      protocol_options: protocol_options,
       recovery: nil,
       enqueued_revision: 0,
       acknowledged_revision: 0,
@@ -757,7 +768,15 @@ defmodule ChalkSync.Sessions.Coordinator do
     if compatible_head?(state.head, recovery.head) do
       protocol = protocol(subscriber)
       recovery_id = protocol.recovery_id()
-      encoded = protocol.recovery_welcome(subscriber.identity, recovery, recovery_id)
+
+      encoded =
+        recovery_welcome(
+          protocol,
+          subscriber.identity,
+          recovery,
+          recovery_id,
+          subscriber.protocol_options
+        )
 
       recovery_state = %{
         mode: recovery.mode,
@@ -800,6 +819,12 @@ defmodule ChalkSync.Sessions.Coordinator do
     end
   rescue
     ArgumentError -> {:reply, {:error, :invalid_recovery}, remove_socket(state, socket)}
+  end
+
+  defp recovery_welcome(protocol, identity, recovery, recovery_id, options) do
+    if function_exported?(protocol, :recovery_welcome, 4),
+      do: protocol.recovery_welcome(identity, recovery, recovery_id, options),
+      else: protocol.recovery_welcome(identity, recovery, recovery_id)
   end
 
   defp pop_recovery_socket(state, socket, subscriber) do

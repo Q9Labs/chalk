@@ -1,4 +1,4 @@
-import type { V3Capability, V3MediaPublication, V3MediaSource, V3Participant, V3SessionSnapshot } from "@q9labsai/chalk-client";
+import type { ChalkChatMessage, ChalkRoomReaction, V3Capability, V3DirectedRequest, V3DirectedRequestResult, V3MediaPublication, V3MediaSource, V3Participant, V3SessionSnapshot } from "@q9labsai/chalk-client";
 
 const capabilities: readonly V3Capability[] = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "removeParticipant"];
 
@@ -11,6 +11,10 @@ export type MeetingState = {
 export type ServerMessage =
   | { readonly type: "state"; readonly state: MeetingState }
   | { readonly type: "ack"; readonly id: string }
+  | { readonly type: "room_action_event"; readonly event: { readonly type: "reaction"; readonly reaction: ChalkRoomReaction } | { readonly type: "chat_message"; readonly message: ChalkChatMessage } }
+  | { readonly type: "room_action_result"; readonly id: string; readonly reaction?: ChalkRoomReaction; readonly message?: ChalkChatMessage; readonly messages?: readonly ChalkChatMessage[] }
+  | { readonly type: "directed_request"; readonly request: V3DirectedRequest }
+  | { readonly type: "directed_request_result"; readonly id: string; readonly result: V3DirectedRequestResult }
   | { readonly type: "peers"; readonly participants: readonly string[] }
   | { readonly type: "signal"; readonly from: string; readonly description?: RTCSessionDescriptionInit; readonly candidate?: RTCIceCandidateInit | null; readonly mids?: Readonly<Record<string, V3MediaSource>> }
   | { readonly type: "force_failure" };

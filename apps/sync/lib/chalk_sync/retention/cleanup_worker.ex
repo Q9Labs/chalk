@@ -121,6 +121,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
         external_operation_rows =
           delete_count(transaction, SQL.delete_terminal_external_operations(), candidate)
 
+        delete_collaboration_data(transaction, candidate)
+
         if receipt_rows != candidate.receipt_count or
              lifecycle_intent_rows != candidate.lifecycle_intent_count or
              event_rows != event_count or
@@ -301,6 +303,21 @@ defmodule ChalkSync.Retention.CleanupWorker do
       candidate.tenant_id,
       candidate.session_id
     ])
+  end
+
+  defp delete_collaboration_data(transaction, candidate) do
+    collaboration_deletions = [
+      SQL.delete_chat_messages(),
+      SQL.delete_chat_streams(),
+      SQL.delete_whiteboard_operation_receipts(),
+      SQL.delete_whiteboard_permissions(),
+      SQL.delete_whiteboard_elements(),
+      SQL.delete_whiteboard_scenes()
+    ]
+
+    Enum.each(collaboration_deletions, fn query ->
+      _measurement = delete_measurement(transaction, query, candidate)
+    end)
   end
 
   defp candidate([

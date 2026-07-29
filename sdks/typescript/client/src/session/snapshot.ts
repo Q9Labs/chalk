@@ -1,7 +1,21 @@
 import type { CloudflareSFUSnapshot } from "../media";
 import type { V3Capability, V3SessionSnapshot } from "../sync";
 import type { ParticipantAccessSubject } from "./access";
-import type { ChalkLocalMedia, ChalkMediaSource, ChalkSessionCapability, ChalkSessionConnectionPhase, ChalkSessionFailure, ChalkSessionSnapshot, ChalkSessionState } from "./types";
+import type {
+  ChalkChatState,
+  ChalkIncomingMediaRequest,
+  ChalkLocalMedia,
+  ChalkMediaSource,
+  ChalkParticipantMediaState,
+  ChalkRoomActionCapability,
+  ChalkRoomReaction,
+  ChalkSessionCapability,
+  ChalkSessionConnectionPhase,
+  ChalkSessionFailure,
+  ChalkSessionSnapshot,
+  ChalkSessionState,
+  ChalkWhiteboardSummary,
+} from "./types";
 
 const SOURCES = ["microphone", "camera", "screen"] as const;
 
@@ -16,6 +30,13 @@ export function initialChalkSessionSnapshot(): ChalkSessionSnapshot {
     localMedia: emptyLocalMedia(),
     remoteMedia: [],
     failure: null,
+    roomActions: { phase: "disabled", capabilities: [], error: null },
+    participantRoomActionCapabilities: {},
+    participantMedia: {},
+    reactions: [],
+    chat: emptyChat(),
+    whiteboard: emptyWhiteboard(),
+    incomingMediaRequests: [],
   });
 }
 
@@ -27,6 +48,12 @@ export function projectChalkSessionSnapshot(input: {
   readonly localTracks: ReadonlyMap<ChalkMediaSource, MediaStreamTrack>;
   readonly localIntent: Readonly<Record<"microphone" | "camera", boolean>>;
   readonly failure: ChalkSessionFailure | null;
+  readonly roomActions?: ChalkSessionSnapshot["roomActions"];
+  readonly participantRoomActionCapabilities?: Readonly<Record<string, readonly ChalkRoomActionCapability[]>>;
+  readonly reactions?: readonly ChalkRoomReaction[];
+  readonly chat?: ChalkChatState;
+  readonly whiteboard?: ChalkWhiteboardSummary;
+  readonly incomingMediaRequests?: readonly ChalkIncomingMediaRequest[];
 }): ChalkSessionSnapshot {
   const control = input.sync?.optimisticControl ?? input.sync?.control ?? null;
   return freezeSnapshot({
@@ -64,7 +91,37 @@ export function projectChalkSessionSnapshot(input: {
         track: publication.track,
       })) ?? [],
     failure: input.failure ? { ...input.failure } : null,
+    roomActions: input.roomActions ?? { phase: "disabled", capabilities: [], error: null },
+    participantRoomActionCapabilities: input.participantRoomActionCapabilities ?? {},
+    participantMedia: projectParticipantMedia(input.sync),
+    reactions: input.reactions ?? [],
+    chat: input.chat ?? emptyChat(),
+    whiteboard: input.whiteboard ?? emptyWhiteboard(),
+    incomingMediaRequests: input.incomingMediaRequests ?? [],
   });
+}
+
+function projectParticipantMedia(sync: V3SessionSnapshot | null): Readonly<Record<string, ChalkParticipantMediaState>> {
+  const participants = sync?.optimisticControl?.participants ?? sync?.control?.participants ?? [];
+  const media = sync?.media;
+  if (!media) {
+    return Object.fromEntries(participants.map((participant) => [participant.participantSessionId, { microphone: "unknown", camera: "unknown", screenShare: "unknown" } satisfies ChalkParticipantMediaState]));
+  }
+
+  const active = new Set(media.items.filter((publication) => publication.enabled).map((publication) => `${publication.participantSessionId}:${publication.source}`));
+  return Object.fromEntries(
+    participants.map((participant) => {
+      const prefix = participant.participantSessionId;
+      return [
+        prefix,
+        {
+          microphone: active.has(`${prefix}:microphone`) ? "active" : "inactive",
+          camera: active.has(`${prefix}:camera`) ? "active" : "inactive",
+          screenShare: active.has(`${prefix}:screen`) ? "active" : "inactive",
+        } satisfies ChalkParticipantMediaState,
+      ];
+    }),
+  );
 }
 
 function projectLocalMedia(input: Parameters<typeof projectChalkSessionSnapshot>[0]): Readonly<Record<ChalkMediaSource, ChalkLocalMedia>> {
@@ -105,6 +162,31 @@ function activeIntentState(hasTrack: boolean): ChalkLocalMedia["state"] {
 
 function emptyLocalMedia(): Readonly<Record<ChalkMediaSource, ChalkLocalMedia>> {
   return Object.fromEntries(SOURCES.map((source) => [source, Object.freeze({ source, state: "unavailable", track: null })])) as Readonly<Record<ChalkMediaSource, ChalkLocalMedia>>;
+}
+
+function emptyChat(): ChalkChatState {
+  return {
+    status: "idle",
+    messages: [],
+    pending: [],
+    hasOlder: false,
+    historyTruncated: false,
+    retainedFloorSequence: null,
+    unreadCount: 0,
+    error: null,
+  };
+}
+
+function emptyWhiteboard(): ChalkWhiteboardSummary {
+  return {
+    status: "unsubscribed",
+    sceneId: null,
+    revision: null,
+    capabilities: [],
+    canDraw: false,
+    canClear: false,
+    error: null,
+  };
 }
 
 function mapSyncPhase(phase: V3SessionSnapshot["connection"]["phase"] | undefined): ChalkSessionConnectionPhase {
@@ -164,5 +246,32 @@ function freezeSnapshot(snapshot: ChalkSessionSnapshot): ChalkSessionSnapshot {
     localMedia,
     remoteMedia: Object.freeze(snapshot.remoteMedia.map((publication) => Object.freeze(publication))),
     failure: snapshot.failure ? Object.freeze(snapshot.failure) : null,
+    roomActions: Object.freeze({
+      ...snapshot.roomActions,
+      capabilities: Object.freeze(snapshot.roomActions.capabilities),
+      error: snapshot.roomActions.error ? Object.freeze(snapshot.roomActions.error) : null,
+    }),
+    participantRoomActionCapabilities: Object.freeze(Object.fromEntries(Object.entries(snapshot.participantRoomActionCapabilities).map(([participantId, capabilities]) => [participantId, Object.freeze(capabilities)]))),
+    participantMedia: Object.freeze(Object.fromEntries(Object.entries(snapshot.participantMedia).map(([participantId, media]) => [participantId, Object.freeze(media)]))),
+    reactions: Object.freeze(snapshot.reactions.map((reaction) => Object.freeze(reaction))),
+    chat: Object.freeze({
+      ...snapshot.chat,
+      messages: Object.freeze(snapshot.chat.messages.map((message) => Object.freeze(message))),
+      pending: Object.freeze(
+        snapshot.chat.pending.map((message) =>
+          Object.freeze({
+            ...message,
+            error: message.error ? Object.freeze(message.error) : null,
+          }),
+        ),
+      ),
+      error: snapshot.chat.error ? Object.freeze(snapshot.chat.error) : null,
+    }),
+    whiteboard: Object.freeze({
+      ...snapshot.whiteboard,
+      capabilities: Object.freeze(snapshot.whiteboard.capabilities),
+      error: snapshot.whiteboard.error ? Object.freeze(snapshot.whiteboard.error) : null,
+    }),
+    incomingMediaRequests: Object.freeze(snapshot.incomingMediaRequests.map((request) => Object.freeze(request))),
   });
 }

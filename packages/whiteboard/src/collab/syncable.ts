@@ -1,12 +1,8 @@
 import { isInvisiblySmallElement } from "@excalidraw/excalidraw";
 import type { OrderedExcalidrawElement } from "./types.js";
 
-const TOMBSTONE_RETENTION_MS = 24 * 60 * 60 * 1000;
-
-export const filterSyncableElements = (elements: readonly OrderedExcalidrawElement[], nowMs: number) =>
+export const filterSyncableElements = (elements: readonly OrderedExcalidrawElement[]) =>
   elements.filter((el) => {
-    if (el.isDeleted) {
-      return el.updated > nowMs - TOMBSTONE_RETENTION_MS;
-    }
+    if (el.isDeleted) return true;
     return !isInvisiblySmallElement(el);
   });

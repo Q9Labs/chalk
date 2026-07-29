@@ -1,0 +1,161 @@
+{
+  "$schema": "chalk.whiteboard.v1",
+  "version": 1,
+  "protocol": {
+    "name": "whiteboard-v1",
+    "route": "/v1/whiteboard",
+    "transport": "websocket-json-text"
+  },
+  "identity": {
+    "credential": "participant-access-token",
+    "authorityKey": ["tenant_id", "room_id", "session_id"],
+    "generationFenced": true
+  },
+  "capabilities": ["drawWhiteboard", "manageWhiteboard"],
+  "phases": [
+    {
+      "id": "awaiting_hello",
+      "accepts": ["hello", "ping"],
+      "deadlineMs": 5000
+    },
+    {
+      "id": "live",
+      "accepts": ["submit_update", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
+      "heartbeatIntervalMs": 20000,
+      "missedDeadlinesBeforeClose": 2
+    }
+  ],
+  "limits": {
+    "decodedInboundFrameBytes": 262144,
+    "encodedOutboundFrameBytes": 262144,
+    "tokenBytes": 8192,
+    "operationIdMinBytes": 16,
+    "operationIdMaxBytes": 64,
+    "requestIdMinBytes": 16,
+    "requestIdMaxBytes": 64,
+    "elementIdMaxBytes": 128,
+    "elementTypeMaxBytes": 64,
+    "elementIndexMaxBytes": 64,
+    "elementPayloadEncodedBytes": 16384,
+    "elementBatchMaxItems": 128,
+    "snapshotPageMaxItems": 128,
+    "snapshotPageEncodedBytes": 196608,
+    "snapshotMaxPages": 128,
+    "cursorFrameBytes": 1024,
+    "displayNameMaxBytes": 256,
+    "errorMessageMaxBytes": 256,
+    "jsonMaxDepth": 16,
+    "socketQueueMaxFrames": 256,
+    "socketQueueMaxBytes": 2097152,
+    "socketQueueMaxAgeMs": 5000,
+    "cursorTtlMs": 10000,
+    "cursorRatePerSecond": 60,
+    "pendingOperationMaxItems": 128,
+    "sceneElementMaxItems": 10000,
+    "sceneJsonMaxBytes": 67108864,
+    "sceneObjectMaxBytes": 268435456
+  },
+  "cursor": {
+    "sceneId": "uuid",
+    "revision": "unsigned-decimal-string"
+  },
+  "element": {
+    "exactFields": ["id", "type", "version", "version_nonce", "index", "is_deleted", "payload"],
+    "winner": "higher-version-then-lower-version-nonce"
+  },
+  "sharedAppState": {
+    "exactFields": ["view_background_color"]
+  },
+  "frames": {
+    "hello": {
+      "exactFields": ["type", "protocol", "token", "cursor"]
+    },
+    "submitUpdate": {
+      "exactFields": ["type", "operation_id", "scene_id", "sync_all", "elements"]
+    },
+    "requestSnapshot": {
+      "exactFields": ["type", "request_id"]
+    },
+    "snapshotAck": {
+      "exactFields": ["type", "request_id", "scene_id", "revision", "page"]
+    },
+    "clear": {
+      "exactFields": ["type", "operation_id", "scene_id"]
+    },
+    "setDrawPermission": {
+      "exactFields": ["type", "operation_id", "participant_session_id", "can_draw"]
+    },
+    "cursor": {
+      "clientExactFields": ["type", "x", "y"],
+      "serverExactFields": ["type", "participant_session_id", "display_name", "x", "y", "occurred_at"]
+    },
+    "welcome": {
+      "exactFields": ["type", "protocol", "participant_session_id", "participant_session_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"]
+    },
+    "snapshotPage": {
+      "exactFields": ["type", "request_id", "scene_id", "revision", "page", "page_count", "elements", "app_state"]
+    },
+    "update": {
+      "exactFields": ["type", "operation_id", "scene_id", "revision", "elements"]
+    },
+    "commit": {
+      "exactFields": ["type", "operation_id", "outcome", "scene_id", "revision"]
+    },
+    "permissionUpdated": {
+      "exactFields": ["type", "participant_session_id", "can_draw"]
+    },
+    "resetRequired": {
+      "exactFields": ["type", "scene_id", "reason"]
+    },
+    "operationError": {
+      "exactFields": ["type", "correlation_id", "operation", "code", "recoverable", "message"]
+    }
+  },
+  "clientFrames": ["hello", "submit_update", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
+  "serverFrames": ["welcome", "snapshot_page", "update", "commit", "cursor", "permission_updated", "reset_required", "operation_error", "pong"],
+  "receiptOperations": ["submit_update", "clear", "set_draw_permission"],
+  "receiptOutcomes": ["committed", "duplicate"],
+  "resetReasons": ["scene_changed", "cursor_expired", "gap"],
+  "errorCodes": ["unavailable", "permission_denied", "invalid_payload", "stale_scene", "cursor_reset_required", "rate_limited", "overloaded", "storage_unavailable"],
+  "notifications": {
+    "durableHeadChannel": "chalk_whiteboard_v1_heads",
+    "transientCursorChannel": "chalk_whiteboard_v1_cursors",
+    "transientEnvelopeBytes": 1024,
+    "durablePayloadContainsContent": false
+  },
+  "fileTransport": {
+    "initiateUploadResult": {
+      "method": "PUT",
+      "uploadUrl": "string",
+      "headers": "exact-string-map",
+      "expiresAt": "rfc3339"
+    },
+    "finalizeVerifies": ["provider_existence", "byte_length", "sha256", "mime_type", "immutable_object_identity", "active_scene", "file_id_uniqueness", "participant_authorization"],
+    "download": "participant-bound-short-lived-url"
+  },
+  "persistence": {
+    "fullSyncDeletesAbsentElements": false,
+    "clearStartsNewSceneEpoch": true,
+    "tombstonesSurviveNormalMerge": true,
+    "winner": "higher-version-then-lower-version-nonce",
+    "operationReceipts": true
+  },
+  "telemetry": {
+    "propagates": ["journey_id", "traceparent", "tracestate"],
+    "forbidden": ["elements", "file_contents", "presigned_urls", "access_tokens"]
+  },
+  "closeCodes": [
+    {
+      "code": 1008,
+      "reasons": ["invalid token", "policy violation"]
+    },
+    {
+      "code": 1009,
+      "reasons": ["malformed frame", "oversized frame"]
+    },
+    {
+      "code": 1012,
+      "reasons": ["dependency unavailable", "server draining"]
+    }
+  ]
+}

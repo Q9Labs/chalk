@@ -344,6 +344,16 @@ function validateV3SyncContract(value) {
     projectionMaxItems: 1_500,
     directedRequestTtlMs: 30_000,
     directedRequestsPerActorTarget: 4,
+    roomActionFrameBytes: 32_768,
+    roomActionQueueMaxFrames: 256,
+    roomActionBurstMax: 8,
+    chatMessageUtf8Bytes: 16_384,
+    chatMessageUnicodeScalars: 4_000,
+    chatPageMaxMessages: 100,
+    chatPageEncodedBytes: 131_072,
+    reactionTtlMs: 5_000,
+    reactionRateWindowMs: 10_000,
+    reactionRateMax: 10,
     protocolErrorDetailBytes: 1_024,
   };
   for (const [property, expected] of Object.entries(expectedLimits)) {
@@ -506,6 +516,30 @@ function validateV3SyncContract(value) {
     const frame = requireObjectProperty(directedRequestFrames, property, `directedRequestFrames.${property} is required`);
     requireArrayProperty(frame, "exactFields", `directedRequestFrames.${property}.exactFields are required`);
   }
+  const roomActions = requireObjectProperty(value, "roomActions", "roomActions are required");
+  if (roomActions.extension !== "room_actions_v1" || JSON.stringify(roomActions.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) || JSON.stringify(roomActions.reactions) !== JSON.stringify(["👍", "❤️", "😂", "😮", "😢", "🎉"])) {
+    throw new Error("Invalid sync v3 contract: roomActions negotiation, capabilities, and reactions must be exhaustive");
+  }
+  const chatCursor = requireObjectProperty(roomActions, "chatCursor", "roomActions.chatCursor is required");
+  if (JSON.stringify(chatCursor.exactFields) !== JSON.stringify(["after_sequence", "retained_floor_sequence"])) {
+    throw new Error("Invalid sync v3 contract: roomActions chat cursor fields must be exact");
+  }
+  const helloExtension = requireObjectProperty(roomActions, "helloExtension", "roomActions.helloExtension is required");
+  const welcomeExtension = requireObjectProperty(roomActions, "welcomeExtension", "roomActions.welcomeExtension is required");
+  requireArrayProperty(helloExtension, "exactFields", "roomActions.helloExtension exact fields are required");
+  requireArrayProperty(welcomeExtension, "exactFields", "roomActions.welcomeExtension exact fields are required");
+  const roomActionClientFrames = requireObjectProperty(roomActions, "clientFrames", "roomActions.clientFrames are required");
+  for (const property of ["sendReaction", "sendChat", "readChatPage"]) {
+    const frame = requireObjectProperty(roomActionClientFrames, property, `roomActions.clientFrames.${property} is required`);
+    requireStringProperty(frame, "type", `roomActions.clientFrames.${property}.type is required`);
+    requireArrayProperty(frame, "exactFields", `roomActions.clientFrames.${property}.exactFields are required`);
+  }
+  const roomActionServerFrames = requireObjectProperty(roomActions, "serverFrames", "roomActions.serverFrames are required");
+  for (const property of ["reaction", "reactionResult", "chatMessage", "chatSendResult", "chatPage", "chatHead"]) {
+    const frame = requireObjectProperty(roomActionServerFrames, property, `roomActions.serverFrames.${property} is required`);
+    requireStringProperty(frame, "type", `roomActions.serverFrames.${property}.type is required`);
+  }
+  requireArrayProperty(roomActions, "errorCodes", "roomActions.errorCodes are required");
   const projectionFrames = /** @type {JsonObject} */ (value.projectionFrames);
   for (const property of ["mediaSnapshot", "mediaEvent", "presenceSnapshot", "presenceEvent"]) {
     const frame = requireObjectProperty(projectionFrames, property, `projectionFrames.${property} is required`);

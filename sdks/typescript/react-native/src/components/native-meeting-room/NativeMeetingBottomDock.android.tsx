@@ -21,14 +21,16 @@ export function NativeMeetingBottomDockAndroid({ simulatorMediaDisabled, isMuted
         <Pressable disabled={simulatorMediaDisabled} onPress={onToggleVideo} style={({ pressed }) => [styles.controlButton, isCameraOff && styles.controlButtonDanger, simulatorMediaDisabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}>
           <HugeiconsIcon color={isCameraOff ? "white" : Theme.colors.primary} icon={isCameraOff ? VideoOffIcon : Video01Icon} size={22} />
         </Pressable>
-        <Pressable onPress={onOpenChat} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
-          <HugeiconsIcon color="white" icon={Chat01Icon} size={22} />
-          {unreadChatCount > 0 ? (
-            <View style={styles.controlBadge}>
-              <Text style={styles.controlBadgeText}>{unreadChatCount > 9 ? "9+" : String(unreadChatCount)}</Text>
-            </View>
-          ) : null}
-        </Pressable>
+        {onOpenChat ? (
+          <Pressable onPress={onOpenChat} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
+            <HugeiconsIcon color="white" icon={Chat01Icon} size={22} />
+            {unreadChatCount > 0 ? (
+              <View style={styles.controlBadge}>
+                <Text style={styles.controlBadgeText}>{unreadChatCount > 9 ? "9+" : String(unreadChatCount)}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        ) : null}
         <Pressable onPress={onOpenMore} style={({ pressed }) => [styles.controlButton, pressed && styles.controlButtonPressed]}>
           <HugeiconsIcon color="white" icon={MoreHorizontalIcon} size={22} />
         </Pressable>

@@ -48,6 +48,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/users"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -167,6 +168,8 @@ func run() error {
 	var syncTokenRefresh httpapi.SyncTokenRefreshIssuer
 	var participantMediaIssuer httpapi.ParticipantMediaIssuer
 	var participantMediaVerifier httpapi.ParticipantMediaVerifier
+	var syncParticipantVerifier synctokens.Verifier
+	var syncParticipantVerifierConfigured bool
 	participantActiveAuthorizer := participantaccess.NewActiveAuthorizer(sessionLifecycleRepository)
 	if len(cfg.SyncToken.PrivateKey) > 0 {
 		service, err := synctokens.NewService(synctokens.Config{
@@ -179,6 +182,14 @@ func run() error {
 		broker := synctokens.NewBroker(sessionLifecycleRepository, service)
 		syncTokenService = broker
 		syncTokenRefresh = broker
+		syncParticipantVerifier, err = synctokens.NewVerifier(synctokens.VerifierConfig{
+			Issuer: cfg.SyncToken.Issuer, Audience: cfg.SyncToken.Audience,
+			VerificationKeys: cfg.SyncToken.VerificationKeys,
+		})
+		if err != nil {
+			return fmt.Errorf("configure Sync participant verifier: %w", err)
+		}
+		syncParticipantVerifierConfigured = true
 		mediaIssuer, err := participantaccess.NewIssuer(participantaccess.IssuerConfig{
 			Issuer: cfg.SyncToken.Issuer, KeyID: cfg.SyncToken.KeyID, PrivateKey: cfg.SyncToken.PrivateKey,
 		})
@@ -236,6 +247,9 @@ func run() error {
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService
 	var transcriptionStorage *objectstorage.Service
+	var whiteboardFileService httpapi.WhiteboardFileService
+	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
+	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
@@ -245,6 +259,15 @@ func run() error {
 		recordingDownloads = recordingStorage
 		recordingObjects = recordingStorage
 		transcriptionStorage = &recordingStorage
+		whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
+		whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, recordingStorage)
+		whiteboardCleanupScheduler = whiteboardfiles.NewCleanupScheduler(whiteboardCleanupWorker, 0, logger)
+		if syncParticipantVerifierConfigured {
+			service := whiteboardfiles.NewService(whiteboardRepository, recordingStorage)
+			verifier := whiteboardfiles.NewParticipantVerifier(syncParticipantVerifier)
+			whiteboardFileService = service
+			whiteboardParticipantVerifier = verifier
+		}
 	}
 	var integrationService httpapi.IntegrationService
 	if cfg.Capabilities.Integrations {
@@ -364,6 +387,8 @@ func run() error {
 		FinalizerAuthority:     transcriptionAuthority,
 		Users:                  userService,
 		Webhooks:               webhookService,
+		WhiteboardFiles:        whiteboardFileService,
+		WhiteboardParticipants: whiteboardParticipantVerifier,
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	diagnostics.ApplyHTTP(&routerOptions)
@@ -392,6 +417,12 @@ func run() error {
 	deadlineScheduler := sessionlifecycle.NewDeadlineScheduler(sessionLifecycleRepository, cfg.DeadlineScheduler.Interval, cfg.DeadlineScheduler.Batch)
 	deadlineSchedulerErr := make(chan error, 1)
 	go func() { deadlineSchedulerErr <- deadlineScheduler.Run(signalCtx) }()
+	var whiteboardCleanupErr <-chan error
+	if whiteboardCleanupScheduler != nil {
+		cleanupErr := make(chan error, 1)
+		whiteboardCleanupErr = cleanupErr
+		go func() { cleanupErr <- whiteboardCleanupScheduler.Run(signalCtx) }()
+	}
 	var providerBridgeErr <-chan error
 	if providerBridgeServer != nil {
 		providerBridgeErr, err = providerBridgeServer.Start()
@@ -418,6 +449,7 @@ func run() error {
 	var runErr error
 	serverResultReceived := false
 	providerBridgeResultReceived := false
+	whiteboardCleanupResultReceived := false
 	select {
 	case err := <-serverErr:
 		runErr = err
@@ -435,6 +467,10 @@ func run() error {
 		stop()
 	case err := <-deadlineSchedulerErr:
 		runErr = err
+		stop()
+	case err := <-whiteboardCleanupErr:
+		runErr = err
+		whiteboardCleanupResultReceived = true
 		stop()
 	case <-signalCtx.Done():
 		stop()
@@ -468,6 +504,11 @@ func run() error {
 	}
 	if providerBridgeErr != nil && !providerBridgeResultReceived {
 		if err := <-providerBridgeErr; runErr == nil {
+			runErr = err
+		}
+	}
+	if whiteboardCleanupErr != nil && !whiteboardCleanupResultReceived {
+		if err := <-whiteboardCleanupErr; runErr == nil {
 			runErr = err
 		}
 	}

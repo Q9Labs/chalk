@@ -41,18 +41,187 @@ defmodule ChalkSync.Transport.SocketV3Test do
     def end_session(_adapter, _operation_id, _session), do: :confirmed
   end
 
+  defmodule RoomActionRepository do
+    @moduledoc false
+    @behaviour ChalkSync.RoomActions.ChatRepository
+
+    @message %{
+      message_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c81",
+      client_message_id: "chat-message-0001",
+      sequence: "1",
+      participant_session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      display_name: "Ada",
+      text: "Hello from Chalk",
+      created_at: "2026-07-29T14:00:00.000Z"
+    }
+
+    @impl true
+    def authorize(_identity, _capability), do: {:ok, %{display_name: "Ada"}}
+
+    @impl true
+    def participant_capabilities(identity) do
+      {:ok,
+       %{
+         capabilities: ["sendReaction", "sendChat"],
+         participant_capabilities: %{
+           identity.participant_session_id => ["sendReaction", "sendChat"]
+         }
+       }}
+    end
+
+    @impl true
+    def append(identity, input) do
+      {:ok,
+       %{
+         outcome: :committed,
+         message: %{
+           @message
+           | participant_session_id: identity.participant_session_id,
+             client_message_id: input.client_message_id,
+             text: input.text
+         }
+       }}
+    end
+
+    @impl true
+    def head(_session), do: {:ok, %{head_sequence: "1", retained_floor_sequence: "1"}}
+
+    @impl true
+    def read_page(_session, _request) do
+      {:ok,
+       %{
+         messages: [@message],
+         has_more: false,
+         head_sequence: "1",
+         retained_floor_sequence: "1"
+       }}
+    end
+  end
+
   setup do
     previous = Application.get_env(:chalk_sync, :media_plane)
+
+    previous_room_action_repository =
+      Application.get_env(:chalk_sync, :room_actions_chat_repository)
+
     {:ok, adapter} = MediaPlaneTestAdapter.start_link()
     Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
+
+    Application.put_env(
+      :chalk_sync,
+      :room_actions_chat_repository,
+      RoomActionRepository
+    )
 
     on_exit(fn ->
       if previous,
         do: Application.put_env(:chalk_sync, :media_plane, previous),
         else: Application.delete_env(:chalk_sync, :media_plane)
+
+      if previous_room_action_repository,
+        do:
+          Application.put_env(
+            :chalk_sync,
+            :room_actions_chat_repository,
+            previous_room_action_repository
+          ),
+        else: Application.delete_env(:chalk_sync, :room_actions_chat_repository)
     end)
 
     {:ok, adapter: adapter}
+  end
+
+  test "extended Sync v3 negotiates and carries reactions, chat, and paging", %{
+    port: port
+  } do
+    identity = seed_identity()
+    {:ok, client} = Client.connect(port, "/v3/sync")
+
+    extended_hello =
+      Map.put(hello(identity), "extensions", [
+        %{
+          "name" => "room_actions_v1",
+          "chat_cursor" => %{
+            "after_sequence" => nil,
+            "retained_floor_sequence" => nil
+          }
+        }
+      ])
+
+    client = Client.send_json(client, extended_hello)
+
+    assert {:json,
+            %{
+              "type" => "welcome",
+              "extensions" => [
+                %{
+                  "name" => "room_actions_v1",
+                  "capabilities" => ["sendReaction", "sendChat"],
+                  "chat_head_sequence" => "1",
+                  "retained_floor_sequence" => "1"
+                }
+              ]
+            } = welcome, client} = Client.recv(client)
+
+    client = Client.acknowledge_recovery(client, welcome)
+    {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+
+    {:json, %{"type" => "projection_snapshot", "stream" => "media"}, client} =
+      Client.recv(client)
+
+    {:json, %{"type" => "projection_snapshot", "stream" => "presence"}, client} =
+      Client.recv(client)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "room_reaction_send",
+        "operation_id" => "reaction-op-00001",
+        "reaction" => "🎉"
+      })
+
+    assert {:json,
+            %{
+              "type" => "room_reaction_result",
+              "operation_id" => "reaction-op-00001",
+              "outcome" => "accepted"
+            }, client} = Client.recv(client)
+
+    assert {:json, %{"type" => "room_reaction", "reaction" => "🎉"}, client} =
+             Client.recv(client)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "chat_send",
+        "client_message_id" => "chat-message-0001",
+        "text" => "Hello from Chalk"
+      })
+
+    assert {:json,
+            %{
+              "type" => "chat_send_result",
+              "client_message_id" => "chat-message-0001",
+              "outcome" => "accepted"
+            }, client} = Client.recv(client)
+
+    assert {:json, %{"type" => "chat_head", "head_sequence" => "1"}, client} =
+             Client.recv(client)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "chat_page_request",
+        "request_id" => "chat-page-req-001",
+        "direction" => "newer",
+        "cursor_sequence" => nil,
+        "limit" => 20
+      })
+
+    assert {:json,
+            %{
+              "type" => "chat_page",
+              "request_id" => "chat-page-req-001",
+              "outcome" => "loaded",
+              "messages" => [%{"text" => "Hello from Chalk"}]
+            }, _client} = Client.recv(client)
   end
 
   test "real v3 operation captures upgrade journey and W3C context", %{port: port} do

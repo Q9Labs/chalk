@@ -41,6 +41,9 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodGet, "/v1/me"},
 		{http.MethodPost, "/v1/telemetry/journey-events"},
 		{http.MethodGet, "/v1/regions"},
+		{http.MethodPost, "/v1/whiteboard/files/uploads"},
+		{http.MethodPost, "/v1/whiteboard/files/uploads/{uploadId}/finalize"},
+		{http.MethodGet, "/v1/whiteboard/files/{fileId}/download"},
 		{http.MethodGet, "/v1/tenants"},
 		{http.MethodPost, "/v1/tenants"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}"},
@@ -130,7 +133,7 @@ func TestPreviewRouteContracts(t *testing.T) {
 		if len(contract.Errors) == 0 {
 			t.Fatalf("%s %s has no error metadata", contract.Method, contract.Path)
 		}
-		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer && contract.Auth != httpapi.APIAuthParticipantMedia {
+		if !publicContract(contract.Method, contract.Path) && contract.Auth != httpapi.APIAuthSessionOrBearer && contract.Auth != httpapi.APIAuthParticipantMedia && contract.Auth != httpapi.APIAuthParticipantSync {
 			t.Fatalf("%s %s should advertise a supported auth family", contract.Method, contract.Path)
 		}
 		if strings.Contains(contract.Path, "/media/sfu/") && contract.Auth != httpapi.APIAuthParticipantMedia {

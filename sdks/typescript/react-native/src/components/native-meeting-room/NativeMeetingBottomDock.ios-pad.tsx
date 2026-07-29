@@ -65,18 +65,22 @@ export function NativeMeetingBottomDockIosPad({
             </View>
           </Pressable>
 
-          <Pressable onPress={onOpenChat} style={({ pressed }) => [styles.controlButton, styles.secondaryButton, pressed && styles.buttonPressed]}>
-            <HugeiconsIcon color="white" icon={Chat01Icon} size={22} />
-            {unreadChatCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.badgeText}>{unreadChatCount > 9 ? "9+" : unreadChatCount}</Text>
-              </View>
-            )}
-          </Pressable>
+          {onOpenChat ? (
+            <Pressable onPress={onOpenChat} style={({ pressed }) => [styles.controlButton, styles.secondaryButton, pressed && styles.buttonPressed]}>
+              <HugeiconsIcon color="white" icon={Chat01Icon} size={22} />
+              {unreadChatCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.badgeText}>{unreadChatCount > 9 ? "9+" : unreadChatCount}</Text>
+                </View>
+              )}
+            </Pressable>
+          ) : null}
 
-          <Pressable onPress={onOpenReactions} style={({ pressed }) => [styles.controlButton, styles.secondaryButton, pressed && styles.buttonPressed]}>
-            <HugeiconsIcon color="white" icon={SmileIcon} size={22} />
-          </Pressable>
+          {onOpenReactions ? (
+            <Pressable onPress={onOpenReactions} style={({ pressed }) => [styles.controlButton, styles.secondaryButton, pressed && styles.buttonPressed]}>
+              <HugeiconsIcon color="white" icon={SmileIcon} size={22} />
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.divider} />

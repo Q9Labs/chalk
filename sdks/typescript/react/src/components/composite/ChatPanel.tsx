@@ -1,310 +1,159 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
-import { Message01Icon, SentIcon, PlusSignIcon, CancelCircleIcon, Cancel01Icon, FileTextIcon } from "../../utils/icons";
-import { MessageBubble } from "./MessageBubble";
+import { Message01Icon, SentIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { Button } from "../ui";
-import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
-import type { ChatAttachment, ChatMessage, ChatReadReceipt } from "./chat-types";
+import { MessageBubble } from "./MessageBubble";
+import type { ChatMessage } from "./chat-types";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
-export type { ChatAttachment, ChatMessage, ChatReadReceipt };
+export type { ChatMessage };
 
-export interface ChatPanelProps {
-  messages: ChatMessage[];
-  onSendMessage: (content: string) => void;
-  onSendMessageWithAttachments?: (content: string, files: File[]) => void;
-  onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
-  localParticipantId?: string;
-  onClose?: () => void;
-  disabled?: boolean;
-  placeholder?: string;
-  className?: string;
-  title?: string;
-  /** Variant for different layouts */
-  variant?: "sidebar" | "mobile";
-  participantColorSeed?: string;
-  participantGradientPreference?: ParticipantGradientPreference;
+export interface ChatPanelPendingMessage {
+  readonly id: string;
+  readonly content: string;
+  readonly state: "sending" | "failed";
+  readonly error?: string;
 }
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
-
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-};
-
-// Group messages by sender within a time window (2 minutes)
-const groupMessages = (messages: ChatMessage[]) => {
-  const groups: { messages: ChatMessage[]; senderId: string }[] = [];
-  const TIME_WINDOW = 2 * 60 * 1000; // 2 minutes
-
-  messages.forEach((msg) => {
-    const lastGroup = groups[groups.length - 1];
-    const lastMsg = lastGroup?.messages[lastGroup.messages.length - 1];
-
-    // Check if this message belongs to the same group
-    const isSameSender = lastGroup && lastGroup.senderId === msg.senderId;
-    const isWithinTimeWindow = lastMsg && new Date(msg.timestamp).getTime() - new Date(lastMsg.timestamp).getTime() < TIME_WINDOW;
-
-    if (isSameSender && isWithinTimeWindow) {
-      lastGroup.messages.push(msg);
-    } else {
-      groups.push({ messages: [msg], senderId: msg.senderId });
-    }
-  });
-
-  return groups;
-};
+export interface ChatPanelProps {
+  readonly messages: readonly ChatMessage[];
+  readonly pendingMessages?: readonly ChatPanelPendingMessage[];
+  readonly onSendMessage: (content: string) => Promise<void>;
+  readonly onRetryMessage?: (id: string) => Promise<void>;
+  readonly onLoadOlder?: () => Promise<void>;
+  readonly hasOlder?: boolean;
+  readonly loadingOlder?: boolean;
+  readonly localParticipantId?: string;
+  readonly onClose?: () => void;
+  readonly disabled?: boolean;
+  readonly placeholder?: string;
+  readonly className?: string;
+  readonly title?: string;
+  readonly variant?: "sidebar" | "mobile";
+  readonly error?: string | null;
+}
 
 export const ChatPanel = React.memo(
-  ({ messages, onSendMessage, onSendMessageWithAttachments, onResolveAttachmentUrl, localParticipantId, onClose, disabled = false, placeholder = "Type a message...", title = "Chat", variant = "sidebar", participantColorSeed, participantGradientPreference, className }: ChatPanelProps) => {
-    const prefersReducedMotion = usePrefersReducedMotion();
-    const [inputValue, setInputValue] = useState("");
-    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-    const [uploading, setUploading] = useState(false);
-    const [attachmentError, setAttachmentError] = useState<string | null>(null);
-
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const messagesContainerRef = useRef<HTMLDivElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+  ({ messages, pendingMessages = [], onSendMessage, onRetryMessage, onLoadOlder, hasOlder = false, loadingOlder = false, localParticipantId, onClose, disabled = false, placeholder = "Type a message...", title = "Chat", variant = "sidebar", error, className }: ChatPanelProps) => {
+    const [draft, setDraft] = useState("");
+    const [sending, setSending] = useState(false);
+    const [composerError, setComposerError] = useState<string | null>(null);
+    const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    const [isAtBottom, setIsAtBottom] = useState(true);
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
-
-    const messageGroups = useMemo(() => groupMessages(messages), [messages]);
-
-    const scrollToBottom = (smooth = true) => {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: smooth && !prefersReducedMotion ? "smooth" : "auto",
-      });
-    };
+    const grouped = useMemo(() => groupMessages(messages), [messages]);
 
     useEffect(() => {
-      if (isAtBottom) {
-        scrollToBottom();
-      }
-    }, [messages, isAtBottom]);
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages, pendingMessages]);
 
-    // Grow the composer with its content, up to its max height
     useEffect(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-    }, [inputValue]);
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }, [draft]);
 
-    const handleScroll = () => {
-      if (!messagesContainerRef.current) return;
-      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      setIsAtBottom(scrollHeight - scrollTop - clientHeight < 50);
-    };
-
-    const handleSend = async () => {
-      const trimmedContent = inputValue.trim();
-      const hasFiles = selectedFiles.length > 0;
-
-      if ((trimmedContent || hasFiles) && !disabled && !uploading) {
-        if (hasFiles && onSendMessageWithAttachments) {
-          try {
-            setUploading(true);
-            await onSendMessageWithAttachments(trimmedContent, selectedFiles);
-            setInputValue("");
-            setSelectedFiles([]);
-            setAttachmentError(null);
-          } catch (error) {
-            setAttachmentError(error instanceof Error ? error.message : "Failed to upload files. Please try again.");
-          } finally {
-            setUploading(false);
-          }
-        } else {
-          onSendMessage(trimmedContent);
-          setInputValue("");
-        }
-        setTimeout(() => scrollToBottom(), 100);
-      }
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      if (files.length === 0) return;
-
-      const validFiles: File[] = [];
-      const oversizedFiles: string[] = [];
-
-      files.forEach((file) => {
-        if (file.size > MAX_FILE_SIZE) {
-          oversizedFiles.push(file.name);
-        } else {
-          validFiles.push(file);
-        }
-      });
-
-      if (oversizedFiles.length > 0) {
-        const fileLabel = oversizedFiles.map((name) => `"${name}"`).join(", ");
-        setAttachmentError(`${fileLabel} ${oversizedFiles.length === 1 ? "exceeds" : "exceed"} the max 25 MB per file limit.`);
-      } else {
-        setAttachmentError(null);
-      }
-
-      setSelectedFiles((prev) => [...prev, ...validFiles]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    };
-
-    const removeFile = (index: number) => {
-      setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-      if (selectedFiles.length === 1) {
-        setAttachmentError(null);
+    const send = async () => {
+      const text = draft.trim();
+      if (!text || disabled || sending) return;
+      setSending(true);
+      try {
+        await onSendMessage(text);
+        setDraft("");
+        setComposerError(null);
+      } catch (cause) {
+        setComposerError(cause instanceof Error ? cause.message : "Message could not be sent.");
+      } finally {
+        setSending(false);
       }
     };
 
     return (
-      <div
-        className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden", "bg-transparent text-card-foreground", !prefersReducedMotion && variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)}
-        data-tour="chat-panel"
-        role="complementary"
-        aria-label="Chat panel"
-        style={themeVariables as React.CSSProperties}
-      >
-        {variant === "sidebar" && (
-          <div className="flex items-center justify-between px-6 py-5">
-            <h2 className="text-2xl font-bold text-card-foreground">{title}</h2>
-            <div className="flex items-center gap-2">
-              {onClose && (
-                <button type="button" onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-muted text-muted-foreground hover:text-foreground" aria-label="Close chat">
-                  <Cancel01Icon size={20} />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+      <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-card-foreground", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
+        {variant === "sidebar" ? (
+          <header className="flex items-center justify-between px-6 py-5">
+            <h2 className="text-2xl font-bold">{title}</h2>
+            {onClose ? (
+              <button type="button" onClick={onClose} className="rounded-full px-3 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close chat">
+                Close
+              </button>
+            ) : null}
+          </header>
+        ) : null}
 
-        <div ref={messagesContainerRef} onScroll={handleScroll} className={cn("flex-1 overflow-y-auto py-4", "[scrollbar-width:thin] [scrollbar-color:var(--border)_transparent]")}>
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center px-6">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-primary/10 text-primary">
-                <Message01Icon className="w-8 h-8" />
+        <div className="flex-1 overflow-y-auto px-4 py-3" aria-live="polite">
+          {hasOlder && onLoadOlder ? (
+            <Button variant="ghost" size="sm" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void onLoadOlder()}>
+              {loadingOlder ? "Loading…" : "Load earlier messages"}
+            </Button>
+          ) : null}
+          {messages.length === 0 && pendingMessages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Message01Icon className="h-8 w-8" />
               </div>
-              <h3 className="font-medium mb-1 text-card-foreground">No messages yet</h3>
-              <p className="text-sm max-w-[200px] text-muted-foreground">Send a message to start the conversation</p>
+              <h3 className="mb-1 font-medium">No messages yet</h3>
+              <p className="max-w-[220px] text-sm text-muted-foreground">Send a message to start the conversation.</p>
             </div>
           ) : (
-            <div>
-              {messageGroups.map((group, groupIndex) => (
-                <div key={`group-${groupIndex}`}>
-                  {group.messages.map((msg, msgIndex) => {
-                    const isLocalMessage = msg.isLocal ?? (localParticipantId !== undefined && msg.senderId === localParticipantId);
-
-                    return (
-                      <MessageBubble
-                        key={msg.id}
-                        content={msg.content}
-                        senderName={msg.senderName}
-                        timestamp={msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)}
-                        isLocal={isLocalMessage}
-                        isFirstInGroup={msgIndex === 0}
-                        isLastInGroup={msgIndex === group.messages.length - 1}
-                        showSender={msgIndex === 0}
-                        showTimestamp={msgIndex === group.messages.length - 1}
-                        showAvatar={true}
-                        attachments={msg.attachments}
-                        readBy={msg.readBy}
-                        onResolveAttachmentUrl={onResolveAttachmentUrl}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+            grouped.map((group) => (
+              <div key={`${group.senderId}-${group.firstMessageId}`}>
+                {group.messages.map((message, index) => (
+                  <MessageBubble
+                    key={message.id}
+                    content={message.content}
+                    senderName={message.senderName}
+                    timestamp={message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp)}
+                    isLocal={message.isLocal ?? (localParticipantId !== undefined && message.senderId === localParticipantId)}
+                    isFirstInGroup={index === 0}
+                    isLastInGroup={index === group.messages.length - 1}
+                    showSender={index === 0}
+                    showTimestamp={index === group.messages.length - 1}
+                    showAvatar
+                  />
+                ))}
+              </div>
+            ))
           )}
-          <div ref={messagesEndRef} className="h-1" />
+          {pendingMessages.map((pending) => (
+            <div key={pending.id} className="my-2 ml-auto max-w-[85%] rounded-2xl bg-primary/10 px-3 py-2 text-sm">
+              <p>{pending.content}</p>
+              <div className="mt-1 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                <span>{pending.state === "sending" ? "Sending…" : pending.error || "Not sent"}</span>
+                {pending.state === "failed" && onRetryMessage ? (
+                  <button type="button" className="font-medium text-primary hover:underline" onClick={() => void onRetryMessage(pending.id)}>
+                    Retry
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          <div ref={endRef} />
         </div>
 
-        {!isAtBottom && messages.length > 0 && (
-          <Button onClick={() => scrollToBottom()} size="sm" className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
-            Jump to latest
-          </Button>
+        {(error || composerError) && (
+          <p role="alert" className="mx-4 mb-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {composerError || error}
+          </p>
         )}
-
-        <div className="px-6 py-5 border-t border-border/30">
-          {/* Attachment Tray */}
-          {selectedFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-              {selectedFiles.map((file, index) => {
-                const isImage = file.type.startsWith("image/");
-                return (
-                  <div key={`${file.name}-${index}`} className="relative group">
-                    <div className={cn("flex items-center gap-2 p-2 rounded-xl border bg-muted/30 border-border/50", isImage ? "pr-3" : "px-3")}>
-                      {isImage ? (
-                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-border/30">
-                          <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)} />
-                        </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10 text-primary shrink-0">
-                          <FileTextIcon className="w-5 h-5" />
-                        </div>
-                      )}
-                      <div className="max-w-[120px]">
-                        <p className="text-xs font-medium truncate">{file.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{formatFileSize(file.size)}</p>
-                      </div>
-                    </div>
-                    <button type="button" onClick={() => removeFile(index)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-transform">
-                      <CancelCircleIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {attachmentError && (
-            <div className="mb-3 p-2 px-3 rounded-lg bg-destructive/10 text-destructive text-[11px] font-medium animate-in fade-in duration-200" role="alert">
-              {attachmentError}
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple />
-            <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} className="flex-shrink-0 w-11 h-11 rounded-full bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted/80" aria-label="Add attachment">
-              <PlusSignIcon className="w-5 h-5" />
-            </Button>
-
-            <div className="flex-1">
-              <textarea
-                ref={textareaRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder || "Write message..."}
-                disabled={disabled || uploading}
-                aria-label="Message"
-                className={cn("w-full py-3 px-5 resize-none outline-none rounded-2xl text-sm", "bg-muted/50", "text-foreground", "placeholder:text-muted-foreground", "focus:ring-2 focus:ring-primary/50 focus:bg-muted/70", "transition-all")}
-                style={{ minHeight: "44px", maxHeight: "120px" }}
-                rows={1}
-              />
-            </div>
-
-            <Button
-              onClick={handleSend}
-              disabled={(!inputValue.trim() && selectedFiles.length === 0) || disabled || uploading}
-              size="icon"
-              className={cn("flex-shrink-0 w-11 h-11 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25", uploading && "opacity-70 cursor-not-allowed")}
-              aria-label="Send message"
-            >
-              {uploading ? <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> : <SentIcon className="w-5 h-5 ml-0.5" />}
-            </Button>
-          </div>
+        <div className="flex items-end gap-3 border-t border-border/30 px-4 py-4">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              void send();
+            }}
+            placeholder={placeholder}
+            disabled={disabled || sending}
+            aria-label="Message"
+            className="min-h-11 max-h-[120px] flex-1 resize-none rounded-2xl bg-muted/50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/50"
+            rows={1}
+          />
+          <Button type="button" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={!draft.trim() || disabled || sending} onClick={() => void send()} aria-label="Send message">
+            <SentIcon className="h-5 w-5" />
+          </Button>
         </div>
       </div>
     );
@@ -312,3 +161,18 @@ export const ChatPanel = React.memo(
 );
 
 ChatPanel.displayName = "ChatPanel";
+
+function groupMessages(messages: readonly ChatMessage[]) {
+  const groups: { readonly senderId: string; readonly firstMessageId: string; readonly messages: ChatMessage[] }[] = [];
+  for (const message of messages) {
+    const group = groups.at(-1);
+    const previous = group?.messages.at(-1);
+    const withinWindow = previous && new Date(message.timestamp).getTime() - new Date(previous.timestamp).getTime() < 120_000;
+    if (group && group.senderId === message.senderId && withinWindow) {
+      group.messages.push(message);
+    } else {
+      groups.push({ senderId: message.senderId, firstMessageId: message.id, messages: [message] });
+    }
+  }
+  return groups;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { Alert, type AlertButton, Share } from "react-native";
 import { useChalkSession, useSession } from "../../context/chalk-native-provider";
 import { useChat } from "../../hooks/useChat";
@@ -13,6 +13,8 @@ import { useRoom } from "../../hooks/useRoom";
 import { useScreenShare } from "../../hooks/useScreenShare";
 import { useTranscripts } from "../../hooks/useTranscripts";
 import { useWhiteboard } from "../../hooks/useWhiteboard";
+import { useOptionalChalkSnapshot } from "../../hooks/useChalkRoomActions";
+import { createNativeMediaRequestPrompt, createNativeRoomActionCommands, projectNativeRoomActions } from "../../room-actions/native-room-actions";
 import { buildChalkInviteLink } from "../../utils/build-chalk-invite-link";
 import { isIosSimulator } from "../../utils/ios-simulator";
 import type { NativeMeetingRoomProps } from "../NativeMeetingRoom";
@@ -56,6 +58,10 @@ export interface NativeMeetingRoomController {
   canReactions: boolean;
   canHandRaise: boolean;
   canWhiteboard: boolean;
+  canRequestMedia: boolean;
+  canMuteParticipants: boolean;
+  canRemoveParticipants: boolean;
+  canStopParticipantCamera: boolean;
   roomDiagnostics: NativeMeetingRoomDiagnosticsSnapshot;
   devices: ReturnType<typeof useDevices>;
   participants: ReturnType<typeof useParticipants>;
@@ -84,7 +90,9 @@ export interface NativeMeetingRoomController {
   refreshDevices: () => void;
   removeParticipant: (participantId: string) => void;
   muteParticipant: (participantId: string) => void;
-  unmuteParticipant: (participantId: string) => void;
+  requestUnmuteParticipant: (participantId: string) => void;
+  requestStartParticipantCamera: (participantId: string) => void;
+  stopParticipantCamera: (participantId: string) => void;
   selectCamera: (deviceId: string) => void;
   selectMicrophone: (deviceId: string) => void;
   selectSpeaker: (deviceId: string) => void;
@@ -93,7 +101,7 @@ export interface NativeMeetingRoomController {
 export function useNativeMeetingRoomController({ roomName, features, onLeave, onEndForAll, onDiagnosticsChange }: NativeMeetingRoomProps): NativeMeetingRoomController {
   const simulatorMediaDisabled = isIosSimulator();
   const session = useSession();
-  const { removeParticipant, muteParticipant, unmuteParticipant } = useChalkSession();
+  const { sessionStore } = useChalkSession();
   const media = useMedia();
   const devices = useDevices();
   const participants = useParticipants();
@@ -106,17 +114,22 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   const layout = useLayout();
   const panels = usePanels();
   const whiteboard = useWhiteboard();
+  const chalkSnapshot = useOptionalChalkSnapshot();
+  const roomActions = useMemo(() => projectNativeRoomActions(chalkSnapshot), [chalkSnapshot]);
+  const roomActionCommands = useMemo(() => (sessionStore ? createNativeRoomActionCommands(sessionStore) : null), [sessionStore]);
+  const promptedRequestId = useRef<string | null>(null);
   const derived = useNativeMeetingRoomDerived({
     participants: participants.participants,
     localParticipant: participants.localParticipant,
     screenShare,
-    isWhiteboardOpen: whiteboard.isOpen,
+    isWhiteboardOpen: false,
   });
 
   const store = useMemo(() => new NativeMeetingRoomControllerStore(), []);
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
-  const isHost = (participants.localParticipant?.role ?? "participant") === "host";
+  const localChalkParticipant = chalkSnapshot?.participants.find((participant) => participant.participantSessionId === chalkSnapshot.subject?.participantSessionId);
+  const isHost = (localChalkParticipant?.role ?? participants.localParticipant?.role ?? "participant") === "host";
   const panel = snapshot.localPanel ?? panels.activePanel;
   const selfName = participants.localParticipant?.displayName || "Guest";
   const isMuted = !media.isAudioEnabled;
@@ -124,7 +137,7 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   const handRaised = interactions.isHandRaised;
   const raisedHandCount = interactions.raisedHandCount;
   const activeReactions = interactions.activeReactions.slice(-3);
-  const canChat = features?.chat !== false;
+  const canChat = features?.chat !== false && roomActions.chatEnabled;
   const canParticipants = features?.participants !== false;
   const canTranscripts = features?.transcripts !== false;
   const canSettings = features?.settings !== false;
@@ -137,9 +150,35 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   );
   const canScreenShare = screenShareAvailability.enabled;
   const canRecording = features?.recording !== false;
-  const canReactions = features?.reactions !== false;
+  const canReactions = features?.reactions !== false && roomActions.reactionEnabled;
   const canHandRaise = features?.handRaise !== false;
-  const canWhiteboard = features?.whiteboard !== false;
+  const canWhiteboard = false;
+  const canRequestMedia = localChalkParticipant?.capabilities.includes("requestMediaOthers") ?? false;
+  const canMuteParticipants = localChalkParticipant?.capabilities.includes("muteOthers") ?? false;
+  const canRemoveParticipants = localChalkParticipant?.capabilities.includes("removeParticipant") ?? false;
+  const canStopParticipantCamera = localChalkParticipant?.capabilities.includes("stopVideoOthers") ?? false;
+
+  const runAsync = useCallback(async (action: () => void | Promise<unknown>) => {
+    try {
+      await Promise.resolve(action());
+    } catch (cause) {
+      console.warn("NativeMeetingRoom async action failed:", cause);
+    }
+  }, []);
+
+  useEffect(() => {
+    const request = roomActions.incomingRequest;
+    if (!request || !roomActionCommands) {
+      promptedRequestId.current = null;
+      return;
+    }
+    if (promptedRequestId.current === request.requestId) return;
+    promptedRequestId.current = request.requestId;
+    const prompt = createNativeMediaRequestPrompt(request, roomActionCommands, (cause) => {
+      console.warn("NativeMeetingRoom media request failed:", cause);
+    });
+    Alert.alert(prompt.title, prompt.message, [...prompt.buttons]);
+  }, [roomActionCommands, roomActions.incomingRequest]);
 
   const roomDiagnostics = useMemo(
     () =>
@@ -174,14 +213,6 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
     onDiagnosticsChange,
   });
 
-  const runAsync = useCallback(async (action: () => void | Promise<unknown>) => {
-    try {
-      await Promise.resolve(action());
-    } catch (cause) {
-      console.warn("NativeMeetingRoom async action failed:", cause);
-    }
-  }, []);
-
   const handleLeave = useCallback(() => {
     const buttons: AlertButton[] = [
       { text: "Cancel", style: "cancel" },
@@ -202,6 +233,8 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   const openPanel = useCallback(
     (nextPanel: NativeMeetingPanelName) => {
       store.setActionsOpen(false);
+      if (nextPanel === "whiteboard") return;
+      if (nextPanel === "chat" && !canChat) return;
       if (nextPanel === "transcripts") {
         panels.closePanel();
         store.setLocalPanel("transcripts");
@@ -211,7 +244,7 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       store.setLocalPanel(null);
       panels.openPanel(nextPanel);
     },
-    [panels, store],
+    [canChat, panels, store],
   );
 
   const closePanel = useCallback(() => {
@@ -261,6 +294,10 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
     canReactions,
     canHandRaise,
     canWhiteboard,
+    canRequestMedia,
+    canMuteParticipants,
+    canRemoveParticipants,
+    canStopParticipantCamera,
     roomDiagnostics,
     devices,
     participants,
@@ -334,26 +371,37 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       if (!canReactions) {
         return;
       }
-      interactions.sendReaction(emoji);
+      void runAsync(() => interactions.sendReaction(emoji));
     },
     sendChatMessage: () => {
       if (!snapshot.chatDraft.trim()) {
         return;
       }
-      chat.sendMessage(snapshot.chatDraft.trim());
+      void runAsync(() => chat.sendMessage(snapshot.chatDraft.trim()));
       store.setChatDraft("");
     },
     refreshDevices: () => {
       void runAsync(devices.refreshDevices);
     },
     removeParticipant: (participantId: string) => {
-      void runAsync(() => removeParticipant(participantId));
+      if (!roomActionCommands) throw new Error("ChalkNativeProvider requires sessionStore for participant moderation.");
+      void runAsync(() => roomActionCommands.removeParticipant(participantId));
     },
     muteParticipant: (participantId: string) => {
-      void runAsync(() => muteParticipant(participantId));
+      if (!roomActionCommands) throw new Error("ChalkNativeProvider requires sessionStore for participant moderation.");
+      void runAsync(() => roomActionCommands.muteParticipant(participantId));
     },
-    unmuteParticipant: (participantId: string) => {
-      void runAsync(() => unmuteParticipant(participantId));
+    requestUnmuteParticipant: (participantId: string) => {
+      if (!roomActionCommands) throw new Error("ChalkNativeProvider requires sessionStore for media requests.");
+      void runAsync(() => roomActionCommands.requestUnmute(participantId));
+    },
+    requestStartParticipantCamera: (participantId: string) => {
+      if (!roomActionCommands) throw new Error("ChalkNativeProvider requires sessionStore for media requests.");
+      void runAsync(() => roomActionCommands.requestStartCamera(participantId));
+    },
+    stopParticipantCamera: (participantId: string) => {
+      if (!roomActionCommands) throw new Error("ChalkNativeProvider requires sessionStore for participant moderation.");
+      void runAsync(() => roomActionCommands.stopParticipantCamera(participantId));
     },
     selectCamera: (deviceId: string) => {
       void runAsync(() => devices.selectCamera(deviceId));
