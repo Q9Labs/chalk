@@ -1796,13 +1796,13 @@
           <ol class="phases">
             <li class="done">0 · Accepted scope<span class="caption">All five product decisions and scope fences</span></li>
             <li class="now">1 · Contract + types<span class="caption">Legacy/extended Sync v3, whiteboard-v1, ports, compile tests</span></li>
-            <li class="">2 · Foundations<span class="caption">Database/reducer, then Sync v3 room-actions and whiteboard-v1 lanes</span></li>
-            <li class="">3 · Client core<span class="caption">Session, extended V3Client, whiteboard client, adapters</span></li>
-            <li class="">4 · Product<span class="caption">Web room and iOS/Android non-whiteboard actions</span></li>
+            <li class="">2 · Core implementation<span class="caption">Three lanes: backend, whiteboard, and SDK</span></li>
+            <li class="">3 · Integration<span class="caption">Orchestrator reconciles shared seams and proves lifecycle</span></li>
+            <li class="">4 · Product<span class="caption">One lane for web, iOS, and Android surfaces</span></li>
             <li class="">5 · Hardening<span class="caption">Two replicas, restart, quotas, overload, retention</span></li>
             <li class="">6 · Handoff<span class="caption">Release notes, bounded review, root gate, commit</span></li>
           </ol>
-          <div class="beat" data-mark=""><p>Each fan-out rejoins at an explicit integration gate. First-party UI cannot begin against private protocol shapes; it consumes the compiled Session API.</p></div>
+          <div class="beat" data-mark=""><p>The orchestrator is not another lane. Three core workers rejoin at the integration gate, then one product worker consumes the compiled Session API across web and mobile.</p></div>
         </section>
 
         <section class="slide" data-spine="Done">

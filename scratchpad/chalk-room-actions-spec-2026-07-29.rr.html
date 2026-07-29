@@ -228,14 +228,14 @@ export type ChalkWhiteboardV1Transport = {
       <rr-phases>
         <rr-phase label="0 · Accepted scope" caption="All five product decisions and scope fences" state="done" />
         <rr-phase label="1 · Contract + types" caption="Legacy/extended Sync v3, whiteboard-v1, ports, compile tests" state="now" />
-        <rr-phase label="2 · Foundations" caption="Database/reducer, then Sync v3 room-actions and whiteboard-v1 lanes" />
-        <rr-phase label="3 · Client core" caption="Session, extended V3Client, whiteboard client, adapters" />
-        <rr-phase label="4 · Product" caption="Web room and iOS/Android non-whiteboard actions" />
+        <rr-phase label="2 · Core implementation" caption="Three lanes: backend, whiteboard, and SDK" />
+        <rr-phase label="3 · Integration" caption="Orchestrator reconciles shared seams and proves lifecycle" />
+        <rr-phase label="4 · Product" caption="One lane for web, iOS, and Android surfaces" />
         <rr-phase label="5 · Hardening" caption="Two replicas, restart, quotas, overload, retention" />
         <rr-phase label="6 · Handoff" caption="Release notes, bounded review, root gate, commit" />
       </rr-phases>
       <rr-beat>
-        <p>Each fan-out rejoins at an explicit integration gate. First-party UI cannot begin against private protocol shapes; it consumes the compiled Session API.</p>
+        <p>The orchestrator is not another lane. Three core workers rejoin at the integration gate, then one product worker consumes the compiled Session API across web and mobile.</p>
       </rr-beat>
     </rr-slide>
 

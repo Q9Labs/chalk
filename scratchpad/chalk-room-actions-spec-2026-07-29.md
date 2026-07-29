@@ -1140,39 +1140,29 @@ gate.
 
 ```mermaid
 flowchart TD
-  D["Spec owner<br/>Accepted scope"]
-  F["Contract owner<br/>Freeze public, wire, repository, reducer, fan-out ports"]
-  G1{"Legacy/extended Sync v3 + whiteboard-v1 contract gate"}
-  DB["Data lane<br/>Keys, quotas, receipts, retention"]
-  ROOM["Sync v3 room-actions lane<br/>Chat, reactions, recovery, fan-out"]
-  BOARD["whiteboard-v1 lane<br/>Socket, fencing, recovery, telemetry"]
-  FILES["File API lane<br/>File auth and object lifecycle"]
-  SDK["SDK lane<br/>Session, extended V3Client, whiteboard-v1, adapters"]
-  WB["Whiteboard lane<br/>Reducer fixtures and wire conversion"]
-  INT["Integration owner<br/>Generated contracts and Session lifecycle"]
-  WEB["Web lane<br/>Turnkey room wiring"]
-  MOB["Mobile lane<br/>Selected RN scope"]
+  G1{"Contract + type gate<br/>Sync v3 and whiteboard-v1"}
+  BACKEND["Room-actions backend lane<br/>Persistence, Sync v3, fan-out, retention"]
+  WHITEBOARD["Whiteboard lane<br/>whiteboard-v1, reducer, files"]
+  SDK["SDK lane<br/>Clients, Session, React/RN adapters"]
+  INT{"Integration gate<br/>Server + SDK + Session lifecycle"}
+  PRODUCT["Product lane<br/>Web + iOS + Android"]
   G2{"Multi-client, restart, migration, and device gate"}
-  HANDOFF["Owner<br/>Review, release notes, scoped commit"]
+  HANDOFF["Review, release notes, scoped commit"]
 
-  D --> F --> G1
-  G1 --> DB
+  G1 --> BACKEND
+  G1 --> WHITEBOARD
   G1 --> SDK
-  G1 --> WB
-  DB --> ROOM
-  DB --> BOARD
-  WB --> BOARD
-  DB --> FILES
-  ROOM --> INT
-  BOARD --> INT
+  BACKEND --> INT
+  WHITEBOARD --> INT
   SDK --> INT
-  FILES --> INT
-  INT --> WEB
-  INT --> MOB
-  WEB --> G2
-  MOB --> G2
+  INT --> PRODUCT
+  PRODUCT --> G2
   G2 --> HANDOFF
 ```
+
+The orchestrator is not a worker lane. I own the contract gate, shared
+registration files, cross-lane integration, system diagnosis, final
+verification, and sign-off. Workers implement the four bounded lanes.
 
 ### Phase ownership and handoffs
 
@@ -1181,49 +1171,43 @@ bindings, public TypeScript types, compile-only consumer tests, and failure
 unions before runtime implementation. UI work starts only after the integrated
 Session surface compiles against the real clients.
 
-| Phase                          | DAG nodes                  | Deliverable and interface                                                                                                                                                                                                                                                                    | Exit proof                                                                                                                                      |
-| ------------------------------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0. Accepted scope              | D                          | All five product decisions and scope fences                                                                                                                                                                                                                                                  | Decision ledger accepted; spec is executable                                                                                                    |
-| 1. Contract and types          | F → G1                     | strict legacy/extended Sync v3 unions, handwritten `V3RoomActionsClient` types, `whiteboard-v1` schema, generated bindings, public types, control-first logical queue budgets, repository ports, reducer input/output, fan-out envelopes, required file-service port, compile-only API tests | Generation, exhaustive unions, public exports, queue fixtures, port fixtures, legacy-client/new-server and new-client/legacy-server checks pass |
-| 2. Foundations and server      | DB, WB, ROOM, BOARD, FILES | DB and reducer lanes implement frozen ports; the Sync v3 room-actions lane consumes chat/reaction ports, `whiteboard-v1` consumes DB/reducer ports, and FILES implements authenticated object lifecycle                                                                                      | Fresh/upgrade migrations, reducer fixtures, independent two-replica feature-path tests, and file lifecycle tests pass                           |
-| 3. Client core and integration | SDK → INT                  | extended `V3Client`, `ChalkWhiteboardV1Client`, Session snapshot/actions, React selectors, native room-action adapter                                                                                                                                                                        | Real SyncEngine integration tests prove typed successes, isolated failures, reconnect, and cleanup                                              |
-| 4. Product surfaces            | WEB and MOB                | Web panels/prompts/menus/board plus iOS and Android reactions, chat, requests, and moderation; native whiteboard hidden                                                                                                                                                                      | Two-browser product run and separate iOS/Android room-action runs pass                                                                          |
-| 5. System hardening            | G2                         | Restart, two replicas, lost/duplicate hints, quotas, overload isolation, retention, privacy, migration, and selected storage failure matrix                                                                                                                                                  | Every observable done criterion has current evidence                                                                                            |
-| 6. Handoff                     | HANDOFF                    | Release notes, one bounded code review, fixes, scoped commit                                                                                                                                                                                                                                 | Root gate passes with no unresolved required finding                                                                                            |
+| Phase                  | DAG nodes                | Deliverable and interface                                                                                                                                                                                                                                                                    | Exit proof                                                                                                                                      |
+| ---------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Accepted scope      | Complete before DAG      | All five product decisions and scope fences                                                                                                                                                                                                                                                  | Decision ledger accepted; spec is executable                                                                                                    |
+| 1. Contract and types  | G1                       | strict legacy/extended Sync v3 unions, handwritten `V3RoomActionsClient` types, `whiteboard-v1` schema, generated bindings, public types, control-first logical queue budgets, repository ports, reducer input/output, fan-out envelopes, required file-service port, compile-only API tests | Generation, exhaustive unions, public exports, queue fixtures, port fixtures, legacy-client/new-server and new-client/legacy-server checks pass |
+| 2. Core implementation | BACKEND, WHITEBOARD, SDK | Room-actions backend owns chat/reaction persistence and Sync v3 delivery; whiteboard owns its protocol, persistence, reducer, and files; SDK owns both clients, Session state/actions, and React/RN adapters                                                                                 | Focused server, database, reducer, file, and SDK gates pass independently                                                                       |
+| 3. Integration         | INT                      | Shared SyncEngine registration, generated contracts, Session lifecycle, retry/recovery, and cross-lane error mapping                                                                                                                                                                         | Real SyncEngine integration tests prove typed successes, isolated failures, reconnect, and cleanup                                              |
+| 4. Product surfaces    | PRODUCT                  | One worker wires web panels/prompts/menus/board and iOS/Android reactions, chat, requests, and moderation; native whiteboard stays hidden                                                                                                                                                    | Two-browser product run and separate iOS/Android room-action runs pass                                                                          |
+| 5. System hardening    | G2                       | Restart, two replicas, lost/duplicate hints, quotas, overload isolation, retention, privacy, migration, and selected storage failure matrix                                                                                                                                                  | Every observable done criterion has current evidence                                                                                            |
+| 6. Handoff             | HANDOFF                  | Release notes, one bounded code review, fixes, scoped commit                                                                                                                                                                                                                                 | Root gate passes with no unresolved required finding                                                                                            |
 
 Scope fences:
 
 - Phase 1 changes schemas, generated artifacts, exports, and type tests only; it
   does not implement handlers or UI.
-- DB, WB, and SDK start from G1 on disjoint modules. The Sync v3 room-actions
-  and FILES lanes wait for DB. `whiteboard-v1` waits for DB and WB. Neither
-  server lane invents private storage or merge behavior.
-- Phase 3 owns public SDK behavior and adapters, not first-party room layout.
-- Phase 4 consumes only the frozen public API. App components do not import
-  protocol clients or database-specific shapes.
+- BACKEND, WHITEBOARD, and SDK start together after G1 and own disjoint files.
+  Common SyncEngine routing, supervision, generated-file reconciliation, and
+  Session assembly remain untouched until INT.
+- WHITEBOARD owns its server modules, migrations, reducer fixtures, file
+  lifecycle, and `packages/whiteboard`; SDK owns the TypeScript transport client
+  and public adapter seam.
+- PRODUCT begins only after INT and owns web and mobile product wiring as one
+  sequential lane.
 - Phase 5 fixes defects found by system proof but does not widen feature scope.
 
 ### Resumable execution checklist
 
-- [x] D — accept all five product decisions and scope fences.
-- [ ] F — freeze wire schemas, public APIs, types, and failure unions.
 - [ ] G1 — pass generation, public type, legacy/extended Sync v3 coexistence,
       and `whiteboard-v1` contract gates.
-- [ ] DB — land keys, fences, quotas, receipts, queries, and retention.
-- [ ] WB — land pinned Excalidraw golden fixtures, deterministic reducer, and
-      wire conversion; do not own the browser adapter.
-- [ ] ROOM — land the Sync v3 `room_actions_v1` extension, chat/reaction
-      authorization, recovery, and cross-replica fan-out.
-- [ ] BOARD — land `whiteboard-v1` authorization, receipts, snapshots, cursors,
-      recovery, and cross-replica fan-out.
-- [ ] FILES — land participant-authenticated initiate/upload/finalize/download,
-      provider verification, quotas, expiry, and orphan cleanup.
+- [ ] BACKEND — land chat/reaction persistence, Sync v3 authorization,
+      recovery, cross-replica fan-out, quotas, and retention.
+- [ ] WHITEBOARD — land `whiteboard-v1`, scene persistence, reducer fixtures,
+      receipts, cursors, image files, recovery, and cleanup.
 - [ ] SDK — extend `V3Client`, land the `whiteboard-v1` client, Session
-      state/actions, React selectors, native room actions, and the browser board
-      adapter.
+      state/actions, React selectors, and native room-action adapters.
 - [ ] INT — prove the generated contract, server, and SDK together.
-- [ ] WEB — wire the turnkey browser room and real Excalidraw adapter.
-- [ ] MOB — wire and prove iOS/Android non-whiteboard room actions.
+- [ ] PRODUCT — wire the turnkey browser room, real Excalidraw adapter, and
+      iOS/Android non-whiteboard room actions.
 - [ ] G2 — pass the full multi-client, restart, migration, overload, and device
       evidence matrix.
 - [ ] HANDOFF — update release notes, review once, fix findings, pass root gate,
