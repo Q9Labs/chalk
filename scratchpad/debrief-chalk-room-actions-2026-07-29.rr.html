@@ -1,0 +1,402 @@
+<rr-doc title="Chalk room actions — implementation debrief" register="debrief" project="chalk" risk="major" verdict="needs-attention" minutes="12" summary="Chat, reactions, browser whiteboard, moderation, and media requests landed; default native runtime and real R2 whiteboard proof remain incomplete.">
+
+<rr-toc>
+  <rr-toc-link href="#background" label="Background"/>
+  <rr-toc-link href="#summary" label="Verdict"/>
+  <rr-toc-link href="#world" label="Mini world"/>
+  <rr-toc-link href="#map" label="System map"/>
+  <rr-toc-link href="#api" label="Public API"/>
+  <rr-toc-link href="#phases" label="Execution"/>
+  <rr-toc-link href="#proof" label="Proof"/>
+  <rr-toc-link href="#findings" label="Findings"/>
+</rr-toc>
+
+<rr-header kicker="Implementation debrief · 29 Jul 2026" title="The room can now talk, react, draw, and ask" icon="users">
+  <p>The browser room now carries durable chat, short-lived reactions, host controls, consent-based microphone and camera requests, and a shared drawing board. The release is <b>not done</b>: the default mobile runtime cannot yet create the canonical room store, and the drawing board has not run end to end against real object storage.</p>
+</rr-header>
+
+<rr-section id="background" title="Background" icon="compass">
+  <rr-panes>
+    <rr-before label="Before">
+      <p>The turnkey room could join, leave, publish media, share a screen, raise a hand, and show the roster. Lower layers held some host controls, but the product did not expose them. Chat, reactions, and a shared board stopped short of a complete public path.</p>
+    </rr-before>
+    <rr-after label="Now">
+      <p>One canonical room store owns room actions and projects immutable state to web and mobile adapters. Chat and reactions share the existing <rr-term def="The third version of Chalk's live room connection. It carries control state and now also carries negotiated chat and reaction messages.">Sync v3</rr-term> connection. Only the board uses <rr-term def="The separate wire contract used by the shared drawing board. Keeping it separate prevents drawing traffic from delaying room control messages.">whiteboard-v1</rr-term>.</p>
+    </rr-after>
+  </rr-panes>
+  <rr-journey>
+    <rr-stop>Room UI</rr-stop><rr-sep/>
+    <rr-stop tone="new">Canonical room store</rr-stop><rr-sep/>
+    <rr-stop tone="new">Two live transports</rr-stop><rr-sep/>
+    <rr-stop>Database + object storage</rr-stop>
+  </rr-journey>
+</rr-section>
+
+<rr-section id="summary" title="Grand summary" icon="bolt">
+  <rr-tiles>
+    <rr-tile icon="check" label="Browser actions" value="Proven" caption="chat · reaction · requests" tone="green"/>
+    <rr-tile icon="db" label="Chat" value="Durable" caption="paged · retained 7 days" tone="green"/>
+    <rr-tile icon="branch" label="Board lane" value="Separate" caption="whiteboard-v1" tone="green"/>
+    <rr-tile icon="warning" label="Release" value="Not done" caption="2 product proofs missing" tone="red"/>
+  </rr-tiles>
+
+  <rr-callout tone="red"><b>Verdict — needs attention.</b> The browser implementation and the server paths are substantial and well tested. Do not call the whole room experience complete until a default mobile room can use these actions without an injected store and a real browser completes board file upload, finalize, download, and cleanup against <rr-term def="Cloudflare's object storage service. Chalk uses it for images placed on the drawing board.">R2</rr-term>.</rr-callout>
+
+  <rr-cols2>
+    <rr-card>
+      <h3 style="margin-top:0">What landed</h3>
+      <ul>
+        <li>Negotiated chat and reactions on <rr-term def="The third version of Chalk's live room connection.">Sync v3</rr-term>, with old-client fallback.</li>
+        <li>Room-wide chat in <rr-term def="The relational database used for durable Chalk data. Chat pages and board state survive process restarts here.">Postgres</rr-term>; reactions stay short-lived.</li>
+        <li>A separate <rr-term def="The drawing-board wire contract and connection.">whiteboard-v1</rr-term> connection with an <rr-term def="The open-source canvas editor used for Chalk's shared drawing surface.">Excalidraw</rr-term>-compatible reducer.</li>
+        <li>Browser chat, reactions, moderation, ask-to-unmute, ask-to-start-camera, and board controls.</li>
+        <li>Participant-authenticated staged board file transfer and seven-day cleanup.</li>
+      </ul>
+    </rr-card>
+    <rr-card>
+      <h3 style="margin-top:0">Deliberate fences</h3>
+      <ul>
+        <li>No recording controls.</li>
+        <li>No native mobile board.</li>
+        <li>Media requests never turn on a device by force; the target accepts or declines.</li>
+        <li>A slow board cannot consume the room-control queue.</li>
+        <li>Unsupported mobile actions stay disabled instead of calling old no-op methods.</li>
+      </ul>
+    </rr-card>
+  </rr-cols2>
+</rr-section>
+
+<style>
+  #world .stage-head > .stage-body { flex: 1 0 100%; order: 5; }
+  #world .stage-head > button[data-fullscreen] { order: 2; }
+  #world .stage-head > .legend { order: 1; }
+  .room-world-controls { display: flex; flex-wrap: wrap; gap: var(--s1); margin-bottom: var(--s3); }
+  .room-world-controls button.active { color: var(--accent); border-color: var(--accent); }
+  .room-world-grid { display: grid; grid-template-columns: 1fr auto 1.3fr auto 1fr; align-items: stretch; gap: var(--s2); }
+  .room-world-node { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s3); min-height: 12rem; }
+  .room-world-node.lit { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+  .room-world-node.failed { border-color: var(--red); }
+  .room-world-node h3 { margin: 0 0 var(--s1); }
+  .room-world-arrow { display: grid; place-items: center; color: var(--muted); font: 600 var(--t-sub)/1 var(--mono); }
+  .room-world-route { margin: var(--s2) 0 0; padding: 0; list-style: none; }
+  .room-world-route li { border-left: 2px solid var(--line); padding: 0 0 var(--s2) var(--s2); color: var(--muted); font-size: var(--t-support); }
+  .room-world-route li.lit { border-color: var(--accent); color: var(--fg); }
+  .room-world-narration { margin-top: var(--s3); border: 1px solid var(--line); background: var(--bg); padding: var(--s2) var(--s3); min-height: 5rem; }
+  @media (max-width: 820px) {
+    .room-world-grid { grid-template-columns: 1fr; }
+    .room-world-arrow { transform: rotate(90deg); min-height: 2rem; }
+  }
+</style>
+
+<rr-stage id="world" crumb="Room action simulator · choose one path">
+  <rr-legend>
+    <rr-key kind="lit">active path</rr-key>
+    <rr-key kind="green">durable result</rr-key>
+    <rr-key kind="amber">consent or proof needed</rr-key>
+  </rr-legend>
+  <rr-stage-body>
+    <div class="room-world-controls" role="group" aria-label="Choose a room action">
+      <button type="button" data-room-lane="chat" class="active">Send chat</button>
+      <button type="button" data-room-lane="reaction">Send reaction</button>
+      <button type="button" data-room-lane="whiteboard">Draw + upload image</button>
+      <button type="button" data-room-lane="request">Ask to unmute</button>
+      <label>Failure
+        <select id="room-world-failure">
+          <option value="none">none</option>
+          <option value="sync">room connection down</option>
+          <option value="storage">object storage down</option>
+          <option value="decline">target declines</option>
+        </select>
+      </label>
+    </div>
+    <div class="room-world-grid">
+      <article class="room-world-node lit" data-world-node="client">
+        <h3>1 · Room surface</h3>
+        <p id="world-client-copy">Alice sends “Hello”. The room store adds a pending message.</p>
+      </article>
+      <div class="room-world-arrow" aria-hidden="true">→</div>
+      <article class="room-world-node lit" data-world-node="transport">
+        <h3>2 · Chosen lane</h3>
+        <ol class="room-world-route" id="world-route">
+          <li class="lit">Sync v3 room_actions_v1</li>
+          <li class="lit">Server admission + limits</li>
+          <li class="lit">Postgres insert + fan-out</li>
+        </ol>
+      </article>
+      <div class="room-world-arrow" aria-hidden="true">→</div>
+      <article class="room-world-node lit" data-world-node="result">
+        <h3>3 · Confirmed state</h3>
+        <p id="world-result-copy">The server assigns sequence 1. Both room stores project the confirmed message.</p>
+      </article>
+    </div>
+    <div class="room-world-narration" aria-live="polite" id="world-narration"><b>Chat is durable.</b> A reconnecting client asks for pages after its last sequence. Seven days after the room ends, cleanup removes the retained collaboration data.</div>
+    <rr-readout>
+      <rr-stat label="Control queue" value="isolated"/>
+      <rr-stat label="Chat retention" value="7 days"/>
+      <rr-stat label="Reaction lifetime" value="5 s"/>
+      <rr-stat label="Board transport" value="whiteboard-v1"/>
+    </rr-readout>
+  </rr-stage-body>
+</rr-stage>
+
+<script>
+  addEventListener("DOMContentLoaded", () => {
+    const scenarios = {
+      chat: {
+        client: "Alice sends “Hello”. The room store adds a pending message.",
+        route: ["Sync v3 room_actions_v1", "Server admission + limits", "Postgres insert + fan-out"],
+        result: "The server assigns a sequence. Both room stores project the confirmed message.",
+        note: "<b>Chat is durable.</b> A reconnecting client asks for pages after its last sequence. Seven days after the room ends, cleanup removes the retained collaboration data."
+      },
+      reaction: {
+        client: "Bob chooses 🎉. The room store sends one bounded action.",
+        route: ["Sync v3 room_actions_v1", "Transient admission + rate limit", "Cross-replica notification"],
+        result: "Both rooms show the reaction, then remove it after five seconds.",
+        note: "<b>Reactions are transient.</b> They fan out across replicas but never enter chat history or the durable control log."
+      },
+      whiteboard: {
+        client: "Alice draws in Excalidraw and adds an image.",
+        route: ["whiteboard-v1 update", "Postgres scene reducer", "API stage → R2 → finalize"],
+        result: "Peers merge the revision. The image becomes readable only after finalize.",
+        note: "<b>The board owns its lane.</b> Drawing updates cannot delay room control. Real R2 browser proof is still missing."
+      },
+      request: {
+        client: "A host asks Bob to unmute. Bob sees a timed prompt.",
+        route: ["Sync v3 directed request", "Target-only delivery", "Explicit accept or decline"],
+        result: "Only Bob can enable his microphone; decline changes no media state.",
+        note: "<b>Consent stays local.</b> The host can ask, but cannot force a microphone or camera on."
+      }
+    };
+    const buttons = [...document.querySelectorAll("[data-room-lane]")];
+    const failure = document.getElementById("room-world-failure");
+    const client = document.getElementById("world-client-copy");
+    const result = document.getElementById("world-result-copy");
+    const route = document.getElementById("world-route");
+    const narration = document.getElementById("world-narration");
+    let lane = "chat";
+    function render() {
+      const item = scenarios[lane];
+      buttons.forEach((button) => button.classList.toggle("active", button.dataset.roomLane === lane));
+      client.textContent = item.client;
+      result.textContent = item.result;
+      route.replaceChildren(...item.route.map((step) => {
+        const li = document.createElement("li");
+        li.className = "lit";
+        li.textContent = step;
+        return li;
+      }));
+      document.querySelectorAll("[data-world-node]").forEach((node) => node.classList.remove("failed"));
+      let note = item.note;
+      if (failure.value === "sync" && lane !== "whiteboard") {
+        document.querySelector('[data-world-node="transport"]').classList.add("failed");
+        result.textContent = "The action fails without pretending it was confirmed. Other local room controls keep their last known state.";
+        note = "<b>The room-action path reports unavailable.</b> Recovery retries the connection; chat can catch up from its durable sequence.";
+      } else if (failure.value === "storage" && lane === "whiteboard") {
+        document.querySelector('[data-world-node="result"]').classList.add("failed");
+        result.textContent = "The drawing update can still sync, but the image stays unfinalized and cannot appear as a trusted file.";
+        note = "<b>File failure stays inside the board.</b> Room control, chat, and reactions continue on their own path.";
+      } else if (failure.value === "decline" && lane === "request") {
+        result.textContent = "Bob declines. The prompt closes and his microphone remains off.";
+        note = "<b>Decline is a valid outcome.</b> No server or host path can turn the device on.";
+      }
+      narration.innerHTML = note;
+    }
+    buttons.forEach((button) => button.addEventListener("click", () => { lane = button.dataset.roomLane; render(); }));
+    failure.addEventListener("change", render);
+    render();
+  });
+</script>
+
+<rr-section id="map" title="System map and call stacks" icon="route">
+  <p>Three paths now meet at the canonical room store, then split by behavior. Chat and reactions reuse the room connection. Drawing owns a separate connection. Device requests reuse the existing target-only request path.</p>
+
+  <rr-cols2>
+    <rr-card>
+      <h3 style="margin-top:0">Chat + reactions</h3>
+      <rr-stack label="Calls">
+        <rr-frame fn="React room action" file="browser room">
+          <rr-frame fn="ChalkSession" file="canonical store">
+            <rr-frame fn="V3RoomActionsClient" file="Sync v3">
+              <rr-frame fn="SocketV3" file="Sync service">
+                <rr-frame fn="RoomActions" file="admission + result">
+                  <rr-frame fn="Postgres / fan-out" file="durable chat or transient reaction" tone="new"/>
+                </rr-frame>
+              </rr-frame>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-stack>
+    </rr-card>
+    <rr-card>
+      <h3 style="margin-top:0">Directed device request</h3>
+      <rr-stack label="Calls">
+        <rr-frame fn="Participant menu" file="host UI">
+          <rr-frame fn="ChalkSession.request…" file="canonical store">
+            <rr-frame fn="Sync target delivery" file="existing request lane">
+              <rr-frame fn="Incoming prompt" file="target UI">
+                <rr-frame fn="accept / decline" file="target-owned media state" tone="new"/>
+              </rr-frame>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-stack>
+    </rr-card>
+  </rr-cols2>
+
+  <rr-card>
+    <h3 style="margin-top:0">Drawing board + files</h3>
+    <rr-stack label="Calls">
+      <rr-frame fn="Excalidraw canvas" file="browser room">
+        <rr-frame fn="collaboration engine" file="merge + retry">
+          <rr-frame fn="whiteboard-v1 client" file="separate socket">
+            <rr-frame fn="Sync board reducer" file="scene revisions + Postgres" tone="new"/>
+          </rr-frame>
+          <rr-frame fn="file transport" file="stage / upload / finalize">
+            <rr-frame fn="participant-auth API" file="file routes">
+              <rr-frame fn="R2 object storage" file="protected file bytes" tone="new"/>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-frame>
+    </rr-stack>
+  </rr-card>
+
+  <table>
+    <thead><tr><th>Part</th><th>Responsibility now</th><th>Failure boundary</th></tr></thead>
+    <tbody>
+      <tr><td>Canonical room store</td><td>One typed snapshot and action surface for product adapters.</td><td>Rejects unconfirmed actions; never invents success.</td></tr>
+      <tr><td>Room connection</td><td>Negotiates chat and reactions without changing old clients.</td><td>Bounded action queue cannot starve control messages.</td></tr>
+      <tr><td>Board connection</td><td>Merges drawing revisions and resumes from a cursor.</td><td>Board recovery does not restart room control.</td></tr>
+      <tr><td>File service</td><td>Stages, verifies, protects, and deletes board images.</td><td>Failed files do not take down drawing or room actions.</td></tr>
+    </tbody>
+  </table>
+</rr-section>
+
+<rr-section id="api" title="Public API and type-driven boundary" icon="branch">
+  <rr-types label="Public shapes">
+    <rr-sig name="sendReaction" tone="new">(reaction) → confirmed room reaction</rr-sig>
+    <rr-sig name="sendChatMessage" tone="new">(text, optional client id) → confirmed chat message</rr-sig>
+    <rr-sig name="loadOlderChatMessages" tone="new">(limit?) → loaded page or retained-cursor reset</rr-sig>
+    <rr-sig name="requestUnmute / requestStartCamera" tone="new">(participant id) → delivered or unavailable</rr-sig>
+    <rr-sig name="acceptMediaRequest / declineMediaRequest" tone="new">(request id) → local consent outcome</rr-sig>
+    <rr-sig name="whiteboard" tone="new">transport or null</rr-sig>
+  </rr-types>
+
+  <rr-code file="public room API — TypeScript" lang="ts" collapsed="">
+export type ChalkSessionStore = ChalkSessionActions & {
+  readonly getSnapshot: () => ChalkSessionSnapshot;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly whiteboard: ChalkWhiteboardV1Transport | null;
+};
+
+export type ChalkSessionActions = {
+  readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkRoomReaction>;
+  readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
+  readonly retryChatMessage: (clientMessageId: string) => Promise<ChalkChatMessage>;
+  readonly loadOlderChatMessages: (limit?: number) => Promise<ChalkChatPageResult>;
+  readonly markChatRead: () => void;
+  readonly requestUnmute: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
+  readonly requestStartCamera: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
+  readonly acceptMediaRequest: (requestId: string) => Promise<void>;
+  readonly declineMediaRequest: (requestId: string) => void;
+};
+
+export type ChalkWhiteboardV1Transport = {
+  readonly startSceneSubscription: () => Promise<void>;
+  readonly stopSceneSubscription: () => void;
+  readonly subscribe: (listener: (event: ChalkWhiteboardV1Event) => void) => () => void;
+  readonly submitUpdate: (input: ChalkWhiteboardV1UpdateInput) => Promise<ChalkWhiteboardV1Commit>;
+  readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
+  readonly requestSnapshot: () => Promise<void>;
+  readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
+  readonly setDrawPermission: (participantSessionId: string, canDraw: boolean) => Promise<void>;
+  readonly files: ChalkWhiteboardV1FileTransport;
+};
+  </rr-code>
+
+  <rr-callout><b>Why the nullable board matters.</b> Browser builds create the board transport. Native builds pass no board URL and expose null, which keeps the deferred mobile board out of the runtime and the type surface honest.</rr-callout>
+</rr-section>
+
+<rr-section id="phases" title="Execution strategy and phase status" icon="waypoint">
+  <rr-phases>
+    <rr-phase state="done" label="0 · Contract" caption="decisions frozen"/>
+    <rr-phase state="done" label="1 · Data" caption="migrations + repositories"/>
+    <rr-phase state="done" label="2 · Sync" caption="chat + reactions"/>
+    <rr-phase state="done" label="3 · Board" caption="transport + reducer + files"/>
+    <rr-phase state="done" label="4 · SDK" caption="public types + Session"/>
+    <rr-phase state="done" label="5 · Product" caption="browser + conditional native"/>
+    <rr-phase state="done" label="6 · Proof" caption="automated + Helium"/>
+    <rr-phase state="now" label="7 · Release" caption="blocked on 2 proofs"/>
+  </rr-phases>
+
+  <rr-checklist label="Release exit">
+    <rr-done>Chat and reactions negotiate through the current room connection.</rr-done>
+    <rr-done>Browser room exposes chat, reactions, moderation, and consent prompts.</rr-done>
+    <rr-done>Board traffic and files use their own path and retention policy.</rr-done>
+    <rr-todo>Build the default native canonical-room bootstrap and real media adapter.</rr-todo>
+    <rr-todo>Run browser board upload/finalize/download/delete against real R2.</rr-todo>
+  </rr-checklist>
+</rr-section>
+
+<rr-section id="proof" title="Verification ledger" icon="check">
+  <rr-scorecard>
+    <rr-score-row promised="API migrations, routes, lifecycle, static checks" delivered="Passed; vulnerability check found no imported Go issue" verdict="kept" tone="green"/>
+    <rr-score-row promised="Sync service gate" delivered="436 tests, strict style, warnings as errors" verdict="kept" tone="green"/>
+    <rr-score-row promised="Workspace type checks" delivered="20/20 tasks" verdict="kept" tone="green"/>
+    <rr-score-row promised="Workspace tests" delivered="13/13 coverage tasks" verdict="kept" tone="green"/>
+    <rr-score-row promised="Production/package builds" delivered="10/10 builds; package layout and type resolution passed" verdict="kept" tone="green"/>
+    <rr-score-row promised="Two-person browser behavior" delivered="Chat, reaction, unmute request, decline, camera request observed in Helium" verdict="kept" tone="green"/>
+    <rr-score-row promised="Real board provider proof" delivered="Reducer, protocol, API, and lifecycle tests only; no real R2 browser run" verdict="missing" tone="red"/>
+    <rr-score-row promised="Default mobile parity" delivered="Only works with an injected canonical store" verdict="missing" tone="red"/>
+    <rr-score-row promised="Scoped commit gate" delivered="Own analysis passed; stopped on five unchanged dependency advisories" verdict="external red" tone="amber"/>
+    <rr-score-row promised="Automated code review" delivered="Timed out with exit 124 and no verdict" verdict="failed coverage" tone="red"/>
+  </rr-scorecard>
+  <rr-callout tone="amber"><b>Repository gate detail.</b> The scoped gate cleared formatting, changed-code analysis, secret scanning, hygiene, and static security rules. The dependency scan then stopped on existing advisories in cel-go, brace-expansion, two postcss versions, and tar. This implementation did not change those locked versions.</rr-callout>
+</rr-section>
+
+<rr-section id="findings" title="Findings and next moves" icon="warning">
+  <rr-callout tone="red"><b>Major · Correctness · Default mobile room.</b> Mobile hooks can call the canonical store only when the app injects one. The default provider has a bearer token and a legacy no-op room shell, but the real store needs renewable participant access plus a real media client. <b>Next:</b> define the native bootstrap contract, return renewable participant access, and add the supported native media adapter before claiming mobile parity.</rr-callout>
+
+  <rr-callout tone="red"><b>Major · Release proof · Board files.</b> Unit and service tests prove the state machine, but no real browser has uploaded and finalized an image in R2, loaded it as another participant, then observed retention cleanup. <b>Next:</b> run that exact two-participant scenario in a non-production environment with the real provider.</rr-callout>
+
+  <rr-callout tone="red"><b>Major · Review coverage.</b> The required exact-commit review ran once and timed out with no verdict. A clean automated gate cannot replace defect review for a cross-stack change. <b>Next:</b> ask for a fresh review pass when review capacity is available; the current handoff must remain needs attention.</rr-callout>
+
+  <rr-callout tone="amber"><b>Minor · Repository security gate.</b> Five fixable dependency advisories keep the scoped commit gate red even though they predate this change. <b>Next:</b> handle them in a dependency-only change with its own regression run.</rr-callout>
+
+  <rr-details summary="Trace appendix — precise handoff pointers, not for first reading">
+    <pre><code>Commit: e889d019
+
+Public Session API
+sdks/typescript/client/src/session/types.ts:187
+sdks/typescript/client/src/session/types.ts:211
+sdks/typescript/client/src/session/types.ts:243
+
+Canonical Session assembly
+sdks/typescript/client/src/session/chalk-session.ts:126
+sdks/typescript/client/src/session/chalk-session.ts:267
+sdks/typescript/client/src/session/chalk-session.ts:489
+
+Sync v3 room actions
+sdks/typescript/client/src/sync/v3-room-actions.ts:1
+apps/sync/lib/chalk_sync/transport/socket_v3.ex:1
+apps/sync/lib/chalk_sync/room_actions.ex:1
+
+whiteboard-v1
+contract/schema/whiteboard-v1.json:1
+sdks/typescript/client/src/whiteboard/types.ts:97
+apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1.ex:1
+packages/whiteboard/src/collab/engine.ts:1
+
+Board files
+apps/api/internal/httpapi/whiteboard_files.go:1
+apps/api/internal/whiteboardfiles/service.go:1
+apps/api/internal/whiteboardfiles/cleanup_scheduler.go:1
+
+Product surfaces
+sdks/typescript/react/src/components/full/SessionMeetingRoom.tsx:1
+sdks/typescript/react-native/src/hooks/useChalkRoomActions.ts:1
+sdks/typescript/react-native/src/context/chalk-native-provider.tsx:1</code></pre>
+  </rr-details>
+</rr-section>
+
+</rr-doc>
