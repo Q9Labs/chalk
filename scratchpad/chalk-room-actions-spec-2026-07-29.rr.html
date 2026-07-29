@@ -1,0 +1,127 @@
+<rr-doc title="Chalk room actions — draft" register="spec" project="Chalk" risk="major" summary="Complete reactions, durable chat, Excalidraw whiteboard, directed media requests, and existing moderation across the SyncEngine and SDKs.">
+  <rr-deck id="chalk-room-actions">
+    <rr-slide spine="Outcome">
+      <h1>Complete the networked room</h1>
+      <p class="lede">One capability-gated Session model for reactions, chat, Excalidraw whiteboard, directed media requests, and host moderation. Recording stays out.</p>
+      <rr-tiles>
+        <rr-tile icon="layers" label="Included groups" value="5" caption="Three collaboration paths; two existing paths to finish" />
+        <rr-tile icon="warning" label="Open decisions" value="5" caption="The spec is not executable yet" tone="amber" />
+      </rr-tiles>
+      <p><a href="chalk-room-actions-spec-2026-07-29.md">Open the detailed implementation specification</a></p>
+    </rr-slide>
+
+    <rr-slide spine="Scope" title="The transport exists for moderation, but the room stops short">
+      <rr-panes>
+        <rr-before label="Already below the UI">
+          <p><b>Directed requests:</b> SyncEngine and low-level TypeScript client.</p>
+          <p><b>Moderation:</b> SyncEngine, TypeScript Session, and React hooks.</p>
+          <p><b>Whiteboard:</b> Excalidraw client collaboration engine.</p>
+        </rr-before>
+        <rr-after label="Still missing">
+          <p>Unified request state, room prompts, and requester controls.</p>
+          <p>Capability-gated moderation, admission, and real React Native behavior.</p>
+          <p>Chat state/error/paging UI, reactions, whiteboard server/storage paths, room wiring, and live proof.</p>
+        </rr-after>
+      </rr-panes>
+      <rr-beat>
+        <rr-callout tone="amber">“Unmute” must become “Ask to unmute.” A host cannot force another participant to publish audio.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Room" title="The existing room gains real, typed actions">
+      <rr-mockup app="Chalk" id="chalk-actions-preview" label="Turnkey room control strip">
+        <style>
+          .dock {
+            padding: 38px 20px;
+            background: #09090b;
+            color: #fff;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            font:
+              14px Inter,
+              sans-serif;
+          }
+          .dock button {
+            border: 0;
+            border-radius: 999px;
+            padding: 11px 14px;
+            background: #242429;
+            color: inherit;
+          }
+          .dock .new {
+            background: #175f59;
+          }
+          .dock .leave {
+            background: #dc2626;
+          }
+        </style>
+        <div class="dock"><button>Mic</button><button>Camera</button><button>Share</button> <button class="new">Board</button><button class="new">Reactions</button> <button class="new">Chat</button><button>People</button><button class="leave">Leave</button></div>
+      </rr-mockup>
+      <rr-beat>
+        <p>The framework-neutral Session owns collaboration transport, metadata, reconnect, failures, and permissions. Renderer adapters own the Excalidraw imperative API.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Design" title="Each action gets the delivery model it needs">
+      <rr-cols2>
+        <rr-card>
+          <h3>Transient</h3>
+          <p>Reactions and whiteboard cursors are bounded live fan-out. Directed media requests stay on the existing live-only control path.</p>
+        </rr-card>
+        <rr-card>
+          <h3>Durable</h3>
+          <p>Postgres owns ordered chat and recoverable whiteboard scenes. A clear advances the scene epoch so stale clients cannot restore old content.</p>
+        </rr-card>
+      </rr-cols2>
+      <rr-beat>
+        <p>Existing moderation remains authoritative Sync v3 control state. Whiteboard files require participant-authenticated object access or the image tool remains disabled.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Decisions" title="Product decisions">
+      <rr-cols2>
+        <rr-callout tone="amber">
+          <h3>D1 · Chat depth</h3>
+          <p><b>Recommend:</b> durable room-wide text, acknowledgements, paging, reconnect, and local unread state.</p>
+          <p>Alternatives: edit/delete/reactions; or attachments, typing, and durable receipts.</p>
+        </rr-callout>
+        <rr-callout tone="amber">
+          <h3>D2 · Platform proof</h3>
+          <p><b>Recommend:</b> TypeScript, React, React Native, web, iOS, and Android, with separate real-device native whiteboard proofs.</p>
+          <p>Alternatives: web first; or native contract with renderer deferred.</p>
+        </rr-callout>
+      </rr-cols2>
+    </rr-slide>
+
+    <rr-slide spine="Decisions" title="Data and transport decisions">
+      <rr-cols2>
+        <rr-callout tone="amber">
+          <h3>D3 · Retention</h3>
+          <p><b>Recommend:</b> one exact Session policy for chat, board state, permissions, and files.</p>
+          <p>Alternatives: delete at Session end; or separate chat and board policies.</p>
+        </rr-callout>
+        <rr-callout tone="amber">
+          <h3>D4 · Transport</h3>
+          <p><b>Recommend:</b> a separate collab-v1 socket owned by the same Elixir SyncEngine.</p>
+          <p>Alternative: Sync v4 or a separate negotiated subprotocol. Strict Sync v3 remains unchanged.</p>
+        </rr-callout>
+      </rr-cols2>
+      <rr-beat>
+        <rr-callout tone="amber"><b>D5 · Excalidraw images — Recommend:</b> staged, participant-authenticated upload with server verification and cleanup. Alternative: disable the image tool and reject image elements.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Done" title="Done means multi-client proof">
+      <rr-checklist label="Release gates">
+        <rr-todo>Generated TypeScript and Elixir contracts agree</rr-todo>
+        <rr-todo>Chat survives reconnect and SyncEngine restart without duplicates</rr-todo>
+        <rr-todo>Concurrent boards converge; clear rejects stale updates</rr-todo>
+        <rr-todo>Directed requests and every moderation action work against another client</rr-todo>
+        <rr-todo>Selected browser and device gates pass from the final tree</rr-todo>
+        <rr-todo>Fresh and upgraded databases pass migration and retention cleanup</rr-todo>
+      </rr-checklist>
+      <rr-progress label="Decisions closed" pct="0" n="0/5" tone="amber" />
+    </rr-slide>
+  </rr-deck>
+</rr-doc>
