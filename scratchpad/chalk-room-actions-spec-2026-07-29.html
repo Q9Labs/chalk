@@ -1169,6 +1169,7 @@
         <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
         <path d="M12 9v4M12 17h.01" />
       </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
       <symbol id="i-route" viewBox="0 0 24 24">
         <path d="M5 20h7.5a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h6" />
         <circle cx="5" cy="20" r="1.8" />
@@ -1205,7 +1206,14 @@
               <span class="caption">Three collaboration paths; two existing paths to finish</span>
             </div>
             <div class="card tile">
-              <div class="tile-v amber">5</div>
+              <div class="tile-v green">2</div>
+              <div class="tile-l">
+                <svg class="icon"><use href="#i-check" /></svg> Accepted decisions
+              </div>
+              <span class="caption">Chat depth and platform scope</span>
+            </div>
+            <div class="card tile">
+              <div class="tile-v amber">3</div>
               <div class="tile-l">
                 <svg class="icon"><use href="#i-warning" /></svg> Open decisions
               </div>
@@ -1230,7 +1238,7 @@
             <div class="pane after">
               <p>Unified request state, room prompts, and requester controls.</p>
               <p>Capability-gated moderation, admission, and real React Native behavior.</p>
-              <p>Chat state/error/paging UI, reactions, whiteboard server/storage paths, room wiring, and live proof.</p>
+              <p>Chat state/error/paging UI, reactions, browser whiteboard server/storage paths, room wiring, and live proof.</p>
               <span class="pane-label">Still missing</span>
             </div>
           </div>
@@ -1302,35 +1310,35 @@
           <div class="beat" data-mark=""><p>Existing moderation remains authoritative Sync v3 control state. Whiteboard files require participant-authenticated object access or the image tool remains disabled.</p></div>
         </section>
 
-        <section class="slide" data-spine="Decisions">
+        <section class="slide" data-spine="Decided">
           <div class="slide-head">
-            <h2 class="slide-title">Product decisions</h2>
+            <h2 class="slide-title">Chat and platform scope are settled</h2>
             <span class="slide-kicker klabel"></span>
           </div>
           <div class="cols2">
-            <div class="callout amber">
-              <h3>D1 · Chat depth</h3>
-              <p><b>Recommend:</b> durable room-wide text, acknowledgements, paging, reconnect, and local unread state.</p>
-              <p>Alternatives: edit/delete/reactions; or attachments, typing, and durable receipts.</p>
+            <div class="callout green">
+              <h3>D1 · Durable room-wide text</h3>
+              <p>Include acknowledgements, paging, reconnect recovery, retention, and local unread state.</p>
+              <p>Attachments, edit/delete, typing, durable receipts, and message reactions stay out.</p>
             </div>
-            <div class="callout amber">
-              <h3>D2 · Platform proof</h3>
-              <p><b>Recommend:</b> TypeScript, React, React Native, web, iOS, and Android, with separate real-device native whiteboard proofs.</p>
-              <p>Alternatives: web first; or native contract with renderer deferred.</p>
+            <div class="callout green">
+              <h3>D2 · All clients, browser whiteboard</h3>
+              <p>Web, iOS, and Android include reactions, chat, requests, and moderation.</p>
+              <p>Browser Excalidraw is included. Native mobile whiteboard is deferred.</p>
             </div>
           </div>
         </section>
 
         <section class="slide" data-spine="Decisions">
           <div class="slide-head">
-            <h2 class="slide-title">Data and transport decisions</h2>
+            <h2 class="slide-title">Three choices still block implementation</h2>
             <span class="slide-kicker klabel"></span>
           </div>
           <div class="cols2">
             <div class="callout amber">
-              <h3>D3 · Retention</h3>
-              <p><b>Recommend:</b> one exact Session policy for chat, board state, permissions, and files.</p>
-              <p>Alternatives: delete at Session end; or separate chat and board policies.</p>
+              <h3>D3 · Retention values</h3>
+              <p><b>Recommend:</b> seven days after Session end; never clean active Sessions; reject writes at end.</p>
+              <p>Alternatives: one day or thirty days.</p>
             </div>
             <div class="callout amber">
               <h3>D4 · Transport</h3>
@@ -1355,14 +1363,14 @@
               <li class="todo"><span class="cbox"></span> Chat survives reconnect and SyncEngine restart without duplicates</li>
               <li class="todo"><span class="cbox"></span> Concurrent boards converge; clear rejects stale updates</li>
               <li class="todo"><span class="cbox"></span> Directed requests and every moderation action work against another client</li>
-              <li class="todo"><span class="cbox"></span> Selected browser and device gates pass from the final tree</li>
+              <li class="todo"><span class="cbox"></span> Browser whiteboard and iOS/Android room-action gates pass</li>
               <li class="todo"><span class="cbox"></span> Fresh and upgraded databases pass migration and retention cleanup</li>
             </ul>
           </div>
           <div class="progress-row">
             <span class="n label">Decisions closed</span>
-            <div class="progress"><i class="amber" style="width: 0%"></i></div>
-            <span class="n">0/5</span>
+            <div class="progress"><i class="amber" style="width: 40%"></i></div>
+            <span class="n">2/5</span>
           </div>
         </section>
         <footer class="hud">

@@ -1,6 +1,6 @@
 # Chalk Room Actions Implementation Specification
 
-Status: **draft — not executable until the five decision cards are closed**
+Status: **draft — not executable until D3–D5 are closed**
 Date: 2026-07-29
 Owner: Chalk
 Companion: `chalk-room-actions-spec-2026-07-29.html`
@@ -21,21 +21,19 @@ Recording controls are explicitly out of scope.
 
 ## Decision gate
 
-Hasan chose to leave the remaining product decisions open. This document
-therefore defines the seams, recommended defaults, and observable acceptance
-criteria, but implementation must not start until these five choices have an
-owner and accepted value.
+The chat contract and platform scope are settled. Implementation must not start
+until the exact retention values, transport shape, and Excalidraw image policy
+have an owner and accepted value.
 
-| ID  | Decision          | Recommendation                                                         | Status |
-| --- | ----------------- | ---------------------------------------------------------------------- | ------ |
-| D1  | Chat depth        | Durable room-wide text                                                 | Open   |
-| D2  | Platform proof    | TypeScript, React, React Native, web, and mobile                       | Open   |
-| D3  | Retention         | One Session collaboration retention policy                             | Open   |
-| D4  | Transport shape   | Separate collaboration socket in the Elixir SyncEngine                 | Open   |
-| D5  | Excalidraw images | Support images through a staged, participant-authenticated object flow | Open   |
+| ID  | Decision          | Outcome                                                            | Status             |
+| --- | ----------------- | ------------------------------------------------------------------ | ------------------ |
+| D1  | Chat depth        | Durable room-wide text                                             | Accepted           |
+| D2  | Platform proof    | All clients for room actions; native mobile whiteboard deferred    | Accepted           |
+| D3  | Retention         | One Session collaboration policy; exact values still required      | Partially accepted |
+| D4  | Transport shape   | Separate collaboration socket in the Elixir SyncEngine recommended | Open               |
+| D5  | Excalidraw images | Staged, participant-authenticated object flow recommended          | Open               |
 
-The decision cards appear after the proposed design because the consequences
-are easier to evaluate against concrete behavior.
+Only unresolved choices retain decision cards.
 
 ## Current state
 
@@ -92,8 +90,9 @@ another participant to publish audio. For a muted participant the menu must say
   operations.
 
 The missing work is the real SyncEngine collaboration path, durable scene
-storage, file routes and access control, Session/SDK state, room wiring, native
-renderer decision, and live proof.
+storage, file routes and access control if D5 includes images, Session/SDK
+state, browser room wiring, and live proof. Native mobile whiteboard
+implementation is deferred.
 
 The removed historical Go whiteboard implementation is not a valid starting
 point. It deleted tombstones and ignored Excalidraw `versionNonce` and scene
@@ -124,9 +123,35 @@ or media behavior. They do not belong in this protocol scope.
 - polls, breakout rooms, and general-purpose app events;
 - direct messages;
 - whiteboard export or revision history;
+- native mobile whiteboard rendering and synchronization;
 - chat attachments, edit, delete, typing, durable read receipts, and
-  per-message reactions unless D1 selects them;
+  per-message reactions;
 - production deployment.
+
+### Platform delivery
+
+The framework-neutral TypeScript Session, React SDK, React Native SDK, turnkey
+web room, and first-party iOS and Android rooms must complete reactions, durable
+chat, directed media requests, and moderation.
+
+Browser whiteboard is included through the React adapter and must render a real
+Excalidraw scene. Native mobile whiteboard state, rendering, synchronization,
+and device proof are deferred as one explicit follow-up. The release must hide
+or label that control as unavailable on native mobile; a placeholder or no-op
+does not count as partial completion.
+
+| Surface            | Reactions | Chat     | Requests | Moderation                | Whiteboard                      |
+| ------------------ | --------- | -------- | -------- | ------------------------- | ------------------------------- |
+| TypeScript Session | Required  | Required | Required | Existing surface retained | Transport and metadata required |
+| React SDK          | Required  | Required | Required | Required                  | Browser adapter required        |
+| Turnkey web room   | Required  | Required | Required | Required                  | Real Excalidraw required        |
+| React Native SDK   | Required  | Required | Required | Required                  | Deferred                        |
+| iOS app proof      | Required  | Required | Required | Required                  | Deferred                        |
+| Android app proof  | Required  | Required | Required | Required                  | Deferred                        |
+
+Included React Native behavior must reuse the framework-neutral Session or an
+adapter with contract-equivalence tests. It may not preserve the current
+parallel no-op core. The existing macOS surface remains outside this release.
 
 ## Architecture
 
@@ -218,8 +243,9 @@ The framework-neutral Session owns collaboration connection lifecycle,
 authorization metadata, durable cursors, pending operations, and typed
 failures. It does not own Excalidraw's browser imperative API or UI panel
 visibility. `WhiteboardCanvas` owns the browser Excalidraw adapter; native uses
-its selected renderer adapter. Both consume a Session-provided whiteboard
-transport and publish acknowledged operations through it.
+no whiteboard renderer in this release. The browser adapter consumes a
+Session-provided whiteboard transport and publishes acknowledged operations
+through it.
 
 Extend `ChalkSessionSnapshot` with bounded collaboration state rather than
 separate app-owned stores:
@@ -324,7 +350,7 @@ only the contracted six values even though the generic picker can display more.
 
 ### Chat
 
-The base contract is room-wide text:
+The selected contract is room-wide text:
 
 1. The client creates a stable `client_message_id` and shows a pending row.
 2. SyncEngine validates live membership, capability, text limits, and rate.
@@ -345,11 +371,10 @@ original message. Reusing it with different text is a conflict.
 
 The UI distinguishes pending, sent, and failed and permits retry with the same
 client message ID. A failed send preserves the composer text or failed row. The
-chat panel exposes load-older loading, empty, end, and failed states. If D1
-excludes attachments, the attachment control is absent. It never invents a
-durable server message before acknowledgement. Unread count and mark-as-read
-are local in the base contract; durable read receipts require D1 to select
-them.
+chat panel exposes load-older loading, empty, end, and failed states. The
+attachment control is absent. It never invents a durable server message before
+acknowledgement. Unread count and mark-as-read are local; durable read receipts
+are outside this release.
 
 ### Whiteboard
 
@@ -485,8 +510,8 @@ different fingerprint is a conflict. First-message races use
 fences authority, reserves row and byte quotas, allocates the sequence, inserts,
 and advances the head. Reads are indexed by Session and sequence.
 
-Expanded D1 choices add new tables or columns only after their authorization,
-conflict, and deletion semantics are accepted.
+Future chat expansion adds new tables or columns only after its authorization,
+conflict, and deletion semantics are specified.
 
 ### Whiteboard tables
 
@@ -598,71 +623,27 @@ stale-epoch, overloaded, database-failed, and object-storage-failed outcomes.
 
 ## Decision cards
 
-### D1 — Chat depth
+### D3 — Retention values
 
-**Recommendation: durable room-wide text.** Include acknowledgements,
-idempotency, ordered paging, reconnect backfill, retention, unread counts, and
-local mark-as-read.
+The shared-policy shape is accepted. The remaining choice is its exact product
+default and lifecycle boundary.
 
-Alternatives:
-
-- **Expanded:** add edit, delete, and per-message reactions.
-- **Full UI parity:** also add attachments, typing, and durable read receipts.
-
-Why it matters: expanded options require new authorization, conflict,
-notification, file access, deletion, and privacy contracts. Existing component
-props are not proof of those systems.
-
-### D2 — Platform proof
-
-**Recommendation: all SDK contracts and both first-party apps.** Require the
-framework-neutral TypeScript client, React, React Native, the web room, and the
-mobile room. Browser Excalidraw is mandatory. Native whiteboard is done only
-after a real iOS and Android scene-sync proof.
+**Recommendation:** retain collaboration data for seven days after Session end.
+Never clean an active Session. Reject collaboration writes immediately when the
+Session ends. Retention does not create post-meeting history access.
 
 Alternatives:
 
-- **Web first:** TypeScript, React, and the web room now; React Native follows.
-- **Native contract only:** expose native state and actions, but defer the
-  native Excalidraw renderer.
-
-Why it matters: React Native currently exposes placeholder manager behavior.
-Calling the release complete without naming the platform proof would hide that
-gap.
-
-The accepted choice freezes each cell independently:
-
-| Surface            | Reactions                | Chat                     | Requests                 | Moderation                | Whiteboard                      |
-| ------------------ | ------------------------ | ------------------------ | ------------------------ | ------------------------- | ------------------------------- |
-| TypeScript Session | Required in every option | Required in every option | Required in every option | Existing surface retained | Transport and metadata required |
-| React SDK          | Required in every option | Required in every option | Required in every option | Required in every option  | Browser adapter required        |
-| Turnkey web room   | Required in every option | Required in every option | Required in every option | Required in every option  | Real Excalidraw required        |
-| React Native SDK   | Per D2                   | Per D2                   | Per D2                   | Per D2                    | Per D2; no parallel no-op core  |
-| iOS app proof      | Per D2                   | Per D2                   | Per D2                   | Per D2                    | Separate real-device gate       |
-| Android app proof  | Per D2                   | Per D2                   | Per D2                   | Per D2                    | Separate real-device gate       |
-
-The existing macOS surface is not included unless explicitly added when D2
-closes. Any included React Native work must reuse the framework-neutral Session
-or an adapter with contract-equivalence tests; it may not preserve a parallel
-placeholder implementation.
-
-### D3 — Retention
-
-**Recommendation: one configurable Session collaboration retention policy.**
-Chat, board scenes, board files, and permissions use the same cleanup boundary.
-Choose an exact duration, end-of-Session eligibility delay, and stale-write
-window when this decision closes. The recommended access model permits only
-active-participant reconnect while the Session remains active; retention does
-not create post-meeting history access.
-
-Alternatives:
-
-- **Meeting lifetime:** delete collaboration data when the Session ends.
-- **Separate policies:** configure chat and whiteboard independently.
+- **One day:** lower storage and privacy exposure with a shorter recovery
+  window.
+- **Thirty days:** more operational recovery time with higher storage and
+  privacy cost.
 
 Why it matters: retention determines database cleanup, object cleanup,
 reconnect and cursor-reset behavior, authorization after leave or Session end,
 customer promises, and operational cost.
+
+Default without an explicit duration: implementation remains blocked.
 
 ### D4 — Transport shape
 
@@ -681,6 +662,8 @@ while chat and whiteboard need independent recovery cursors. A separate socket
 reduces compatibility and head-of-line risk without creating a second
 authority.
 
+Default without an explicit transport choice: implementation remains blocked.
+
 ### D5 — Excalidraw images
 
 **Recommendation: support images.** Add initiate/upload/finalize file handling,
@@ -696,6 +679,8 @@ Why it matters: the current client adapter can request presigned transfers, but
 the repository has no participant-authenticated whiteboard file routes. A
 client-provided `saved` flag is not proof that the expected immutable object
 exists or is authorized.
+
+Default without an explicit image choice: implementation remains blocked.
 
 ## Observable done criteria
 
@@ -755,8 +740,8 @@ This release is done only when the accepted scope has current end-to-end proof.
       epoch.
 - [ ] If images are in scope, upload, cross-client download, authorization
       denial, and retention deletion pass end to end.
-- [ ] Any platform counted as complete renders a real Excalidraw scene; a
-      placeholder is a failing proof.
+- [ ] The browser renders a real Excalidraw scene. Native mobile exposes no
+      whiteboard placeholder or no-op control.
 
 ### Directed requests and moderation
 
@@ -774,8 +759,8 @@ This release is done only when the accepted scope has current end-to-end proof.
 
 ### Product and operations
 
-- [ ] The selected React and React Native surfaces expose the same typed state,
-      actions, and failures.
+- [ ] React and React Native expose the same typed state, actions, and failures
+      for reactions, chat, directed requests, and moderation.
 - [ ] First-party rooms contain no private collaboration transport path.
 - [ ] A collaboration-only outage preserves media, control state, leave,
       moderation, and directed requests while collaboration enters a truthful
@@ -794,11 +779,11 @@ This release is done only when the accepted scope has current end-to-end proof.
 
 ## Execution graph
 
-Execution remains blocked on D1–D5.
+Execution remains blocked on D3–D5.
 
 ```mermaid
 flowchart TD
-  D["Hasan + spec owner<br/>Close D1–D5"]
+  D["Hasan + spec owner<br/>Close D3–D5"]
   F["Contract owner<br/>Freeze protocol, policy, limits, failures"]
   G1{"Sync v3 coexistence + contract gate"}
   DB["Data lane<br/>Keys, quotas, receipts, retention"]
@@ -834,10 +819,10 @@ flowchart TD
 
 | Phase          | Primary scope                                                                                      | Exit condition                                          |
 | -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| 0. Decisions   | D1–D5 and exact limits/defaults                                                                    | Decision ledger accepted; document becomes executable   |
+| 0. Decisions   | D3–D5 and exact limits/defaults                                                                    | Decision ledger accepted; document becomes executable   |
 | 1. Contracts   | Capabilities, frames, errors, generated bindings                                                   | Compatibility and generator checks pass                 |
 | 2. Foundations | Migrations, retention, SyncEngine, file access, reducer fixtures                                   | Fresh/upgrade DB and focused server tests pass          |
-| 3. SDK         | Unified Session lifecycle, state/actions, React and selected native adapters                       | SDK integration tests pass with real SyncEngine         |
+| 3. SDK         | Unified Session lifecycle, state/actions, React and native room-action adapters                    | SDK integration tests pass with real SyncEngine         |
 | 4. Product     | Turnkey room controls, prompts, panels, permissions                                                | Two-client browser proof and selected device proof pass |
 | 5. Hardening   | Two replicas, restart, reconnect, duplicate/reordered delivery, quotas, overload, privacy, cleanup | Full acceptance matrix and root gate pass               |
 | 6. Handoff     | Review, release notes, scoped commit                                                               | No unresolved required finding or unverified claim      |
@@ -853,5 +838,6 @@ flowchart TD
 - Do not log chat text, whiteboard data, reaction values, files, tokens, or
   presigned URLs.
 - Do not allow collaboration traffic to starve control traffic.
-- Do not call native whiteboard complete while a placeholder renders.
+- Do not expose a native whiteboard placeholder or no-op control in this
+  release.
 - Do not wire recording controls as part of this work.

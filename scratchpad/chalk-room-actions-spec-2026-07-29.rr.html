@@ -5,7 +5,8 @@
       <p class="lede">One capability-gated Session model for reactions, chat, Excalidraw whiteboard, directed media requests, and host moderation. Recording stays out.</p>
       <rr-tiles>
         <rr-tile icon="layers" label="Included groups" value="5" caption="Three collaboration paths; two existing paths to finish" />
-        <rr-tile icon="warning" label="Open decisions" value="5" caption="The spec is not executable yet" tone="amber" />
+        <rr-tile icon="check" label="Accepted decisions" value="2" caption="Chat depth and platform scope" tone="green" />
+        <rr-tile icon="warning" label="Open decisions" value="3" caption="The spec is not executable yet" tone="amber" />
       </rr-tiles>
       <p><a href="chalk-room-actions-spec-2026-07-29.md">Open the detailed implementation specification</a></p>
     </rr-slide>
@@ -20,7 +21,7 @@
         <rr-after label="Still missing">
           <p>Unified request state, room prompts, and requester controls.</p>
           <p>Capability-gated moderation, admission, and real React Native behavior.</p>
-          <p>Chat state/error/paging UI, reactions, whiteboard server/storage paths, room wiring, and live proof.</p>
+          <p>Chat state/error/paging UI, reactions, browser whiteboard server/storage paths, room wiring, and live proof.</p>
         </rr-after>
       </rr-panes>
       <rr-beat>
@@ -79,27 +80,27 @@
       </rr-beat>
     </rr-slide>
 
-    <rr-slide spine="Decisions" title="Product decisions">
+    <rr-slide spine="Decided" title="Chat and platform scope are settled">
       <rr-cols2>
-        <rr-callout tone="amber">
-          <h3>D1 · Chat depth</h3>
-          <p><b>Recommend:</b> durable room-wide text, acknowledgements, paging, reconnect, and local unread state.</p>
-          <p>Alternatives: edit/delete/reactions; or attachments, typing, and durable receipts.</p>
+        <rr-callout tone="green">
+          <h3>D1 · Durable room-wide text</h3>
+          <p>Include acknowledgements, paging, reconnect recovery, retention, and local unread state.</p>
+          <p>Attachments, edit/delete, typing, durable receipts, and message reactions stay out.</p>
         </rr-callout>
-        <rr-callout tone="amber">
-          <h3>D2 · Platform proof</h3>
-          <p><b>Recommend:</b> TypeScript, React, React Native, web, iOS, and Android, with separate real-device native whiteboard proofs.</p>
-          <p>Alternatives: web first; or native contract with renderer deferred.</p>
+        <rr-callout tone="green">
+          <h3>D2 · All clients, browser whiteboard</h3>
+          <p>Web, iOS, and Android include reactions, chat, requests, and moderation.</p>
+          <p>Browser Excalidraw is included. Native mobile whiteboard is deferred.</p>
         </rr-callout>
       </rr-cols2>
     </rr-slide>
 
-    <rr-slide spine="Decisions" title="Data and transport decisions">
+    <rr-slide spine="Decisions" title="Three choices still block implementation">
       <rr-cols2>
         <rr-callout tone="amber">
-          <h3>D3 · Retention</h3>
-          <p><b>Recommend:</b> one exact Session policy for chat, board state, permissions, and files.</p>
-          <p>Alternatives: delete at Session end; or separate chat and board policies.</p>
+          <h3>D3 · Retention values</h3>
+          <p><b>Recommend:</b> seven days after Session end; never clean active Sessions; reject writes at end.</p>
+          <p>Alternatives: one day or thirty days.</p>
         </rr-callout>
         <rr-callout tone="amber">
           <h3>D4 · Transport</h3>
@@ -118,10 +119,10 @@
         <rr-todo>Chat survives reconnect and SyncEngine restart without duplicates</rr-todo>
         <rr-todo>Concurrent boards converge; clear rejects stale updates</rr-todo>
         <rr-todo>Directed requests and every moderation action work against another client</rr-todo>
-        <rr-todo>Selected browser and device gates pass from the final tree</rr-todo>
+        <rr-todo>Browser whiteboard and iOS/Android room-action gates pass</rr-todo>
         <rr-todo>Fresh and upgraded databases pass migration and retention cleanup</rr-todo>
       </rr-checklist>
-      <rr-progress label="Decisions closed" pct="0" n="0/5" tone="amber" />
+      <rr-progress label="Decisions closed" pct="40" n="2/5" tone="amber" />
     </rr-slide>
   </rr-deck>
 </rr-doc>
