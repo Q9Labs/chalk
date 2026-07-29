@@ -1,0 +1,691 @@
+<rr-doc title="Chalk native whiteboard options — draft" register="spec" project="Chalk" risk="major" summary="Choose a mobile whiteboard path through an embedded Excalidraw proof, a conditional Chalk engine, or last-resort Swift and Kotlin ports.">
+  <rr-deck id="chalk-native-whiteboard-options">
+    <rr-slide spine="Outcome">
+      <h1>Prove one renderer, then branch on format</h1>
+      <p class="lede">Evaluate embedded Excalidraw first. Stop if it passes. A Chalk engine is available only if Chalk accepts a new document format; native Excalidraw ports are the last path when compatibility and pure-native delivery both stay mandatory.</p>
+      <p><rr-badge tone="amber">Draft · 6 open decisions</rr-badge></p>
+      <rr-tiles>
+        <rr-tile icon="layers" label="Options specified" value="3" caption="Each has an activation rule, architecture, proof, and stop condition" />
+        <rr-tile icon="branch" label="Implementation paths" value="1" caption="Select one; do not build three editors" tone="accent" />
+        <rr-tile icon="warning" label="Main risk" value="Format" caption="Option 2 changes the compatibility promise" tone="amber" />
+        <rr-tile icon="check" label="Before Option 1" value="0 / 3" caption="Thresholds, native pen escalation, and launch consumers" />
+      </rr-tiles>
+      <p><a href="chalk-native-whiteboard-options-spec-2026-07-29.md">Open the executor Markdown</a></p>
+    </rr-slide>
+
+    <rr-slide spine="Gap" title="Mobile has room state, but no editor">
+      <rr-panes>
+        <rr-before label="Current">
+          <h3>Web owns the working board</h3>
+          <p>Excalidraw renders, restores, edits, and reconciles the scene.</p>
+          <p>The legacy React Native whiteboard hook is inert. It is not a renderer integration point.</p>
+          <p>The new <rr-term def="A separate typed collaboration connection for Excalidraw scenes, revisions, capabilities, files, and recovery.">whiteboard-v1</rr-term> transport owns room truth, but the native provider and product do not consume it yet.</p>
+          <p>Updates stop at 128 elements and 256 KiB today; large full syncs need a protocol change.</p>
+        </rr-before>
+        <rr-after label="Desired">
+          <h3>One room contract, replaceable editors</h3>
+          <p>Web and mobile open the same board, enforce the same permission, and recover the same committed scene.</p>
+          <p>A Chalk-owned controller keeps scene and revision outside the editor and isolates board failure from the meeting.</p>
+          <p>Device traces, compatibility fixtures, and failure tests decide whether a renderer ships.</p>
+        </rr-after>
+      </rr-panes>
+      <rr-beat>
+        <rr-callout tone="amber">The current rule is lossless Excalidraw round trips. That makes Option 1 and Option 3 feasible; Option 2 requires a format decision.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Route" title="The priority list is a decision tree">
+      <rr-step wp="01 · Embed">
+        <rr-card>
+          <h3>Prove embedded Excalidraw</h3>
+          <p>Use the same editor behind thin native hosts. Add native pen capture only if pen input alone misses the bar.</p>
+        </rr-card>
+      </rr-step>
+      <rr-step wp="02 · Branch on format">
+        <rr-cols2>
+          <rr-card>
+            <h3>New format accepted</h3>
+            <p>Build Chalk's focused engine for new documents; keep the embedded editor for old Excalidraw documents.</p>
+          </rr-card>
+          <rr-card>
+            <h3>Excalidraw remains mandatory</h3>
+            <p>Skip the greenfield shortcut. Pure-native delivery now means full Swift and Kotlin reimplementation.</p>
+          </rr-card>
+        </rr-cols2>
+      </rr-step>
+      <rr-step wp="03 · Stop">
+        <rr-callout tone="green">The first option that passes its full product gate ships. The others remain unbuilt.</rr-callout>
+      </rr-step>
+    </rr-slide>
+
+    <rr-slide spine="Contract" title="The controller owns room truth; the renderer owns editing">
+      <rr-types label="Renderer adapter">
+        <rr-sig name="mount" note="Start platform resources and report supported behavior." tone="new">(input: RendererMountInput) → RendererCapabilities</rr-sig>
+        <rr-sig name="applySnapshot" note="Apply one validated scene with a fresh renderer generation." tone="new">(input: SnapshotInput) → ApplyOutcome</rr-sig>
+        <rr-sig name="applyUpdate" note="Apply exact whiteboard-v1 elements; the controller owns revision." tone="new">(input: UpdateInput) → ApplyOutcome</rr-sig>
+        <rr-sig name="setCapabilities" note="Control draw, clear, upload, copy, export, and convert separately." tone="new">(capabilities: RendererCapabilities) → void</rr-sig>
+        <rr-sig name="setViewport" note="Apply safe areas, keyboard bounds, and size." tone="new">(viewport: RendererViewport) → void</rr-sig>
+        <rr-sig name="exportUserFile" note="Create PNG, SVG, or Excalidraw bytes; never replace transport state." tone="new">(format: UserExportFormat) → bytes</rr-sig>
+        <rr-sig name="subscribe" note="Emit typed changes, metrics, files, cursors, and failures." tone="new">(listener: OutcomeListener) → Unsubscribe</rr-sig>
+        <rr-sig name="dispose" note="Release WebView, GPU, listeners, and file buffers." tone="new">() → void</rr-sig>
+      </rr-types>
+      <rr-beat>
+        <p>An opaque generation rejects stale renderer work. Only a <rr-term def="The server acknowledgement that advances the durable scene revision.">transport commit</rr-term> advances room state.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Controller" title="The controller is the only renderer-to-room path">
+      <rr-types label="Controller boundary">
+        <rr-sig name="open" note="Start the exact ChalkWhiteboardV1Transport and load its committed snapshot." tone="new">(transport: ChalkWhiteboardV1Transport) → OpenOutcome</rr-sig>
+        <rr-sig name="setRenderer" note="Attach one replaceable editor adapter." tone="new">(renderer: ExcalidrawRendererAdapter) → void</rr-sig>
+        <rr-sig name="updateProductPolicy" note="Supply copy, export, and conversion policy absent from the server contract." tone="new">(policy: WhiteboardProductPolicy) → void</rr-sig>
+        <rr-sig name="close" note="Stop input; preserve only transport-owned pending operations; release resources." tone="new">() → CloseOutcome</rr-sig>
+      </rr-types>
+      <rr-beat>
+        <rr-journey>
+          <rr-stop>gesture</rr-stop><rr-sep /> <rr-stop tone="new">renderer generation</rr-stop><rr-sep /> <rr-stop tone="new">controller validation</rr-stop><rr-sep />
+          <rr-stop>whiteboard-v1 commit</rr-stop>
+        </rr-journey>
+      </rr-beat>
+      <rr-beat>
+        <p>Journey ID and W3C trace context follow open, snapshot, gesture commit, file transfer, recovery, and close. Scene content, text, file bytes, tokens, and signed links never enter telemetry.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Proof" title="“Native-grade” becomes a measured gate">
+      <table>
+        <thead>
+          <tr>
+            <th>Measure</th>
+            <th>Draft pass threshold</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cold open</td>
+            <td>p95 ≤ 3 seconds for the fixed medium fixture</td>
+          </tr>
+          <tr>
+            <td>Warm open</td>
+            <td>p95 ≤ 1.5 seconds for a medium scene</td>
+          </tr>
+          <tr>
+            <td>Visible ink</td>
+            <td>p95 ≤ 50 ms; no visible gap above 100 ms</td>
+          </tr>
+          <tr>
+            <td>Pan or zoom</td>
+            <td>Under 5% missed display deadlines; no stall above 100 ms</td>
+          </tr>
+          <tr>
+            <td>Medium scene</td>
+            <td>1,000 elements plus 10 images without input regression</td>
+          </tr>
+          <tr>
+            <td>Stress recovery</td>
+            <td>5,000 elements reopen and converge without crash or data loss</td>
+          </tr>
+          <tr>
+            <td>Endurance</td>
+            <td>20 open/close cycles under 1% post-close memory slope; 30-minute final within 15% of baseline</td>
+          </tr>
+          <tr>
+            <td>Isolation</td>
+            <td>Board faults never break the meeting</td>
+          </tr>
+        </tbody>
+      </table>
+      <rr-beat>
+        <p>Run at least 30 cold and warm opens per device against a native blank-canvas reference. Include media deltas, fixed image bytes, display-refresh deadlines, WebView or GPU memory, and presented-frame timing.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Mobile states" title="The board stays inside Chalk's meeting shell">
+      <rr-cols2>
+        <rr-mockup app="Chalk" id="chalk-board-editable" viewport="mobile" label="Editable">
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+            .room {
+              min-height: 510px;
+              background: #000;
+              color: #fbffff;
+              font-family: Inter, ui-sans-serif, sans-serif;
+              display: flex;
+              flex-direction: column;
+            }
+            .top {
+              height: 52px;
+              padding: 14px 16px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            }
+            .roomname {
+              font-size: 15px;
+              font-weight: 700;
+            }
+            .live {
+              color: #1bb6a6;
+              font-size: 12px;
+              font-weight: 700;
+            }
+            .board {
+              flex: 1;
+              margin: 8px;
+              border-radius: 24px;
+              background: #f7f4ed;
+              color: #141418;
+              overflow: hidden;
+              position: relative;
+            }
+            .tools {
+              height: 54px;
+              padding: 8px 10px;
+              display: flex;
+              gap: 7px;
+              background: #fff;
+              border-bottom: 1px solid #e4e4e7;
+            }
+            .tool {
+              width: 38px;
+              height: 38px;
+              border: 1px solid #d4d4d8;
+              border-radius: 10px;
+              display: grid;
+              place-items: center;
+              font-size: 17px;
+            }
+            .tool.on {
+              color: #fff;
+              border-color: #1bb6a6;
+              background: #1bb6a6;
+            }
+            .ink {
+              position: absolute;
+              left: 58px;
+              top: 142px;
+              width: 210px;
+              height: 70px;
+              border-top: 5px solid #1bb6a6;
+              border-radius: 50%;
+              transform: rotate(-8deg);
+            }
+            .label {
+              position: absolute;
+              left: 84px;
+              top: 225px;
+              font-size: 17px;
+              font-weight: 700;
+              transform: rotate(-2deg);
+            }
+            .media {
+              height: 74px;
+              padding: 13px 18px 21px;
+              display: flex;
+              justify-content: space-between;
+              border-top: 1px solid rgba(255, 255, 255, 0.06);
+            }
+            .media span {
+              width: 42px;
+              height: 42px;
+              display: grid;
+              place-items: center;
+              border-radius: 21px;
+              background: rgba(255, 255, 255, 0.08);
+            }
+            .media .end {
+              width: 62px;
+              border-radius: 18px;
+              background: #ef4444;
+            }
+          </style>
+          <div class="room">
+            <div class="top"><span class="roomname">Product planning</span><span class="live">Board · editable</span></div>
+            <div class="board">
+              <div class="tools"><span class="tool on">✎</span><span class="tool">□</span><span class="tool">○</span><span class="tool">T</span><span class="tool">↶</span></div>
+              <div class="ink"></div>
+              <div class="label">Ship the smallest proof</div>
+            </div>
+            <div class="media"><span>⌁</span><span>▣</span><span>•••</span><span class="end">×</span></div>
+          </div>
+        </rr-mockup>
+        <rr-mockup app="Chalk" id="chalk-board-recovering" viewport="mobile" label="Recovering">
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+            .room {
+              min-height: 510px;
+              background: #000;
+              color: #fbffff;
+              font-family: Inter, ui-sans-serif, sans-serif;
+              display: flex;
+              flex-direction: column;
+            }
+            .top {
+              height: 52px;
+              padding: 14px 16px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            }
+            .roomname {
+              font-size: 15px;
+              font-weight: 700;
+            }
+            .state {
+              color: #f59e0b;
+              font-size: 12px;
+              font-weight: 700;
+            }
+            .board {
+              flex: 1;
+              margin: 8px;
+              border-radius: 24px;
+              background: #f7f4ed;
+              color: #141418;
+              overflow: hidden;
+              position: relative;
+            }
+            .tools {
+              height: 54px;
+              padding: 8px 10px;
+              display: flex;
+              gap: 7px;
+              background: #fff;
+              border-bottom: 1px solid #e4e4e7;
+              opacity: 0.42;
+            }
+            .tool {
+              width: 38px;
+              height: 38px;
+              border: 1px solid #d4d4d8;
+              border-radius: 10px;
+              display: grid;
+              place-items: center;
+              font-size: 17px;
+            }
+            .note {
+              margin: 86px 20px 0;
+              padding: 16px;
+              border-radius: 12px;
+              background: #141418;
+              color: #fbffff;
+              text-align: center;
+            }
+            .note b {
+              display: block;
+              font-size: 16px;
+              margin-bottom: 4px;
+            }
+            .note small {
+              color: #a1a1aa;
+              font-size: 13px;
+              line-height: 1.4;
+            }
+            .media {
+              height: 74px;
+              padding: 13px 18px 21px;
+              display: flex;
+              justify-content: space-between;
+              border-top: 1px solid rgba(255, 255, 255, 0.06);
+            }
+            .media span {
+              width: 42px;
+              height: 42px;
+              display: grid;
+              place-items: center;
+              border-radius: 21px;
+              background: rgba(255, 255, 255, 0.08);
+            }
+            .media .end {
+              width: 62px;
+              border-radius: 18px;
+              background: #ef4444;
+            }
+          </style>
+          <div class="room">
+            <div class="top"><span class="roomname">Product planning</span><span class="state">Reconnecting</span></div>
+            <div class="board">
+              <div class="tools"><span class="tool">✎</span><span class="tool">□</span><span class="tool">○</span><span class="tool">T</span><span class="tool">↶</span></div>
+              <div class="note"><b>Board paused</b><small>The last committed scene stays visible. Editing returns after a fresh snapshot.</small></div>
+            </div>
+            <div class="media"><span>⌁</span><span>▣</span><span>•••</span><span class="end">×</span></div>
+          </div>
+        </rr-mockup>
+      </rr-cols2>
+      <rr-beat>
+        <p>View-only, file-degraded, cleared, update-required, and renderer-failed states use the same shell. An accessible object list makes canvas content reachable beyond the toolbar.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Embed" title="Option 1 keeps Excalidraw authoritative">
+      <rr-stack label="Embedded update path">
+        <rr-frame fn="NativeMeetingRoom opens board" file="apps/mobile">
+          <rr-frame fn="ChalkWhiteboardController.open" file="packages/whiteboard" tone="new">
+            <rr-frame fn="ChalkSessionStore.whiteboard.startSceneSubscription" file="chalk-client">
+              <rr-frame fn="controller receives validated snapshot" file="packages/whiteboard" tone="new">
+                <rr-frame fn="ChalkEmbeddedWhiteboardView.applySnapshot" file="native host" tone="new">
+                  <rr-frame fn="Excalidraw restores elements" file="local embedded bundle" tone="new" />
+                </rr-frame>
+              </rr-frame>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-stack>
+      <rr-beat>
+        <rr-cols2>
+          <rr-card>
+            <h3>Native host owns</h3>
+            <p>Lifecycle, safe areas, keyboard, clipboard, file bytes, share sheet, accessibility shell, and telemetry.</p>
+          </rr-card>
+          <rr-card>
+            <h3>Embedded editor owns</h3>
+            <p>Canvas, tools, selection, text, history, reconciliation, and final Excalidraw serialization.</p>
+          </rr-card>
+        </rr-cols2>
+      </rr-beat>
+      <rr-beat>
+        <p>A separate embedded artifact pins Excalidraw exactly and bundles CSS, fonts, MathJax, icons, hashes, and license notices. Offline install proof records zero non-Chalk requests.</p>
+      </rr-beat>
+      <rr-beat>
+        <rr-callout tone="amber">Before the 1,000-element gate, whiteboard-v1 needs an atomic multipart update: validate all parts, commit one revision, then fan out. Partial bulk edits never become visible.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Embed gate" title="Ship Option 1 only after cross-client proof">
+      <rr-cols2>
+        <rr-card>
+          <h3>Why it leads</h3>
+          <p>One editor gives the strongest compatibility, the smallest permanent burden, and the fastest path to both first-party mobile and thin native SDK views.</p>
+        </rr-card>
+        <rr-card>
+          <h3>Where it can fail</h3>
+          <p>Pen latency, palm rejection, touch layout, keyboard behavior, WebView recovery, accessibility, or memory can still miss the device bar.</p>
+        </rr-card>
+      </rr-cols2>
+      <rr-beat>
+        <rr-checklist label="Option 1 exit gate">
+          <rr-todo>One compatibility manifest gates web and mobile features</rr-todo>
+          <rr-todo>Corpus round-trips between web, iOS, and Android</rr-todo>
+          <rr-todo>Multipart full sync and bulk edits pass above 128 elements</rr-todo>
+          <rr-todo>Concurrent edit, clear, reconnect, files, and stale-scene tests converge</rr-todo>
+          <rr-todo>All device thresholds pass during a live call</rr-todo>
+          <rr-todo>Bridge fuzz, ordering, size, security, and secret-leak tests pass</rr-todo>
+          <rr-todo>Renderer failures leave the meeting working</rr-todo>
+        </rr-checklist>
+      </rr-beat>
+      <rr-beat>
+        <rr-callout tone="green">If this gate passes, stop. If it fails, allow one targeted remediation per failure class; the same hard gate failing twice becomes the structural failure report for the next branch.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Chalk engine" title="Option 2 buys product control by changing format">
+      <rr-panes>
+        <rr-before label="Legacy Excalidraw documents">
+          <h3>The new engine cannot edit them</h3>
+          <p>Web keeps Excalidraw editing. Mobile gets a read-only embedded viewer only if that narrower path passes; otherwise it opens on web.</p>
+          <p>An owner may create a new Chalk copy from one frozen source revision. The original never changes.</p>
+        </rr-before>
+        <rr-after label="New Chalk documents">
+          <h3>Use a focused Chalk editor</h3>
+          <p>The Option 1 failure report chooses a core that removes the measured cause. A new typed transport carries Chalk operations.</p>
+        </rr-after>
+      </rr-panes>
+      <rr-beat>
+        <p>The first release includes pen, core shapes, text, images, selection, transforms, grouping, ordering, history, pan and zoom, clipboard, export, collaboration, recovery, accessibility, and diagnostics.</p>
+      </rr-beat>
+      <rr-beat>
+        <rr-callout tone="amber">Full Excalidraw export is incompatible with a smaller focused engine. If lossless export remains mandatory, skip this option. New offline edits are also out of the first release.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Chalk gate" title="Option 2 must prove an engine and a migration">
+      <rr-cols2>
+        <rr-card>
+          <h3>Why choose it</h3>
+          <p>Chalk controls the document, editor scope, collaboration rules, observability, and future structured tools.</p>
+        </rr-card>
+        <rr-card>
+          <h3>Permanent cost</h3>
+          <p>Chalk owns every editor defect and format change, and it operates two renderers while legacy Excalidraw documents remain.</p>
+        </rr-card>
+      </rr-cols2>
+      <rr-beat>
+        <rr-checklist label="Option 2 exit gate">
+          <rr-todo>chalk/1 schemas and reducer agree across runtimes</rr-todo>
+          <rr-todo>Web and React Native pass the complete first feature set</rr-todo>
+          <rr-todo>Randomized collaboration and recovery converge</rr-todo>
+          <rr-todo>Legacy documents follow the accepted read-only, web, and Chalk-copy policy</rr-todo>
+          <rr-todo>Owner-authorized copy, limits, rollback, and support policy ship first</rr-todo>
+        </rr-checklist>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Native ports" title="Option 3 preserves format at the highest cost">
+      <rr-cols2>
+        <rr-stack label="iOS editor">
+          <rr-frame fn="ChalkWhiteboardView" file="Swift" tone="new">
+            <rr-frame fn="Swift scene + editor" file="iOS SDK" tone="new">
+              <rr-frame fn="whiteboard-v1 adapter" file="shared room contract" />
+            </rr-frame>
+          </rr-frame>
+        </rr-stack>
+        <rr-stack label="Android editor">
+          <rr-frame fn="ChalkWhiteboardView" file="Kotlin" tone="new">
+            <rr-frame fn="Kotlin scene + editor" file="Android SDK" tone="new">
+              <rr-frame fn="whiteboard-v1 adapter" file="shared room contract" />
+            </rr-frame>
+          </rr-frame>
+        </rr-stack>
+      </rr-cols2>
+      <rr-beat>
+        <p>Web stays the reference implementation. The ports share generated models, bundled fonts, canonical text shaping, operation traces, geometry vectors, visual expectations, and an upstream-delta report—not native editor code.</p>
+      </rr-beat>
+      <rr-beat>
+        <rr-callout tone="amber">This is a reimplementation, not a normal fork. The React browser editor does not compile into Swift or Kotlin.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Port gate" title="One upstream upgrade is part of Option 3's proof">
+      <rr-cols2>
+        <rr-card>
+          <h3>Why choose it</h3>
+          <p>Highest ceiling for platform input, accessibility, lifecycle, text systems, and pure-native SDK ergonomics while keeping Excalidraw documents.</p>
+        </rr-card>
+        <rr-card>
+          <h3>Permanent cost</h3>
+          <p>Three editors, two native implementations, platform text and graphics drift, and manual intake of every supported upstream change.</p>
+        </rr-card>
+      </rr-cols2>
+      <rr-beat>
+        <rr-checklist label="Option 3 exit gate">
+          <rr-todo>Swift, Kotlin, and web pass one semantic corpus</rr-todo>
+          <rr-todo>Repeated cross-platform edits preserve fields, text, bindings, order, and deletes</rr-todo>
+          <rr-todo>Both native editors pass device and accessibility gates</rr-todo>
+          <rr-todo>Concurrent collaboration and recovery converge</rr-todo>
+          <rr-todo>Current and previous manifests gate web/mobile release skew</rr-todo>
+          <rr-todo>One real upstream baseline upgrade completes before release</rr-todo>
+        </rr-checklist>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Compare" title="The format promise decides the fallback">
+      <table>
+        <thead>
+          <tr>
+            <th>Question</th>
+            <th>Embed</th>
+            <th>Chalk engine</th>
+            <th>Native ports</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Priority</td>
+            <td>First</td>
+            <td>Conditional second</td>
+            <td>Last</td>
+          </tr>
+          <tr>
+            <td>Durable format</td>
+            <td>Excalidraw</td>
+            <td>Chalk for new work</td>
+            <td>Excalidraw</td>
+          </tr>
+          <tr>
+            <td>Lossless Excalidraw edit</td>
+            <td>Strongest</td>
+            <td>Web or clients where legacy passed</td>
+            <td>Required, costly</td>
+          </tr>
+          <tr>
+            <td>Existing mobile boards</td>
+            <td>Editable</td>
+            <td>Read-only, Chalk copy, or web-only</td>
+            <td>Editable</td>
+          </tr>
+          <tr>
+            <td>First release</td>
+            <td>Public React Native component</td>
+            <td>Public React Native component</td>
+            <td>Public pure-native editors</td>
+          </tr>
+          <tr>
+            <td>Permanent editors</td>
+            <td>1</td>
+            <td>2 during migration</td>
+            <td>3</td>
+          </tr>
+          <tr>
+            <td>Main risk</td>
+            <td>WebView behavior</td>
+            <td>Scope + migration</td>
+            <td>Parity + drift</td>
+          </tr>
+        </tbody>
+      </table>
+      <rr-beat>
+        <p>Option 2 is not the automatic next step after an embedded failure. It is the next step only after Chalk accepts a new format.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Decisions 1" title="D1 and D2 set the measured Option 1 bar">
+      <rr-cols2>
+        <rr-callout tone="amber">
+          <h3>D1 · Device thresholds</h3>
+          <p><b>Premise:</b> “Feels native” cannot decide a release.</p>
+          <p><b>A · Absolute + native reference:</b> one clear support bar; may exclude older devices.</p>
+          <p><b>B · Premium + floor:</b> broader support; two experience and evidence levels.</p>
+          <p><b>C · Relative only:</b> adapts per device; may permit poor absolute behavior.</p>
+          <p><b>Recommend/default:</b> A, frozen after Phase 0 variance is known.</p>
+        </rr-callout>
+        <rr-callout tone="amber">
+          <h3>D2 · Native pen capture</h3>
+          <p><b>Premise:</b> pen can fail while the rest of the editor passes.</p>
+          <p><b>A · Allow one neutral-stroke overlay proof:</b> better pen ceiling; adds camera and preview handoff tests.</p>
+          <p><b>B · Pure embedded only:</b> simpler architecture; any pen miss fails the whole option.</p>
+          <p><b>Recommend/default:</b> A. Excalidraw still creates the canonical element.</p>
+        </rr-callout>
+      </rr-cols2>
+      <rr-progress label="Open decisions" pct="0" n="0/6" tone="amber" />
+    </rr-slide>
+
+    <rr-slide spine="Launch scope" title="D5 fixes the first release surface">
+      <rr-callout tone="amber">
+        <h3>D5 · First release consumers</h3>
+        <p><b>Premise:</b> Chalk has a React Native package, not standalone SwiftPM, CocoaPods, or Maven whiteboard products.</p>
+        <rr-cols2>
+          <rr-card>
+            <h3>A · React Native</h3>
+            <p>First-party app plus public React Native component. Native hosts stay internal. Lowest release and support cost.</p>
+          </rr-card>
+          <rr-card>
+            <h3>B · Thin native SDK hosts</h3>
+            <p>Add public embedded views, native sample apps, ABI policy, install proof, and independent releases.</p>
+          </rr-card>
+        </rr-cols2>
+        <p><b>C · Pure-native editors:</b> makes Option 3 or a lower-level Option 2 core part of launch.</p>
+        <p><b>Recommend/default:</b> A. Reopen standalone native distribution later.</p>
+      </rr-callout>
+      <rr-progress label="Open decisions" pct="0" n="0/6" tone="amber" />
+    </rr-slide>
+
+    <rr-slide spine="Fallback" title="D3 and D6 define the honest Option 2 fallback">
+      <rr-cols2>
+        <rr-callout tone="amber">
+          <h3>D3 · Format policy</h3>
+          <p><b>Premise:</b> full Excalidraw behavior turns a focused engine into a port.</p>
+          <p><b>A · Dual format:</b> chalk/1 for new work; permanent legacy policy.</p>
+          <p><b>B · Full compatibility:</b> one format; highest engine scope.</p>
+          <p><b>Recommend/default:</b> A. If B stays mandatory, skip Option 2.</p>
+        </rr-callout>
+        <rr-callout tone="amber">
+          <h3>D6 · Existing mobile boards</h3>
+          <p><b>Premise:</b> the new engine cannot edit the Excalidraw board that triggered it.</p>
+          <p><b>A · Read-only + Chalk copy:</b> best mobile continuity; keeps a legacy viewer.</p>
+          <p><b>B · Web-only:</b> simplest; mobile users cannot open old boards.</p>
+          <p><b>C · Full native edit:</b> activates Option 3 as well.</p>
+          <p><b>Recommend/default:</b> A, with honest web-only fallback.</p>
+        </rr-callout>
+      </rr-cols2>
+      <rr-progress label="Open decisions" pct="0" n="0/6" tone="amber" />
+    </rr-slide>
+
+    <rr-slide spine="Core" title="D4 follows the Option 1 failure cause">
+      <rr-callout tone="amber">
+        <h3>D4 · Option 2 shared core</h3>
+        <p><b>Premise:</b> the fallback must remove the measured cause of failure.</p>
+        <rr-cols2>
+          <rr-card>
+            <h3>A · TypeScript</h3>
+            <p>Web Canvas plus React Native Skia fits current apps and ships faster. Reject it after a JavaScript scheduling or React Native contention failure.</p>
+          </rr-card>
+          <rr-card>
+            <h3>B · Rust or C++</h3>
+            <p>Wider native reach and different runtime behavior. Adds bindings, memory ownership, build, debugging, and release cost.</p>
+          </rr-card>
+        </rr-cols2>
+        <p><b>Recommend/default:</b> A only after a WebView, Excalidraw, or browser-UI failure. Otherwise the failure report chooses B or stops the branch.</p>
+      </rr-callout>
+      <rr-progress label="Open decisions" pct="0" n="0/6" tone="amber" />
+    </rr-slide>
+
+    <rr-slide spine="Execution" title="Contracts and evidence come before an editor bet">
+      <rr-phases>
+        <rr-phase label="0 · Option 1 prerequisites" caption="Close D1, D2, D5; controller, manifests, multipart transport, fixtures, traces, and device harness" state="now" />
+        <rr-phase label="1 · Embedded proof" caption="Local artifact, iOS/Android hosts, public React Native component, files, security, and device gates" />
+        <rr-phase label="2A · Chalk engine" caption="Only after structural failure; then close D3, D4, D6" />
+        <rr-phase label="2B · Native ports" caption="Only when pure-native delivery and Excalidraw compatibility stay mandatory" />
+        <rr-phase label="3 · Selected handoff" caption="SDK docs, support matrix, diagnostics, install proof, gates, and release notes" />
+      </rr-phases>
+      <rr-beat>
+        <rr-callout tone="amber">The browser whiteboard-v1 end-to-end gate is required before mobile integration can pass. Local bundle and native-host feasibility may run beside it.</rr-callout>
+      </rr-beat>
+      <rr-beat>
+        <rr-callout tone="green">Only one Phase 2 branch may activate. A failed branch returns to product scope; it does not silently start the other editor.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Ready" title="The draft is ready for six product decisions">
+      <rr-checklist label="Before implementation">
+        <rr-todo>D1 · Approve the measured mobile bar</rr-todo>
+        <rr-todo>D2 · Allow or reject native pen capture inside Option 1</rr-todo>
+        <rr-todo>D3 · Define the format policy that controls Option 2</rr-todo>
+        <rr-todo>D4 · Select the default core if Option 2 activates</rr-todo>
+        <rr-todo>D5 · Confirm first-party plus public React Native as launch scope</rr-todo>
+        <rr-todo>D6 · Choose the legacy mobile fallback if Option 2 activates</rr-todo>
+      </rr-checklist>
+      <rr-beat>
+        <p>The Markdown contains the full behavior, architecture, option scopes, acceptance gates, risks, and dependency graph.</p>
+      </rr-beat>
+      <rr-beat>
+        <p><a href="chalk-native-whiteboard-options-spec-2026-07-29.md">Read the complete specification</a></p>
+      </rr-beat>
+    </rr-slide>
+  </rr-deck>
+</rr-doc>
