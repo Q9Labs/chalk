@@ -4,8 +4,151 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>Chalk room actions — draft</title>
+    <title>Chalk room actions — ready</title>
     <style>
+      .rr-code {
+        margin: var(--s2) 0;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .rr-code figcaption {
+        display: flex;
+        align-items: center;
+        gap: var(--s1);
+        padding: var(--s1) var(--s2);
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+        font: 500 var(--t-chrome)/1.4 var(--mono);
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .rr-code figcaption code {
+        background: none;
+        border: 0;
+        padding: 0;
+        text-transform: none;
+      }
+      .rr-code figcaption .grow {
+        flex: 1;
+      }
+      .rr-code figcaption .hint {
+        text-transform: none;
+        letter-spacing: 0;
+        opacity: 0.8;
+      }
+      .rr-code pre.shiki {
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        padding: var(--s1) 0;
+        background: var(--surface) !important;
+        overflow-x: auto;
+        font: 400 var(--t-support)/1.55 var(--mono);
+      }
+      @media (prefers-color-scheme: dark) {
+        .rr-code pre.shiki,
+        .rr-code pre.shiki span {
+          color: var(--shiki-dark, inherit) !important;
+        }
+      }
+      .rr-code .line {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+        padding-right: var(--s2);
+        cursor: pointer;
+      }
+      .rr-code code {
+        counter-reset: line var(--ln-start, 0);
+      }
+      .rr-code .line::before {
+        counter-increment: line;
+        content: counter(line);
+        display: inline-block;
+        width: 2.6em;
+        padding-right: 0.9em;
+        text-align: right;
+        color: var(--muted);
+        opacity: 0.55;
+        user-select: none;
+      }
+      .rr-code .line:hover {
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+      }
+      .rr-code .line.sel {
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+      }
+      .rr-code .line.annotated::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--amber);
+      }
+      .rr-code .ann-note,
+      .rr-code .ann-editor {
+        display: block;
+        white-space: normal;
+        margin: var(--s1) var(--s2) var(--s1) 3.5em;
+        padding: var(--s1) var(--s2);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--amber);
+        border-radius: var(--radius);
+        font: 400 var(--t-support)/1.5 var(--text);
+      }
+      .rr-code .ann-note {
+        cursor: pointer;
+      }
+      .rr-code .ann-note .meta {
+        color: var(--muted);
+        font: 500 var(--t-chrome)/1.4 var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        display: block;
+        margin-bottom: 0.15rem;
+      }
+      .rr-code .ann-editor textarea {
+        width: 100%;
+        min-height: 3.2em;
+        resize: vertical;
+        font: inherit;
+        color: var(--fg);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: var(--s1) var(--s2);
+      }
+      .rr-code .ann-editor .row {
+        display: flex;
+        gap: var(--s1);
+        margin-top: 0.4rem;
+        align-items: center;
+      }
+      .rr-code .ann-editor .row .grow {
+        flex: 1;
+      }
+      .ann-bar {
+        position: fixed;
+        right: var(--s2);
+        bottom: var(--s2);
+        z-index: 30;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: var(--s1);
+        display: flex;
+        gap: var(--s1);
+        align-items: center;
+      }
+      .ann-bar[hidden] {
+        display: none;
+      }
+
       /* play mode: the deck owns the viewport, one slide at a time --------------- */
       body:has(.deck.is-play) main {
         display: block;
@@ -1278,21 +1421,17 @@
   </head>
   <body>
     <svg style="display: none" aria-hidden="true">
-      <symbol id="i-chip" viewBox="0 0 24 24">
-        <rect x="5" y="5" width="14" height="14" rx="2" />
-        <rect x="10" y="10" width="4" height="4" />
-        <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
-      </symbol>
-      <symbol id="i-warning" viewBox="0 0 24 24">
-        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-        <path d="M12 9v4M12 17h.01" />
-      </symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
       <symbol id="i-branch" viewBox="0 0 24 24">
         <path d="M6 3v12" />
         <circle cx="18" cy="6" r="3" />
         <circle cx="6" cy="18" r="3" />
         <path d="M18 9a9 9 0 0 1-9 9" />
+      </symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24">
+        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+        <path d="M14 3v6h6M9 13h6M9 17h6" />
       </symbol>
       <symbol id="i-route" viewBox="0 0 24 24">
         <path d="M5 20h7.5a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h6" />
@@ -1327,21 +1466,21 @@
               <div class="tile-l">
                 <svg class="icon"><use href="#i-layers" /></svg> Included groups
               </div>
-              <span class="caption">Three collaboration paths; two existing paths to finish</span>
+              <span class="caption">Two transports; five end-to-end action groups</span>
             </div>
             <div class="card tile">
-              <div class="tile-v green">2</div>
+              <div class="tile-v green">5</div>
               <div class="tile-l">
                 <svg class="icon"><use href="#i-check" /></svg> Accepted decisions
               </div>
-              <span class="caption">Chat depth and platform scope</span>
+              <span class="caption">Chat, platforms, retention, transports, images</span>
             </div>
             <div class="card tile">
-              <div class="tile-v amber">3</div>
+              <div class="tile-v green">Ready</div>
               <div class="tile-l">
-                <svg class="icon"><use href="#i-warning" /></svg> Open decisions
+                <svg class="icon"><use href="#i-route" /></svg> Execution status
               </div>
-              <span class="caption">The spec is not executable yet</span>
+              <span class="caption">Phase 1 starts with contracts and types</span>
             </div>
           </div>
           <p><a href="chalk-room-actions-spec-2026-07-29.md">Open the detailed implementation specification</a></p>
@@ -1413,13 +1552,20 @@
               </div>
             </div>
           </figure>
-          <div class="beat" data-mark=""><p>The framework-neutral Session owns collaboration transport, metadata, reconnect, failures, and permissions. Renderer adapters own the Excalidraw imperative API.</p></div>
+          <div class="beat" data-mark=""><p>The framework-neutral Session owns the Sync v3 room-actions extension and the separate whiteboard-v1 transport. Renderer adapters own the Excalidraw imperative API.</p></div>
         </section>
 
         <section class="slide" data-spine="Design">
           <div class="slide-head">
             <h2 class="slide-title">Each action gets the delivery model it needs</h2>
             <span class="slide-kicker klabel"></span>
+          </div>
+          <div class="journey">
+            <span class="stop new">Sync v3 · controls + chat + reactions</span
+            ><span class="sep"
+              ><svg class="icon"><use href="#i-arrow-right" /></svg
+            ></span>
+            <span class="stop new">whiteboard-v1 · Excalidraw</span>
           </div>
           <div class="cols2">
             <div class="card">
@@ -1431,82 +1577,122 @@
               <p>Postgres owns ordered chat and recoverable whiteboard scenes. A clear advances the scene epoch so stale clients cannot restore old content.</p>
             </div>
           </div>
-          <div class="beat" data-mark=""><p>Existing moderation remains authoritative Sync v3 control state. Whiteboard files require participant-authenticated object access or the image tool remains disabled.</p></div>
+          <div class="beat" data-mark=""><p>Existing moderation remains authoritative Sync v3 control state. Whiteboard images use participant-authenticated upload, provider verification, and protected download.</p></div>
         </section>
 
         <section class="slide" data-spine="API">
           <div class="slide-head">
-            <h2 class="slide-title">One public Session, typed outcomes</h2>
+            <h2 class="slide-title">The complete set of Session additions</h2>
             <span class="slide-kicker klabel"></span>
           </div>
-          <div class="cols2">
-            <figure class="types">
-              <figcaption>
-                <svg class="icon"><use href="#i-chip" /></svg> Room actions
-              </figcaption>
-              <div class="sigs">
-                <div class="sig new">
-                  <code class="sig-name">sendReaction</code>
-                  <code class="sig-shape">(ChalkReaction) → Promise&lt;ChalkRoomReaction&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">sendChatMessage</code>
-                  <code class="sig-shape">(ChalkSendChatMessageInput) → Promise&lt;ChalkChatMessage&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">retryChatMessage</code>
-                  <code class="sig-shape">(clientMessageId) → Promise&lt;ChalkChatMessage&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">requestUnmute</code>
-                  <code class="sig-shape">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">requestStartCamera</code>
-                  <code class="sig-shape">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-              </div>
-            </figure>
-            <figure class="types">
-              <figcaption>
-                <svg class="icon"><use href="#i-chip" /></svg> Whiteboard port
-              </figcaption>
-              <div class="sigs">
-                <div class="sig new">
-                  <code class="sig-name">startSceneSubscription</code>
-                  <code class="sig-shape">() → Promise&lt;void&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">subscribe</code>
-                  <code class="sig-shape">(ChalkWhiteboardEvent listener) → unsubscribe</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">submitUpdate</code>
-                  <code class="sig-shape">(ChalkWhiteboardUpdateInput) → Promise&lt;ChalkWhiteboardCommit&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">sendCursor</code>
-                  <code class="sig-shape">({ x, y }) → void</code>
-                  <span class="sig-note"></span>
-                </div>
-                <div class="sig new">
-                  <code class="sig-name">requestSnapshot</code>
-                  <code class="sig-shape">() → Promise&lt;void&gt;</code>
-                  <span class="sig-note"></span>
-                </div>
-              </div>
-            </figure>
-          </div>
+          <figure class="rr-code" data-code-id="code-1" data-file="@q9labsai/chalk-client/session-api.excerpt.ts" data-start="1">
+            <figcaption>
+              <svg class="icon"><use href="#i-doc" /></svg> <code>@q9labsai/chalk-client/session-api.excerpt.ts</code><span class="grow"></span><span class="hint">click a line to annotate · shift-click extends</span>
+            </figcaption>
+            <pre
+              class="shiki shiki-themes github-light github-dark"
+              style="background-color: #fff; --shiki-dark-bg: #24292e; color: #24292e; --shiki-dark: #e1e4e8"
+              tabindex="0"
+            ><code style="--ln-start:0"><span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">export</span><span style="color:#D73A49;--shiki-dark:#F97583"> type</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkSessionStore</span><span style="color:#D73A49;--shiki-dark:#F97583"> =</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkSessionActions</span><span style="color:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> getSnapshot</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkSessionSnapshot</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> subscribe</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="color:#6F42C1;--shiki-dark:#B392F0">listener</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> whiteboard</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1Transport</span><span style="color:#D73A49;--shiki-dark:#F97583"> |</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">};</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">export</span><span style="color:#D73A49;--shiki-dark:#F97583"> type</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkSessionActions</span><span style="color:#D73A49;--shiki-dark:#F97583"> =</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D;--shiki-dark:#6A737D">  // Existing Session actions remain unchanged.</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> sendReaction</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    reaction</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkReaction</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkRoomReaction</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> sendChatMessage</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    input</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkSendChatMessageInput</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkChatMessage</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> retryChatMessage</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    clientMessageId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkChatMessage</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> loadOlderChatMessages</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    limit</span><span style="color:#D73A49;--shiki-dark:#F97583">?:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> number</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkChatPageResult</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> markChatRead</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> requestUnmute</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    participantSessionId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkDirectedRequestResult</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> requestStartCamera</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    participantSessionId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkDirectedRequestResult</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> acceptMediaRequest</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="color:#E36209;--shiki-dark:#FFAB70">requestId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#005CC5;--shiki-dark:#79B8FF">void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> declineMediaRequest</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="color:#E36209;--shiki-dark:#FFAB70">requestId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">};</span></span></code></pre>
+          </figure>
           <div class="beat" data-mark="">
-            <p><code>ChalkSessionStore</code> remains snapshot + actions + subscribe, with one nullable whiteboard port. Room actions reject as <code>ChalkSessionError</code>; transport operations use <code>ChalkWhiteboardTransportError</code>.</p>
+            <p>Room actions reject as <code>ChalkSessionError</code>. React and React Native consume the same snapshot and action types.</p>
+          </div>
+        </section>
+
+        <section class="slide" data-spine="Types">
+          <div class="slide-head">
+            <h2 class="slide-title">whiteboard-v1 is a separate typed transport</h2>
+            <span class="slide-kicker klabel"></span>
+          </div>
+          <figure class="rr-code" data-code-id="code-2" data-file="@q9labsai/chalk-client/whiteboard-v1.ts" data-start="1">
+            <figcaption>
+              <svg class="icon"><use href="#i-doc" /></svg> <code>@q9labsai/chalk-client/whiteboard-v1.ts</code><span class="grow"></span><span class="hint">click a line to annotate · shift-click extends</span>
+            </figcaption>
+            <pre
+              class="shiki shiki-themes github-light github-dark"
+              style="background-color: #fff; --shiki-dark-bg: #24292e; color: #24292e; --shiki-dark: #e1e4e8"
+              tabindex="0"
+            ><code style="--ln-start:0"><span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">export</span><span style="color:#D73A49;--shiki-dark:#F97583"> type</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1Event</span><span style="color:#D73A49;--shiki-dark:#F97583"> =</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  |</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> type</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "snapshot"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> sceneId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> revision</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> elements</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#D73A49;--shiki-dark:#F97583"> readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1Element</span><span style="color:#24292E;--shiki-dark:#E1E4E8">[];</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> appState</span><span style="color:#D73A49;--shiki-dark:#F97583">?:</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkSharedWhiteboardAppState</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  |</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> type</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "update"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> sceneId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> revision</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> elements</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#D73A49;--shiki-dark:#F97583"> readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1Element</span><span style="color:#24292E;--shiki-dark:#E1E4E8">[];</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  |</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> type</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "cursor"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> participantSessionId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> displayName</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> x</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> number</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> y</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> number</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> occurredAt</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  |</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> type</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "reset_required"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> sceneId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">      readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> reason</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "scene_changed"</span><span style="color:#D73A49;--shiki-dark:#F97583"> |</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "cursor_expired"</span><span style="color:#D73A49;--shiki-dark:#F97583"> |</span><span style="color:#032F62;--shiki-dark:#9ECBFF"> "gap"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    };</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">export</span><span style="color:#D73A49;--shiki-dark:#F97583"> type</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1Transport</span><span style="color:#D73A49;--shiki-dark:#F97583"> =</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> startSceneSubscription</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#005CC5;--shiki-dark:#79B8FF">void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> stopSceneSubscription</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> subscribe</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#6F42C1;--shiki-dark:#B392F0">    listener</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="color:#E36209;--shiki-dark:#FFAB70">event</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1Event</span><span style="color:#24292E;--shiki-dark:#E1E4E8">) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> submitUpdate</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    input</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1UpdateInput</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkWhiteboardV1Commit</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> sendCursor</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    input</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="color:#D73A49;--shiki-dark:#F97583">readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> x</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> number</span><span style="color:#24292E;--shiki-dark:#E1E4E8">; </span><span style="color:#D73A49;--shiki-dark:#F97583">readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> y</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> number</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#005CC5;--shiki-dark:#79B8FF"> void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> requestSnapshot</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#005CC5;--shiki-dark:#79B8FF">void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> clear</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> () </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#6F42C1;--shiki-dark:#B392F0">ChalkWhiteboardV1Commit</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> setDrawPermission</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    participantSessionId</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> string</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E36209;--shiki-dark:#FFAB70">    canDraw</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#005CC5;--shiki-dark:#79B8FF"> boolean</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ) </span><span style="color:#D73A49;--shiki-dark:#F97583">=></span><span style="color:#6F42C1;--shiki-dark:#B392F0"> Promise</span><span style="color:#24292E;--shiki-dark:#E1E4E8">&#x3C;</span><span style="color:#005CC5;--shiki-dark:#79B8FF">void</span><span style="color:#24292E;--shiki-dark:#E1E4E8">>;</span></span>
+<span class="line"><span style="color:#D73A49;--shiki-dark:#F97583">  readonly</span><span style="color:#E36209;--shiki-dark:#FFAB70"> files</span><span style="color:#D73A49;--shiki-dark:#F97583">:</span><span style="color:#6F42C1;--shiki-dark:#B392F0"> ChalkWhiteboardV1FileTransport</span><span style="color:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">};</span></span></code></pre>
+          </figure>
+          <div class="beat" data-mark="">
+            <p><code>ChalkWhiteboardV1Client</code> owns operation IDs, receipts, retry, and reconnect. Excalidraw owns rendering and reconciliation.</p>
           </div>
         </section>
 
@@ -1528,10 +1714,10 @@
                       <span class="fn">ChalkSession.sendChatMessage</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
                       <ul class="frames">
                         <li class="frame new">
-                          <span class="fn">ChalkSessionCollaborationClient.sendChatMessage</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
+                          <span class="fn">V3Client.sendChatMessage</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
                           <ul class="frames">
                             <li class="frame new">
-                              <span class="fn">Collaboration.Session.send_chat</span><span class="fmeta">apps/sync</span><span class="fnote"></span>
+                              <span class="fn">ChalkSync.RoomActions.send_chat</span><span class="fmeta">apps/sync</span><span class="fnote"></span>
                               <ul class="frames">
                                 <li class="frame new">
                                   <span class="fn">ChatRepository.append</span><span class="fmeta">apps/sync</span><span class="fnote">commit, then fan out</span>
@@ -1559,10 +1745,10 @@
                       <span class="fn">ExcalidrawCollabEngine.handleChange</span><span class="fmeta">chalk-whiteboard</span><span class="fnote"></span>
                       <ul class="frames">
                         <li class="frame new">
-                          <span class="fn">WhiteboardTransport.submitUpdate</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
+                          <span class="fn">ChalkWhiteboardV1Transport.submitUpdate</span><span class="fmeta">chalk-client</span><span class="fnote"></span>
                           <ul class="frames">
                             <li class="frame new">
-                              <span class="fn">WhiteboardReducer.merge</span><span class="fmeta">apps/sync</span><span class="fnote"></span>
+                              <span class="fn">ChalkSync.WhiteboardV1.Session.apply_update</span><span class="fmeta">apps/sync</span><span class="fnote"></span>
                               <ul class="frames">
                                 <li class="frame new">
                                   <span class="fn">WhiteboardRepository.commit</span><span class="fmeta">apps/sync</span><span class="fnote">receipt + revision</span>
@@ -1584,42 +1770,21 @@
 
         <section class="slide" data-spine="Decided">
           <div class="slide-head">
-            <h2 class="slide-title">Chat and platform scope are settled</h2>
+            <h2 class="slide-title">All five decisions are settled</h2>
             <span class="slide-kicker klabel"></span>
           </div>
           <div class="cols2">
             <div class="callout green">
               <h3>D1 · Durable room-wide text</h3>
               <p>Include acknowledgements, paging, reconnect recovery, retention, and local unread state.</p>
-              <p>Attachments, edit/delete, typing, durable receipts, and message reactions stay out.</p>
+              <p><b>D3 · Retention:</b> seven days after Session end; never clean an active Session.</p>
             </div>
             <div class="callout green">
               <h3>D2 · All clients, browser whiteboard</h3>
               <p>Web, iOS, and Android include reactions, chat, requests, and moderation.</p>
-              <p>Browser Excalidraw is included. Native mobile whiteboard is deferred.</p>
+              <p><b>D4 · Transports:</b> Sync v3 for controls/chat/reactions; whiteboard-v1 for Excalidraw.</p>
+              <p><b>D5 · Images:</b> authenticated staged upload, verification, and protected download.</p>
             </div>
-          </div>
-        </section>
-
-        <section class="slide" data-spine="Decisions">
-          <div class="slide-head">
-            <h2 class="slide-title">Three choices still block implementation</h2>
-            <span class="slide-kicker klabel"></span>
-          </div>
-          <div class="cols2">
-            <div class="callout amber">
-              <h3>D3 · Retention values</h3>
-              <p><b>Recommend:</b> seven days after Session end; never clean active Sessions; reject writes at end.</p>
-              <p>Alternatives: one day or thirty days.</p>
-            </div>
-            <div class="callout amber">
-              <h3>D4 · Transport</h3>
-              <p><b>Recommend:</b> a separate collab-v1 socket owned by the same Elixir SyncEngine.</p>
-              <p>Alternative: Sync v4 or a separate negotiated subprotocol. Strict Sync v3 remains unchanged.</p>
-            </div>
-          </div>
-          <div class="beat" data-mark="">
-            <div class="callout amber"><b>D5 · Excalidraw images — Recommend:</b> staged, participant-authenticated upload with server verification and cleanup. Alternative: disable the image tool and reject image elements.</div>
           </div>
         </section>
 
@@ -1629,10 +1794,10 @@
             <span class="slide-kicker klabel"></span>
           </div>
           <ol class="phases">
-            <li class="now">0 · Decisions<span class="caption">Close D3–D5 and numeric defaults</span></li>
-            <li class="">1 · Contract + types<span class="caption">Public, wire, repository, reducer, fan-out ports and compile tests</span></li>
-            <li class="">2 · Foundations<span class="caption">Database and reducer first; then SyncEngine and conditional files</span></li>
-            <li class="">3 · Client core<span class="caption">Session, collaboration client, adapters, integration</span></li>
+            <li class="done">0 · Accepted scope<span class="caption">All five product decisions and scope fences</span></li>
+            <li class="now">1 · Contract + types<span class="caption">Legacy/extended Sync v3, whiteboard-v1, ports, compile tests</span></li>
+            <li class="">2 · Foundations<span class="caption">Database/reducer, then Sync v3 room-actions and whiteboard-v1 lanes</span></li>
+            <li class="">3 · Client core<span class="caption">Session, extended V3Client, whiteboard client, adapters</span></li>
             <li class="">4 · Product<span class="caption">Web room and iOS/Android non-whiteboard actions</span></li>
             <li class="">5 · Hardening<span class="caption">Two replicas, restart, quotas, overload, retention</span></li>
             <li class="">6 · Handoff<span class="caption">Release notes, bounded review, root gate, commit</span></li>
@@ -1648,7 +1813,7 @@
           <div class="card checklist-card">
             <p class="checklist-title">Release gates</p>
             <ul class="checklist">
-              <li class="todo"><span class="cbox"></span> Generated TypeScript and Elixir contracts agree</li>
+              <li class="todo"><span class="cbox"></span> Extended Sync v3 and whiteboard-v1 generated contracts agree</li>
               <li class="todo"><span class="cbox"></span> Chat survives reconnect and SyncEngine restart without duplicates</li>
               <li class="todo"><span class="cbox"></span> Concurrent boards converge; clear rejects stale updates</li>
               <li class="todo"><span class="cbox"></span> Directed requests and every moderation action work against another client</li>
@@ -1658,8 +1823,8 @@
           </div>
           <div class="progress-row">
             <span class="n label">Decisions closed</span>
-            <div class="progress"><i class="amber" style="width: 40%"></i></div>
-            <span class="n">2/5</span>
+            <div class="progress"><i class="green" style="width: 100%"></i></div>
+            <span class="n">5/5</span>
           </div>
         </section>
         <footer class="hud">
@@ -1673,6 +1838,155 @@
       </div>
     </main>
     <script>
+      (() => {
+        const KEY = "rr-ann:" + location.pathname;
+        const load = () => {
+          try {
+            return JSON.parse(localStorage.getItem(KEY)) || {};
+          } catch {
+            return {};
+          }
+        };
+        const store = load();
+        const save = () => localStorage.setItem(KEY, JSON.stringify(store));
+        const blocks = [...document.querySelectorAll("figure[data-code-id]")];
+        if (!blocks.length) return;
+
+        const bar = document.createElement("div");
+        bar.className = "ann-bar";
+        bar.hidden = true;
+        bar.innerHTML = '<button type="button" class="primary" data-ann-copy></button><button type="button" data-ann-clear>Clear</button>';
+        document.body.append(bar);
+        const copyBtn = bar.querySelector("[data-ann-copy]");
+
+        const anns = (b) => (store[b.dataset.codeId] ??= []);
+        const lines = (b) => [...b.querySelectorAll(".line")];
+        const lineNo = (b, el) => Number(b.dataset.start) + lines(b).indexOf(el);
+        const total = () => blocks.reduce((t, b) => t + anns(b).length, 0);
+
+        function render(b) {
+          b.querySelectorAll(".ann-note, .ann-editor").forEach((n) => n.remove());
+          lines(b).forEach((l) => l.classList.remove("annotated", "sel"));
+          const ls = lines(b);
+          for (const a of anns(b)
+            .slice()
+            .sort((x, y) => x.s - y.s)) {
+            const startIdx = a.s - Number(b.dataset.start);
+            const endIdx = a.e - Number(b.dataset.start);
+            for (let i = startIdx; i <= endIdx && i < ls.length; i++) ls[i].classList.add("annotated");
+            const note = document.createElement("span");
+            note.className = "ann-note";
+            note.innerHTML = `<span class="meta">L${a.s}${a.e > a.s ? "–" + a.e : ""} · click to edit</span>`;
+            note.append(a.text);
+            note.addEventListener("click", () => edit(b, a.s, a.e, a));
+            ls[Math.min(endIdx, ls.length - 1)].after(note);
+          }
+          const n = total();
+          bar.hidden = !n;
+          copyBtn.textContent = `Copy ${n} annotation${n === 1 ? "" : "s"}`;
+        }
+
+        function edit(b, s, e, existing) {
+          document.querySelectorAll(".ann-editor").forEach((x) => x.remove());
+          render(b);
+          const ls = lines(b);
+          const startIdx = s - Number(b.dataset.start);
+          const endIdx = e - Number(b.dataset.start);
+          for (let i = startIdx; i <= endIdx && i < ls.length; i++) ls[i].classList.add("sel");
+          const ed = document.createElement("span");
+          ed.className = "ann-editor";
+          ed.innerHTML = `<textarea placeholder="Note for L${s}${e > s ? "–" + e : ""} — will be copied for the agent"></textarea>
+      <span class="row"><span class="grow"></span>
+      ${existing ? '<button type="button" data-del>Delete</button>' : ""}
+      <button type="button" data-cancel>Cancel</button>
+      <button type="button" class="primary" data-save>Save</button></span>`;
+          const ta = ed.querySelector("textarea");
+          if (existing) ta.value = existing.text;
+          ed.querySelector("[data-save]").addEventListener("click", () => {
+            const text = ta.value.trim();
+            if (existing) existing.text = text || existing.text;
+            else if (text) anns(b).push({ s, e, text });
+            if (existing && !text) drop(b, existing);
+            save();
+            render(b);
+          });
+          ed.querySelector("[data-cancel]").addEventListener("click", () => render(b));
+          ed.querySelector("[data-del]")?.addEventListener("click", () => {
+            drop(b, existing);
+            save();
+            render(b);
+          });
+          ta.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" && !ev.shiftKey) {
+              ev.preventDefault();
+              ed.querySelector("[data-save]").click();
+            }
+            if (ev.key === "Escape") render(b);
+          });
+          ls[Math.min(endIdx, ls.length - 1)].after(ed);
+          ta.focus();
+        }
+
+        const drop = (b, a) => {
+          store[b.dataset.codeId] = anns(b).filter((x) => x !== a);
+        };
+
+        let anchor = null; // { block, line } for shift-click ranges
+        for (const b of blocks)
+          b.addEventListener("click", (ev) => {
+            const l = ev.target.closest(".line");
+            if (!l || ev.target.closest(".ann-note, .ann-editor")) return;
+            const n = lineNo(b, l);
+            if (ev.shiftKey && anchor && anchor.block === b) {
+              edit(b, Math.min(anchor.n, n), Math.max(anchor.n, n));
+            } else {
+              anchor = { block: b, n };
+              edit(b, n, n);
+            }
+          });
+
+        function exportText() {
+          const out = [`Annotations — ${document.title}`];
+          for (const b of blocks) {
+            const ls = lines(b);
+            for (const a of anns(b)
+              .slice()
+              .sort((x, y) => x.s - y.s)) {
+              out.push("", `${b.dataset.file} L${a.s}${a.e > a.s ? "-" + a.e : ""}:`);
+              for (let i = a.s - Number(b.dataset.start); i <= a.e - Number(b.dataset.start) && i < ls.length; i++) out.push(`> ${ls[i].textContent.replace(/\s+$/, "")}`);
+              out.push(`note: ${a.text}`);
+            }
+          }
+          return out.join("\n");
+        }
+
+        copyBtn.addEventListener("click", async () => {
+          const text = exportText();
+          try {
+            await navigator.clipboard.writeText(text);
+          } catch {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            document.body.append(ta);
+            ta.select();
+            document.execCommand("copy");
+            ta.remove();
+          }
+          const prev = copyBtn.textContent;
+          copyBtn.textContent = "Copied — paste to the agent";
+          setTimeout(() => {
+            copyBtn.textContent = prev;
+          }, 1600);
+        });
+        bar.querySelector("[data-ann-clear]").addEventListener("click", () => {
+          for (const b of blocks) store[b.dataset.codeId] = [];
+          save();
+          blocks.forEach(render);
+        });
+
+        blocks.forEach(render);
+      })();
+
       document.querySelectorAll(".deck").forEach((deck) => {
         const slides = [...deck.querySelectorAll(".slide")];
         if (!slides.length) return;

@@ -1,12 +1,12 @@
-<rr-doc title="Chalk room actions — draft" register="spec" project="Chalk" risk="major" summary="Complete reactions, durable chat, Excalidraw whiteboard, directed media requests, and existing moderation across the SyncEngine and SDKs.">
+<rr-doc title="Chalk room actions — ready" register="spec" project="Chalk" risk="major" summary="Complete reactions, durable chat, Excalidraw whiteboard, directed media requests, and existing moderation across the SyncEngine and SDKs.">
   <rr-deck id="chalk-room-actions">
     <rr-slide spine="Outcome">
       <h1>Complete the networked room</h1>
       <p class="lede">One capability-gated Session model for reactions, chat, Excalidraw whiteboard, directed media requests, and host moderation. Recording stays out.</p>
       <rr-tiles>
-        <rr-tile icon="layers" label="Included groups" value="5" caption="Three collaboration paths; two existing paths to finish" />
-        <rr-tile icon="check" label="Accepted decisions" value="2" caption="Chat depth and platform scope" tone="green" />
-        <rr-tile icon="warning" label="Open decisions" value="3" caption="The spec is not executable yet" tone="amber" />
+        <rr-tile icon="layers" label="Included groups" value="5" caption="Two transports; five end-to-end action groups" />
+        <rr-tile icon="check" label="Accepted decisions" value="5" caption="Chat, platforms, retention, transports, images" tone="green" />
+        <rr-tile icon="route" label="Execution status" value="Ready" caption="Phase 1 starts with contracts and types" tone="green" />
       </rr-tiles>
       <p><a href="chalk-room-actions-spec-2026-07-29.md">Open the detailed implementation specification</a></p>
     </rr-slide>
@@ -60,11 +60,15 @@
         <div class="dock"><button>Mic</button><button>Camera</button><button>Share</button> <button class="new">Board</button><button class="new">Reactions</button> <button class="new">Chat</button><button>People</button><button class="leave">Leave</button></div>
       </rr-mockup>
       <rr-beat>
-        <p>The framework-neutral Session owns collaboration transport, metadata, reconnect, failures, and permissions. Renderer adapters own the Excalidraw imperative API.</p>
+        <p>The framework-neutral Session owns the Sync v3 room-actions extension and the separate whiteboard-v1 transport. Renderer adapters own the Excalidraw imperative API.</p>
       </rr-beat>
     </rr-slide>
 
     <rr-slide spine="Design" title="Each action gets the delivery model it needs">
+      <rr-journey>
+        <rr-stop tone="new">Sync v3 · controls + chat + reactions</rr-stop><rr-sep />
+        <rr-stop tone="new">whiteboard-v1 · Excalidraw</rr-stop>
+      </rr-journey>
       <rr-cols2>
         <rr-card>
           <h3>Transient</h3>
@@ -76,29 +80,101 @@
         </rr-card>
       </rr-cols2>
       <rr-beat>
-        <p>Existing moderation remains authoritative Sync v3 control state. Whiteboard files require participant-authenticated object access or the image tool remains disabled.</p>
+        <p>Existing moderation remains authoritative Sync v3 control state. Whiteboard images use participant-authenticated upload, provider verification, and protected download.</p>
       </rr-beat>
     </rr-slide>
 
-    <rr-slide spine="API" title="One public Session, typed outcomes">
-      <rr-cols2>
-        <rr-types label="Room actions">
-          <rr-sig name="sendReaction" tone="new">(ChalkReaction) → Promise&lt;ChalkRoomReaction&gt;</rr-sig>
-          <rr-sig name="sendChatMessage" tone="new">(ChalkSendChatMessageInput) → Promise&lt;ChalkChatMessage&gt;</rr-sig>
-          <rr-sig name="retryChatMessage" tone="new">(clientMessageId) → Promise&lt;ChalkChatMessage&gt;</rr-sig>
-          <rr-sig name="requestUnmute" tone="new">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</rr-sig>
-          <rr-sig name="requestStartCamera" tone="new">(participantSessionId) → Promise&lt;ChalkDirectedRequestResult&gt;</rr-sig>
-        </rr-types>
-        <rr-types label="Whiteboard port">
-          <rr-sig name="startSceneSubscription" tone="new">() → Promise&lt;void&gt;</rr-sig>
-          <rr-sig name="subscribe" tone="new">(ChalkWhiteboardEvent listener) → unsubscribe</rr-sig>
-          <rr-sig name="submitUpdate" tone="new">(ChalkWhiteboardUpdateInput) → Promise&lt;ChalkWhiteboardCommit&gt;</rr-sig>
-          <rr-sig name="sendCursor" tone="new">({ x, y }) → void</rr-sig>
-          <rr-sig name="requestSnapshot" tone="new">() → Promise&lt;void&gt;</rr-sig>
-        </rr-types>
-      </rr-cols2>
+    <rr-slide spine="API" title="The complete set of Session additions">
+      <rr-code file="@q9labsai/chalk-client/session-api.excerpt.ts" lang="ts" start="1">
+export type ChalkSessionStore = ChalkSessionActions & {
+  readonly getSnapshot: () => ChalkSessionSnapshot;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly whiteboard: ChalkWhiteboardV1Transport | null;
+};
+
+export type ChalkSessionActions = {
+  // Existing Session actions remain unchanged.
+  readonly sendReaction: (
+    reaction: ChalkReaction,
+  ) => Promise<ChalkRoomReaction>;
+  readonly sendChatMessage: (
+    input: ChalkSendChatMessageInput,
+  ) => Promise<ChalkChatMessage>;
+  readonly retryChatMessage: (
+    clientMessageId: string,
+  ) => Promise<ChalkChatMessage>;
+  readonly loadOlderChatMessages: (
+    limit?: number,
+  ) => Promise<ChalkChatPageResult>;
+  readonly markChatRead: () => void;
+  readonly requestUnmute: (
+    participantSessionId: string,
+  ) => Promise<ChalkDirectedRequestResult>;
+  readonly requestStartCamera: (
+    participantSessionId: string,
+  ) => Promise<ChalkDirectedRequestResult>;
+  readonly acceptMediaRequest: (requestId: string) => Promise<void>;
+  readonly declineMediaRequest: (requestId: string) => void;
+};
+      </rr-code>
       <rr-beat>
-        <p><code>ChalkSessionStore</code> remains snapshot + actions + subscribe, with one nullable whiteboard port. Room actions reject as <code>ChalkSessionError</code>; transport operations use <code>ChalkWhiteboardTransportError</code>.</p>
+        <p>Room actions reject as <code>ChalkSessionError</code>. React and React Native consume the same snapshot and action types.</p>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Types" title="whiteboard-v1 is a separate typed transport">
+      <rr-code file="@q9labsai/chalk-client/whiteboard-v1.ts" lang="ts" start="1">
+export type ChalkWhiteboardV1Event =
+  | {
+      readonly type: "snapshot";
+      readonly sceneId: string;
+      readonly revision: string;
+      readonly elements: readonly ChalkWhiteboardV1Element[];
+      readonly appState?: ChalkSharedWhiteboardAppState;
+    }
+  | {
+      readonly type: "update";
+      readonly sceneId: string;
+      readonly revision: string;
+      readonly elements: readonly ChalkWhiteboardV1Element[];
+    }
+  | {
+      readonly type: "cursor";
+      readonly participantSessionId: string;
+      readonly displayName: string;
+      readonly x: number;
+      readonly y: number;
+      readonly occurredAt: string;
+    }
+  | {
+      readonly type: "reset_required";
+      readonly sceneId: string;
+      readonly reason: "scene_changed" | "cursor_expired" | "gap";
+    };
+
+export type ChalkWhiteboardV1Transport = {
+  readonly startSceneSubscription: () => Promise<void>;
+  readonly stopSceneSubscription: () => void;
+  readonly subscribe: (
+    listener: (event: ChalkWhiteboardV1Event) => void,
+  ) => () => void;
+  readonly submitUpdate: (
+    input: ChalkWhiteboardV1UpdateInput,
+  ) => Promise<ChalkWhiteboardV1Commit>;
+  readonly sendCursor: (
+    input: { readonly x: number; readonly y: number },
+  ) => void;
+  readonly requestSnapshot: () => Promise<void>;
+  readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
+  readonly setDrawPermission: (
+    participantSessionId: string,
+    canDraw: boolean,
+  ) => Promise<void>;
+  readonly files: ChalkWhiteboardV1FileTransport;
+};
+      </rr-code>
+      <rr-beat>
+        <p><code>ChalkWhiteboardV1Client</code> owns operation IDs, receipts, retry, and reconnect. Excalidraw owns rendering and reconciliation.</p>
       </rr-beat>
     </rr-slide>
 
@@ -107,8 +183,8 @@
         <rr-stack label="Durable chat">
           <rr-frame fn="ChatPanel.onSend" file="chalk-react" tone="amber">
             <rr-frame fn="ChalkSession.sendChatMessage" file="chalk-client" tone="new">
-              <rr-frame fn="ChalkSessionCollaborationClient.sendChatMessage" file="chalk-client" tone="new">
-                <rr-frame fn="Collaboration.Session.send_chat" file="apps/sync" tone="new">
+              <rr-frame fn="V3Client.sendChatMessage" file="chalk-client" tone="new">
+                <rr-frame fn="ChalkSync.RoomActions.send_chat" file="apps/sync" tone="new">
                   <rr-frame fn="ChatRepository.append" file="apps/sync" note="commit, then fan out" tone="new" />
                 </rr-frame>
               </rr-frame>
@@ -118,8 +194,8 @@
         <rr-stack label="Excalidraw update">
           <rr-frame fn="WhiteboardCanvas.onChange" file="chalk-whiteboard">
             <rr-frame fn="ExcalidrawCollabEngine.handleChange" file="chalk-whiteboard" tone="amber">
-              <rr-frame fn="WhiteboardTransport.submitUpdate" file="chalk-client" tone="new">
-                <rr-frame fn="WhiteboardReducer.merge" file="apps/sync" tone="new">
+              <rr-frame fn="ChalkWhiteboardV1Transport.submitUpdate" file="chalk-client" tone="new">
+                <rr-frame fn="ChalkSync.WhiteboardV1.Session.apply_update" file="apps/sync" tone="new">
                   <rr-frame fn="WhiteboardRepository.commit" file="apps/sync" note="receipt + revision" tone="new" />
                 </rr-frame>
               </rr-frame>
@@ -132,45 +208,28 @@
       </rr-beat>
     </rr-slide>
 
-    <rr-slide spine="Decided" title="Chat and platform scope are settled">
+    <rr-slide spine="Decided" title="All five decisions are settled">
       <rr-cols2>
         <rr-callout tone="green">
           <h3>D1 · Durable room-wide text</h3>
           <p>Include acknowledgements, paging, reconnect recovery, retention, and local unread state.</p>
-          <p>Attachments, edit/delete, typing, durable receipts, and message reactions stay out.</p>
+          <p><b>D3 · Retention:</b> seven days after Session end; never clean an active Session.</p>
         </rr-callout>
         <rr-callout tone="green">
           <h3>D2 · All clients, browser whiteboard</h3>
           <p>Web, iOS, and Android include reactions, chat, requests, and moderation.</p>
-          <p>Browser Excalidraw is included. Native mobile whiteboard is deferred.</p>
+          <p><b>D4 · Transports:</b> Sync v3 for controls/chat/reactions; whiteboard-v1 for Excalidraw.</p>
+          <p><b>D5 · Images:</b> authenticated staged upload, verification, and protected download.</p>
         </rr-callout>
       </rr-cols2>
-    </rr-slide>
-
-    <rr-slide spine="Decisions" title="Three choices still block implementation">
-      <rr-cols2>
-        <rr-callout tone="amber">
-          <h3>D3 · Retention values</h3>
-          <p><b>Recommend:</b> seven days after Session end; never clean active Sessions; reject writes at end.</p>
-          <p>Alternatives: one day or thirty days.</p>
-        </rr-callout>
-        <rr-callout tone="amber">
-          <h3>D4 · Transport</h3>
-          <p><b>Recommend:</b> a separate collab-v1 socket owned by the same Elixir SyncEngine.</p>
-          <p>Alternative: Sync v4 or a separate negotiated subprotocol. Strict Sync v3 remains unchanged.</p>
-        </rr-callout>
-      </rr-cols2>
-      <rr-beat>
-        <rr-callout tone="amber"><b>D5 · Excalidraw images — Recommend:</b> staged, participant-authenticated upload with server verification and cleanup. Alternative: disable the image tool and reject image elements.</rr-callout>
-      </rr-beat>
     </rr-slide>
 
     <rr-slide spine="Execution" title="Seven gated phases, types first">
       <rr-phases>
-        <rr-phase label="0 · Decisions" caption="Close D3–D5 and numeric defaults" state="now" />
-        <rr-phase label="1 · Contract + types" caption="Public, wire, repository, reducer, fan-out ports and compile tests" />
-        <rr-phase label="2 · Foundations" caption="Database and reducer first; then SyncEngine and conditional files" />
-        <rr-phase label="3 · Client core" caption="Session, collaboration client, adapters, integration" />
+        <rr-phase label="0 · Accepted scope" caption="All five product decisions and scope fences" state="done" />
+        <rr-phase label="1 · Contract + types" caption="Legacy/extended Sync v3, whiteboard-v1, ports, compile tests" state="now" />
+        <rr-phase label="2 · Foundations" caption="Database/reducer, then Sync v3 room-actions and whiteboard-v1 lanes" />
+        <rr-phase label="3 · Client core" caption="Session, extended V3Client, whiteboard client, adapters" />
         <rr-phase label="4 · Product" caption="Web room and iOS/Android non-whiteboard actions" />
         <rr-phase label="5 · Hardening" caption="Two replicas, restart, quotas, overload, retention" />
         <rr-phase label="6 · Handoff" caption="Release notes, bounded review, root gate, commit" />
@@ -182,14 +241,14 @@
 
     <rr-slide spine="Done" title="Done means multi-client proof">
       <rr-checklist label="Release gates">
-        <rr-todo>Generated TypeScript and Elixir contracts agree</rr-todo>
+        <rr-todo>Extended Sync v3 and whiteboard-v1 generated contracts agree</rr-todo>
         <rr-todo>Chat survives reconnect and SyncEngine restart without duplicates</rr-todo>
         <rr-todo>Concurrent boards converge; clear rejects stale updates</rr-todo>
         <rr-todo>Directed requests and every moderation action work against another client</rr-todo>
         <rr-todo>Browser whiteboard and iOS/Android room-action gates pass</rr-todo>
         <rr-todo>Fresh and upgraded databases pass migration and retention cleanup</rr-todo>
       </rr-checklist>
-      <rr-progress label="Decisions closed" pct="40" n="2/5" tone="amber" />
+      <rr-progress label="Decisions closed" pct="100" n="5/5" tone="green" />
     </rr-slide>
   </rr-deck>
 </rr-doc>

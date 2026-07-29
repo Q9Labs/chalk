@@ -1,6 +1,6 @@
 # Chalk Room Actions Implementation Specification
 
-Status: **draft — not executable until D3–D5 are closed**
+Status: **ready for implementation**
 Date: 2026-07-29
 Owner: Chalk
 Companion: `chalk-room-actions-spec-2026-07-29.html`
@@ -19,21 +19,18 @@ that must survive reconnect or process restart.
 
 Recording controls are explicitly out of scope.
 
-## Decision gate
+## Accepted decisions
 
-The chat contract and platform scope are settled. Implementation must not start
-until the exact retention values, transport shape, and Excalidraw image policy
-have an owner and accepted value.
+The chat contract, platform scope, seven-day retention policy, transport shape,
+and Excalidraw image lifecycle are settled.
 
-| ID  | Decision          | Outcome                                                            | Status             |
-| --- | ----------------- | ------------------------------------------------------------------ | ------------------ |
-| D1  | Chat depth        | Durable room-wide text                                             | Accepted           |
-| D2  | Platform proof    | All clients for room actions; native mobile whiteboard deferred    | Accepted           |
-| D3  | Retention         | One Session collaboration policy; exact values still required      | Partially accepted |
-| D4  | Transport shape   | Separate collaboration socket in the Elixir SyncEngine recommended | Open               |
-| D5  | Excalidraw images | Staged, participant-authenticated object flow recommended          | Open               |
-
-Only unresolved choices retain decision cards.
+| ID  | Decision          | Outcome                                                                            | Status   |
+| --- | ----------------- | ---------------------------------------------------------------------------------- | -------- |
+| D1  | Chat depth        | Durable room-wide text                                                             | Accepted |
+| D2  | Platform proof    | All clients for room actions; native mobile whiteboard deferred                    | Accepted |
+| D3  | Retention         | Seven days after Session end; active Sessions are never cleaned                    | Accepted |
+| D4  | Transport shape   | Sync v3 for controls/chat/reactions; separate `whiteboard-v1` for Excalidraw sync  | Accepted |
+| D5  | Excalidraw images | Staged, participant-authenticated upload, verified storage, and protected download | Accepted |
 
 ## Current state
 
@@ -90,7 +87,7 @@ another participant to publish audio. For a muted participant the menu must say
   operations.
 
 The missing work is the real SyncEngine collaboration path, durable scene
-storage, file routes and access control if D5 includes images, Session/SDK
+storage, participant-authenticated file routes and access control, Session/SDK
 state, browser room wiring, and live proof. Native mobile whiteboard
 implementation is deferred.
 
@@ -102,13 +99,13 @@ epochs, allowing stale updates to win or deleted shapes to return.
 
 ### Included networked actions
 
-| Group                   | User behavior                                                                                                  | Delivery model                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Reactions               | Send one allowed room reaction and see who sent it.                                                            | Authenticated, bounded, transient fan-out. No replay.                                                  |
-| Chat                    | Send room-wide text and recover durable messages after reconnect.                                              | Ordered Postgres stream with acknowledgements, paging, and a durable cursor.                           |
-| Whiteboard              | Open a shared Excalidraw board, draw, clear, see cursors, and synchronize image files if images are supported. | Durable scene and elements; transient cursors; client and server Excalidraw-compatible reconciliation. |
-| Directed media requests | Ask a participant to unmute or start their camera; the target accepts or declines locally.                     | Existing bounded, live-only Sync v3 directed request path.                                             |
-| Host moderation         | Admit or deny, change roles, transfer host, mute, stop camera or screen, remove, and end Session.              | Existing authoritative Sync v3 control commands.                                                       |
+| Group                   | User behavior                                                                                     | Delivery model                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Reactions               | Send one allowed room reaction and see who sent it.                                               | Authenticated, bounded, transient fan-out. No replay.                                                  |
+| Chat                    | Send room-wide text and recover durable messages after reconnect.                                 | Ordered Postgres stream with acknowledgements, paging, and a durable cursor.                           |
+| Whiteboard              | Open a shared Excalidraw board, draw, clear, see cursors, and synchronize image files.            | Durable scene and elements; transient cursors; client and server Excalidraw-compatible reconciliation. |
+| Directed media requests | Ask a participant to unmute or start their camera; the target accepts or declines locally.        | Existing bounded, live-only Sync v3 directed request path.                                             |
+| Host moderation         | Admit or deny, change roles, transfer host, mute, stop camera or screen, remove, and end Session. | Existing authoritative Sync v3 control commands.                                                       |
 
 ### Related actions that are not new SyncEngine features
 
@@ -159,13 +156,13 @@ parallel no-op core. The existing macOS surface remains outside this release.
 flowchart LR
   APP["First-party web / mobile room"] --> ADAPTER["React / React Native"]
   ADAPTER --> SESSION["Framework-neutral ChalkSession"]
-  SESSION --> CONTROL["Sync v3 control client"]
-  SESSION --> COLLAB["Collaboration client"]
-  CONTROL --> SYNC["Elixir SyncEngine"]
-  COLLAB --> SYNC
+  SESSION --> SYNCV3["Sync v3 client<br/>controls + chat + reactions"]
+  SESSION --> BOARD["whiteboard-v1 client"]
+  SYNCV3 --> SYNC["Elixir SyncEngine"]
+  BOARD --> SYNC
   SYNC --> PG[("Postgres")]
   SESSION --> EX["Chalk Excalidraw engine"]
-  EX --> COLLAB
+  EX --> BOARD
   APP --> FILEAPI["Participant-authenticated file API"]
   FILEAPI --> R2[("Object storage")]
 
@@ -173,10 +170,11 @@ flowchart LR
   PG -- "chat pages + scene recovery" --> SYNC
 ```
 
-The public Session hides the transport split. Apps use one Session snapshot and
-one action surface regardless of whether D4 selects one socket or two.
-Collaboration is an independently degradable subsystem: a collaboration outage
-does not change control/media Session state or prevent leave, moderation, or
+The public Session hides two fixed transports. Sync v3 carries controls,
+directed requests, chat, and reactions over one connection. `whiteboard-v1`
+carries Excalidraw synchronization over a separate connection. A
+`whiteboard-v1` failure degrades only the board and does not change
+control/media Session state or prevent chat, reactions, leave, moderation, or
 directed requests. Pending durable operations remain retryable until their
 idempotent outcome is recovered or the caller cancels them.
 
@@ -187,38 +185,57 @@ log.
 
 ### Protocol ownership
 
-`contract/schema/sync-v3.json` remains unchanged as the source for existing
-control and directed-request frames. Contract generation must keep
-`sdks/typescript/client/src/generated/sync-v3.ts` and
-`apps/sync/lib/chalk_sync/contract/generated_v3.ex` in agreement.
+`contract/schema/sync-v3.json` remains the source for the existing frames and
+gains a strict `room_actions_v1` extension for chat and reactions. The
+extension uses an alternate exact hello/welcome shape, not optional loose
+fields:
 
-The recommended D4 choice introduces a strict `collab-v1` handshake, welcome,
-policy, frame schema, and generated bindings. Its capability names
-(`sendReaction`, `sendChat`, `drawWhiteboard`, and `manageWhiteboard`) live in
-the collaboration policy, not the immutable Sync v3 role-capability map. This
-keeps existing Sync v3 clients, role limits, state digests, and active Session
-policies compatible.
+- the legacy Sync v3 hello and welcome remain valid byte-for-byte;
+- an extended hello requests `room_actions_v1` with its chat cursor;
+- the extended welcome returns the negotiated extension, chat head, and
+  `sendReaction`/`sendChat` policy;
+- the server sends room-action frames only after that negotiation;
+- an old client never receives an unknown frame, and a new server must support
+  old and extended clients in the same active Session.
 
-If D4 selects one physical socket, the replacement protocol is Sync v4 or a
-separate negotiated WebSocket subprotocol. It is not labeled a compatible Sync
-v3 frame extension. The contract gate must prove old Sync v3 coexistence and
-active-Session migration behavior.
+This is one Sync v3 connection and one `V3Client`. Chat remains a separate
+durable stream rather than entering the control event log or state digest.
+Reaction frames remain transient. New room-action capabilities live in the
+extension policy and do not change the existing 16-name role-capability map,
+role limits, or control digest.
 
-The collaboration contract must have:
+`whiteboard-v1` is a second strict protocol in the same Elixir SyncEngine. It
+owns its handshake, welcome, scene epoch/revision cursor, update receipts,
+snapshot/reset, cursors, and `drawWhiteboard`/`manageWhiteboard` policy. Its
+connection, queue, recovery, and overload behavior are independent from Sync
+v3.
+
+Contract generation must keep the updated
+`sdks/typescript/client/src/generated/sync-v3.ts`, the updated
+`apps/sync/lib/chalk_sync/contract/generated_v3.ex`, and the new generated
+`whiteboard-v1` bindings in agreement.
+
+The Sync v3 room-actions extension and `whiteboard-v1` must have:
 
 - explicit protocol and capability negotiation;
 - a `session_id`, participant Session identity and generation on every
   authenticated connection;
 - stable client operation IDs for idempotent writes;
-- independent durable cursors for chat and whiteboard;
+- one feature-specific durable cursor;
 - bounded frame sizes, batch sizes, queues, pages, and rates;
 - typed accepted and rejected outcomes;
 - server-owned participant identity, timestamp, sequence, authorization, and
   room routing;
 - journey and W3C trace context without content payloads in telemetry.
 
-High-volume whiteboard frames must not block control commands, leave, directed
-requests, or moderation.
+The shared Sync v3 socket has separate logical inbound and outbound budgets for
+control and room-action frames. The server drains control first with a frozen
+maximum room-action burst between control checks. Chat recovery pages have a
+smaller encoded-byte ceiling than the socket frame ceiling and may interleave
+only between complete control frames. A full room-action queue rejects or
+drops room-action work according to its typed policy; it never delays ping,
+leave, moderation, or directed requests. High-volume `whiteboard-v1` frames
+must not block Sync v3 either.
 
 ### Replica fan-out and authority fencing
 
@@ -226,13 +243,16 @@ Every SyncEngine replica subscribes through PostgreSQL `LISTEN`/`NOTIFY`. The
 existing `chalk_sync_heads` channel remains unchanged and payload-free beyond
 routing metadata and committed heads.
 
-Collaboration adds two versioned channels:
+The two feature paths use separate versioned channels:
 
-- durable-head notifications contain only Session routing, stream, and head;
-  they never contain chat text or board elements and remain recoverable hints;
-- transient notifications contain one validated, server-stamped reaction or
-  coalesced cursor envelope, capped at 1 KiB, on a separate channel. They are
-  best-effort, never persisted or replayed, and never logged.
+- the Sync v3 room-actions durable-head channel contains Session routing and
+  chat head; its transient channel contains one server-stamped reaction
+  envelope;
+- `whiteboard-v1` durable heads contain Session routing, scene ID, and revision;
+  its transient channel contains one coalesced cursor envelope.
+
+Durable channels never contain chat text or board elements. Transient envelopes
+are capped at 1 KiB, best-effort, never persisted or replayed, and never logged.
 
 A missed durable notification is repaired by periodic head watermarks and
 cursor recovery. A missed reaction is dropped. Cursor notifications are lossy
@@ -240,17 +260,18 @@ and coalesced by participant.
 
 Before committing chat, whiteboard, permission, or file metadata, the database
 transaction fences on authoritative Session status, participant status and
-generation, and current collaboration policy. End, removal, or generation
-replacement invalidates the collaboration connection and any later write.
+generation, and current feature policy. End, removal, or generation replacement
+invalidates the relevant extension or connection and any later write.
 Two-replica tests pin clients to separate nodes and cover a node crash during
 transient and durable sends.
 
 ## Public SDK model
 
-The framework-neutral Session owns collaboration connection lifecycle,
-authorization metadata, durable cursors, pending operations, and typed
-failures. It does not own Excalidraw's browser imperative API or UI panel
-visibility. `WhiteboardCanvas` owns the browser Excalidraw adapter; native uses
+The framework-neutral Session owns Sync v3 extension negotiation,
+`whiteboard-v1` connection lifecycle, authorization metadata, durable cursors,
+pending operations, and typed failures. It does not own Excalidraw's browser
+imperative API or UI panel visibility. `WhiteboardCanvas` owns the browser
+Excalidraw adapter; native uses
 no whiteboard renderer in this release. The browser adapter consumes a
 Session-provided whiteboard transport and publishes acknowledged operations
 through it.
@@ -261,7 +282,7 @@ The existing public shape stays intact:
 type ChalkSessionStore = ChalkSessionActions & {
   readonly getSnapshot: () => ChalkSessionSnapshot;
   readonly subscribe: (listener: () => void) => () => void;
-  readonly whiteboard: ChalkWhiteboardTransport | null;
+  readonly whiteboard: ChalkWhiteboardV1Transport | null;
 };
 ```
 
@@ -275,9 +296,11 @@ full Excalidraw elements never enter the general Session snapshot.
 These names and discriminants are the contract-freeze target:
 
 ```ts
-type ChalkCollaborationPhase = "disabled" | "connecting" | "healthy" | "recovering" | "failed" | "stopped";
+type ChalkRoomActionsPhase = "disabled" | "negotiating" | "healthy" | "recovering" | "failed" | "stopped";
 
-type ChalkCollaborationCapability = "sendReaction" | "sendChat" | "drawWhiteboard" | "manageWhiteboard";
+type ChalkSyncV3RoomActionCapability = "sendReaction" | "sendChat";
+type ChalkWhiteboardV1Capability = "drawWhiteboard" | "manageWhiteboard";
+type ChalkRoomActionCapability = ChalkSyncV3RoomActionCapability | ChalkWhiteboardV1Capability;
 
 type ChalkParticipantMediaState = {
   readonly microphone: "active" | "inactive" | "unknown";
@@ -318,9 +341,13 @@ type ChalkChatState = {
   readonly messages: readonly ChalkChatMessage[];
   readonly pending: readonly ChalkPendingChatMessage[];
   readonly hasOlder: boolean;
+  readonly historyTruncated: boolean;
+  readonly retainedFloorSequence: string | null;
   readonly unreadCount: number;
   readonly error: ChalkSessionFailure | null;
 };
+
+type ChalkChatPageResult = { readonly status: "loaded"; readonly count: number; readonly hasOlder: boolean } | { readonly status: "cursor_reset"; readonly retainedFloorSequence: string };
 
 type ChalkSendChatMessageInput = {
   readonly text: string;
@@ -338,12 +365,13 @@ type ChalkIncomingMediaRequest = {
 type ChalkDirectedRequestResult = { readonly status: "delivered"; readonly requestId: string } | { readonly status: "target_unavailable" | "expired" | "rejected" | "rate_limited"; readonly requestId: string };
 
 type ChalkWhiteboardSummary = {
-  readonly status: "unsubscribed" | "loading" | "ready" | "failed";
+  readonly status: "unsubscribed" | "loading" | "ready" | "recovering" | "failed";
   readonly sceneId: string | null;
   readonly revision: string | null;
+  readonly capabilities: readonly ChalkWhiteboardV1Capability[];
   readonly canDraw: boolean;
   readonly canClear: boolean;
-  readonly error: ChalkSessionFailure | null;
+  readonly error: ChalkWhiteboardV1Failure | null;
 };
 ```
 
@@ -354,12 +382,12 @@ fields:
 type ChalkSessionSnapshot = {
   // existing state, subject, control/media connections, participants,
   // admission requests, localMedia, remoteMedia, and failure
-  readonly collaboration: {
-    readonly phase: ChalkCollaborationPhase;
-    readonly capabilities: readonly ChalkCollaborationCapability[];
+  readonly roomActions: {
+    readonly phase: ChalkRoomActionsPhase;
+    readonly capabilities: readonly ChalkSyncV3RoomActionCapability[];
     readonly error: ChalkSessionFailure | null;
   };
-  readonly participantCollaborationCapabilities: Readonly<Record<string, readonly ChalkCollaborationCapability[]>>;
+  readonly participantRoomActionCapabilities: Readonly<Record<string, readonly ChalkRoomActionCapability[]>>;
   readonly participantMedia: Readonly<Record<string, ChalkParticipantMediaState>>;
   readonly reactions: readonly ChalkRoomReaction[];
   readonly chat: ChalkChatState;
@@ -377,12 +405,11 @@ replacement.
 `CHALK_SESSION_ACTIONS` gains `sendReaction`, `sendChatMessage`,
 `retryChatMessage`, `loadOlderChatMessages`, `markChatRead`,
 `requestUnmute`, `requestStartCamera`, `acceptMediaRequest`,
-`declineMediaRequest`, `clearWhiteboard`, and `setWhiteboardDrawPermission`.
+and `declineMediaRequest`.
 `CHALK_SESSION_ERROR_CODES` gains
-`collaboration_unavailable`, `rate_limited`, `invalid_payload`,
-`stale_whiteboard_scene`, and `storage_unavailable`. Rejections still use the
-existing `ChalkSessionError` shape with action, code, recoverability, and a safe
-message.
+`room_actions_unavailable`, `chat_cursor_reset_required`, `rate_limited`, and
+`invalid_payload`. Rejections still use the existing `ChalkSessionError` shape
+with action, code, recoverability, and a safe message.
 
 ```ts
 type ChalkSessionActions = {
@@ -392,16 +419,13 @@ type ChalkSessionActions = {
   readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkRoomReaction>;
   readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
   readonly retryChatMessage: (clientMessageId: string) => Promise<ChalkChatMessage>;
-  readonly loadOlderChatMessages: (limit?: number) => Promise<void>;
+  readonly loadOlderChatMessages: (limit?: number) => Promise<ChalkChatPageResult>;
   readonly markChatRead: () => void;
 
   readonly requestUnmute: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
   readonly requestStartCamera: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
   readonly acceptMediaRequest: (requestId: string) => Promise<void>;
   readonly declineMediaRequest: (requestId: string) => void;
-
-  readonly clearWhiteboard: () => Promise<ChalkWhiteboardCommit>;
-  readonly setWhiteboardDrawPermission: (participantSessionId: string, canDraw: boolean) => Promise<void>;
 };
 ```
 
@@ -416,12 +440,53 @@ format conversion of `expires_at_ms`; actor display name is optional local
 roster enrichment. Results contain only request ID and status because Sync v3
 does not send expiry or retry timing.
 
+### Low-level Sync v3 extension types
+
+The generated frame unions remain the wire source. These handwritten client
+types freeze the seam used by `ChalkSession`:
+
+```ts
+type V3ChatCursor = {
+  readonly afterSequence: string | null;
+  readonly retainedFloorSequence: string | null;
+};
+
+type V3RoomActionsExtensionRequest = {
+  readonly name: "room_actions_v1";
+  readonly chatCursor: V3ChatCursor;
+};
+
+type V3RoomActionsExtensionState = {
+  readonly negotiated: boolean;
+  readonly capabilities: readonly ChalkSyncV3RoomActionCapability[];
+  readonly chatHeadSequence: string | null;
+  readonly retainedFloorSequence: string | null;
+};
+
+type V3RoomActionClientEvent = { readonly type: "reaction"; readonly reaction: ChalkRoomReaction } | { readonly type: "chat_message"; readonly message: ChalkChatMessage } | { readonly type: "chat_cursor_reset"; readonly retainedFloorSequence: string };
+
+type V3RoomActionsClient = {
+  readonly getRoomActionsExtensionState: () => V3RoomActionsExtensionState;
+  readonly subscribeRoomActions: (listener: (event: V3RoomActionClientEvent) => void) => () => void;
+  readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkRoomReaction>;
+  readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
+  readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
+};
+```
+
+The SDK requests the extension in `V3Client` construction. If a strict legacy
+server rejects the extended hello, the client reconnects once with the legacy
+hello, sets `roomActions.phase` to `"disabled"`, and keeps existing control,
+media, presence, and directed-request behavior. Room-action methods then reject
+with `room_actions_unavailable`. Deployment remains server-first, but this
+fallback prevents an accidental old-server route from breaking the room.
+
 ### Whiteboard transport port
 
 ```ts
 type ChalkJsonValue = null | boolean | number | string | readonly ChalkJsonValue[] | { readonly [key: string]: ChalkJsonValue };
 
-type ChalkWhiteboardElement = {
+type ChalkWhiteboardV1Element = {
   readonly id: string;
   readonly type: string;
   readonly version: number;
@@ -435,64 +500,74 @@ type ChalkSharedWhiteboardAppState = {
   readonly viewBackgroundColor?: string;
 };
 
-type ChalkWhiteboardUpdateInput = {
+type ChalkWhiteboardV1UpdateInput = {
   readonly sceneId: string;
   readonly syncAll: boolean;
-  readonly elements: readonly ChalkWhiteboardElement[];
+  readonly elements: readonly ChalkWhiteboardV1Element[];
 };
 
-type ChalkWhiteboardEvent =
-  | { readonly type: "snapshot"; readonly sceneId: string; readonly revision: string; readonly elements: readonly ChalkWhiteboardElement[]; readonly appState?: ChalkSharedWhiteboardAppState }
-  | { readonly type: "update"; readonly sceneId: string; readonly revision: string; readonly elements: readonly ChalkWhiteboardElement[] }
+type ChalkWhiteboardV1Event =
+  | { readonly type: "snapshot"; readonly sceneId: string; readonly revision: string; readonly elements: readonly ChalkWhiteboardV1Element[]; readonly appState?: ChalkSharedWhiteboardAppState }
+  | { readonly type: "update"; readonly sceneId: string; readonly revision: string; readonly elements: readonly ChalkWhiteboardV1Element[] }
   | { readonly type: "cursor"; readonly participantSessionId: string; readonly displayName: string; readonly x: number; readonly y: number; readonly occurredAt: string }
   | { readonly type: "reset_required"; readonly sceneId: string; readonly reason: "scene_changed" | "cursor_expired" | "gap" };
 
-type ChalkWhiteboardCommit = {
+type ChalkWhiteboardV1Commit = {
   readonly operationId: string;
   readonly sceneId: string;
   readonly revision: string;
 };
 
-type ChalkWhiteboardTransportOperation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download";
+type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "initiate_file_upload" | "finalize_file_upload" | "get_file_download";
 
-type ChalkWhiteboardTransportErrorCode = "unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "storage_unavailable" | "file_transfer_failed";
+type ChalkWhiteboardV1ErrorCode = "unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "storage_unavailable" | "file_transfer_failed";
 
-declare class ChalkWhiteboardTransportError extends Error {
-  readonly operation: ChalkWhiteboardTransportOperation;
-  readonly code: ChalkWhiteboardTransportErrorCode;
+type ChalkWhiteboardV1Failure = {
+  readonly operation: ChalkWhiteboardV1Operation;
+  readonly code: ChalkWhiteboardV1ErrorCode;
+  readonly recoverable: boolean;
+  readonly message: string;
+};
+
+declare class ChalkWhiteboardV1Error extends Error {
+  readonly operation: ChalkWhiteboardV1Operation;
+  readonly code: ChalkWhiteboardV1ErrorCode;
   readonly recoverable: boolean;
 }
 
-type ChalkWhiteboardFileTransport = {
+type ChalkWhiteboardV1FileTransport = {
   readonly initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => Promise<{ readonly uploadId: string; readonly uploadUrl: string; readonly expiresAt: string }>;
   readonly finalizeUpload: (uploadId: string) => Promise<void>;
   readonly getDownloadUrl: (fileId: string) => Promise<{ readonly downloadUrl: string; readonly expiresAt: string }>;
 };
 
-type ChalkWhiteboardTransport = {
+type ChalkWhiteboardV1Transport = {
   readonly startSceneSubscription: () => Promise<void>;
   readonly stopSceneSubscription: () => void;
-  readonly subscribe: (listener: (event: ChalkWhiteboardEvent) => void) => () => void;
-  readonly submitUpdate: (input: ChalkWhiteboardUpdateInput) => Promise<ChalkWhiteboardCommit>;
+  readonly subscribe: (listener: (event: ChalkWhiteboardV1Event) => void) => () => void;
+  readonly submitUpdate: (input: ChalkWhiteboardV1UpdateInput) => Promise<ChalkWhiteboardV1Commit>;
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
   readonly requestSnapshot: () => Promise<void>;
-  readonly files: ChalkWhiteboardFileTransport | null; // final shape depends on D5
+  readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
+  readonly setDrawPermission: (participantSessionId: string, canDraw: boolean) => Promise<void>;
+  readonly files: ChalkWhiteboardV1FileTransport;
 };
 ```
 
-The generated `collab-v1` decoder validates every envelope and JSON value before
-it reaches the port. The whiteboard package converts the exact envelope to the
-pinned Excalidraw element union and rejects an invalid payload. Shared app state
-is limited to `ChalkSharedWhiteboardAppState`; viewport, selection, and editor
-state cannot enter the wire type.
+The generated `whiteboard-v1` decoder validates every envelope and JSON value
+before it reaches the port. The whiteboard package converts the exact envelope
+to the pinned Excalidraw element union and rejects an invalid payload. Shared
+app state is limited to `ChalkSharedWhiteboardAppState`; viewport, selection,
+and editor state cannot enter the wire type.
 
 `WhiteboardCanvas` adapts this port to `ExcalidrawCollabEngine`. The engine's
 current fire-and-forget update callback becomes an acknowledged submission.
-`ChalkSessionCollaborationClient` alone generates operation IDs, retains the
-retry queue, and recovers committed receipts; the Excalidraw engine awaits the
-result without owning transport recovery. Transport methods reject with
-`ChalkWhiteboardTransportError`, while room actions continue to reject with
-`ChalkSessionError`. Only the browser React adapter exports
+`ChalkWhiteboardV1Client` alone generates operation IDs, retains the retry
+queue, and recovers committed receipts; the Excalidraw engine awaits the result
+without owning transport recovery. Transport methods reject with
+`ChalkWhiteboardV1Error`; the client copies its safe fields into
+`ChalkWhiteboardV1Failure` when projecting summary state. Sync v3 room actions
+continue to reject with `ChalkSessionError`. Only the browser React adapter exports
 `useChalkWhiteboardTransport()` in this release.
 
 ### React and React Native surface
@@ -502,7 +577,7 @@ React keeps the current external-store pattern:
 ```ts
 useChalkSelector<T>(selector: (snapshot: ChalkSessionSnapshot) => T): T;
 useChalkActions(): ChalkSessionActions;
-useChalkWhiteboardTransport(): ChalkWhiteboardTransport; // browser only
+useChalkWhiteboardTransport(): ChalkWhiteboardV1Transport; // browser only
 ```
 
 `ChatPanel` changes from a void send callback to typed async callbacks and
@@ -516,11 +591,14 @@ moderation. `ChalkNativeProvider` adapts its media plane around the shared
 release. Existing `useChat()` and `useInteractions()` exports may remain only
 as compatibility wrappers over canonical selectors/actions with equivalence
 tests. Their manager-shaped no-op implementations and native whiteboard hooks
-are not part of the new public path.
+are not part of the new public path. `clear` and `setDrawPermission` live only
+on `ChalkWhiteboardV1Transport`, so the shared `ChalkSessionActions` type does
+not expose deferred whiteboard behavior to native.
 
-Collaboration capabilities default from the authoritative role policy in
-`collab-v1`. The client uses them only to render the interface; the server
-repeats every authorization check.
+Chat/reaction capabilities come from the authoritative Sync v3
+`room_actions_v1` extension policy. Board capabilities come from
+`whiteboard-v1`. The client uses them only to render the interface; each server
+path repeats every authorization check.
 
 ## Intended call stacks
 
@@ -533,17 +611,20 @@ exist but need a new seam.
 SessionMeetingRoom / ChatPanel.onSend                                  changed
 └─ useChalkActions().sendChatMessage                                  new
    └─ ChalkSession.sendChatMessage                                    new
-      └─ ChalkSessionCollaborationClient.sendChatMessage              new
-         └─ collab-v1 WebSocket frame
-            └─ ChalkSync.Collaboration.Socket.handle_frame            new
-               └─ ChalkSync.Collaboration.Session.send_chat           new
-                  └─ ChalkSync.Collaboration.ChatRepository.append    new
+      └─ V3Client.sendChatMessage                                     new
+         └─ Sync v3 room_actions_v1 frame
+            └─ ChalkSync.Live.Socket.handle_frame                     changed
+               └─ ChalkSync.RoomActions.send_chat                     new
+                  └─ ChalkSync.RoomActions.ChatRepository.append      new
                      └─ Postgres transaction: fence → quota → sequence → insert
                         └─ Postgres NOTIFY durable-head hint
                            └─ every SyncEngine replica
-                              └─ ChalkSessionCollaborationClient cursor recovery
-                                 └─ ChalkSessionSnapshot.chat
-                                    └─ useChalkSelector / ChatPanel
+                              └─ ChalkSync.RoomActions.Fanout.on_head
+                                 └─ ChatRepository.read_after
+                                    └─ negotiated V3 socket head/page frame
+                                       └─ V3Client chat cursor recovery
+                                          └─ ChalkSessionSnapshot.chat
+                                             └─ useChalkSelector / ChatPanel
 ```
 
 The send promise resolves from the committed message, not from WebSocket write
@@ -555,12 +636,14 @@ the original row.
 ```text
 ReactionPicker.onSelect                                               changed
 └─ useChalkActions().sendReaction                                     new
-   └─ ChalkSession → ChalkSessionCollaborationClient                  new
-      └─ ChalkSync.Collaboration.Session.send_reaction                new
+   └─ ChalkSession → V3Client.sendReaction                            new
+      └─ ChalkSync.RoomActions.send_reaction                          new
          └─ authorize → validate → rate-limit
-            └─ bounded collaboration-transient NOTIFY envelope
-               └─ ChalkSessionSnapshot.reactions
-                  └─ ReactionBubble
+            └─ bounded room-actions-transient NOTIFY envelope
+               └─ every replica selects room_actions_v1 sockets
+                  └─ V3Client reaction event
+                     └─ ChalkSessionSnapshot.reactions
+                        └─ ReactionBubble
 ```
 
 There is no repository append or reconnect replay in this stack.
@@ -570,21 +653,23 @@ There is no repository append or reconnect replay in this stack.
 ```text
 WhiteboardCanvas.onChange                                             existing
 └─ ExcalidrawCollabEngine.handleChange                                changed
-   └─ ChalkWhiteboardTransport.submitUpdate                           new
-      └─ ChalkSessionCollaborationClient.submitWhiteboardUpdate       new
-         └─ ChalkSync.Collaboration.Session.apply_whiteboard_update   new
-            └─ ChalkSync.Collaboration.WhiteboardReducer.merge        new
+   └─ ChalkWhiteboardV1Transport.submitUpdate                         new
+      └─ ChalkWhiteboardV1Client.submitUpdate                         new
+         └─ ChalkSync.WhiteboardV1.Session.apply_update               new
+            └─ ChalkSync.WhiteboardV1.Reducer.merge                   new
                └─ WhiteboardRepository.commit_update_and_receipt      new
                   └─ Postgres commit + durable-head hint
-                     └─ remote ChalkWhiteboardTransport event
-                        └─ ExcalidrawCollabEngine.handleRemoteData
-                           └─ Excalidraw API updateScene
+                     └─ every replica WhiteboardV1 fan-out listener
+                        └─ WhiteboardRepository.read_revision
+                           └─ subscribed whiteboard-v1 sockets
+                              └─ remote ChalkWhiteboardV1Event
+                                 └─ ExcalidrawCollabEngine.handleRemoteData
+                                    └─ Excalidraw API updateScene
 ```
 
-The Session collaboration client retains the generated operation and retry
-state until `ChalkWhiteboardCommit` returns. `clearWhiteboard` uses the Session
-action path and commits a new scene epoch; ordinary delete-to-empty stays an
-element update.
+The `ChalkWhiteboardV1Client` retains the generated operation and retry state
+until `ChalkWhiteboardV1Commit` returns. `ChalkWhiteboardV1Transport.clear`
+commits a new scene epoch; ordinary delete-to-empty stays an element update.
 
 ### Existing moderation and directed requests
 
@@ -601,22 +686,28 @@ ParticipantOptionsMenu / request prompt                              changed
 ```
 
 Accepting a directed request then calls the existing local microphone or camera
-action and resolves only after its publication state is enabled. No
-collaboration socket participates in moderation or directed requests.
+action and resolves only after its publication state is enabled. These controls
+use the same Sync v3 connection as chat/reactions. The `whiteboard-v1` socket
+does not participate.
 
 ### Recovery and platform paths
 
 ```text
-ChalkSession.join / collaboration recovery
-└─ start Sync v3 control → start media → start collab-v1
-   └─ collab welcome policy + chat cursor + whiteboard cursor
-      └─ recover each stream independently
-         └─ collaboration phase becomes healthy
+ChalkSession.join / room-action recovery
+└─ start Sync v3 with room_actions_v1 request → start media
+   └─ extended welcome policy + chat cursor
+      └─ recover chat and resume transient reactions
+         └─ roomActions phase becomes healthy
 ```
+
+`whiteboard-v1` connects only when the browser calls
+`startSceneSubscription()`. It then recovers the scene epoch/revision
+independently; closing the board stops only that subscription and never closes
+Sync v3.
 
 ```text
 durable-head hint / periodic watermark / loadOlderChatMessages
-└─ ChalkSessionCollaborationClient requests after-sequence or bounded older page
+└─ V3Client requests after-sequence or bounded older page
    └─ ChatRepository.read_page at one retained floor
       └─ validate contiguous page → dedupe → update Session chat window
 ```
@@ -630,8 +721,8 @@ V3Client.onDirectedRequest
 ```
 
 ```text
-ChalkWhiteboardEvent.reset_required
-└─ ChalkWhiteboardTransport.requestSnapshot
+ChalkWhiteboardV1Event.reset_required
+└─ ChalkWhiteboardV1Transport.requestSnapshot
    └─ fixed-revision snapshot pages → validate and assemble
       └─ ExcalidrawCollabEngine.handleRemoteSnapshot → updateScene
 ```
@@ -641,7 +732,7 @@ NativeMeetingRoom
 └─ canonical useChalkSelector / useChalkActions
    └─ NativeSessionAdapter → shared ChalkSessionStore
       ├─ native media-plane adapter
-      └─ Sync v3 + collab-v1 clients
+      └─ Sync v3 room_actions_v1 extension
 ```
 
 ## Behavior contracts
@@ -714,8 +805,8 @@ upsert; absence from a client frame never deletes a stored element.
 
 A higher element version wins. If versions tie, the lower `versionNonce` wins.
 Unknown Excalidraw element fields are preserved. The adapter submits typed
-content and awaits a committed revision. The Session collaboration client adds
-the stable operation ID and retains unacknowledged updates across reconnect
+content and awaits a committed revision. The `ChalkWhiteboardV1Client` adds the
+stable operation ID and retains unacknowledged updates across reconnect
 instead of marking them sent before durable acknowledgement.
 
 Each board has a `scene_id` epoch and monotonically increasing server revision.
@@ -739,15 +830,12 @@ complete validation. A scene change, retained-floor miss, lost hint, or page
 gap produces a documented reset/snapshot path. Periodic head watermarks repair
 lost durable notifications.
 
-The existing image tool follows D5:
-
-- full support uses initiate, direct upload, and finalize. Finalize verifies
-  provider-observed existence, byte length, hash, MIME, immutable object
-  identity, active scene, file-ID uniqueness, and participant authorization
-  before server-owned availability becomes visible;
-- abandoned uploads have persisted expiry and orphan cleanup;
-- if D5 disables images, the image tool and unsupported image elements are
-  absent from the room.
+The image tool uses initiate, direct upload, and finalize. Finalize verifies
+provider-observed existence, byte length, hash, MIME, immutable object identity,
+active scene, file-ID uniqueness, and participant authorization before
+server-owned availability becomes visible. Abandoned uploads have persisted
+expiry and orphan cleanup. Downloads are participant-bound, short-lived, and
+authorized against the active Session and scene.
 
 ### Directed media requests
 
@@ -864,7 +952,7 @@ conflict, and deletion semantics are specified.
 - committed `scene_id`, revision, and safe result;
 - created timestamp and receipt-retention state.
 
-`sync_whiteboard_files`, when D5 selects image support
+`sync_whiteboard_files`
 
 - Session, `scene_id`, and Excalidraw file ID;
 - immutable object key, verified MIME type, byte length, hash, and state;
@@ -887,8 +975,10 @@ including tombstone growth and incomplete uploads.
 ### Retention
 
 One cleanup workflow expires chat rows, whiteboard rows, receipts, permissions,
-and associated objects according to D3. It never cleans a live Session. Cursor
-requests below a retained floor receive a typed reset outcome.
+and associated objects seven days after Session end. It never cleans a live
+Session. Chat and whiteboard writes stop immediately at Session end, and the
+retained rows do not create a post-meeting history API. Cursor requests below a
+retained floor receive a typed reset outcome.
 
 Object cleanup is a persisted state machine: mark pending deletion, delete the
 object idempotently, then finalize metadata deletion. Retries and an orphan
@@ -937,77 +1027,21 @@ values, access tokens, presigned URLs, or raw participant secrets.
 Dashboards and tests must distinguish accepted, unauthorized, rate-limited,
 stale-epoch, overloaded, database-failed, and object-storage-failed outcomes.
 
-## Decision cards
-
-### D3 — Retention values
-
-The shared-policy shape is accepted. The remaining choice is its exact product
-default and lifecycle boundary.
-
-**Recommendation:** retain collaboration data for seven days after Session end.
-Never clean an active Session. Reject collaboration writes immediately when the
-Session ends. Retention does not create post-meeting history access.
-
-Alternatives:
-
-- **One day:** lower storage and privacy exposure with a shorter recovery
-  window.
-- **Thirty days:** more operational recovery time with higher storage and
-  privacy cost.
-
-Why it matters: retention determines database cleanup, object cleanup,
-reconnect and cursor-reset behavior, authorization after leave or Session end,
-customer promises, and operational cost.
-
-Default without an explicit duration: implementation remains blocked.
-
-### D4 — Transport shape
-
-**Recommendation: a separate collaboration socket and protocol owned by the
-same Elixir SyncEngine.** The unified Session connects it internally.
-
-Alternative:
-
-- **One socket:** introduce Sync v4 or a separate negotiated WebSocket
-  subprotocol with proven old-client coexistence and queue isolation. Do not
-  add unknown frames or capabilities to strict Sync v3.
-
-Why it matters: Sync v3 currently has a strict accepted frame set and carries
-latency-sensitive control. Whiteboard has larger and more frequent frames,
-while chat and whiteboard need independent recovery cursors. A separate socket
-reduces compatibility and head-of-line risk without creating a second
-authority.
-
-Default without an explicit transport choice: implementation remains blocked.
-
-### D5 — Excalidraw images
-
-**Recommendation: support images.** Add initiate/upload/finalize file handling,
-provider-side verification, server-owned availability, participant-bound
-downloads, fixed quotas, and retention cleanup.
-
-Alternative:
-
-- **Disable images:** remove the image tool and reject image elements in every
-  selected client until the file lifecycle is implemented.
-
-Why it matters: the current client adapter can request presigned transfers, but
-the repository has no participant-authenticated whiteboard file routes. A
-client-provided `saved` flag is not proof that the expected immutable object
-exists or is authorized.
-
-Default without an explicit image choice: implementation remains blocked.
-
 ## Observable done criteria
 
 This release is done only when the accepted scope has current end-to-end proof.
 
 ### Contract and migrations
 
-- [ ] Collaboration and control schemas generate matching TypeScript and Elixir
+- [ ] Extended Sync v3 and `whiteboard-v1` schemas generate matching TypeScript
+      and Elixir
       bindings with no uncommitted generated drift.
-- [ ] Existing Sync v3 clients and active Sessions retain identical accepted
-      frames, capability maps, digests, and control behavior.
+- [ ] The server accepts legacy and extended Sync v3 clients in one active
+      Session; legacy clients receive no room-action frame, and existing
+      capability maps, digests, and control behavior stay identical.
+- [ ] An extended client routed to a legacy server reconnects once with the
+      legacy hello, marks room actions disabled, and retains every existing
+      Sync v3 behavior.
 - [ ] Fresh database migration up, upgrade from the previous schema, down, and
       up again pass.
 - [ ] Retention cleanup removes every selected durable row and object without
@@ -1054,8 +1088,8 @@ This release is done only when the accepted scope has current end-to-end proof.
       rejection is visible.
 - [ ] Ordinary delete-to-empty produces tombstones; only `canClear` advances the
       epoch.
-- [ ] If images are in scope, upload, cross-client download, authorization
-      denial, and retention deletion pass end to end.
+- [ ] Image upload, provider verification, cross-client download, authorization
+      denial, orphan cleanup, and retention deletion pass end to end.
 - [ ] The browser renders a real Excalidraw scene. Native mobile exposes no
       whiteboard placeholder or no-op control.
 
@@ -1077,15 +1111,21 @@ This release is done only when the accepted scope has current end-to-end proof.
 
 - [ ] React and React Native expose the same typed state, actions, and failures
       for reactions, chat, directed requests, and moderation.
-- [ ] First-party rooms contain no private collaboration transport path.
-- [ ] A collaboration-only outage preserves media, control state, leave,
-      moderation, and directed requests while collaboration enters a truthful
-      recovering or failed state.
+- [ ] First-party rooms contain no private Sync v3 room-action or
+      `whiteboard-v1` transport path.
+- [ ] When `room_actions_v1` is not negotiated, controls, media, leave,
+      moderation, and directed requests continue while chat/reactions remain
+      unavailable.
+- [ ] A chat-store outage degrades chat while preserving reactions,
+      `whiteboard-v1`, media, control, leave, moderation, and directed requests.
+- [ ] A `whiteboard-v1` outage degrades only the board while preserving
+      Sync v3 chat/reactions and every control action.
 - [ ] Two clients pinned to different SyncEngine replicas receive transient
       fan-out and durable recovery; one replica may fail mid-send without durable
       loss or duplicate commits.
-- [ ] Saturating collaboration traffic does not exceed the frozen control
-      latency threshold.
+- [ ] Saturating Sync v3 room-action frames or `whiteboard-v1` does not exceed
+      the frozen Sync v3 control latency threshold or starve the other feature
+      path.
 - [ ] Success, rejection, overload, reconnect, database failure, and object
       failure are visible without content payloads in telemetry.
 - [ ] Focused server, database, SDK, package, browser, and selected device gates
@@ -1095,18 +1135,20 @@ This release is done only when the accepted scope has current end-to-end proof.
 
 ## Execution graph
 
-Execution remains blocked on D3–D5.
+All product decisions are closed. Execution starts at the contract-and-types
+gate.
 
 ```mermaid
 flowchart TD
-  D["Hasan + spec owner<br/>Close D3–D5"]
+  D["Spec owner<br/>Accepted scope"]
   F["Contract owner<br/>Freeze public, wire, repository, reducer, fan-out ports"]
-  G1{"Sync v3 coexistence + contract gate"}
+  G1{"Legacy/extended Sync v3 + whiteboard-v1 contract gate"}
   DB["Data lane<br/>Keys, quotas, receipts, retention"]
-  SE["Sync lane<br/>Protocol, fencing, cross-replica fan-out, telemetry"]
-  FILES["Conditional D5 API lane<br/>File auth and object lifecycle"]
-  SDK["SDK lane<br/>ChalkSession, React, React Native"]
-  WB["Whiteboard lane<br/>Excalidraw reducer fixtures and adapter"]
+  ROOM["Sync v3 room-actions lane<br/>Chat, reactions, recovery, fan-out"]
+  BOARD["whiteboard-v1 lane<br/>Socket, fencing, recovery, telemetry"]
+  FILES["File API lane<br/>File auth and object lifecycle"]
+  SDK["SDK lane<br/>Session, extended V3Client, whiteboard-v1, adapters"]
+  WB["Whiteboard lane<br/>Reducer fixtures and wire conversion"]
   INT["Integration owner<br/>Generated contracts and Session lifecycle"]
   WEB["Web lane<br/>Turnkey room wiring"]
   MOB["Mobile lane<br/>Selected RN scope"]
@@ -1117,10 +1159,12 @@ flowchart TD
   G1 --> DB
   G1 --> SDK
   G1 --> WB
-  DB --> SE
-  WB --> SE
+  DB --> ROOM
+  DB --> BOARD
+  WB --> BOARD
   DB --> FILES
-  SE --> INT
+  ROOM --> INT
+  BOARD --> INT
   SDK --> INT
   FILES --> INT
   INT --> WEB
@@ -1137,23 +1181,23 @@ bindings, public TypeScript types, compile-only consumer tests, and failure
 unions before runtime implementation. UI work starts only after the integrated
 Session surface compiles against the real clients.
 
-| Phase                          | DAG nodes                     | Deliverable and interface                                                                                                                                                                                            | Exit proof                                                                                              |
-| ------------------------------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| 0. Decisions                   | D                             | D3–D5 plus every numeric limit/default                                                                                                                                                                               | Decision ledger accepted; spec becomes executable                                                       |
-| 1. Contract and types          | F → G1                        | `collab-v1` schema, generated bindings, public types, repository ports, reducer input/output, durable/transient fan-out envelopes, conditional file-service port, compile-only API tests, unchanged Sync v3 fixtures | Generation, exhaustive unions, public exports, port fixtures, and old-client compatibility checks pass  |
-| 2. Foundations and server      | DB, WB, SE, conditional FILES | DB and reducer lanes implement frozen ports in parallel; SyncEngine assembles them only after both land; D5 file lifecycle consumes the frozen DB and service ports                                                  | Fresh/upgrade migrations, reducer fixtures, two-replica protocol tests, and conditional file tests pass |
-| 3. Client core and integration | SDK → INT                     | `ChalkSessionCollaborationClient`, Session snapshot/actions, whiteboard transport, React selectors, native room-action adapter                                                                                       | Real SyncEngine integration tests prove typed successes, failures, reconnect, and cleanup               |
-| 4. Product surfaces            | WEB and MOB                   | Web panels/prompts/menus/board plus iOS and Android reactions, chat, requests, and moderation; native whiteboard hidden                                                                                              | Two-browser product run and separate iOS/Android room-action runs pass                                  |
-| 5. System hardening            | G2                            | Restart, two replicas, lost/duplicate hints, quotas, overload isolation, retention, privacy, migration, and selected storage failure matrix                                                                          | Every observable done criterion has current evidence                                                    |
-| 6. Handoff                     | HANDOFF                       | Release notes, one bounded code review, fixes, scoped commit                                                                                                                                                         | Root gate passes with no unresolved required finding                                                    |
+| Phase                          | DAG nodes                  | Deliverable and interface                                                                                                                                                                                                                                                                    | Exit proof                                                                                                                                      |
+| ------------------------------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Accepted scope              | D                          | All five product decisions and scope fences                                                                                                                                                                                                                                                  | Decision ledger accepted; spec is executable                                                                                                    |
+| 1. Contract and types          | F → G1                     | strict legacy/extended Sync v3 unions, handwritten `V3RoomActionsClient` types, `whiteboard-v1` schema, generated bindings, public types, control-first logical queue budgets, repository ports, reducer input/output, fan-out envelopes, required file-service port, compile-only API tests | Generation, exhaustive unions, public exports, queue fixtures, port fixtures, legacy-client/new-server and new-client/legacy-server checks pass |
+| 2. Foundations and server      | DB, WB, ROOM, BOARD, FILES | DB and reducer lanes implement frozen ports; the Sync v3 room-actions lane consumes chat/reaction ports, `whiteboard-v1` consumes DB/reducer ports, and FILES implements authenticated object lifecycle                                                                                      | Fresh/upgrade migrations, reducer fixtures, independent two-replica feature-path tests, and file lifecycle tests pass                           |
+| 3. Client core and integration | SDK → INT                  | extended `V3Client`, `ChalkWhiteboardV1Client`, Session snapshot/actions, React selectors, native room-action adapter                                                                                                                                                                        | Real SyncEngine integration tests prove typed successes, isolated failures, reconnect, and cleanup                                              |
+| 4. Product surfaces            | WEB and MOB                | Web panels/prompts/menus/board plus iOS and Android reactions, chat, requests, and moderation; native whiteboard hidden                                                                                                                                                                      | Two-browser product run and separate iOS/Android room-action runs pass                                                                          |
+| 5. System hardening            | G2                         | Restart, two replicas, lost/duplicate hints, quotas, overload isolation, retention, privacy, migration, and selected storage failure matrix                                                                                                                                                  | Every observable done criterion has current evidence                                                                                            |
+| 6. Handoff                     | HANDOFF                    | Release notes, one bounded code review, fixes, scoped commit                                                                                                                                                                                                                                 | Root gate passes with no unresolved required finding                                                                                            |
 
 Scope fences:
 
 - Phase 1 changes schemas, generated artifacts, exports, and type tests only; it
   does not implement handlers or UI.
-- DB, WB, SDK, and conditional FILES start from G1 on disjoint modules. SE waits
-  for DB and WB, then consumes their frozen interfaces; it does not invent
-  private storage or merge behavior.
+- DB, WB, and SDK start from G1 on disjoint modules. The Sync v3 room-actions
+  and FILES lanes wait for DB. `whiteboard-v1` waits for DB and WB. Neither
+  server lane invents private storage or merge behavior.
 - Phase 3 owns public SDK behavior and adapters, not first-party room layout.
 - Phase 4 consumes only the frozen public API. App components do not import
   protocol clients or database-specific shapes.
@@ -1161,17 +1205,22 @@ Scope fences:
 
 ### Resumable execution checklist
 
-- [ ] D — close D3–D5 and numeric defaults.
+- [x] D — accept all five product decisions and scope fences.
 - [ ] F — freeze wire schemas, public APIs, types, and failure unions.
-- [ ] G1 — pass generation, public type, and Sync v3 coexistence gates.
+- [ ] G1 — pass generation, public type, legacy/extended Sync v3 coexistence,
+      and `whiteboard-v1` contract gates.
 - [ ] DB — land keys, fences, quotas, receipts, queries, and retention.
-- [ ] WB — land pinned Excalidraw golden fixtures and deterministic reducer.
-- [ ] SE — land collaboration socket, authorization, recovery, and
-      cross-replica fan-out.
-- [ ] FILES — land or explicitly skip the D5 file lane according to the
-      accepted image decision.
-- [ ] SDK — land Session state/actions, collaboration client, React selectors,
-      native room actions, and whiteboard transport.
+- [ ] WB — land pinned Excalidraw golden fixtures, deterministic reducer, and
+      wire conversion; do not own the browser adapter.
+- [ ] ROOM — land the Sync v3 `room_actions_v1` extension, chat/reaction
+      authorization, recovery, and cross-replica fan-out.
+- [ ] BOARD — land `whiteboard-v1` authorization, receipts, snapshots, cursors,
+      recovery, and cross-replica fan-out.
+- [ ] FILES — land participant-authenticated initiate/upload/finalize/download,
+      provider verification, quotas, expiry, and orphan cleanup.
+- [ ] SDK — extend `V3Client`, land the `whiteboard-v1` client, Session
+      state/actions, React selectors, native room actions, and the browser board
+      adapter.
 - [ ] INT — prove the generated contract, server, and SDK together.
 - [ ] WEB — wire the turnkey browser room and real Excalidraw adapter.
 - [ ] MOB — wire and prove iOS/Android non-whiteboard room actions.
@@ -1190,7 +1239,8 @@ Scope fences:
 - Do not physically delete Excalidraw tombstones during normal merge.
 - Do not log chat text, whiteboard data, reaction values, files, tokens, or
   presigned URLs.
-- Do not allow collaboration traffic to starve control traffic.
+- Do not allow Sync v3 room-action traffic or `whiteboard-v1` traffic to starve
+  Sync v3 control traffic.
 - Do not expose a native whiteboard placeholder or no-op control in this
   release.
 - Do not wire recording controls as part of this work.
