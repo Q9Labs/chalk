@@ -125,3 +125,6 @@
   The generic smart gate still lacked a browser binary, so its packed-consumer
   check was narrowed to Chromium and pointed at GitHub's installed Chrome; the
   dedicated workflow retains the complete three-browser matrix.
+- The final full gate completed all 451 Sync tests successfully, then found one
+  harness portability defect: the zero-skip wrapper assumed `rg` existed on the
+  GitHub runner. Its matcher now uses portable `grep -E`.

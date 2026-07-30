@@ -23,7 +23,7 @@ if ((test_status != 0)); then
   exit "${test_status}"
 fi
 
-if rg -q '(^|, )[1-9][0-9]* (invalid|skipped)' "${output}"; then
+if grep -Eq '(^|, )[1-9][0-9]* (invalid|skipped)' "${output}"; then
   echo "Sync tests reported invalid or skipped cases; the strict reliability gate requires zero" >&2
   exit 1
 fi
