@@ -23,6 +23,10 @@ with candidates as (
         attachment.cleanup_claimed_until is null
         or attachment.cleanup_claimed_until <= $3
     )
+        and not (
+            attachment.status = 'finalizing'
+            and attachment.finalize_claimed_until > $3
+        )
         and (
             (
                 attachment.status <> 'attached'
@@ -111,16 +115,27 @@ func (q *Queries) ClaimChatAttachmentCleanup(ctx context.Context, arg ClaimChatA
 
 const claimChatAttachmentUploadFinalize = `-- name: ClaimChatAttachmentUploadFinalize :one
 update sync_chat_attachments attachment
-set status = 'finalizing', updated_at = now()
+set
+    status = 'finalizing',
+    finalize_claim_token = $1,
+    finalize_claimed_until = $2,
+    finalize_attempts = finalize_attempts + 1,
+    updated_at = now()
 from participants participant, room_sessions session
-where attachment.upload_id = $1
-    and attachment.tenant_id = $2
-    and attachment.room_id = $3
-    and attachment.session_id = $4
-    and attachment.participant_session_id = $5
-    and attachment.participant_session_generation = $6
-    and attachment.status in ('pending', 'finalizing')
-    and attachment.expires_at > $7
+where attachment.upload_id = $3
+    and attachment.tenant_id = $4
+    and attachment.room_id = $5
+    and attachment.session_id = $6
+    and attachment.participant_session_id = $7
+    and attachment.participant_session_generation = $8
+    and (
+        attachment.status = 'pending'
+        or (
+            attachment.status = 'finalizing'
+            and attachment.finalize_claimed_until <= $9
+        )
+    )
+    and attachment.expires_at > $9
     and participant.tenant_id = attachment.tenant_id
     and participant.room_id = attachment.room_id
     and participant.session_id = attachment.session_id
@@ -142,10 +157,14 @@ returning
     attachment.sha256,
     attachment.request_fingerprint,
     attachment.status,
-    attachment.expires_at
+    attachment.expires_at,
+    attachment.finalize_claim_token,
+    attachment.finalize_claimed_until
 `
 
 type ClaimChatAttachmentUploadFinalizeParams struct {
+	FinalizeClaimToken    pgtype.UUID        `json:"finalize_claim_token"`
+	FinalizeClaimedUntil  pgtype.Timestamptz `json:"finalize_claimed_until"`
 	UploadID              pgtype.UUID        `json:"upload_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
 	RoomID                pgtype.UUID        `json:"room_id"`
@@ -156,20 +175,24 @@ type ClaimChatAttachmentUploadFinalizeParams struct {
 }
 
 type ClaimChatAttachmentUploadFinalizeRow struct {
-	AttachmentID       pgtype.UUID        `json:"attachment_id"`
-	UploadID           pgtype.UUID        `json:"upload_id"`
-	ObjectKey          string             `json:"object_key"`
-	OriginalFilename   string             `json:"original_filename"`
-	MimeType           string             `json:"mime_type"`
-	ByteLength         int64              `json:"byte_length"`
-	Sha256             []byte             `json:"sha256"`
-	RequestFingerprint []byte             `json:"request_fingerprint"`
-	Status             string             `json:"status"`
-	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	AttachmentID         pgtype.UUID        `json:"attachment_id"`
+	UploadID             pgtype.UUID        `json:"upload_id"`
+	ObjectKey            string             `json:"object_key"`
+	OriginalFilename     string             `json:"original_filename"`
+	MimeType             string             `json:"mime_type"`
+	ByteLength           int64              `json:"byte_length"`
+	Sha256               []byte             `json:"sha256"`
+	RequestFingerprint   []byte             `json:"request_fingerprint"`
+	Status               string             `json:"status"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	FinalizeClaimToken   pgtype.UUID        `json:"finalize_claim_token"`
+	FinalizeClaimedUntil pgtype.Timestamptz `json:"finalize_claimed_until"`
 }
 
 func (q *Queries) ClaimChatAttachmentUploadFinalize(ctx context.Context, arg ClaimChatAttachmentUploadFinalizeParams) (ClaimChatAttachmentUploadFinalizeRow, error) {
 	row := q.db.QueryRow(ctx, claimChatAttachmentUploadFinalize,
+		arg.FinalizeClaimToken,
+		arg.FinalizeClaimedUntil,
 		arg.UploadID,
 		arg.TenantID,
 		arg.RoomID,
@@ -190,6 +213,8 @@ func (q *Queries) ClaimChatAttachmentUploadFinalize(ctx context.Context, arg Cla
 		&i.RequestFingerprint,
 		&i.Status,
 		&i.ExpiresAt,
+		&i.FinalizeClaimToken,
+		&i.FinalizeClaimedUntil,
 	)
 	return i, err
 }
@@ -243,19 +268,31 @@ set
     immutable_object_identity = $1,
     finalized_at = now(),
     expires_at = $2,
+    finalize_claim_token = null,
+    finalize_claimed_until = null,
     updated_at = now()
 where upload_id = $3
     and status = 'finalizing'
+    and finalize_claim_token = $4
+    and finalize_claimed_until > $5
 `
 
 type CompleteChatAttachmentUploadParams struct {
 	ImmutableObjectIdentity pgtype.Text        `json:"immutable_object_identity"`
 	ExpiresAt               pgtype.Timestamptz `json:"expires_at"`
 	UploadID                pgtype.UUID        `json:"upload_id"`
+	FinalizeClaimToken      pgtype.UUID        `json:"finalize_claim_token"`
+	NowAt                   pgtype.Timestamptz `json:"now_at"`
 }
 
 func (q *Queries) CompleteChatAttachmentUpload(ctx context.Context, arg CompleteChatAttachmentUploadParams) (int64, error) {
-	result, err := q.db.Exec(ctx, completeChatAttachmentUpload, arg.ImmutableObjectIdentity, arg.ExpiresAt, arg.UploadID)
+	result, err := q.db.Exec(ctx, completeChatAttachmentUpload,
+		arg.ImmutableObjectIdentity,
+		arg.ExpiresAt,
+		arg.UploadID,
+		arg.FinalizeClaimToken,
+		arg.NowAt,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -264,13 +301,28 @@ func (q *Queries) CompleteChatAttachmentUpload(ctx context.Context, arg Complete
 
 const failChatAttachmentUpload = `-- name: FailChatAttachmentUpload :execrows
 update sync_chat_attachments
-set status = 'failed', updated_at = now()
+set
+    status = 'failed',
+    finalize_claim_token = null,
+    finalize_claimed_until = null,
+    updated_at = now()
 where upload_id = $1
-    and status in ('pending', 'finalizing')
+    and (
+        status = 'pending'
+        or (
+            status = 'finalizing'
+            and finalize_claim_token = $2
+        )
+    )
 `
 
-func (q *Queries) FailChatAttachmentUpload(ctx context.Context, uploadID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, failChatAttachmentUpload, uploadID)
+type FailChatAttachmentUploadParams struct {
+	UploadID           pgtype.UUID `json:"upload_id"`
+	FinalizeClaimToken pgtype.UUID `json:"finalize_claim_token"`
+}
+
+func (q *Queries) FailChatAttachmentUpload(ctx context.Context, arg FailChatAttachmentUploadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failChatAttachmentUpload, arg.UploadID, arg.FinalizeClaimToken)
 	if err != nil {
 		return 0, err
 	}

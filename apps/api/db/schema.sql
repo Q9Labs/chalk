@@ -473,6 +473,9 @@ create table sync_chat_attachments (
     expires_at timestamptz not null,
     message_sequence bigint,
     message_ordinal smallint,
+    finalize_claim_token uuid,
+    finalize_claimed_until timestamptz,
+    finalize_attempts integer not null default 0,
     cleanup_claim_token uuid,
     cleanup_claimed_until timestamptz,
     cleanup_attempts integer not null default 0,
@@ -565,6 +568,21 @@ create table sync_chat_attachments (
         or status in ('pending', 'finalizing', 'failed')
     ),
     check (
+        finalize_attempts >= 0
+        and (
+            (
+                status = 'finalizing'
+                and finalize_claim_token is not null
+                and finalize_claimed_until is not null
+            )
+            or (
+                status <> 'finalizing'
+                and finalize_claim_token is null
+                and finalize_claimed_until is null
+            )
+        )
+    ),
+    check (
         cleanup_attempts >= 0
         and (
             (cleanup_claim_token is null and cleanup_claimed_until is null)
@@ -577,6 +595,9 @@ create index sync_chat_attachments_cleanup_idx
     where status <> 'attached';
 create index sync_chat_attachments_session_status_idx
     on sync_chat_attachments(tenant_id, session_id, status);
+create index sync_chat_attachments_finalize_lease_idx
+    on sync_chat_attachments(finalize_claimed_until)
+    where status = 'finalizing';
 
 create table sync_chat_read_receipts (
     tenant_id uuid not null,

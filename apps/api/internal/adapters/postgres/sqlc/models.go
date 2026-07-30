@@ -428,6 +428,9 @@ type SyncChatAttachment struct {
 	ExpiresAt                    pgtype.Timestamptz `json:"expires_at"`
 	MessageSequence              pgtype.Int8        `json:"message_sequence"`
 	MessageOrdinal               pgtype.Int2        `json:"message_ordinal"`
+	FinalizeClaimToken           pgtype.UUID        `json:"finalize_claim_token"`
+	FinalizeClaimedUntil         pgtype.Timestamptz `json:"finalize_claimed_until"`
+	FinalizeAttempts             int32              `json:"finalize_attempts"`
 	CleanupClaimToken            pgtype.UUID        `json:"cleanup_claim_token"`
 	CleanupClaimedUntil          pgtype.Timestamptz `json:"cleanup_claimed_until"`
 	CleanupAttempts              int32              `json:"cleanup_attempts"`

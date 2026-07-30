@@ -27,6 +27,7 @@ const (
 	uploadLifetime             = 10 * time.Minute
 	unattachedLifetime         = 24 * time.Hour
 	downloadLifetime           = 2 * time.Minute
+	finalizeLeaseDuration      = 2 * time.Minute
 )
 
 var (
@@ -86,12 +87,14 @@ type Attachment struct {
 
 type Upload struct {
 	Attachment
-	UploadID           utilities.ID
-	ObjectKey          string
-	SHA256             [32]byte
-	RequestFingerprint [32]byte
-	Status             string
-	ExpiresAt          time.Time
+	UploadID             utilities.ID
+	ObjectKey            string
+	SHA256               [32]byte
+	RequestFingerprint   [32]byte
+	Status               string
+	ExpiresAt            time.Time
+	FinalizeClaimToken   utilities.ID
+	FinalizeClaimedUntil time.Time
 }
 
 type UploadInstructions struct {
@@ -116,15 +119,17 @@ type ReserveInput struct {
 
 type CompleteInput struct {
 	UploadID                utilities.ID
+	FinalizeClaimToken      utilities.ID
 	ImmutableObjectIdentity string
 	ExpiresAt               time.Time
+	Now                     time.Time
 }
 
 type Repository interface {
 	Reserve(context.Context, ReserveInput) (Upload, error)
-	ClaimFinalize(context.Context, Subject, utilities.ID, time.Time) (Upload, error)
+	ClaimFinalize(context.Context, Subject, utilities.ID, time.Time, time.Time) (Upload, error)
 	Complete(context.Context, CompleteInput) error
-	Fail(context.Context, utilities.ID) error
+	Fail(context.Context, utilities.ID, utilities.ID) error
 	AuthorizedDownload(context.Context, Subject, utilities.ID) (Upload, error)
 }
 
@@ -140,13 +145,25 @@ type Service struct {
 	repository Repository
 	objects    ObjectStore
 	now        func() time.Time
+	telemetry  *requestTelemetry
 }
 
 func NewService(repository Repository, objects ObjectStore) Service {
-	return Service{repository: repository, objects: objects, now: time.Now}
+	return Service{
+		repository: repository,
+		objects:    objects,
+		now:        time.Now,
+		telemetry:  newRequestTelemetry(nil, time.Now),
+	}
 }
 
-func (s Service) Initiate(ctx context.Context, input InitiateInput) (UploadInstructions, error) {
+func (s Service) Initiate(
+	ctx context.Context,
+	input InitiateInput,
+) (result UploadInstructions, resultErr error) {
+	ctx, finish := s.startRequest(ctx, "initiate")
+	defer func() { finish(resultErr) }()
+
 	if s.repository == nil || s.objects == nil {
 		return UploadInstructions{}, objectstorage.ErrStoreUnavailable
 	}
@@ -194,12 +211,12 @@ func (s Service) Initiate(ctx context.Context, input InitiateInput) (UploadInstr
 		},
 	})
 	if err != nil {
-		_ = s.repository.Fail(ctx, upload.UploadID)
+		_ = s.repository.Fail(ctx, upload.UploadID, utilities.ID{})
 		return UploadInstructions{}, fmt.Errorf("create chat attachment upload url: %w", err)
 	}
 	headers, err := signedHeaders(signed.SignedHeader)
 	if err != nil {
-		_ = s.repository.Fail(ctx, upload.UploadID)
+		_ = s.repository.Fail(ctx, upload.UploadID, utilities.ID{})
 		return UploadInstructions{}, err
 	}
 
@@ -209,11 +226,25 @@ func (s Service) Initiate(ctx context.Context, input InitiateInput) (UploadInstr
 	}, nil
 }
 
-func (s Service) Finalize(ctx context.Context, subject Subject, uploadID utilities.ID) (Attachment, error) {
+func (s Service) Finalize(
+	ctx context.Context,
+	subject Subject,
+	uploadID utilities.ID,
+) (result Attachment, resultErr error) {
+	ctx, finish := s.startRequest(ctx, "finalize")
+	defer func() { finish(resultErr) }()
+
 	if s.repository == nil || s.objects == nil || invalidSubject(subject) || uploadID.IsZero() {
 		return Attachment{}, ErrInvalidInput
 	}
-	upload, err := s.repository.ClaimFinalize(ctx, subject, uploadID, s.now().UTC())
+	now := s.now().UTC()
+	upload, err := s.repository.ClaimFinalize(
+		ctx,
+		subject,
+		uploadID,
+		now,
+		now.Add(finalizeLeaseDuration),
+	)
 	if err != nil {
 		return Attachment{}, err
 	}
@@ -223,7 +254,7 @@ func (s Service) Finalize(ctx context.Context, subject Subject, uploadID utiliti
 
 	facts, err := s.objects.InspectObject(ctx, upload.ObjectKey)
 	if err != nil {
-		_ = s.repository.Fail(ctx, uploadID)
+		_ = s.repository.Fail(ctx, uploadID, upload.FinalizeClaimToken)
 		return Attachment{}, fmt.Errorf("inspect chat attachment upload: %w", err)
 	}
 	if facts.Size != upload.ByteLength ||
@@ -236,22 +267,32 @@ func (s Service) Finalize(ctx context.Context, subject Subject, uploadID utiliti
 
 	matches, err := s.objectDigestMatches(ctx, upload)
 	if err != nil {
-		_ = s.repository.Fail(ctx, uploadID)
+		_ = s.repository.Fail(ctx, uploadID, upload.FinalizeClaimToken)
 		return Attachment{}, err
 	}
 	if !matches {
 		return Attachment{}, s.rejectUpload(ctx, upload)
 	}
+	completedAt := s.now().UTC()
 	if err := s.repository.Complete(ctx, CompleteInput{
-		UploadID: uploadID, ImmutableObjectIdentity: facts.ETag,
-		ExpiresAt: s.now().UTC().Add(unattachedLifetime),
+		UploadID: uploadID, FinalizeClaimToken: upload.FinalizeClaimToken,
+		ImmutableObjectIdentity: facts.ETag,
+		ExpiresAt:               completedAt.Add(unattachedLifetime),
+		Now:                     completedAt,
 	}); err != nil {
 		return Attachment{}, err
 	}
 	return upload.Attachment, nil
 }
 
-func (s Service) Download(ctx context.Context, subject Subject, attachmentID utilities.ID) (Download, error) {
+func (s Service) Download(
+	ctx context.Context,
+	subject Subject,
+	attachmentID utilities.ID,
+) (result Download, resultErr error) {
+	ctx, finish := s.startRequest(ctx, "download")
+	defer func() { finish(resultErr) }()
+
 	if s.repository == nil || s.objects == nil || invalidSubject(subject) || attachmentID.IsZero() {
 		return Download{}, ErrInvalidInput
 	}
@@ -290,8 +331,18 @@ func (s Service) objectDigestMatches(ctx context.Context, upload Upload) (bool, 
 
 func (s Service) rejectUpload(ctx context.Context, upload Upload) error {
 	_ = s.objects.DeleteObject(ctx, upload.ObjectKey)
-	_ = s.repository.Fail(ctx, upload.UploadID)
+	_ = s.repository.Fail(ctx, upload.UploadID, upload.FinalizeClaimToken)
 	return ErrFileTransferFailed
+}
+
+func (s Service) startRequest(
+	ctx context.Context,
+	operation string,
+) (context.Context, func(error)) {
+	if s.telemetry == nil {
+		return ctx, func(error) {}
+	}
+	return s.telemetry.start(ctx, operation)
 }
 
 func validateInitiate(input InitiateInput) (string, string, [32]byte, [32]byte, error) {

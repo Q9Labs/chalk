@@ -24,7 +24,7 @@ type chatAttachmentQuerier interface {
 	GetChatAttachmentByClientID(context.Context, sqlc.GetChatAttachmentByClientIDParams) (sqlc.GetChatAttachmentByClientIDRow, error)
 	GetChatAttachmentByUploadID(context.Context, sqlc.GetChatAttachmentByUploadIDParams) (sqlc.GetChatAttachmentByUploadIDRow, error)
 	ClaimChatAttachmentUploadFinalize(context.Context, sqlc.ClaimChatAttachmentUploadFinalizeParams) (sqlc.ClaimChatAttachmentUploadFinalizeRow, error)
-	FailChatAttachmentUpload(context.Context, pgtype.UUID) (int64, error)
+	FailChatAttachmentUpload(context.Context, sqlc.FailChatAttachmentUploadParams) (int64, error)
 	CompleteChatAttachmentUpload(context.Context, sqlc.CompleteChatAttachmentUploadParams) (int64, error)
 	GetAuthorizedChatAttachmentDownload(context.Context, sqlc.GetAuthorizedChatAttachmentDownloadParams) (sqlc.GetAuthorizedChatAttachmentDownloadRow, error)
 	ClaimChatAttachmentCleanup(context.Context, sqlc.ClaimChatAttachmentCleanupParams) ([]sqlc.ClaimChatAttachmentCleanupRow, error)
@@ -90,19 +90,47 @@ func (r ChatAttachmentRepository) existingReservation(ctx context.Context, input
 	return upload, nil
 }
 
-func (r ChatAttachmentRepository) ClaimFinalize(ctx context.Context, subject chatattachments.Subject, uploadID utilities.ID, now time.Time) (chatattachments.Upload, error) {
+func (r ChatAttachmentRepository) ClaimFinalize(
+	ctx context.Context,
+	subject chatattachments.Subject,
+	uploadID utilities.ID,
+	now time.Time,
+	leaseUntil time.Time,
+) (chatattachments.Upload, error) {
+	if !leaseUntil.After(now) {
+		return chatattachments.Upload{}, chatattachments.ErrInvalidInput
+	}
+	claimToken, err := utilities.NewID()
+	if err != nil {
+		return chatattachments.Upload{}, fmt.Errorf("generate chat attachment finalize claim: %w", err)
+	}
 	row, err := r.queries.ClaimChatAttachmentUploadFinalize(ctx, sqlc.ClaimChatAttachmentUploadFinalizeParams{
+		FinalizeClaimToken: uuid(claimToken),
+		FinalizeClaimedUntil: pgtype.Timestamptz{
+			Time: leaseUntil, Valid: true,
+		},
 		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), RoomID: uuid(subject.RoomID),
 		SessionID: uuid(subject.SessionID), ParticipantSessionID: uuid(subject.ParticipantSessionID),
 		ParticipantGeneration: subject.ParticipantGeneration,
 		NowAt:                 pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err == nil {
-		return mapChatAttachmentUpload(
+		upload, mapErr := mapChatAttachmentUpload(
 			row.AttachmentID, row.UploadID, row.ObjectKey, row.OriginalFilename,
 			row.MimeType, row.ByteLength, row.Sha256, row.RequestFingerprint,
 			row.Status, row.ExpiresAt,
 		)
+		if mapErr != nil {
+			return chatattachments.Upload{}, mapErr
+		}
+		if !row.FinalizeClaimToken.Valid || !row.FinalizeClaimedUntil.Valid {
+			return chatattachments.Upload{}, fmt.Errorf(
+				"chat attachment finalize claim has invalid lease fields",
+			)
+		}
+		upload.FinalizeClaimToken = utilities.IDFromBytes(row.FinalizeClaimToken.Bytes)
+		upload.FinalizeClaimedUntil = row.FinalizeClaimedUntil.Time
+		return upload, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return chatattachments.Upload{}, fmt.Errorf("claim chat attachment finalize: %w", err)
@@ -137,10 +165,19 @@ func (r ChatAttachmentRepository) ClaimFinalize(ctx context.Context, subject cha
 }
 
 func (r ChatAttachmentRepository) Complete(ctx context.Context, input chatattachments.CompleteInput) error {
+	if input.UploadID.IsZero() ||
+		input.FinalizeClaimToken.IsZero() ||
+		input.ImmutableObjectIdentity == "" ||
+		input.ExpiresAt.IsZero() ||
+		input.Now.IsZero() {
+		return chatattachments.ErrInvalidInput
+	}
 	rows, err := r.queries.CompleteChatAttachmentUpload(ctx, sqlc.CompleteChatAttachmentUploadParams{
 		UploadID:                uuid(input.UploadID),
+		FinalizeClaimToken:      uuid(input.FinalizeClaimToken),
 		ImmutableObjectIdentity: pgtype.Text{String: input.ImmutableObjectIdentity, Valid: true},
 		ExpiresAt:               pgtype.Timestamptz{Time: input.ExpiresAt, Valid: true},
+		NowAt:                   pgtype.Timestamptz{Time: input.Now, Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("complete chat attachment upload: %w", err)
@@ -151,9 +188,23 @@ func (r ChatAttachmentRepository) Complete(ctx context.Context, input chatattach
 	return nil
 }
 
-func (r ChatAttachmentRepository) Fail(ctx context.Context, uploadID utilities.ID) error {
-	if _, err := r.queries.FailChatAttachmentUpload(ctx, uuid(uploadID)); err != nil {
+func (r ChatAttachmentRepository) Fail(
+	ctx context.Context,
+	uploadID utilities.ID,
+	finalizeClaimToken utilities.ID,
+) error {
+	rows, err := r.queries.FailChatAttachmentUpload(
+		ctx,
+		sqlc.FailChatAttachmentUploadParams{
+			UploadID:           uuid(uploadID),
+			FinalizeClaimToken: uuid(finalizeClaimToken),
+		},
+	)
+	if err != nil {
 		return fmt.Errorf("fail chat attachment upload: %w", err)
+	}
+	if rows != 1 {
+		return chatattachments.ErrUploadNotReady
 	}
 	return nil
 }

@@ -85,7 +85,9 @@ func TestChatAttachmentRepositoryReservesFirstStreamAndPreservesIdempotency(t *t
 	}
 }
 
-func TestChatAttachmentRepositoryFinalizesAndAuthorizesOwnerDownload(t *testing.T) {
+func TestChatAttachmentRepositoryLeasesFinalizeExclusivelyAndReclaimsExpiredLease(
+	t *testing.T,
+) {
 	pool := chatAttachmentIntegrationPool(t)
 	ctx := context.Background()
 	subject := seedChatAttachmentSubject(t, pool)
@@ -117,17 +119,86 @@ func TestChatAttachmentRepositoryFinalizesAndAuthorizesOwnerDownload(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	claimed, err := repository.ClaimFinalize(ctx, subject, uploadID, time.Now())
+	now := time.Now().UTC()
+	leaseUntil := now.Add(time.Minute)
+	type claimResult struct {
+		upload chatattachments.Upload
+		err    error
+	}
+	results := make(chan claimResult, 2)
+	for range 2 {
+		go func() {
+			upload, claimErr := repository.ClaimFinalize(
+				ctx,
+				subject,
+				uploadID,
+				now,
+				leaseUntil,
+			)
+			results <- claimResult{upload: upload, err: claimErr}
+		}()
+	}
+
+	var firstClaim chatattachments.Upload
+	var claimed, rejected int
+	for range 2 {
+		result := <-results
+		switch {
+		case result.err == nil:
+			firstClaim = result.upload
+			claimed++
+		case errors.Is(result.err, chatattachments.ErrUploadNotReady):
+			rejected++
+		default:
+			t.Fatalf("concurrent claim error = %v", result.err)
+		}
+	}
+	if claimed != 1 || rejected != 1 {
+		t.Fatalf("claims = %d, rejected = %d, want 1 and 1", claimed, rejected)
+	}
+	if firstClaim.Status != "finalizing" ||
+		firstClaim.FinalizeClaimToken.IsZero() ||
+		!firstClaim.FinalizeClaimedUntil.Equal(leaseUntil) {
+		t.Fatalf("first claim = %#v", firstClaim)
+	}
+
+	reclaimedAt := leaseUntil.Add(time.Nanosecond)
+	secondClaim, err := repository.ClaimFinalize(
+		ctx,
+		subject,
+		uploadID,
+		reclaimedAt,
+		reclaimedAt.Add(time.Minute),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claimed.Status != "finalizing" {
-		t.Fatalf("claimed status = %q", claimed.Status)
+	if secondClaim.FinalizeClaimToken == firstClaim.FinalizeClaimToken {
+		t.Fatal("reclaimed finalize lease reused its predecessor's fence token")
+	}
+
+	if err := repository.Fail(
+		ctx,
+		uploadID,
+		firstClaim.FinalizeClaimToken,
+	); !errors.Is(err, chatattachments.ErrUploadNotReady) {
+		t.Fatalf("stale finalize failure error = %v", err)
 	}
 	if err := repository.Complete(ctx, chatattachments.CompleteInput{
 		UploadID:                uploadID,
+		FinalizeClaimToken:      firstClaim.FinalizeClaimToken,
 		ImmutableObjectIdentity: "immutable-etag",
 		ExpiresAt:               time.Now().Add(24 * time.Hour),
+		Now:                     now,
+	}); !errors.Is(err, chatattachments.ErrUploadNotReady) {
+		t.Fatalf("stale finalize completion error = %v", err)
+	}
+	if err := repository.Complete(ctx, chatattachments.CompleteInput{
+		UploadID:                uploadID,
+		FinalizeClaimToken:      secondClaim.FinalizeClaimToken,
+		ImmutableObjectIdentity: "immutable-etag",
+		ExpiresAt:               time.Now().Add(24 * time.Hour),
+		Now:                     reclaimedAt.Add(time.Second),
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -119,6 +119,17 @@ func TestFinalizeHashesObjectBeforeMakingAttachmentReady(t *testing.T) {
 	if repository.completed.ImmutableObjectIdentity != "immutable-etag" {
 		t.Fatalf("completion = %#v", repository.completed)
 	}
+	if repository.completed.FinalizeClaimToken != upload.FinalizeClaimToken ||
+		repository.completed.Now.IsZero() {
+		t.Fatalf("completion fence = %#v, upload = %#v", repository.completed, upload)
+	}
+	if repository.claimLeaseUntil.Sub(repository.claimNow) != finalizeLeaseDuration {
+		t.Fatalf(
+			"finalize lease = %s, want %s",
+			repository.claimLeaseUntil.Sub(repository.claimNow),
+			finalizeLeaseDuration,
+		)
+	}
 	if repository.failed || objects.deletedKey != "" {
 		t.Fatal("valid upload was failed or deleted")
 	}
@@ -193,12 +204,14 @@ func TestDownloadForcesOfficeFilesToAttachment(t *testing.T) {
 }
 
 type chatAttachmentRepositoryStub struct {
-	reserved  ReserveInput
-	claimed   Upload
-	download  Upload
-	completed CompleteInput
-	failed    bool
-	err       error
+	reserved        ReserveInput
+	claimed         Upload
+	download        Upload
+	completed       CompleteInput
+	failed          bool
+	err             error
+	claimNow        time.Time
+	claimLeaseUntil time.Time
 }
 
 func (r *chatAttachmentRepositoryStub) Reserve(
@@ -210,11 +223,14 @@ func (r *chatAttachmentRepositoryStub) Reserve(
 }
 
 func (r *chatAttachmentRepositoryStub) ClaimFinalize(
-	context.Context,
-	Subject,
-	utilities.ID,
-	time.Time,
+	_ context.Context,
+	_ Subject,
+	_ utilities.ID,
+	now time.Time,
+	leaseUntil time.Time,
 ) (Upload, error) {
+	r.claimNow = now
+	r.claimLeaseUntil = leaseUntil
 	return r.claimed, r.err
 }
 
@@ -226,7 +242,11 @@ func (r *chatAttachmentRepositoryStub) Complete(
 	return r.err
 }
 
-func (r *chatAttachmentRepositoryStub) Fail(context.Context, utilities.ID) error {
+func (r *chatAttachmentRepositoryStub) Fail(
+	context.Context,
+	utilities.ID,
+	utilities.ID,
+) error {
 	r.failed = true
 	return r.err
 }
@@ -317,6 +337,11 @@ func chatAttachmentTestUpload(
 		SHA256:    digest,
 		Status:    "finalizing",
 		ExpiresAt: time.Now().Add(time.Hour),
+		FinalizeClaimToken: chatAttachmentTestID(
+			t,
+			"77777777-7777-4777-8777-777777777777",
+		),
+		FinalizeClaimedUntil: time.Now().Add(finalizeLeaseDuration),
 	}
 }
 

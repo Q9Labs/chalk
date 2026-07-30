@@ -138,7 +138,12 @@ where upload_id = sqlc.arg(upload_id)
 
 -- name: ClaimChatAttachmentUploadFinalize :one
 update sync_chat_attachments attachment
-set status = 'finalizing', updated_at = now()
+set
+    status = 'finalizing',
+    finalize_claim_token = sqlc.arg(finalize_claim_token),
+    finalize_claimed_until = sqlc.arg(finalize_claimed_until),
+    finalize_attempts = finalize_attempts + 1,
+    updated_at = now()
 from participants participant, room_sessions session
 where attachment.upload_id = sqlc.arg(upload_id)
     and attachment.tenant_id = sqlc.arg(tenant_id)
@@ -146,7 +151,13 @@ where attachment.upload_id = sqlc.arg(upload_id)
     and attachment.session_id = sqlc.arg(session_id)
     and attachment.participant_session_id = sqlc.arg(participant_session_id)
     and attachment.participant_session_generation = sqlc.arg(participant_generation)
-    and attachment.status in ('pending', 'finalizing')
+    and (
+        attachment.status = 'pending'
+        or (
+            attachment.status = 'finalizing'
+            and attachment.finalize_claimed_until <= sqlc.arg(now_at)
+        )
+    )
     and attachment.expires_at > sqlc.arg(now_at)
     and participant.tenant_id = attachment.tenant_id
     and participant.room_id = attachment.room_id
@@ -169,13 +180,25 @@ returning
     attachment.sha256,
     attachment.request_fingerprint,
     attachment.status,
-    attachment.expires_at;
+    attachment.expires_at,
+    attachment.finalize_claim_token,
+    attachment.finalize_claimed_until;
 
 -- name: FailChatAttachmentUpload :execrows
 update sync_chat_attachments
-set status = 'failed', updated_at = now()
+set
+    status = 'failed',
+    finalize_claim_token = null,
+    finalize_claimed_until = null,
+    updated_at = now()
 where upload_id = sqlc.arg(upload_id)
-    and status in ('pending', 'finalizing');
+    and (
+        status = 'pending'
+        or (
+            status = 'finalizing'
+            and finalize_claim_token = sqlc.narg(finalize_claim_token)
+        )
+    );
 
 -- name: CompleteChatAttachmentUpload :execrows
 update sync_chat_attachments
@@ -184,9 +207,13 @@ set
     immutable_object_identity = sqlc.arg(immutable_object_identity),
     finalized_at = now(),
     expires_at = sqlc.arg(expires_at),
+    finalize_claim_token = null,
+    finalize_claimed_until = null,
     updated_at = now()
 where upload_id = sqlc.arg(upload_id)
-    and status = 'finalizing';
+    and status = 'finalizing'
+    and finalize_claim_token = sqlc.arg(finalize_claim_token)
+    and finalize_claimed_until > sqlc.arg(now_at);
 
 -- name: GetAuthorizedChatAttachmentDownload :one
 select
@@ -238,6 +265,10 @@ with candidates as (
         attachment.cleanup_claimed_until is null
         or attachment.cleanup_claimed_until <= sqlc.arg(now_at)
     )
+        and not (
+            attachment.status = 'finalizing'
+            and attachment.finalize_claimed_until > sqlc.arg(now_at)
+        )
         and (
             (
                 attachment.status <> 'attached'
