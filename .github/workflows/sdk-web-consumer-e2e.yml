@@ -54,7 +54,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install browser runtimes
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium firefox webkit
 
       - name: Build package artifacts
         run: |

@@ -100,10 +100,21 @@
 
 ## 2026-07-30 22:20 PKT
 
-- Committed the isolated harness change as `test(sync): add reliability
-  harness`; unrelated shared-worktree changes remained unstaged.
+- Committed the isolated harness change; unrelated shared-worktree changes
+  remained unstaged.
 - The required `codex review` run produced only startup metadata and no findings
   for roughly 27 minutes. It was stopped at Hasan's request and exited 137, so
   review coverage is failed, not green.
 - Removed the exact M4 verification copy and confirmed no harness, topology,
   PostgreSQL, Sync-node, or review processes remained.
+
+## 2026-07-30 23:00 PKT
+
+- Pushed `master` through `230e807e` after confirming push-triggered workflows
+  contain no production deployment.
+- Manually dispatched the non-production topology profile to prove the Docker
+  branch. Its first run reached PostgreSQL 18 replication setup and failed
+  because the primary lacked an explicit replication `pg_hba.conf` rule.
+- The packed-browser workflow also exposed an existing workspace invocation
+  error: root `pnpm exec` could not resolve the client-owned Playwright binary.
+  Both CI-only failures were patched for a focused rerun.

@@ -188,6 +188,14 @@ start_docker_topology() {
     psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
     -c "create role chalk_replicator with replication login password 'replicator';" >/dev/null
 
+  # The container shell expands PGDATA.
+  # shellcheck disable=SC2016
+  "${docker_bin}" exec "${primary}" \
+    sh -c 'printf "%s\n" "host replication chalk_replicator 0.0.0.0/0 scram-sha-256" >> "$PGDATA/pg_hba.conf"'
+  "${docker_bin}" exec "${primary}" \
+    psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+    -c "select pg_reload_conf();" >/dev/null
+
   # The container shell expands PGDATA and $1.
   # shellcheck disable=SC2016
   "${docker_bin}" run --rm \
