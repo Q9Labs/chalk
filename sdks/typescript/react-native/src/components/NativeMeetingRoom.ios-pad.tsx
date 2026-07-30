@@ -8,6 +8,7 @@ import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid.ios-p
 import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock.ios-pad";
 import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage.ios-pad";
 import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar.ios-pad";
+import { NativeMeetingWhiteboardSurface } from "./native-meeting-room/NativeMeetingWhiteboardSurface";
 import { useNativeMeetingMultitasking } from "./native-meeting-room/useNativeMeetingMultitasking.ios";
 import { useNativeMeetingRoomController } from "./native-meeting-room/useNativeMeetingRoomController";
 
@@ -30,7 +31,9 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
       <NativeMeetingTopBar formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
 
       <View style={styles.stageFrame}>
-        {controller.derived.isStageMode ? (
+        {controller.whiteboard.isOpen ? (
+          <NativeMeetingWhiteboardSurface whiteboard={controller.whiteboard} />
+        ) : controller.derived.isStageMode ? (
           <NativeMeetingStage
             activeReactions={controller.activeReactions}
             handRaised={controller.handRaised}
@@ -147,6 +150,7 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
         }}
         onOpenSettings={() => controller.openPanel("settings")}
         onOpenTranscripts={() => controller.openPanel("transcripts")}
+        onOpenWhiteboard={() => controller.openPanel("whiteboard")}
         onToggleHand={() => {
           controller.setActionsOpen(false);
           controller.toggleHand();
@@ -159,6 +163,7 @@ export function NativeMeetingRoomIosPad(props: NativeMeetingRoomProps): React.JS
         screenShareEnabled={controller.canScreenShare}
         transcriptsEnabled={controller.canTranscripts}
         visible={controller.actionsOpen}
+        whiteboardEnabled={controller.canWhiteboard}
       />
 
       <NativeReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={controller.sendReaction} />

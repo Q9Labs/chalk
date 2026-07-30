@@ -30,7 +30,7 @@ export interface NativeMeetingActionsSheetProps {
   reactionsEnabled: boolean;
   peopleEnabled: boolean;
   transcriptsEnabled: boolean;
-  whiteboardEnabled?: boolean;
+  whiteboardEnabled: boolean;
   screenShareEnabled: boolean;
   settingsEnabled: boolean;
   chatUnreadCount: number;
@@ -42,7 +42,7 @@ export interface NativeMeetingActionsSheetProps {
   onOpenParticipants: () => void;
   onToggleHand: () => void;
   onOpenReactions: () => void;
-  onOpenWhiteboard?: () => void;
+  onOpenWhiteboard: () => void;
   onToggleScreenShare: () => void;
   onOpenTranscripts: () => void;
   onOpenSettings: () => void;

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 import type { ChalkSessionStore } from "@q9labsai/chalk-client";
-import { ChalkSession, type ChalkIncident, type ConferenceClientConfig, type IncidentReporter, type JoinOptions } from "../internal/core";
+import type { ChalkIncident, ConferenceClientConfig, IncidentReporter, JoinOptions } from "../internal/core";
+import { ChalkSession } from "../internal/realtimekit-runtime";
 import type { MediaPlaneAdapter } from "../media/media-plane-port";
 import { realtimeKitMediaPlaneAdapter, type NativeRealtimeKitMeeting } from "../media/realtimekit";
 import { trackNativeTokenProvider } from "../runtime/transport-correlation";

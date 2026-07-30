@@ -1,4 +1,6 @@
 import { CaptureUpdateAction, MIME_TYPES, newElementWith } from "@excalidraw/excalidraw";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 import type { BinaryFileData, BinaryFiles, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types.js";
 import type { WhiteboardUploadInstructions } from "./wire.js";
@@ -13,6 +15,25 @@ export interface WhiteboardFileSyncState {
   downloading: number;
   downloadQueued: number;
   lastErrorAtMs: number | null;
+}
+
+export interface WhiteboardFileTransfer {
+  readonly upload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string; readonly dataURL: string }) => Promise<void>;
+  readonly download: (fileId: string) => Promise<{ readonly mimeType: string; readonly dataURL: string }>;
+}
+
+export interface WhiteboardFileTransferOptions {
+  fileTransfer?: WhiteboardFileTransfer;
+  initiateUpload?: (input: { fileId: string; mimeType: string; byteLength: number; sha256: string }) => Promise<WhiteboardUploadInstructions>;
+  finalizeUpload?: (uploadId: string) => Promise<void>;
+  presignDownload?: (fileId: string) => Promise<{ downloadUrl: string }>;
+}
+
+interface WhiteboardFilesSyncOptions extends WhiteboardFileTransferOptions {
+  excalidrawAPI: ExcalidrawImperativeAPI;
+  uploadThrottleMs?: number;
+  downloadThrottleMs?: number;
+  onStateChange?: (state: WhiteboardFileSyncState) => void;
 }
 
 const dataURLToBlob = (dataURL: string) => {
@@ -33,10 +54,7 @@ const blobToDataURL = (blob: Blob) =>
     reader.readAsDataURL(blob);
   });
 
-const sha256Hex = async (blob: Blob) => {
-  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-};
+const sha256Hex = async (blob: Blob) => bytesToHex(sha256(new Uint8Array(await blob.arrayBuffer())));
 
 type OrderedImageElement = Extract<OrderedExcalidrawElement, { type: "image" }>;
 
@@ -84,17 +102,7 @@ export class WhiteboardFilesSync {
   private uploading = new Set<string>();
   private downloading = new Set<string>();
 
-  constructor(
-    private readonly opts: {
-      excalidrawAPI: ExcalidrawImperativeAPI;
-      initiateUpload: (input: { fileId: string; mimeType: string; byteLength: number; sha256: string }) => Promise<WhiteboardUploadInstructions>;
-      finalizeUpload: (uploadId: string) => Promise<void>;
-      presignDownload: (fileId: string) => Promise<{ downloadUrl: string }>;
-      uploadThrottleMs?: number;
-      downloadThrottleMs?: number;
-      onStateChange?: (state: WhiteboardFileSyncState) => void;
-    },
-  ) {}
+  constructor(private readonly opts: WhiteboardFilesSyncOptions) {}
 
   private remotePendingUploads = 0;
   private lastErrorAtMs: number | null = null;
@@ -193,21 +201,29 @@ export class WhiteboardFilesSync {
     this.emitState();
     try {
       const blob = dataURLToBlob(file.dataURL);
-      const instructions = await this.opts.initiateUpload({
+      const metadata = {
         fileId,
         mimeType: file.mimeType,
         byteLength: blob.size,
         sha256: await sha256Hex(blob),
-      });
+      };
 
-      const res = await fetch(instructions.uploadUrl, {
-        method: instructions.method,
-        headers: instructions.headers,
-        body: blob,
-      });
-      if (!res.ok) throw new Error(`upload failed: ${res.status}`);
+      if (this.opts.fileTransfer) {
+        await this.opts.fileTransfer.upload({ ...metadata, dataURL: file.dataURL });
+      } else {
+        const initiateUpload = requireOption(this.opts.initiateUpload, "initiateUpload");
+        const finalizeUpload = requireOption(this.opts.finalizeUpload, "finalizeUpload");
+        const instructions = await initiateUpload(metadata);
 
-      await this.opts.finalizeUpload(instructions.uploadId);
+        const res = await fetch(instructions.uploadUrl, {
+          method: instructions.method,
+          headers: instructions.headers,
+          body: blob,
+        });
+        if (!res.ok) throw new Error(`upload failed: ${res.status}`);
+
+        await finalizeUpload(instructions.uploadId);
+      }
       updateImageStatus(this.opts.excalidrawAPI, fileId, "saved");
     } catch {
       this.lastErrorAtMs = Date.now();
@@ -227,19 +243,28 @@ export class WhiteboardFilesSync {
     this.downloading.add(fileId);
     this.emitState();
     try {
-      const { downloadUrl } = await this.opts.presignDownload(fileId);
-      const res = await fetch(downloadUrl);
+      let mimeType: BinaryFileData["mimeType"];
+      let dataURL: DataURL;
 
-      if (res.status === 404) {
-        this.lastErrorAtMs = Date.now();
-        updateImageStatus(this.opts.excalidrawAPI, fileId, "error");
-        return;
+      if (this.opts.fileTransfer) {
+        const file = await this.opts.fileTransfer.download(fileId);
+        mimeType = normalizeMimeType(file.mimeType);
+        dataURL = toDataURL(file.dataURL);
+      } else {
+        const presignDownload = requireOption(this.opts.presignDownload, "presignDownload");
+        const { downloadUrl } = await presignDownload(fileId);
+        const res = await fetch(downloadUrl);
+
+        if (res.status === 404) {
+          this.lastErrorAtMs = Date.now();
+          updateImageStatus(this.opts.excalidrawAPI, fileId, "error");
+          return;
+        }
+        if (!res.ok) throw new Error(`download failed: ${res.status}`);
+
+        mimeType = normalizeMimeType(res.headers.get("content-type") ?? "image/png");
+        dataURL = toDataURL(await blobToDataURL(await res.blob()));
       }
-      if (!res.ok) throw new Error(`download failed: ${res.status}`);
-
-      const mimeType = normalizeMimeType(res.headers.get("content-type") ?? "image/png");
-      const blob = await res.blob();
-      const dataURL = toDataURL(await blobToDataURL(blob));
 
       this.opts.excalidrawAPI.addFiles([
         {
@@ -278,4 +303,9 @@ export class WhiteboardFilesSync {
       lastErrorAtMs: this.lastErrorAtMs,
     });
   }
+}
+
+function requireOption<T>(value: T | undefined, name: string): T {
+  if (value === undefined) throw new Error(`whiteboard file sync requires ${name}`);
+  return value;
 }

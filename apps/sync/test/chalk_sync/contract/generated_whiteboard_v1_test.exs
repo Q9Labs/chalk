@@ -65,6 +65,34 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
                "sync_all" => true,
                "elements" => List.duplicate(element, 129)
              })
+
+    assert {:ok, {:submit_update_part, part}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "submit_update_part",
+               "operation_id" => @operation_id,
+               "scene_id" => @scene_id,
+               "sync_all" => true,
+               "part" => 1,
+               "part_count" => 2,
+               "element_count" => 129,
+               "elements" => [element]
+             })
+
+    assert part.part == 1
+    assert part.part_count == 2
+    assert part.element_count == 129
+
+    assert {:error, :invalid_payload} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "submit_update_part",
+               "operation_id" => @operation_id,
+               "scene_id" => @scene_id,
+               "sync_all" => true,
+               "part" => 2,
+               "part_count" => 2,
+               "element_count" => 129,
+               "elements" => [element]
+             })
   end
 
   test "validates fixed snapshot pages, capabilities, and receipts" do
@@ -97,6 +125,17 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
              "outcome" => "duplicate",
              "scene_id" => @scene_id,
              "revision" => "7"
+           })
+
+    assert GeneratedWhiteboardV1.valid_server_frame?(%{
+             "type" => "update_part",
+             "operation_id" => @operation_id,
+             "scene_id" => @scene_id,
+             "revision" => "8",
+             "part" => 0,
+             "part_count" => 2,
+             "element_count" => 129,
+             "elements" => []
            })
   end
 end

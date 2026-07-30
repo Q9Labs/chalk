@@ -17,12 +17,14 @@ import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
 import { clearJoinContext, clearStoredHostAuth, getApiUrl, getHostTokenProvider, getJoinAccessToken, getMobileDebugContext, getWsUrl, parseUrlLike, resolveJoinToken, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
 import { MobileMeetingScreen } from "./src/meeting/MobileMeetingScreen";
+import { MobileWhiteboardPlayground } from "./src/meeting/MobileWhiteboardPlayground";
+import { shouldShowWhiteboardRendererPlayground } from "./src/meeting/mobile-whiteboard-playground-policy";
 import { HomeScreen } from "./src/screens/HomeScreen";
 
 type ChalkSession = ReturnType<typeof useSession> & {
@@ -41,6 +43,7 @@ export default function App(): React.JSX.Element {
   const [isBooting, setIsBooting] = useState(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [isRefreshingDiagnosticsAuth, setIsRefreshingDiagnosticsAuth] = useState(false);
+  const [whiteboardPlaygroundOpen, setWhiteboardPlaygroundOpen] = useState(false);
   const diagnosticsSessionRef = useRef<ChalkSession | null>(null);
   const lastJoinErrorRef = useRef<string | null>(null);
 
@@ -296,26 +299,39 @@ export default function App(): React.JSX.Element {
     setDevDiagnosticsSession(null);
     await syncStaticDiagnostics();
   }, [apiUrl, buildProfile, route, syncStaticDiagnostics, wsUrl]);
+  const showWhiteboardPlaygroundEntry = shouldShowWhiteboardRendererPlayground({
+    isDevRuntime: __DEV__,
+    routeKind: route.kind,
+  });
 
   return (
     <SafeAreaProvider>
       <View style={styles.appShell}>
         <StatusBar style="light" />
-        {renderContent({
-          apiUrl,
-          diagnosticsEnabled,
-          handleConferenceDiagnostics,
-          handleConferenceError,
-          isBooting,
-          onClose: goHome,
-          onDiagnosticsFailure: openDiagnosticsForFailure,
-          onNavigate: openLobby,
-          onSessionChange: handleSessionChange,
-          route,
-          tokenProvider,
-          wideEvents: diagnosticsWideEvents,
-          wsUrl,
-        })}
+        {whiteboardPlaygroundOpen ? (
+          <MobileWhiteboardPlayground onClose={() => setWhiteboardPlaygroundOpen(false)} />
+        ) : (
+          renderContent({
+            apiUrl,
+            diagnosticsEnabled,
+            handleConferenceDiagnostics,
+            handleConferenceError,
+            isBooting,
+            onClose: goHome,
+            onDiagnosticsFailure: openDiagnosticsForFailure,
+            onNavigate: openLobby,
+            onSessionChange: handleSessionChange,
+            route,
+            tokenProvider,
+            wideEvents: diagnosticsWideEvents,
+            wsUrl,
+          })
+        )}
+        {showWhiteboardPlaygroundEntry && !whiteboardPlaygroundOpen ? (
+          <Pressable accessibilityRole="button" onPress={() => setWhiteboardPlaygroundOpen(true)} style={({ pressed }) => [styles.whiteboardPlaygroundButton, pressed && styles.whiteboardPlaygroundButtonPressed]}>
+            <Text style={styles.whiteboardPlaygroundButtonText}>Whiteboard renderer playground (local only)</Text>
+          </Pressable>
+        ) : null}
         {diagnosticsEnabled ? (
           <>
             <Pressable hitSlop={16} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
@@ -413,5 +429,28 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
+  },
+  whiteboardPlaygroundButton: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 20,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Theme.radius.xl,
+    borderWidth: 1,
+    borderColor: "rgba(27, 182, 166, 0.4)",
+    backgroundColor: "rgba(10, 10, 11, 0.96)",
+    paddingHorizontal: Theme.spacing.lg,
+  },
+  whiteboardPlaygroundButtonPressed: {
+    opacity: 0.75,
+  },
+  whiteboardPlaygroundButtonText: {
+    color: Theme.colors.primary,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
   },
 });

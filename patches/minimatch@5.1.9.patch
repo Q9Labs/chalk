@@ -1,0 +1,13 @@
+diff --git a/minimatch.js b/minimatch.js
+index 8cc043b..26f54a7 100644
+--- a/minimatch.js
++++ b/minimatch.js
+@@ -14,6 +14,7 @@ minimatch.sep = path.sep
+ const GLOBSTAR = Symbol('globstar **')
+ minimatch.GLOBSTAR = GLOBSTAR
+-const expand = require('brace-expansion')
++const braceExpansion = require('brace-expansion')
++const expand = braceExpansion.expand || braceExpansion
+ 
+ const plTypes = {
+   '!': { open: '(?:(?!(?:', close: '))[^/]*?)'},

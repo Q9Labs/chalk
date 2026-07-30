@@ -1,6 +1,7 @@
 import type { MediaPlaneAdapter } from "../media/media-plane-port";
 import type { NativeTelemetry } from "../telemetry";
-import type { ChalkSession, IncidentConfig } from "../internal/core";
+import type { IncidentConfig } from "../internal/core";
+import type { ChalkSession } from "../internal/realtimekit-runtime";
 
 export interface NativeProviderSessionSnapshot<TMeeting> {
   readonly isConnected: boolean;

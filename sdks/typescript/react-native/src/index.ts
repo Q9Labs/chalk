@@ -8,6 +8,8 @@ export type { NativeVideoConferenceCallKitOptions } from "./callkit/resolve-nati
 export { NativeEndScreen } from "./components/NativeEndScreen";
 export type { NativeEndScreenProps, NativeMeetingEndData } from "./components/NativeEndScreen";
 export { ChalkLogoElements } from "./components/ChalkLogoElements";
+export { ChalkEmbeddedWhiteboard } from "./components/ChalkEmbeddedWhiteboard";
+export type { ChalkEmbeddedWhiteboardProps } from "./components/ChalkEmbeddedWhiteboard";
 export { NativeJoiningLoadingScreen } from "./components/NativeJoiningLoadingScreen";
 export type { NativeJoiningLoadingScreenProps } from "./components/NativeJoiningLoadingScreen";
 export { NativeMediaView } from "./components/NativeMediaView";

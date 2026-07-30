@@ -101,9 +101,6 @@ defmodule ChalkSync.Live.Projection do
 
           {:error, :stale_projection} ->
             rotate(projection, desired_items, options)
-
-          {:error, reason} ->
-            {:error, reason}
         end
 
       {:error, reason} ->

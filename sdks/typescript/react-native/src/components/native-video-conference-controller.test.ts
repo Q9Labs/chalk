@@ -1,5 +1,5 @@
 import type { RoomState } from "../internal/core";
-import { ChalkSession } from "../internal/core";
+import { ChalkSession } from "../internal/realtimekit-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { NativeVideoConferenceController, type NativeVideoConferenceControllerOptions } from "./native-video-conference-controller";
 

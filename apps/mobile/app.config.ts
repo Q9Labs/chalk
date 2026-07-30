@@ -24,7 +24,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
     expo: {
       name: "Chalk",
       slug: "chalk-mobile",
-      scheme: "chalk",
+      scheme: ["chalk", "ai.q9labs.chalk.mobile"],
       version: "1.0.1",
       orientation: "portrait",
       icon: "./assets/icon.png",
@@ -54,6 +54,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
         buildNumber: "19",
+        associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
         entitlements: {
           "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"],
         },
@@ -80,7 +81,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             data: [
               ...PUBLIC_WEB_HOSTS.flatMap((host) => [
                 { scheme: "https", host, pathPrefix: "/j/" },
-                { scheme: "https", host, pathPrefix: "/room/" },
+                { scheme: "https", host, pathPrefix: "/room" },
               ]),
             ],
           },

@@ -16,6 +16,7 @@ import {
   type ChalkWhiteboardV1UpdateInput,
 } from "./types";
 import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
+import { WhiteboardV1UpdateAssembler, whiteboardV1OperationFrames, whiteboardV1PendingOperationBytes } from "./v1-multipart";
 import { compareChalkWhiteboardV1PendingOperations, InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 
 const CLIENT_RESTART_CLOSE_CODE = 4000;
@@ -57,6 +58,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #reservedOperationIds = new Set<string>();
   readonly #operationRetryTimers = new Map<string, unknown>();
   readonly #snapshots = new Map<string, SnapshotAssembly>();
+  readonly #updateAssembler = new WhiteboardV1UpdateAssembler();
+  readonly #updateAssemblyTimers = new Map<string, unknown>();
   #socket: SyncSocket | null = null;
   #started = false;
   #startupGeneration = 0;
@@ -110,6 +113,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearReconnect();
     this.#clearHeartbeat();
     this.#clearOperationRetryTimers();
+    this.#clearUpdateAssemblies();
     this.#socket?.close(1000, "whiteboard subscription stopped");
     this.#socket = null;
     this.#phase = "stopped";
@@ -210,8 +214,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #validRestoredOperation(pending: ChalkWhiteboardV1PendingOperation): boolean {
-    const wire = encodeWhiteboardV1ClientFrame(pending.frame);
-    return pending.operationId === pending.frame.operation_id && pending.bytes === encoder.encode(wire).byteLength;
+    try {
+      whiteboardV1OperationFrames(pending.frame);
+      return pending.operationId === pending.frame.operation_id && pending.bytes === whiteboardV1PendingOperationBytes(pending.frame);
+    } catch {
+      return false;
+    }
   }
 
   #failStartup(cause: unknown): void {
@@ -274,16 +282,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         this.#snapshotPage(frame);
         return;
       case "update":
-        this.#requireLive();
-        this.#sceneId = frame.scene_id;
-        this.#revision = frame.revision;
-        this.#publishSummary("ready", null);
-        this.#emit({
-          type: "update",
-          sceneId: frame.scene_id,
-          revision: frame.revision,
-          elements: frame.elements.map(elementFromFrame),
-        });
+        this.#update(frame);
+        return;
+      case "update_part":
+        this.#updatePart(frame);
         return;
       case "commit":
         this.#commit(frame);
@@ -321,6 +323,43 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
   }
 
+  #update(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "update" }>): void {
+    this.#requireLive();
+    this.#sceneId = frame.scene_id;
+    this.#revision = frame.revision;
+    this.#publishSummary("ready", null);
+    this.#emit({
+      type: "update",
+      sceneId: frame.scene_id,
+      revision: frame.revision,
+      elements: frame.elements.map(elementFromFrame),
+    });
+  }
+
+  #updatePart(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "update_part" }>): void {
+    this.#requireLive();
+    const result = this.#updateAssembler.add(frame);
+    if (result.status === "incomplete") {
+      if (result.started) {
+        const timer = this.#clock().setTimeout(() => this.#expireUpdateAssembly(result.key), WhiteboardV1ProtocolLimits.multipartUpdateTimeoutMs);
+        this.#updateAssemblyTimers.set(result.key, timer);
+      }
+      return;
+    }
+
+    this.#clearUpdateAssemblyTimer(result.key);
+    this.#update(result.frame);
+  }
+
+  #expireUpdateAssembly(key: string): void {
+    this.#updateAssemblyTimers.delete(key);
+    this.#updateAssembler.discard(key);
+    if (this.#phase !== "live") return;
+    const incomplete = failure("request_snapshot", "cursor_reset_required", true, "Whiteboard multipart update recovery is required.");
+    this.#publishSummary("recovering", incomplete);
+    void this.#requestSnapshot().catch(() => undefined);
+  }
+
   #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
@@ -332,7 +371,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#publishSummary("loading", null);
     this.#missedHeartbeats = 0;
     for (const entry of [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending))) {
-      this.#send(entry.pending.frame);
+      this.#sendOperation(entry.pending.frame);
     }
     void this.#requestSnapshot().catch(() => undefined);
     this.#startHeartbeat();
@@ -397,15 +436,15 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   async #queueOperation(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>): Promise<ChalkWhiteboardV1Commit> {
     this.#assertOperationCapacity();
-    const wire = encodeWhiteboardV1ClientFrame(frame);
+    whiteboardV1OperationFrames(frame);
     const pending = {
       operationId: frame.operation_id,
       frame,
       createdAt: this.#now(),
-      bytes: encoder.encode(wire).byteLength,
+      bytes: whiteboardV1PendingOperationBytes(frame),
     } satisfies ChalkWhiteboardV1PendingOperation;
     const queuedBytes = [...this.#operations.values()].reduce((total, entry) => total + entry.pending.bytes, 0);
-    if (queuedBytes + pending.bytes > WhiteboardV1ProtocolLimits.socketQueueMaxBytes) {
+    if (queuedBytes + pending.bytes > WhiteboardV1ProtocolLimits.multipartUpdateMaxBytes) {
       throw error(failure("submit_update", "unavailable", true, "Whiteboard operation byte capacity is full."));
     }
     this.#reservedOperationIds.add(frame.operation_id);
@@ -421,7 +460,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       deferred = { resolve, reject, settled: false };
     });
     this.#operations.set(frame.operation_id, { pending, deferred, retries: 0 });
-    this.#send(frame);
+    this.#sendOperation(frame);
     return promise;
   }
 
@@ -476,7 +515,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const timer = this.#clock().setTimeout(
       () => {
         this.#operationRetryTimers.delete(operationId);
-        if (this.#phase === "live" && this.#operations.get(operationId) === entry) this.#send(entry.pending.frame);
+        if (this.#phase === "live" && this.#operations.get(operationId) === entry) this.#sendOperation(entry.pending.frame);
       },
       this.#options.retryDelayMs ?? Math.min(100 * 2 ** Math.min(entry.retries - 1, 4), 2_000),
     );
@@ -487,6 +526,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (socket !== this.#socket) return;
     this.#socket = null;
     this.#clearHeartbeat();
+    this.#clearUpdateAssemblies();
     this.#phase = "connecting";
     this.#participantSessionId = null;
     this.#capabilities = [];
@@ -541,6 +581,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #send(frame: WhiteboardV1ClientFrame): void {
     this.#socket?.send(encodeWhiteboardV1ClientFrame(frame));
+  }
+
+  #sendOperation(frame: ChalkWhiteboardV1PendingOperation["frame"]): void {
+    for (const outbound of whiteboardV1OperationFrames(frame)) this.#send(outbound);
   }
 
   #emit(event: ChalkWhiteboardV1Event): void {
@@ -600,6 +644,19 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (timer === undefined) return;
     this.#clock().clearTimeout(timer);
     this.#operationRetryTimers.delete(operationId);
+  }
+
+  #clearUpdateAssemblies(): void {
+    for (const timer of this.#updateAssemblyTimers.values()) this.#clock().clearTimeout(timer);
+    this.#updateAssemblyTimers.clear();
+    this.#updateAssembler.clear();
+  }
+
+  #clearUpdateAssemblyTimer(key: string): void {
+    const timer = this.#updateAssemblyTimers.get(key);
+    if (timer === undefined) return;
+    this.#clock().clearTimeout(timer);
+    this.#updateAssemblyTimers.delete(key);
   }
 
   #clearReconnect(): void {

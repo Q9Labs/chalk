@@ -104,6 +104,56 @@ describe("ChalkWhiteboardV1Client", () => {
     client.stopSceneSubscription();
   });
 
+  it("sends and receives multipart updates as one logical operation", async () => {
+    const { client, socket, started } = await connectingClient();
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+    const events: unknown[] = [];
+    client.subscribe((event) => events.push(event));
+    const elements = Array.from({ length: 129 }, (_, index) => publicElement(`element-${index}`));
+
+    const committed = client.submitUpdate({ sceneId, syncAll: true, elements });
+    await settle();
+    const parts = socket.frames().filter((frame) => frame.type === "submit_update_part");
+    expect(parts).toHaveLength(2);
+    expect(new Set(parts.map((part) => part.operation_id))).toEqual(new Set([parts[0]!.operation_id]));
+
+    const updateParts = parts.map((part) => ({
+      type: "update_part",
+      operation_id: part.operation_id,
+      scene_id: part.scene_id,
+      revision: "4",
+      part: part.part,
+      part_count: part.part_count,
+      element_count: part.element_count,
+      elements: part.elements,
+    }));
+    socket.receive(updateParts[1]);
+    await settle();
+    expect(events).toEqual([]);
+
+    socket.receive(updateParts[0]);
+    await settle();
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "update",
+        sceneId,
+        revision: "4",
+        elements,
+      }),
+    ]);
+
+    socket.receive({
+      type: "commit",
+      operation_id: parts[0]!.operation_id,
+      outcome: "committed",
+      scene_id: sceneId,
+      revision: "4",
+    });
+    await expect(committed).resolves.toMatchObject({ sceneId, revision: "4" });
+    client.stopSceneSubscription();
+  });
+
   it("retries stable operation IDs and throttles transient cursors independently", async () => {
     const clock = new TestClock();
     const { client, socket, started } = await connectingClient({ clock, retryDelayMs: 100 });

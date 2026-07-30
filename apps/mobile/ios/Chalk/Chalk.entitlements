@@ -8,5 +8,10 @@
     <array>
       <string>group.ai.q9labs.chalk.mobile</string>
     </array>
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+      <string>applinks:chalkmeet.com</string>
+      <string>applinks:chalk.q9labs.ai</string>
+    </array>
   </dict>
 </plist>

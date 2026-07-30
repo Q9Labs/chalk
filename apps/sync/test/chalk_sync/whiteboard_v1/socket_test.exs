@@ -72,4 +72,76 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                state
              )
   end
+
+  test "keeps a multipart update private until complete and fails an expired assembly" do
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        display_name: "Ada",
+        scene_id: @scene_id,
+        revision: 4
+    }
+
+    frame =
+      JSON.encode!(%{
+        "type" => "submit_update_part",
+        "operation_id" => "operation-0000000001",
+        "scene_id" => @scene_id,
+        "sync_all" => true,
+        "part" => 0,
+        "part_count" => 2,
+        "element_count" => 2,
+        "elements" => [
+          %{
+            "id" => "element-1",
+            "type" => "rectangle",
+            "version" => 1,
+            "version_nonce" => 1,
+            "index" => "a0",
+            "is_deleted" => false,
+            "payload" => %{}
+          }
+        ]
+      })
+
+    assert {:ok, pending} =
+             SocketWhiteboardV1.handle_in({frame, [opcode: :text]}, state)
+
+    assert pending.multipart.operation_id == "operation-0000000001"
+    assert map_size(pending.multipart.parts) == 1
+    Process.cancel_timer(pending.multipart_timer)
+
+    assert {:push, {:text, failure}, expired} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_multipart_timeout, "operation-0000000001"},
+               pending
+             )
+
+    assert expired.multipart == nil
+    assert expired.multipart_timer == nil
+
+    assert JSON.decode!(failure) == %{
+             "type" => "operation_error",
+             "correlation_id" => "operation-0000000001",
+             "operation" => "submit_update",
+             "code" => "overloaded",
+             "recoverable" => true,
+             "message" => "Whiteboard temporarily overloaded"
+           }
+  end
+
+  defp identity do
+    %Identity{
+      session: %SessionKey{
+        tenant_id: "30000000-0000-4000-8000-000000000003",
+        room_id: "40000000-0000-4000-8000-000000000004",
+        session_id: "50000000-0000-4000-8000-000000000005"
+      },
+      participant_session_id: @participant_id,
+      participant_session_generation: 1
+    }
+  end
 end

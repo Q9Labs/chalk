@@ -3,19 +3,20 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   @behaviour WebSock
 
-  require Logger
-
   alias ChalkSync.Auth.Claims
   alias ChalkSync.Auth.TokenVerifier
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.WhiteboardV1.Fanout
+  alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.OutboundQueue
   alias ChalkSync.WhiteboardV1.Protocol
   alias ChalkSync.WhiteboardV1.Session
 
   @hello_timeout_ms 5_000
+  @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
 
   @impl true
   def init(options) do
@@ -40,6 +41,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        scene_id: nil,
        revision: 0,
        snapshot: nil,
+       multipart: nil,
+       multipart_timer: nil,
        cursor_window_started_at_ms: 0,
        cursor_window_count: 0,
        outbound: OutboundQueue.new(),
@@ -65,6 +68,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info(:hello_timeout, state), do: {:ok, state}
 
   def handle_info(
+        {:whiteboard_multipart_timeout, operation_id},
+        %{multipart: %{operation_id: operation_id}} = state
+      ) do
+    state = %{state | multipart: nil, multipart_timer: nil}
+    operation_failure(operation_id, :submit_update, {:retryable, :overloaded}, state)
+  end
+
+  def handle_info({:whiteboard_multipart_timeout, _operation_id}, state), do: {:ok, state}
+
+  def handle_info(
         {:whiteboard_v1_frame,
          %{"type" => "cursor", "participant_session_id" => participant_session_id}},
         %{identity: %Identity{participant_session_id: participant_session_id}} = state
@@ -73,10 +86,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   def handle_info(
         {:whiteboard_v1_frame,
-         %{"type" => "update", "scene_id" => scene_id, "revision" => revision} = frame},
+         %{"type" => type, "scene_id" => scene_id, "revision" => revision} = frame},
         %{phase: :live, scene_id: scene_id} = state
       )
-      when is_binary(revision) do
+      when type in ["update", "update_part"] and is_binary(revision) do
     if String.to_integer(revision) <= state.revision,
       do: {:ok, state},
       else: deliver_frame(state, frame)
@@ -109,25 +122,25 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:ok, state}
 
       true ->
-        case Session.read_after(identity, scene_id, state.revision) do
-          {:ok, frames} when length(frames) == revision - state.revision ->
-            enqueue_and_push(%{state | revision: revision}, frames)
-
-          _unavailable ->
-            enqueue_and_push(state, [
-              %{
-                "type" => "reset_required",
-                "scene_id" => scene_id,
-                "reason" => "gap"
-              }
-            ])
-        end
+        replay_or_reset(state, identity, scene_id, revision)
     end
   end
 
   def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
 
   def handle_info(:whiteboard_drain, state), do: push_next(state)
+
+  defp replay_or_reset(state, identity, scene_id, revision) do
+    case Session.read_after(identity, scene_id, state.revision) do
+      {:ok, frames} ->
+        if frames_reach_revision?(frames, revision),
+          do: enqueue_replay(state, scene_id, revision, frames),
+          else: enqueue_gap_reset(state, scene_id)
+
+      _unavailable ->
+        enqueue_gap_reset(state, scene_id)
+    end
+  end
 
   @impl true
   def terminate(_reason, %{identity: %Identity{session: session}} = state) do
@@ -171,14 +184,47 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     do: {:stop, :normal, {1008, "already authenticated"}, state}
 
   defp handle_frame({:submit_update, operation}, %{phase: :live, identity: identity} = state) do
-    case Session.submit_update(identity, operation) do
-      {:ok, commit, update} ->
-        Fanout.broadcast_local(identity.session, update)
-        state = observe_operation(state, "submit_update", "committed")
-        {:push, {:text, Protocol.encode!(commit)}, state}
+    if is_nil(state.multipart) do
+      submit_update(identity, operation, state)
+    else
+      operation_failure(
+        operation.operation_id,
+        :submit_update,
+        {:retryable, :overloaded},
+        state
+      )
+    end
+  end
+
+  defp handle_frame(
+         {:submit_update_part, part},
+         %{phase: :live, identity: identity} = state
+       ) do
+    case Multipart.add(state.multipart, part) do
+      {:incomplete, assembly} ->
+        timer =
+          state.multipart_timer ||
+            Process.send_after(
+              self(),
+              {:whiteboard_multipart_timeout, part.operation_id},
+              @multipart_timeout_ms
+            )
+
+        {:ok, %{state | multipart: assembly, multipart_timer: timer}}
+
+      {:complete, operation} ->
+        cancel_timer(state.multipart_timer)
+        submit_update(identity, operation, %{state | multipart: nil, multipart_timer: nil})
 
       failure ->
-        operation_failure(operation.operation_id, :submit_update, failure, state)
+        cancel_timer(state.multipart_timer)
+
+        operation_failure(
+          part.operation_id,
+          :submit_update,
+          failure,
+          %{state | multipart: nil, multipart_timer: nil}
+        )
     end
   end
 
@@ -297,6 +343,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp handle_frame(_frame, state),
     do: {:stop, :normal, {1008, "operation not available in this phase"}, state}
 
+  defp submit_update(identity, operation, state) do
+    case Session.submit_update(identity, operation) do
+      {:ok, commit, updates} ->
+        Enum.each(updates, &Fanout.broadcast_local(identity.session, &1))
+        state = observe_operation(state, "submit_update", "committed")
+        {:push, {:text, Protocol.encode!(commit)}, state}
+
+      failure ->
+        operation_failure(operation.operation_id, :submit_update, failure, state)
+    end
+  end
+
   defp operation_failure(correlation_id, operation, failure, state) do
     {code, recoverable} =
       case failure do
@@ -319,17 +377,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp enqueue_and_push(state, frames) do
-    now_ms = System.monotonic_time(:millisecond)
-
-    result =
-      Enum.reduce_while(frames, {:ok, state.outbound}, fn frame, {:ok, queue} ->
-        case OutboundQueue.push(queue, frame, now_ms) do
-          {:ok, next} -> {:cont, {:ok, next}}
-          {:error, reason} -> {:halt, {:error, reason}}
-        end
-      end)
-
-    case result do
+    case enqueue_frames(state.outbound, frames) do
       {:ok, queue} ->
         push_next(%{state | outbound: queue})
 
@@ -359,6 +407,17 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp advance_cursor(state, %{"type" => type, "scene_id" => scene_id, "revision" => revision})
        when type in ["update", "commit"] do
+    %{state | scene_id: scene_id, revision: String.to_integer(revision)}
+  end
+
+  defp advance_cursor(state, %{
+         "type" => "update_part",
+         "scene_id" => scene_id,
+         "revision" => revision,
+         "part" => part,
+         "part_count" => part_count
+       })
+       when part == part_count - 1 do
     %{state | scene_id: scene_id, revision: String.to_integer(revision)}
   end
 
@@ -442,6 +501,52 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         do: {:ok, %{state | cursor_window_count: state.cursor_window_count + 1}},
         else: :rate_limited
     end
+  end
+
+  defp frames_reach_revision?([], _revision), do: false
+
+  defp frames_reach_revision?(frames, revision) do
+    frames
+    |> List.last()
+    |> Map.get("revision")
+    |> then(&(&1 == Integer.to_string(revision)))
+  end
+
+  defp cancel_timer(nil), do: :ok
+  defp cancel_timer(timer), do: Process.cancel_timer(timer)
+
+  defp enqueue_gap_reset(state, scene_id) do
+    enqueue_and_push(state, [
+      %{
+        "type" => "reset_required",
+        "scene_id" => scene_id,
+        "reason" => "gap"
+      }
+    ])
+  end
+
+  defp enqueue_replay(state, scene_id, revision, frames) do
+    case enqueue_frames(state.outbound, frames) do
+      {:ok, queue} ->
+        push_next(%{state | outbound: queue, revision: revision})
+
+      {:error, _reason} ->
+        # A valid multipart revision may intentionally exceed the ordinary
+        # per-socket replay queue. Keep the socket alive and move the client to
+        # paged snapshot recovery instead of exposing only a prefix.
+        enqueue_gap_reset(state, scene_id)
+    end
+  end
+
+  defp enqueue_frames(queue, frames) do
+    now_ms = System.monotonic_time(:millisecond)
+
+    Enum.reduce_while(frames, {:ok, queue}, fn frame, {:ok, current} ->
+      case OutboundQueue.push(current, frame, now_ms) do
+        {:ok, next} -> {:cont, {:ok, next}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp observe_operation(state, operation, outcome) do

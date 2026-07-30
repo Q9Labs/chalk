@@ -5,12 +5,12 @@ import { extractJoinTokenFromInviteLink } from "@q9labsai/chalk-react-native/inv
 import { canUseLocalHostBootstrap, createStorageScopeId, getNativeDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
 import { createSecureStoreTokenStorage, HOST_ACCESS_TOKEN_KEY, HOST_EXPIRES_KEY, HOST_REFRESH_TOKEN_KEY, type NativeTokenStorage } from "@q9labsai/chalk-react-native/storage";
 import { createTokenProvider } from "./mobile-auth";
+import { isMobileHostCreationEnabled } from "./mobile-host-policy";
 import { getCanonicalJoinRoomId, getJoinRoomName } from "./join-exchange";
 import { createHostedMeeting } from "./newMeeting";
 
 const JOIN_CONTEXT_KEY = "chalk_mobile_join_context_v1";
 const LOCAL_DEV_HOST_API_KEY_KEY = "chalk_mobile_local_dev_host_api_key_v1";
-const INTERNAL_CLIENT_ID_KEY = "chalk_mobile_internal_client_id_v1";
 const PROD_API_URL = "https://chalk-api.q9labs.ai";
 const PROD_WS_URL = "wss://chalk-ws.q9labs.ai/ws";
 
@@ -22,7 +22,7 @@ type JoinContext = {
 };
 
 export interface MobileDebugContext {
-  hostMode: "configured-api-key" | "local-bootstrap" | "internal-bootstrap" | "none";
+  hostMode: "configured-api-key" | "local-bootstrap" | "none";
   configuredHostApiKeyPreview: string | null;
   localDevHostApiKeyPreview: string | null;
   joinTokenPreview: string | null;
@@ -56,7 +56,10 @@ type JoinTokenExchangeResponse = {
 let cachedHostTokenProvider: (() => Promise<string>) | null = null;
 let cachedHostTokenProviderKey: string | null = null;
 let cachedLocalDevHostApiKey: string | null | undefined;
-let cachedInternalClientID: string | null | undefined;
+
+function isDevRuntime(): boolean {
+  return typeof __DEV__ !== "undefined" && __DEV__;
+}
 
 export function getApiUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -101,74 +104,12 @@ function canBootstrapLocalHostKey(apiUrl: string, allowDeviceLocal = __DEV__): b
   return canUseLocalHostBootstrap(apiUrl, allowDeviceLocal);
 }
 
-export function canCreateMeeting(): boolean {
-  return true;
-}
-
-async function getOrCreateInternalClientId(): Promise<string> {
-  if (cachedInternalClientID !== undefined && cachedInternalClientID !== null) {
-    return cachedInternalClientID;
-  }
-
-  const existing = await SecureStore.getItemAsync(INTERNAL_CLIENT_ID_KEY);
-  if (existing) {
-    cachedInternalClientID = existing;
-    return existing;
-  }
-
-  const next = globalThis.crypto?.randomUUID?.() ?? `chalk-mobile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  cachedInternalClientID = next;
-  await SecureStore.setItemAsync(INTERNAL_CLIENT_ID_KEY, next);
-  return next;
-}
-
-async function fetchInternalAccessToken(apiUrl: string): Promise<string> {
-  const clientId = await getOrCreateInternalClientId();
-  const response = await fetch(`${apiUrl}/api/v1/internal/auth/access-token`, {
-    method: "GET",
-    headers: {
-      "X-Chalk-Local-Client-ID": clientId,
-    },
+export function canCreateMeeting(apiUrl: string): boolean {
+  return isMobileHostCreationEnabled({
+    isDevRuntime: isDevRuntime(),
+    hasConfiguredHostKey: Boolean(getHostApiKey()),
+    canBootstrapLocalHost: canBootstrapLocalHostKey(apiUrl),
   });
-
-  const responseMeta = {
-    statusCode: response.status,
-    requestId: response.headers?.get?.("x-request-id") ?? null,
-    traceId: response.headers?.get?.("x-chalk-trace-id") ?? null,
-    cfRay: response.headers?.get?.("cf-ray") ?? null,
-  };
-
-  const data = (await response.json().catch(() => null)) as { access_token?: string; error?: string } | null;
-
-  if (!response.ok || !data?.access_token) {
-    recordManualRequest({
-      eventType: "api.request",
-      method: "GET",
-      path: "/api/v1/internal/auth/access-token",
-      url: `${apiUrl}/api/v1/internal/auth/access-token`,
-      outcome: "error",
-      statusCode: responseMeta.statusCode,
-      requestId: responseMeta.requestId,
-      traceId: responseMeta.traceId,
-      cfRay: responseMeta.cfRay,
-      errorMessage: data?.error ?? `internal auth failed (${response.status})`,
-    });
-    throw new Error(data?.error ?? `internal auth failed (${response.status})`);
-  }
-
-  recordManualRequest({
-    eventType: "api.request",
-    method: "GET",
-    path: "/api/v1/internal/auth/access-token",
-    url: `${apiUrl}/api/v1/internal/auth/access-token`,
-    outcome: "success",
-    statusCode: responseMeta.statusCode,
-    requestId: responseMeta.requestId,
-    traceId: responseMeta.traceId,
-    cfRay: responseMeta.cfRay,
-  });
-
-  return data.access_token;
 }
 
 function getTokenProviderForKey(apiUrl: string, apiKey: string): () => Promise<string> {
@@ -258,11 +199,15 @@ async function createLocalDevHostApiKey(apiUrl: string): Promise<string> {
 }
 
 export function getHostTokenProvider(apiUrl: string): (() => Promise<string>) | null {
+  if (!isDevRuntime()) {
+    return null;
+  }
+
   const configuredApiKey = getHostApiKey();
   const allowLocalBootstrap = canBootstrapLocalHostKey(apiUrl);
 
   if (!configuredApiKey && !allowLocalBootstrap) {
-    return async () => await fetchInternalAccessToken(apiUrl);
+    return null;
   }
 
   return async () => {
@@ -354,7 +299,7 @@ export async function getMobileDebugContext(apiUrl: string): Promise<MobileDebug
   const joinContext = await getJoinContext();
 
   return {
-    hostMode: configuredHostApiKey ? "configured-api-key" : localDevHostApiKey ? "local-bootstrap" : "internal-bootstrap",
+    hostMode: configuredHostApiKey ? "configured-api-key" : localDevHostApiKey ? "local-bootstrap" : "none",
     configuredHostApiKeyPreview: maskSecret(configuredHostApiKey),
     localDevHostApiKeyPreview: maskSecret(localDevHostApiKey),
     joinTokenPreview: maskSecret(joinContext?.joinToken ?? null),

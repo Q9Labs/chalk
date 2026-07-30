@@ -1,4 +1,5 @@
-import { ChalkErrorClass, type ChalkError, type ChalkSession, type ChalkSessionDiagnosticsSnapshot, type RoomState } from "../internal/core";
+import { ChalkErrorClass, type ChalkError, type ChalkSessionDiagnosticsSnapshot, type RoomState } from "../internal/core";
+import type { ChalkSession } from "../internal/realtimekit-runtime";
 import type { NativeVideoConferenceCallKitOptions } from "../callkit/resolve-native-video-conference-callkit-options";
 import type { NativeTelemetry } from "../telemetry";
 import { canExecuteNativeJoin, canStartNativeJoin, shouldFailNativeJoinAfterDisconnect, shouldPromoteAfterJoinError } from "../utils/native-join-guard";

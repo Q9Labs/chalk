@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "rendererBuildId": "chalk-excalidraw-0.18.1-r1",
+  "excalidraw": {
+    "package": "@excalidraw/excalidraw",
+    "version": "0.18.1",
+    "restoreImplementation": "@excalidraw/excalidraw@0.18.1"
+  },
+  "bridge": {
+    "current": 1,
+    "minimum": 1,
+    "maximum": 1,
+    "priorCompatible": []
+  },
+  "document": {
+    "format": "excalidraw",
+    "supportedElementTypes": ["arrow", "diamond", "ellipse", "embeddable", "frame", "freedraw", "iframe", "image", "line", "magicframe", "rectangle", "selection", "text"],
+    "supportedSharedAppStateFields": ["viewBackgroundColor"],
+    "preserveUnknownOptionalElementFields": true,
+    "unknownRequiredFeaturePolicy": "read-only-update-required"
+  },
+  "assets": {
+    "fonts": ["Assistant", "Cascadia", "ComicShanns", "Excalifont", "Liberation", "Lilita", "Nunito", "Virgil", "Xiaolai"],
+    "math": "mathjax@4.1.3",
+    "runtimeContentDelivery": false
+  },
+  "clientSkew": {
+    "rendererBuildMustMatch": true,
+    "initialBridgeHasNoPriorRelease": true,
+    "newerRequiredFeaturesOpenReadOnly": true
+  },
+  "security": {
+    "networkPolicy": "offline-only",
+    "rendererReceivesCredentials": false,
+    "rendererReceivesSignedURLs": false
+  }
+}

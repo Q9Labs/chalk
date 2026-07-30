@@ -36,7 +36,6 @@ defmodule ChalkSync.ProviderBridge.Transport.ErlangHTTP do
   end
 
   defp content_type(:post), do: ~c"application/json"
-  defp content_type(:get), do: ~c"application/json"
 
   defp ssl_options(_url, []), do: []
 

@@ -49,6 +49,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     case Map.get(frame, "type") do
       "hello" -> decode_hello(frame)
       "submit_update" -> decode_submit_update(frame)
+      "submit_update_part" -> decode_submit_update_part(frame)
       "request_snapshot" -> decode_request_snapshot(frame)
       "snapshot_ack" -> decode_snapshot_ack(frame)
       "clear" -> decode_clear(frame)
@@ -66,6 +67,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "welcome" -> valid_welcome?(frame)
       "snapshot_page" -> valid_snapshot_page?(frame)
       "update" -> valid_update?(frame)
+      "update_part" -> valid_update_part?(frame)
       "commit" -> valid_commit?(frame)
       "cursor" -> valid_server_cursor?(frame)
       "permission_updated" -> valid_permission_updated?(frame)
@@ -97,6 +99,19 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
          sync_all when is_boolean(sync_all) <- frame["sync_all"],
          {:ok, elements} <- element_batch(frame["elements"], @limits["elementBatchMaxItems"]) do
       {:ok, {:submit_update, %{operation_id: frame["operation_id"], scene_id: frame["scene_id"], sync_all: sync_all, elements: elements}}}
+    else
+      _ -> {:error, :invalid_payload}
+    end
+  end
+
+  defp decode_submit_update_part(frame) do
+    with true <- exact?(frame, ${render(contract.frames.submitUpdatePart.exactFields)}),
+         true <- operation_id?(frame["operation_id"]),
+         true <- uuid?(frame["scene_id"]),
+         sync_all when is_boolean(sync_all) <- frame["sync_all"],
+         true <- multipart_coordinates?(frame),
+         {:ok, elements} <- element_batch(frame["elements"], @limits["elementBatchMaxItems"]) do
+      {:ok, {:submit_update_part, %{operation_id: frame["operation_id"], scene_id: frame["scene_id"], sync_all: sync_all, part: frame["part"], part_count: frame["part_count"], element_count: frame["element_count"], elements: elements}}}
     else
       _ -> {:error, :invalid_payload}
     end
@@ -169,6 +184,13 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       match?({:ok, _elements}, element_batch(frame["elements"], @limits["elementBatchMaxItems"]))
   end
 
+  defp valid_update_part?(frame) do
+    exact?(frame, ${render(contract.frames.updatePart.exactFields)}) and
+      operation_id?(frame["operation_id"]) and uuid?(frame["scene_id"]) and
+      unsigned_decimal?(frame["revision"]) and multipart_coordinates?(frame) and
+      match?({:ok, _elements}, element_batch(frame["elements"], @limits["elementBatchMaxItems"]))
+  end
+
   defp valid_commit?(frame) do
     exact?(frame, ${render(contract.frames.commit.exactFields)}) and operation_id?(frame["operation_id"]) and
       frame["outcome"] in @receipt_outcomes and uuid?(frame["scene_id"]) and unsigned_decimal?(frame["revision"])
@@ -232,6 +254,13 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   defp valid_app_state?(app_state) do
     exact?(app_state, ${render(contract.sharedAppState.exactFields)}) and
       bounded_string?(app_state["view_background_color"], 0, 64)
+  end
+
+  defp multipart_coordinates?(frame) do
+    non_negative_integer?(frame["part"]) and non_negative_integer?(frame["part_count"]) and
+      frame["part_count"] >= 2 and frame["part_count"] <= @limits["multipartUpdateMaxParts"] and
+      frame["part"] < frame["part_count"] and non_negative_integer?(frame["element_count"]) and
+      frame["element_count"] > 0 and frame["element_count"] <= @limits["multipartUpdateMaxItems"]
   end
 
   defp capabilities?(capabilities) when is_list(capabilities) do

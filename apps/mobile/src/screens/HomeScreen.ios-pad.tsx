@@ -25,7 +25,7 @@ interface HomeScreenProps {
 
 export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScreenProps): React.JSX.Element {
   const apiUrl = useMemo(() => getApiUrl(), []);
-  const createEnabled = useMemo(() => canCreateMeeting(), []);
+  const createEnabled = useMemo(() => canCreateMeeting(apiUrl), [apiUrl]);
   const [input, setInput] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [error, setError] = useState<string | null>(null);

@@ -1,11 +1,11 @@
 import { CaptureUpdateAction, hashElementsVersion, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
 import { WhiteboardFilesSync } from "./files.js";
-import type { WhiteboardFileSyncState } from "./files.js";
+import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files.js";
 import { WhiteboardPresence } from "./presence.js";
 import { filterSyncableElements } from "./syncable.js";
 import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types.js";
-import { fromWireElement, toWireElement, type WhiteboardCommit, type WhiteboardUploadInstructions, type WhiteboardWireElement } from "./wire.js";
+import { fromWireElement, toWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire.js";
 
 const FULL_SYNC_INTERVAL_MS = 20_000;
 const CHANGE_DEBOUNCE_MS = 150;
@@ -17,6 +17,7 @@ const toReconcileRemoteElements = (elements: readonly OrderedExcalidrawElement[]
 
 type SubmissionContext = {
   readonly sceneId: string;
+  readonly sceneGeneration?: string;
   readonly elements: readonly OrderedExcalidrawElement[];
 };
 
@@ -25,6 +26,7 @@ export type WhiteboardCollaborationEvent =
       readonly type: "snapshot";
       readonly sceneId: string;
       readonly revision: string;
+      readonly sceneGeneration?: string;
       readonly elements: readonly WhiteboardWireElement[];
       readonly appState?: { readonly viewBackgroundColor?: string };
     }
@@ -32,6 +34,7 @@ export type WhiteboardCollaborationEvent =
       readonly type: "update";
       readonly sceneId: string;
       readonly revision: string;
+      readonly sceneGeneration?: string;
       readonly elements: readonly WhiteboardWireElement[];
     }
   | {
@@ -48,16 +51,13 @@ export type WhiteboardCollaborationEvent =
       readonly reason: "scene_changed" | "cursor_expired" | "gap";
     };
 
-export interface ExcalidrawCollabEngineOptions {
+export interface ExcalidrawCollabEngineOptions extends WhiteboardFileTransferOptions {
   excalidrawAPI: ExcalidrawImperativeAPI;
   canDraw: boolean;
-  submitUpdate: (payload: { sceneId: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }) => Promise<WhiteboardCommit>;
+  submitUpdate: (payload: { sceneId: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }) => Promise<WhiteboardCommit>;
   sendCursor: (payload: { x: number; y: number }) => void;
   requestSnapshot: () => Promise<void>;
   clear: () => Promise<WhiteboardCommit>;
-  initiateUpload: (input: { fileId: string; mimeType: string; byteLength: number; sha256: string }) => Promise<WhiteboardUploadInstructions>;
-  finalizeUpload: (uploadId: string) => Promise<void>;
-  presignDownload: (fileId: string) => Promise<{ downloadUrl: string }>;
   subscribe: (listener: (event: WhiteboardCollaborationEvent) => void) => () => void;
   onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
   onSubmissionError?: (error: unknown) => void;
@@ -65,6 +65,7 @@ export interface ExcalidrawCollabEngineOptions {
 
 export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;
+  private sceneGeneration: string | null = null;
   private canDraw = true;
 
   private lastBroadcastedOrReceivedElementsHash = 0;
@@ -85,6 +86,7 @@ export class ExcalidrawCollabEngine {
 
     this.filesSync = new WhiteboardFilesSync({
       excalidrawAPI: opts.excalidrawAPI,
+      fileTransfer: opts.fileTransfer,
       initiateUpload: opts.initiateUpload,
       finalizeUpload: opts.finalizeUpload,
       presignDownload: opts.presignDownload,
@@ -112,6 +114,7 @@ export class ExcalidrawCollabEngine {
     if (!this.canDraw) throw new Error("whiteboard drawing is not permitted");
     const commit = await this.opts.clear();
     this.sceneId = commit.sceneId;
+    this.sceneGeneration = commit.sceneGeneration ?? null;
     this.broadcastedElementVersions.clear();
     this.lastBroadcastedOrReceivedElementsHash = 0;
     this.opts.excalidrawAPI.updateScene({
@@ -158,6 +161,7 @@ export class ExcalidrawCollabEngine {
       case "snapshot":
         this.handleRemoteSnapshot({
           sceneId: event.sceneId,
+          ...(event.sceneGeneration ? { sceneGeneration: event.sceneGeneration } : {}),
           elements: event.elements,
           appState: event.appState as AppState | undefined,
         });
@@ -165,6 +169,7 @@ export class ExcalidrawCollabEngine {
       case "update":
         this.handleRemoteData({
           sceneId: event.sceneId,
+          ...(event.sceneGeneration ? { sceneGeneration: event.sceneGeneration } : {}),
           syncAll: false,
           elements: event.elements,
         });
@@ -183,18 +188,20 @@ export class ExcalidrawCollabEngine {
     }
   }
 
-  handleRemoteData(payload: { sceneId: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }): void {
+  handleRemoteData(payload: { sceneId: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }): void {
     this.applyRemoteElements({
       sceneId: payload.sceneId,
+      ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: payload.syncAll,
       remoteElements: payload.elements.map(fromWireElement),
       isSnapshot: false,
     });
   }
 
-  handleRemoteSnapshot(payload: { sceneId: string; elements: readonly WhiteboardWireElement[]; appState?: AppState }): void {
+  handleRemoteSnapshot(payload: { sceneId: string; sceneGeneration?: string; elements: readonly WhiteboardWireElement[]; appState?: AppState }): void {
     this.applyRemoteElements({
       sceneId: payload.sceneId,
+      ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: true,
       remoteElements: payload.elements.map(fromWireElement),
       appState: payload.appState,
@@ -216,7 +223,7 @@ export class ExcalidrawCollabEngine {
     }
     if (delta.length === 0) return;
 
-    this.submit(context.sceneId, false, delta, elementsHash);
+    this.submit(context.sceneId, context.sceneGeneration ?? null, false, delta, elementsHash);
   }
 
   private scheduleFullSync(): void {
@@ -231,7 +238,7 @@ export class ExcalidrawCollabEngine {
     const context = this.submissionContext();
     if (!context) return;
     const syncableAll = filterSyncableElements(context.elements);
-    this.submit(context.sceneId, true, syncableAll, hashElementsVersion(context.elements));
+    this.submit(context.sceneId, context.sceneGeneration ?? null, true, syncableAll, hashElementsVersion(context.elements));
   }
 
   private submissionContext(): SubmissionContext | null {
@@ -246,22 +253,24 @@ export class ExcalidrawCollabEngine {
     }
     return {
       sceneId: this.sceneId,
+      ...(this.sceneGeneration ? { sceneGeneration: this.sceneGeneration } : {}),
       elements: this.opts.excalidrawAPI.getSceneElementsIncludingDeleted(),
     };
   }
 
-  private submit(sceneId: string, syncAll: boolean, elements: readonly OrderedExcalidrawElement[], elementsHash: number): void {
+  private submit(sceneId: string, sceneGeneration: string | null, syncAll: boolean, elements: readonly OrderedExcalidrawElement[], elementsHash: number): void {
     this.submissionInFlight = true;
     this.dirtyDuringSubmission = false;
 
     void this.opts
       .submitUpdate({
         sceneId,
+        ...(sceneGeneration ? { sceneGeneration } : {}),
         syncAll,
         elements: elements.map(toWireElement),
       })
       .then((commit) => {
-        if (commit.sceneId !== sceneId) {
+        if (commit.sceneId !== sceneId || this.sceneId !== sceneId || this.sceneGeneration !== sceneGeneration) {
           void this.opts.requestSnapshot();
           return;
         }
@@ -278,7 +287,7 @@ export class ExcalidrawCollabEngine {
       });
   }
 
-  private applyRemoteElements(args: { sceneId: string; syncAll: boolean; remoteElements: unknown[]; appState?: AppState; isSnapshot: boolean }) {
+  private applyRemoteElements(args: { sceneId: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: AppState; isSnapshot: boolean }) {
     const remoteSceneId = args.sceneId;
 
     if (!this.sceneId) {
@@ -300,6 +309,7 @@ export class ExcalidrawCollabEngine {
         return;
       }
     }
+    if (args.sceneGeneration) this.sceneGeneration = args.sceneGeneration;
 
     const excalidrawAPI = this.opts.excalidrawAPI;
     const local = excalidrawAPI.getSceneElementsIncludingDeleted();

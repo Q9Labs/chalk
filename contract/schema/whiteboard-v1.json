@@ -20,7 +20,7 @@
     },
     {
       "id": "live",
-      "accepts": ["submit_update", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
+      "accepts": ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
       "heartbeatIntervalMs": 20000,
       "missedDeadlinesBeforeClose": 2
     }
@@ -51,6 +51,10 @@
     "cursorTtlMs": 10000,
     "cursorRatePerSecond": 60,
     "pendingOperationMaxItems": 128,
+    "multipartUpdateMaxParts": 128,
+    "multipartUpdateMaxItems": 10000,
+    "multipartUpdateMaxBytes": 16777216,
+    "multipartUpdateTimeoutMs": 10000,
     "sceneElementMaxItems": 10000,
     "sceneJsonMaxBytes": 67108864,
     "sceneObjectMaxBytes": 268435456
@@ -72,6 +76,9 @@
     },
     "submitUpdate": {
       "exactFields": ["type", "operation_id", "scene_id", "sync_all", "elements"]
+    },
+    "submitUpdatePart": {
+      "exactFields": ["type", "operation_id", "scene_id", "sync_all", "part", "part_count", "element_count", "elements"]
     },
     "requestSnapshot": {
       "exactFields": ["type", "request_id"]
@@ -98,6 +105,9 @@
     "update": {
       "exactFields": ["type", "operation_id", "scene_id", "revision", "elements"]
     },
+    "updatePart": {
+      "exactFields": ["type", "operation_id", "scene_id", "revision", "part", "part_count", "element_count", "elements"]
+    },
     "commit": {
       "exactFields": ["type", "operation_id", "outcome", "scene_id", "revision"]
     },
@@ -111,8 +121,8 @@
       "exactFields": ["type", "correlation_id", "operation", "code", "recoverable", "message"]
     }
   },
-  "clientFrames": ["hello", "submit_update", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
-  "serverFrames": ["welcome", "snapshot_page", "update", "commit", "cursor", "permission_updated", "reset_required", "operation_error", "pong"],
+  "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"],
+  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "permission_updated", "reset_required", "operation_error", "pong"],
   "receiptOperations": ["submit_update", "clear", "set_draw_permission"],
   "receiptOutcomes": ["committed", "duplicate"],
   "resetReasons": ["scene_changed", "cursor_expired", "gap"],

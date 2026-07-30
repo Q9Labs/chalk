@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LobbyRoute } from "../lib/chalk";
 import { createMobileTelemetry, flushAndDisposeTelemetry } from "../lib/telemetry";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
+import { MOBILE_MEETING_FEATURES } from "./mobile-meeting-features";
 import { recordMobileMeetingJoined, terminalizeMobileMeetingJourney } from "./mobile-meeting-telemetry-lifecycle";
 
 type ChalkSession = ReturnType<typeof useSession>;
@@ -22,7 +23,6 @@ export interface MeetingScreenProps {
 }
 
 export function MobileMeetingScreen({ route, onClose, apiUrl, wsUrl, tokenProvider, diagnosticsEnabled, wideEvents, onDiagnosticsChange, onDiagnosticsError, onSessionChange }: MeetingScreenProps): React.JSX.Element {
-  const meetingFeatures = useMemo(() => ({ screenShare: true }), []);
   const telemetry = useMemo(() => createMobileTelemetry({ apiUrl, enabled: true, tokenProvider }), [apiUrl, tokenProvider]);
   const journeyRef = useRef<TelemetryJourney | undefined>(undefined);
   const [journey, setJourney] = useState<TelemetryJourney | undefined>(undefined);
@@ -84,7 +84,7 @@ export function MobileMeetingScreen({ route, onClose, apiUrl, wsUrl, tokenProvid
       <NativeVideoConference
         autoJoin={false}
         callKit={true}
-        features={meetingFeatures}
+        features={MOBILE_MEETING_FEATURES}
         initialPhase="lobby"
         onClose={handleClose}
         onDiagnosticsChange={onDiagnosticsChange}

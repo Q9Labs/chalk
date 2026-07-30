@@ -28,8 +28,8 @@ function validateWhiteboardContract(contract) {
   }
 
   requireExactStrings(contract.capabilities, ["drawWhiteboard", "manageWhiteboard"], "capabilities");
-  requireExactStrings(contract.clientFrames, ["hello", "submit_update", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"], "clientFrames");
-  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "commit", "cursor", "permission_updated", "reset_required", "operation_error", "pong"], "serverFrames");
+  requireExactStrings(contract.clientFrames, ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "cursor", "ping"], "clientFrames");
+  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "permission_updated", "reset_required", "operation_error", "pong"], "serverFrames");
   requireExactStrings(contract.receiptOperations, ["submit_update", "clear", "set_draw_permission"], "receiptOperations");
   requireExactStrings(contract.receiptOutcomes, ["committed", "duplicate"], "receiptOutcomes");
   requireExactStrings(contract.resetReasons, ["scene_changed", "cursor_expired", "gap"], "resetReasons");
@@ -60,6 +60,10 @@ function validateWhiteboardContract(contract) {
     "cursorTtlMs",
     "cursorRatePerSecond",
     "pendingOperationMaxItems",
+    "multipartUpdateMaxParts",
+    "multipartUpdateMaxItems",
+    "multipartUpdateMaxBytes",
+    "multipartUpdateTimeoutMs",
     "sceneElementMaxItems",
     "sceneJsonMaxBytes",
     "sceneObjectMaxBytes",
@@ -80,7 +84,7 @@ function validateWhiteboardContract(contract) {
   }
 
   const frameEntries = Object.values(contract.frames ?? {});
-  if (frameEntries.length !== 14 || frameEntries.some((entry) => typeof entry !== "object" || entry === null)) {
+  if (frameEntries.length !== 16 || frameEntries.some((entry) => typeof entry !== "object" || entry === null)) {
     throw new Error("Invalid whiteboard contract: all strict frame definitions are required");
   }
 }

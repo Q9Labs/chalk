@@ -3,6 +3,7 @@ defmodule ChalkSync.WhiteboardV1.Session do
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.Repository
 
   @limits GeneratedWhiteboardV1.limits()
@@ -29,15 +30,24 @@ defmodule ChalkSync.WhiteboardV1.Session do
   end
 
   def submit_update(%Identity{} = identity, operation) do
-    with {:ok, commit} <- Repository.commit_update(identity, operation) do
-      {:ok, commit_frame(commit),
-       %{
-         "type" => "update",
-         "operation_id" => commit.operation_id,
-         "scene_id" => commit.scene_id,
-         "revision" => Integer.to_string(commit.revision),
-         "elements" => operation.elements
-       }}
+    with {:ok, _validated_frames} <-
+           Multipart.update_frames(%{
+             "type" => "update",
+             "operation_id" => operation.operation_id,
+             "scene_id" => operation.scene_id,
+             "revision" => "9223372036854775807",
+             "elements" => operation.elements
+           }),
+         {:ok, commit} <- Repository.commit_update(identity, operation),
+         {:ok, frames} <-
+           Multipart.update_frames(%{
+             "type" => "update",
+             "operation_id" => commit.operation_id,
+             "scene_id" => commit.scene_id,
+             "revision" => Integer.to_string(commit.revision),
+             "elements" => operation.elements
+           }) do
+      {:ok, commit_frame(commit), frames}
     end
   end
 
@@ -91,17 +101,9 @@ defmodule ChalkSync.WhiteboardV1.Session do
   def read_after(%Identity{} = identity, scene_id, revision) do
     with {:ok, updates} <- Repository.read_after(identity, scene_id, revision),
          true <- length(updates) <= @snapshot_page_items,
-         true <- contiguous?(updates, revision) do
-      {:ok,
-       Enum.map(updates, fn update ->
-         %{
-           "type" => "update",
-           "operation_id" => update.operation_id,
-           "scene_id" => update.scene_id,
-           "revision" => Integer.to_string(update.revision),
-           "elements" => update.elements
-         }
-       end)}
+         true <- contiguous?(updates, revision),
+         {:ok, frames} <- update_frames(updates) do
+      {:ok, frames}
     else
       false -> {:error, :cursor_reset_required}
       other -> other
@@ -150,6 +152,24 @@ defmodule ChalkSync.WhiteboardV1.Session do
       "scene_id" => commit.scene_id,
       "revision" => Integer.to_string(commit.revision)
     }
+  end
+
+  defp update_frames(updates) do
+    Enum.reduce_while(updates, {:ok, []}, fn update, {:ok, frames} ->
+      result =
+        Multipart.update_frames(%{
+          "type" => "update",
+          "operation_id" => update.operation_id,
+          "scene_id" => update.scene_id,
+          "revision" => Integer.to_string(update.revision),
+          "elements" => update.elements
+        })
+
+      case result do
+        {:ok, update_frames} -> {:cont, {:ok, frames ++ update_frames}}
+        failure -> {:halt, failure}
+      end
+    end)
   end
 
   defp contiguous?(updates, revision) do

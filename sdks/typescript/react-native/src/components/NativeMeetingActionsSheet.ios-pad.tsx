@@ -2,6 +2,7 @@ import CallEnd01Icon from "@hugeicons/core-free-icons/dist/esm/CallEnd01Icon";
 import Chat01Icon from "@hugeicons/core-free-icons/dist/esm/Chat01Icon";
 import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
+import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
 import Settings01Icon from "@hugeicons/core-free-icons/dist/esm/Settings01Icon";
 import SmileIcon from "@hugeicons/core-free-icons/dist/esm/SmileIcon";
 import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
@@ -20,6 +21,7 @@ export interface NativeMeetingActionsSheetProps {
   reactionsEnabled: boolean;
   peopleEnabled: boolean;
   transcriptsEnabled: boolean;
+  whiteboardEnabled: boolean;
   screenShareEnabled: boolean;
   settingsEnabled: boolean;
   chatUnreadCount: number;
@@ -31,6 +33,7 @@ export interface NativeMeetingActionsSheetProps {
   onOpenParticipants: () => void;
   onToggleHand: () => void;
   onOpenReactions: () => void;
+  onOpenWhiteboard: () => void;
   onToggleScreenShare: () => void;
   onOpenTranscripts: () => void;
   onOpenSettings: () => void;
@@ -48,6 +51,7 @@ function NativeMeetingActionsSheetIosPadBase({
   reactionsEnabled,
   peopleEnabled,
   transcriptsEnabled,
+  whiteboardEnabled,
   screenShareEnabled,
   settingsEnabled,
   chatUnreadCount,
@@ -59,6 +63,7 @@ function NativeMeetingActionsSheetIosPadBase({
   onOpenParticipants,
   onToggleHand,
   onOpenReactions,
+  onOpenWhiteboard,
   onToggleScreenShare,
   onOpenTranscripts,
   onOpenSettings,
@@ -84,6 +89,7 @@ function NativeMeetingActionsSheetIosPadBase({
                   <Text style={styles.sectionLabel}>Collaboration</Text>
                   <View style={styles.grid}>
                     <ActionTile active={isHandRaised} badge={raisedHandCount > 0 ? formatBadge(raisedHandCount) : null} icon={WavingHand01Icon} label="Raise Hand" onPress={onToggleHand} />
+                    <ActionTile disabled={!whiteboardEnabled} icon={Presentation01Icon} label="Whiteboard" onPress={onOpenWhiteboard} />
                     <ActionTile active={isScreenSharing} disabled={!screenShareEnabled} icon={ComputerScreenShareIcon} label="Share Screen" onPress={onToggleScreenShare} />
                   </View>
                 </View>

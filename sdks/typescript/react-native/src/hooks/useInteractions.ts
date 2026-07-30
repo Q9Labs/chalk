@@ -1,8 +1,7 @@
-import type { ActiveReaction, InteractionState, ReactionEmoji } from "../internal/core";
+import type { ActiveReaction, ReactionEmoji } from "../internal/core";
 import { useCallback, useMemo } from "react";
-import { useChalkSessionStore, useSession } from "../context/chalk-native-provider";
+import { useChalkSessionStore } from "../context/chalk-native-provider";
 import { createNativeRoomActionCommands, projectNativeRoomActions } from "../room-actions/native-room-actions";
-import { useManagerState } from "./external-store";
 import { useOptionalChalkSnapshot } from "./useChalkRoomActions";
 
 export interface UseInteractionsReturn {
@@ -11,24 +10,31 @@ export interface UseInteractionsReturn {
   raisedHandCount: number;
   activeReactions: readonly ActiveReaction[];
   reactionEnabled: boolean;
-  raiseHand: () => void;
-  lowerHand: () => void;
-  toggleHand: () => void;
+  raiseHand: () => Promise<void>;
+  lowerHand: () => Promise<void>;
+  toggleHand: () => Promise<void>;
   sendReaction: (emoji: ReactionEmoji) => Promise<void>;
 }
 
 export function useInteractions(): UseInteractionsReturn {
-  const session = useSession();
-  const { interactions } = session;
-  const state = useManagerState<InteractionState>(interactions);
   const store = useChalkSessionStore();
   const snapshot = useOptionalChalkSnapshot();
   const projection = useMemo(() => projectNativeRoomActions(snapshot), [snapshot]);
   const commands = useMemo(() => (store ? createNativeRoomActionCommands(store) : null), [store]);
+  const raisedHands = useMemo(() => snapshot?.participants.filter((participant) => participant.handRaised).map((participant) => participant.participantSessionId) ?? [], [snapshot]);
+  const localParticipantId = snapshot?.subject?.participantSessionId ?? null;
+  const isHandRaised = localParticipantId ? raisedHands.includes(localParticipantId) : false;
 
-  const raiseHand = useCallback(() => interactions.raiseHand(), [interactions]);
-  const lowerHand = useCallback(() => interactions.lowerHand(), [interactions]);
-  const toggleHand = useCallback(() => interactions.toggleHand(), [interactions]);
+  const setHandRaised = useCallback(
+    async (raised: boolean) => {
+      if (!store) throw new Error("ChalkNativeProvider requires sessionStore for hand raise.");
+      await store.setHandRaised(raised);
+    },
+    [store],
+  );
+  const raiseHand = useCallback(() => setHandRaised(true), [setHandRaised]);
+  const lowerHand = useCallback(() => setHandRaised(false), [setHandRaised]);
+  const toggleHand = useCallback(() => setHandRaised(!isHandRaised), [isHandRaised, setHandRaised]);
   const sendReaction = useCallback(
     async (emoji: ReactionEmoji) => {
       if (!commands) throw new Error("ChalkNativeProvider requires sessionStore for room reactions.");
@@ -39,9 +45,9 @@ export function useInteractions(): UseInteractionsReturn {
 
   return useMemo(
     () => ({
-      isHandRaised: state.isHandRaised,
-      raisedHands: state.raisedHands,
-      raisedHandCount: state.raisedHandCount,
+      isHandRaised,
+      raisedHands,
+      raisedHandCount: raisedHands.length,
       activeReactions: projection.reactions,
       reactionEnabled: projection.reactionEnabled,
       raiseHand,
@@ -49,6 +55,6 @@ export function useInteractions(): UseInteractionsReturn {
       toggleHand,
       sendReaction,
     }),
-    [state, projection, raiseHand, lowerHand, toggleHand, sendReaction],
+    [isHandRaised, raisedHands, projection, raiseHand, lowerHand, toggleHand, sendReaction],
   );
 }

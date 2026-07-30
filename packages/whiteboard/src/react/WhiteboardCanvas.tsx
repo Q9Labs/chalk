@@ -286,6 +286,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((er
             sendCursor: collab.sendCursor,
             requestSnapshot: collab.requestSnapshot,
             clear: collab.clear,
+            fileTransfer: collab.fileTransfer,
             initiateUpload: collab.initiateUpload,
             finalizeUpload: collab.finalizeUpload,
             presignDownload: collab.presignDownload,

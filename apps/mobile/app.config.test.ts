@@ -16,14 +16,16 @@ describe("createExpoConfig", () => {
     expect(config.expo.ios.infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
     expect(config.expo.ios.infoPlist.RTCAppScreenSharingExtension).toBe("ai.q9labs.chalk.mobile.screenshare");
     expect(config.expo.ios.entitlements?.["com.apple.security.application-groups"]).toEqual(["group.ai.q9labs.chalk.mobile"]);
+    expect(config.expo.ios.associatedDomains).toEqual(["applinks:chalkmeet.com", "applinks:chalk.q9labs.ai"]);
+    expect(config.expo.scheme).toEqual(["chalk", "ai.q9labs.chalk.mobile"]);
     expect(config.expo.splash.image).toBe("./assets/splash-logo.png");
     expect(config.expo.splash.backgroundColor).toBe("#0b0c14");
     expect(config.expo.android.adaptiveIcon.backgroundColor).toBe("#0b0c14");
     expect(config.expo.android.intentFilters?.[0]?.data).toEqual([
       { scheme: "https", host: "chalkmeet.com", pathPrefix: "/j/" },
-      { scheme: "https", host: "chalkmeet.com", pathPrefix: "/room/" },
+      { scheme: "https", host: "chalkmeet.com", pathPrefix: "/room" },
       { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" },
-      { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
+      { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room" },
     ]);
     expect(config.expo.extra.wsUrl).toBeDefined();
   });

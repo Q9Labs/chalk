@@ -31,6 +31,7 @@ export type WhiteboardV1SharedAppState = { readonly view_background_color: strin
 export type WhiteboardV1ClientFrame =
   | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null }
   | { readonly type: "submit_update"; readonly operation_id: string; readonly scene_id: string; readonly sync_all: boolean; readonly elements: readonly WhiteboardV1Element[] }
+  | { readonly type: "submit_update_part"; readonly operation_id: string; readonly scene_id: string; readonly sync_all: boolean; readonly part: number; readonly part_count: number; readonly element_count: number; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "request_snapshot"; readonly request_id: string }
   | { readonly type: "snapshot_ack"; readonly request_id: string; readonly scene_id: string; readonly revision: string; readonly page: number }
   | { readonly type: "clear"; readonly operation_id: string; readonly scene_id: string }
@@ -41,6 +42,7 @@ export type WhiteboardV1ServerFrame =
   | { readonly type: "welcome"; readonly protocol: "whiteboard-v1"; readonly participant_session_id: string; readonly participant_session_generation: number; readonly capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly participant_capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly scene_id: string; readonly revision: string; readonly can_draw: boolean }
   | { readonly type: "snapshot_page"; readonly request_id: string; readonly scene_id: string; readonly revision: string; readonly page: number; readonly page_count: number; readonly elements: readonly WhiteboardV1Element[]; readonly app_state: WhiteboardV1SharedAppState }
   | { readonly type: "update"; readonly operation_id: string; readonly scene_id: string; readonly revision: string; readonly elements: readonly WhiteboardV1Element[] }
+  | { readonly type: "update_part"; readonly operation_id: string; readonly scene_id: string; readonly revision: string; readonly part: number; readonly part_count: number; readonly element_count: number; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "commit"; readonly operation_id: string; readonly outcome: "committed" | "duplicate"; readonly scene_id: string; readonly revision: string }
   | { readonly type: "cursor"; readonly participant_session_id: string; readonly display_name: string; readonly x: number; readonly y: number; readonly occurred_at: string }
   | { readonly type: "permission_updated"; readonly participant_session_id: string; readonly can_draw: boolean }
@@ -129,6 +131,19 @@ function isCapabilities(value: unknown): boolean {
   return Array.isArray(value) && value.length <= WhiteboardV1ProtocolMetadata.capabilities.length && new Set(value).size === value.length && value.every((capability) => WhiteboardV1ProtocolMetadata.capabilities.includes(capability));
 }
 
+function isMultipartCoordinates(value: Record<string, unknown>): boolean {
+  return (
+    isNonNegativeInteger(value.part) &&
+    isNonNegativeInteger(value.part_count) &&
+    Number(value.part_count) >= 2 &&
+    Number(value.part_count) <= WhiteboardV1ProtocolLimits.multipartUpdateMaxParts &&
+    Number(value.part) < Number(value.part_count) &&
+    isNonNegativeInteger(value.element_count) &&
+    Number(value.element_count) > 0 &&
+    Number(value.element_count) <= WhiteboardV1ProtocolLimits.multipartUpdateMaxItems
+  );
+}
+
 function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
   if (!isRecord(value)) return false;
   switch (value.type) {
@@ -136,6 +151,8 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.hello.exactFields) && value.protocol === "whiteboard-v1" && typeof value.token === "string" && utf8Bytes(value.token) > 0 && utf8Bytes(value.token) <= WhiteboardV1ProtocolLimits.tokenBytes && (value.cursor === null || isCursor(value.cursor));
     case "submit_update":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.submitUpdate.exactFields) && isBoundedIdentifier(value.operation_id, WhiteboardV1ProtocolLimits.operationIdMinBytes, WhiteboardV1ProtocolLimits.operationIdMaxBytes) && isUuid(value.scene_id) && typeof value.sync_all === "boolean" && isElementBatch(value.elements, WhiteboardV1ProtocolLimits.elementBatchMaxItems);
+    case "submit_update_part":
+      return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.submitUpdatePart.exactFields) && isBoundedIdentifier(value.operation_id, WhiteboardV1ProtocolLimits.operationIdMinBytes, WhiteboardV1ProtocolLimits.operationIdMaxBytes) && isUuid(value.scene_id) && typeof value.sync_all === "boolean" && isMultipartCoordinates(value) && isElementBatch(value.elements, WhiteboardV1ProtocolLimits.elementBatchMaxItems);
     case "request_snapshot":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.requestSnapshot.exactFields) && isBoundedIdentifier(value.request_id, WhiteboardV1ProtocolLimits.requestIdMinBytes, WhiteboardV1ProtocolLimits.requestIdMaxBytes);
     case "snapshot_ack":
@@ -166,6 +183,8 @@ function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.snapshotPage.exactFields) && isBoundedIdentifier(value.request_id, WhiteboardV1ProtocolLimits.requestIdMinBytes, WhiteboardV1ProtocolLimits.requestIdMaxBytes) && isUuid(value.scene_id) && isUnsignedDecimal(value.revision) && isNonNegativeInteger(value.page) && isNonNegativeInteger(value.page_count) && value.page_count > 0 && value.page_count <= WhiteboardV1ProtocolLimits.snapshotMaxPages && value.page < value.page_count && isElementBatch(value.elements, WhiteboardV1ProtocolLimits.snapshotPageMaxItems) && isAppState(value.app_state) && encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.snapshotPageEncodedBytes;
     case "update":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.update.exactFields) && isBoundedIdentifier(value.operation_id, WhiteboardV1ProtocolLimits.operationIdMinBytes, WhiteboardV1ProtocolLimits.operationIdMaxBytes) && isUuid(value.scene_id) && isUnsignedDecimal(value.revision) && isElementBatch(value.elements, WhiteboardV1ProtocolLimits.elementBatchMaxItems);
+    case "update_part":
+      return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.updatePart.exactFields) && isBoundedIdentifier(value.operation_id, WhiteboardV1ProtocolLimits.operationIdMinBytes, WhiteboardV1ProtocolLimits.operationIdMaxBytes) && isUuid(value.scene_id) && isUnsignedDecimal(value.revision) && isMultipartCoordinates(value) && isElementBatch(value.elements, WhiteboardV1ProtocolLimits.elementBatchMaxItems);
     case "commit":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.commit.exactFields) && isBoundedIdentifier(value.operation_id, WhiteboardV1ProtocolLimits.operationIdMinBytes, WhiteboardV1ProtocolLimits.operationIdMaxBytes) && typeof value.outcome === "string" && WhiteboardV1ProtocolMetadata.receiptOutcomes.some((outcome) => outcome === value.outcome) && isUuid(value.scene_id) && isUnsignedDecimal(value.revision);
     case "cursor":

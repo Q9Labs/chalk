@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import type { ChalkSessionStore, ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, type AlertButton, Share } from "react-native";
 import { useChalkSession, useSession } from "../../context/chalk-native-provider";
 import { useChat } from "../../hooks/useChat";
@@ -12,7 +13,6 @@ import { useRecording } from "../../hooks/useRecording";
 import { useRoom } from "../../hooks/useRoom";
 import { useScreenShare } from "../../hooks/useScreenShare";
 import { useTranscripts } from "../../hooks/useTranscripts";
-import { useWhiteboard } from "../../hooks/useWhiteboard";
 import { useOptionalChalkSnapshot } from "../../hooks/useChalkRoomActions";
 import { createNativeMediaRequestPrompt, createNativeRoomActionCommands, projectNativeRoomActions } from "../../room-actions/native-room-actions";
 import { buildChalkInviteLink } from "../../utils/build-chalk-invite-link";
@@ -25,11 +25,49 @@ import type { NativeMeetingPanelName } from "./types";
 import { useNativeMeetingRoomDerived } from "./useNativeMeetingRoomDerived";
 
 const isDevRuntime = () => typeof __DEV__ !== "undefined" && __DEV__ === true;
+const emptyWhiteboardElements: readonly unknown[] = Object.freeze([]);
+const emptyWhiteboardParticipants: readonly string[] = Object.freeze([]);
+const unavailableWhiteboardSummary: ChalkWhiteboardSummary = Object.freeze({
+  status: "unsubscribed",
+  sceneId: null,
+  revision: null,
+  capabilities: Object.freeze([]),
+  canDraw: false,
+  canClear: false,
+  error: null,
+});
+
+export interface NativeMeetingWhiteboardController {
+  readonly isOpen: boolean;
+  readonly canDraw: boolean;
+  readonly canClear: boolean;
+  readonly elements: readonly unknown[];
+  readonly openParticipants: readonly string[];
+  readonly transport: ChalkWhiteboardV1Transport | null;
+  readonly journeyId: string;
+  readonly traceparent?: string;
+  readonly tracestate?: string;
+  readonly open: () => void;
+  readonly close: () => void;
+  readonly toggle: () => void;
+  readonly requestSync: () => void;
+  readonly clear: () => void;
+}
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function useCanonicalWhiteboardSummary(sessionStore: ChalkSessionStore | null): ChalkWhiteboardSummary {
+  const subscribe = useCallback((listener: () => void) => sessionStore?.subscribe(listener) ?? (() => undefined), [sessionStore]);
+  const getSnapshot = useCallback(() => sessionStore?.getSnapshot().whiteboard ?? unavailableWhiteboardSummary, [sessionStore]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+function createJourneyId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `native-whiteboard-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export interface NativeMeetingRoomController {
@@ -72,7 +110,7 @@ export interface NativeMeetingRoomController {
   screenShare: ReturnType<typeof useScreenShare>;
   layout: ReturnType<typeof useLayout>;
   panels: ReturnType<typeof usePanels>;
-  whiteboard: ReturnType<typeof useWhiteboard>;
+  whiteboard: NativeMeetingWhiteboardController;
   derived: ReturnType<typeof useNativeMeetingRoomDerived>;
   setActionsOpen: (open: boolean) => void;
   setReactionPickerOpen: (open: boolean) => void;
@@ -102,7 +140,7 @@ export interface NativeMeetingRoomController {
 export function useNativeMeetingRoomController({ roomName, features, onLeave, onEndForAll, onDiagnosticsChange }: NativeMeetingRoomProps): NativeMeetingRoomController {
   const simulatorMediaDisabled = isIosSimulator();
   const session = useSession();
-  const { sessionStore } = useChalkSession();
+  const { sessionStore, telemetry } = useChalkSession();
   const media = useMedia();
   const devices = useDevices();
   const participants = useParticipants();
@@ -114,18 +152,13 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   const screenShare = useScreenShare();
   const layout = useLayout();
   const panels = usePanels();
-  const whiteboard = useWhiteboard();
   const chalkSnapshot = useOptionalChalkSnapshot();
+  const whiteboardSummary = useCanonicalWhiteboardSummary(sessionStore);
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
+  const fallbackJourneyId = useRef(createJourneyId());
   const roomActions = useMemo(() => projectNativeRoomActions(chalkSnapshot), [chalkSnapshot]);
   const roomActionCommands = useMemo(() => (sessionStore ? createNativeRoomActionCommands(sessionStore) : null), [sessionStore]);
   const promptedRequestId = useRef<string | null>(null);
-  const derived = useNativeMeetingRoomDerived({
-    participants: participants.participants,
-    localParticipant: participants.localParticipant,
-    screenShare,
-    isWhiteboardOpen: false,
-  });
-
   const store = useMemo(() => new NativeMeetingRoomControllerStore(), []);
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
@@ -152,8 +185,9 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   const canScreenShare = screenShareAvailability.enabled;
   const canRecording = features?.recording !== false;
   const canReactions = features?.reactions !== false && roomActions.reactionEnabled;
-  const canHandRaise = features?.handRaise !== false;
-  const canWhiteboard = false;
+  const canHandRaise = features?.handRaise !== false && sessionStore !== null;
+  const whiteboardTransport = sessionStore?.whiteboard ?? null;
+  const canWhiteboard = features?.whiteboard !== false && whiteboardTransport !== null;
   const canRequestMedia = localChalkParticipant?.capabilities.includes("requestMediaOthers") ?? false;
   const canMuteParticipants = localChalkParticipant?.capabilities.includes("muteOthers") ?? false;
   const canRemoveParticipants = localChalkParticipant?.capabilities.includes("removeParticipant") ?? false;
@@ -166,6 +200,55 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       console.warn("NativeMeetingRoom async action failed:", cause);
     }
   }, []);
+
+  const openWhiteboard = useCallback(() => {
+    if (canWhiteboard) setWhiteboardOpen(true);
+  }, [canWhiteboard]);
+  const closeWhiteboard = useCallback(() => {
+    setWhiteboardOpen(false);
+  }, []);
+  const toggleWhiteboard = useCallback(() => {
+    if (!canWhiteboard) {
+      setWhiteboardOpen(false);
+      return;
+    }
+    setWhiteboardOpen((isOpen) => !isOpen);
+  }, [canWhiteboard]);
+  const requestWhiteboardSync = useCallback(() => {
+    if (whiteboardTransport) void runAsync(() => whiteboardTransport.requestSnapshot());
+  }, [runAsync, whiteboardTransport]);
+  const clearWhiteboard = useCallback(() => {
+    if (whiteboardTransport && whiteboardSummary.canClear) void runAsync(() => whiteboardTransport.clear());
+  }, [runAsync, whiteboardSummary.canClear, whiteboardTransport]);
+  const whiteboard = useMemo<NativeMeetingWhiteboardController>(
+    () => ({
+      isOpen: canWhiteboard && whiteboardOpen,
+      canDraw: canWhiteboard && whiteboardSummary.canDraw,
+      canClear: canWhiteboard && whiteboardSummary.canClear,
+      elements: emptyWhiteboardElements,
+      openParticipants: emptyWhiteboardParticipants,
+      transport: whiteboardTransport,
+      journeyId: telemetry?.session.context.journeyId ?? fallbackJourneyId.current,
+      ...(telemetry?.session.context.traceparent ? { traceparent: telemetry.session.context.traceparent } : {}),
+      ...(telemetry?.session.context.tracestate ? { tracestate: telemetry.session.context.tracestate } : {}),
+      open: openWhiteboard,
+      close: closeWhiteboard,
+      toggle: toggleWhiteboard,
+      requestSync: requestWhiteboardSync,
+      clear: clearWhiteboard,
+    }),
+    [canWhiteboard, clearWhiteboard, closeWhiteboard, openWhiteboard, requestWhiteboardSync, telemetry, toggleWhiteboard, whiteboardOpen, whiteboardSummary.canClear, whiteboardSummary.canDraw, whiteboardTransport],
+  );
+  const derived = useNativeMeetingRoomDerived({
+    participants: participants.participants,
+    localParticipant: participants.localParticipant,
+    screenShare,
+    isWhiteboardOpen: whiteboard.isOpen,
+  });
+
+  useEffect(() => {
+    if (!canWhiteboard) setWhiteboardOpen(false);
+  }, [canWhiteboard]);
 
   useEffect(() => {
     const request = roomActions.incomingRequest;
@@ -232,7 +315,12 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   const openPanel = useCallback(
     (nextPanel: NativeMeetingPanelName) => {
       store.setActionsOpen(false);
-      if (nextPanel === "whiteboard") return;
+      if (nextPanel === "whiteboard") {
+        store.setLocalPanel(null);
+        panels.closePanel();
+        whiteboard.open();
+        return;
+      }
       if (nextPanel === "chat" && !canChat) return;
       if (nextPanel === "transcripts") {
         panels.closePanel();
@@ -243,7 +331,7 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       store.setLocalPanel(null);
       panels.openPanel(nextPanel);
     },
-    [canChat, panels, store],
+    [canChat, panels, store, whiteboard],
   );
 
   const closePanel = useCallback(() => {
@@ -364,7 +452,7 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       if (!canHandRaise) {
         return;
       }
-      interactions.toggleHand();
+      void runAsync(() => interactions.toggleHand());
     },
     sendReaction: (emoji: string) => {
       if (!canReactions) {

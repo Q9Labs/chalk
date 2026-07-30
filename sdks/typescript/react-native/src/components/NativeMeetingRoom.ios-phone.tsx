@@ -8,6 +8,7 @@ import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid.ios-p
 import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock.ios-phone";
 import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage.ios-phone";
 import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar.ios-phone";
+import { NativeMeetingWhiteboardSurface } from "./native-meeting-room/NativeMeetingWhiteboardSurface";
 import { useNativeMeetingMultitasking } from "./native-meeting-room/useNativeMeetingMultitasking.ios";
 import { useNativeMeetingRoomController } from "./native-meeting-room/useNativeMeetingRoomController";
 
@@ -29,7 +30,9 @@ export function NativeMeetingRoomIosPhone(props: NativeMeetingRoomProps): React.
       <NativeMeetingTopBar formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
 
       <View style={styles.stageFrame}>
-        {controller.derived.isStageMode ? (
+        {controller.whiteboard.isOpen ? (
+          <NativeMeetingWhiteboardSurface whiteboard={controller.whiteboard} />
+        ) : controller.derived.isStageMode ? (
           <NativeMeetingStage
             activeReactions={controller.activeReactions}
             handRaised={controller.handRaised}
@@ -100,6 +103,7 @@ export function NativeMeetingRoomIosPhone(props: NativeMeetingRoomProps): React.
         }}
         onOpenSettings={() => controller.openPanel("settings")}
         onOpenTranscripts={() => controller.openPanel("transcripts")}
+        onOpenWhiteboard={() => controller.openPanel("whiteboard")}
         onToggleHand={() => {
           controller.setActionsOpen(false);
           controller.toggleHand();

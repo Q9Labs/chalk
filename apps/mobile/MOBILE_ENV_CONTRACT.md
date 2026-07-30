@@ -6,15 +6,17 @@ Required release env:
 
 - `EXPO_PUBLIC_API_URL=<production API URL>`
 - `EXPO_PUBLIC_WS_URL=<production websocket URL>`
-- `EXPO_PUBLIC_CHALK_API_KEY=<host API key from secret manager>`
 
 Rules:
 
 - treat `apps/mobile/.env.local` as dev-only
+- never put a tenant or host API key in an `EXPO_PUBLIC_*` variable; Expo embeds
+  public variables in the application bundle
+- production mobile meeting creation remains disabled until Chalk has a native
+  participant-access broker
+- invite-link participants may still join through the public join-token exchange
 - local prod builds must run through `apps/mobile/scripts/run-with-production-mobile-env.ts`
-- `apps/mobile/scripts/verify-production-mobile-host-key.ts` must pass before bundling
 - if local mobile host auth drifts, run `pnpm run mobile:sync-local-env`
-- never trust a local host key for Play/TestFlight builds
 - Android closed/prod releases: CI artifact only
 - sideloadable production Android APKs: CI artifact only
 - Android signing material stays in CI secrets, recreated only on the runner

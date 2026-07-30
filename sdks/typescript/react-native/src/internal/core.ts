@@ -1,5 +1,4 @@
 import type { NativeSessionTelemetry } from "../telemetry";
-import { correlateNativeTransports } from "../runtime/transport-correlation";
 
 export type ReactionEmoji = string;
 export type LayoutMode = "grid" | "speaker" | "sidebar" | string;
@@ -228,6 +227,7 @@ export interface ChalkSessionConfig extends ConferenceClientConfig {
   debug?: boolean;
   demoMode?: boolean;
   realtimeKitLoader?: () => Promise<unknown>;
+  fetch?: typeof fetch;
 }
 
 export interface IncidentConfig {
@@ -258,135 +258,6 @@ export class ChalkErrorClass extends Error {
 }
 
 export type ChalkError = ChalkErrorClass;
-
-const emptyRoomState: RoomState = {
-  id: null,
-  status: "disconnected",
-  error: null,
-  roomId: null,
-  roomName: null,
-  isJoining: false,
-  hostId: null,
-};
-
-function createManager<State>(state: State): any {
-  return {
-    getState: () => state,
-    subscribe: () => () => {},
-    getRoom: () => state,
-    getParticipant: () => undefined,
-    remoteParticipants: [],
-    updateDisplayName: async () => {},
-    join: async () => {},
-    leave: async () => {},
-    start: async () => false,
-    stop: async () => {},
-    toggle: async () => false,
-    mute: async () => {},
-    unmute: async () => {},
-    refreshDevices: async () => [],
-    applyBackgroundEffect: async () => {},
-    sendReaction: () => {},
-    raiseHand: () => {},
-    lowerHand: () => {},
-    sendMessage: () => {},
-    reactToMessage: () => {},
-    getMessage: () => undefined,
-    clearUnread: () => {},
-    startRecording: async () => {},
-    stopRecording: async () => {},
-    openPanel: () => {},
-    closePanel: () => {},
-    togglePanel: () => {},
-    setLayout: () => {},
-    openWhiteboard: () => {},
-    closeWhiteboard: () => {},
-    on: () => {},
-    off: () => {},
-  };
-}
-
-export class ChalkSession {
-  private readonly stopTransportCorrelation: (() => void) | undefined;
-  readonly telemetry: NativeSessionTelemetry | undefined;
-  readonly room = createManager(emptyRoomState);
-  readonly participants = createManager({ participants: [], localParticipant: null, activeSpeaker: null, count: 0 } satisfies ParticipantState);
-  readonly media = createManager({
-    devices: [],
-    cameras: [],
-    microphones: [],
-    speakers: [],
-    selectedCameraId: null,
-    selectedMicrophoneId: null,
-    selectedSpeakerId: null,
-    selectedBackgroundEffect: { id: "none", type: "none" },
-    selectedCamera: null,
-    selectedMicrophone: null,
-    selectedSpeaker: null,
-    isBackgroundEffectsSupported: false,
-    isApplyingBackgroundEffect: false,
-    isVideoEnabled: false,
-    isAudioEnabled: false,
-    isTogglingVideo: false,
-    isTogglingAudio: false,
-  } satisfies MediaState);
-  readonly screenShare = createManager({ isActive: false, isLocalSharing: false, isStarting: false, sharerParticipantId: null, videoTrack: null, audioTrack: null } satisfies ScreenShareState);
-  readonly interactions = createManager({ handRaised: false, isHandRaised: false, raisedHandCount: 0, raisedHands: [], activeReactions: [] } satisfies InteractionState);
-  readonly chat = createManager({ messages: [], unreadCount: 0, isEnabled: false, count: 0 } satisfies ChatState);
-  readonly recording = createManager({ isRecording: false, isStarting: false, isStopping: false, recordingId: null, startedAt: null } satisfies RecordingState);
-  readonly ui = createManager({ layout: "grid", activePanel: null, controlsVisible: true, isMobileView: false, isFullscreen: false } satisfies UIState);
-  readonly whiteboard = createManager({ isOpen: false, cursors: [], openParticipants: [], canDraw: false, elements: [], elementCount: 0, lastSeq: 0 } satisfies WhiteboardState);
-
-  constructor(config: ChalkSessionConfig) {
-    this.telemetry = config.telemetry;
-    this.stopTransportCorrelation = config.telemetry
-      ? correlateNativeTransports({
-          apiUrl: config.apiUrl,
-          credentials: [config.token, config.apiKey].filter((credential): credential is string => Boolean(credential)),
-          dynamicCredentials: config.dynamicTransportCredentials,
-          wsUrl: config.wsUrl,
-          telemetry: config.telemetry,
-        })
-      : undefined;
-  }
-
-  configureIncident(_config?: IncidentConfig): void {}
-  dispose(): void {
-    this.stopTransportCorrelation?.();
-  }
-  preloadRealtimeKit(): Promise<void> {
-    return Promise.resolve();
-  }
-  on(_event: string, _handler: (...args: any[]) => void): () => void {
-    return () => {};
-  }
-  join(_roomId: string, _options: JoinOptions): Promise<void> {
-    return Promise.resolve();
-  }
-  leave(_options?: LeaveOptions): Promise<void> {
-    return Promise.resolve();
-  }
-  createSession(_name?: string): Promise<string> {
-    return Promise.resolve("");
-  }
-  createJoinToken(_roomId?: string): Promise<{ joinToken: string }> {
-    return Promise.resolve({ joinToken: "" });
-  }
-  endSession(_roomId: string): Promise<void> {
-    return Promise.resolve();
-  }
-  getDiagnosticsSnapshot(): ChalkSessionDiagnosticsSnapshot {
-    return { websocketConnectionState: "disconnected" };
-  }
-  updateOwnDisplayName(_displayName: string): Promise<void> {
-    return Promise.resolve();
-  }
-  removeParticipant(_participantId: string): Promise<void> {
-    return Promise.resolve();
-  }
-  muteParticipant(_participantId: string): void {}
-  unmuteParticipant(_participantId: string): void {}
-}
 
 function hashString(value: string): number {
   let hash = 0;

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -342,8 +343,12 @@ func apiKeyNewID(t *testing.T) utilities.ID {
 
 func apiKeyTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	databaseURL := os.Getenv("CHALK_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("CHALK_DATABASE_URL is not set")
+	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable")
+	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}

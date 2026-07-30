@@ -18,8 +18,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   transient reactions, durable paged Postgres chat with read receipts and
   protected file attachments, host moderation and ask-to-unmute/start-camera
   flows, plus a separate `whiteboard-v1` Excalidraw transport with staged
-  participant-authenticated file uploads and seven-day cleanup. Native
-  whiteboard remains intentionally deferred.
+  participant-authenticated file uploads and seven-day cleanup. Native hosts
+  now have a pinned offline Excalidraw renderer and public React Native bridge;
+  first-party live exposure remains gated on the canonical session store.
+- Atomic multipart `whiteboard-v1` updates that retain the 128-element and
+  256-KiB frame bounds while carrying logical operations of up to 10,000
+  elements and 16 MiB, with timeout recovery through canonical snapshots.
 - A public Pages meeting entry that starts a capability-secured meeting from the
   restored React SDK lobby and supports invite-link guests, host refresh, live
   participant updates, Cloudflare media, and terminal Leave cleanup.
@@ -134,6 +138,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Replaced the mobile app's placeholder native meeting adapter with the
+  RealtimeKit admission and media runtime; features that require canonical
+  Chalk session authority remain explicitly unavailable instead of silently
+  degrading.
 - Made terminal Cloudflare SFU cleanup production-safe by accepting expired
   sessions as already absent, allowing the provider's documented connection
   wait, and keeping Sync readiness responsive during durable provider work.

@@ -8,6 +8,7 @@ import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid.macos
 import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock.macos";
 import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage.macos";
 import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar.macos";
+import { NativeMeetingWhiteboardSurface } from "./native-meeting-room/NativeMeetingWhiteboardSurface";
 import { useNativeMeetingRoomController } from "./native-meeting-room/useNativeMeetingRoomController";
 
 export function NativeMeetingRoomMacos(props: NativeMeetingRoomProps): React.JSX.Element {
@@ -18,7 +19,9 @@ export function NativeMeetingRoomMacos(props: NativeMeetingRoomProps): React.JSX
       <NativeMeetingTopBar formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
 
       <View style={styles.stageFrame}>
-        {controller.derived.isStageMode ? (
+        {controller.whiteboard.isOpen ? (
+          <NativeMeetingWhiteboardSurface whiteboard={controller.whiteboard} />
+        ) : controller.derived.isStageMode ? (
           <NativeMeetingStage
             activeReactions={controller.activeReactions}
             handRaised={controller.handRaised}
@@ -89,6 +92,7 @@ export function NativeMeetingRoomMacos(props: NativeMeetingRoomProps): React.JSX
         }}
         onOpenSettings={() => controller.openPanel("settings")}
         onOpenTranscripts={() => controller.openPanel("transcripts")}
+        onOpenWhiteboard={() => controller.openPanel("whiteboard")}
         onToggleHand={() => {
           controller.setActionsOpen(false);
           controller.toggleHand();

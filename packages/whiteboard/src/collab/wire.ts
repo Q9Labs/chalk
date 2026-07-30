@@ -16,6 +16,7 @@ export interface WhiteboardCommit {
   readonly operationId: string;
   readonly sceneId: string;
   readonly revision: string;
+  readonly sceneGeneration?: string;
 }
 
 export interface WhiteboardUploadInstructions {

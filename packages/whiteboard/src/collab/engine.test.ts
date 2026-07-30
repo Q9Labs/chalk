@@ -84,6 +84,7 @@ describe("ExcalidrawCollabEngine", () => {
 
     engine.handleRemoteSnapshot({
       sceneId: "10000000-0000-4000-8000-000000000001",
+      sceneGeneration: "scene-generation-1",
       elements: remoteElements.map(toWireElement),
     });
     sceneElements = localElements;
@@ -94,6 +95,7 @@ describe("ExcalidrawCollabEngine", () => {
       expect.objectContaining({
         elements: localElements.map(toWireElement),
         sceneId: "10000000-0000-4000-8000-000000000001",
+        sceneGeneration: "scene-generation-1",
         syncAll: false,
       }),
     );

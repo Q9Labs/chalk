@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "src",
+    "embedded",
     "android",
     "ios",
     "*.podspec"
@@ -140,9 +141,10 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/storage.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc && pnpm run build:types",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/storage.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc && pnpm run build:types && pnpm run sync:whiteboard-assets",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
-    "dev": "tsup ./src/index.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/storage.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --watch",
+    "dev": "tsup ./src/index.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/storage.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/realtimekit-react-native --external @cloudflare/react-native-webrtc --watch",
+    "sync:whiteboard-assets": "node ./scripts/sync-whiteboard-assets.mjs",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
@@ -150,11 +152,13 @@
   },
   "dependencies": {
     "@q9labsai/chalk-client": "workspace:^",
+    "@q9labsai/chalk-whiteboard": "workspace:^",
     "@q9labsai/facehash": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
+    "react-native-webview": "13.16.1",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {
@@ -164,6 +168,7 @@
     "@hugeicons/react-native": "^1.0.13",
     "react": "^18.0.0 || ^19.0.0",
     "react-native": ">=0.77",
-    "react-native-svg": "^15.15.3"
+    "react-native-svg": "^15.15.3",
+    "react-native-webview": "^13.16.1"
   }
 }

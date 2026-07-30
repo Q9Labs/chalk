@@ -24,7 +24,8 @@ defmodule ChalkSync.MixProject do
 
   defp deps do
     [
-      {:bandit, "~> 1.6"},
+      {:bandit,
+       github: "mtrudel/bandit", ref: "418ef7e906192a230ddba112f7a669c87b6b0e3a", override: true},
       {:postgrex, "~> 0.22.3"},
       {:telemetry, "~> 1.3"},
       {:websock_adapter, "~> 0.5"},
@@ -32,7 +33,8 @@ defmodule ChalkSync.MixProject do
       {:opentelemetry, "~> 1.7"},
       {:opentelemetry_exporter, "~> 1.10"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:mint_web_socket, "~> 1.0", only: :test}
+      {:mint_web_socket, "~> 1.0", only: :test},
+      {:mint, "~> 1.9.3", only: :test}
     ]
   end
 end
