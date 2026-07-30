@@ -34,6 +34,20 @@ describe("canonical native room-action hooks", () => {
     expect(sendReaction).toHaveBeenCalledWith("🎉");
   });
 
+  it("preserves the explicit visible sequence when marking chat read", async () => {
+    const markChatRead = vi.fn(async () => null);
+    state.store = {
+      getSnapshot: () => ({ state: "live" }) as ChalkSessionSnapshot,
+      subscribe: vi.fn(() => () => undefined),
+      markChatRead,
+    } as unknown as ChalkSessionStore;
+    const { useChalkActions } = await import("./useChalkRoomActions");
+
+    await useChalkActions().markChatRead("18446744073709551615");
+
+    expect(markChatRead).toHaveBeenCalledWith("18446744073709551615");
+  });
+
   it("fails closed when the provider has no canonical session store", async () => {
     const { useChalkActions, useChalkSelector, useOptionalChalkSnapshot } = await import("./useChalkRoomActions");
 
