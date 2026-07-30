@@ -1,0 +1,389 @@
+<rr-doc title="Chalk room chat — implementation debrief" register="debrief" project="Chalk" risk="major" verdict="needs-attention" minutes="11" summary="Read receipts and attachment sharing now run through Sync v3, Postgres, the public SDKs, and the room UI; real R2 upload proof still needs a development-bucket credential.">
+
+<rr-toc>
+  <rr-toc-link href="#verdict" label="Verdict"/>
+  <rr-toc-link href="#world" label="Mini world"/>
+  <rr-toc-link href="#api" label="Public API"/>
+  <rr-toc-link href="#stacks" label="Call stacks"/>
+  <rr-toc-link href="#phases" label="Phases"/>
+  <rr-toc-link href="#proof" label="Proof"/>
+  <rr-toc-link href="#trace" label="Trace"/>
+</rr-toc>
+
+<rr-header kicker="Implementation debrief · 30 Jul 2026" title="Chat now knows what was read and what was shared" icon="users">
+  <p>Chalk now models attachments and participant read watermarks as first-class chat data. Chat and reactions remain on negotiated <rr-term def="The existing room WebSocket protocol. Its room_actions_v2 extension adds attachments and durable read receipts without moving drawing traffic onto this connection.">Sync v3</rr-term>; only Excalidraw collaboration uses the separate <rr-term def="The independent connection and strict contract for board scenes, cursors, revisions, and recovery.">whiteboard-v1</rr-term> transport.</p>
+</rr-header>
+
+<rr-section id="verdict" title="Verdict" icon="bolt">
+  <rr-tiles>
+    <rr-tile icon="check" label="Contracts" value="Done" caption="room_actions_v2 + v1 fallback" tone="green"/>
+    <rr-tile icon="db" label="Persistence" value="Done" caption="messages · files · watermarks" tone="green"/>
+    <rr-tile icon="branch" label="SDK + UI" value="Done" caption="web + native projections" tone="green"/>
+    <rr-tile icon="warning" label="End to end" value="Not done" caption="R2 credential blocks PUT" tone="red"/>
+  </rr-tiles>
+
+  <rr-callout tone="red"><b>Status — not done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. Attachment bytes remain unproved: the isolated R2 bucket passes CORS preflight, then returns <code>401 Unauthorized</code> on the signed <code>PUT</code> because the available S3 key is restricted to the shared bucket. Final upload, protected download, and attachment-message proof wait on an approved key scoped to the development bucket.</rr-callout>
+
+  <rr-cols2>
+    <rr-card>
+      <h3 style="margin-top:0">Final behavior</h3>
+      <ul>
+        <li>Up to five finalized attachments can accompany one durable message.</li>
+        <li>Each participant owns one monotonic read-through sequence per chat stream.</li>
+        <li>Read receipts survive reconnects and fan out across Sync replicas.</li>
+        <li>Files are uploaded directly to R2 with short-lived signed URLs; API servers do not proxy file bytes.</li>
+        <li>Chat data and files are retained for seven days after the Session ends.</li>
+      </ul>
+    </rr-card>
+    <rr-card>
+      <h3 style="margin-top:0">Intentional boundaries</h3>
+      <ul>
+        <li>No recording controls.</li>
+        <li>Ask-to-unmute and ask-to-start-camera remain consent based.</li>
+        <li>Host mute, stop-camera, remove, and role controls are wired in the browser room.</li>
+        <li>Native rooms render attachment metadata and receipts; a native file picker/upload surface is deferred.</li>
+        <li>Native whiteboard remains deferred; browser whiteboard stays on <code>whiteboard-v1</code>.</li>
+      </ul>
+    </rr-card>
+  </rr-cols2>
+</rr-section>
+
+<style>
+  .chat-world-controls { display:flex; flex-wrap:wrap; gap:var(--s1); margin-bottom:var(--s3); }
+  .chat-world-controls button.active { color:var(--accent); border-color:var(--accent); }
+  .chat-world-flow { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--s2); }
+  .chat-world-step { border:1px solid var(--line); border-radius:var(--radius); padding:var(--s3); background:var(--bg); }
+  .chat-world-step.active { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--bg)); }
+  .chat-world-step.blocked { border-color:var(--red); }
+  .chat-world-step b { display:block; margin-bottom:var(--s1); }
+  @media (max-width:820px) { .chat-world-flow { grid-template-columns:1fr; } }
+</style>
+
+<rr-stage id="world" crumb="Chat state simulator · switch paths">
+  <rr-legend>
+    <rr-key kind="lit">current transition</rr-key>
+    <rr-key kind="green">durable state</rr-key>
+    <rr-key kind="amber">provider boundary</rr-key>
+  </rr-legend>
+  <rr-stage-body>
+    <div class="chat-world-controls" role="group" aria-label="Choose a chat path">
+      <button type="button" class="active" data-chat-path="receipt">Read watermark</button>
+      <button type="button" data-chat-path="upload">Attachment upload</button>
+      <label>Step
+        <select id="chat-world-step">
+          <option value="0">1</option>
+          <option value="1">2</option>
+          <option value="2">3</option>
+          <option value="3">4</option>
+        </select>
+      </label>
+    </div>
+    <div class="chat-world-flow" id="chat-world-flow"></div>
+    <p id="chat-world-note">Ada reads through sequence 42 locally. The UI clears unread state immediately, then sends the durable watermark.</p>
+    <rr-readout>
+      <rr-stat label="Protocol" value="room_actions_v2"/>
+      <rr-stat label="Attachment cap" value="5 × 25 MiB"/>
+      <rr-stat label="Receipt rule" value="monotonic"/>
+      <rr-stat label="Retention" value="7 days"/>
+    </rr-readout>
+  </rr-stage-body>
+</rr-stage>
+
+<script>
+  addEventListener("DOMContentLoaded", () => {
+    const paths = {
+      receipt: {
+        steps: [
+          ["Local read", "Ada reaches message sequence 42."],
+          ["Sync command", "chat_read_set carries 42 on Sync v3."],
+          ["Postgres", "The watermark advances only if 42 is newer."],
+          ["Fan-out", "Peers render “Read by Ada” through sequence 42."]
+        ],
+        notes: [
+          "Ada reads through sequence 42 locally. The UI clears unread state immediately, then sends the durable watermark.",
+          "room_actions_v1 clients keep local unread behavior but never send or receive receipt frames.",
+          "A delayed sequence 39 cannot move the stored watermark backwards.",
+          "Reconnect negotiation returns the current receipt set with the retained chat page."
+        ]
+      },
+      upload: {
+        steps: [
+          ["Initiate", "API reserves IDs and returns a signed PUT."],
+          ["Direct PUT", "The browser uploads exact bytes to R2."],
+          ["Finalize", "API verifies object size and immutable identity."],
+          ["Claim + send", "chat_send atomically attaches finalized IDs."]
+        ],
+        notes: [
+          "The request authenticates the participant Session and records filename, MIME type, byte length, and SHA-256.",
+          "CORS must permit the exact web origin, PUT, Content-Type, If-None-Match, and Chalk metadata headers.",
+          "Only a verified finalized object becomes a public ChalkChatAttachment; pending uploads cannot be sent.",
+          "The message insert locks every attachment, rejects cross-participant reuse, assigns ordinals, and fans out one confirmed message."
+        ]
+      }
+    };
+    let path = "receipt";
+    const buttons = [...document.querySelectorAll("[data-chat-path]")];
+    const step = document.getElementById("chat-world-step");
+    const flow = document.getElementById("chat-world-flow");
+    const note = document.getElementById("chat-world-note");
+    function render() {
+      const index = Number(step.value);
+      const scenario = paths[path];
+      buttons.forEach((button) => button.classList.toggle("active", button.dataset.chatPath === path));
+      flow.replaceChildren(...scenario.steps.map(([title, copy], position) => {
+        const item = document.createElement("article");
+        item.className = `chat-world-step${position === index ? " active" : ""}`;
+        item.innerHTML = `<b>${position + 1} · ${title}</b><span>${copy}</span>`;
+        return item;
+      }));
+      note.textContent = scenario.notes[index];
+    }
+    buttons.forEach((button) => button.addEventListener("click", () => { path = button.dataset.chatPath; step.value = "0"; render(); }));
+    step.addEventListener("change", render);
+    render();
+  });
+</script>
+
+<rr-section id="api" title="Public API — type-driven first" icon="branch">
+  <p>The public types force callers to finalize files before sending them, keep read watermarks sequence based, and expose feature availability explicitly through nullable transports and the negotiated room-actions version.</p>
+
+  <rr-code file="@q9labsai/chalk-client — room chat types" lang="ts" start="1">
+export type ChalkChatAttachment = {
+  readonly attachmentId: string;
+  readonly fileName: string;
+  readonly mimeType: ChalkChatAttachmentMimeType;
+  readonly byteLength: number;
+};
+
+export type ChalkChatReadReceipt = {
+  readonly participantSessionId: string;
+  readonly participantSessionGeneration: number;
+  readonly readThroughSequence: string;
+  readonly readAt: string;
+};
+
+export type ChalkChatMessage = {
+  readonly messageId: string;
+  readonly clientMessageId: string;
+  readonly sequence: string;
+  readonly participantSessionId: string;
+  readonly displayName: string;
+  readonly text: string;
+  readonly createdAt: string;
+  readonly attachments: readonly ChalkChatAttachment[];
+};
+
+export type ChalkSendChatMessageInput = {
+  readonly text: string;
+  readonly attachments?: readonly ChalkChatAttachment[];
+  readonly clientMessageId?: string;
+};
+  </rr-code>
+
+  <rr-code file="@q9labsai/chalk-client — actions and file transport" lang="ts" start="1">
+export type ChalkSessionStore = ChalkSessionActions & {
+  readonly getSnapshot: () => ChalkSessionSnapshot;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly chatFiles: ChalkChatFileTransport | null;
+  readonly whiteboard: ChalkWhiteboardV1Transport | null;
+};
+
+export type ChalkSessionActions = {
+  readonly sendChatMessage: (
+    input: ChalkSendChatMessageInput
+  ) => Promise<ChalkChatMessage>;
+  readonly markChatRead: (
+    throughSequence?: string
+  ) => Promise<ChalkChatReadReceipt | null>;
+  readonly loadOlderChatMessages: (
+    limit?: number
+  ) => Promise<ChalkChatPageResult>;
+};
+
+// Documentation alias for the public inline return shape.
+type ChatDownloadResult = {
+  readonly downloadUrl: string;
+  readonly expiresAt: string;
+};
+
+export type ChalkChatFileTransport = {
+  readonly initiateUpload: (
+    input: ChalkChatUploadInput
+  ) => Promise<ChalkChatUploadInstructions>;
+  readonly finalizeUpload: (
+    uploadId: string
+  ) => Promise<ChalkChatAttachment>;
+  readonly getDownloadUrl: (
+    attachmentId: string
+  ) => Promise<ChatDownloadResult>;
+};
+  </rr-code>
+
+  <rr-callout><b>Compatibility rule.</b> <code>room_actions_v2</code> supports attachments and durable receipts. If negotiation falls back to <code>room_actions_v1</code>, text chat and reactions continue, attachment controls disappear, and <code>markChatRead</code> remains local.</rr-callout>
+</rr-section>
+
+<rr-section id="stacks" title="Actual call stacks" icon="route">
+  <rr-card>
+    <h3 style="margin-top:0">Upload, finalize, then send</h3>
+    <rr-stack label="Calls">
+      <rr-frame fn="ChatPanel.onUploadAttachment" file="React product surface">
+        <rr-frame fn="uploadChatAttachment" file="SHA-256 + provider PUT">
+          <rr-frame fn="chatFiles.initiateUpload" file="POST /v1/chat/attachments/uploads">
+            <rr-frame fn="chatattachments.Service.Initiate" file="reserve Postgres row + R2 presign"/>
+          </rr-frame>
+          <rr-frame fn="fetch(uploadUrl, PUT)" file="browser → R2"/>
+          <rr-frame fn="chatFiles.finalizeUpload" file="POST …/finalize">
+            <rr-frame fn="chatattachments.Service.Finalize" file="HEAD object + verify" tone="new"/>
+          </rr-frame>
+        </rr-frame>
+        <rr-frame fn="session.sendChatMessage" file="attachments[]">
+          <rr-frame fn="V3Client chat_send" file="room_actions_v2">
+            <rr-frame fn="SocketV3 → RoomActions.send_chat" file="Sync">
+              <rr-frame fn="Postgres transaction" file="lock + claim files + insert message + fan-out" tone="new"/>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-frame>
+    </rr-stack>
+  </rr-card>
+
+  <rr-cols2>
+    <rr-card>
+      <h3 style="margin-top:0">Read receipt</h3>
+      <rr-stack label="Calls">
+        <rr-frame fn="ChatPanel.onMarkRead" file="visible bottom sequence">
+          <rr-frame fn="ChalkSession.markChatRead" file="local optimistic watermark">
+            <rr-frame fn="V3Client.markChatRead" file="chat_read_set">
+              <rr-frame fn="SocketV3" file="strict frame decode">
+                <rr-frame fn="RoomActions.mark_chat_read" file="admission">
+                  <rr-frame fn="Postgres upsert" file="monotonic watermark">
+                    <rr-frame fn="chat_read_receipt fan-out" file="all v2 peers" tone="new"/>
+                  </rr-frame>
+                </rr-frame>
+              </rr-frame>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-stack>
+    </rr-card>
+    <rr-card>
+      <h3 style="margin-top:0">Protected download</h3>
+      <rr-stack label="Calls">
+        <rr-frame fn="MessageBubble attachment click" file="React">
+          <rr-frame fn="chatFiles.getDownloadUrl" file="GET /v1/chat/attachments/:id/download">
+            <rr-frame fn="participant verifier" file="Session + generation">
+              <rr-frame fn="Service.Download" file="attached file lookup">
+                <rr-frame fn="R2 presigned GET" file="short-lived browser URL" tone="new"/>
+              </rr-frame>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-stack>
+    </rr-card>
+  </rr-cols2>
+
+  <rr-card>
+    <h3 style="margin-top:0">Whiteboard remains separate</h3>
+    <rr-stack label="Calls">
+      <rr-frame fn="Excalidraw canvas" file="browser">
+        <rr-frame fn="whiteboard collaboration engine" file="merge + retry">
+          <rr-frame fn="whiteboard-v1 client" file="separate socket">
+            <rr-frame fn="SocketWhiteboardV1" file="Sync">
+              <rr-frame fn="scene reducer + Postgres" file="revision authority" tone="new"/>
+            </rr-frame>
+          </rr-frame>
+        </rr-frame>
+      </rr-frame>
+    </rr-stack>
+  </rr-card>
+</rr-section>
+
+<rr-section id="phases" title="Execution strategy" icon="waypoint">
+  <rr-phases>
+    <rr-phase state="done" label="0 · Decisions" caption="Sync v3 + whiteboard-v1"/>
+    <rr-phase state="done" label="1 · Contracts" caption="strict v2 unions + codegen"/>
+    <rr-phase state="done" label="2 · Data" caption="migration + repositories"/>
+    <rr-phase state="done" label="3 · Services" caption="API + Sync + retention"/>
+    <rr-phase state="done" label="4 · SDKs" caption="client + React + native"/>
+    <rr-phase state="done" label="5 · Product" caption="room UI + host controls"/>
+    <rr-phase state="now" label="6 · Provider proof" caption="blocked on dev R2 key"/>
+    <rr-phase label="7 · Handoff" caption="attachment browser proof"/>
+  </rr-phases>
+
+  <rr-checklist label="Exit criteria">
+    <rr-done>Contract generation agrees across JSON Schema, Elixir, TypeScript, and OpenAPI.</rr-done>
+    <rr-done>Postgres proves idempotent upload reservation, finalization, atomic claim, and monotonic receipts.</rr-done>
+    <rr-done>Client, React, React Native, web, and codegen builds and coverage suites pass on the M4 Mac Mini.</rr-done>
+    <rr-done>Local API, Sync, BFF, Vite, PostgreSQL 18, and two participants join one configured room.</rr-done>
+    <rr-done>Two browsers prove durable read receipts, reaction fan-out, Excalidraw launch, and both consent-based host media requests.</rr-done>
+    <rr-todo>Create a read/write S3 key restricted to the isolated development bucket.</rr-todo>
+    <rr-todo>Observe browser PUT, finalize, send, and second-participant protected download.</rr-todo>
+  </rr-checklist>
+</rr-section>
+
+<rr-section id="proof" title="Verification ledger" icon="check">
+  <rr-scorecard>
+    <rr-score-row promised="Generated contracts" delivered="OpenAPI, Effect HTTP, Sync v3 TypeScript and Elixir drift checks pass" verdict="kept" tone="green"/>
+    <rr-score-row promised="Feature package verification" delivered="Client 289, React 37, React Native 155, plus focused web and contract checks pass remotely" verdict="kept" tone="green"/>
+    <rr-score-row promised="Real PostgreSQL behavior" delivered="Upload lifecycle, atomic attachment claim, v1 suppression, v2 receipts, and monotonic watermarks pass" verdict="kept" tone="green"/>
+    <rr-score-row promised="Two-person room behavior" delivered="Read receipt, reaction fan-out, Excalidraw launch, host request-to-unmute, and request-to-start-camera pass" verdict="kept" tone="green"/>
+    <rr-score-row promised="Cloudflare CORS" delivered="Isolated bucket created; exact localhost preflight returns HTTP 204" verdict="kept" tone="green"/>
+    <rr-score-row promised="Real attachment bytes" delivered="Signed PUT returns HTTP 401 because the current key cannot access the isolated bucket" verdict="missing" tone="red"/>
+    <rr-score-row promised="Repository full gate" delivered="Stops on existing dependency advisories plus existing API/Sync gate failures" verdict="external red" tone="amber"/>
+    <rr-score-row promised="Automated review" delivered="Two bounded remote passes found and fixed fallback, lease, recovery, receipt, and native-adapter defects" verdict="kept" tone="green"/>
+  </rr-scorecard>
+  <rr-callout tone="amber"><b>Full-gate boundary.</b> Architecture, Semgrep, hygiene, secret scanning, feature type checks, ordered builds, and scoped coverage passed on <code>agents-macmini</code>. The repository-wide dependency scan stops on existing advisories in <code>cel-go</code>, <code>brace-expansion</code>, <code>postcss</code>, and <code>tar</code>. The API and Sync full gates also expose unrelated existing database-fixture and warnings-as-errors failures.</rr-callout>
+</rr-section>
+
+<rr-section id="trace" title="Trace and handoff" icon="search">
+  <p>The API Execution Trace Harness now includes the attachment lifecycle scenario. Run it from <code>apps/api</code> with <code>go run ./cmd/trace -scenario chat-attachments -style tree -color always</code>. It shows authentication, reservation, presigning, finalization, protected download, and cleanup boundaries without requiring a provider write.</p>
+
+  <rr-details summary="Precise source map">
+    <pre><code>Commits
+02ceae04  R2 transport hardening
+bd72e4f1  SDK attachment and receipt types
+2053e7f8  API + Sync persistence and protocol
+f595f167  native runtime preservation
+87b7299b  configured local-room reuse
+ccce91b6  whiteboard file capability enforcement
+85846406  SDK fallback and read-state hardening
+706bd7d7  attachment-finalization lease fencing
+0fd024c3  native explicit read sequence
+4f42844f  recovery and attachment race hardening
+
+Public types
+sdks/typescript/client/src/room-actions/types.ts:24
+sdks/typescript/client/src/chat-files/types.ts:28
+sdks/typescript/client/src/session/types.ts:218
+
+Client behavior
+sdks/typescript/client/src/session/chalk-session.ts:346
+sdks/typescript/client/src/sync/v3-client.ts:267
+sdks/typescript/react/src/components/composite/chat-file-upload.ts:11
+sdks/typescript/react/src/components/full/SessionMeetingRoom.tsx:191
+
+API
+apps/api/internal/httpapi/chat_attachments.go:80
+apps/api/internal/chatattachments/service.go:149
+apps/api/internal/chatattachments/cleanup.go:1
+apps/api/internal/traceharness/scenario_chat_attachments.go:1
+
+Sync
+apps/sync/lib/chalk_sync/room_actions.ex:18
+apps/sync/lib/chalk_sync/room_actions.ex:100
+apps/sync/lib/chalk_sync/room_actions.ex:186
+apps/sync/lib/chalk_sync/room_actions/chat_repository/postgres.ex:55
+apps/sync/lib/chalk_sync/transport/socket_v3.ex:393
+
+Contracts and data
+contract/schema/sync-v3.json:1
+contract/generated/openapi.json:1
+apps/api/db/migrations/20260730091500_add_chat_receipts_and_attachments.sql:1
+
+Whiteboard separation
+contract/schema/whiteboard-v1.json:1
+apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1.ex:1</code></pre>
+  </rr-details>
+</rr-section>
+
+</rr-doc>
