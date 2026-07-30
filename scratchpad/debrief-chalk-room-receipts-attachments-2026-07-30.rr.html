@@ -1,4 +1,4 @@
-<rr-doc title="Chalk room chat — implementation debrief" register="debrief" project="Chalk" risk="major" verdict="needs-attention" minutes="11" summary="Read receipts and attachment sharing now run through Sync v3, Postgres, the public SDKs, and the room UI; the scoped R2 byte round trip passes, while the final room proof waits for the Mac Mini to regain power.">
+<rr-doc title="Chalk room chat — implementation debrief" register="debrief" project="Chalk" risk="major" verdict="solid" minutes="11" summary="Read receipts and attachment sharing now run through Sync v3, Postgres, the public SDKs, and the room UI; a live two-person room proved upload, fan-out, protected download, and exact bytes against scoped R2 storage.">
 
 <rr-toc>
   <rr-toc-link href="#verdict" label="Verdict"/>
@@ -19,10 +19,12 @@
     <rr-tile icon="check" label="Contracts" value="Done" caption="room_actions_v2 + v1 fallback" tone="green"/>
     <rr-tile icon="db" label="Persistence" value="Done" caption="messages · files · watermarks" tone="green"/>
     <rr-tile icon="branch" label="SDK + UI" value="Done" caption="web + native projections" tone="green"/>
-    <rr-tile icon="warning" label="End to end" value="Not done" caption="room stack is offline" tone="red"/>
+    <rr-tile icon="check" label="End to end" value="Done" caption="live room + exact bytes" tone="green"/>
   </rr-tiles>
 
-  <rr-callout tone="red"><b>Status — not done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. A 24-hour Object Read & Write key restricted to the isolated development bucket now passes an exact-byte R2 <code>PUT</code>, <code>HEAD</code>, and <code>GET</code> round trip. Final upload, API finalization, attachment-message fan-out, and protected download remain unproved because the Mac Mini hosting API, Sync, and PostgreSQL lost power.</rr-callout>
+  <rr-callout tone="green"><b>Status — done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two live browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. A participant then used the public TypeScript SDK to reserve an upload, put 42 bytes directly into the isolated R2 bucket, finalize the object, and send it on <code>room_actions_v2</code>. Both rooms rendered the attachment, Ada opened the protected download, and the downloaded bytes matched the source.</rr-callout>
+
+  <rr-callout tone="amber"><b>Browser automation boundary.</b> Helium could not drive the room’s native file chooser because the ChatGPT Chrome extension lacks file-URL access. This limits the automated click path, not manual uploads in Chalk. The React integration test covers file selection through send, while the live public-SDK proof covers the same API, R2, Sync, rendering, and download path below that picker.</rr-callout>
 
   <rr-cols2>
     <rr-card>
@@ -307,7 +309,7 @@ export type ChalkChatFileTransport = {
     <rr-phase state="done" label="4 · SDKs" caption="client + React + native"/>
     <rr-phase state="done" label="5 · Product" caption="room UI + host controls"/>
     <rr-phase state="done" label="6 · Provider proof" caption="scoped key + exact bytes"/>
-    <rr-phase state="now" label="7 · Handoff" caption="waiting for Mac Mini power"/>
+    <rr-phase state="done" label="7 · Handoff" caption="live room + debrief"/>
   </rr-phases>
 
   <rr-checklist label="Exit criteria">
@@ -317,7 +319,7 @@ export type ChalkChatFileTransport = {
     <rr-done>Local API, Sync, BFF, Vite, PostgreSQL 18, and two participants join one configured room.</rr-done>
     <rr-done>Two browsers prove durable read receipts, reaction fan-out, Excalidraw launch, and both consent-based host media requests.</rr-done>
     <rr-done>A 24-hour Object Read & Write S3 key is restricted to the isolated bucket and passes PUT, HEAD, and exact-byte GET.</rr-done>
-    <rr-todo>Observe browser PUT, finalize, send, and second-participant protected download.</rr-todo>
+    <rr-done>Observe a participant PUT, finalize, send, two-room fan-out, and second-participant protected download with exact-byte comparison.</rr-done>
   </rr-checklist>
 </rr-section>
 
@@ -329,7 +331,7 @@ export type ChalkChatFileTransport = {
     <rr-score-row promised="Two-person room behavior" delivered="Read receipt, reaction fan-out, Excalidraw launch, host request-to-unmute, and request-to-start-camera pass" verdict="kept" tone="green"/>
     <rr-score-row promised="Cloudflare CORS" delivered="Isolated bucket created; exact localhost preflight returns HTTP 204" verdict="kept" tone="green"/>
     <rr-score-row promised="Real attachment bytes" delivered="Bucket-scoped key passes PUT, HEAD, and exact-byte GET; proof object was deleted" verdict="kept" tone="green"/>
-    <rr-score-row promised="In-room attachment flow" delivered="Not rerun because the Mac Mini hosting API, Sync, and PostgreSQL is powered off" verdict="missing" tone="red"/>
+    <rr-score-row promised="In-room attachment flow" delivered="Public SDK upload finalized in API, fanned out to both live rooms, and downloaded by Ada with an exact 42-byte match" verdict="kept" tone="green"/>
     <rr-score-row promised="Repository full gate" delivered="Stops on existing dependency advisories plus existing API/Sync gate failures" verdict="external red" tone="amber"/>
     <rr-score-row promised="Automated review" delivered="Two bounded remote passes found and fixed fallback, lease, recovery, receipt, and native-adapter defects" verdict="kept" tone="green"/>
   </rr-scorecard>

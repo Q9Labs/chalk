@@ -1252,10 +1252,6 @@
         <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
         <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
       </symbol>
-      <symbol id="i-warning" viewBox="0 0 24 24">
-        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-        <path d="M12 9v4M12 17h.01" />
-      </symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
       <symbol id="i-branch" viewBox="0 0 24 24">
         <path d="M6 3v12" />
@@ -1344,18 +1340,22 @@
             <span class="caption">web + native projections</span>
           </div>
           <div class="card tile">
-            <div class="tile-v red">Not done</div>
+            <div class="tile-v green">Done</div>
             <div class="tile-l">
-              <svg class="icon"><use href="#i-warning" /></svg> End to end
+              <svg class="icon"><use href="#i-check" /></svg> End to end
             </div>
-            <span class="caption">room stack is offline</span>
+            <span class="caption">live room + exact bytes</span>
           </div>
         </div>
 
-        <div class="callout red">
-          <b>Status — not done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. A 24-hour Object Read & Write key
-          restricted to the isolated development bucket now passes an exact-byte R2 <code>PUT</code>, <code>HEAD</code>, and <code>GET</code> round trip. Final upload, API finalization, attachment-message fan-out, and protected download remain unproved because the Mac Mini hosting API, Sync, and
-          PostgreSQL lost power.
+        <div class="callout green">
+          <b>Status — done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two live browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. A participant then used the public
+          TypeScript SDK to reserve an upload, put 42 bytes directly into the isolated R2 bucket, finalize the object, and send it on <code>room_actions_v2</code>. Both rooms rendered the attachment, Ada opened the protected download, and the downloaded bytes matched the source.
+        </div>
+
+        <div class="callout amber">
+          <b>Browser automation boundary.</b> Helium could not drive the room’s native file chooser because the ChatGPT Chrome extension lacks file-URL access. This limits the automated click path, not manual uploads in Chalk. The React integration test covers file selection through send, while the
+          live public-SDK proof covers the same API, R2, Sync, rendering, and download path below that picker.
         </div>
 
         <div class="cols2">
@@ -1815,7 +1815,7 @@
           <li class="done">4 · SDKs<span class="caption">client + React + native</span></li>
           <li class="done">5 · Product<span class="caption">room UI + host controls</span></li>
           <li class="done">6 · Provider proof<span class="caption">scoped key + exact bytes</span></li>
-          <li class="now">7 · Handoff<span class="caption">waiting for Mac Mini power</span></li>
+          <li class="done">7 · Handoff<span class="caption">live room + debrief</span></li>
         </ol>
 
         <div class="card checklist-card">
@@ -1839,7 +1839,9 @@
             <li class="done">
               <svg class="icon"><use href="#i-check" /></svg> A 24-hour Object Read & Write S3 key is restricted to the isolated bucket and passes PUT, HEAD, and exact-byte GET.
             </li>
-            <li class="todo"><span class="cbox"></span> Observe browser PUT, finalize, send, and second-participant protected download.</li>
+            <li class="done">
+              <svg class="icon"><use href="#i-check" /></svg> Observe a participant PUT, finalize, send, two-room fan-out, and second-participant protected download with exact-byte comparison.
+            </li>
           </ul>
         </div>
       </section>
@@ -1856,7 +1858,7 @@
           <div class="row"><span>Two-person room behavior</span><span>Read receipt, reaction fan-out, Excalidraw launch, host request-to-unmute, and request-to-start-camera pass</span><span class="badge green">kept</span></div>
           <div class="row"><span>Cloudflare CORS</span><span>Isolated bucket created; exact localhost preflight returns HTTP 204</span><span class="badge green">kept</span></div>
           <div class="row"><span>Real attachment bytes</span><span>Bucket-scoped key passes PUT, HEAD, and exact-byte GET; proof object was deleted</span><span class="badge green">kept</span></div>
-          <div class="row"><span>In-room attachment flow</span><span>Not rerun because the Mac Mini hosting API, Sync, and PostgreSQL is powered off</span><span class="badge red">missing</span></div>
+          <div class="row"><span>In-room attachment flow</span><span>Public SDK upload finalized in API, fanned out to both live rooms, and downloaded by Ada with an exact 42-byte match</span><span class="badge green">kept</span></div>
           <div class="row"><span>Repository full gate</span><span>Stops on existing dependency advisories plus existing API/Sync gate failures</span><span class="badge amber">external red</span></div>
           <div class="row"><span>Automated review</span><span>Two bounded remote passes found and fixed fallback, lease, recovery, receipt, and native-adapter defects</span><span class="badge green">kept</span></div>
         </div>
