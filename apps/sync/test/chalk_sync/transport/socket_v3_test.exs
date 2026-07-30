@@ -4,12 +4,14 @@ defmodule ChalkSync.Transport.SocketV3Test do
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.ProtocolV3
+  alias ChalkSync.RoomActions.OutboundQueue, as: RoomActionQueue
   alias ChalkSync.Sessions.Coordinator
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.TestWSClient, as: Client
+  alias ChalkSync.Transport.SocketV3
 
   @journey_id "10000000-0000-4000-8000-000000000001"
   @trace_id "11111111111111111111111111111111"
@@ -162,6 +164,43 @@ defmodule ChalkSync.Transport.SocketV3Test do
     end)
 
     {:ok, adapter: adapter}
+  end
+
+  test "buffers v2 read receipts during recovery and delivers them on live transition" do
+    receipt = %{
+      "type" => "chat_read_receipt",
+      "participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      "participant_session_generation" => 1,
+      "sequence" => "42",
+      "read_at" => "2026-07-29T14:01:00.000Z"
+    }
+
+    assert {:ok, initial} = SocketV3.init([])
+
+    recovering = %{
+      initial
+      | phase: :recovering,
+        coordinator: self(),
+        room_actions_negotiated: true,
+        room_actions_version: 2
+    }
+
+    assert {:ok, buffered} =
+             SocketV3.handle_info({:room_action_frame, receipt}, recovering)
+
+    assert {:ok, %{queued_frames: 1}} =
+             RoomActionQueue.stats(buffered.room_actions_queue)
+
+    assert {:push, {:text, encoded}, live} =
+             SocketV3.handle_info({:sync_recovery_live, self()}, buffered)
+
+    assert JSON.decode!(encoded) == receipt
+    assert live.phase == :live
+    assert {:ok, %{queued_frames: 0}} = RoomActionQueue.stats(live.room_actions_queue)
+
+    Process.cancel_timer(initial.hello_timer)
+    Process.cancel_timer(live.heartbeat_timer)
+    assert :ok = RoomActionQueue.close(live.room_actions_queue)
   end
 
   test "extended Sync v3 negotiates and carries reactions, chat, and paging", %{

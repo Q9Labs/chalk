@@ -247,6 +247,8 @@ defmodule ChalkSync.RoomActions.ChatRepository.SQL do
       and room_id = $2
       and session_id = $3
       and attachment_id = any($4::uuid[])
+      and expires_at > now()
+      and cleanup_claim_token is null
     order by array_position($4::uuid[], attachment_id)
     for update
     """
@@ -268,16 +270,35 @@ defmodule ChalkSync.RoomActions.ChatRepository.SQL do
       and status = 'ready'
       and participant_session_id = $8
       and participant_session_generation = $9
+      and expires_at > now()
+      and cleanup_claim_token is null
     returning attachment_id
     """
   end
 
   def list_read_receipts do
     """
-    select participant_session_id, participant_session_generation, sequence, read_at
-    from sync_chat_read_receipts
-    where tenant_id = $1 and room_id = $2 and session_id = $3
-    order by participant_session_id, participant_session_generation
+    select
+      receipt.participant_session_id,
+      receipt.participant_session_generation,
+      receipt.sequence,
+      receipt.read_at
+    from sync_chat_read_receipts receipt
+    join participants participant
+      on participant.tenant_id = receipt.tenant_id
+      and participant.room_id = receipt.room_id
+      and participant.session_id = receipt.session_id
+      and participant.id = receipt.participant_session_id
+      and participant.generation = receipt.participant_session_generation
+    where receipt.tenant_id = $1
+      and receipt.room_id = $2
+      and receipt.session_id = $3
+      and participant.status = 'active'
+    order by
+      receipt.read_at desc,
+      receipt.participant_session_id,
+      receipt.participant_session_generation
+    limit 500
     """
   end
 

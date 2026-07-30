@@ -278,6 +278,209 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
     assert {:ok, [^receipt]} = Postgres.read_receipts(identity.session)
   end
 
+  test "fences expired and cleanup-claimed attachments from message binding", %{
+    connection: connection,
+    identity: identity
+  } do
+    expired_attachment =
+      insert_ready_attachment(
+        connection,
+        identity,
+        DateTime.add(DateTime.utc_now(), -1, :second)
+      )
+
+    cleanup_token = UUID.generate()
+
+    cleanup_claimed_attachment =
+      insert_ready_attachment(
+        connection,
+        identity,
+        DateTime.add(DateTime.utc_now(), 1, :day),
+        cleanup_token
+      )
+
+    for {attachment_id, client_message_id} <- [
+          {expired_attachment, "chat-expired-file-0001"},
+          {cleanup_claimed_attachment, "chat-cleanup-file-0001"}
+        ] do
+      assert {:error, :attachment_not_found} =
+               Postgres.append(identity, %{
+                 client_message_id: client_message_id,
+                 text: "",
+                 attachment_ids: [attachment_id]
+               })
+    end
+
+    assert [["ready", persisted_cleanup_token]] =
+             Postgrex.query!(
+               connection,
+               """
+               select status, cleanup_claim_token
+               from sync_chat_attachments
+               where tenant_id = $1 and session_id = $2 and attachment_id = $3
+               """,
+               [
+                 uuid(identity.session.tenant_id),
+                 uuid(identity.session.session_id),
+                 uuid(cleanup_claimed_attachment)
+               ]
+             ).rows
+
+    assert UUID.load!(persisted_cleanup_token) == cleanup_token
+  end
+
+  test "returns at most 500 deterministic active-participant read receipts", %{
+    connection: connection,
+    identity: identity
+  } do
+    assert {:ok, %{outcome: :committed}} =
+             Postgres.append(identity, %{
+               client_message_id: "chat-receipt-bound-0001",
+               text: "receipt bound seed",
+               attachment_ids: []
+             })
+
+    params = [
+      uuid(identity.session.tenant_id),
+      uuid(identity.session.room_id),
+      uuid(identity.session.session_id)
+    ]
+
+    Postgrex.query!(
+      connection,
+      """
+      with readers as (
+        select
+          (
+            '10000000-0000-4000-8000-' ||
+            lpad(reader_index::text, 12, '0')
+          )::uuid as participant_id,
+          reader_index
+        from generate_series(1, 501) as reader_index
+      )
+      insert into participants (
+        id, name, capabilities, tenant_id, room_id, session_id,
+        generation, status, joined_at, role, eligible_roles
+      )
+      select
+        participant_id,
+        'Reader ' || reader_index,
+        array['sendChat']::text[],
+        $1,
+        $2,
+        $3,
+        1,
+        'active',
+        now(),
+        'participant',
+        array['participant']::text[]
+      from readers
+      """,
+      params
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      with readers as (
+        select
+          (
+            '10000000-0000-4000-8000-' ||
+            lpad(reader_index::text, 12, '0')
+          )::uuid as participant_id,
+          reader_index
+        from generate_series(1, 501) as reader_index
+      )
+      insert into sync_chat_read_receipts (
+        tenant_id, room_id, session_id, participant_session_id,
+        participant_session_generation, sequence, read_at
+      )
+      select
+        $1,
+        $2,
+        $3,
+        participant_id,
+        1,
+        1,
+        '2026-07-30T00:00:00Z'::timestamptz +
+          reader_index * interval '1 millisecond'
+      from readers
+      """,
+      params
+    )
+
+    assert {:ok, receipts} = Postgres.read_receipts(identity.session)
+    assert length(receipts) == 500
+    assert hd(receipts).participant_session_id == reader_id(501)
+    assert List.last(receipts).participant_session_id == reader_id(2)
+    refute Enum.any?(receipts, &(&1.participant_session_id == reader_id(1)))
+  end
+
+  defp insert_ready_attachment(
+         connection,
+         identity,
+         expires_at,
+         cleanup_token \\ nil
+       ) do
+    attachment_id = UUID.generate()
+    upload_id = UUID.generate()
+    cleanup_until = if cleanup_token, do: DateTime.add(DateTime.utc_now(), 5, :minute)
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_streams (tenant_id, room_id, session_id)
+      values ($1, $2, $3)
+      on conflict (tenant_id, session_id) do nothing
+      """,
+      [
+        uuid(identity.session.tenant_id),
+        uuid(identity.session.room_id),
+        uuid(identity.session.session_id)
+      ]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_attachments (
+        tenant_id, room_id, session_id, attachment_id,
+        participant_session_id, participant_session_generation,
+        client_attachment_id, request_fingerprint, upload_id, object_key,
+        original_filename, mime_type, byte_length, sha256,
+        immutable_object_identity, status, expires_at, finalized_at,
+        cleanup_claim_token, cleanup_claimed_until
+      ) values (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        'diagram.png', 'image/png', 32, $11,
+        'immutable-etag', 'ready', $12, now(), $13, $14
+      )
+      """,
+      [
+        uuid(identity.session.tenant_id),
+        uuid(identity.session.room_id),
+        uuid(identity.session.session_id),
+        uuid(attachment_id),
+        uuid(identity.participant_session_id),
+        identity.participant_session_generation,
+        "chat-file-#{attachment_id}",
+        :crypto.hash(:sha256, "reservation"),
+        uuid(upload_id),
+        "chat-attachments-v1/#{upload_id}",
+        :crypto.hash(:sha256, "content"),
+        expires_at,
+        if(cleanup_token, do: uuid(cleanup_token)),
+        cleanup_until
+      ]
+    )
+
+    attachment_id
+  end
+
+  defp reader_id(index) do
+    "10000000-0000-4000-8000-" <> String.pad_leading(Integer.to_string(index), 12, "0")
+  end
+
   defp retain_from(connection, session, floor) do
     Postgrex.transaction(connection, fn transaction ->
       Postgrex.query!(

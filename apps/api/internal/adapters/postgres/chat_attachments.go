@@ -25,6 +25,7 @@ type chatAttachmentQuerier interface {
 	GetChatAttachmentByUploadID(context.Context, sqlc.GetChatAttachmentByUploadIDParams) (sqlc.GetChatAttachmentByUploadIDRow, error)
 	ClaimChatAttachmentUploadFinalize(context.Context, sqlc.ClaimChatAttachmentUploadFinalizeParams) (sqlc.ClaimChatAttachmentUploadFinalizeRow, error)
 	FailChatAttachmentUpload(context.Context, sqlc.FailChatAttachmentUploadParams) (int64, error)
+	ReleaseChatAttachmentUploadFinalize(context.Context, sqlc.ReleaseChatAttachmentUploadFinalizeParams) (int64, error)
 	CompleteChatAttachmentUpload(context.Context, sqlc.CompleteChatAttachmentUploadParams) (int64, error)
 	GetAuthorizedChatAttachmentDownload(context.Context, sqlc.GetAuthorizedChatAttachmentDownloadParams) (sqlc.GetAuthorizedChatAttachmentDownloadRow, error)
 	ClaimChatAttachmentCleanup(context.Context, sqlc.ClaimChatAttachmentCleanupParams) ([]sqlc.ClaimChatAttachmentCleanupRow, error)
@@ -202,6 +203,30 @@ func (r ChatAttachmentRepository) Fail(
 	)
 	if err != nil {
 		return fmt.Errorf("fail chat attachment upload: %w", err)
+	}
+	if rows != 1 {
+		return chatattachments.ErrUploadNotReady
+	}
+	return nil
+}
+
+func (r ChatAttachmentRepository) ReleaseFinalize(
+	ctx context.Context,
+	uploadID utilities.ID,
+	finalizeClaimToken utilities.ID,
+) error {
+	if uploadID.IsZero() || finalizeClaimToken.IsZero() {
+		return chatattachments.ErrInvalidInput
+	}
+	rows, err := r.queries.ReleaseChatAttachmentUploadFinalize(
+		ctx,
+		sqlc.ReleaseChatAttachmentUploadFinalizeParams{
+			UploadID:           uuid(uploadID),
+			FinalizeClaimToken: uuid(finalizeClaimToken),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("release chat attachment finalize: %w", err)
 	}
 	if rows != 1 {
 		return chatattachments.ErrUploadNotReady

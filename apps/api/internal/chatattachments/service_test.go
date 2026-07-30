@@ -168,6 +168,60 @@ func TestFinalizeDeletesAndFailsHashMismatch(t *testing.T) {
 	}
 }
 
+func TestFinalizeReleasesTransientInspectionFailureAndCanRetry(t *testing.T) {
+	content := []byte("retryable chat attachment")
+	digest := sha256.Sum256(content)
+	upload := chatAttachmentTestUpload(t, digest, int64(len(content)), "image/png")
+	repository := &chatAttachmentRepositoryStub{claimed: upload}
+	objects := &chatAttachmentObjectStoreStub{
+		body: content,
+		facts: objectstorage.ObjectFacts{
+			Object: objectstorage.Object{
+				Key: upload.ObjectKey, ETag: "immutable-etag",
+				ContentType: upload.MIMEType, Size: upload.ByteLength,
+			},
+			Metadata: map[string]string{
+				"chalk-upload-id":     upload.UploadID.String(),
+				"chalk-attachment-id": upload.AttachmentID.String(),
+			},
+		},
+		err: context.Canceled,
+	}
+	service := NewService(repository, objects)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := service.Finalize(
+		canceled,
+		chatAttachmentTestSubject(t),
+		upload.UploadID,
+	); !errors.Is(err, context.Canceled) {
+		t.Fatalf("first finalize error = %v", err)
+	}
+	if repository.releaseCount != 1 ||
+		repository.releasedUploadID != upload.UploadID ||
+		repository.releasedClaimToken != upload.FinalizeClaimToken ||
+		repository.releaseContextErr != nil {
+		t.Fatalf("release = %#v", repository)
+	}
+	if repository.failed {
+		t.Fatal("transient inspection failure terminalized the upload")
+	}
+
+	objects.err = nil
+	attachment, err := service.Finalize(
+		context.Background(),
+		chatAttachmentTestSubject(t),
+		upload.UploadID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attachment != upload.Attachment || repository.completed.UploadID != upload.UploadID {
+		t.Fatalf("retry attachment = %#v, repository = %#v", attachment, repository)
+	}
+}
+
 func TestDownloadForcesOfficeFilesToAttachment(t *testing.T) {
 	digest := sha256.Sum256([]byte("document"))
 	upload := chatAttachmentTestUpload(
@@ -204,14 +258,18 @@ func TestDownloadForcesOfficeFilesToAttachment(t *testing.T) {
 }
 
 type chatAttachmentRepositoryStub struct {
-	reserved        ReserveInput
-	claimed         Upload
-	download        Upload
-	completed       CompleteInput
-	failed          bool
-	err             error
-	claimNow        time.Time
-	claimLeaseUntil time.Time
+	reserved           ReserveInput
+	claimed            Upload
+	download           Upload
+	completed          CompleteInput
+	failed             bool
+	err                error
+	claimNow           time.Time
+	claimLeaseUntil    time.Time
+	releaseCount       int
+	releasedUploadID   utilities.ID
+	releasedClaimToken utilities.ID
+	releaseContextErr  error
 }
 
 func (r *chatAttachmentRepositoryStub) Reserve(
@@ -248,6 +306,18 @@ func (r *chatAttachmentRepositoryStub) Fail(
 	utilities.ID,
 ) error {
 	r.failed = true
+	return r.err
+}
+
+func (r *chatAttachmentRepositoryStub) ReleaseFinalize(
+	ctx context.Context,
+	uploadID utilities.ID,
+	finalizeClaimToken utilities.ID,
+) error {
+	r.releaseCount++
+	r.releasedUploadID = uploadID
+	r.releasedClaimToken = finalizeClaimToken
+	r.releaseContextErr = ctx.Err()
 	return r.err
 }
 

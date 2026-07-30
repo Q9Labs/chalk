@@ -301,6 +301,27 @@ defmodule ChalkSync.RoomActionsTest do
     assert participant_session_id == identity.participant_session_id
   end
 
+  test "projects attachment-only chat as a valid deterministic v1 placeholder", %{
+    options: options
+  } do
+    identity = identity()
+
+    assert {:ok, result} =
+             RoomActions.send_chat(
+               identity,
+               %{
+                 client_message_id: "chat-message-0002",
+                 text: "",
+                 attachment_ids: ["018f2f65-2a77-7a44-8e9a-5b0b6f8d4c82"]
+               },
+               Keyword.put(options, :version, 1)
+             )
+
+    assert result["message"]["text"] == "[Attachment]"
+    refute Map.has_key?(result["message"], "attachments")
+    assert GeneratedV3.valid_server_frame?(result)
+  end
+
   test "returns generated-valid loaded and cursor-reset pages", %{options: options} do
     identity = identity()
 

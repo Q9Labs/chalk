@@ -551,6 +551,31 @@ func (q *Queries) GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAt
 	return i, err
 }
 
+const releaseChatAttachmentUploadFinalize = `-- name: ReleaseChatAttachmentUploadFinalize :execrows
+update sync_chat_attachments
+set
+    status = 'pending',
+    finalize_claim_token = null,
+    finalize_claimed_until = null,
+    updated_at = now()
+where upload_id = $1
+    and status = 'finalizing'
+    and finalize_claim_token = $2
+`
+
+type ReleaseChatAttachmentUploadFinalizeParams struct {
+	UploadID           pgtype.UUID `json:"upload_id"`
+	FinalizeClaimToken pgtype.UUID `json:"finalize_claim_token"`
+}
+
+func (q *Queries) ReleaseChatAttachmentUploadFinalize(ctx context.Context, arg ReleaseChatAttachmentUploadFinalizeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseChatAttachmentUploadFinalize, arg.UploadID, arg.FinalizeClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const reserveChatAttachmentUpload = `-- name: ReserveChatAttachmentUpload :one
 with authority as materialized (
     select

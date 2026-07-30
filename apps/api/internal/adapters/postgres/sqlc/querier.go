@@ -177,6 +177,7 @@ type Querier interface {
 	RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExpiredArtifactJobsParams) ([]ArtifactJob, error)
 	RecoverExpiredRecordingJobs(ctx context.Context) ([]RecoverExpiredRecordingJobsRow, error)
 	RecoverExpiredTranscriptionCleanupJobs(ctx context.Context, arg RecoverExpiredTranscriptionCleanupJobsParams) ([]TranscriptionCleanupJob, error)
+	ReleaseChatAttachmentUploadFinalize(ctx context.Context, arg ReleaseChatAttachmentUploadFinalizeParams) (int64, error)
 	ReleaseRecordingReservation(ctx context.Context, arg ReleaseRecordingReservationParams) (ReleaseRecordingReservationRow, error)
 	ReplaceRecordingTranscriptionSourceChunk(ctx context.Context, arg ReplaceRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)

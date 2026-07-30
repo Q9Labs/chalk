@@ -3,6 +3,8 @@ defmodule ChalkSync.RoomActions.ChatRepository.Message do
 
   alias ChalkSync.UUID
 
+  @v1_attachment_placeholder "[Attachment]"
+
   def from_row([
         message_id,
         client_message_id,
@@ -61,7 +63,7 @@ defmodule ChalkSync.RoomActions.ChatRepository.Message do
       "sequence" => message.sequence,
       "participant_session_id" => message.participant_session_id,
       "display_name" => message.display_name,
-      "text" => message.text,
+      "text" => wire_text(message, version),
       "created_at" => message.created_at
     }
 
@@ -74,6 +76,9 @@ defmodule ChalkSync.RoomActions.ChatRepository.Message do
         ),
       else: frame
   end
+
+  defp wire_text(%{text: "", attachments: [_ | _]}, 1), do: @v1_attachment_placeholder
+  defp wire_text(message, _version), do: message.text
 
   defp attachments(value) when is_list(value) do
     Enum.map(value, fn attachment ->

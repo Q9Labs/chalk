@@ -193,12 +193,42 @@ func TestChatAttachmentRepositoryLeasesFinalizeExclusivelyAndReclaimsExpiredLeas
 	}); !errors.Is(err, chatattachments.ErrUploadNotReady) {
 		t.Fatalf("stale finalize completion error = %v", err)
 	}
+	if err := repository.ReleaseFinalize(
+		ctx,
+		uploadID,
+		secondClaim.FinalizeClaimToken,
+	); err != nil {
+		t.Fatal(err)
+	}
+	retryAt := reclaimedAt.Add(time.Second)
+	retryClaim, err := repository.ClaimFinalize(
+		ctx,
+		subject,
+		uploadID,
+		retryAt,
+		retryAt.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retryClaim.FinalizeClaimToken == secondClaim.FinalizeClaimToken {
+		t.Fatal("released finalize lease reused its predecessor's fence token")
+	}
 	if err := repository.Complete(ctx, chatattachments.CompleteInput{
 		UploadID:                uploadID,
 		FinalizeClaimToken:      secondClaim.FinalizeClaimToken,
 		ImmutableObjectIdentity: "immutable-etag",
 		ExpiresAt:               time.Now().Add(24 * time.Hour),
-		Now:                     reclaimedAt.Add(time.Second),
+		Now:                     retryAt,
+	}); !errors.Is(err, chatattachments.ErrUploadNotReady) {
+		t.Fatalf("released finalize completion error = %v", err)
+	}
+	if err := repository.Complete(ctx, chatattachments.CompleteInput{
+		UploadID:                uploadID,
+		FinalizeClaimToken:      retryClaim.FinalizeClaimToken,
+		ImmutableObjectIdentity: "immutable-etag",
+		ExpiresAt:               time.Now().Add(24 * time.Hour),
+		Now:                     retryAt,
 	}); err != nil {
 		t.Fatal(err)
 	}

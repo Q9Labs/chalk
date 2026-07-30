@@ -28,6 +28,7 @@ const (
 	unattachedLifetime         = 24 * time.Hour
 	downloadLifetime           = 2 * time.Minute
 	finalizeLeaseDuration      = 2 * time.Minute
+	finalizeMutationTimeout    = 2 * time.Second
 )
 
 var (
@@ -130,6 +131,7 @@ type Repository interface {
 	ClaimFinalize(context.Context, Subject, utilities.ID, time.Time, time.Time) (Upload, error)
 	Complete(context.Context, CompleteInput) error
 	Fail(context.Context, utilities.ID, utilities.ID) error
+	ReleaseFinalize(context.Context, utilities.ID, utilities.ID) error
 	AuthorizedDownload(context.Context, Subject, utilities.ID) (Upload, error)
 }
 
@@ -254,7 +256,7 @@ func (s Service) Finalize(
 
 	facts, err := s.objects.InspectObject(ctx, upload.ObjectKey)
 	if err != nil {
-		_ = s.repository.Fail(ctx, uploadID, upload.FinalizeClaimToken)
+		s.releaseFinalize(ctx, upload)
 		return Attachment{}, fmt.Errorf("inspect chat attachment upload: %w", err)
 	}
 	if facts.Size != upload.ByteLength ||
@@ -267,7 +269,7 @@ func (s Service) Finalize(
 
 	matches, err := s.objectDigestMatches(ctx, upload)
 	if err != nil {
-		_ = s.repository.Fail(ctx, uploadID, upload.FinalizeClaimToken)
+		s.releaseFinalize(ctx, upload)
 		return Attachment{}, err
 	}
 	if !matches {
@@ -280,6 +282,7 @@ func (s Service) Finalize(
 		ExpiresAt:               completedAt.Add(unattachedLifetime),
 		Now:                     completedAt,
 	}); err != nil {
+		s.releaseFinalize(ctx, upload)
 		return Attachment{}, err
 	}
 	return upload.Attachment, nil
@@ -333,6 +336,19 @@ func (s Service) rejectUpload(ctx context.Context, upload Upload) error {
 	_ = s.objects.DeleteObject(ctx, upload.ObjectKey)
 	_ = s.repository.Fail(ctx, upload.UploadID, upload.FinalizeClaimToken)
 	return ErrFileTransferFailed
+}
+
+func (s Service) releaseFinalize(ctx context.Context, upload Upload) {
+	releaseContext, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx),
+		finalizeMutationTimeout,
+	)
+	defer cancel()
+	_ = s.repository.ReleaseFinalize(
+		releaseContext,
+		upload.UploadID,
+		upload.FinalizeClaimToken,
+	)
 }
 
 func (s Service) startRequest(

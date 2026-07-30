@@ -109,7 +109,10 @@ defmodule ChalkSync.Transport.SocketV3 do
         {:sync_recovery_live, coordinator},
         %{phase: :recovering, coordinator: coordinator} = state
       ) do
-    {:ok, state |> Map.put(:phase, :live) |> start_heartbeat()}
+    state
+    |> Map.put(:phase, :live)
+    |> start_heartbeat()
+    |> push_room_action()
   end
 
   def handle_info({:sync_recovery_live, _coordinator}, state), do: {:ok, state}
@@ -140,6 +143,16 @@ defmodule ChalkSync.Transport.SocketV3 do
         %{phase: :live, room_actions_negotiated: true} = state
       ),
       do: enqueue_room_action(frame, state)
+
+  def handle_info(
+        {:room_action_frame, %{"type" => "chat_read_receipt"} = frame},
+        %{
+          phase: :recovering,
+          room_actions_negotiated: true,
+          room_actions_version: 2
+        } = state
+      ),
+      do: buffer_room_action(frame, state)
 
   def handle_info({:room_action_frame, _frame}, state), do: {:ok, state}
 
@@ -608,6 +621,18 @@ defmodule ChalkSync.Transport.SocketV3 do
     case RoomActionQueue.push(state.room_actions_queue, encoded, kind: kind) do
       :ok ->
         push_room_action(state)
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+    end
+  end
+
+  defp buffer_room_action(frame, state) do
+    encoded = ProtocolV3.encode!(frame)
+
+    case RoomActionQueue.push(state.room_actions_queue, encoded) do
+      :ok ->
+        {:ok, state}
 
       {:error, _reason} ->
         {:stop, :normal, {1012, "room action delivery recovery required"}, state}

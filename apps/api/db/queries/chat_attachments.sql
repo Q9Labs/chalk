@@ -200,6 +200,17 @@ where upload_id = sqlc.arg(upload_id)
         )
     );
 
+-- name: ReleaseChatAttachmentUploadFinalize :execrows
+update sync_chat_attachments
+set
+    status = 'pending',
+    finalize_claim_token = null,
+    finalize_claimed_until = null,
+    updated_at = now()
+where upload_id = sqlc.arg(upload_id)
+    and status = 'finalizing'
+    and finalize_claim_token = sqlc.arg(finalize_claim_token);
+
 -- name: CompleteChatAttachmentUpload :execrows
 update sync_chat_attachments
 set
