@@ -99,7 +99,7 @@ function isInitiateUploadResponse(value: unknown): value is Awaited<ReturnType<C
 }
 
 function isAttachment(value: unknown): value is Awaited<ReturnType<ChalkChatFileTransport["finalizeUpload"]>> {
-  return hasOnlyKeys(value, "attachmentId,byteLength,fileName,mimeType") && typeof value.attachmentId === "string" && typeof value.fileName === "string" && isAllowedMimeType(value.mimeType) && validAttachmentByteLength(Number(value.byteLength));
+  return hasOnlyKeys(value, "attachmentId,byteLength,fileName,mimeType") && typeof value.attachmentId === "string" && typeof value.fileName === "string" && isAllowedMimeType(value.mimeType) && typeof value.byteLength === "number" && validAttachmentByteLength(value.byteLength);
 }
 
 function isDownloadResponse(value: unknown): value is Awaited<ReturnType<ChalkChatFileTransport["getDownloadUrl"]>> {
