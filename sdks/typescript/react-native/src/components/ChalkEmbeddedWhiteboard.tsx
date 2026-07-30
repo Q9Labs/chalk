@@ -40,12 +40,18 @@ export function ChalkEmbeddedWhiteboard({ transport, journeyId, traceparent, tra
   const webViewRef = useRef<WebView>(null);
   const controllerRef = useRef<ChalkWhiteboardController | null>(null);
   const listenersRef = useRef(new Set<(message: string) => void>());
+  const onMetricRef = useRef(onMetric);
+  const onErrorRef = useRef(onError);
+  const onUserExportRef = useRef(onUserExport);
   const [rendererURL, setRendererURL] = useState<string | null>(null);
   const [rendererGeneration, setRendererGeneration] = useState(createRendererGeneration);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [compatibilityNotice, setCompatibilityNotice] = useState<string | null>(null);
   const { width, height, scale } = useWindowDimensions();
+  onMetricRef.current = onMetric;
+  onErrorRef.current = onError;
+  onUserExportRef.current = onUserExport;
 
   const rendererPort = useMemo(
     () => ({
@@ -57,12 +63,9 @@ export function ChalkEmbeddedWhiteboard({ transport, journeyId, traceparent, tra
     }),
     [],
   );
-  const handleControllerError = useCallback(
-    (error: { readonly code: string; readonly message: string; readonly recoverable: boolean }) => {
-      onError?.(error);
-    },
-    [onError],
-  );
+  const handleControllerError = useCallback((error: { readonly code: string; readonly message: string; readonly recoverable: boolean }) => onErrorRef.current?.(error), []);
+  const handleControllerMetric = useCallback((metric: { readonly name: string; readonly value: number; readonly attributes?: Readonly<Record<string, string | number | boolean>> }) => onMetricRef.current?.(metric), []);
+  const handleControllerUserExport = useCallback((value: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string }) => onUserExportRef.current?.(value), []);
 
   useEffect(() => {
     let active = true;
@@ -94,10 +97,10 @@ export function ChalkEmbeddedWhiteboard({ transport, journeyId, traceparent, tra
       canClear,
       theme,
       ...(localParticipantColor ? { localParticipantColor } : {}),
-      ...(onMetric ? { onMetric } : {}),
+      onMetric: handleControllerMetric,
       onError: handleControllerError,
       onCompatibilityChange: (state) => setCompatibilityNotice(state.message),
-      ...(onUserExport ? { onUserExport } : {}),
+      onUserExport: handleControllerUserExport,
     });
     controller.start();
     controllerRef.current = controller;
@@ -105,7 +108,7 @@ export function ChalkEmbeddedWhiteboard({ transport, journeyId, traceparent, tra
       if (controllerRef.current === controller) controllerRef.current = null;
       controller.stop();
     };
-  }, [handleControllerError, journeyId, localParticipantColor, onMetric, onUserExport, rendererPort, theme, traceparent, tracestate, transport]);
+  }, [handleControllerError, handleControllerMetric, handleControllerUserExport, journeyId, localParticipantColor, rendererPort, theme, traceparent, tracestate, transport]);
 
   useEffect(() => {
     controllerRef.current?.setCapabilities({ canDraw, canClear });
@@ -132,8 +135,8 @@ export function ChalkEmbeddedWhiteboard({ transport, journeyId, traceparent, tra
     reloadRenderer();
   };
   const handleRendererTermination = (): void => {
-    onMetric?.({ name: "whiteboard.renderer.termination", value: 1 });
-    onError?.({
+    handleControllerMetric({ name: "whiteboard.renderer.termination", value: 1 });
+    handleControllerError({
       code: "renderer_terminated",
       message: "The whiteboard renderer stopped and is recovering.",
       recoverable: true,
@@ -173,7 +176,7 @@ export function ChalkEmbeddedWhiteboard({ transport, journeyId, traceparent, tra
         onError={(event) => {
           const message = event.nativeEvent.description || "The whiteboard renderer failed to load";
           setLoadError(message);
-          onError?.({ code: "renderer_load_failed", message, recoverable: true });
+          handleControllerError({ code: "renderer_load_failed", message, recoverable: true });
         }}
         onMessage={handleMessage}
         onRenderProcessGone={handleRendererTermination}

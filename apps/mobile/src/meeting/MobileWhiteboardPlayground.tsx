@@ -1,6 +1,6 @@
 import { ChalkEmbeddedWhiteboard } from "@q9labsai/chalk-react-native";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { createMobileWhiteboardPlaygroundTransport } from "./mobile-whiteboard-playground-transport";
@@ -19,6 +19,7 @@ export function MobileWhiteboardPlayground({ onClose }: { readonly onClose: () =
   const transport = useMemo(createMobileWhiteboardPlaygroundTransport, []);
   const journeyId = useMemo(createMobileWhiteboardPlaygroundJourneyId, []);
   const [error, setError] = useState<string | null>(null);
+  const handleError = useCallback((value: { readonly code: string; readonly message: string }) => setError(`${value.code}: ${value.message}`), []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -36,7 +37,7 @@ export function MobileWhiteboardPlayground({ onClose }: { readonly onClose: () =
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-      <ChalkEmbeddedWhiteboard {...mobileWhiteboardPlaygroundRendererCapabilities} journeyId={journeyId} onError={(value) => setError(`${value.code}: ${value.message}`)} style={styles.whiteboard} testID="mobile-whiteboard-renderer-playground" transport={transport} />
+      <ChalkEmbeddedWhiteboard {...mobileWhiteboardPlaygroundRendererCapabilities} journeyId={journeyId} onError={handleError} style={styles.whiteboard} testID="mobile-whiteboard-renderer-playground" transport={transport} />
     </SafeAreaView>
   );
 }

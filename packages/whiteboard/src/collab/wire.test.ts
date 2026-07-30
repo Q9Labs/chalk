@@ -50,8 +50,25 @@ describe("whiteboard-v1 Excalidraw wire conversion", () => {
         versionNonce: 44,
         index: "a0",
         isDeleted: false,
-        invalid: undefined,
+        invalid: () => undefined,
       } as unknown as OrderedExcalidrawElement),
     ).toThrow("not JSON serializable");
+  });
+
+  it("omits undefined optional Excalidraw properties from wire payloads", () => {
+    const wire = toWireElement({
+      id: "freedraw-1",
+      type: "freedraw",
+      version: 1,
+      versionNonce: 2,
+      index: "a0",
+      isDeleted: false,
+      customData: undefined,
+      nested: { value: 1, optional: undefined },
+    } as unknown as OrderedExcalidrawElement);
+
+    expect(wire.payload).toMatchObject({ id: "freedraw-1", nested: { value: 1 } });
+    expect(Object.hasOwn(wire.payload, "customData")).toBe(false);
+    expect(Object.hasOwn(wire.payload.nested as object, "optional")).toBe(false);
   });
 });

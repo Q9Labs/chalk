@@ -5,6 +5,7 @@ vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
   return {
     ...react,
+    useCallback: (callback: unknown) => callback,
     useMemo: (factory: () => unknown) => factory(),
     useState: (initial: unknown) => [initial, vi.fn()],
   };

@@ -2,6 +2,9 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ChalkEmbeddedWhiteboardRendererBridge } from "./renderer-bridge";
+import { decodeEmbeddedWhiteboardRendererMessage } from "./protocol";
+
 const rendererTestState = vi.hoisted(() => ({
   createRoot: vi.fn(),
   render: vi.fn(),
@@ -40,5 +43,22 @@ describe("embedded whiteboard renderer entrypoint", () => {
     document.body.innerHTML = "";
 
     await expect(import("./renderer")).rejects.toThrow("embedded whiteboard root is missing");
+  });
+
+  it("strips runtime-only Excalidraw fields from cursor messages", async () => {
+    window.ReactNativeWebView = { postMessage: vi.fn() };
+    const { createCollaborationBridge } = await import("./renderer");
+    const bridge = new ChalkEmbeddedWhiteboardRendererBridge();
+    const collaboration = createCollaborationBridge(bridge);
+    const pointer = { x: 12, y: 34, tool: "pointer" };
+
+    collaboration.sendCursor(pointer);
+
+    const raw = vi.mocked(window.ReactNativeWebView.postMessage).mock.calls[0]?.[0];
+    expect(decodeEmbeddedWhiteboardRendererMessage(String(raw), "renderer-generation-test")).toMatchObject({
+      type: "cursor",
+      payload: { x: 12, y: 34 },
+    });
+    expect(JSON.parse(String(raw)).payload).not.toHaveProperty("tool");
   });
 });

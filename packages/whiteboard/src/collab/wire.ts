@@ -75,10 +75,30 @@ export function isWireElement(value: unknown): value is WhiteboardWireElement {
 }
 
 function toJsonRecord(value: unknown): Readonly<Record<string, WhiteboardJsonValue>> {
-  if (!isRecord(value) || !isJsonValue(value)) {
-    throw new Error("Excalidraw element is not JSON serializable");
+  if (!isRecord(value)) throw new Error("Excalidraw element is not JSON serializable");
+  return normalizeJsonRecord(value, 0);
+}
+
+function normalizeJsonRecord(value: Record<string, unknown>, depth: number): Readonly<Record<string, WhiteboardJsonValue>> {
+  assertJsonDepth(depth);
+  const entries: [string, WhiteboardJsonValue][] = [];
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) continue;
+    entries.push([key, normalizeJsonValue(item, depth + 1)]);
   }
-  return value;
+  return Object.fromEntries(entries);
+}
+
+function normalizeJsonValue(value: unknown, depth: number): WhiteboardJsonValue {
+  assertJsonDepth(depth);
+  if (Array.isArray(value)) return value.map((item) => normalizeJsonValue(item, depth + 1));
+  if (isRecord(value)) return normalizeJsonRecord(value, depth);
+  if (isJsonPrimitive(value)) return value;
+  throw new Error("Excalidraw element is not JSON serializable");
+}
+
+function assertJsonDepth(depth: number): void {
+  if (depth > 16) throw new Error("Excalidraw element is not JSON serializable");
 }
 
 function isJsonValue(value: unknown, depth = 0): value is WhiteboardJsonValue {

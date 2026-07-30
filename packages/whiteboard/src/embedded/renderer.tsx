@@ -75,7 +75,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
   );
 }
 
-function createCollaborationBridge(rendererBridge: ChalkEmbeddedWhiteboardRendererBridge) {
+export function createCollaborationBridge(rendererBridge: ChalkEmbeddedWhiteboardRendererBridge) {
   const listeners = new Set<(event: WhiteboardCollaborationEvent) => void>();
   rendererBridge.subscribe((message) => {
     const event = collaborationEvent(message);
@@ -84,7 +84,7 @@ function createCollaborationBridge(rendererBridge: ChalkEmbeddedWhiteboardRender
 
   return {
     submitUpdate: (payload: Parameters<ChalkEmbeddedWhiteboardRendererBridge["submitUpdate"]>[0]) => rendererBridge.submitUpdate(payload),
-    sendCursor: (payload: { readonly x: number; readonly y: number }) => rendererBridge.post({ type: "cursor", payload }),
+    sendCursor: ({ x, y }: { readonly x: number; readonly y: number }) => rendererBridge.post({ type: "cursor", payload: { x, y } }),
     requestSnapshot: () => rendererBridge.requestSnapshot(),
     clear: () => rendererBridge.clear(),
     fileTransfer: {
