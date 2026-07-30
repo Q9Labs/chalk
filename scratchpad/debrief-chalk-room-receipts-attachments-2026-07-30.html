@@ -1348,14 +1348,14 @@
             <div class="tile-l">
               <svg class="icon"><use href="#i-warning" /></svg> End to end
             </div>
-            <span class="caption">R2 credential blocks PUT</span>
+            <span class="caption">room stack is offline</span>
           </div>
         </div>
 
         <div class="callout red">
-          <b>Status — not done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. Attachment bytes remain unproved: the
-          isolated R2 bucket passes CORS preflight, then returns <code>401 Unauthorized</code> on the signed <code>PUT</code> because the available S3 key is restricted to the shared bucket. Final upload, protected download, and attachment-message proof wait on an approved key scoped to the
-          development bucket.
+          <b>Status — not done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. A 24-hour Object Read & Write key
+          restricted to the isolated development bucket now passes an exact-byte R2 <code>PUT</code>, <code>HEAD</code>, and <code>GET</code> round trip. Final upload, API finalization, attachment-message fan-out, and protected download remain unproved because the Mac Mini hosting API, Sync, and
+          PostgreSQL lost power.
         </div>
 
         <div class="cols2">
@@ -1814,8 +1814,8 @@
           <li class="done">3 · Services<span class="caption">API + Sync + retention</span></li>
           <li class="done">4 · SDKs<span class="caption">client + React + native</span></li>
           <li class="done">5 · Product<span class="caption">room UI + host controls</span></li>
-          <li class="now">6 · Provider proof<span class="caption">blocked on dev R2 key</span></li>
-          <li class="">7 · Handoff<span class="caption">attachment browser proof</span></li>
+          <li class="done">6 · Provider proof<span class="caption">scoped key + exact bytes</span></li>
+          <li class="now">7 · Handoff<span class="caption">waiting for Mac Mini power</span></li>
         </ol>
 
         <div class="card checklist-card">
@@ -1836,7 +1836,9 @@
             <li class="done">
               <svg class="icon"><use href="#i-check" /></svg> Two browsers prove durable read receipts, reaction fan-out, Excalidraw launch, and both consent-based host media requests.
             </li>
-            <li class="todo"><span class="cbox"></span> Create a read/write S3 key restricted to the isolated development bucket.</li>
+            <li class="done">
+              <svg class="icon"><use href="#i-check" /></svg> A 24-hour Object Read & Write S3 key is restricted to the isolated bucket and passes PUT, HEAD, and exact-byte GET.
+            </li>
             <li class="todo"><span class="cbox"></span> Observe browser PUT, finalize, send, and second-participant protected download.</li>
           </ul>
         </div>
@@ -1853,7 +1855,8 @@
           <div class="row"><span>Real PostgreSQL behavior</span><span>Upload lifecycle, atomic attachment claim, v1 suppression, v2 receipts, and monotonic watermarks pass</span><span class="badge green">kept</span></div>
           <div class="row"><span>Two-person room behavior</span><span>Read receipt, reaction fan-out, Excalidraw launch, host request-to-unmute, and request-to-start-camera pass</span><span class="badge green">kept</span></div>
           <div class="row"><span>Cloudflare CORS</span><span>Isolated bucket created; exact localhost preflight returns HTTP 204</span><span class="badge green">kept</span></div>
-          <div class="row"><span>Real attachment bytes</span><span>Signed PUT returns HTTP 401 because the current key cannot access the isolated bucket</span><span class="badge red">missing</span></div>
+          <div class="row"><span>Real attachment bytes</span><span>Bucket-scoped key passes PUT, HEAD, and exact-byte GET; proof object was deleted</span><span class="badge green">kept</span></div>
+          <div class="row"><span>In-room attachment flow</span><span>Not rerun because the Mac Mini hosting API, Sync, and PostgreSQL is powered off</span><span class="badge red">missing</span></div>
           <div class="row"><span>Repository full gate</span><span>Stops on existing dependency advisories plus existing API/Sync gate failures</span><span class="badge amber">external red</span></div>
           <div class="row"><span>Automated review</span><span>Two bounded remote passes found and fixed fallback, lease, recovery, receipt, and native-adapter defects</span><span class="badge green">kept</span></div>
         </div>

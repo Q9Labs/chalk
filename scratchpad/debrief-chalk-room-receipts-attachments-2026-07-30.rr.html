@@ -1,4 +1,4 @@
-<rr-doc title="Chalk room chat — implementation debrief" register="debrief" project="Chalk" risk="major" verdict="needs-attention" minutes="11" summary="Read receipts and attachment sharing now run through Sync v3, Postgres, the public SDKs, and the room UI; real R2 upload proof still needs a development-bucket credential.">
+<rr-doc title="Chalk room chat — implementation debrief" register="debrief" project="Chalk" risk="major" verdict="needs-attention" minutes="11" summary="Read receipts and attachment sharing now run through Sync v3, Postgres, the public SDKs, and the room UI; the scoped R2 byte round trip passes, while the final room proof waits for the Mac Mini to regain power.">
 
 <rr-toc>
   <rr-toc-link href="#verdict" label="Verdict"/>
@@ -19,10 +19,10 @@
     <rr-tile icon="check" label="Contracts" value="Done" caption="room_actions_v2 + v1 fallback" tone="green"/>
     <rr-tile icon="db" label="Persistence" value="Done" caption="messages · files · watermarks" tone="green"/>
     <rr-tile icon="branch" label="SDK + UI" value="Done" caption="web + native projections" tone="green"/>
-    <rr-tile icon="warning" label="End to end" value="Not done" caption="R2 credential blocks PUT" tone="red"/>
+    <rr-tile icon="warning" label="End to end" value="Not done" caption="room stack is offline" tone="red"/>
   </rr-tiles>
 
-  <rr-callout tone="red"><b>Status — not done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. Attachment bytes remain unproved: the isolated R2 bucket passes CORS preflight, then returns <code>401 Unauthorized</code> on the signed <code>PUT</code> because the available S3 key is restricted to the shared bucket. Final upload, protected download, and attachment-message proof wait on an approved key scoped to the development bucket.</rr-callout>
+  <rr-callout tone="red"><b>Status — not done.</b> The implementation, generated contracts, focused database proofs, SDK builds, and product tests pass. Two browsers prove durable “Read by Ada” receipts, reaction fan-out, Excalidraw launch, and consent-based host requests. A 24-hour Object Read & Write key restricted to the isolated development bucket now passes an exact-byte R2 <code>PUT</code>, <code>HEAD</code>, and <code>GET</code> round trip. Final upload, API finalization, attachment-message fan-out, and protected download remain unproved because the Mac Mini hosting API, Sync, and PostgreSQL lost power.</rr-callout>
 
   <rr-cols2>
     <rr-card>
@@ -306,8 +306,8 @@ export type ChalkChatFileTransport = {
     <rr-phase state="done" label="3 · Services" caption="API + Sync + retention"/>
     <rr-phase state="done" label="4 · SDKs" caption="client + React + native"/>
     <rr-phase state="done" label="5 · Product" caption="room UI + host controls"/>
-    <rr-phase state="now" label="6 · Provider proof" caption="blocked on dev R2 key"/>
-    <rr-phase label="7 · Handoff" caption="attachment browser proof"/>
+    <rr-phase state="done" label="6 · Provider proof" caption="scoped key + exact bytes"/>
+    <rr-phase state="now" label="7 · Handoff" caption="waiting for Mac Mini power"/>
   </rr-phases>
 
   <rr-checklist label="Exit criteria">
@@ -316,7 +316,7 @@ export type ChalkChatFileTransport = {
     <rr-done>Client, React, React Native, web, and codegen builds and coverage suites pass on the M4 Mac Mini.</rr-done>
     <rr-done>Local API, Sync, BFF, Vite, PostgreSQL 18, and two participants join one configured room.</rr-done>
     <rr-done>Two browsers prove durable read receipts, reaction fan-out, Excalidraw launch, and both consent-based host media requests.</rr-done>
-    <rr-todo>Create a read/write S3 key restricted to the isolated development bucket.</rr-todo>
+    <rr-done>A 24-hour Object Read & Write S3 key is restricted to the isolated bucket and passes PUT, HEAD, and exact-byte GET.</rr-done>
     <rr-todo>Observe browser PUT, finalize, send, and second-participant protected download.</rr-todo>
   </rr-checklist>
 </rr-section>
@@ -328,7 +328,8 @@ export type ChalkChatFileTransport = {
     <rr-score-row promised="Real PostgreSQL behavior" delivered="Upload lifecycle, atomic attachment claim, v1 suppression, v2 receipts, and monotonic watermarks pass" verdict="kept" tone="green"/>
     <rr-score-row promised="Two-person room behavior" delivered="Read receipt, reaction fan-out, Excalidraw launch, host request-to-unmute, and request-to-start-camera pass" verdict="kept" tone="green"/>
     <rr-score-row promised="Cloudflare CORS" delivered="Isolated bucket created; exact localhost preflight returns HTTP 204" verdict="kept" tone="green"/>
-    <rr-score-row promised="Real attachment bytes" delivered="Signed PUT returns HTTP 401 because the current key cannot access the isolated bucket" verdict="missing" tone="red"/>
+    <rr-score-row promised="Real attachment bytes" delivered="Bucket-scoped key passes PUT, HEAD, and exact-byte GET; proof object was deleted" verdict="kept" tone="green"/>
+    <rr-score-row promised="In-room attachment flow" delivered="Not rerun because the Mac Mini hosting API, Sync, and PostgreSQL is powered off" verdict="missing" tone="red"/>
     <rr-score-row promised="Repository full gate" delivered="Stops on existing dependency advisories plus existing API/Sync gate failures" verdict="external red" tone="amber"/>
     <rr-score-row promised="Automated review" delivered="Two bounded remote passes found and fixed fallback, lease, recovery, receipt, and native-adapter defects" verdict="kept" tone="green"/>
   </rr-scorecard>
