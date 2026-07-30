@@ -16,3 +16,12 @@
 - Added product-parity mobile previews for editable and recovering board states using the existing Chalk React Native theme.
 - Rebuilt and republished the draft companion after the critique. The first formatted rebuild exposed a Reading Room parser limitation with split custom closing tags; reported it through `complain` as issue 2936, restored component-safe formatting, and verified the hosted republish.
 - Ran the canonical staged documentation gate on an isolated `agents-macmini` copy. Gate routing tests, repository hygiene, staged secret scanning, and formatting passed. Moved the temporary remote copy to Trash after verification.
+
+## 2026-07-30
+
+- Rechecked the 128-element and 256 KiB warning against the current committed `master` code after Hasan asked whether a live whiteboard can stop working.
+- Confirmed that `whiteboard-v1` accepts at most 128 elements per update frame and 256 KiB per inbound or outbound frame, while snapshots are paged and the durable scene limit is 10,000 elements.
+- Confirmed that the collaboration engine sends changed elements as one delta and schedules an unchunked full-scene sync after a successful update.
+- Reproduced the client boundary with a 129-element `submit_update`; the generated codec rejected it as `must be a strict bounded whiteboard-v1 client frame`.
+- Traced the failure behavior: the local Excalidraw canvas and meeting media continue, but the rejected batch never reaches remote participants. A large paste, import, bulk transform, bulk delete, or payload-heavy change can therefore leave whiteboard collaborators divergent.
+- Confirmed that the current React meeting adapter does not supply `onSubmissionError`, so this submission failure has no dedicated user-visible board error. The changelog still lists the feature under Unreleased and explicitly defers native whiteboard, so no production deployment claim was made.
