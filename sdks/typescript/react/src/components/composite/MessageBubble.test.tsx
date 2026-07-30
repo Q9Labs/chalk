@@ -46,6 +46,19 @@ describe("MessageBubble", () => {
     await waitFor(() => expect(popup.close).toHaveBeenCalledOnce());
   });
 
+  it("resolves a fresh protected URL on click instead of reusing the cached image preview", async () => {
+    const popup = { opener: window, location: { href: "about:blank" }, close: vi.fn() };
+    vi.spyOn(window, "open").mockImplementation(() => popup as unknown as Window);
+    const resolveAttachment = vi.fn().mockResolvedValueOnce("https://download.test/expired-preview").mockResolvedValueOnce("https://download.test/fresh-click");
+    render(<MessageBubble content="" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" attachments={[{ attachmentId: "attachment-1", fileName: "diagram.png", mimeType: "image/png", byteLength: 2048 }]} onResolveAttachmentUrl={resolveAttachment} />);
+
+    await waitFor(() => expect(screen.getByRole("img", { name: "diagram.png" })).toHaveAttribute("src", "https://download.test/expired-preview"));
+    fireEvent.click(screen.getByRole("button", { name: "Download diagram.png" }));
+
+    await waitFor(() => expect(resolveAttachment).toHaveBeenCalledTimes(2));
+    expect(popup.location.href).toBe("https://download.test/fresh-click");
+  });
+
   it("uses pending, sent, and read statuses without a delivered state", () => {
     const { rerender } = render(<MessageBubble content="Update" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" isLocal status="pending" />);
     expect(screen.getByText("Pending")).toBeInTheDocument();

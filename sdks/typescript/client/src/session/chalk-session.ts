@@ -588,12 +588,13 @@ export class ChalkSession implements ChalkSessionStore {
     const existing = this.#chat.messages.find((candidate) => candidate.messageId === message.messageId || candidate.sequence === message.sequence);
     const messages = existing ? this.#chat.messages : [...this.#chat.messages, message].sort((left, right) => compareSequence(left.sequence, right.sequence)).slice(-MAX_LOADED_CHAT_MESSAGES);
     const isLocal = message.participantSessionId === this.#access.current?.subject.participantSessionId;
+    const alreadyRead = this.#chat.localReadThroughSequence !== null && compareSequence(message.sequence, this.#chat.localReadThroughSequence) <= 0;
     this.#chat = {
       ...this.#chat,
       status: "ready",
       messages,
       pending: this.#chat.pending.filter((pending) => pending.clientMessageId !== message.clientMessageId),
-      unreadCount: countUnread && !isLocal && !existing ? this.#chat.unreadCount + 1 : this.#chat.unreadCount,
+      unreadCount: countUnread && !isLocal && !existing && !alreadyRead ? this.#chat.unreadCount + 1 : this.#chat.unreadCount,
       error: null,
     };
     this.#publish();

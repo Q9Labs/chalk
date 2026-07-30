@@ -132,7 +132,7 @@ describe("V3SyncClient room_actions_v2", () => {
     expect(client.getRoomActionsExtensionState().retainedFloorSequence).toBe("4");
   });
 
-  it("falls back from v2 to v1 while preserving room actions", async () => {
+  it("falls back from v2 to v1 only once when invalid_frame and close 1009 reject the same hello", async () => {
     const sockets: TestSocket[] = [];
     const client = new V3SyncClient({
       url: "ws://sync.test/v3/sync",
@@ -151,7 +151,11 @@ describe("V3SyncClient room_actions_v2", () => {
     await settle();
     expect(sockets[0]!.frames()[0]).toMatchObject({ extensions: [{ name: "room_actions_v2" }] });
 
+    sockets[0]!.dispatchesClientClose = false;
     sockets[0]!.receive({ type: "error", code: "invalid_frame", detail: "invalid frame" });
+    await settle();
+    expect(sockets[0]!.closeCalls).toEqual([{ code: 4000, reason: "room actions unsupported" }]);
+    sockets[0]!.remoteClose(1009);
     for (let attempt = 0; attempt < 50 && sockets.length < 2; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
@@ -347,6 +351,7 @@ class TestSocket implements SyncSocket {
   onerror: (() => void) | null = null;
   readonly sent: string[] = [];
   readonly closeCalls: { readonly code: number; readonly reason: string | undefined }[] = [];
+  dispatchesClientClose = true;
 
   send(data: string): void {
     this.sent.push(data);
@@ -354,6 +359,10 @@ class TestSocket implements SyncSocket {
 
   close(code = 1000, reason?: string): void {
     this.closeCalls.push({ code, reason });
+    if (this.dispatchesClientClose) this.onclose?.({ code });
+  }
+
+  remoteClose(code: number): void {
     this.onclose?.({ code });
   }
 

@@ -135,6 +135,7 @@ export class V3SyncClient implements V3RoomActionsClient {
   #requestedRoomActionsVersion: 0 | 1 | 2;
   #sentExtendedHello = false;
   #welcomedOnSocket = false;
+  #roomActionsFallbackSocket: V3Socket | null = null;
   readonly #localMedia: Record<V3MediaSource, "unknown" | "requesting" | "enabled" | "disabled" | "failed"> = { microphone: "unknown", camera: "unknown", screen: "unknown" };
 
   constructor(options: V3SyncClientOptions) {
@@ -1130,9 +1131,7 @@ export class V3SyncClient implements V3RoomActionsClient {
 
   #disconnected(socket: V3Socket, closeCode?: number): void {
     if (socket !== this.#socket) return;
-    if (closeCode === LEGACY_STRICT_FRAME_CLOSE_CODE && this.#canFallbackToLegacyRoomActions()) {
-      this.#requestedRoomActionsVersion = previousRoomActionsVersion(this.#requestedRoomActionsVersion);
-    }
+    if (closeCode === LEGACY_STRICT_FRAME_CLOSE_CODE && this.#canFallbackToLegacyRoomActions()) this.#applyRoomActionsFallback(socket);
     this.#socket = null;
     this.#recovery = null;
     this.#clearHeartbeat();
@@ -1161,14 +1160,19 @@ export class V3SyncClient implements V3RoomActionsClient {
   }
 
   #canFallbackToLegacyRoomActions(): boolean {
-    return this.#sentExtendedHello && !this.#welcomedOnSocket && this.#requestedRoomActionsVersion > 0;
+    return this.#sentExtendedHello && !this.#welcomedOnSocket && this.#requestedRoomActionsVersion > 0 && this.#socket !== this.#roomActionsFallbackSocket;
   }
 
   #fallbackToLegacyRoomActions(): void {
     const socket = this.#socket;
     if (!socket || !this.#canFallbackToLegacyRoomActions()) return;
-    this.#requestedRoomActionsVersion = previousRoomActionsVersion(this.#requestedRoomActionsVersion);
+    this.#applyRoomActionsFallback(socket);
     socket.close(CLIENT_RESTART_CLOSE_CODE, "room actions unsupported");
+  }
+
+  #applyRoomActionsFallback(socket: V3Socket): void {
+    this.#roomActionsFallbackSocket = socket;
+    this.#requestedRoomActionsVersion = previousRoomActionsVersion(this.#requestedRoomActionsVersion);
   }
 
   #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {

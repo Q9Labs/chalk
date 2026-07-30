@@ -103,7 +103,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       const popup = window.open("about:blank", "_blank");
       if (popup) popup.opener = null;
       try {
-        const url = resolvedAttachmentUrls[attachment.attachmentId] ?? (await onResolveAttachmentUrl(attachment.attachmentId));
+        const url = await onResolveAttachmentUrl(attachment.attachmentId);
         if (popup) popup.location.href = url;
       } catch {
         popup?.close();

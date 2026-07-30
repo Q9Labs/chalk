@@ -118,6 +118,22 @@ describe("ChalkSession", () => {
     await harness.session.leave();
   });
 
+  it("does not count catch-up or live messages at or below the local read watermark as unread", async () => {
+    const harness = createHarness();
+    await harness.session.join();
+    harness.sync.emitRoomAction(chatMessageEvent("2"));
+    await harness.session.markChatRead("2");
+
+    harness.sync.emitRoomAction(chatMessageEvent("1"));
+
+    expect(harness.session.getSnapshot().chat).toMatchObject({
+      messages: [{ sequence: "1" }, { sequence: "2" }],
+      localReadThroughSequence: "2",
+      unreadCount: 0,
+    });
+    await harness.session.leave();
+  });
+
   it("loads initial chat and follows later chat heads without counting history as unread", async () => {
     const harness = createHarness();
     harness.sync.chatHeadSequence = "2";
