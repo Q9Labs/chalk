@@ -6,6 +6,7 @@ defmodule ChalkSync.SyncBreakerV3.DurableLifecyclePhase do
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncBreakerV3.Oracle
+  alias ChalkSync.SyncBreakerV3.Verdict
   alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
@@ -34,6 +35,13 @@ defmodule ChalkSync.SyncBreakerV3.DurableLifecyclePhase do
     admission_race = admission_expiry_race(connections)
     deadline = deadline_scenarios(connections)
 
+    invariants = %{
+      "canonical_snapshot_matches_postgres" => true,
+      "digest_chain_matches_postgres" => true,
+      "all_schedules_executed" => true,
+      "reference_reducer_independent" => true
+    }
+
     %{
       "name" => @name,
       "seed" => seed,
@@ -54,13 +62,8 @@ defmodule ChalkSync.SyncBreakerV3.DurableLifecyclePhase do
         "schedule_steps" => length(@schedule),
         "reference_event_names" => length(Oracle.event_names())
       },
-      "invariants" => %{
-        "canonical_snapshot_matches_postgres" => true,
-        "digest_chain_matches_postgres" => true,
-        "all_schedules_executed" => true,
-        "reference_reducer_independent" => true
-      },
-      "verdict" => "pass"
+      "invariants" => invariants,
+      "verdict" => Verdict.from_invariants(invariants)
     }
   end
 

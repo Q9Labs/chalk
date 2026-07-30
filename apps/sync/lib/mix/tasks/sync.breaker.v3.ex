@@ -3,6 +3,10 @@ defmodule Mix.Tasks.Sync.Breaker.V3 do
 
   use Mix.Task
 
+  alias ChalkSync.SyncBreakerV3.Artifact
+  alias ChalkSync.SyncBreakerV3.Campaign
+  alias ChalkSync.SyncBreakerV3.Verdict
+
   @shortdoc "Runs or replays the deterministic SyncEngine v3 breaker"
 
   @impl true
@@ -17,7 +21,7 @@ defmodule Mix.Tasks.Sync.Breaker.V3 do
       OptionParser.parse(arguments, strict: [replay: :string, output: :string, seed: :integer])
 
     database_url = System.fetch_env!("CHALK_SYNC_TEST_DATABASE_URL")
-    {artifact, campaign} = breaker_modules!()
+    {artifact, campaign, _verdict} = breaker_modules!()
 
     if replay = options[:replay] do
       expected = artifact.read!(replay)
@@ -27,6 +31,7 @@ defmodule Mix.Tasks.Sync.Breaker.V3 do
       Mix.shell().info("SyncEngine v3 replay passed twice")
     else
       result = campaign.run!(database_url, options[:seed] || 730_013)
+      require_pass!(result)
       path = options[:output] || Path.expand(".private/sync-breaker-v3.json", File.cwd!())
       artifact.write!(path, result)
       Mix.shell().info("SyncEngine v3 breaker passed: #{path}")
@@ -40,10 +45,17 @@ defmodule Mix.Tasks.Sync.Breaker.V3 do
 
     unless expected == first and first == second,
       do: Mix.raise("v3 replay diverged from the recorded semantic artifact")
+
+    require_pass!(first)
+  end
+
+  defp require_pass!(result) do
+    unless Verdict.pass?(result),
+      do: Mix.raise("SyncEngine v3 breaker invariants failed")
   end
 
   defp breaker_modules! do
-    modules = {ChalkSync.SyncBreakerV3.Artifact, ChalkSync.SyncBreakerV3.Campaign}
+    modules = {Artifact, Campaign, Verdict}
 
     if modules |> Tuple.to_list() |> Enum.all?(&Code.ensure_loaded?/1) do
       modules

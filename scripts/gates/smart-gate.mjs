@@ -37,7 +37,11 @@ function startsWithAny(file, prefixes) {
 }
 
 function isGateDefinition(file) {
-  return gateDefinitionPaths.has(file) || file.startsWith("scripts/gates/");
+  return gateDefinitionPaths.has(file) || file.startsWith(".github/workflows/") || file.startsWith("scripts/gates/");
+}
+
+function isSyncReliabilityInput(file) {
+  return startsWithAny(file, ["apps/sync", "packages/whiteboard", "sdks/typescript/client/src/sync", "sdks/typescript/client/src/whiteboard"]) || file === "contract/schema/sync-v3.json" || file === "contract/schema/whiteboard-v1.json" || file.startsWith("contract/schema/fixtures/sync-v3/");
 }
 
 function isKnownPath(file, workspaces) {
@@ -103,14 +107,14 @@ export function createGatePlan(files, options = {}) {
   const selectedWorkspaces = affectedWorkspaces(nonDocumentationFiles, workspaces, allJavaScript);
   const selectedNames = selectedWorkspaces.map((workspace) => workspace.name).join(", ");
   const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api"]));
-  const sync = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/sync"]));
+  const sync = full || nonDocumentationFiles.some(isSyncReliabilityInput);
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-codegen", "sdks/typescript/client/src/generated"]));
   const architecture = full || nonDocumentationFiles.some((file) => file === "architecture.html" || startsWithAny(file, ["infrastructure/architecture-worker", "packages/assets/src/logos", "scripts/architecture-worker"]));
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder"]));
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file));
   const publishableWorkspaces = selectedWorkspaces.filter((workspace) => workspace.isPublic && startsWithAny(workspace.directory, ["packages", "sdks/typescript"]));
-  const serviceGates = [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/gate.sh" : null].filter(Boolean);
+  const serviceGates = [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/reliability-correctness" : null].filter(Boolean);
   const base = options.base ?? process.env.GATE_BASE_REF ?? "origin/master";
   const scope = options.scope ?? "staged";
   const fallowCommand = explicitFull ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
@@ -119,7 +123,7 @@ export function createGatePlan(files, options = {}) {
   const testPresenceFiles = addedFiles.join("\n");
 
   const tasks = [
-    task("self-test", "Gate routing tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs"]),
+    task("self-test", "Gate routing tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
     task("architecture", "Architecture Worker", architecture, architecture ? "architecture inputs changed" : "no architecture inputs changed", ["pnpm", "run", "architecture:test"]),
@@ -127,7 +131,7 @@ export function createGatePlan(files, options = {}) {
     task("fallow", "Changed-code analysis", full || architecture || sourceFiles.length > 0, full ? fullReason : architecture ? "architecture inputs changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("semgrep", "Static security rules", Boolean(semgrepCommand), full ? fullReason : `${sourceFiles.length} source file(s) changed`, semgrepCommand),
     task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
-    task("services", "Service-backed API and basic Sync gates", serviceGates.length > 0, serviceGates.length > 0 ? serviceGates.join(" and ") : "API and Sync are unaffected", ["bash", "scripts/gates/with-postgres.sh", ...serviceGates], { CHALK_SYNC_GATE_MODE: "basic" }),
+    task("services", "Service-backed API and Sync correctness gates", serviceGates.length > 0, serviceGates.length > 0 ? serviceGates.join(" and ") : "API and Sync are unaffected", ["bash", "scripts/gates/with-postgres.sh", ...serviceGates]),
     task("contracts", "Contract and generated SDK drift", contracts, contracts ? "contract producers or consumers changed" : "contracts are unaffected", ["pnpm", "run", "contract:check"]),
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("test-presence", "Test presence", full || sourceFiles.some((file) => [".ts", ".tsx"].includes(path.extname(file))), "TypeScript source files changed", ["pnpm", "run", "test:presence"], { TEST_PRESENCE_FILES: testPresenceFiles, TEST_PRESENCE_BASE_REF: base }),

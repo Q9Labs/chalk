@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+output="$(mktemp "${TMPDIR:-/tmp}/chalk-sync-test-output.XXXXXX")"
+cleanup() {
+  rm -f "${output}"
+}
+trap cleanup EXIT INT TERM
+
+arguments=("$@")
+if [[ "${CHALK_PROVIDER_BRIDGE_E2E:-0}" == "1" ]]; then
+  arguments=(--include provider_bridge_e2e "${arguments[@]}")
+fi
+
+set +e
+mix test "${arguments[@]}" 2>&1 | tee "${output}"
+test_status="${PIPESTATUS[0]}"
+set -e
+
+if ((test_status != 0)); then
+  exit "${test_status}"
+fi
+
+if rg -q '(^|, )[1-9][0-9]* (invalid|skipped)' "${output}"; then
+  echo "Sync tests reported invalid or skipped cases; the strict reliability gate requires zero" >&2
+  exit 1
+fi

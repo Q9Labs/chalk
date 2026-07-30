@@ -3,6 +3,7 @@ defmodule ChalkSync.SyncBreakerV3.WireSdkPhase do
 
   alias ChalkSync.Contract.GeneratedV3
   alias ChalkSync.ProtocolV3
+  alias ChalkSync.SyncBreakerV3.Verdict
 
   @name "wire_sdk"
   @default_seed 730_044
@@ -35,6 +36,19 @@ defmodule ChalkSync.SyncBreakerV3.WireSdkPhase do
     wire = exercise_wire()
     sdk = exercise_sdk(seed)
 
+    invariants = %{
+      "all_five_declarative_targets_round_trip" =>
+        wire["invariants"]["all_five_declarative_targets_round_trip"],
+      "relative_setters_and_remote_force_on_are_rejected" =>
+        wire["invariants"]["relative_setters_and_remote_force_on_are_rejected"] and
+          sdk["invariants"]["forbidden_client_shapes_are_encoder_rejected"],
+      "wire_and_sdk_reject_same_client_shapes" =>
+        wire["evidence"]["invalid_shapes"]["labels"] ==
+          sdk["evidence"]["forbidden_client_shapes"]["labels"],
+      "sdk_schedule_and_invariants_hold" => sdk["invariants"] |> Map.values() |> Enum.all?(& &1),
+      "same_seed_sdk_map_is_normalized" => sdk["seed"] == seed
+    }
+
     %{
       "name" => @name,
       "seed" => seed,
@@ -52,21 +66,8 @@ defmodule ChalkSync.SyncBreakerV3.WireSdkPhase do
       "observations" => wire["observations"] ++ sdk["observations"],
       "evidence" => %{"wire" => wire["evidence"], "sdk" => sdk["evidence"]},
       "bounds" => Map.merge(@bounds, sdk["bounds"]),
-      "invariants" => %{
-        "all_five_declarative_targets_round_trip" =>
-          wire["invariants"]["all_five_declarative_targets_round_trip"],
-        "relative_setters_and_remote_force_on_are_rejected" =>
-          wire["invariants"]["relative_setters_and_remote_force_on_are_rejected"] and
-            sdk["invariants"]["forbidden_client_shapes_are_encoder_rejected"],
-        "wire_and_sdk_reject_same_client_shapes" =>
-          wire["evidence"]["invalid_shapes"]["labels"] ==
-            sdk["evidence"]["forbidden_client_shapes"]["labels"],
-        "sdk_schedule_and_invariants_hold" =>
-          sdk["invariants"] |> Map.values() |> Enum.all?(& &1),
-        "same_seed_sdk_map_is_normalized" => sdk["seed"] == seed
-      },
-      "verdict" =>
-        if(wire["verdict"] == "pass" and sdk["verdict"] == "pass", do: "pass", else: "fail")
+      "invariants" => invariants,
+      "verdict" => Verdict.from_invariants(invariants, [wire, sdk])
     }
   end
 
@@ -108,6 +109,13 @@ defmodule ChalkSync.SyncBreakerV3.WireSdkPhase do
 
     invalid = invalid_wire_shapes()
 
+    invariants = %{
+      "all_five_declarative_targets_round_trip" =>
+        Enum.map(target_observations, & &1["decoded_name"]) == @target_names and
+          Enum.all?(target_observations, &(&1["encoded_ack_bytes"] > 0)),
+      "relative_setters_and_remote_force_on_are_rejected" => invalid["all_decode_rejected"]
+    }
+
     %{
       "observations" => [
         %{
@@ -124,13 +132,8 @@ defmodule ChalkSync.SyncBreakerV3.WireSdkPhase do
         "declarative_targets" => target_observations,
         "invalid_shapes" => invalid
       },
-      "invariants" => %{
-        "all_five_declarative_targets_round_trip" =>
-          Enum.map(target_observations, & &1["decoded_name"]) == @target_names and
-            Enum.all?(target_observations, &(&1["encoded_ack_bytes"] > 0)),
-        "relative_setters_and_remote_force_on_are_rejected" => invalid["all_decode_rejected"]
-      },
-      "verdict" => "pass"
+      "invariants" => invariants,
+      "verdict" => Verdict.from_invariants(invariants)
     }
   end
 

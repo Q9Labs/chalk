@@ -86,8 +86,10 @@ async function startFixture(databaseUrl) {
 function readFixture(child) {
   return new Promise((resolveFixture, rejectFixture) => {
     let output = "";
+    let stderr = "";
     let settled = false;
     let timeout;
+    const diagnostics = () => (stderr.trim() ? `: ${stderr.trim().slice(-4_000)}` : "");
     const settle = (callback) => (value) => {
       if (settled) {
         return;
@@ -99,9 +101,9 @@ function readFixture(child) {
     const resolveReady = settle(resolveFixture);
     const rejectReady = settle(rejectFixture);
 
-    timeout = setTimeout(() => rejectReady(new Error("timed out waiting for the local sync Node fixture")), fixtureTimeoutMs);
+    timeout = setTimeout(() => rejectReady(new Error(`timed out waiting for the local sync Node fixture${diagnostics()}`)), fixtureTimeoutMs);
     child.once("error", (error) => rejectReady(error));
-    child.once("exit", (code) => rejectReady(new Error(`local sync Node fixture exited before readiness (code ${code ?? "signal"})`)));
+    child.once("exit", (code) => rejectReady(new Error(`local sync Node fixture exited before readiness (code ${code ?? "signal"})${diagnostics()}`)));
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
       output += chunk;
@@ -123,7 +125,10 @@ function readFixture(child) {
         }
       }
     });
-    child.stderr.resume();
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr = `${stderr}${chunk}`.slice(-8_000);
+    });
   });
 }
 

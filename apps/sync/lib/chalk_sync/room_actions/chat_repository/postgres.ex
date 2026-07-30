@@ -130,16 +130,18 @@ defmodule ChalkSync.RoomActions.ChatRepository.Postgres do
 
   @impl true
   def mark_read(%Identity{} = identity, sequence) when is_binary(sequence) do
-    with {parsed, ""} when parsed > 0 <- Integer.parse(sequence) do
-      Postgrex.transaction(
-        Database.connection(identity.session),
-        fn connection -> mark_read_transaction(connection, identity, parsed) end,
-        timeout: @transaction_timeout_ms,
-        commit_comment: "chalk sync chat read receipt"
-      )
-      |> transaction_result()
-    else
-      _ -> {:error, :invalid_payload}
+    case Integer.parse(sequence) do
+      {parsed, ""} when parsed > 0 ->
+        Postgrex.transaction(
+          Database.connection(identity.session),
+          fn connection -> mark_read_transaction(connection, identity, parsed) end,
+          timeout: @transaction_timeout_ms,
+          commit_comment: "chalk sync chat read receipt"
+        )
+        |> transaction_result()
+
+      _ ->
+        {:error, :invalid_payload}
     end
   rescue
     _exception -> {:error, :dependency_unavailable}
@@ -155,18 +157,20 @@ defmodule ChalkSync.RoomActions.ChatRepository.Postgres do
   defp mark_read_transaction(connection, identity, sequence) do
     configure_transaction(connection)
 
-    with {:ok, _profile} <- lock_authority(connection, identity) do
-      params = session_params(identity.session)
+    case lock_authority(connection, identity) do
+      {:ok, _profile} ->
+        params = session_params(identity.session)
 
-      case Postgrex.query!(connection, SQL.lock_stream_for_read(), params).rows do
-        [[head, _floor]] when sequence <= head ->
-          upsert_receipt(connection, identity, sequence)
+        case Postgrex.query!(connection, SQL.lock_stream_for_read(), params).rows do
+          [[head, _floor]] when sequence <= head ->
+            upsert_receipt(connection, identity, sequence)
 
-        _ ->
-          Postgrex.rollback(connection, {:error, :invalid_payload})
-      end
-    else
-      {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+          _ ->
+            Postgrex.rollback(connection, {:error, :invalid_payload})
+        end
+
+      {:error, reason} ->
+        Postgrex.rollback(connection, {:error, reason})
     end
   end
 
@@ -291,18 +295,20 @@ defmodule ChalkSync.RoomActions.ChatRepository.Postgres do
        ) do
     case select_idempotent(connection, identity, input.client_message_id) do
       nil ->
-        with {:ok, attachments} <- lock_attachments(connection, identity, input.attachment_ids) do
-          append_new_message(
-            connection,
-            identity,
-            display_name,
-            input,
-            attachments,
-            fingerprint,
-            head_sequence + 1
-          )
-        else
-          {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+        case lock_attachments(connection, identity, input.attachment_ids) do
+          {:ok, attachments} ->
+            append_new_message(
+              connection,
+              identity,
+              display_name,
+              input,
+              attachments,
+              fingerprint,
+              head_sequence + 1
+            )
+
+          {:error, reason} ->
+            Postgrex.rollback(connection, {:error, reason})
         end
 
       existing ->
@@ -505,17 +511,36 @@ defmodule ChalkSync.RoomActions.ChatRepository.Postgres do
          text: text,
          attachment_ids: attachment_ids
        }) do
+    with :ok <- validate_client_message_id(client_message_id),
+         :ok <- validate_text(text),
+         :ok <- validate_attachment_ids(attachment_ids) do
+      validate_content(text, attachment_ids)
+    end
+  end
+
+  defp validate_client_message_id(client_message_id) do
+    if byte_size(client_message_id) in 16..64, do: :ok, else: {:error, :invalid_payload}
+  end
+
+  defp validate_text(text) do
     cond do
-      byte_size(client_message_id) not in 16..64 -> {:error, :invalid_payload}
       byte_size(text) > 16_384 -> {:error, :invalid_payload}
       String.length(text) > 4_000 -> {:error, :invalid_payload}
-      length(attachment_ids) > 5 -> {:error, :invalid_payload}
-      Enum.uniq(attachment_ids) != attachment_ids -> {:error, :invalid_payload}
-      not Enum.all?(attachment_ids, &valid_uuid?/1) -> {:error, :invalid_payload}
-      text == "" and attachment_ids == [] -> {:error, :invalid_payload}
       true -> :ok
     end
   end
+
+  defp validate_attachment_ids(attachment_ids) do
+    cond do
+      length(attachment_ids) > 5 -> {:error, :invalid_payload}
+      Enum.uniq(attachment_ids) != attachment_ids -> {:error, :invalid_payload}
+      not Enum.all?(attachment_ids, &valid_uuid?/1) -> {:error, :invalid_payload}
+      true -> :ok
+    end
+  end
+
+  defp validate_content("", []), do: {:error, :invalid_payload}
+  defp validate_content(_text, _attachment_ids), do: :ok
 
   defp request_fingerprint(text, attachment_ids) do
     if attachment_ids == [] do

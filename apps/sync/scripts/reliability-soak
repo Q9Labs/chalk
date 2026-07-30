@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+exec env MIX_ENV=test mix test \
+  test/chalk_sync/reliability/soak_profile_test.exs \
+  --include reliability_soak \
+  --max-cases 1

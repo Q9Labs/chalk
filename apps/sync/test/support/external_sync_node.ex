@@ -21,6 +21,7 @@ defmodule ChalkSync.ExternalSyncNode do
   def logs(node), do: GenServer.call(node, :logs)
 
   def stop(node, timeout \\ 5_000), do: GenServer.call(node, :stop, timeout)
+  def kill(node, timeout \\ 5_000), do: GenServer.call(node, :kill, timeout)
 
   @impl GenServer
   def init(options) do
@@ -77,6 +78,11 @@ defmodule ChalkSync.ExternalSyncNode do
 
   def handle_call(:stop, _from, state) do
     terminate_os_process(state.beam_pid || state.os_pid)
+    {:stop, :normal, :ok, state}
+  end
+
+  def handle_call(:kill, _from, state) do
+    kill_os_process(state.beam_pid || state.os_pid)
     {:stop, :normal, :ok, state}
   end
 
@@ -143,6 +149,15 @@ defmodule ChalkSync.ExternalSyncNode do
       System.cmd("kill", ["-KILL", encoded_pid], stderr_to_stdout: true)
       _exited = wait_for_exit(encoded_pid, 100)
     end
+  rescue
+    _exception -> :ok
+  end
+
+  defp kill_os_process(os_pid) do
+    encoded_pid = to_string(os_pid)
+    System.cmd("kill", ["-KILL", encoded_pid], stderr_to_stdout: true)
+    _exited = wait_for_exit(encoded_pid, 100)
+    :ok
   rescue
     _exception -> :ok
   end

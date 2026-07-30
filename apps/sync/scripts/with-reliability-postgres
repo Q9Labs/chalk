@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (($# == 0)); then
+  echo "with-reliability-postgres requires a command" >&2
+  exit 2
+fi
+
+repository_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "${repository_root}"
+
+database_url="${CHALK_SYNC_TEST_DATABASE_URL:-${CHALK_DATABASE_URL:-}}"
+if [[ -n "${database_url}" ]]; then
+  export CHALK_DATABASE_URL="${database_url}"
+  export CHALK_SYNC_TEST_DATABASE_URL="${database_url}"
+  exec "$@"
+fi
+
+exec scripts/gates/with-postgres.sh -- "$@"

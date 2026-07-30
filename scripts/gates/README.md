@@ -20,14 +20,15 @@ of every gate.
   tests, and builds follow affected source files and workspace dependents.
 - Tests run once with coverage; lint aliases do not repeat formatting or type
   checks.
-- Go API changes run the complete language gate; Elixir Sync changes run locked
-  dependencies, formatting, and warnings-as-errors compilation. Both share one
-  disposable, migrated PostgreSQL container that is removed on exit. Run
-  `apps/sync/scripts/gate.sh` manually for Sync's Credo and full test suite.
+- Go API changes run the complete language gate. Elixir Sync changes run the
+  shared correctness profile: the full zero-skip PostgreSQL suite, Credo, the
+  replayed v3 breaker, and focused Sync and whiteboard SDK tests. Both use a
+  disposable, migrated PostgreSQL container that is removed on exit.
 - Contract producers and consumers run generated-contract and SDK drift checks.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.
 
-The full mode selects every rule. CI runs it nightly; release verification must
-run it before shipping.
+The full mode selects every rule. Separate nightly and release-candidate
+workflows add multi-node partitions, PostgreSQL failover, sustained load,
+process restart, and real-browser proof.

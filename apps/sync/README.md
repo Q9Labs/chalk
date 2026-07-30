@@ -149,11 +149,16 @@ its response frames and creates a journey at v1 sync ingress when one is absent.
 
 ## Verification
 
+The shared [`reliability harness`](./docs/reliability-harness.md) maps pull
+requests, nightly schedules, and release candidates to increasing profiles. It
+covers PostgreSQL-backed semantics, Sync v3 and whiteboard transports,
+multi-node partitions and process loss, PostgreSQL failover, sustained load,
+Node restart recovery, and a real browser. Each run saves replayable,
+commit-bound evidence and fails closed.
+
 The external
 [`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md)
-controls local or staging process and provider drills. Real-Postgres semantic
-tests, transport bounds, browser/runtime proofs, lifecycle tests, failure
-schedules, and the repository gates define the local claim. The replayable v3
-matrix is documented in [`sync-breaker-v3.md`](./docs/sync-breaker-v3.md); the
-complete acceptance contract is in
+still controls staging provider drills. The replayable v3 matrix is documented
+in [`sync-breaker-v3.md`](./docs/sync-breaker-v3.md); the complete acceptance
+contract is in
 [`declarative-sync-engine-v3-spec-2026-07-12.md`](../../scratchpad/declarative-sync-engine-v3-spec-2026-07-12.md).

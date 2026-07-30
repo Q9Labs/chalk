@@ -1,0 +1,87 @@
+name: Sync reliability
+
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Reliability profile to enforce
+        required: true
+        default: topology
+        type: choice
+        options:
+          - topology
+          - release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-reliability-${{ github.event.inputs.profile || 'topology' }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reliability:
+    name: ${{ github.event.inputs.profile || 'topology' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.12
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Setup Erlang and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          elixir-version: 1.19.5
+
+      - name: Setup pnpm
+        if: github.event.inputs.profile == 'release'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - name: Setup Node
+        if: github.event.inputs.profile == 'release'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+
+      - name: Install release dependencies
+        if: github.event.inputs.profile == 'release'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir sdks/typescript/client exec playwright install --with-deps --no-shell chromium
+
+      - name: Run scheduled multi-node and failover profile
+        if: github.event_name == 'schedule' || github.event.inputs.profile == 'topology'
+        run: scripts/gates/with-sync-topology.sh apps/sync/scripts/reliability-topology
+
+      - name: Run release-candidate profile
+        if: github.event.inputs.profile == 'release'
+        env:
+          CHALK_SYNC_SOAK_CLIENTS: "24"
+          CHALK_SYNC_SOAK_COMMANDS: "100"
+          CHALK_SYNC_SOAK_COMMAND_INTERVAL_MS: "200"
+          CHALK_SYNC_SOAK_DURATION_SECONDS: "300"
+          CHALK_SYNC_SOAK_P95_BUDGET_MS: "2500"
+        run: apps/sync/scripts/reliability-harness release
+
+      - name: Upload replayable evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-reliability-${{ github.event.inputs.profile || 'topology' }}-${{ github.sha }}
+          path: apps/sync/.artifacts/reliability/
+          if-no-files-found: warn
+          retention-days: 30

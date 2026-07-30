@@ -35,11 +35,16 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
 
   @impl GenServer
   def init(options) do
+    source_id = options |> Keyword.fetch!(:source_id) |> source_id()
+
     url =
       Keyword.get_lazy(options, :url, fn -> Application.fetch_env!(:chalk_sync, :database_url) end)
 
     {:ok, connection_options} = Database.connection_options(url)
-    {:ok, notifications} = Postgrex.Notifications.start_link(connection_options)
+
+    {:ok, notifications} =
+      Postgrex.Notifications.start_link(Keyword.put(connection_options, :auto_reconnect, true))
+
     {:ok, head_ref} = Postgrex.Notifications.listen(notifications, @head_channel)
     {:ok, cursor_ref} = Postgrex.Notifications.listen(notifications, @cursor_channel)
     {:ok, publisher} = Postgrex.start_link(connection_options)
@@ -49,7 +54,8 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
        notifications: notifications,
        head_ref: head_ref,
        cursor_ref: cursor_ref,
-       publisher: publisher
+       publisher: publisher,
+       source_id: source_id
      }}
   end
 
@@ -57,7 +63,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
   def handle_cast({:publish_cursor, session, frame}, state) do
     payload =
       JSON.encode!(%{
-        "source_node" => Atom.to_string(node()),
+        "source_node" => state.source_id,
         "session" => session_map(session),
         "frame" => frame
       })
@@ -104,7 +110,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
             "session" => session,
             "frame" => frame
           }} <- JSON.decode(payload),
-         false <- source_node == Atom.to_string(node()),
+         false <- source_node == state.source_id,
          {:ok, session_key} <- session_key(session) do
       broadcast_local(session_key, frame)
     else
@@ -158,6 +164,11 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
       "room_id" => session.room_id,
       "session_id" => session.session_id
     }
+
+  defp source_id(value) when is_binary(value) do
+    :crypto.hash(:sha256, value)
+    |> Base.encode16(case: :lower)
+  end
 
   defp group(session), do: {__MODULE__, SessionKey.authority_key(session)}
 end

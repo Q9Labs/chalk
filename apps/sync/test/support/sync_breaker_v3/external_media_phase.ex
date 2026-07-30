@@ -7,6 +7,7 @@ defmodule ChalkSync.SyncBreakerV3.ExternalMediaPhase do
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncBreakerV3.ScriptedMediaPlane
+  alias ChalkSync.SyncBreakerV3.Verdict
   alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
@@ -125,6 +126,21 @@ defmodule ChalkSync.SyncBreakerV3.ExternalMediaPhase do
     provider_projection = phase_projection(ScriptedMediaPlane.projection(controller))
     stop(controller)
 
+    invariants = %{
+      "stable_external_operation_deduplication" =>
+        effect_count(effects, :remove_participant, remove_id) == 1,
+      "pending_ambiguity_reconciled" =>
+        operation_state(fixture.session, ambiguous_id)["status"] == "applied",
+      "confirmation_crash_retry_deduplicated" => crash_retry["effect_count"] == 1,
+      "single_screen_lease" => screen["lease_count_during_race"] == 1,
+      "publication_loss_releases_lease" => screen["lease_count_after_loss"] == 0,
+      "recording_concurrency_fenced" => concurrent.result != :pending,
+      "stale_observation_does_not_overwrite_newer_projection" =>
+        stale_observation["older_snapshot_ignored"],
+      "restart_reconciliation_preserves_provider_truth" =>
+        restart_reconciliation["production_projection_matches_provider_truth"]
+    }
+
     %{
       "name" => @name,
       "seed" => seed,
@@ -153,21 +169,8 @@ defmodule ChalkSync.SyncBreakerV3.ExternalMediaPhase do
       "intent_states" => Enum.map(states, & &1["status"]),
       "provider_projection" => provider_projection,
       "bounds" => ScriptedMediaPlane.bounds(),
-      "invariants" => %{
-        "stable_external_operation_deduplication" =>
-          effect_count(effects, :remove_participant, remove_id) == 1,
-        "pending_ambiguity_reconciled" =>
-          operation_state(fixture.session, ambiguous_id)["status"] == "applied",
-        "confirmation_crash_retry_deduplicated" => crash_retry["effect_count"] == 1,
-        "single_screen_lease" => screen["lease_count_during_race"] == 1,
-        "publication_loss_releases_lease" => screen["lease_count_after_loss"] == 0,
-        "recording_concurrency_fenced" => concurrent.result != :pending,
-        "stale_observation_does_not_overwrite_newer_projection" =>
-          stale_observation["older_snapshot_ignored"],
-        "restart_reconciliation_preserves_provider_truth" =>
-          restart_reconciliation["production_projection_matches_provider_truth"]
-      },
-      "verdict" => "pass"
+      "invariants" => invariants,
+      "verdict" => Verdict.from_invariants(invariants)
     }
   end
 

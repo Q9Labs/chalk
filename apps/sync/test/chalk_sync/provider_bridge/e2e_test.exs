@@ -1,6 +1,8 @@
 defmodule ChalkSync.ProviderBridge.E2ETest do
   use ExUnit.Case, async: false
 
+  @moduletag :provider_bridge_e2e
+
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.ProviderBridge.Client
   alias ChalkSync.ProviderBridge.MediaPlane

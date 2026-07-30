@@ -22,7 +22,7 @@ Checks:
   - mix format --check-formatted, non-mutating
   - mix compile --warnings-as-errors (test env, compiles test support too)
   - mix credo --strict
-  - mix test
+  - PostgreSQL-backed mix test with zero skipped cases
 EOF
 }
 
@@ -58,7 +58,12 @@ if [[ "$command" == "basic" ]]; then
   exit 0
 fi
 
+if [[ -z "${CHALK_SYNC_TEST_DATABASE_URL:-${CHALK_DATABASE_URL:-}}" ]]; then
+  echo "The full Sync gate requires CHALK_SYNC_TEST_DATABASE_URL" >&2
+  exit 2
+fi
+
 run "Credo" mix credo --strict
-run "Tests" mix test --max-cases "${CHALK_SYNC_TEST_MAX_CASES:-10}"
+run "Tests (zero skips)" scripts/test-strict --max-cases "${CHALK_SYNC_TEST_MAX_CASES:-10}"
 
 printf '\nSync server gate passed.\n'

@@ -56,8 +56,16 @@ test("Sync changes are part of the global gate", () => {
   const plan = createGatePlan(["apps/sync/lib/chalk_sync/application.ex"], { workspaces });
   assert.equal(selected(plan, "services"), true);
   const services = plan.tasks.find((task) => task.id === "services");
-  assert.match(services.command.join(" "), /apps\/sync\/scripts\/gate\.sh/);
-  assert.equal(services.env.CHALK_SYNC_GATE_MODE, "basic");
+  assert.match(services.command.join(" "), /apps\/sync\/scripts\/reliability-correctness/);
+  assert.equal(services.env.CHALK_SYNC_GATE_MODE, undefined);
+});
+
+test("whiteboard and SDK transport changes run the shared Sync correctness profile", () => {
+  for (const file of ["packages/whiteboard/src/collab/client.ts", "sdks/typescript/client/src/sync/client.ts", "sdks/typescript/client/src/whiteboard/client.ts", "contract/schema/whiteboard-v1.json"]) {
+    const services = createGatePlan([file], { workspaces }).tasks.find((task) => task.id === "services");
+    assert.equal(services.selected, true, file);
+    assert.match(services.command.join(" "), /reliability-correctness/, file);
+  }
 });
 
 test("lockfile changes select all JavaScript workspaces and dependency checks", () => {
@@ -69,6 +77,7 @@ test("lockfile changes select all JavaScript workspaces and dependency checks", 
 
 test("gate definitions and unknown paths fail closed to full scope", () => {
   assert.equal(createGatePlan(["scripts/gates/commit.sh"], { workspaces }).full, true);
+  assert.equal(createGatePlan([".github/workflows/sync-reliability.yml"], { workspaces }).full, true);
   assert.equal(createGatePlan(["experimental/runtime.xyz"], { workspaces }).full, true);
 });
 

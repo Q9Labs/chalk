@@ -4,6 +4,7 @@ defmodule ChalkSync.Transport.SocketV3Test do
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.ProtocolV3
+  alias ChalkSync.RoomActions.Fanout
   alias ChalkSync.RoomActions.OutboundQueue, as: RoomActionQueue
   alias ChalkSync.Sessions.Coordinator
   alias ChalkSync.Stateholder.Identity
@@ -335,8 +336,8 @@ defmodule ChalkSync.Transport.SocketV3Test do
     }
 
     assert :ok =
-             ChalkSync.RoomActions.Fanout.publish_chat_read_receipt(
-               ChalkSync.RoomActions.Fanout,
+             Fanout.publish_chat_read_receipt(
+               Fanout,
                identity.session,
                receipt
              )

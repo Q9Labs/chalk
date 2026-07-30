@@ -122,11 +122,17 @@ defmodule ChalkSync.Application do
   defp whiteboard_fanout_child do
     case Application.fetch_env!(:chalk_sync, :stateholder) do
       ChalkSync.Stateholder.Postgres ->
-        {ChalkSync.WhiteboardV1.Fanout, url: Application.fetch_env!(:chalk_sync, :database_url)}
+        {ChalkSync.WhiteboardV1.Fanout,
+         url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
 
       _adapter ->
         nil
     end
+  end
+
+  defp instance_id do
+    Application.get_env(:chalk_sync, :instance_id) ||
+      Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
   end
 
   defp retention_scheduler_child do

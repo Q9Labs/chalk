@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command="${1:-}"
+backend="${CHALK_SYNC_TOPOLOGY_BACKEND:-}"
+
+native_query() {
+  local port="$1"
+  local query="$2"
+  "${CHALK_SYNC_TOPOLOGY_PG_BIN}/psql" \
+    -h 127.0.0.1 \
+    -p "${port}" \
+    -U postgres \
+    -d chalk_reliability \
+    -v ON_ERROR_STOP=1 \
+    -Atqc "${query}"
+}
+
+docker_query() {
+  local container="$1"
+  local query="$2"
+  "${CHALK_SYNC_TOPOLOGY_DOCKER_BIN}" exec "${container}" \
+    psql -U postgres -d chalk_reliability -v ON_ERROR_STOP=1 -Atqc "${query}"
+}
+
+wait_for_replay() {
+  local primary_lsn
+  local caught_up
+
+  if [[ "${backend}" == "native" ]]; then
+    primary_lsn="$(native_query "${CHALK_SYNC_TOPOLOGY_PRIMARY_PORT}" "select pg_current_wal_lsn()")"
+
+    for _ in {1..100}; do
+      caught_up="$(native_query "${CHALK_SYNC_TOPOLOGY_STANDBY_PORT}" \
+        "select coalesce(pg_last_wal_replay_lsn() >= '${primary_lsn}'::pg_lsn, false)")"
+      [[ "${caught_up}" == "t" ]] && return 0
+      sleep 0.05
+    done
+  elif [[ "${backend}" == "docker" ]]; then
+    primary_lsn="$(docker_query "${CHALK_SYNC_TOPOLOGY_PRIMARY_CONTAINER}" \
+      "select pg_current_wal_lsn()")"
+
+    for _ in {1..100}; do
+      caught_up="$(docker_query "${CHALK_SYNC_TOPOLOGY_STANDBY_CONTAINER}" \
+        "select coalesce(pg_last_wal_replay_lsn() >= '${primary_lsn}'::pg_lsn, false)")"
+      [[ "${caught_up}" == "t" ]] && return 0
+      sleep 0.05
+    done
+  else
+    echo "Unsupported topology backend: ${backend}" >&2
+    exit 2
+  fi
+
+  echo "PostgreSQL standby did not catch up" >&2
+  exit 1
+}
+
+promote_standby() {
+  if [[ "${backend}" == "native" ]]; then
+    "${CHALK_SYNC_TOPOLOGY_PG_BIN}/pg_ctl" \
+      -D "${CHALK_SYNC_TOPOLOGY_PRIMARY_DATA}" \
+      -m immediate \
+      stop >/dev/null
+    "${CHALK_SYNC_TOPOLOGY_PG_BIN}/pg_ctl" \
+      -D "${CHALK_SYNC_TOPOLOGY_STANDBY_DATA}" \
+      promote >/dev/null
+
+    for _ in {1..100}; do
+      [[ "$(native_query "${CHALK_SYNC_TOPOLOGY_STANDBY_PORT}" \
+        "select not pg_is_in_recovery()")" == "t" ]] && return 0
+      sleep 0.05
+    done
+  elif [[ "${backend}" == "docker" ]]; then
+    "${CHALK_SYNC_TOPOLOGY_DOCKER_BIN}" stop -t 0 \
+      "${CHALK_SYNC_TOPOLOGY_PRIMARY_CONTAINER}" >/dev/null
+    # The container shell expands PGDATA.
+    # shellcheck disable=SC2016
+    "${CHALK_SYNC_TOPOLOGY_DOCKER_BIN}" exec \
+      --user postgres \
+      "${CHALK_SYNC_TOPOLOGY_STANDBY_CONTAINER}" \
+      sh -c 'pg_ctl -D "$PGDATA" promote' >/dev/null
+
+    for _ in {1..100}; do
+      [[ "$(docker_query "${CHALK_SYNC_TOPOLOGY_STANDBY_CONTAINER}" \
+        "select not pg_is_in_recovery()")" == "t" ]] && return 0
+      sleep 0.05
+    done
+  else
+    echo "Unsupported topology backend: ${backend}" >&2
+    exit 2
+  fi
+
+  echo "PostgreSQL standby promotion did not complete" >&2
+  exit 1
+}
+
+case "${command}" in
+  catch-up) wait_for_replay ;;
+  failover)
+    wait_for_replay
+    promote_standby
+    ;;
+  *)
+    echo "usage: postgres-failover-control <catch-up|failover>" >&2
+    exit 2
+    ;;
+esac

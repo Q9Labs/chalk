@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- A shared, fail-closed Sync reliability harness with pull-request correctness,
+  nightly multi-node/network/PostgreSQL failover, and release soak, restart, and
+  real-browser profiles; every run emits replayable commit-bound evidence.
 - Chalk room actions across Sync v3 and the public TypeScript/React SDKs:
   transient reactions, durable paged Postgres chat with read receipts and
   protected file attachments, host moderation and ask-to-unmute/start-camera

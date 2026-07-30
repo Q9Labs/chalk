@@ -1107,5 +1107,7 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
 
   defp stop_connection(connection) do
     if Process.alive?(connection), do: GenServer.stop(connection)
+  catch
+    :exit, _reason -> :ok
   end
 end

@@ -41,7 +41,10 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
       end
 
     {:ok, connection_options} = Database.connection_options(url)
-    {:ok, notifications} = Postgrex.Notifications.start_link(connection_options)
+
+    {:ok, notifications} =
+      Postgrex.Notifications.start_link(Keyword.put(connection_options, :auto_reconnect, true))
+
     {:ok, listen_ref} = Postgrex.Notifications.listen(notifications, @channel)
 
     room_action_refs =
