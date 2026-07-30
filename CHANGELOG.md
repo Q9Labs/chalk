@@ -15,10 +15,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - Chalk room actions across Sync v3 and the public TypeScript/React SDKs:
-  transient reactions, durable paged Postgres chat, host moderation and
-  ask-to-unmute/start-camera flows, plus a separate `whiteboard-v1`
-  Excalidraw transport with staged participant-authenticated file uploads and
-  seven-day cleanup. Native whiteboard remains intentionally deferred.
+  transient reactions, durable paged Postgres chat with read receipts and
+  protected file attachments, host moderation and ask-to-unmute/start-camera
+  flows, plus a separate `whiteboard-v1` Excalidraw transport with staged
+  participant-authenticated file uploads and seven-day cleanup. Native
+  whiteboard remains intentionally deferred.
 - A public Pages meeting entry that starts a capability-secured meeting from the
   restored React SDK lobby and supports invite-link guests, host refresh, live
   participant updates, Cloudflare media, and terminal Leave cleanup.

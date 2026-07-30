@@ -85,7 +85,7 @@ export function createLocalChalkHandler(options) {
 
   function ensureSharedRoom() {
     if (!sharedRoomPromise) {
-      sharedRoomPromise = createSharedRoom(options.chalk, options.randomUUID).catch((error) => {
+      sharedRoomPromise = createSharedRoom(options.chalk, options.randomUUID, options.roomId).catch((error) => {
         sharedRoomPromise = undefined;
         throw error;
       });
@@ -136,6 +136,7 @@ async function startLocalChalkBackend(environment = process.env) {
   const tenantId = requiredEnvironment(environment, "CHALK_TENANT_ID");
   const apiBaseURL = environment.CHALK_API_URL ?? "http://127.0.0.1:8080";
   const syncURL = environment.CHALK_SYNC_URL ?? "ws://127.0.0.1:4100/v3/sync";
+  const roomId = environment.CHALK_ROOM_ID?.trim() || undefined;
   const port = integerPort(environment.CHALK_LOCAL_BACKEND_PORT ?? "3071");
   const allowedOrigins = environment.CHALK_WEB_ORIGIN ? [environment.CHALK_WEB_ORIGIN] : ["http://127.0.0.1:3070", "http://localhost:3070"];
   const { createChalkServerClient } = await import("@q9labsai/chalk-client/server");
@@ -144,6 +145,7 @@ async function startLocalChalkBackend(environment = process.env) {
     chalk,
     apiBaseURL,
     syncURL,
+    roomId,
     allowedOrigins,
     randomUUID: () => crypto.randomUUID(),
     log: (event, fields) => console.error(`[chalk-local-bff] ${event}`, fields),
@@ -157,16 +159,20 @@ async function startLocalChalkBackend(environment = process.env) {
   return server;
 }
 
-async function createSharedRoom(chalk, randomUUID) {
+async function createSharedRoom(chalk, randomUUID, configuredRoomId) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
-  const room = await chalk.rooms.create({
-    name: "Local SDK verification room",
-    slug: `local-sdk-${suffix}`,
-    status: "active",
-    media_plane: "cf_sfu",
-  });
+  const roomId =
+    configuredRoomId ??
+    (
+      await chalk.rooms.create({
+        name: "Local SDK verification room",
+        slug: `local-sdk-${suffix}`,
+        status: "active",
+        media_plane: "cf_sfu",
+      })
+    ).id;
   const session = await chalk.sessions.create(
-    room.id,
+    roomId,
     {
       admission_policy: "open",
       host_exit_policy: "require_transfer",
@@ -179,7 +185,7 @@ async function createSharedRoom(chalk, randomUUID) {
     },
     { idempotencyKey: `local-session-${suffix}` },
   );
-  return { roomId: room.id, sessionId: session.id };
+  return { roomId, sessionId: session.id };
 }
 
 const participantCapabilities = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf"];
