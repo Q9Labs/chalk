@@ -18,7 +18,15 @@ defmodule ChalkSync.RoomActionsTest do
       participant_session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
       display_name: "Ada",
       text: "Hello from Chalk",
+      attachments: [],
       created_at: "2026-07-29T14:00:00.000Z"
+    }
+
+    @receipt %{
+      participant_session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      participant_session_generation: 1,
+      sequence: "42",
+      read_at: "2026-07-29T14:01:00.000Z"
     }
 
     @impl true
@@ -43,8 +51,36 @@ defmodule ChalkSync.RoomActionsTest do
     end
 
     @impl true
-    def append(_identity, %{client_message_id: "chat-message-0001", text: "Hello from Chalk"}) do
+    def append(_identity, %{
+          client_message_id: "chat-message-0001",
+          text: "Hello from Chalk",
+          attachment_ids: []
+        }) do
       {:ok, %{outcome: :committed, message: @message}}
+    end
+
+    def append(_identity, %{
+          client_message_id: "chat-message-0002",
+          text: "",
+          attachment_ids: ["018f2f65-2a77-7a44-8e9a-5b0b6f8d4c82"]
+        }) do
+      {:ok,
+       %{
+         outcome: :committed,
+         message: %{
+           @message
+           | client_message_id: "chat-message-0002",
+             text: "",
+             attachments: [
+               %{
+                 attachment_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c82",
+                 file_name: "board.png",
+                 mime_type: "image/png",
+                 byte_length: 2048
+               }
+             ]
+         }
+       }}
     end
 
     def append(_identity, _input), do: {:error, :invalid_payload}
@@ -53,6 +89,16 @@ defmodule ChalkSync.RoomActionsTest do
     def head(_session) do
       {:ok, %{head_sequence: "42", retained_floor_sequence: "7"}}
     end
+
+    @impl true
+    def read_receipts(_session), do: {:ok, [@receipt]}
+
+    @impl true
+    def mark_read(_identity, "42") do
+      {:ok, %{outcome: :advanced, receipt: @receipt}}
+    end
+
+    def mark_read(_identity, _sequence), do: {:error, :invalid_payload}
 
     @impl true
     def read_page(_session, %{direction: :newer, cursor_sequence: "41", limit: 10}) do
@@ -137,6 +183,33 @@ defmodule ChalkSync.RoomActionsTest do
     assert event == result["reaction"]
   end
 
+  test "negotiates v2 with receipt watermarks", %{options: options} do
+    identity = identity()
+
+    assert {:ok, extension} =
+             RoomActions.negotiate(
+               identity,
+               %{
+                 extension: "room_actions_v2",
+                 after_sequence: "41",
+                 retained_floor_sequence: "7"
+               },
+               self(),
+               options
+             )
+
+    assert extension["name"] == "room_actions_v2"
+
+    assert extension["read_receipts"] == [
+             %{
+               "participant_session_id" => identity.participant_session_id,
+               "participant_session_generation" => 1,
+               "sequence" => "42",
+               "read_at" => "2026-07-29T14:01:00.000Z"
+             }
+           ]
+  end
+
   test "returns a committed chat message and a durable head hint", %{options: options} do
     identity = identity()
 
@@ -165,6 +238,67 @@ defmodule ChalkSync.RoomActionsTest do
                       "head_sequence" => "42",
                       "retained_floor_sequence" => "7"
                     }}
+  end
+
+  test "returns attachment-only v2 chat and advances read receipt", %{
+    options: options
+  } do
+    identity = identity()
+    options = Keyword.put(options, :version, 2)
+
+    assert {:ok, _extension} =
+             RoomActions.negotiate(
+               identity,
+               %{
+                 extension: "room_actions_v2",
+                 after_sequence: "41",
+                 retained_floor_sequence: "7"
+               },
+               self(),
+               options
+             )
+
+    assert {:ok, chat_result} =
+             RoomActions.send_chat(
+               identity,
+               %{
+                 client_message_id: "chat-message-0002",
+                 text: "",
+                 attachment_ids: ["018f2f65-2a77-7a44-8e9a-5b0b6f8d4c82"]
+               },
+               options
+             )
+
+    assert chat_result["message"]["text"] == ""
+
+    assert chat_result["message"]["attachments"] == [
+             %{
+               "attachment_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c82",
+               "file_name" => "board.png",
+               "mime_type" => "image/png",
+               "byte_length" => 2048
+             }
+           ]
+
+    assert {:ok, read_result} =
+             RoomActions.mark_chat_read(
+               identity,
+               %{request_id: "chat-read-request-0001", sequence: "42"},
+               options
+             )
+
+    assert read_result["outcome"] == "accepted"
+    assert read_result["sequence"] == "42"
+    assert GeneratedV3.valid_server_frame?(read_result)
+
+    assert_receive {:room_action_frame,
+                    %{
+                      "type" => "chat_read_receipt",
+                      "participant_session_id" => participant_session_id,
+                      "sequence" => "42"
+                    }}
+
+    assert participant_session_id == identity.participant_session_id
   end
 
   test "returns generated-valid loaded and cursor-reset pages", %{options: options} do

@@ -408,6 +408,35 @@ type SyncAdmissionRequest struct {
 	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
 }
 
+type SyncChatAttachment struct {
+	TenantID                     pgtype.UUID        `json:"tenant_id"`
+	RoomID                       pgtype.UUID        `json:"room_id"`
+	SessionID                    pgtype.UUID        `json:"session_id"`
+	AttachmentID                 pgtype.UUID        `json:"attachment_id"`
+	ParticipantSessionID         pgtype.UUID        `json:"participant_session_id"`
+	ParticipantSessionGeneration int64              `json:"participant_session_generation"`
+	ClientAttachmentID           string             `json:"client_attachment_id"`
+	RequestFingerprint           []byte             `json:"request_fingerprint"`
+	UploadID                     pgtype.UUID        `json:"upload_id"`
+	ObjectKey                    string             `json:"object_key"`
+	OriginalFilename             string             `json:"original_filename"`
+	MimeType                     string             `json:"mime_type"`
+	ByteLength                   int64              `json:"byte_length"`
+	Sha256                       []byte             `json:"sha256"`
+	ImmutableObjectIdentity      pgtype.Text        `json:"immutable_object_identity"`
+	Status                       string             `json:"status"`
+	ExpiresAt                    pgtype.Timestamptz `json:"expires_at"`
+	MessageSequence              pgtype.Int8        `json:"message_sequence"`
+	MessageOrdinal               pgtype.Int2        `json:"message_ordinal"`
+	CleanupClaimToken            pgtype.UUID        `json:"cleanup_claim_token"`
+	CleanupClaimedUntil          pgtype.Timestamptz `json:"cleanup_claimed_until"`
+	CleanupAttempts              int32              `json:"cleanup_attempts"`
+	FinalizedAt                  pgtype.Timestamptz `json:"finalized_at"`
+	AttachedAt                   pgtype.Timestamptz `json:"attached_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+}
+
 type SyncChatMessage struct {
 	TenantID                     pgtype.UUID        `json:"tenant_id"`
 	RoomID                       pgtype.UUID        `json:"room_id"`
@@ -424,6 +453,17 @@ type SyncChatMessage struct {
 	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
 }
 
+type SyncChatReadReceipt struct {
+	TenantID                     pgtype.UUID        `json:"tenant_id"`
+	RoomID                       pgtype.UUID        `json:"room_id"`
+	SessionID                    pgtype.UUID        `json:"session_id"`
+	ParticipantSessionID         pgtype.UUID        `json:"participant_session_id"`
+	ParticipantSessionGeneration int64              `json:"participant_session_generation"`
+	Sequence                     int64              `json:"sequence"`
+	ReadAt                       pgtype.Timestamptz `json:"read_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type SyncChatStream struct {
 	TenantID              pgtype.UUID        `json:"tenant_id"`
 	RoomID                pgtype.UUID        `json:"room_id"`
@@ -434,6 +474,8 @@ type SyncChatStream struct {
 	MessageBytes          int64              `json:"message_bytes"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	AttachmentCount       int64              `json:"attachment_count"`
+	AttachmentBytes       int64              `json:"attachment_bytes"`
 }
 
 type SyncCommandReceipt struct {

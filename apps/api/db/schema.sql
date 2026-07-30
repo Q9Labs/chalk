@@ -374,6 +374,8 @@ create table sync_chat_streams (
     retained_floor_sequence bigint,
     message_count bigint not null default 0,
     message_bytes bigint not null default 0,
+    attachment_count bigint not null default 0,
+    attachment_bytes bigint not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     primary key (tenant_id, session_id),
@@ -385,6 +387,8 @@ create table sync_chat_streams (
         head_sequence >= 0
         and message_count between 0 and 250000
         and message_bytes between 0 and 2147483648
+        and attachment_count between 0 and 1000
+        and attachment_bytes between 0 and 5368709120
         and (
             (
                 head_sequence = 0
@@ -441,13 +445,174 @@ create table sync_chat_messages (
     check (octet_length(request_fingerprint) = 32),
     check (octet_length(display_name) between 1 and 256),
     check (
-        octet_length(message_text) between 1 and 16384
+        octet_length(message_text) between 0 and 16384
         and char_length(message_text) <= 4000
     ),
     check (encoded_bytes between 1 and 32768)
 );
 create index sync_chat_messages_session_created_at_idx
     on sync_chat_messages(tenant_id, session_id, created_at, sequence);
+
+create table sync_chat_attachments (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    attachment_id uuid not null,
+    participant_session_id uuid not null,
+    participant_session_generation bigint not null,
+    client_attachment_id text not null,
+    request_fingerprint bytea not null,
+    upload_id uuid not null,
+    object_key text not null,
+    original_filename text not null,
+    mime_type text not null,
+    byte_length bigint not null,
+    sha256 bytea not null,
+    immutable_object_identity text,
+    status text not null,
+    expires_at timestamptz not null,
+    message_sequence bigint,
+    message_ordinal smallint,
+    cleanup_claim_token uuid,
+    cleanup_claimed_until timestamptz,
+    cleanup_attempts integer not null default 0,
+    finalized_at timestamptz,
+    attached_at timestamptz,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, session_id, attachment_id),
+    unique (upload_id),
+    unique (object_key),
+    unique (
+        tenant_id,
+        session_id,
+        participant_session_id,
+        participant_session_generation,
+        client_attachment_id
+    ),
+    unique (tenant_id, session_id, message_sequence, message_ordinal),
+    foreign key (tenant_id, room_id, session_id)
+        references sync_chat_streams(tenant_id, room_id, session_id)
+        on delete restrict,
+    foreign key (
+        tenant_id,
+        room_id,
+        session_id,
+        participant_session_id,
+        participant_session_generation
+    )
+        references participants(
+            tenant_id,
+            room_id,
+            session_id,
+            id,
+            generation
+        )
+        on delete restrict,
+    foreign key (tenant_id, session_id, message_sequence)
+        references sync_chat_messages(tenant_id, session_id, sequence)
+        on delete restrict,
+    check (octet_length(client_attachment_id) between 16 and 64),
+    check (octet_length(request_fingerprint) = 32),
+    check (octet_length(object_key) between 1 and 1024),
+    check (octet_length(original_filename) between 1 and 255),
+    check (
+        mime_type in (
+            'image/png',
+            'image/jpeg',
+            'image/gif',
+            'image/webp',
+            'application/pdf',
+            'text/plain',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.oasis.opendocument.text',
+            'application/vnd.oasis.opendocument.spreadsheet',
+            'application/vnd.oasis.opendocument.presentation'
+        )
+    ),
+    check (byte_length between 1 and 26214400),
+    check (octet_length(sha256) = 32),
+    check (
+        immutable_object_identity is null
+        or octet_length(immutable_object_identity) between 1 and 512
+    ),
+    check (status in ('pending', 'finalizing', 'ready', 'attached', 'failed')),
+    check (
+        (
+            status = 'attached'
+            and message_sequence is not null
+            and message_ordinal between 0 and 4
+            and attached_at is not null
+        )
+        or (
+            status <> 'attached'
+            and message_sequence is null
+            and message_ordinal is null
+            and attached_at is null
+        )
+    ),
+    check (
+        (
+            status in ('ready', 'attached')
+            and immutable_object_identity is not null
+            and finalized_at is not null
+        )
+        or status in ('pending', 'finalizing', 'failed')
+    ),
+    check (
+        cleanup_attempts >= 0
+        and (
+            (cleanup_claim_token is null and cleanup_claimed_until is null)
+            or (cleanup_claim_token is not null and cleanup_claimed_until is not null)
+        )
+    )
+);
+create index sync_chat_attachments_cleanup_idx
+    on sync_chat_attachments(status, expires_at)
+    where status <> 'attached';
+create index sync_chat_attachments_session_status_idx
+    on sync_chat_attachments(tenant_id, session_id, status);
+
+create table sync_chat_read_receipts (
+    tenant_id uuid not null,
+    room_id uuid not null,
+    session_id uuid not null,
+    participant_session_id uuid not null,
+    participant_session_generation bigint not null,
+    sequence bigint not null,
+    read_at timestamptz not null,
+    updated_at timestamptz not null default now(),
+    primary key (
+        tenant_id,
+        session_id,
+        participant_session_id,
+        participant_session_generation
+    ),
+    foreign key (tenant_id, room_id, session_id)
+        references sync_chat_streams(tenant_id, room_id, session_id)
+        on delete restrict,
+    foreign key (
+        tenant_id,
+        room_id,
+        session_id,
+        participant_session_id,
+        participant_session_generation
+    )
+        references participants(
+            tenant_id,
+            room_id,
+            session_id,
+            id,
+            generation
+        )
+        on delete restrict,
+    check (sequence > 0)
+);
 
 create table sync_whiteboard_scenes (
     tenant_id uuid not null,

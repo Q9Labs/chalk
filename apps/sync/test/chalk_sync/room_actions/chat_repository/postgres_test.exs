@@ -60,7 +60,11 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
   test "allocates contiguous sequences and returns stable idempotent results", %{
     identity: identity
   } do
-    input = %{client_message_id: "chat-message-0001", text: "First message"}
+    input = %{
+      client_message_id: "chat-message-0001",
+      text: "First message",
+      attachment_ids: []
+    }
 
     assert {:ok, %{outcome: :committed, message: first}} = Postgres.append(identity, input)
     assert first.sequence == "1"
@@ -76,7 +80,8 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
     assert {:ok, %{outcome: :committed, message: second}} =
              Postgres.append(identity, %{
                client_message_id: "chat-message-0002",
-               text: "Second message"
+               text: "Second message",
+               attachment_ids: []
              })
 
     assert second.sequence == "2"
@@ -92,7 +97,8 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
         fn index ->
           Postgres.append(identity, %{
             client_message_id: "chat-concurrent-#{String.pad_leading(to_string(index), 4, "0")}",
-            text: "message #{index}"
+            text: "message #{index}",
+            attachment_ids: []
           })
         end,
         max_concurrency: 8,
@@ -117,7 +123,8 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
                Postgres.append(identity, %{
                  client_message_id:
                    "chat-page-item-#{String.pad_leading(to_string(index), 3, "0")}",
-                 text: "message #{index}"
+                 text: "message #{index}",
+                 attachment_ids: []
                })
     end)
 
@@ -157,7 +164,8 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
   } do
     committed_input = %{
       client_message_id: "chat-before-end-01",
-      text: "accepted before end"
+      text: "accepted before end",
+      attachment_ids: []
     }
 
     assert {:ok, %{outcome: :committed, message: committed}} =
@@ -168,7 +176,8 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
     assert {:error, :participant_stale} =
              Postgres.append(stale, %{
                client_message_id: "chat-stale-gen-01",
-               text: "not accepted"
+               text: "not accepted",
+               attachment_ids: []
              })
 
     Postgrex.query!(
@@ -183,8 +192,90 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
     assert {:error, :session_ended} =
              Postgres.append(identity, %{
                client_message_id: "chat-ended-room-01",
-               text: "not accepted"
+               text: "not accepted",
+               attachment_ids: []
              })
+  end
+
+  test "atomically claims ready attachments and advances read watermarks", %{
+    connection: connection,
+    identity: identity
+  } do
+    attachment_id = UUID.generate()
+    upload_id = UUID.generate()
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_streams (tenant_id, room_id, session_id)
+      values ($1, $2, $3)
+      on conflict (tenant_id, session_id) do nothing
+      """,
+      [
+        uuid(identity.session.tenant_id),
+        uuid(identity.session.room_id),
+        uuid(identity.session.session_id)
+      ]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_attachments (
+        tenant_id, room_id, session_id, attachment_id,
+        participant_session_id, participant_session_generation,
+        client_attachment_id, request_fingerprint, upload_id, object_key,
+        original_filename, mime_type, byte_length, sha256,
+        immutable_object_identity, status, expires_at, finalized_at
+      ) values (
+        $1, $2, $3, $4, $5, $6, 'chat-file-client-0001',
+        $7, $8, $9, 'diagram.png', 'image/png', 32, $10,
+        'immutable-etag', 'ready', now() + interval '1 day', now()
+      )
+      """,
+      [
+        uuid(identity.session.tenant_id),
+        uuid(identity.session.room_id),
+        uuid(identity.session.session_id),
+        uuid(attachment_id),
+        uuid(identity.participant_session_id),
+        identity.participant_session_generation,
+        :crypto.hash(:sha256, "reservation"),
+        uuid(upload_id),
+        "chat-attachments-v1/#{upload_id}",
+        :crypto.hash(:sha256, "content")
+      ]
+    )
+
+    assert {:ok, %{outcome: :committed, message: message}} =
+             Postgres.append(identity, %{
+               client_message_id: "chat-attachment-0001",
+               text: "",
+               attachment_ids: [attachment_id]
+             })
+
+    assert message.text == ""
+
+    assert message.attachments == [
+             %{
+               attachment_id: attachment_id,
+               file_name: "diagram.png",
+               mime_type: "image/png",
+               byte_length: 32
+             }
+           ]
+
+    assert {:ok, %{outcome: :advanced, receipt: receipt}} =
+             Postgres.mark_read(identity, "1")
+
+    assert receipt.sequence == "1"
+    assert receipt.participant_session_generation == identity.participant_session_generation
+
+    assert {:ok, %{outcome: :unchanged, receipt: ^receipt}} =
+             Postgres.mark_read(identity, "1")
+
+    assert {:error, :invalid_payload} = Postgres.mark_read(identity, "2")
+    assert {:ok, [^receipt]} = Postgres.read_receipts(identity.session)
   end
 
   defp retain_from(connection, session, floor) do
@@ -219,6 +310,18 @@ defmodule ChalkSync.RoomActions.ChatRepository.PostgresTest do
   end
 
   defp cleanup_chat(connection, session) do
+    Postgrex.query!(
+      connection,
+      "delete from sync_chat_read_receipts where tenant_id = $1 and session_id = $2",
+      [uuid(session.tenant_id), uuid(session.session_id)]
+    )
+
+    Postgrex.query!(
+      connection,
+      "delete from sync_chat_attachments where tenant_id = $1 and session_id = $2",
+      [uuid(session.tenant_id), uuid(session.session_id)]
+    )
+
     Postgrex.query!(
       connection,
       "delete from sync_chat_messages where tenant_id = $1 and session_id = $2",

@@ -1,0 +1,14 @@
+# Chat receipts and attachments session log — 2026-07-30
+
+- 2026-07-30: Resumed after the Codex server restart. Re-read the repository protocol, writing rules, and global code standards.
+- 2026-07-30: Audited the local stack prerequisites. PostgreSQL and Redis are available through OrbStack; the Chalk API, Sync v3, and web room were not running.
+- 2026-07-30: Began a local-first bring-up and split the existing implementation lanes across backend contracts/storage, SDK/product integration, and R2/CORS verification.
+- 2026-07-30: Froze the backend contract around `room_actions_v2` on Sync v3 with v2-to-v1 fallback, participant-session/generation read watermarks, pre-uploaded chat attachments claimed by `chat_send`, and seven-day post-session retention. Began backend implementation.
+- 2026-07-30: Brought up a clean local stack on PostgreSQL database `chalk_room_dev_20260730`: API at `127.0.0.1:8080`, Sync at `127.0.0.1:4100`, and the web room at `127.0.0.1:3070/room`.
+- 2026-07-30: Verified a real browser join, Cloudflare SFU negotiation, Sync v3 recovery, persisted chat send, and reaction fanout. The test message appears in the room and in `sync_chat_messages`.
+- 2026-07-30: Confirmed whiteboard is not yet working end to end. The `whiteboard-v1` client repeatedly sends `hello` and closes before `welcome`; Sync failed in `:pg.join` because the process group service was not supervised. Assigned the startup fix and regression coverage to the whiteboard lane.
+- 2026-07-30: Verified the available Cloudflare management token cannot inspect bucket CORS (`HTTP 403`, code `10000`). No shared or production Cloudflare state was changed. Infrastructure work will make the exact-origin GET/PUT CORS policy explicit and testable in source.
+- 2026-07-30: Restarted Sync with the supervised `:pg` child and verified the repaired `whiteboard-v1` handshake using a fresh admitted local participant. The server returned `welcome`, a scene ID, and the `drawWhiteboard` and `manageWhiteboard` capabilities.
+- 2026-07-30 09:27 PKT: Continued the backend lane after a Codex server restart. Contract generation, API chat-attachment persistence/routes, and Sync v3 `room_actions_v2` plumbing compile; remaining work is regression coverage, migrated-database HTTP/WebSocket proof, remote full gates, review, and a scoped commit.
+- 2026-07-30 09:35 PKT: Added v1 receipt-suppression and v2 attachment/read-receipt WebSocket regressions, plus real PostgreSQL proofs for first-upload stream reservation, idempotency, finalization, atomic attachment claim, and monotonic read watermarks. The chat migration passed up/down/up on `chalk_room_dev_20260730`; focused API, trace-harness, Sync, and compile checks pass.
+- 2026-07-30 09:36 PKT: Regenerated OpenAPI, Effect HTTP schemas/API, and OpenAPI TypeScript declarations for the three participant-scoped chat attachment routes. The root orchestrator will run the combined full gate remotely after lane commits.

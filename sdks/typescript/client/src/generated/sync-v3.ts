@@ -33,7 +33,7 @@ export const SyncProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "ping"],
+      accepts: ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "room_reaction_send", "chat_send", "chat_page_request", "chat_read_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
         missedDeadlinesBeforeClose: 2,
@@ -118,6 +118,9 @@ export const SyncProtocolMetadata = {
     roomActionBurstMax: 8,
     chatMessageUtf8Bytes: 16384,
     chatMessageUnicodeScalars: 4000,
+    chatAttachmentMaxItems: 5,
+    chatAttachmentFileNameUtf8Bytes: 255,
+    chatAttachmentMaxBytes: 26214400,
     chatPageMaxMessages: 100,
     chatPageEncodedBytes: 131072,
     reactionTtlMs: 5000,
@@ -126,9 +129,27 @@ export const SyncProtocolMetadata = {
     protocolErrorDetailBytes: 1024,
   },
   roomActions: {
-    extension: "room_actions_v1",
+    extension: "room_actions_v2",
+    fallbackExtension: "room_actions_v1",
     capabilities: ["sendReaction", "sendChat"],
     reactions: ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+    attachmentMimeTypes: [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "application/pdf",
+      "text/plain",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.oasis.opendocument.text",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      "application/vnd.oasis.opendocument.presentation",
+    ],
     chatCursor: {
       exactFields: ["after_sequence", "retained_floor_sequence"],
       afterSequence: "nullableUnsignedDecimal",
@@ -138,6 +159,9 @@ export const SyncProtocolMetadata = {
       exactFields: ["name", "chat_cursor"],
     },
     welcomeExtension: {
+      exactFields: ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"],
+    },
+    fallbackWelcomeExtension: {
       exactFields: ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence"],
     },
     clientFrames: {
@@ -147,12 +171,20 @@ export const SyncProtocolMetadata = {
       },
       sendChat: {
         type: "chat_send",
+        exactFields: ["type", "client_message_id", "text", "attachment_ids"],
+      },
+      fallbackSendChat: {
+        type: "chat_send",
         exactFields: ["type", "client_message_id", "text"],
       },
       readChatPage: {
         type: "chat_page_request",
         exactFields: ["type", "request_id", "direction", "cursor_sequence", "limit"],
         directions: ["older", "newer"],
+      },
+      setChatRead: {
+        type: "chat_read_set",
+        exactFields: ["type", "request_id", "sequence"],
       },
     },
     serverFrames: {
@@ -167,6 +199,10 @@ export const SyncProtocolMetadata = {
         outcomes: ["accepted", "rejected"],
       },
       chatMessage: {
+        type: "chat_message",
+        exactFields: ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "attachments", "created_at"],
+      },
+      fallbackChatMessage: {
         type: "chat_message",
         exactFields: ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "created_at"],
       },
@@ -186,8 +222,18 @@ export const SyncProtocolMetadata = {
         type: "chat_head",
         exactFields: ["type", "head_sequence", "retained_floor_sequence"],
       },
+      chatReadReceipt: {
+        type: "chat_read_receipt",
+        exactFields: ["type", "participant_session_id", "participant_session_generation", "sequence", "read_at"],
+      },
+      chatReadResult: {
+        type: "chat_read_result",
+        acceptedFields: ["type", "request_id", "outcome", "participant_session_id", "participant_session_generation", "sequence", "read_at"],
+        rejectedFields: ["type", "request_id", "outcome", "error_code"],
+        outcomes: ["accepted", "rejected"],
+      },
     },
-    errorCodes: ["capability_denied", "invalid_payload", "rate_limited", "overloaded", "session_ended", "participant_stale", "client_message_id_conflict", "dependency_unavailable"],
+    errorCodes: ["capability_denied", "invalid_payload", "rate_limited", "overloaded", "session_ended", "participant_stale", "client_message_id_conflict", "attachment_not_found", "attachment_not_ready", "attachment_already_claimed", "attachment_quota_exceeded", "dependency_unavailable"],
   },
   continuity: {
     cursor: {
@@ -307,7 +353,7 @@ function strictCommand(value: Record<string, unknown>): boolean {
   }
 }
 function strictRoomActionsHelloExtension(value: unknown): boolean {
-  return exactObject(value, ["name", "chat_cursor"]) && value.name === "room_actions_v1" && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
+  return exactObject(value, ["name", "chat_cursor"]) && (value.name === "room_actions_v2" || value.name === "room_actions_v1") && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
 }
 function strictHello(value: Record<string, unknown>): boolean {
   const legacy = exactObject(value, ["type", "protocol", "token", "streams"]);
@@ -326,7 +372,13 @@ function strictHello(value: Record<string, unknown>): boolean {
   );
 }
 function strictChatMessage(value: unknown): boolean {
-  return exactObject(value, ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "created_at"]);
+  return (
+    exactObject(value, ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "created_at"]) ||
+    (exactObject(value, ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "attachments", "created_at"]) && Array.isArray(value.attachments) && value.attachments.every(strictChatAttachment))
+  );
+}
+function strictChatAttachment(value: unknown): boolean {
+  return exactObject(value, ["attachment_id", "file_name", "mime_type", "byte_length"]);
 }
 function strictRoomReaction(value: unknown): boolean {
   return exactObject(value, ["type", "event_id", "participant_session_id", "display_name", "reaction", "occurred_at", "expires_at"]);
@@ -376,9 +428,11 @@ function strictClientFrame(value: unknown): boolean {
     case "room_reaction_send":
       return exactObject(value, ["type", "operation_id", "reaction"]);
     case "chat_send":
-      return exactObject(value, ["type", "client_message_id", "text"]);
+      return exactObject(value, ["type", "client_message_id", "text"]) || exactObject(value, ["type", "client_message_id", "text", "attachment_ids"]);
     case "chat_page_request":
       return exactObject(value, ["type", "request_id", "direction", "cursor_sequence", "limit"]);
+    case "chat_read_set":
+      return exactObject(value, ["type", "request_id", "sequence"]);
     case "delivery_ack":
       return exactObject(value, ["type", "stream", "revision", "state_digest"]);
     case "recovery_ack":
@@ -489,7 +543,11 @@ function strictProjection(value: Record<string, unknown>): boolean {
 }
 function strictWelcome(value: Record<string, unknown>): boolean {
   const base = ["type", "protocol", "participant_session_id", "participant_session_generation", "recovery_id", "head", "mode"];
-  const extensionValid = Array.isArray(value.extensions) && value.extensions.length === 1 && exactObject(value.extensions[0], ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence"]);
+  const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
+  const extensionValid =
+    isObject(extension) &&
+    ((extension.name === "room_actions_v1" && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence"])) ||
+      (extension.name === "room_actions_v2" && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts)));
   const fields = extensionValid ? [...base, "extensions"] : base;
   if (!strictCursor(value.head)) return false;
   if (value.mode === "snapshot") return exactObject(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
@@ -538,6 +596,10 @@ function strictServerFrame(value: unknown): boolean {
         : value.outcome === "cursor_reset" && exactObject(value, ["type", "request_id", "outcome", "retained_floor_sequence"]);
     case "chat_head":
       return exactObject(value, ["type", "head_sequence", "retained_floor_sequence"]);
+    case "chat_read_receipt":
+      return exactObject(value, ["type", "participant_session_id", "participant_session_generation", "sequence", "read_at"]);
+    case "chat_read_result":
+      return value.outcome === "accepted" ? exactObject(value, ["type", "request_id", "outcome", "participant_session_id", "participant_session_generation", "sequence", "read_at"]) : value.outcome === "rejected" && exactObject(value, ["type", "request_id", "outcome", "error_code"]);
     case "retryable_error":
       return exactObject(value, ["type", "command_id", "code"]);
     case "error":
@@ -658,7 +720,9 @@ const NullCursorStreamSchema = Schema.Struct({ cursor: Schema.Null }).check(exac
 const StreamsSchema = Schema.Struct({ control: Schema.Struct({ cursor: Schema.NullOr(ControlCursorSchema) }).check(exactKeys(["cursor"])), media: NullCursorStreamSchema, presence: NullCursorStreamSchema, requests: NullCursorStreamSchema });
 export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(3), token: boundedUtf8String(8192), streams: StreamsSchema }).check(boundedFrame(65536));
 export const ChatCursorSchema = Schema.Struct({ after_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(["after_sequence", "retained_floor_sequence"]));
-export const RoomActionsHelloExtensionSchema = Schema.Struct({ name: Schema.Literal("room_actions_v1"), chat_cursor: ChatCursorSchema }).check(exactKeys(["name", "chat_cursor"]));
+export const RoomActionsV1HelloExtensionSchema = Schema.Struct({ name: Schema.Literal("room_actions_v1"), chat_cursor: ChatCursorSchema }).check(exactKeys(["name", "chat_cursor"]));
+export const RoomActionsHelloExtensionSchema = Schema.Struct({ name: Schema.Literal("room_actions_v2"), chat_cursor: ChatCursorSchema }).check(exactKeys(["name", "chat_cursor"]));
+export const V1ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(3), token: boundedUtf8String(8192), streams: StreamsSchema, extensions: Schema.Tuple([RoomActionsV1HelloExtensionSchema]) }).check(boundedFrame(65536));
 export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(3), token: boundedUtf8String(8192), streams: StreamsSchema, extensions: Schema.Tuple([RoomActionsHelloExtensionSchema]) }).check(boundedFrame(65536));
 export const DeliveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("delivery_ack"), stream: Schema.Literal("control"), revision: PositiveIntegerSchema, state_digest: StateDigestSchema });
 export const RecoveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("recovery_ack"), recovery_id: UuidSchema, revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });
@@ -716,8 +780,35 @@ export const DirectedRequestSendFrameSchema = Schema.Struct({ type: Schema.Liter
 export const RequestAckFrameSchema = Schema.Struct({ type: Schema.Literal("request_ack"), request_id: RequestIdSchema });
 export const RoomReactionSchema = Schema.Union([Schema.Literal("👍"), Schema.Literal("❤️"), Schema.Literal("😂"), Schema.Literal("😮"), Schema.Literal("😢"), Schema.Literal("🎉")]);
 export const RoomReactionSendFrameSchema = Schema.Struct({ type: Schema.Literal("room_reaction_send"), operation_id: RequestIdSchema, reaction: RoomReactionSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
-export const ChatTextSchema = boundedUtf8String(16384, 1).check(Schema.makeFilter((value) => (Array.from(value).length <= 4000 ? undefined : { path: ["text"], issue: "must fit the Unicode scalar limit" })));
-export const ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send"), client_message_id: RequestIdSchema, text: ChatTextSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
+export const ChatTextSchema = boundedUtf8String(16384).check(Schema.makeFilter((value) => (Array.from(value).length <= 4000 ? undefined : { path: ["text"], issue: "must fit the Unicode scalar limit" })));
+const LegacyChatTextSchema = ChatTextSchema.check(Schema.makeFilter((value) => (value.length > 0 ? undefined : { path: ["text"], issue: "must not be empty" })));
+export const ChatAttachmentMimeTypeSchema = Schema.Union([
+  Schema.Literal("image/png"),
+  Schema.Literal("image/jpeg"),
+  Schema.Literal("image/gif"),
+  Schema.Literal("image/webp"),
+  Schema.Literal("application/pdf"),
+  Schema.Literal("text/plain"),
+  Schema.Literal("application/msword"),
+  Schema.Literal("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+  Schema.Literal("application/vnd.ms-excel"),
+  Schema.Literal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+  Schema.Literal("application/vnd.ms-powerpoint"),
+  Schema.Literal("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+  Schema.Literal("application/vnd.oasis.opendocument.text"),
+  Schema.Literal("application/vnd.oasis.opendocument.spreadsheet"),
+  Schema.Literal("application/vnd.oasis.opendocument.presentation"),
+]);
+export const ChatAttachmentIdSchema = Schema.Array(UuidSchema).check(
+  Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems),
+  Schema.makeFilter((ids) => (uniqueStrings(ids) ? undefined : { path: ["attachment_ids"], issue: "must contain unique attachment IDs" })),
+);
+export const V1ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send"), client_message_id: RequestIdSchema, text: LegacyChatTextSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
+export const ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send"), client_message_id: RequestIdSchema, text: ChatTextSchema, attachment_ids: ChatAttachmentIdSchema }).check(
+  Schema.makeFilter((frame) => (frame.text.length > 0 || frame.attachment_ids.length > 0 ? undefined : { path: [], issue: "must contain text or at least one attachment" })),
+  boundedFrame(SyncProtocolLimits.roomActionFrameBytes),
+);
+export const ChatReadSetFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_set"), request_id: RequestIdSchema, sequence: UnsignedDecimalSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
 export const ChatPageDirectionSchema = Schema.Union([Schema.Literal("older"), Schema.Literal("newer")]);
 export const ChatPageRequestFrameSchema = Schema.Struct({ type: Schema.Literal("chat_page_request"), request_id: RequestIdSchema, direction: ChatPageDirectionSchema, cursor_sequence: Schema.NullOr(UnsignedDecimalSchema), limit: PositiveIntegerSchema }).check(
   Schema.makeFilter((frame) => (frame.limit <= SyncProtocolLimits.chatPageMaxMessages ? undefined : { path: ["limit"], issue: "must fit the chat page limit" })),
@@ -1066,19 +1157,36 @@ const RoomActionCapabilitiesSchema = Schema.Array(RoomActionCapabilitySchema).ch
   Schema.isMaxLength(2),
   Schema.makeFilter((capabilities) => (uniqueStrings(capabilities) ? undefined : { path: [], issue: "must contain unique room-action capabilities" })),
 );
-export const RoomActionsWelcomeExtensionSchema = Schema.Struct({
+export const ChatReadReceiptSchema = Schema.Struct({ participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(
+  exactKeys(["participant_session_id", "participant_session_generation", "sequence", "read_at"]),
+);
+export type ChatReadReceipt = typeof ChatReadReceiptSchema.Type;
+export const RoomActionsV1WelcomeExtensionSchema = Schema.Struct({
   name: Schema.Literal("room_actions_v1"),
   capabilities: RoomActionCapabilitiesSchema,
   participant_capabilities: Schema.Record(UuidSchema, RoomActionCapabilitiesSchema),
   chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema),
   retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
 }).check(exactKeys(["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence"]));
+export const RoomActionsWelcomeExtensionSchema = Schema.Struct({
+  name: Schema.Literal("room_actions_v2"),
+  capabilities: RoomActionCapabilitiesSchema,
+  participant_capabilities: Schema.Record(UuidSchema, RoomActionCapabilitiesSchema),
+  chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema),
+  retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
+  read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)),
+}).check(exactKeys(["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]));
 const WelcomeBase = { type: Schema.Literal("welcome"), protocol: Schema.Literal(3), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema };
+const V1ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([RoomActionsV1WelcomeExtensionSchema]) };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([RoomActionsWelcomeExtensionSchema]) };
 export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));
 export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("replay") });
 export const WelcomeUpToDateFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("up_to_date") });
 export const WelcomeTerminalFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema });
+export const V1ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));
+export const V1ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal("replay") });
+export const V1ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal("up_to_date") });
+export const V1ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema });
 export const ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));
 export const ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("replay") });
 export const ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("up_to_date") });
@@ -1088,6 +1196,10 @@ export const WelcomeFrameSchema = Schema.Union([
   ExtendedWelcomeReplayFrameSchema,
   ExtendedWelcomeUpToDateFrameSchema,
   ExtendedWelcomeTerminalFrameSchema,
+  V1ExtendedWelcomeSnapshotFrameSchema,
+  V1ExtendedWelcomeReplayFrameSchema,
+  V1ExtendedWelcomeUpToDateFrameSchema,
+  V1ExtendedWelcomeTerminalFrameSchema,
   WelcomeSnapshotFrameSchema,
   WelcomeReplayFrameSchema,
   WelcomeUpToDateFrameSchema,
@@ -1161,11 +1273,30 @@ export const RoomActionErrorCodeSchema = Schema.Union([
   Schema.Literal("session_ended"),
   Schema.Literal("participant_stale"),
   Schema.Literal("client_message_id_conflict"),
+  Schema.Literal("attachment_not_found"),
+  Schema.Literal("attachment_not_ready"),
+  Schema.Literal("attachment_already_claimed"),
+  Schema.Literal("attachment_quota_exceeded"),
   Schema.Literal("dependency_unavailable"),
 ]);
 export const AcceptedRoomReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("room_reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("accepted"), reaction: RoomReactionEventFrameSchema });
 export const RejectedRoomReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("room_reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: RoomActionErrorCodeSchema });
 export const RoomReactionResultFrameSchema = Schema.Union([AcceptedRoomReactionResultFrameSchema, RejectedRoomReactionResultFrameSchema]);
+export const ChatAttachmentSchema = Schema.Struct({ attachment_id: UuidSchema, file_name: boundedUtf8String(SyncProtocolLimits.chatAttachmentFileNameUtf8Bytes, 1), mime_type: ChatAttachmentMimeTypeSchema, byte_length: PositiveIntegerSchema }).check(
+  Schema.makeFilter((attachment) => (attachment.byte_length <= SyncProtocolLimits.chatAttachmentMaxBytes ? undefined : { path: ["byte_length"], issue: "must fit the attachment byte limit" })),
+  exactKeys(["attachment_id", "file_name", "mime_type", "byte_length"]),
+);
+export type ChatAttachment = typeof ChatAttachmentSchema.Type;
+export const V1ChatMessageFrameSchema = Schema.Struct({
+  type: Schema.Literal("chat_message"),
+  message_id: UuidSchema,
+  client_message_id: RequestIdSchema,
+  sequence: UnsignedDecimalSchema,
+  participant_session_id: UuidSchema,
+  display_name: boundedUtf8String(256, 1),
+  text: LegacyChatTextSchema,
+  created_at: boundedUtf8String(64, 1),
+}).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
 export const ChatMessageFrameSchema = Schema.Struct({
   type: Schema.Literal("chat_message"),
   message_id: UuidSchema,
@@ -1174,16 +1305,22 @@ export const ChatMessageFrameSchema = Schema.Struct({
   participant_session_id: UuidSchema,
   display_name: boundedUtf8String(256, 1),
   text: ChatTextSchema,
+  attachments: Schema.Array(ChatAttachmentSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems)),
   created_at: boundedUtf8String(64, 1),
-}).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
+}).check(
+  Schema.makeFilter((frame) => (frame.text.length > 0 || frame.attachments.length > 0 ? undefined : { path: [], issue: "must contain text or at least one attachment" })),
+  boundedFrame(SyncProtocolLimits.roomActionFrameBytes),
+);
+export const AnyChatMessageFrameSchema = Schema.Union([ChatMessageFrameSchema, V1ChatMessageFrameSchema]);
 export const AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("accepted"), message: ChatMessageFrameSchema });
+export const V1AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("accepted"), message: V1ChatMessageFrameSchema });
 export const RejectedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: RoomActionErrorCodeSchema });
-export const ChatSendResultFrameSchema = Schema.Union([AcceptedChatSendResultFrameSchema, RejectedChatSendResultFrameSchema]);
+export const ChatSendResultFrameSchema = Schema.Union([AcceptedChatSendResultFrameSchema, V1AcceptedChatSendResultFrameSchema, RejectedChatSendResultFrameSchema]);
 export const LoadedChatPageFrameSchema = Schema.Struct({
   type: Schema.Literal("chat_page"),
   request_id: RequestIdSchema,
   outcome: Schema.Literal("loaded"),
-  messages: Schema.Array(ChatMessageFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatPageMaxMessages)),
+  messages: Schema.Array(AnyChatMessageFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatPageMaxMessages)),
   has_more: Schema.Boolean,
   head_sequence: Schema.NullOr(UnsignedDecimalSchema),
   retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
@@ -1191,6 +1328,20 @@ export const LoadedChatPageFrameSchema = Schema.Struct({
 export const ResetChatPageFrameSchema = Schema.Struct({ type: Schema.Literal("chat_page"), request_id: RequestIdSchema, outcome: Schema.Literal("cursor_reset"), retained_floor_sequence: UnsignedDecimalSchema });
 export const ChatPageFrameSchema = Schema.Union([LoadedChatPageFrameSchema, ResetChatPageFrameSchema]);
 export const ChatHeadFrameSchema = Schema.Struct({ type: Schema.Literal("chat_head"), head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) });
+export const ChatReadReceiptFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_receipt"), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(
+  exactKeys(["type", "participant_session_id", "participant_session_generation", "sequence", "read_at"]),
+);
+export const AcceptedChatReadResultFrameSchema = Schema.Struct({
+  type: Schema.Literal("chat_read_result"),
+  request_id: RequestIdSchema,
+  outcome: Schema.Literal("accepted"),
+  participant_session_id: UuidSchema,
+  participant_session_generation: PositiveIntegerSchema,
+  sequence: UnsignedDecimalSchema,
+  read_at: boundedUtf8String(64, 1),
+});
+export const RejectedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_result"), request_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: RoomActionErrorCodeSchema });
+export const ChatReadResultFrameSchema = Schema.Union([AcceptedChatReadResultFrameSchema, RejectedChatReadResultFrameSchema]);
 export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal("retryable_error"), command_id: CommandIdSchema, code: RetryableErrorCodeSchema });
 export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(1024) });
 export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
@@ -1201,6 +1352,7 @@ export const SyncV3ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
     Schema.decodeTo(
       Schema.Union([
         ExtendedHelloFrameSchema,
+        V1ExtendedHelloFrameSchema,
         HelloFrameSchema,
         SetHandRaisedCommandFrameSchema,
         SetDisplayNameCommandFrameSchema,
@@ -1222,7 +1374,9 @@ export const SyncV3ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         RequestAckFrameSchema,
         RoomReactionSendFrameSchema,
         ChatSendFrameSchema,
+        V1ChatSendFrameSchema,
         ChatPageRequestFrameSchema,
+        ChatReadSetFrameSchema,
         DeliveryAckFrameSchema,
         RecoveryAckFrameSchema,
         PingFrameSchema,
@@ -1249,9 +1403,12 @@ export const SyncV3ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
       RoomReactionEventFrameSchema,
       RoomReactionResultFrameSchema,
       ChatMessageFrameSchema,
+      V1ChatMessageFrameSchema,
       ChatSendResultFrameSchema,
       ChatPageFrameSchema,
       ChatHeadFrameSchema,
+      ChatReadReceiptFrameSchema,
+      ChatReadResultFrameSchema,
       RetryableErrorFrameSchema,
       ErrorFrameSchema,
       PongFrameSchema,

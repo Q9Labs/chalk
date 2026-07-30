@@ -55,9 +55,19 @@ defmodule ChalkSync.RoomActions.Fanout do
     :exit, _reason -> {:error, :dependency_unavailable}
   end
 
+  @spec publish_chat_read_receipt(GenServer.server(), SessionKey.t(), map()) ::
+          :ok | {:error, :dependency_unavailable}
+  def publish_chat_read_receipt(server \\ __MODULE__, %SessionKey{} = session, receipt) do
+    transport = GenServer.call(server, {:publish, session, receipt}, 1_000)
+    publish_external(transport, :chat_read_receipt, session, receipt)
+    :ok
+  catch
+    :exit, _reason -> {:error, :dependency_unavailable}
+  end
+
   @spec accept_external(GenServer.server(), :chat_head | :reaction, SessionKey.t(), map()) :: :ok
   def accept_external(server \\ __MODULE__, kind, %SessionKey{} = session, frame)
-      when kind in [:chat_head, :reaction] do
+      when kind in [:chat_head, :chat_read_receipt, :reaction] do
     GenServer.cast(server, {:external, key(session), frame})
   end
 
@@ -171,6 +181,10 @@ defmodule ChalkSync.RoomActions.Fanout do
 
   defp publish_external({module, adapter}, :reaction, session, frame) do
     module.publish_reaction(adapter, session, frame)
+  end
+
+  defp publish_external({module, adapter}, :chat_read_receipt, session, frame) do
+    module.publish_chat_read_receipt(adapter, session, frame)
   end
 
   defp remove_subscriber(state, session_key, subscriber, options \\ []) do

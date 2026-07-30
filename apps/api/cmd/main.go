@@ -24,6 +24,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
@@ -247,6 +248,9 @@ func run() error {
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService
 	var transcriptionStorage *objectstorage.Service
+	var chatAttachmentService httpapi.ChatAttachmentService
+	var chatParticipantVerifier httpapi.ChatParticipantVerifier
+	var chatCleanupScheduler *chatattachments.CleanupScheduler
 	var whiteboardFileService httpapi.WhiteboardFileService
 	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
 	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
@@ -259,10 +263,17 @@ func run() error {
 		recordingDownloads = recordingStorage
 		recordingObjects = recordingStorage
 		transcriptionStorage = &recordingStorage
+		chatRepository := postgres.NewChatAttachmentRepository(pool)
+		chatCleanupWorker := chatattachments.NewCleanupWorker(chatRepository, recordingStorage)
+		chatCleanupScheduler = chatattachments.NewCleanupScheduler(chatCleanupWorker, 0, logger)
 		whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
 		whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, recordingStorage)
 		whiteboardCleanupScheduler = whiteboardfiles.NewCleanupScheduler(whiteboardCleanupWorker, 0, logger)
 		if syncParticipantVerifierConfigured {
+			chatService := chatattachments.NewService(chatRepository, recordingStorage)
+			chatVerifier := chatattachments.NewParticipantVerifier(syncParticipantVerifier)
+			chatAttachmentService = chatService
+			chatParticipantVerifier = chatVerifier
 			service := whiteboardfiles.NewService(whiteboardRepository, recordingStorage)
 			verifier := whiteboardfiles.NewParticipantVerifier(syncParticipantVerifier)
 			whiteboardFileService = service
@@ -387,6 +398,8 @@ func run() error {
 		FinalizerAuthority:     transcriptionAuthority,
 		Users:                  userService,
 		Webhooks:               webhookService,
+		ChatAttachments:        chatAttachmentService,
+		ChatParticipants:       chatParticipantVerifier,
 		WhiteboardFiles:        whiteboardFileService,
 		WhiteboardParticipants: whiteboardParticipantVerifier,
 	}
@@ -423,6 +436,12 @@ func run() error {
 		whiteboardCleanupErr = cleanupErr
 		go func() { cleanupErr <- whiteboardCleanupScheduler.Run(signalCtx) }()
 	}
+	var chatCleanupErr <-chan error
+	if chatCleanupScheduler != nil {
+		cleanupErr := make(chan error, 1)
+		chatCleanupErr = cleanupErr
+		go func() { cleanupErr <- chatCleanupScheduler.Run(signalCtx) }()
+	}
 	var providerBridgeErr <-chan error
 	if providerBridgeServer != nil {
 		providerBridgeErr, err = providerBridgeServer.Start()
@@ -449,6 +468,7 @@ func run() error {
 	var runErr error
 	serverResultReceived := false
 	providerBridgeResultReceived := false
+	chatCleanupResultReceived := false
 	whiteboardCleanupResultReceived := false
 	select {
 	case err := <-serverErr:
@@ -471,6 +491,10 @@ func run() error {
 	case err := <-whiteboardCleanupErr:
 		runErr = err
 		whiteboardCleanupResultReceived = true
+		stop()
+	case err := <-chatCleanupErr:
+		runErr = err
+		chatCleanupResultReceived = true
 		stop()
 	case <-signalCtx.Done():
 		stop()
@@ -509,6 +533,11 @@ func run() error {
 	}
 	if whiteboardCleanupErr != nil && !whiteboardCleanupResultReceived {
 		if err := <-whiteboardCleanupErr; runErr == nil {
+			runErr = err
+		}
+	}
+	if chatCleanupErr != nil && !chatCleanupResultReceived {
+		if err := <-chatCleanupErr; runErr == nil {
 			runErr = err
 		}
 	}

@@ -77,21 +77,37 @@ defmodule ChalkSync.RoomActions.ChatRepository.SQL do
   def select_idempotent_message do
     """
     select
-      message_id,
-      client_message_id,
-      sequence,
-      participant_session_id,
-      display_name,
-      message_text,
-      created_at,
-      request_fingerprint
-    from sync_chat_messages
-    where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
-      and participant_session_id = $4
-      and participant_session_generation = $5
-      and client_message_id = $6
+      message.message_id,
+      message.client_message_id,
+      message.sequence,
+      message.participant_session_id,
+      message.display_name,
+      message.message_text,
+      message.created_at,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'attachment_id', attachment.attachment_id,
+            'file_name', attachment.original_filename,
+            'mime_type', attachment.mime_type,
+            'byte_length', attachment.byte_length
+          ) order by attachment.message_ordinal
+        ) filter (where attachment.attachment_id is not null),
+        '[]'::jsonb
+      ),
+      message.request_fingerprint
+    from sync_chat_messages message
+    left join sync_chat_attachments attachment
+      on attachment.tenant_id = message.tenant_id
+      and attachment.session_id = message.session_id
+      and attachment.message_sequence = message.sequence
+    where message.tenant_id = $1
+      and message.room_id = $2
+      and message.session_id = $3
+      and message.participant_session_id = $4
+      and message.participant_session_generation = $5
+      and message.client_message_id = $6
+    group by message.tenant_id, message.session_id, message.sequence
     """
   end
 
@@ -145,20 +161,36 @@ defmodule ChalkSync.RoomActions.ChatRepository.SQL do
   def read_newer_page do
     """
     select
-      message_id,
-      client_message_id,
-      sequence,
-      participant_session_id,
-      display_name,
-      message_text,
-      created_at
-    from sync_chat_messages
-    where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
-      and sequence > $4
-      and sequence <= $5
-    order by sequence asc
+      message.message_id,
+      message.client_message_id,
+      message.sequence,
+      message.participant_session_id,
+      message.display_name,
+      message.message_text,
+      message.created_at,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'attachment_id', attachment.attachment_id,
+            'file_name', attachment.original_filename,
+            'mime_type', attachment.mime_type,
+            'byte_length', attachment.byte_length
+          ) order by attachment.message_ordinal
+        ) filter (where attachment.attachment_id is not null),
+        '[]'::jsonb
+      )
+    from sync_chat_messages message
+    left join sync_chat_attachments attachment
+      on attachment.tenant_id = message.tenant_id
+      and attachment.session_id = message.session_id
+      and attachment.message_sequence = message.sequence
+    where message.tenant_id = $1
+      and message.room_id = $2
+      and message.session_id = $3
+      and message.sequence > $4
+      and message.sequence <= $5
+    group by message.tenant_id, message.session_id, message.sequence
+    order by message.sequence asc
     limit $6
     """
   end
@@ -166,21 +198,123 @@ defmodule ChalkSync.RoomActions.ChatRepository.SQL do
   def read_older_page do
     """
     select
-      message_id,
-      client_message_id,
-      sequence,
+      message.message_id,
+      message.client_message_id,
+      message.sequence,
+      message.participant_session_id,
+      message.display_name,
+      message.message_text,
+      message.created_at,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'attachment_id', attachment.attachment_id,
+            'file_name', attachment.original_filename,
+            'mime_type', attachment.mime_type,
+            'byte_length', attachment.byte_length
+          ) order by attachment.message_ordinal
+        ) filter (where attachment.attachment_id is not null),
+        '[]'::jsonb
+      )
+    from sync_chat_messages message
+    left join sync_chat_attachments attachment
+      on attachment.tenant_id = message.tenant_id
+      and attachment.session_id = message.session_id
+      and attachment.message_sequence = message.sequence
+    where message.tenant_id = $1
+      and message.room_id = $2
+      and message.session_id = $3
+      and message.sequence < $4
+      and message.sequence >= $5
+    group by message.tenant_id, message.session_id, message.sequence
+    order by message.sequence desc
+    limit $6
+    """
+  end
+
+  def lock_attachments do
+    """
+    select
+      attachment_id,
+      original_filename,
+      mime_type,
+      byte_length,
+      status,
       participant_session_id,
-      display_name,
-      message_text,
-      created_at
-    from sync_chat_messages
+      participant_session_generation
+    from sync_chat_attachments
     where tenant_id = $1
       and room_id = $2
       and session_id = $3
-      and sequence < $4
-      and sequence >= $5
-    order by sequence desc
-    limit $6
+      and attachment_id = any($4::uuid[])
+    order by array_position($4::uuid[], attachment_id)
+    for update
+    """
+  end
+
+  def attach_message_files do
+    """
+    update sync_chat_attachments
+    set
+      status = 'attached',
+      message_sequence = $4,
+      message_ordinal = $5,
+      attached_at = $6,
+      updated_at = now()
+    where tenant_id = $1
+      and room_id = $2
+      and session_id = $3
+      and attachment_id = $7
+      and status = 'ready'
+      and participant_session_id = $8
+      and participant_session_generation = $9
+    returning attachment_id
+    """
+  end
+
+  def list_read_receipts do
+    """
+    select participant_session_id, participant_session_generation, sequence, read_at
+    from sync_chat_read_receipts
+    where tenant_id = $1 and room_id = $2 and session_id = $3
+    order by participant_session_id, participant_session_generation
+    """
+  end
+
+  def upsert_read_receipt do
+    """
+    insert into sync_chat_read_receipts (
+      tenant_id,
+      room_id,
+      session_id,
+      participant_session_id,
+      participant_session_generation,
+      sequence,
+      read_at
+    ) values ($1, $2, $3, $4, $5, $6, $7)
+    on conflict (
+      tenant_id,
+      session_id,
+      participant_session_id,
+      participant_session_generation
+    ) do update set
+      sequence = excluded.sequence,
+      read_at = excluded.read_at,
+      updated_at = now()
+    where sync_chat_read_receipts.sequence < excluded.sequence
+    returning participant_session_id, participant_session_generation, sequence, read_at
+    """
+  end
+
+  def read_participant_receipt do
+    """
+    select participant_session_id, participant_session_generation, sequence, read_at
+    from sync_chat_read_receipts
+    where tenant_id = $1
+      and room_id = $2
+      and session_id = $3
+      and participant_session_id = $4
+      and participant_session_generation = $5
     """
   end
 end

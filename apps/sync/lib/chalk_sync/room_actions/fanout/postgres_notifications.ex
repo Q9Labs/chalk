@@ -37,9 +37,18 @@ defmodule ChalkSync.RoomActions.Fanout.PostgresNotifications do
 
   @impl true
   def publish_reaction(_adapter, %SessionKey{} = session, event) do
+    publish_transient(session, "reaction", event)
+  end
+
+  @impl true
+  def publish_chat_read_receipt(_adapter, %SessionKey{} = session, receipt) do
+    publish_transient(session, "chat_read_receipt", receipt)
+  end
+
+  defp publish_transient(session, kind, event) do
     payload =
       encode_payload(%{
-        "kind" => "reaction",
+        "kind" => kind,
         "tenant_id" => session.tenant_id,
         "room_id" => session.room_id,
         "session_id" => session.session_id,
@@ -52,7 +61,8 @@ defmodule ChalkSync.RoomActions.Fanout.PostgresNotifications do
   end
 
   @spec decode_notification(String.t(), binary()) ::
-          {:ok, {:chat_head | :reaction, SessionKey.t(), map()}} | {:error, :invalid_payload}
+          {:ok, {:chat_head | :chat_read_receipt | :reaction, SessionKey.t(), map()}}
+          | {:error, :invalid_payload}
   def decode_notification(channel, payload)
       when channel in [@head_channel, @transient_channel] and is_binary(payload) do
     with {:ok, frame} <- JSON.decode(payload),
@@ -88,11 +98,14 @@ defmodule ChalkSync.RoomActions.Fanout.PostgresNotifications do
 
   defp decode_value(
          @transient_channel,
-         %{"kind" => "reaction", "event" => event} = payload
-       ) do
+         %{"kind" => kind, "event" => event} = payload
+       )
+       when kind in ["reaction", "chat_read_receipt"] do
+    decoded_kind = if kind == "reaction", do: :reaction, else: :chat_read_receipt
+
     if exact_keys?(payload, ["kind", "tenant_id", "room_id", "session_id", "event"]) and
          GeneratedV3.valid_server_frame?(event),
-       do: {:ok, :reaction, event},
+       do: {:ok, decoded_kind, event},
        else: {:error, :invalid_payload}
   end
 

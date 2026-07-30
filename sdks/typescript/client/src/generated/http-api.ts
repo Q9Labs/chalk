@@ -258,6 +258,27 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("finalizeChatAttachmentUpload", "/v1/chat/attachments/uploads/:uploadId/finalize", {
+      params: S.FinalizeChatAttachmentUploadPathParamsSchema,
+      success: S.FinalizeChatAttachmentUploadResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.InvalidChatAttachmentErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ChatAttachmentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ChatAttachmentUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ChatAttachmentQuotaExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ChatAttachmentUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ClientAttachmentIdConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ChatAttachmentUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ChatAttachmentTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ChatAttachmentStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("finalizeWhiteboardFileUpload", "/v1/whiteboard/files/uploads/:uploadId/finalize", {
       params: S.FinalizeWhiteboardFileUploadPathParamsSchema,
       success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
@@ -275,6 +296,27 @@ const defaultGroup = HttpApiGroup.make("default")
         S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getChatAttachmentDownload", "/v1/chat/attachments/:attachmentId/download", {
+      params: S.GetChatAttachmentDownloadPathParamsSchema,
+      success: S.GetChatAttachmentDownloadResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.InvalidChatAttachmentErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ChatAttachmentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ChatAttachmentUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ChatAttachmentQuotaExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ChatAttachmentUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ClientAttachmentIdConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ChatAttachmentUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ChatAttachmentTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ChatAttachmentStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
   )
@@ -338,6 +380,28 @@ const defaultGroup = HttpApiGroup.make("default")
         S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("initiateChatAttachmentUpload", "/v1/chat/attachments/uploads", {
+      payload: S.InitiateChatAttachmentUploadRequestBodySchema,
+      success: S.InitiateChatAttachmentUploadResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.InvalidChatAttachmentErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ChatAttachmentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ChatAttachmentUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ChatAttachmentQuotaExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ChatAttachmentUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ClientAttachmentIdConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ChatAttachmentUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ChatAttachmentTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ChatAttachmentStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
   )

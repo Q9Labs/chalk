@@ -45,6 +45,7 @@ defmodule ChalkSync.Transport.SocketV3 do
        coordinator: nil,
        commands: %{},
        room_actions_negotiated: false,
+       room_actions_version: nil,
        room_actions_queue: RoomActionQueue.new(),
        observability: observability
      }}
@@ -128,6 +129,13 @@ defmodule ChalkSync.Transport.SocketV3 do
   end
 
   def handle_info(
+        {:room_action_frame, %{"type" => "chat_read_receipt"}},
+        %{room_actions_version: version} = state
+      )
+      when version != 2,
+      do: {:ok, state}
+
+  def handle_info(
         {:room_action_frame, frame},
         %{phase: :live, room_actions_negotiated: true} = state
       ),
@@ -207,7 +215,7 @@ defmodule ChalkSync.Transport.SocketV3 do
              identity.session,
              identity.admission_lifecycle_intent_id
            ),
-         {:ok, protocol_options, negotiated?} <-
+         {:ok, protocol_options, negotiated?, room_actions_version} <-
            negotiate_room_actions(identity, Map.get(hello, :room_actions)),
          {:ok, coordinator} <-
            Coordinator.begin_recovery(identity, self(), protocol_options) do
@@ -216,7 +224,8 @@ defmodule ChalkSync.Transport.SocketV3 do
         identity,
         cursor,
         coordinator,
-        negotiated?
+        negotiated?,
+        room_actions_version
       )
     else
       {:error, :invalid_token} ->
@@ -381,10 +390,26 @@ defmodule ChalkSync.Transport.SocketV3 do
   end
 
   defp handle_frame(
+         {:chat_read_set, input},
+         %{
+           phase: :live,
+           identity: identity,
+           room_actions_negotiated: true,
+           room_actions_version: 2
+         } = state
+       ) do
+    with {:ok, frame} <- RoomActions.mark_chat_read(identity, input) do
+      state = observe_room_action(state, "chat.read", frame["outcome"])
+      enqueue_room_action(frame, state)
+    end
+  end
+
+  defp handle_frame(
          {:chat_send, input},
          %{phase: :live, identity: identity, room_actions_negotiated: true} = state
        ) do
-    with {:ok, frame} <- RoomActions.send_chat(identity, input) do
+    with {:ok, frame} <-
+           RoomActions.send_chat(identity, input, version: state.room_actions_version) do
       state = observe_room_action(state, "chat.send", frame["outcome"])
       enqueue_room_action(frame, state)
     end
@@ -394,7 +419,7 @@ defmodule ChalkSync.Transport.SocketV3 do
          {:chat_page_request, input},
          %{phase: :live, identity: identity, room_actions_negotiated: true} = state
        ) do
-    case RoomActions.read_chat_page(identity, input) do
+    case RoomActions.read_chat_page(identity, input, version: state.room_actions_version) do
       {:ok, frame} ->
         state = observe_room_action(state, "chat.page", frame["outcome"])
         enqueue_room_action(frame, state, :chat_page)
@@ -406,7 +431,7 @@ defmodule ChalkSync.Transport.SocketV3 do
   end
 
   defp handle_frame({name, _input}, state)
-       when name in [:room_reaction_send, :chat_send, :chat_page_request],
+       when name in [:room_reaction_send, :chat_send, :chat_page_request, :chat_read_set],
        do: protocol_error(:room_actions_not_negotiated, state)
 
   defp handle_frame(:ping, state), do: {:push, {:text, ProtocolV3.pong()}, state}
@@ -416,7 +441,8 @@ defmodule ChalkSync.Transport.SocketV3 do
          identity,
          cursor,
          coordinator,
-         room_actions_negotiated
+         room_actions_negotiated,
+         room_actions_version
        ) do
     with {:ok, recovery} <- Stateholder.recover(identity, cursor),
          :ok <-
@@ -435,7 +461,8 @@ defmodule ChalkSync.Transport.SocketV3 do
            hello_timer: nil,
            identity: identity,
            coordinator: coordinator,
-           room_actions_negotiated: room_actions_negotiated
+           room_actions_negotiated: room_actions_negotiated,
+           room_actions_version: room_actions_version
        }
        |> observe_room_action("extension.negotiate", negotiation_outcome(room_actions_negotiated))}
     else
@@ -562,12 +589,13 @@ defmodule ChalkSync.Transport.SocketV3 do
     Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5_000) + 1_000
   end
 
-  defp negotiate_room_actions(_identity, nil), do: {:ok, %{}, false}
+  defp negotiate_room_actions(_identity, nil), do: {:ok, %{}, false, nil}
 
   defp negotiate_room_actions(identity, chat_cursor) do
     case RoomActions.negotiate(identity, chat_cursor, self()) do
       {:ok, extension} ->
-        {:ok, %{room_actions_extension: extension}, true}
+        version = if extension["name"] == "room_actions_v2", do: 2, else: 1
+        {:ok, %{room_actions_extension: extension}, true, version}
 
       {:error, reason} ->
         {:error, reason}

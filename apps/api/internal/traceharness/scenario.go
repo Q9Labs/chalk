@@ -87,6 +87,8 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteJourneyEventIntake(ctx)
 	case RouteWhiteboardFileUploadScenario:
 		return runRouteWhiteboardFileUpload(ctx)
+	case RouteChatAttachmentUploadScenario:
+		return runRouteChatAttachmentUpload(ctx)
 	case RouteAPIKeyCustomerFlowScenario:
 		return runRouteAPIKeyCustomerFlow(ctx)
 	case EdgeAPIKeyRejectedScopeScenario:

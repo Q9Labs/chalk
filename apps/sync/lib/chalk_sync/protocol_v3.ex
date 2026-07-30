@@ -216,7 +216,7 @@ defmodule ChalkSync.ProtocolV3 do
             streams: streams,
             extensions: [
               %{
-                "name" => "room_actions_v1",
+                "name" => extension,
                 "chat_cursor" => %{
                   "after_sequence" => after_sequence,
                   "retained_floor_sequence" => retained_floor_sequence
@@ -226,6 +226,7 @@ defmodule ChalkSync.ProtocolV3 do
           }}
        ) do
     normalize_hello(token, streams, %{
+      extension: extension,
       after_sequence: after_sequence,
       retained_floor_sequence: retained_floor_sequence
     })

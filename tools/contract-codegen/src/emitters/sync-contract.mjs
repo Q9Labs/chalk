@@ -349,6 +349,9 @@ function validateV3SyncContract(value) {
     roomActionBurstMax: 8,
     chatMessageUtf8Bytes: 16_384,
     chatMessageUnicodeScalars: 4_000,
+    chatAttachmentMaxItems: 5,
+    chatAttachmentFileNameUtf8Bytes: 255,
+    chatAttachmentMaxBytes: 26_214_400,
     chatPageMaxMessages: 100,
     chatPageEncodedBytes: 131_072,
     reactionTtlMs: 5_000,
@@ -517,8 +520,12 @@ function validateV3SyncContract(value) {
     requireArrayProperty(frame, "exactFields", `directedRequestFrames.${property}.exactFields are required`);
   }
   const roomActions = requireObjectProperty(value, "roomActions", "roomActions are required");
-  if (roomActions.extension !== "room_actions_v1" || JSON.stringify(roomActions.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) || JSON.stringify(roomActions.reactions) !== JSON.stringify(["👍", "❤️", "😂", "😮", "😢", "🎉"])) {
+  if (roomActions.extension !== "room_actions_v2" || roomActions.fallbackExtension !== "room_actions_v1" || JSON.stringify(roomActions.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) || JSON.stringify(roomActions.reactions) !== JSON.stringify(["👍", "❤️", "😂", "😮", "😢", "🎉"])) {
     throw new Error("Invalid sync v3 contract: roomActions negotiation, capabilities, and reactions must be exhaustive");
+  }
+  const attachmentMimeTypes = requireArrayProperty(roomActions, "attachmentMimeTypes", "roomActions.attachmentMimeTypes are required");
+  if (attachmentMimeTypes.length === 0 || !attachmentMimeTypes.every((value) => typeof value === "string") || new Set(attachmentMimeTypes).size !== attachmentMimeTypes.length) {
+    throw new Error("Invalid sync v3 contract: roomActions attachment MIME types must be unique strings");
   }
   const chatCursor = requireObjectProperty(roomActions, "chatCursor", "roomActions.chatCursor is required");
   if (JSON.stringify(chatCursor.exactFields) !== JSON.stringify(["after_sequence", "retained_floor_sequence"])) {
@@ -526,16 +533,18 @@ function validateV3SyncContract(value) {
   }
   const helloExtension = requireObjectProperty(roomActions, "helloExtension", "roomActions.helloExtension is required");
   const welcomeExtension = requireObjectProperty(roomActions, "welcomeExtension", "roomActions.welcomeExtension is required");
+  const fallbackWelcomeExtension = requireObjectProperty(roomActions, "fallbackWelcomeExtension", "roomActions.fallbackWelcomeExtension is required");
   requireArrayProperty(helloExtension, "exactFields", "roomActions.helloExtension exact fields are required");
   requireArrayProperty(welcomeExtension, "exactFields", "roomActions.welcomeExtension exact fields are required");
+  requireArrayProperty(fallbackWelcomeExtension, "exactFields", "roomActions.fallbackWelcomeExtension exact fields are required");
   const roomActionClientFrames = requireObjectProperty(roomActions, "clientFrames", "roomActions.clientFrames are required");
-  for (const property of ["sendReaction", "sendChat", "readChatPage"]) {
+  for (const property of ["sendReaction", "sendChat", "fallbackSendChat", "readChatPage", "setChatRead"]) {
     const frame = requireObjectProperty(roomActionClientFrames, property, `roomActions.clientFrames.${property} is required`);
     requireStringProperty(frame, "type", `roomActions.clientFrames.${property}.type is required`);
     requireArrayProperty(frame, "exactFields", `roomActions.clientFrames.${property}.exactFields are required`);
   }
   const roomActionServerFrames = requireObjectProperty(roomActions, "serverFrames", "roomActions.serverFrames are required");
-  for (const property of ["reaction", "reactionResult", "chatMessage", "chatSendResult", "chatPage", "chatHead"]) {
+  for (const property of ["reaction", "reactionResult", "chatMessage", "fallbackChatMessage", "chatSendResult", "chatPage", "chatHead", "chatReadReceipt", "chatReadResult"]) {
     const frame = requireObjectProperty(roomActionServerFrames, property, `roomActions.serverFrames.${property} is required`);
     requireStringProperty(frame, "type", `roomActions.serverFrames.${property}.type is required`);
   }

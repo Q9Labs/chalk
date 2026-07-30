@@ -88,6 +88,8 @@ type Options struct {
 	FinalizerAuthority     FinalizerAuthority
 	Users                  UserService
 	Webhooks               WebhookService
+	ChatAttachments        ChatAttachmentService
+	ChatParticipants       ChatParticipantVerifier
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
 }
@@ -250,6 +252,7 @@ func mountV1Routes(r chi.Router, options Options) {
 		})
 
 		r.Group(func(r chi.Router) {
+			mountChatAttachmentRoutes(r, options.ChatAttachments, options.ChatParticipants, options.RateLimit)
 			mountWhiteboardFileRoutes(r, options.WhiteboardFiles, options.WhiteboardParticipants, options.RateLimit)
 		})
 	})

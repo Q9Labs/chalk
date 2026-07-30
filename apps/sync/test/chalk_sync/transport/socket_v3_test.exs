@@ -52,6 +52,7 @@ defmodule ChalkSync.Transport.SocketV3Test do
       participant_session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
       display_name: "Ada",
       text: "Hello from Chalk",
+      attachments: [],
       created_at: "2026-07-29T14:00:00.000Z"
     }
 
@@ -71,6 +72,20 @@ defmodule ChalkSync.Transport.SocketV3Test do
 
     @impl true
     def append(identity, input) do
+      attachments =
+        if Map.get(input, :attachment_ids, []) == [] do
+          []
+        else
+          [
+            %{
+              attachment_id: hd(input.attachment_ids),
+              file_name: "diagram.png",
+              mime_type: "image/png",
+              byte_length: 32
+            }
+          ]
+        end
+
       {:ok,
        %{
          outcome: :committed,
@@ -78,13 +93,31 @@ defmodule ChalkSync.Transport.SocketV3Test do
            @message
            | participant_session_id: identity.participant_session_id,
              client_message_id: input.client_message_id,
-             text: input.text
+             text: input.text,
+             attachments: attachments
          }
        }}
     end
 
     @impl true
     def head(_session), do: {:ok, %{head_sequence: "1", retained_floor_sequence: "1"}}
+
+    @impl true
+    def read_receipts(_session), do: {:ok, []}
+
+    @impl true
+    def mark_read(identity, "1") do
+      {:ok,
+       %{
+         outcome: :advanced,
+         receipt: %{
+           participant_session_id: identity.participant_session_id,
+           participant_session_generation: identity.participant_session_generation,
+           sequence: "1",
+           read_at: "2026-07-29T14:01:00.000Z"
+         }
+       }}
+    end
 
     @impl true
     def read_page(_session, _request) do
@@ -222,6 +255,145 @@ defmodule ChalkSync.Transport.SocketV3Test do
               "outcome" => "loaded",
               "messages" => [%{"text" => "Hello from Chalk"}]
             }, _client} = Client.recv(client)
+  end
+
+  test "v1 fallback suppresses v2 read-receipt fanout", %{port: port} do
+    identity = seed_identity()
+    {:ok, client} = Client.connect(port, "/v3/sync")
+
+    extended_hello =
+      Map.put(hello(identity), "extensions", [
+        %{
+          "name" => "room_actions_v1",
+          "chat_cursor" => %{
+            "after_sequence" => nil,
+            "retained_floor_sequence" => nil
+          }
+        }
+      ])
+
+    client = Client.send_json(client, extended_hello)
+
+    assert {:json,
+            %{
+              "type" => "welcome",
+              "extensions" => [%{"name" => "room_actions_v1"}]
+            } = welcome, client} = Client.recv(client)
+
+    client = Client.acknowledge_recovery(client, welcome)
+    {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+    {:json, %{"type" => "projection_snapshot", "stream" => "media"}, client} = Client.recv(client)
+
+    {:json, %{"type" => "projection_snapshot", "stream" => "presence"}, client} =
+      Client.recv(client)
+
+    receipt = %{
+      "type" => "chat_read_receipt",
+      "participant_session_id" => identity.participant_session_id,
+      "participant_session_generation" => identity.participant_session_generation,
+      "sequence" => "1",
+      "read_at" => "2026-07-29T14:01:00.000Z"
+    }
+
+    assert :ok =
+             ChalkSync.RoomActions.Fanout.publish_chat_read_receipt(
+               ChalkSync.RoomActions.Fanout,
+               identity.session,
+               receipt
+             )
+
+    client = Client.send_json(client, %{"type" => "ping"})
+    assert {:json, %{"type" => "pong"}, _client} = Client.recv(client)
+  end
+
+  test "v2 carries attachment-only chat and monotonic read receipts", %{port: port} do
+    identity = seed_identity()
+    {:ok, client} = Client.connect(port, "/v3/sync")
+
+    extended_hello =
+      Map.put(hello(identity), "extensions", [
+        %{
+          "name" => "room_actions_v2",
+          "chat_cursor" => %{
+            "after_sequence" => nil,
+            "retained_floor_sequence" => nil
+          }
+        }
+      ])
+
+    client = Client.send_json(client, extended_hello)
+
+    assert {:json,
+            %{
+              "type" => "welcome",
+              "extensions" => [
+                %{
+                  "name" => "room_actions_v2",
+                  "read_receipts" => []
+                }
+              ]
+            } = welcome, client} = Client.recv(client)
+
+    client = Client.acknowledge_recovery(client, welcome)
+    {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+    {:json, %{"type" => "projection_snapshot", "stream" => "media"}, client} = Client.recv(client)
+
+    {:json, %{"type" => "projection_snapshot", "stream" => "presence"}, client} =
+      Client.recv(client)
+
+    attachment_id = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c82"
+
+    client =
+      Client.send_json(client, %{
+        "type" => "chat_send",
+        "client_message_id" => "chat-message-0002",
+        "text" => "",
+        "attachment_ids" => [attachment_id]
+      })
+
+    assert {:json,
+            %{
+              "type" => "chat_send_result",
+              "outcome" => "accepted",
+              "message" => %{
+                "text" => "",
+                "attachments" => [
+                  %{
+                    "attachment_id" => ^attachment_id,
+                    "file_name" => "diagram.png",
+                    "mime_type" => "image/png",
+                    "byte_length" => 32
+                  }
+                ]
+              }
+            }, client} = Client.recv(client)
+
+    assert {:json, %{"type" => "chat_head", "head_sequence" => "1"}, client} =
+             Client.recv(client)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "chat_read_set",
+        "request_id" => "chat-read-request-0001",
+        "sequence" => "1"
+      })
+
+    assert {:json,
+            %{
+              "type" => "chat_read_result",
+              "request_id" => "chat-read-request-0001",
+              "outcome" => "accepted",
+              "sequence" => "1"
+            }, client} = Client.recv(client)
+
+    assert {:json,
+            %{
+              "type" => "chat_read_receipt",
+              "participant_session_id" => participant_session_id,
+              "sequence" => "1"
+            }, _client} = Client.recv(client)
+
+    assert participant_session_id == identity.participant_session_id
   end
 
   test "real v3 operation captures upgrade journey and W3C context", %{port: port} do

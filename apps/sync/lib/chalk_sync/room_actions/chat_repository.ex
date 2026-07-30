@@ -18,7 +18,22 @@ defmodule ChalkSync.RoomActions.ChatRepository do
           participant_session_id: String.t(),
           display_name: String.t(),
           text: String.t(),
+          attachments: [attachment()],
           created_at: String.t()
+        }
+
+  @type attachment :: %{
+          attachment_id: String.t(),
+          file_name: String.t(),
+          mime_type: String.t(),
+          byte_length: pos_integer()
+        }
+
+  @type read_receipt :: %{
+          participant_session_id: String.t(),
+          participant_session_generation: pos_integer(),
+          sequence: String.t(),
+          read_at: String.t()
         }
 
   @typedoc "The retained range for one Session chat stream."
@@ -43,6 +58,10 @@ defmodule ChalkSync.RoomActions.ChatRepository do
           | :session_ended
           | :participant_stale
           | :client_message_id_conflict
+          | :attachment_not_found
+          | :attachment_not_ready
+          | :attachment_already_claimed
+          | :attachment_quota_exceeded
           | :dependency_unavailable
 
   @callback authorize(Identity.t(), String.t() | nil) ::
@@ -58,12 +77,20 @@ defmodule ChalkSync.RoomActions.ChatRepository do
 
   @callback append(Identity.t(), %{
               client_message_id: String.t(),
-              text: String.t()
+              text: String.t(),
+              attachment_ids: [String.t()]
             }) ::
               {:ok, %{outcome: :committed | :duplicate, message: message()}}
               | {:error, error_code()}
 
   @callback head(SessionKey.t()) :: {:ok, head()} | {:error, error_code()}
+
+  @callback read_receipts(SessionKey.t()) ::
+              {:ok, [read_receipt()]} | {:error, error_code()}
+
+  @callback mark_read(Identity.t(), String.t()) ::
+              {:ok, %{outcome: :advanced | :unchanged, receipt: read_receipt()}}
+              | {:error, error_code()}
 
   @callback read_page(
               SessionKey.t(),

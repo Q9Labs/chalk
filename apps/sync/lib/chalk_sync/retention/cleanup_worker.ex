@@ -307,6 +307,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
 
   defp delete_collaboration_data(transaction, candidate) do
     collaboration_deletions = [
+      SQL.delete_chat_read_receipts(),
       SQL.delete_chat_messages(),
       SQL.delete_chat_streams(),
       SQL.delete_whiteboard_operation_receipts(),

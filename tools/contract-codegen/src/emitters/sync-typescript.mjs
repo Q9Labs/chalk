@@ -158,7 +158,7 @@ function renderV3TypeScript(contract) {
     "  }",
     "}",
     "function strictRoomActionsHelloExtension(value: unknown): boolean {",
-    "  return exactObject(value, ['name', 'chat_cursor']) && value.name === 'room_actions_v1' && exactObject(value.chat_cursor, ['after_sequence', 'retained_floor_sequence']);",
+    "  return exactObject(value, ['name', 'chat_cursor']) && (value.name === 'room_actions_v2' || value.name === 'room_actions_v1') && exactObject(value.chat_cursor, ['after_sequence', 'retained_floor_sequence']);",
     "}",
     "function strictHello(value: Record<string, unknown>): boolean {",
     "  const legacy = exactObject(value, ['type', 'protocol', 'token', 'streams']);",
@@ -168,7 +168,10 @@ function renderV3TypeScript(contract) {
     "  return exactObject(streams.control, ['cursor']) && (streams.control.cursor === null || strictCursor(streams.control.cursor)) && exactObject(streams.media, ['cursor']) && streams.media.cursor === null && exactObject(streams.presence, ['cursor']) && streams.presence.cursor === null && exactObject(streams.requests, ['cursor']) && streams.requests.cursor === null;",
     "}",
     "function strictChatMessage(value: unknown): boolean {",
-    "  return exactObject(value, ['type', 'message_id', 'client_message_id', 'sequence', 'participant_session_id', 'display_name', 'text', 'created_at']);",
+    "  return exactObject(value, ['type', 'message_id', 'client_message_id', 'sequence', 'participant_session_id', 'display_name', 'text', 'created_at']) || (exactObject(value, ['type', 'message_id', 'client_message_id', 'sequence', 'participant_session_id', 'display_name', 'text', 'attachments', 'created_at']) && Array.isArray(value.attachments) && value.attachments.every(strictChatAttachment));",
+    "}",
+    "function strictChatAttachment(value: unknown): boolean {",
+    "  return exactObject(value, ['attachment_id', 'file_name', 'mime_type', 'byte_length']);",
     "}",
     "function strictRoomReaction(value: unknown): boolean {",
     "  return exactObject(value, ['type', 'event_id', 'participant_session_id', 'display_name', 'reaction', 'occurred_at', 'expires_at']);",
@@ -190,8 +193,9 @@ function renderV3TypeScript(contract) {
     "    case 'directed_request': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.send.exactFields) + ");",
     "    case 'request_ack': return exactObject(value, " + JSON.stringify(contract.directedRequestFrames.acknowledge.exactFields) + ");",
     "    case 'room_reaction_send': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.sendReaction.exactFields) + ");",
-    "    case 'chat_send': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.sendChat.exactFields) + ");",
+    "    case 'chat_send': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.fallbackSendChat.exactFields) + ") || exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.sendChat.exactFields) + ");",
     "    case 'chat_page_request': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.readChatPage.exactFields) + ");",
+    "    case 'chat_read_set': return exactObject(value, " + JSON.stringify(contract.roomActions.clientFrames.setChatRead.exactFields) + ");",
     "    case 'delivery_ack': return exactObject(value, ['type', 'stream', 'revision', 'state_digest']);",
     "    case 'recovery_ack': return exactObject(value, ['type', 'recovery_id', 'revision', 'state_digest']);",
     "    case 'ping': return exactObject(value, ['type']);",
@@ -253,7 +257,8 @@ function renderV3TypeScript(contract) {
     "}",
     "function strictWelcome(value: Record<string, unknown>): boolean {",
     "  const base = ['type', 'protocol', 'participant_session_id', 'participant_session_generation', 'recovery_id', 'head', 'mode'];",
-    "  const extensionValid = Array.isArray(value.extensions) && value.extensions.length === 1 && exactObject(value.extensions[0], ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence']);",
+    "  const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;",
+    "  const extensionValid = isObject(extension) && ((extension.name === 'room_actions_v1' && exactObject(extension, ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence'])) || (extension.name === 'room_actions_v2' && exactObject(extension, ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']) && Array.isArray(extension.read_receipts)));",
     "  const fields = extensionValid ? [...base, 'extensions'] : base;",
     "  if (!strictCursor(value.head)) return false;",
     "  if (value.mode === 'snapshot') return exactObject(value, [...fields, 'snapshot']) && strictSnapshot(value.snapshot);",
@@ -299,6 +304,12 @@ function renderV3TypeScript(contract) {
       JSON.stringify(contract.roomActions.serverFrames.chatPage.resetFields) +
       ");",
     "    case 'chat_head': return exactObject(value, " + JSON.stringify(contract.roomActions.serverFrames.chatHead.exactFields) + ");",
+    "    case 'chat_read_receipt': return exactObject(value, " + JSON.stringify(contract.roomActions.serverFrames.chatReadReceipt.exactFields) + ");",
+    "    case 'chat_read_result': return value.outcome === 'accepted' ? exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.chatReadResult.acceptedFields) +
+      ") : value.outcome === 'rejected' && exactObject(value, " +
+      JSON.stringify(contract.roomActions.serverFrames.chatReadResult.rejectedFields) +
+      ");",
     "    case 'retryable_error': return exactObject(value, ['type', 'command_id', 'code']);",
     "    case 'error': return exactObject(value, ['type', 'code', 'detail']);",
     "    case 'pong': return exactObject(value, ['type']);",
@@ -347,7 +358,9 @@ function renderV3TypeScript(contract) {
     "const StreamsSchema = Schema.Struct({ control: Schema.Struct({ cursor: Schema.NullOr(ControlCursorSchema) }).check(exactKeys(['cursor'])), media: NullCursorStreamSchema, presence: NullCursorStreamSchema, requests: NullCursorStreamSchema });",
     `export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(3), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
     "export const ChatCursorSchema = Schema.Struct({ after_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(['after_sequence', 'retained_floor_sequence']));",
-    "export const RoomActionsHelloExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v1'), chat_cursor: ChatCursorSchema }).check(exactKeys(['name', 'chat_cursor']));",
+    "export const RoomActionsV1HelloExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v1'), chat_cursor: ChatCursorSchema }).check(exactKeys(['name', 'chat_cursor']));",
+    "export const RoomActionsHelloExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v2'), chat_cursor: ChatCursorSchema }).check(exactKeys(['name', 'chat_cursor']));",
+    `export const V1ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(3), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema, extensions: Schema.Tuple([RoomActionsV1HelloExtensionSchema]) }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
     `export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(3), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema, extensions: Schema.Tuple([RoomActionsHelloExtensionSchema]) }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
     "export const DeliveryAckFrameSchema = Schema.Struct({ type: Schema.Literal('delivery_ack'), stream: Schema.Literal('control'), revision: PositiveIntegerSchema, state_digest: StateDigestSchema });",
     "export const RecoveryAckFrameSchema = Schema.Struct({ type: Schema.Literal('recovery_ack'), recovery_id: UuidSchema, revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });",
@@ -374,8 +387,15 @@ function renderV3TypeScript(contract) {
   lines.push("export const RequestAckFrameSchema = Schema.Struct({ type: Schema.Literal('request_ack'), request_id: RequestIdSchema });");
   lines.push(`export const RoomReactionSchema = ${renderLiteralUnion(contract.roomActions.reactions)};`);
   lines.push("export const RoomReactionSendFrameSchema = Schema.Struct({ type: Schema.Literal('room_reaction_send'), operation_id: RequestIdSchema, reaction: RoomReactionSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));");
-  lines.push(`export const ChatTextSchema = boundedUtf8String(${limits.chatMessageUtf8Bytes}, 1).check(Schema.makeFilter((value) => Array.from(value).length <= ${limits.chatMessageUnicodeScalars} ? undefined : { path: ['text'], issue: 'must fit the Unicode scalar limit' }));`);
-  lines.push("export const ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send'), client_message_id: RequestIdSchema, text: ChatTextSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));");
+  lines.push(`export const ChatTextSchema = boundedUtf8String(${limits.chatMessageUtf8Bytes}).check(Schema.makeFilter((value) => Array.from(value).length <= ${limits.chatMessageUnicodeScalars} ? undefined : { path: ['text'], issue: 'must fit the Unicode scalar limit' }));`);
+  lines.push("const LegacyChatTextSchema = ChatTextSchema.check(Schema.makeFilter((value) => value.length > 0 ? undefined : { path: ['text'], issue: 'must not be empty' }));");
+  lines.push("export const ChatAttachmentMimeTypeSchema = " + renderLiteralUnion(contract.roomActions.attachmentMimeTypes) + ";");
+  lines.push("export const ChatAttachmentIdSchema = Schema.Array(UuidSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems), Schema.makeFilter((ids) => uniqueStrings(ids) ? undefined : { path: ['attachment_ids'], issue: 'must contain unique attachment IDs' }));");
+  lines.push("export const V1ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send'), client_message_id: RequestIdSchema, text: LegacyChatTextSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));");
+  lines.push(
+    "export const ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send'), client_message_id: RequestIdSchema, text: ChatTextSchema, attachment_ids: ChatAttachmentIdSchema }).check(Schema.makeFilter((frame) => frame.text.length > 0 || frame.attachment_ids.length > 0 ? undefined : { path: [], issue: 'must contain text or at least one attachment' }), boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
+  );
+  lines.push("export const ChatReadSetFrameSchema = Schema.Struct({ type: Schema.Literal('chat_read_set'), request_id: RequestIdSchema, sequence: UnsignedDecimalSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));");
   lines.push(`export const ChatPageDirectionSchema = ${renderLiteralUnion(contract.roomActions.clientFrames.readChatPage.directions)};`);
   lines.push(
     "export const ChatPageRequestFrameSchema = Schema.Struct({ type: Schema.Literal('chat_page_request'), request_id: RequestIdSchema, direction: ChatPageDirectionSchema, cursor_sequence: Schema.NullOr(UnsignedDecimalSchema), limit: PositiveIntegerSchema }).check(Schema.makeFilter((frame) => frame.limit <= SyncProtocolLimits.chatPageMaxMessages ? undefined : { path: ['limit'], issue: 'must fit the chat page limit' }), boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
@@ -410,20 +430,32 @@ function renderV3TypeScript(contract) {
   lines.push(`export const RoomActionCapabilitySchema = ${renderLiteralUnion(contract.roomActions.capabilities)};`);
   lines.push("const RoomActionCapabilitiesSchema = Schema.Array(RoomActionCapabilitySchema).check(Schema.isMaxLength(2), Schema.makeFilter((capabilities) => uniqueStrings(capabilities) ? undefined : { path: [], issue: 'must contain unique room-action capabilities' }));");
   lines.push(
-    "export const RoomActionsWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v1'), capabilities: RoomActionCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, RoomActionCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence']));",
+    "export const ChatReadReceiptSchema = Schema.Struct({ participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(exactKeys(['participant_session_id', 'participant_session_generation', 'sequence', 'read_at']));",
+  );
+  lines.push("export type ChatReadReceipt = typeof ChatReadReceiptSchema.Type;");
+  lines.push(
+    "export const RoomActionsV1WelcomeExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v1'), capabilities: RoomActionCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, RoomActionCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence']));",
+  );
+  lines.push(
+    "export const RoomActionsWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literal('room_actions_v2'), capabilities: RoomActionCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, RoomActionCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']));",
   );
   lines.push("const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(3), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema };");
+  lines.push("const V1ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([RoomActionsV1WelcomeExtensionSchema]) };");
   lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([RoomActionsWelcomeExtensionSchema]) };");
   lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));");
   lines.push("export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('replay') });");
   lines.push("export const WelcomeUpToDateFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('up_to_date') });");
   lines.push("export const WelcomeTerminalFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('terminal'), reason: TerminalRecoveryReasonSchema });");
+  lines.push("export const V1ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));");
+  lines.push("export const V1ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal('replay') });");
+  lines.push("export const V1ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal('up_to_date') });");
+  lines.push("export const V1ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...V1ExtendedWelcomeBase, mode: Schema.Literal('terminal'), reason: TerminalRecoveryReasonSchema });");
   lines.push("export const ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));");
   lines.push("export const ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('replay') });");
   lines.push("export const ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('up_to_date') });");
   lines.push("export const ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal('terminal'), reason: TerminalRecoveryReasonSchema });");
   lines.push(
-    "export const WelcomeFrameSchema = Schema.Union([ExtendedWelcomeSnapshotFrameSchema, ExtendedWelcomeReplayFrameSchema, ExtendedWelcomeUpToDateFrameSchema, ExtendedWelcomeTerminalFrameSchema, WelcomeSnapshotFrameSchema, WelcomeReplayFrameSchema, WelcomeUpToDateFrameSchema, WelcomeTerminalFrameSchema]);",
+    "export const WelcomeFrameSchema = Schema.Union([ExtendedWelcomeSnapshotFrameSchema, ExtendedWelcomeReplayFrameSchema, ExtendedWelcomeUpToDateFrameSchema, ExtendedWelcomeTerminalFrameSchema, V1ExtendedWelcomeSnapshotFrameSchema, V1ExtendedWelcomeReplayFrameSchema, V1ExtendedWelcomeUpToDateFrameSchema, V1ExtendedWelcomeTerminalFrameSchema, WelcomeSnapshotFrameSchema, WelcomeReplayFrameSchema, WelcomeUpToDateFrameSchema, WelcomeTerminalFrameSchema]);",
   );
   lines.push(
     "export const ReplayPageFrameSchema = Schema.Struct({ type: Schema.Literal('replay_page'), recovery_id: UuidSchema, first_revision: PositiveIntegerSchema, last_revision: PositiveIntegerSchema, events: Schema.Array(EventFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.replayPageMaxEvents)) }).check(Schema.makeFilter((frame) => { const first = frame.events[0]; const last = frame.events.at(-1); return encodedSyncFrameBytes(frame) <= SyncProtocolLimits.replayPageEncodedBytes && first !== undefined && last !== undefined && first.revision === frame.first_revision && last.revision === frame.last_revision && frame.events.every((event, index) => index === 0 || event.base_revision === frame.events[index - 1]!.revision) ? undefined : { path: [], issue: 'must declare one bounded contiguous replay page' }; }));",
@@ -479,28 +511,45 @@ function renderV3TypeScript(contract) {
   lines.push("export const RejectedRoomReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal('room_reaction_result'), operation_id: RequestIdSchema, outcome: Schema.Literal('rejected'), error_code: RoomActionErrorCodeSchema });");
   lines.push("export const RoomReactionResultFrameSchema = Schema.Union([AcceptedRoomReactionResultFrameSchema, RejectedRoomReactionResultFrameSchema]);");
   lines.push(
-    "export const ChatMessageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_message'), message_id: UuidSchema, client_message_id: RequestIdSchema, sequence: UnsignedDecimalSchema, participant_session_id: UuidSchema, display_name: boundedUtf8String(256, 1), text: ChatTextSchema, created_at: boundedUtf8String(64, 1) }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
+    "export const ChatAttachmentSchema = Schema.Struct({ attachment_id: UuidSchema, file_name: boundedUtf8String(SyncProtocolLimits.chatAttachmentFileNameUtf8Bytes, 1), mime_type: ChatAttachmentMimeTypeSchema, byte_length: PositiveIntegerSchema }).check(Schema.makeFilter((attachment) => attachment.byte_length <= SyncProtocolLimits.chatAttachmentMaxBytes ? undefined : { path: ['byte_length'], issue: 'must fit the attachment byte limit' }), exactKeys(['attachment_id', 'file_name', 'mime_type', 'byte_length']));",
   );
-  lines.push("export const AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send_result'), client_message_id: RequestIdSchema, outcome: Schema.Literal('accepted'), message: ChatMessageFrameSchema });");
-  lines.push("export const RejectedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send_result'), client_message_id: RequestIdSchema, outcome: Schema.Literal('rejected'), error_code: RoomActionErrorCodeSchema });");
-  lines.push("export const ChatSendResultFrameSchema = Schema.Union([AcceptedChatSendResultFrameSchema, RejectedChatSendResultFrameSchema]);");
+  lines.push("export type ChatAttachment = typeof ChatAttachmentSchema.Type;");
   lines.push(
-    "export const LoadedChatPageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_page'), request_id: RequestIdSchema, outcome: Schema.Literal('loaded'), messages: Schema.Array(ChatMessageFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatPageMaxMessages)), has_more: Schema.Boolean, head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(boundedFrame(SyncProtocolLimits.chatPageEncodedBytes));",
+    "export const V1ChatMessageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_message'), message_id: UuidSchema, client_message_id: RequestIdSchema, sequence: UnsignedDecimalSchema, participant_session_id: UuidSchema, display_name: boundedUtf8String(256, 1), text: LegacyChatTextSchema, created_at: boundedUtf8String(64, 1) }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
+  );
+  lines.push(
+    "export const ChatMessageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_message'), message_id: UuidSchema, client_message_id: RequestIdSchema, sequence: UnsignedDecimalSchema, participant_session_id: UuidSchema, display_name: boundedUtf8String(256, 1), text: ChatTextSchema, attachments: Schema.Array(ChatAttachmentSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems)), created_at: boundedUtf8String(64, 1) }).check(Schema.makeFilter((frame) => frame.text.length > 0 || frame.attachments.length > 0 ? undefined : { path: [], issue: 'must contain text or at least one attachment' }), boundedFrame(SyncProtocolLimits.roomActionFrameBytes));",
+  );
+  lines.push("export const AnyChatMessageFrameSchema = Schema.Union([ChatMessageFrameSchema, V1ChatMessageFrameSchema]);");
+  lines.push("export const AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send_result'), client_message_id: RequestIdSchema, outcome: Schema.Literal('accepted'), message: ChatMessageFrameSchema });");
+  lines.push("export const V1AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send_result'), client_message_id: RequestIdSchema, outcome: Schema.Literal('accepted'), message: V1ChatMessageFrameSchema });");
+  lines.push("export const RejectedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_send_result'), client_message_id: RequestIdSchema, outcome: Schema.Literal('rejected'), error_code: RoomActionErrorCodeSchema });");
+  lines.push("export const ChatSendResultFrameSchema = Schema.Union([AcceptedChatSendResultFrameSchema, V1AcceptedChatSendResultFrameSchema, RejectedChatSendResultFrameSchema]);");
+  lines.push(
+    "export const LoadedChatPageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_page'), request_id: RequestIdSchema, outcome: Schema.Literal('loaded'), messages: Schema.Array(AnyChatMessageFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatPageMaxMessages)), has_more: Schema.Boolean, head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(boundedFrame(SyncProtocolLimits.chatPageEncodedBytes));",
   );
   lines.push("export const ResetChatPageFrameSchema = Schema.Struct({ type: Schema.Literal('chat_page'), request_id: RequestIdSchema, outcome: Schema.Literal('cursor_reset'), retained_floor_sequence: UnsignedDecimalSchema });");
   lines.push("export const ChatPageFrameSchema = Schema.Union([LoadedChatPageFrameSchema, ResetChatPageFrameSchema]);");
   lines.push("export const ChatHeadFrameSchema = Schema.Struct({ type: Schema.Literal('chat_head'), head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) });");
+  lines.push(
+    "export const ChatReadReceiptFrameSchema = Schema.Struct({ type: Schema.Literal('chat_read_receipt'), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(exactKeys(['type', 'participant_session_id', 'participant_session_generation', 'sequence', 'read_at']));",
+  );
+  lines.push(
+    "export const AcceptedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_read_result'), request_id: RequestIdSchema, outcome: Schema.Literal('accepted'), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) });",
+  );
+  lines.push("export const RejectedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Literal('chat_read_result'), request_id: RequestIdSchema, outcome: Schema.Literal('rejected'), error_code: RoomActionErrorCodeSchema });");
+  lines.push("export const ChatReadResultFrameSchema = Schema.Union([AcceptedChatReadResultFrameSchema, RejectedChatReadResultFrameSchema]);");
   lines.push("export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal('retryable_error'), command_id: CommandIdSchema, code: RetryableErrorCodeSchema });");
   lines.push(`export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal('error'), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(${limits.protocolErrorDetailBytes}) });`);
   lines.push("export const PingFrameSchema = Schema.Struct({ type: Schema.Literal('ping') });");
   lines.push("export const PongFrameSchema = Schema.Struct({ type: Schema.Literal('pong') });");
   lines.push("");
   lines.push(
-    `export const SyncV3ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, RoomReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
+    `export const SyncV3ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, V1ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, RoomReactionSendFrameSchema, ChatSendFrameSchema, V1ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
   );
   lines.push("export type SyncV3ClientFrame = typeof SyncV3ClientFrameSchema.Type;");
   lines.push(
-    `export const SyncV3ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, RoomReactionEventFrameSchema, RoomReactionResultFrameSchema, ChatMessageFrameSchema, ChatSendResultFrameSchema, ChatPageFrameSchema, ChatHeadFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, PongFrameSchema])));`,
+    `export const SyncV3ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, RoomReactionEventFrameSchema, RoomReactionResultFrameSchema, ChatMessageFrameSchema, V1ChatMessageFrameSchema, ChatSendResultFrameSchema, ChatPageFrameSchema, ChatHeadFrameSchema, ChatReadReceiptFrameSchema, ChatReadResultFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, PongFrameSchema])));`,
   );
   lines.push("export type SyncV3ServerFrame = typeof SyncV3ServerFrameSchema.Type;");
   lines.push("export function encodeSyncFrame(frame: SyncV3ClientFrame | SyncV3ServerFrame): string { return JSON.stringify(frame); }");

@@ -14,7 +14,8 @@ defmodule ChalkSync.RoomActions do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
 
-  @extension "room_actions_v1"
+  @extension_v1 "room_actions_v1"
+  @extension_v2 "room_actions_v2"
   @reactions ["👍", "❤️", "😂", "😮", "😢", "🎉"]
   @reaction_ttl_ms 5_000
 
@@ -31,23 +32,33 @@ defmodule ChalkSync.RoomActions do
   end
 
   @spec negotiate(Identity.t(), map(), pid(), options()) :: {:ok, map()} | {:error, atom()}
-  def negotiate(%Identity{} = identity, chat_cursor, socket, options)
+  def negotiate(%Identity{} = identity, negotiation, socket, options)
       when is_pid(socket) and is_list(options) do
     repository = repository(options)
     fanout = fanout(options)
+    {extension, chat_cursor} = negotiation(negotiation)
 
     with :ok <- valid_chat_cursor(chat_cursor),
          {:ok, capability_state} <- repository.participant_capabilities(identity),
+         :ok <- Fanout.subscribe(fanout, identity.session, socket),
          {:ok, head} <- repository.head(identity.session),
-         :ok <- Fanout.subscribe(fanout, identity.session, socket) do
+         {:ok, receipts} <- negotiated_receipts(repository, identity, extension) do
       {:ok,
-       %{
-         "name" => @extension,
-         "capabilities" => capability_state.capabilities,
-         "participant_capabilities" => capability_state.participant_capabilities,
-         "chat_head_sequence" => head.head_sequence,
-         "retained_floor_sequence" => head.retained_floor_sequence
-       }}
+       maybe_put_receipts(
+         %{
+           "name" => extension,
+           "capabilities" => capability_state.capabilities,
+           "participant_capabilities" => capability_state.participant_capabilities,
+           "chat_head_sequence" => head.head_sequence,
+           "retained_floor_sequence" => head.retained_floor_sequence
+         },
+         extension,
+         receipts
+       )}
+    else
+      {:error, reason} ->
+        Fanout.unsubscribe(fanout, identity.session, socket)
+        {:error, reason}
     end
   end
 
@@ -91,13 +102,18 @@ defmodule ChalkSync.RoomActions do
   @spec send_chat(Identity.t(), map(), options()) :: {:ok, map()}
   def send_chat(
         %Identity{} = identity,
-        %{client_message_id: client_message_id, text: text},
+        %{client_message_id: client_message_id, text: text} = input,
         options
       )
       when is_binary(client_message_id) and is_binary(text) and is_list(options) do
     repository = repository(options)
+    attachment_ids = Map.get(input, :attachment_ids, [])
 
-    case repository.append(identity, %{client_message_id: client_message_id, text: text}) do
+    case repository.append(identity, %{
+           client_message_id: client_message_id,
+           text: text,
+           attachment_ids: attachment_ids
+         }) do
       {:ok, %{outcome: outcome, message: message}} ->
         if outcome == :committed do
           head = %{
@@ -113,7 +129,7 @@ defmodule ChalkSync.RoomActions do
            "type" => "chat_send_result",
            "client_message_id" => client_message_id,
            "outcome" => "accepted",
-           "message" => Message.wire(message)
+           "message" => Message.wire(message, version(options))
          }}
 
       {:error, reason} ->
@@ -153,7 +169,7 @@ defmodule ChalkSync.RoomActions do
       }
 
       case repository.read_page(identity.session, request) do
-        {:ok, page} -> {:ok, loaded_page(request_id, page)}
+        {:ok, page} -> {:ok, loaded_page(request_id, page, version(options))}
         {:cursor_reset, floor} -> {:ok, cursor_reset_page(request_id, floor)}
         {:error, reason} -> {:error, reason}
       end
@@ -165,6 +181,53 @@ defmodule ChalkSync.RoomActions do
   def read_chat_page(%Identity{}, input, _options) do
     _request_id = if is_map(input), do: Map.get(input, :request_id, ""), else: ""
     {:error, :invalid_payload}
+  end
+
+  @spec mark_chat_read(Identity.t(), map(), options()) :: {:ok, map()}
+  def mark_chat_read(identity, input, options \\ [])
+
+  def mark_chat_read(
+        %Identity{} = identity,
+        %{request_id: request_id, sequence: sequence},
+        options
+      )
+      when is_binary(request_id) and is_binary(sequence) and is_list(options) do
+    repository = repository(options)
+
+    with :ok <- validate_operation_id(request_id),
+         {:ok, result} <- repository.mark_read(identity, sequence) do
+      receipt = receipt_frame(result.receipt)
+
+      if result.outcome == :advanced,
+        do: Fanout.publish_chat_read_receipt(fanout(options), identity.session, receipt)
+
+      {:ok,
+       receipt
+       |> Map.put("type", "chat_read_result")
+       |> Map.put("request_id", request_id)
+       |> Map.put("outcome", "accepted")}
+    else
+      {:error, reason} ->
+        {:ok,
+         %{
+           "type" => "chat_read_result",
+           "request_id" => request_id,
+           "outcome" => "rejected",
+           "error_code" => error_code(reason)
+         }}
+    end
+  end
+
+  def mark_chat_read(%Identity{}, input, _options) do
+    request_id = if is_map(input), do: Map.get(input, :request_id, ""), else: ""
+
+    {:ok,
+     %{
+       "type" => "chat_read_result",
+       "request_id" => request_id,
+       "outcome" => "rejected",
+       "error_code" => "invalid_payload"
+     }}
   end
 
   @spec unsubscribe(Identity.t(), pid()) :: :ok
@@ -213,12 +276,12 @@ defmodule ChalkSync.RoomActions do
     end
   end
 
-  defp loaded_page(request_id, page) do
+  defp loaded_page(request_id, page, version) do
     %{
       "type" => "chat_page",
       "request_id" => request_id,
       "outcome" => "loaded",
-      "messages" => Enum.map(page.messages, &Message.wire/1),
+      "messages" => Enum.map(page.messages, &Message.wire(&1, version)),
       "has_more" => page.has_more,
       "head_sequence" => page.head_sequence,
       "retained_floor_sequence" => page.retained_floor_sequence
@@ -261,6 +324,10 @@ defmodule ChalkSync.RoomActions do
               :session_ended,
               :participant_stale,
               :client_message_id_conflict,
+              :attachment_not_found,
+              :attachment_not_ready,
+              :attachment_already_claimed,
+              :attachment_quota_exceeded,
               :dependency_unavailable
             ],
        do: Atom.to_string(reason)
@@ -291,6 +358,36 @@ defmodule ChalkSync.RoomActions do
   defp normalize_direction("newer"), do: :newer
   defp normalize_direction(direction) when direction in [:older, :newer], do: direction
   defp normalize_direction(_direction), do: :invalid
+
+  defp negotiation(%{extension: extension} = cursor)
+       when extension in [@extension_v1, @extension_v2],
+       do: {extension, Map.delete(cursor, :extension)}
+
+  defp negotiation(cursor), do: {@extension_v1, cursor}
+
+  defp negotiated_receipts(_repository, _identity, @extension_v1), do: {:ok, []}
+
+  defp negotiated_receipts(repository, identity, @extension_v2),
+    do: repository.read_receipts(identity.session)
+
+  defp maybe_put_receipts(extension, @extension_v1, _receipts), do: extension
+
+  defp maybe_put_receipts(extension, @extension_v2, receipts) do
+    Map.put(extension, "read_receipts", Enum.map(receipts, &receipt_body/1))
+  end
+
+  defp receipt_frame(receipt), do: Map.put(receipt_body(receipt), "type", "chat_read_receipt")
+
+  defp receipt_body(receipt) do
+    %{
+      "participant_session_id" => receipt.participant_session_id,
+      "participant_session_generation" => receipt.participant_session_generation,
+      "sequence" => receipt.sequence,
+      "read_at" => receipt.read_at
+    }
+  end
+
+  defp version(options), do: Keyword.get(options, :version, 1)
 
   defp repository(options) do
     Keyword.get(

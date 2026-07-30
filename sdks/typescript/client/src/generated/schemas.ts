@@ -136,6 +136,30 @@ export const AuthSchema = Schema.Struct({
 });
 export type Auth = typeof AuthSchema.Type;
 
+export const ChatAttachmentSchema = Schema.Struct({
+  attachmentId: Schema.String,
+  byteLength: Schema.Number,
+  fileName: Schema.String,
+  mimeType: Schema.String,
+});
+export type ChatAttachment = typeof ChatAttachmentSchema.Type;
+
+export const ChatAttachmentDownloadSchema = Schema.Struct({
+  downloadUrl: Schema.String,
+  expiresAt: Schema.String,
+});
+export type ChatAttachmentDownload = typeof ChatAttachmentDownloadSchema.Type;
+
+export const ChatAttachmentUploadSchema = Schema.Struct({
+  attachmentId: Schema.String,
+  expiresAt: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
+  method: Schema.String,
+  uploadId: Schema.String,
+  uploadUrl: Schema.String,
+});
+export type ChatAttachmentUpload = typeof ChatAttachmentUploadSchema.Type;
+
 export const CloudflareSFUCloseTracksAPIResponseSchema = Schema.Struct({
   requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
   sessionDescription: Schema.optional(
@@ -383,6 +407,15 @@ export const ExtendRecordingReservationRequestSchema = Schema.Struct({
   max_duration_minutes: Schema.Number,
 });
 export type ExtendRecordingReservationRequest = typeof ExtendRecordingReservationRequestSchema.Type;
+
+export const InitiateChatAttachmentUploadRequestSchema = Schema.Struct({
+  byteLength: Schema.Number,
+  clientAttachmentId: Schema.String.check(Schema.isMinLength(1)),
+  fileName: Schema.String.check(Schema.isMinLength(1)),
+  mimeType: Schema.String.check(Schema.isMinLength(1)),
+  sha256: Schema.String.check(Schema.isMinLength(1)),
+});
+export type InitiateChatAttachmentUploadRequest = typeof InitiateChatAttachmentUploadRequestSchema.Type;
 
 export const InitiateWhiteboardFileUploadRequestSchema = Schema.Struct({
   byteLength: Schema.Number,
@@ -1489,6 +1522,21 @@ export const ExtendRecordingReservation429ResponseHeadersSchema = Schema.Struct(
 });
 export type ExtendRecordingReservation429ResponseHeaders = typeof ExtendRecordingReservation429ResponseHeadersSchema.Type;
 
+export const FinalizeChatAttachmentUploadPathParamsSchema = Schema.Struct({
+  uploadId: Schema.String,
+});
+export type FinalizeChatAttachmentUploadPathParams = typeof FinalizeChatAttachmentUploadPathParamsSchema.Type;
+
+export const FinalizeChatAttachmentUploadResponseSchema = ChatAttachmentSchema;
+export type FinalizeChatAttachmentUploadResponse = typeof FinalizeChatAttachmentUploadResponseSchema.Type;
+
+export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
+
 export const FinalizeWhiteboardFileUploadPathParamsSchema = Schema.Struct({
   uploadId: Schema.String,
 });
@@ -1509,6 +1557,21 @@ export type GetAuditLogPathParams = typeof GetAuditLogPathParamsSchema.Type;
 
 export const GetAuditLogResponseSchema = AuditLogSchema;
 export type GetAuditLogResponse = typeof GetAuditLogResponseSchema.Type;
+
+export const GetChatAttachmentDownloadPathParamsSchema = Schema.Struct({
+  attachmentId: Schema.String,
+});
+export type GetChatAttachmentDownloadPathParams = typeof GetChatAttachmentDownloadPathParamsSchema.Type;
+
+export const GetChatAttachmentDownloadResponseSchema = ChatAttachmentDownloadSchema;
+export type GetChatAttachmentDownloadResponse = typeof GetChatAttachmentDownloadResponseSchema.Type;
+
+export const GetChatAttachmentDownload429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetChatAttachmentDownload429ResponseHeaders = typeof GetChatAttachmentDownload429ResponseHeadersSchema.Type;
 
 export const GetIntegrationConnectionPathParamsSchema = Schema.Struct({
   connection_id: UUIDSchema,
@@ -1647,6 +1710,19 @@ export const GetWhiteboardFileDownload429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type GetWhiteboardFileDownload429ResponseHeaders = typeof GetWhiteboardFileDownload429ResponseHeadersSchema.Type;
+
+export const InitiateChatAttachmentUploadRequestBodySchema = InitiateChatAttachmentUploadRequestSchema;
+export type InitiateChatAttachmentUploadRequestBody = typeof InitiateChatAttachmentUploadRequestBodySchema.Type;
+
+export const InitiateChatAttachmentUploadResponseSchema = ChatAttachmentUploadSchema;
+export type InitiateChatAttachmentUploadResponse = typeof InitiateChatAttachmentUploadResponseSchema.Type;
+
+export const InitiateChatAttachmentUpload429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type InitiateChatAttachmentUpload429ResponseHeaders = typeof InitiateChatAttachmentUpload429ResponseHeadersSchema.Type;
 
 export const InitiateWhiteboardFileUploadRequestBodySchema = InitiateWhiteboardFileUploadRequestSchema;
 export type InitiateWhiteboardFileUploadRequestBody = typeof InitiateWhiteboardFileUploadRequestBodySchema.Type;
@@ -2393,6 +2469,158 @@ export const ApiKeyInactiveErrorSchema = ApiKeyInactiveErrorWireSchema.pipe(
   }),
 );
 
+export class ChatAttachmentNotFoundError extends Schema.TaggedErrorClass<ChatAttachmentNotFoundError>()("ChatAttachmentNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const ChatAttachmentNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_not_found"),
+    message: Schema.String,
+  }),
+});
+export const ChatAttachmentNotFoundErrorSchema = ChatAttachmentNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(ChatAttachmentNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ChatAttachmentNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ChatAttachmentQuotaExceededError extends Schema.TaggedErrorClass<ChatAttachmentQuotaExceededError>()("ChatAttachmentQuotaExceededError", {
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_quota_exceeded"),
+    message: Schema.String,
+  }),
+}) {}
+export const ChatAttachmentQuotaExceededErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_quota_exceeded"),
+    message: Schema.String,
+  }),
+});
+export const ChatAttachmentQuotaExceededErrorSchema = ChatAttachmentQuotaExceededErrorWireSchema.pipe(
+  Schema.decodeTo(ChatAttachmentQuotaExceededError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ChatAttachmentQuotaExceededError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ChatAttachmentStorageUnavailableError extends Schema.TaggedErrorClass<ChatAttachmentStorageUnavailableError>()("ChatAttachmentStorageUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_storage_unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const ChatAttachmentStorageUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_storage_unavailable"),
+    message: Schema.String,
+  }),
+});
+export const ChatAttachmentStorageUnavailableErrorSchema = ChatAttachmentStorageUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(ChatAttachmentStorageUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ChatAttachmentStorageUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ChatAttachmentTransferFailedError extends Schema.TaggedErrorClass<ChatAttachmentTransferFailedError>()("ChatAttachmentTransferFailedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_transfer_failed"),
+    message: Schema.String,
+  }),
+}) {}
+export const ChatAttachmentTransferFailedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_transfer_failed"),
+    message: Schema.String,
+  }),
+});
+export const ChatAttachmentTransferFailedErrorSchema = ChatAttachmentTransferFailedErrorWireSchema.pipe(
+  Schema.decodeTo(ChatAttachmentTransferFailedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ChatAttachmentTransferFailedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ChatAttachmentUploadExpiredError extends Schema.TaggedErrorClass<ChatAttachmentUploadExpiredError>()("ChatAttachmentUploadExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_upload_expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const ChatAttachmentUploadExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_upload_expired"),
+    message: Schema.String,
+  }),
+});
+export const ChatAttachmentUploadExpiredErrorSchema = ChatAttachmentUploadExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(ChatAttachmentUploadExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ChatAttachmentUploadExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ChatAttachmentUploadNotFoundError extends Schema.TaggedErrorClass<ChatAttachmentUploadNotFoundError>()("ChatAttachmentUploadNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_upload_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const ChatAttachmentUploadNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_upload_not_found"),
+    message: Schema.String,
+  }),
+});
+export const ChatAttachmentUploadNotFoundErrorSchema = ChatAttachmentUploadNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(ChatAttachmentUploadNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ChatAttachmentUploadNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ChatAttachmentUploadNotReadyError extends Schema.TaggedErrorClass<ChatAttachmentUploadNotReadyError>()("ChatAttachmentUploadNotReadyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_upload_not_ready"),
+    message: Schema.String,
+  }),
+}) {}
+export const ChatAttachmentUploadNotReadyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("chat_attachment_upload_not_ready"),
+    message: Schema.String,
+  }),
+});
+export const ChatAttachmentUploadNotReadyErrorSchema = ChatAttachmentUploadNotReadyErrorWireSchema.pipe(
+  Schema.decodeTo(ChatAttachmentUploadNotReadyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ChatAttachmentUploadNotReadyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ClientAttachmentIdConflictError extends Schema.TaggedErrorClass<ClientAttachmentIdConflictError>()("ClientAttachmentIdConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("client_attachment_id_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const ClientAttachmentIdConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("client_attachment_id_conflict"),
+    message: Schema.String,
+  }),
+});
+export const ClientAttachmentIdConflictErrorSchema = ClientAttachmentIdConflictErrorWireSchema.pipe(
+  Schema.decodeTo(ClientAttachmentIdConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ClientAttachmentIdConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class EmailAlreadyRegisteredError extends Schema.TaggedErrorClass<EmailAlreadyRegisteredError>()("EmailAlreadyRegisteredError", {
   error: Schema.Struct({
     code: Schema.Literal("email_already_registered"),
@@ -2731,6 +2959,25 @@ export const InvalidCallbackUrlErrorWireSchema = Schema.Struct({
 export const InvalidCallbackUrlErrorSchema = InvalidCallbackUrlErrorWireSchema.pipe(
   Schema.decodeTo(InvalidCallbackUrlError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidCallbackUrlError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class InvalidChatAttachmentError extends Schema.TaggedErrorClass<InvalidChatAttachmentError>()("InvalidChatAttachmentError", {
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_chat_attachment"),
+    message: Schema.String,
+  }),
+}) {}
+export const InvalidChatAttachmentErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("invalid_chat_attachment"),
+    message: Schema.String,
+  }),
+});
+export const InvalidChatAttachmentErrorSchema = InvalidChatAttachmentErrorWireSchema.pipe(
+  Schema.decodeTo(InvalidChatAttachmentError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "InvalidChatAttachmentError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4608,6 +4855,23 @@ export const ExtendRecordingReservationErrorSchema = Schema.Union([
 ]);
 export type ExtendRecordingReservationError = typeof ExtendRecordingReservationErrorSchema.Type;
 
+export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
+  ChatAttachmentNotFoundErrorSchema,
+  ChatAttachmentQuotaExceededErrorSchema,
+  ChatAttachmentStorageUnavailableErrorSchema,
+  ChatAttachmentTransferFailedErrorSchema,
+  ChatAttachmentUploadExpiredErrorSchema,
+  ChatAttachmentUploadNotFoundErrorSchema,
+  ChatAttachmentUploadNotReadyErrorSchema,
+  ClientAttachmentIdConflictErrorSchema,
+  ForbiddenErrorSchema,
+  InvalidChatAttachmentErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type FinalizeChatAttachmentUploadError = typeof FinalizeChatAttachmentUploadErrorSchema.Type;
+
 export const FinalizeWhiteboardFileUploadErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
   InvalidWhiteboardFileErrorSchema,
@@ -4627,6 +4891,23 @@ export type FinalizeWhiteboardFileUploadError = typeof FinalizeWhiteboardFileUpl
 
 export const GetAuditLogErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidAuditLogIdErrorSchema, InvalidTenantIdErrorSchema, NotFoundErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type GetAuditLogError = typeof GetAuditLogErrorSchema.Type;
+
+export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
+  ChatAttachmentNotFoundErrorSchema,
+  ChatAttachmentQuotaExceededErrorSchema,
+  ChatAttachmentStorageUnavailableErrorSchema,
+  ChatAttachmentTransferFailedErrorSchema,
+  ChatAttachmentUploadExpiredErrorSchema,
+  ChatAttachmentUploadNotFoundErrorSchema,
+  ChatAttachmentUploadNotReadyErrorSchema,
+  ClientAttachmentIdConflictErrorSchema,
+  ForbiddenErrorSchema,
+  InvalidChatAttachmentErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type GetChatAttachmentDownloadError = typeof GetChatAttachmentDownloadErrorSchema.Type;
 
 export const GetIntegrationConnectionErrorSchema = Schema.Union([ForbiddenErrorSchema, IntegrationConnectionNotFoundErrorSchema, InternalErrorSchema, InvalidIntegrationConnectionIdErrorSchema, InvalidTenantIdErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type GetIntegrationConnectionError = typeof GetIntegrationConnectionErrorSchema.Type;
@@ -4708,6 +4989,24 @@ export const GetWhiteboardFileDownloadErrorSchema = Schema.Union([
   WhiteboardUploadNotReadyErrorSchema,
 ]);
 export type GetWhiteboardFileDownloadError = typeof GetWhiteboardFileDownloadErrorSchema.Type;
+
+export const InitiateChatAttachmentUploadErrorSchema = Schema.Union([
+  ChatAttachmentNotFoundErrorSchema,
+  ChatAttachmentQuotaExceededErrorSchema,
+  ChatAttachmentStorageUnavailableErrorSchema,
+  ChatAttachmentTransferFailedErrorSchema,
+  ChatAttachmentUploadExpiredErrorSchema,
+  ChatAttachmentUploadNotFoundErrorSchema,
+  ChatAttachmentUploadNotReadyErrorSchema,
+  ClientAttachmentIdConflictErrorSchema,
+  ForbiddenErrorSchema,
+  InvalidChatAttachmentErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type InitiateChatAttachmentUploadError = typeof InitiateChatAttachmentUploadErrorSchema.Type;
 
 export const InitiateWhiteboardFileUploadErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -5256,10 +5555,12 @@ export const ChalkOperationPolicies = {
   endRoomSession: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   extendRecordingReservation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeWhiteboardFileUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getMe: { rateLimit: { limit: 100, policy: "auth.me", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
+  initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   initiateWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   intakeJourneyEvents: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
   issueSessionParticipantAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

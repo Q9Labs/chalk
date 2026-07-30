@@ -18,6 +18,12 @@ defmodule ChalkSync.RoomActions.FanoutTest do
       send(test, {:published_reaction, session, event})
       :ok
     end
+
+    @impl true
+    def publish_chat_read_receipt(test, session, receipt) do
+      send(test, {:published_read_receipt, session, receipt})
+      :ok
+    end
   end
 
   test "delivers locally, invokes cross-replica transport, and unsubscribes" do
@@ -43,6 +49,18 @@ defmodule ChalkSync.RoomActions.FanoutTest do
     assert :ok = Fanout.publish_reaction(fanout, session, event)
     assert_receive {:room_action_frame, ^event}
     assert_receive {:published_reaction, ^session, ^event}
+
+    receipt = %{
+      "type" => "chat_read_receipt",
+      "participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      "participant_session_generation" => 1,
+      "sequence" => "8",
+      "read_at" => "2026-07-29T14:01:00.000Z"
+    }
+
+    assert :ok = Fanout.publish_chat_read_receipt(fanout, session, receipt)
+    assert_receive {:room_action_frame, ^receipt}
+    assert_receive {:published_read_receipt, ^session, ^receipt}
 
     assert :ok = Fanout.unsubscribe(fanout, session, self())
     assert :ok = Fanout.publish_reaction(fanout, session, event)

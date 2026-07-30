@@ -83,6 +83,11 @@ defmodule ChalkSync.Retention.SQL do
         where file.tenant_id = control.tenant_id
           and file.session_id = control.session_id
       )
+      and not exists (
+        select 1 from sync_chat_attachments attachment
+        where attachment.tenant_id = control.tenant_id
+          and attachment.session_id = control.session_id
+      )
     order by session.ended_at, control.tenant_id, control.session_id
     limit $3
     for update of control skip locked
@@ -164,6 +169,7 @@ defmodule ChalkSync.Retention.SQL do
     do: delete_rows("sync_publication_grant_reservations")
 
   def delete_chat_messages, do: delete_rows("sync_chat_messages")
+  def delete_chat_read_receipts, do: delete_rows("sync_chat_read_receipts")
   def delete_chat_streams, do: delete_rows("sync_chat_streams")
 
   def delete_whiteboard_operation_receipts,

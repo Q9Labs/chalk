@@ -68,6 +68,9 @@ defmodule ChalkSync.Contract.GeneratedV3 do
     "roomActionBurstMax" => 8,
     "chatMessageUtf8Bytes" => 16_384,
     "chatMessageUnicodeScalars" => 4000,
+    "chatAttachmentMaxItems" => 5,
+    "chatAttachmentFileNameUtf8Bytes" => 255,
+    "chatAttachmentMaxBytes" => 26_214_400,
     "chatPageMaxMessages" => 100,
     "chatPageEncodedBytes" => 131_072,
     "reactionTtlMs" => 5000,
@@ -128,6 +131,10 @@ defmodule ChalkSync.Contract.GeneratedV3 do
           "directed_request",
           "delivery_ack",
           "request_ack",
+          "room_reaction_send",
+          "chat_send",
+          "chat_page_request",
+          "chat_read_set",
           "ping"
         ],
         "heartbeat" => %{"intervalMs" => 20_000, "missedDeadlinesBeforeClose" => 2}
@@ -205,6 +212,9 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       "roomActionBurstMax" => 8,
       "chatMessageUtf8Bytes" => 16_384,
       "chatMessageUnicodeScalars" => 4000,
+      "chatAttachmentMaxItems" => 5,
+      "chatAttachmentFileNameUtf8Bytes" => 255,
+      "chatAttachmentMaxBytes" => 26_214_400,
       "chatPageMaxMessages" => 100,
       "chatPageEncodedBytes" => 131_072,
       "reactionTtlMs" => 5000,
@@ -213,9 +223,27 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       "protocolErrorDetailBytes" => 1024
     },
     "roomActions" => %{
-      "extension" => "room_actions_v1",
+      "extension" => "room_actions_v2",
+      "fallbackExtension" => "room_actions_v1",
       "capabilities" => ["sendReaction", "sendChat"],
       "reactions" => ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+      "attachmentMimeTypes" => [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.presentation"
+      ],
       "chatCursor" => %{
         "exactFields" => ["after_sequence", "retained_floor_sequence"],
         "afterSequence" => "nullableUnsignedDecimal",
@@ -223,6 +251,16 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       },
       "helloExtension" => %{"exactFields" => ["name", "chat_cursor"]},
       "welcomeExtension" => %{
+        "exactFields" => [
+          "name",
+          "capabilities",
+          "participant_capabilities",
+          "chat_head_sequence",
+          "retained_floor_sequence",
+          "read_receipts"
+        ]
+      },
+      "fallbackWelcomeExtension" => %{
         "exactFields" => [
           "name",
           "capabilities",
@@ -238,12 +276,20 @@ defmodule ChalkSync.Contract.GeneratedV3 do
         },
         "sendChat" => %{
           "type" => "chat_send",
+          "exactFields" => ["type", "client_message_id", "text", "attachment_ids"]
+        },
+        "fallbackSendChat" => %{
+          "type" => "chat_send",
           "exactFields" => ["type", "client_message_id", "text"]
         },
         "readChatPage" => %{
           "type" => "chat_page_request",
           "exactFields" => ["type", "request_id", "direction", "cursor_sequence", "limit"],
           "directions" => ["older", "newer"]
+        },
+        "setChatRead" => %{
+          "type" => "chat_read_set",
+          "exactFields" => ["type", "request_id", "sequence"]
         }
       },
       "serverFrames" => %{
@@ -266,6 +312,20 @@ defmodule ChalkSync.Contract.GeneratedV3 do
           "outcomes" => ["accepted", "rejected"]
         },
         "chatMessage" => %{
+          "type" => "chat_message",
+          "exactFields" => [
+            "type",
+            "message_id",
+            "client_message_id",
+            "sequence",
+            "participant_session_id",
+            "display_name",
+            "text",
+            "attachments",
+            "created_at"
+          ]
+        },
+        "fallbackChatMessage" => %{
           "type" => "chat_message",
           "exactFields" => [
             "type",
@@ -301,6 +361,30 @@ defmodule ChalkSync.Contract.GeneratedV3 do
         "chatHead" => %{
           "type" => "chat_head",
           "exactFields" => ["type", "head_sequence", "retained_floor_sequence"]
+        },
+        "chatReadReceipt" => %{
+          "type" => "chat_read_receipt",
+          "exactFields" => [
+            "type",
+            "participant_session_id",
+            "participant_session_generation",
+            "sequence",
+            "read_at"
+          ]
+        },
+        "chatReadResult" => %{
+          "type" => "chat_read_result",
+          "acceptedFields" => [
+            "type",
+            "request_id",
+            "outcome",
+            "participant_session_id",
+            "participant_session_generation",
+            "sequence",
+            "read_at"
+          ],
+          "rejectedFields" => ["type", "request_id", "outcome", "error_code"],
+          "outcomes" => ["accepted", "rejected"]
         }
       },
       "errorCodes" => [
@@ -311,6 +395,10 @@ defmodule ChalkSync.Contract.GeneratedV3 do
         "session_ended",
         "participant_stale",
         "client_message_id_conflict",
+        "attachment_not_found",
+        "attachment_not_ready",
+        "attachment_already_claimed",
+        "attachment_quota_exceeded",
         "dependency_unavailable"
       ]
     },
@@ -439,6 +527,10 @@ defmodule ChalkSync.Contract.GeneratedV3 do
     "session_ended",
     "participant_stale",
     "client_message_id_conflict",
+    "attachment_not_found",
+    "attachment_not_ready",
+    "attachment_already_claimed",
+    "attachment_quota_exceeded",
     "dependency_unavailable"
   ]
   @media_sources ["microphone", "camera", "screen"]
@@ -483,6 +575,9 @@ defmodule ChalkSync.Contract.GeneratedV3 do
 
         "chat_page_request" ->
           decode_chat_page_request(frame)
+
+        "chat_read_set" ->
+          decode_chat_read_set(frame)
 
         "delivery_ack" ->
           decode_delivery_ack(frame)
@@ -698,10 +793,28 @@ defmodule ChalkSync.Contract.GeneratedV3 do
 
   defp decode_room_reaction_send(_frame), do: {:error, :invalid_room_reaction}
 
+  defp decode_chat_send(
+         %{
+           "client_message_id" => client_message_id,
+           "text" => text,
+           "attachment_ids" => attachment_ids
+         } = frame
+       ) do
+    if exact_keys?(frame, ["type", "client_message_id", "text", "attachment_ids"]) and
+         valid_request_id?(client_message_id) and valid_v2_chat_content?(text, attachment_ids),
+       do:
+         {:ok,
+          {:chat_send,
+           %{client_message_id: client_message_id, text: text, attachment_ids: attachment_ids}}},
+       else: {:error, :invalid_chat_message}
+  end
+
   defp decode_chat_send(%{"client_message_id" => client_message_id, "text" => text} = frame) do
     if exact_keys?(frame, ["type", "client_message_id", "text"]) and
-         valid_request_id?(client_message_id) and valid_chat_text?(text),
-       do: {:ok, {:chat_send, %{client_message_id: client_message_id, text: text}}},
+         valid_request_id?(client_message_id) and valid_v1_chat_text?(text),
+       do:
+         {:ok,
+          {:chat_send, %{client_message_id: client_message_id, text: text, attachment_ids: []}}},
        else: {:error, :invalid_chat_message}
   end
 
@@ -727,6 +840,15 @@ defmodule ChalkSync.Contract.GeneratedV3 do
   end
 
   defp decode_chat_page_request(_frame), do: {:error, :invalid_chat_page_request}
+
+  defp decode_chat_read_set(%{"request_id" => request_id, "sequence" => sequence} = frame) do
+    if exact_keys?(frame, ["type", "request_id", "sequence"]) and valid_request_id?(request_id) and
+         valid_unsigned_decimal?(sequence),
+       do: {:ok, {:chat_read_set, %{request_id: request_id, sequence: sequence}}},
+       else: {:error, :invalid_chat_read}
+  end
+
+  defp decode_chat_read_set(_frame), do: {:error, :invalid_chat_read}
 
   defp decode_delivery_ack(
          %{"stream" => "control", "revision" => revision, "state_digest" => digest} = frame
@@ -790,6 +912,12 @@ defmodule ChalkSync.Contract.GeneratedV3 do
   def valid_server_frame?(%{"type" => "chat_page"} = frame), do: valid_chat_page?(frame)
   def valid_server_frame?(%{"type" => "chat_head"} = frame), do: valid_chat_head?(frame)
 
+  def valid_server_frame?(%{"type" => "chat_read_receipt"} = frame),
+    do: valid_chat_read_receipt?(frame)
+
+  def valid_server_frame?(%{"type" => "chat_read_result"} = frame),
+    do: valid_chat_read_result?(frame)
+
   def valid_server_frame?(
         %{"type" => "retryable_error", "command_id" => id, "code" => code} = frame
       ),
@@ -820,8 +948,9 @@ defmodule ChalkSync.Contract.GeneratedV3 do
   defp valid_streams?(_streams), do: false
 
   defp valid_room_actions_hello_extensions?([
-         %{"name" => "room_actions_v1", "chat_cursor" => cursor} = extension
-       ]) do
+         %{"name" => name, "chat_cursor" => cursor} = extension
+       ])
+       when name in ["room_actions_v2", "room_actions_v1"] do
     exact_keys?(extension, ["name", "chat_cursor"]) and valid_chat_cursor?(cursor)
   end
 
@@ -895,6 +1024,31 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       Enum.all?(participant_capabilities, fn {participant_id, values} ->
         valid_uuid?(participant_id) and valid_room_action_capabilities?(values)
       end) and valid_nullable_unsigned_decimal?(head) and valid_nullable_unsigned_decimal?(floor)
+  end
+
+  defp valid_room_actions_welcome_extensions?([
+         %{
+           "name" => "room_actions_v2",
+           "capabilities" => capabilities,
+           "participant_capabilities" => participant_capabilities,
+           "chat_head_sequence" => head,
+           "retained_floor_sequence" => floor,
+           "read_receipts" => receipts
+         } = extension
+       ]) do
+    exact_keys?(extension, [
+      "name",
+      "capabilities",
+      "participant_capabilities",
+      "chat_head_sequence",
+      "retained_floor_sequence",
+      "read_receipts"
+    ]) and valid_room_action_capabilities?(capabilities) and is_map(participant_capabilities) and
+      Enum.all?(participant_capabilities, fn {participant_id, values} ->
+        valid_uuid?(participant_id) and valid_room_action_capabilities?(values)
+      end) and valid_nullable_unsigned_decimal?(head) and valid_nullable_unsigned_decimal?(floor) and
+      is_list(receipts) and length(receipts) <= 500 and
+      Enum.all?(receipts, &valid_chat_read_receipt_body?/1)
   end
 
   defp valid_room_actions_welcome_extensions?(_extensions), do: false
@@ -1529,6 +1683,36 @@ defmodule ChalkSync.Contract.GeneratedV3 do
            "participant_session_id" => participant_id,
            "display_name" => display_name,
            "text" => text,
+           "attachments" => attachments,
+           "created_at" => created_at
+         } = frame
+       ),
+       do:
+         exact_keys?(frame, [
+           "type",
+           "message_id",
+           "client_message_id",
+           "sequence",
+           "participant_session_id",
+           "display_name",
+           "text",
+           "attachments",
+           "created_at"
+         ]) and valid_uuid?(message_id) and valid_request_id?(client_message_id) and
+           valid_unsigned_decimal?(sequence) and valid_uuid?(participant_id) and
+           bounded_string?(display_name, 1, 256) and is_list(attachments) and
+           valid_v2_chat_content?(text, Enum.map(attachments, & &1["attachment_id"])) and
+           Enum.all?(attachments, &valid_chat_attachment?/1) and valid_iso_timestamp?(created_at) and
+           frame_within_limit?(frame, @limits["roomActionFrameBytes"])
+
+  defp valid_chat_message?(
+         %{
+           "message_id" => message_id,
+           "client_message_id" => client_message_id,
+           "sequence" => sequence,
+           "participant_session_id" => participant_id,
+           "display_name" => display_name,
+           "text" => text,
            "created_at" => created_at
          } = frame
        ),
@@ -1544,11 +1728,44 @@ defmodule ChalkSync.Contract.GeneratedV3 do
            "created_at"
          ]) and valid_uuid?(message_id) and valid_request_id?(client_message_id) and
            valid_unsigned_decimal?(sequence) and valid_uuid?(participant_id) and
-           bounded_string?(display_name, 1, 256) and valid_chat_text?(text) and
+           bounded_string?(display_name, 1, 256) and valid_v1_chat_text?(text) and
            valid_iso_timestamp?(created_at) and
            frame_within_limit?(frame, @limits["roomActionFrameBytes"])
 
   defp valid_chat_message?(_frame), do: false
+
+  defp valid_chat_attachment?(
+         %{
+           "attachment_id" => id,
+           "file_name" => file_name,
+           "mime_type" => mime_type,
+           "byte_length" => byte_length
+         } = attachment
+       ),
+       do:
+         exact_keys?(attachment, ["attachment_id", "file_name", "mime_type", "byte_length"]) and
+           valid_uuid?(id) and
+           bounded_string?(file_name, 1, @limits["chatAttachmentFileNameUtf8Bytes"]) and
+           mime_type in [
+             "image/png",
+             "image/jpeg",
+             "image/gif",
+             "image/webp",
+             "application/pdf",
+             "text/plain",
+             "application/msword",
+             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+             "application/vnd.ms-excel",
+             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+             "application/vnd.ms-powerpoint",
+             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+             "application/vnd.oasis.opendocument.text",
+             "application/vnd.oasis.opendocument.spreadsheet",
+             "application/vnd.oasis.opendocument.presentation"
+           ] and valid_positive_integer?(byte_length) and
+           byte_length <= @limits["chatAttachmentMaxBytes"]
+
+  defp valid_chat_attachment?(_attachment), do: false
 
   defp valid_chat_send_result?(
          %{
@@ -1619,6 +1836,61 @@ defmodule ChalkSync.Contract.GeneratedV3 do
 
   defp valid_chat_head?(_frame), do: false
 
+  defp valid_chat_read_receipt?(%{"type" => "chat_read_receipt"} = frame),
+    do:
+      valid_chat_read_receipt_body?(Map.delete(frame, "type")) and
+        exact_keys?(frame, [
+          "type",
+          "participant_session_id",
+          "participant_session_generation",
+          "sequence",
+          "read_at"
+        ])
+
+  defp valid_chat_read_receipt?(_frame), do: false
+
+  defp valid_chat_read_receipt_body?(
+         %{
+           "participant_session_id" => participant_id,
+           "participant_session_generation" => generation,
+           "sequence" => sequence,
+           "read_at" => read_at
+         } = receipt
+       ),
+       do:
+         exact_keys?(receipt, [
+           "participant_session_id",
+           "participant_session_generation",
+           "sequence",
+           "read_at"
+         ]) and valid_uuid?(participant_id) and valid_positive_integer?(generation) and
+           valid_unsigned_decimal?(sequence) and valid_iso_timestamp?(read_at)
+
+  defp valid_chat_read_receipt_body?(_receipt), do: false
+
+  defp valid_chat_read_result?(%{"outcome" => "accepted", "request_id" => request_id} = frame),
+    do:
+      exact_keys?(frame, [
+        "type",
+        "request_id",
+        "outcome",
+        "participant_session_id",
+        "participant_session_generation",
+        "sequence",
+        "read_at"
+      ]) and valid_request_id?(request_id) and
+        valid_chat_read_receipt_body?(Map.drop(frame, ["type", "request_id", "outcome"]))
+
+  defp valid_chat_read_result?(
+         %{"outcome" => "rejected", "request_id" => request_id, "error_code" => error_code} =
+           frame
+       ),
+       do:
+         exact_keys?(frame, ["type", "request_id", "outcome", "error_code"]) and
+           valid_request_id?(request_id) and error_code in @room_action_error_codes
+
+  defp valid_chat_read_result?(_frame), do: false
+
   defp valid_chat_cursor?(
          %{"after_sequence" => after_sequence, "retained_floor_sequence" => floor} = cursor
        ),
@@ -1632,10 +1904,18 @@ defmodule ChalkSync.Contract.GeneratedV3 do
   defp valid_nullable_unsigned_decimal?(value), do: valid_unsigned_decimal?(value)
   defp valid_unsigned_decimal?(value), do: is_binary(value) and value =~ ~r/\A(?:0|[1-9][0-9]*)\z/
 
-  defp valid_chat_text?(value),
+  defp valid_v1_chat_text?(value),
     do:
       bounded_string?(value, 1, @limits["chatMessageUtf8Bytes"]) and
         String.length(value) <= @limits["chatMessageUnicodeScalars"]
+
+  defp valid_v2_chat_content?(text, attachment_ids),
+    do:
+      bounded_string?(text, 0, @limits["chatMessageUtf8Bytes"]) and
+        String.length(text) <= @limits["chatMessageUnicodeScalars"] and is_list(attachment_ids) and
+        length(attachment_ids) <= @limits["chatAttachmentMaxItems"] and
+        unique_list?(attachment_ids) and Enum.all?(attachment_ids, &valid_uuid?/1) and
+        (text != "" or attachment_ids != [])
 
   defp valid_iso_timestamp?(value), do: bounded_string?(value, 1, 64)
 

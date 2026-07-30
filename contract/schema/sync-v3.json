@@ -34,6 +34,9 @@
     "roomActionBurstMax": 8,
     "chatMessageUtf8Bytes": 16384,
     "chatMessageUnicodeScalars": 4000,
+    "chatAttachmentMaxItems": 5,
+    "chatAttachmentFileNameUtf8Bytes": 255,
+    "chatAttachmentMaxBytes": 26214400,
     "chatPageMaxMessages": 100,
     "chatPageEncodedBytes": 131072,
     "reactionTtlMs": 5000,
@@ -91,7 +94,7 @@
     },
     {
       "id": "live",
-      "accepts": ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "ping"],
+      "accepts": ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "room_reaction_send", "chat_send", "chat_page_request", "chat_read_set", "ping"],
       "heartbeat": { "intervalMs": 20000, "missedDeadlinesBeforeClose": 2 }
     },
     { "id": "terminal", "transitionsTo": "closed" },
@@ -477,9 +480,27 @@
     }
   },
   "roomActions": {
-    "extension": "room_actions_v1",
+    "extension": "room_actions_v2",
+    "fallbackExtension": "room_actions_v1",
     "capabilities": ["sendReaction", "sendChat"],
     "reactions": ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+    "attachmentMimeTypes": [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "application/pdf",
+      "text/plain",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.oasis.opendocument.text",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      "application/vnd.oasis.opendocument.presentation"
+    ],
     "chatCursor": {
       "exactFields": ["after_sequence", "retained_floor_sequence"],
       "afterSequence": "nullableUnsignedDecimal",
@@ -489,6 +510,9 @@
       "exactFields": ["name", "chat_cursor"]
     },
     "welcomeExtension": {
+      "exactFields": ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]
+    },
+    "fallbackWelcomeExtension": {
       "exactFields": ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence"]
     },
     "clientFrames": {
@@ -498,12 +522,20 @@
       },
       "sendChat": {
         "type": "chat_send",
+        "exactFields": ["type", "client_message_id", "text", "attachment_ids"]
+      },
+      "fallbackSendChat": {
+        "type": "chat_send",
         "exactFields": ["type", "client_message_id", "text"]
       },
       "readChatPage": {
         "type": "chat_page_request",
         "exactFields": ["type", "request_id", "direction", "cursor_sequence", "limit"],
         "directions": ["older", "newer"]
+      },
+      "setChatRead": {
+        "type": "chat_read_set",
+        "exactFields": ["type", "request_id", "sequence"]
       }
     },
     "serverFrames": {
@@ -518,6 +550,10 @@
         "outcomes": ["accepted", "rejected"]
       },
       "chatMessage": {
+        "type": "chat_message",
+        "exactFields": ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "attachments", "created_at"]
+      },
+      "fallbackChatMessage": {
         "type": "chat_message",
         "exactFields": ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "created_at"]
       },
@@ -536,9 +572,19 @@
       "chatHead": {
         "type": "chat_head",
         "exactFields": ["type", "head_sequence", "retained_floor_sequence"]
+      },
+      "chatReadReceipt": {
+        "type": "chat_read_receipt",
+        "exactFields": ["type", "participant_session_id", "participant_session_generation", "sequence", "read_at"]
+      },
+      "chatReadResult": {
+        "type": "chat_read_result",
+        "acceptedFields": ["type", "request_id", "outcome", "participant_session_id", "participant_session_generation", "sequence", "read_at"],
+        "rejectedFields": ["type", "request_id", "outcome", "error_code"],
+        "outcomes": ["accepted", "rejected"]
       }
     },
-    "errorCodes": ["capability_denied", "invalid_payload", "rate_limited", "overloaded", "session_ended", "participant_stale", "client_message_id_conflict", "dependency_unavailable"]
+    "errorCodes": ["capability_denied", "invalid_payload", "rate_limited", "overloaded", "session_ended", "participant_stale", "client_message_id_conflict", "attachment_not_found", "attachment_not_ready", "attachment_already_claimed", "attachment_quota_exceeded", "dependency_unavailable"]
   },
   "externalIntents": [
     "admit_participant",
