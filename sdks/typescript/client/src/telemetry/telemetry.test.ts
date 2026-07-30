@@ -209,6 +209,39 @@ describe("TelemetryClient", () => {
     expect(event.attributes?.metric_0).toHaveLength(256);
   });
 
+  it("records numeric diagnostics only while the journey is active", () => {
+    const telemetry = createClient();
+    const journey = telemetry.startJourney({ kind: "meeting.join" });
+
+    const metric = journey.recordDiagnostic({
+      category: "whiteboard_renderer",
+      code: "whiteboard.renderer.ready",
+      metricValue: 27,
+      phase: "media",
+    });
+    journey.terminal("succeeded");
+
+    expect(metric).toMatchObject({
+      name: "diagnostic.timeline",
+      phase: "media",
+      attributes: {
+        category: "whiteboard_renderer",
+        code: "whiteboard.renderer.ready",
+        metric_value: 27,
+      },
+    });
+    expect(
+      journey.recordDiagnostic({
+        category: "whiteboard_renderer",
+        code: "whiteboard.renderer.termination",
+        metricValue: 1,
+        phase: "media",
+        state: "failed",
+      }),
+    ).toBeUndefined();
+    expect(telemetry.getPendingEvents().map((event) => event.name)).toEqual(["journey.started", "diagnostic.timeline", "journey.terminal"]);
+  });
+
   it("posts batches to the configured API journey intake path", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ accepted_count: 1, duplicate_count: 0 }), { status: 202 }));
     const exporter = createJourneyIntakeExporter({ baseUrl: "https://api.chalk.test/api", credentials: "include", fetch: fetchMock as typeof fetch });

@@ -30,16 +30,12 @@ describe("createNativeTelemetry", () => {
       attributes: { renderer_generation: "private-cardinality-value" },
     });
 
-    expect(journey.record).toHaveBeenCalledWith({
-      name: "diagnostic.timeline",
+    expect(journey.recordDiagnostic).toHaveBeenCalledWith({
+      category: "whiteboard_renderer",
+      code: "whiteboard.renderer.termination",
+      metricValue: 1,
       phase: "media",
       state: "failed",
-      origin_kind: "diagnostic",
-      attributes: {
-        category: "whiteboard_renderer",
-        code: "whiteboard.renderer.termination",
-        metric_value: 1,
-      },
     });
   });
 
@@ -65,7 +61,7 @@ describe("createNativeTelemetry", () => {
 });
 
 function createJourney(): NativeTelemetryJourney & {
-  record: ReturnType<typeof vi.fn>;
+  recordDiagnostic: ReturnType<typeof vi.fn>;
   recordRtcSummary: ReturnType<typeof vi.fn>;
   recordSyncFrame: ReturnType<typeof vi.fn>;
 } {
@@ -80,7 +76,7 @@ function createJourney(): NativeTelemetryJourney & {
       "x-chalk-journey-id": "00000000-0000-4000-8000-000000000001",
       traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
     },
-    record: vi.fn(),
+    recordDiagnostic: vi.fn(),
     recordRtcSummary: vi.fn(),
     recordSyncFrame: vi.fn(),
   };

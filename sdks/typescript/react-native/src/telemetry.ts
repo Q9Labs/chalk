@@ -1,9 +1,9 @@
-import { syncTelemetryCorrelation, type JourneyTelemetryContext, type RtcConnectionStateSnapshot, type RtcStatsLike, type SyncFrameObservation, type TelemetryEventDraft } from "@q9labsai/chalk-client/telemetry";
+import { syncTelemetryCorrelation, type DiagnosticObservation, type JourneyTelemetryContext, type RtcConnectionStateSnapshot, type RtcStatsLike, type SyncFrameObservation } from "@q9labsai/chalk-client/telemetry";
 
 export interface NativeTelemetryJourney {
   readonly context: JourneyTelemetryContext;
   readonly headers: Readonly<Record<string, string>>;
-  record?(draft: TelemetryEventDraft): unknown;
+  recordDiagnostic(observation: DiagnosticObservation): unknown;
   recordRtcSummary(connection: RtcConnectionStateSnapshot, stats: Iterable<RtcStatsLike>): unknown;
   recordSyncFrame(observation: SyncFrameObservation): unknown;
 }
@@ -57,16 +57,12 @@ export function createNativeTelemetry(journey: NativeTelemetryJourney): NativeTe
       journey.recordSyncFrame(observation);
     },
     recordWhiteboardMetric(metric) {
-      journey.record?.({
-        name: "diagnostic.timeline",
+      journey.recordDiagnostic({
+        category: "whiteboard_renderer",
+        code: metric.name,
+        metricValue: metric.value,
         phase: "media",
         state: isFailedWhiteboardMetric(metric.name) ? "failed" : "observed",
-        origin_kind: "diagnostic",
-        attributes: {
-          category: "whiteboard_renderer",
-          code: metric.name,
-          metric_value: metric.value,
-        },
       });
     },
   };
