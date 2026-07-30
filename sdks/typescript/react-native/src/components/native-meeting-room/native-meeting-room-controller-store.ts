@@ -10,8 +10,6 @@ export interface NativeMeetingRoomControllerSnapshot {
 }
 
 export interface NativeMeetingRoomControllerStoreSync {
-  readonly panel: NativeMeetingPanelName | null;
-  readonly markChatAsRead: () => void;
   readonly diagnostics: NativeMeetingRoomDiagnosticsSnapshot;
   readonly onDiagnosticsChange: ((snapshot: NativeMeetingRoomDiagnosticsSnapshot) => void) | undefined;
 }
@@ -26,10 +24,6 @@ export class NativeMeetingRoomControllerStore {
   };
   #listeners = new Set<() => void>();
   #timer: ReturnType<typeof setInterval> | undefined;
-  #panel: NativeMeetingPanelName | null = null;
-  #markChatAsRead: (() => void) | undefined;
-  #lastMarkedPanel: NativeMeetingPanelName | null = null;
-  #lastMarkChatAsRead: (() => void) | undefined;
   #diagnostics: NativeMeetingRoomDiagnosticsSnapshot | undefined;
   #onDiagnosticsChange: ((snapshot: NativeMeetingRoomDiagnosticsSnapshot) => void) | undefined;
   #lastDiagnosticsSignature: string | null = null;
@@ -67,9 +61,7 @@ export class NativeMeetingRoomControllerStore {
     this.#update({ localPanel: panel });
   };
 
-  readonly sync = ({ panel, markChatAsRead, diagnostics, onDiagnosticsChange }: NativeMeetingRoomControllerStoreSync): void => {
-    this.#panel = panel;
-    this.#markChatAsRead = markChatAsRead;
+  readonly sync = ({ diagnostics, onDiagnosticsChange }: NativeMeetingRoomControllerStoreSync): void => {
     this.#diagnostics = diagnostics;
     this.#onDiagnosticsChange = onDiagnosticsChange;
     if (this.#listeners.size > 0) {
@@ -105,17 +97,6 @@ export class NativeMeetingRoomControllerStore {
   }
 
   #runEffects(): void {
-    if (this.#panel === "chat") {
-      if (this.#lastMarkedPanel !== "chat" || this.#lastMarkChatAsRead !== this.#markChatAsRead) {
-        this.#lastMarkedPanel = "chat";
-        this.#lastMarkChatAsRead = this.#markChatAsRead;
-        this.#markChatAsRead?.();
-      }
-    } else {
-      this.#lastMarkedPanel = null;
-      this.#lastMarkChatAsRead = undefined;
-    }
-
     const diagnostics = this.#diagnostics;
     const onDiagnosticsChange = this.#onDiagnosticsChange;
     if (!diagnostics || !onDiagnosticsChange) return;

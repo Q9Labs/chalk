@@ -10,7 +10,7 @@ describe("ChalkSession snapshot projection", () => {
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot.localMedia)).toBe(true);
     expect(Object.isFrozen(snapshot.localMedia.camera)).toBe(true);
-    expect(snapshot.roomActions).toEqual({ phase: "disabled", capabilities: [], error: null });
+    expect(snapshot.roomActions).toEqual({ phase: "disabled", version: null, capabilities: [], error: null });
     expect(snapshot.chat).toMatchObject({ status: "idle", messages: [], pending: [], unreadCount: 0 });
     expect(snapshot.whiteboard).toMatchObject({ status: "unsubscribed", canDraw: false, canClear: false });
     expect(Object.isFrozen(snapshot.roomActions.capabilities)).toBe(true);
@@ -85,7 +85,7 @@ describe("ChalkSession snapshot projection", () => {
       localTracks: new Map(),
       localIntent: { microphone: false, camera: false },
       failure: null,
-      roomActions: { phase: "healthy", capabilities: ["sendReaction", "sendChat"], error: null },
+      roomActions: { phase: "healthy", version: 2, capabilities: ["sendReaction", "sendChat"], error: null },
       participantRoomActionCapabilities: { [participantId]: ["sendReaction", "sendChat"] },
       reactions: [
         {

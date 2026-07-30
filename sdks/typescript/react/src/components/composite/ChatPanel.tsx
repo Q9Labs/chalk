@@ -1,23 +1,26 @@
-import { Message01Icon, SentIcon } from "../../utils/icons";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
+import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkPendingChatMessage, ChalkSendChatMessageInput } from "@q9labsai/chalk-client";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
 import { cn } from "../../utils/cn";
+import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
 import { Button } from "../ui";
 import { MessageBubble } from "./MessageBubble";
-import type { ChatMessage } from "./chat-types";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 
-export type { ChatMessage };
+export type { ChatMessage } from "./chat-types";
 
-export interface ChatPanelPendingMessage {
-  readonly id: string;
-  readonly content: string;
-  readonly state: "sending" | "failed";
-  readonly error?: string;
-}
-
+const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
 export interface ChatPanelProps {
-  readonly messages: readonly ChatMessage[];
-  readonly pendingMessages?: readonly ChatPanelPendingMessage[];
-  readonly onSendMessage: (content: string) => Promise<void>;
+  readonly messages: readonly ChalkChatMessage[];
+  readonly pendingMessages?: readonly ChalkPendingChatMessage[];
+  readonly readReceipts?: readonly ChalkChatReadReceipt[];
+  readonly localReadThroughSequence?: string | null;
+  readonly participantNames?: Readonly<Record<string, string>>;
+  readonly onSendMessage: (input: Pick<ChalkSendChatMessageInput, "text" | "attachments">) => Promise<void>;
+  readonly onUploadAttachment?: (file: File) => Promise<ChalkChatAttachment>;
+  readonly onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
+  readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
   readonly onRetryMessage?: (id: string) => Promise<void>;
   readonly onLoadOlder?: () => Promise<void>;
   readonly hasOlder?: boolean;
@@ -33,17 +36,72 @@ export interface ChatPanelProps {
 }
 
 export const ChatPanel = React.memo(
-  ({ messages, pendingMessages = [], onSendMessage, onRetryMessage, onLoadOlder, hasOlder = false, loadingOlder = false, localParticipantId, onClose, disabled = false, placeholder = "Type a message...", title = "Chat", variant = "sidebar", error, className }: ChatPanelProps) => {
+  ({
+    messages,
+    pendingMessages = [],
+    readReceipts = [],
+    localReadThroughSequence = null,
+    participantNames = {},
+    onSendMessage,
+    onUploadAttachment,
+    onResolveAttachmentUrl,
+    onMarkRead,
+    onRetryMessage,
+    onLoadOlder,
+    hasOlder = false,
+    loadingOlder = false,
+    localParticipantId,
+    onClose,
+    disabled = false,
+    placeholder = "Type a message...",
+    title = "Chat",
+    variant = "sidebar",
+    error,
+    className,
+  }: ChatPanelProps) => {
     const [draft, setDraft] = useState("");
+    const [stagedFiles, setStagedFiles] = useState<readonly File[]>([]);
     const [sending, setSending] = useState(false);
     const [composerError, setComposerError] = useState<string | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const grouped = useMemo(() => groupMessages(messages), [messages]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const isAtBottomRef = useRef(true);
+    const mountedRef = useRef(false);
+    const lastMarkedSequenceRef = useRef<string | null>(localReadThroughSequence);
+    const restoreScrollRef = useRef<{ readonly height: number; readonly top: number; readonly firstMessageId: string | undefined } | null>(null);
+    const grouped = useMemo(() => groupChatMessages(messages), [messages]);
+    const latestSequence = messages.at(-1)?.sequence;
+
+    useLayoutEffect(() => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+
+      const restore = restoreScrollRef.current;
+      if (restore) {
+        if (messages[0]?.messageId !== restore.firstMessageId) {
+          scroller.scrollTop = restore.top + scroller.scrollHeight - restore.height;
+        }
+        restoreScrollRef.current = null;
+        isAtBottomRef.current = isChatScrollAtBottom(scroller);
+        return;
+      }
+
+      if (!isAtBottomRef.current) return;
+      scroller.scrollTop = scroller.scrollHeight;
+      endRef.current?.scrollIntoView?.({ behavior: mountedRef.current ? "smooth" : "auto", block: "end" });
+      if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
+      mountedRef.current = true;
+    }, [latestSequence, messages.length, onMarkRead, pendingMessages.length]);
 
     useEffect(() => {
-      endRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages, pendingMessages]);
+      if (!localReadThroughSequence) return;
+      const previous = lastMarkedSequenceRef.current;
+      if (!previous || compareChatSequence(localReadThroughSequence, previous) > 0) {
+        lastMarkedSequenceRef.current = localReadThroughSequence;
+      }
+    }, [localReadThroughSequence]);
 
     useEffect(() => {
       const textarea = textareaRef.current;
@@ -54,17 +112,63 @@ export const ChatPanel = React.memo(
 
     const send = async () => {
       const text = draft.trim();
-      if (!text || disabled || sending) return;
+      if ((!text && stagedFiles.length === 0) || disabled || sending) return;
       setSending(true);
+      setComposerError(null);
       try {
-        await onSendMessage(text);
+        const attachments = onUploadAttachment ? await Promise.all(stagedFiles.map((file) => onUploadAttachment(file))) : [];
+        await onSendMessage({ text, attachments });
         setDraft("");
-        setComposerError(null);
+        setStagedFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
       } catch (cause) {
         setComposerError(cause instanceof Error ? cause.message : "Message could not be sent.");
       } finally {
         setSending(false);
       }
+    };
+
+    const selectFiles = (files: FileList | null) => {
+      if (!files) return;
+      const selected = Array.from(files);
+      if (stagedFiles.length + selected.length > CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage) {
+        setComposerError(`You can attach up to ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files.`);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      const invalid = selected.find((file) => !ALLOWED_ATTACHMENT_MIME_TYPES.has(file.type) || file.size > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength || new TextEncoder().encode(file.name).byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes);
+      if (invalid) {
+        setComposerError(`${invalid.name} is not a supported chat attachment.`);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      setStagedFiles((current) => [...current, ...selected]);
+      setComposerError(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const loadOlder = async () => {
+      const scroller = scrollRef.current;
+      if (scroller) restoreScrollRef.current = { height: scroller.scrollHeight, top: scroller.scrollTop, firstMessageId: messages[0]?.messageId };
+      try {
+        await onLoadOlder?.();
+      } catch (cause) {
+        restoreScrollRef.current = null;
+        setComposerError(cause instanceof Error ? cause.message : "Earlier messages could not be loaded.");
+      }
+    };
+
+    const handleScroll = () => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      const atBottom = isChatScrollAtBottom(scroller);
+      isAtBottomRef.current = atBottom;
+      if (atBottom) {
+        if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
+        return;
+      }
+      const visibleSequence = latestVisibleChatSequence(scroller);
+      if (visibleSequence) markChatSequenceRead(visibleSequence, lastMarkedSequenceRef, onMarkRead);
     };
 
     return (
@@ -80,9 +184,9 @@ export const ChatPanel = React.memo(
           </header>
         ) : null}
 
-        <div className="flex-1 overflow-y-auto px-4 py-3" aria-live="polite">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3" aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
           {hasOlder && onLoadOlder ? (
-            <Button variant="ghost" size="sm" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void onLoadOlder()}>
+            <Button variant="ghost" size="sm" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void loadOlder()}>
               {loadingOlder ? "Loading…" : "Load earlier messages"}
             </Button>
           ) : null}
@@ -96,35 +200,47 @@ export const ChatPanel = React.memo(
             </div>
           ) : (
             grouped.map((group) => (
-              <div key={`${group.senderId}-${group.firstMessageId}`}>
-                {group.messages.map((message, index) => (
-                  <MessageBubble
-                    key={message.id}
-                    content={message.content}
-                    senderName={message.senderName}
-                    timestamp={message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp)}
-                    isLocal={message.isLocal ?? (localParticipantId !== undefined && message.senderId === localParticipantId)}
-                    isFirstInGroup={index === 0}
-                    isLastInGroup={index === group.messages.length - 1}
-                    showSender={index === 0}
-                    showTimestamp={index === group.messages.length - 1}
-                    showAvatar
-                  />
-                ))}
+              <div key={`${group.participantSessionId}-${group.firstMessageId}`}>
+                {group.messages.map((message, index) => {
+                  const isLocal = localParticipantId !== undefined && message.participantSessionId === localParticipantId;
+                  const readBy = isLocal ? receiptsForChatMessage(message.sequence, readReceipts, localParticipantId) : [];
+                  return (
+                    <div key={message.messageId} data-chat-sequence={message.sequence}>
+                      <MessageBubble
+                        content={message.text}
+                        senderName={message.displayName}
+                        timestamp={message.createdAt}
+                        isLocal={isLocal}
+                        isFirstInGroup={index === 0}
+                        isLastInGroup={index === group.messages.length - 1}
+                        showSender={index === 0}
+                        showTimestamp={index === group.messages.length - 1}
+                        showAvatar
+                        status={readBy.length > 0 ? "read" : "sent"}
+                        attachments={message.attachments}
+                        readBy={readBy}
+                        participantNames={participantNames}
+                        onResolveAttachmentUrl={onResolveAttachmentUrl}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             ))
           )}
           {pendingMessages.map((pending) => (
-            <div key={pending.id} className="my-2 ml-auto max-w-[85%] rounded-2xl bg-primary/10 px-3 py-2 text-sm">
-              <p>{pending.content}</p>
-              <div className="mt-1 flex items-center justify-end gap-2 text-xs text-muted-foreground">
-                <span>{pending.state === "sending" ? "Sending…" : pending.error || "Not sent"}</span>
-                {pending.state === "failed" && onRetryMessage ? (
-                  <button type="button" className="font-medium text-primary hover:underline" onClick={() => void onRetryMessage(pending.id)}>
-                    Retry
-                  </button>
-                ) : null}
-              </div>
+            <div key={pending.clientMessageId} className="my-2">
+              <MessageBubble content={pending.text} senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"} timestamp={new Date().toISOString()} isLocal status="pending" attachments={pending.attachments} onResolveAttachmentUrl={onResolveAttachmentUrl} />
+              {pending.state === "failed" ? (
+                <div className="mr-14 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                  <span>{pending.error?.message || "Not sent"}</span>
+                  {onRetryMessage ? (
+                    <button type="button" className="font-medium text-primary hover:underline" onClick={() => void onRetryMessage(pending.clientMessageId)}>
+                      Retry
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ))}
           <div ref={endRef} />
@@ -135,7 +251,27 @@ export const ChatPanel = React.memo(
             {composerError || error}
           </p>
         )}
+        {stagedFiles.length > 0 ? (
+          <div className="flex flex-wrap gap-2 border-t border-border/30 px-4 pt-3" aria-label="Attachments">
+            {stagedFiles.map((file, index) => (
+              <div key={`${file.name}-${file.size}-${file.lastModified}-${index}`} className="flex max-w-full items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs">
+                <span className="max-w-52 truncate">{file.name}</span>
+                <button type="button" disabled={sending} aria-label={`Remove ${file.name}`} onClick={() => setStagedFiles((current) => current.filter((_, candidate) => candidate !== index))}>
+                  <Cancel01Icon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="flex items-end gap-3 border-t border-border/30 px-4 py-4">
+          {onUploadAttachment ? (
+            <>
+              <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} />
+              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={disabled || sending || stagedFiles.length >= CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} onClick={() => fileInputRef.current?.click()} aria-label="Attach files">
+                <Upload01Icon className="h-5 w-5" />
+              </Button>
+            </>
+          ) : null}
           <textarea
             ref={textareaRef}
             value={draft}
@@ -151,7 +287,7 @@ export const ChatPanel = React.memo(
             className="min-h-11 max-h-[120px] flex-1 resize-none rounded-2xl bg-muted/50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/50"
             rows={1}
           />
-          <Button type="button" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={!draft.trim() || disabled || sending} onClick={() => void send()} aria-label="Send message">
+          <Button type="button" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending} onClick={() => void send()} aria-label="Send message">
             <SentIcon className="h-5 w-5" />
           </Button>
         </div>
@@ -161,18 +297,3 @@ export const ChatPanel = React.memo(
 );
 
 ChatPanel.displayName = "ChatPanel";
-
-function groupMessages(messages: readonly ChatMessage[]) {
-  const groups: { readonly senderId: string; readonly firstMessageId: string; readonly messages: ChatMessage[] }[] = [];
-  for (const message of messages) {
-    const group = groups.at(-1);
-    const previous = group?.messages.at(-1);
-    const withinWindow = previous && new Date(message.timestamp).getTime() - new Date(previous.timestamp).getTime() < 120_000;
-    if (group && group.senderId === message.senderId && withinWindow) {
-      group.messages.push(message);
-    } else {
-      groups.push({ senderId: message.senderId, firstMessageId: message.id, messages: [message] });
-    }
-  }
-  return groups;
-}

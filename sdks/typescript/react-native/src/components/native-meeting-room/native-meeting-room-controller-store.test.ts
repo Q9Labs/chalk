@@ -62,27 +62,18 @@ describe("NativeMeetingRoomControllerStore", () => {
     expect(store.getSnapshot().secondsElapsed).toBe(2);
   });
 
-  it("marks chat and emits each diagnostics snapshot once", async () => {
+  it("emits each diagnostics snapshot once", async () => {
     const store = new NativeMeetingRoomControllerStore();
-    const markChatAsRead = vi.fn();
     const onDiagnosticsChange = vi.fn();
     const unsubscribe = store.subscribe(() => {});
 
-    store.sync({ panel: "chat", markChatAsRead, diagnostics, onDiagnosticsChange });
+    store.sync({ diagnostics, onDiagnosticsChange });
     await Promise.resolve();
-    expect(markChatAsRead).toHaveBeenCalledTimes(1);
     expect(onDiagnosticsChange).toHaveBeenCalledTimes(1);
 
-    store.sync({ panel: "chat", markChatAsRead, diagnostics, onDiagnosticsChange });
+    store.sync({ diagnostics, onDiagnosticsChange });
     await Promise.resolve();
-    expect(markChatAsRead).toHaveBeenCalledTimes(1);
     expect(onDiagnosticsChange).toHaveBeenCalledTimes(1);
-
-    store.sync({ panel: null, markChatAsRead, diagnostics, onDiagnosticsChange });
-    await Promise.resolve();
-    store.sync({ panel: "chat", markChatAsRead, diagnostics, onDiagnosticsChange });
-    await Promise.resolve();
-    expect(markChatAsRead).toHaveBeenCalledTimes(2);
 
     unsubscribe();
   });

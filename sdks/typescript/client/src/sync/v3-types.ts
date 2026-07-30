@@ -1,5 +1,5 @@
 import type { SyncV3ServerFrame } from "../generated/sync-v3";
-import type { ChalkChatMessage, ChalkChatPageResult, ChalkReaction, ChalkRoomReaction, ChalkSendChatMessageInput, ChalkSyncV3RoomActionCapability } from "../room-actions/types";
+import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkRoomReaction, ChalkSendChatMessageInput, ChalkSyncV3RoomActionCapability } from "../room-actions/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
 
 export type V3Capability =
@@ -151,18 +151,24 @@ export type V3ChatCursor = {
 };
 
 export type V3RoomActionsExtensionRequest = {
-  readonly name: "room_actions_v1";
+  readonly name: "room_actions_v1" | "room_actions_v2";
   readonly chatCursor: V3ChatCursor;
 };
 
 export type V3RoomActionsExtensionState = {
   readonly negotiated: boolean;
+  readonly version: 1 | 2 | null;
   readonly capabilities: readonly ChalkSyncV3RoomActionCapability[];
   readonly chatHeadSequence: string | null;
   readonly retainedFloorSequence: string | null;
+  readonly readReceipts: readonly ChalkChatReadReceipt[];
 };
 
-export type V3RoomActionClientEvent = { readonly type: "reaction"; readonly reaction: ChalkRoomReaction } | { readonly type: "chat_message"; readonly message: ChalkChatMessage } | { readonly type: "chat_cursor_reset"; readonly retainedFloorSequence: string };
+export type V3RoomActionClientEvent =
+  | { readonly type: "reaction"; readonly reaction: ChalkRoomReaction }
+  | { readonly type: "chat_message"; readonly message: ChalkChatMessage }
+  | { readonly type: "chat_read_receipt"; readonly receipt: ChalkChatReadReceipt }
+  | { readonly type: "chat_cursor_reset"; readonly retainedFloorSequence: string };
 
 export type V3RoomActionsClient = {
   readonly getRoomActionsExtensionState: () => V3RoomActionsExtensionState;
@@ -170,6 +176,7 @@ export type V3RoomActionsClient = {
   readonly subscribeRoomActions: (listener: (event: V3RoomActionClientEvent) => void) => () => void;
   readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkRoomReaction>;
   readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
+  readonly markChatRead: (sequence: string) => Promise<ChalkChatReadReceipt>;
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
 };
 

@@ -1,3 +1,4 @@
+export * from "./chat-files";
 export * from "./media";
 export * from "./room-actions";
 export * from "./session";

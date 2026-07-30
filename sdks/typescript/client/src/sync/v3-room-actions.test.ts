@@ -13,18 +13,27 @@ const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const requestIds = Array.from({ length: 12 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
-describe("V3SyncClient room_actions_v1", () => {
-  it("negotiates the extension and maps reactions, chat sends, and pages", async () => {
+describe("V3SyncClient room_actions_v2", () => {
+  it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveRoomActionsClient();
     expect(socket.frames()[0]).toMatchObject({
       type: "hello",
-      extensions: [{ name: "room_actions_v1", chat_cursor: { after_sequence: null, retained_floor_sequence: null } }],
+      extensions: [{ name: "room_actions_v2", chat_cursor: { after_sequence: null, retained_floor_sequence: null } }],
     });
     expect(client.getRoomActionsExtensionState()).toEqual({
       negotiated: true,
+      version: 2,
       capabilities: ["sendReaction", "sendChat"],
       chatHeadSequence: "8",
       retainedFloorSequence: "2",
+      readReceipts: [
+        {
+          participantSessionId: peerId,
+          participantSessionGeneration: 1,
+          readThroughSequence: "7",
+          readAt: "2026-07-29T12:00:00.000Z",
+        },
+      ],
     });
     expect(client.getParticipantRoomActionCapabilities()).toEqual({
       [participantId]: ["sendReaction", "sendChat"],
@@ -44,9 +53,29 @@ describe("V3SyncClient room_actions_v1", () => {
     });
     await expect(reaction).resolves.toMatchObject({ reaction: "🎉", participantSessionId: participantId });
 
-    const chat = client.sendChatMessage({ text: "Hello", clientMessageId: requestIds[1] });
-    socket.receive({ type: "chat_send_result", client_message_id: requestIds[1], outcome: "accepted", message: chatMessage("9", requestIds[1]) });
-    await expect(chat).resolves.toMatchObject({ text: "Hello", sequence: "9" });
+    const attachment = {
+      attachmentId: requestIds[11]!,
+      fileName: "notes.txt",
+      mimeType: "text/plain" as const,
+      byteLength: 128,
+    };
+    const chat = client.sendChatMessage({ text: "", attachments: [attachment], clientMessageId: requestIds[1] });
+    expect(socket.frames().at(-1)).toMatchObject({ type: "chat_send", text: "", attachment_ids: [attachment.attachmentId] });
+    socket.receive({ type: "chat_send_result", client_message_id: requestIds[1], outcome: "accepted", message: chatMessage("9", requestIds[1], [attachment]) });
+    await expect(chat).resolves.toMatchObject({ text: "", sequence: "9", attachments: [attachment] });
+
+    const read = client.markChatRead("9");
+    const readRequest = socket.frames().at(-1)!;
+    socket.receive({
+      type: "chat_read_result",
+      request_id: readRequest.request_id,
+      outcome: "accepted",
+      participant_session_id: participantId,
+      participant_session_generation: 1,
+      sequence: "9",
+      read_at: "2026-07-29T12:01:00.000Z",
+    });
+    await expect(read).resolves.toMatchObject({ participantSessionId: participantId, readThroughSequence: "9" });
 
     const page = client.readChatPage({ beforeSequence: "9", limit: 20 });
     const pageRequest = socket.frames().at(-1)!;
@@ -54,7 +83,7 @@ describe("V3SyncClient room_actions_v1", () => {
       type: "chat_page",
       request_id: pageRequest.request_id,
       outcome: "loaded",
-      messages: [chatMessage("3", requestIds[2])],
+      messages: [chatMessage("3", requestIds[2], [])],
       has_more: false,
       head_sequence: "9",
       retained_floor_sequence: "2",
@@ -103,7 +132,7 @@ describe("V3SyncClient room_actions_v1", () => {
     expect(client.getRoomActionsExtensionState().retainedFloorSequence).toBe("4");
   });
 
-  it("falls back once to a legacy hello while preserving the base session", async () => {
+  it("falls back from v2 to v1 while preserving room actions", async () => {
     const sockets: TestSocket[] = [];
     const client = new V3SyncClient({
       url: "ws://sync.test/v3/sync",
@@ -120,7 +149,7 @@ describe("V3SyncClient room_actions_v1", () => {
     await client.start();
     sockets[0]!.open();
     await settle();
-    expect(sockets[0]!.frames()[0]).toHaveProperty("extensions");
+    expect(sockets[0]!.frames()[0]).toMatchObject({ extensions: [{ name: "room_actions_v2" }] });
 
     sockets[0]!.receive({ type: "error", code: "invalid_frame", detail: "invalid frame" });
     for (let attempt = 0; attempt < 50 && sockets.length < 2; attempt += 1) {
@@ -129,12 +158,12 @@ describe("V3SyncClient room_actions_v1", () => {
     expect(sockets).toHaveLength(2);
     sockets[1]!.open();
     await settle();
-    expect(sockets[1]!.frames()[0]).not.toHaveProperty("extensions");
+    expect(sockets[1]!.frames()[0]).toMatchObject({ extensions: [{ name: "room_actions_v1" }] });
 
-    const { state } = await recover(sockets[1]!, false);
+    const { state } = await recover(sockets[1]!, "v1");
     expect(client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, control: { revision: state.revision } });
-    expect(client.getRoomActionsExtensionState()).toMatchObject({ negotiated: false, capabilities: [] });
-    expect(() => client.sendReaction("👍")).toThrowError(/room actions are unavailable/u);
+    expect(client.getRoomActionsExtensionState()).toMatchObject({ negotiated: true, version: 1, capabilities: ["sendReaction", "sendChat"] });
+    expect(() => client.sendChatMessage({ text: "", attachments: [{ attachmentId: requestIds[11]!, fileName: "notes.txt", mimeType: "text/plain", byteLength: 1 }] })).toThrowError(/require room_actions_v2/u);
   });
 });
 
@@ -151,7 +180,7 @@ async function liveRoomActionsClient(overrides: Partial<ConstructorParameters<ty
   await client.start();
   socket.open();
   await settle();
-  const { state } = await recover(socket, true);
+  const { state } = await recover(socket, "v2");
   expect(socket.closeCalls).toEqual([]);
   expect(client.getSnapshot()).toMatchObject({
     connection: { phase: "live" },
@@ -161,7 +190,7 @@ async function liveRoomActionsClient(overrides: Partial<ConstructorParameters<ty
   return { client, socket, state };
 }
 
-async function recover(socket: TestSocket, extended: boolean) {
+async function recover(socket: TestSocket, extensionVersion: "v1" | "v2" | false) {
   const state = await stateWithDigest();
   const welcome = {
     type: "welcome",
@@ -172,19 +201,38 @@ async function recover(socket: TestSocket, extended: boolean) {
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode: "snapshot",
     snapshot: wireSnapshot(state),
-    ...(extended
+    ...(extensionVersion
       ? {
           extensions: [
-            {
-              name: "room_actions_v1",
-              capabilities: ["sendReaction", "sendChat"],
-              participant_capabilities: {
-                [participantId]: ["sendReaction", "sendChat"],
-                [peerId]: ["sendReaction"],
-              },
-              chat_head_sequence: "8",
-              retained_floor_sequence: "2",
-            },
+            extensionVersion === "v2"
+              ? {
+                  name: "room_actions_v2",
+                  capabilities: ["sendReaction", "sendChat"],
+                  participant_capabilities: {
+                    [participantId]: ["sendReaction", "sendChat"],
+                    [peerId]: ["sendReaction"],
+                  },
+                  chat_head_sequence: "8",
+                  retained_floor_sequence: "2",
+                  read_receipts: [
+                    {
+                      participant_session_id: peerId,
+                      participant_session_generation: 1,
+                      sequence: "7",
+                      read_at: "2026-07-29T12:00:00.000Z",
+                    },
+                  ],
+                }
+              : {
+                  name: "room_actions_v1",
+                  capabilities: ["sendReaction", "sendChat"],
+                  participant_capabilities: {
+                    [participantId]: ["sendReaction", "sendChat"],
+                    [peerId]: ["sendReaction"],
+                  },
+                  chat_head_sequence: "8",
+                  retained_floor_sequence: "2",
+                },
           ],
         }
       : {}),
@@ -273,7 +321,7 @@ function roomReaction(id: string) {
   } as const;
 }
 
-function chatMessage(sequence: string, clientMessageId: string) {
+function chatMessage(sequence: string, clientMessageId: string, attachments: readonly { readonly attachmentId: string; readonly fileName: string; readonly mimeType: "text/plain"; readonly byteLength: number }[]) {
   return {
     type: "chat_message",
     message_id: requestIds[0]!,
@@ -281,7 +329,13 @@ function chatMessage(sequence: string, clientMessageId: string) {
     sequence,
     participant_session_id: participantId,
     display_name: "Host",
-    text: "Hello",
+    text: attachments.length === 0 ? "Hello" : "",
+    attachments: attachments.map((attachment) => ({
+      attachment_id: attachment.attachmentId,
+      file_name: attachment.fileName,
+      mime_type: attachment.mimeType,
+      byte_length: attachment.byteLength,
+    })),
     created_at: "2026-07-29T12:00:00.000Z",
   } as const;
 }

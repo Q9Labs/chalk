@@ -7,6 +7,7 @@ import type { ParticipantAccess } from "./access";
 import { ChalkSession } from "./chalk-session";
 import type { ChalkSessionAccessRequest, ChalkSessionClock, ChalkSessionDependencies, ChalkSessionMediaFactoryInput, ChalkSessionSyncClient } from "./dependencies";
 import type { ChalkSessionDiagnostic } from "./diagnostics";
+import type { ChalkSendChatMessageInput } from "./types";
 
 describe("ChalkSession", () => {
   it("acquires permission before access, shares concurrent join, and publishes an immutable live snapshot", async () => {
@@ -70,6 +71,53 @@ describe("ChalkSession", () => {
     await harness.session.leave();
   });
 
+  it("sends attachment-only messages and projects monotonic durable read watermarks", async () => {
+    const harness = createHarness();
+    const attachment = {
+      attachmentId: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      fileName: "notes.txt",
+      mimeType: "text/plain" as const,
+      byteLength: 128,
+    };
+    await harness.session.join();
+
+    await expect(harness.session.sendChatMessage({ text: "", attachments: [attachment] })).resolves.toMatchObject({
+      text: "",
+      attachments: [attachment],
+    });
+    expect(harness.sync.sendChatMessage).toHaveBeenCalledWith(expect.objectContaining({ text: "", attachments: [attachment] }));
+
+    harness.sync.emitRoomAction(chatMessageEvent("2"));
+    expect(harness.session.getSnapshot().chat.unreadCount).toBe(1);
+    await expect(harness.session.markChatRead("2")).resolves.toMatchObject({ readThroughSequence: "2" });
+    expect(harness.session.getSnapshot().chat).toMatchObject({
+      unreadCount: 0,
+      localReadThroughSequence: "2",
+      readReceipts: [expect.objectContaining({ participantSessionId: "participant-1", readThroughSequence: "2" })],
+    });
+
+    harness.sync.emitRoomAction({
+      type: "chat_read_receipt",
+      receipt: {
+        participantSessionId: "participant-2",
+        participantSessionGeneration: 1,
+        readThroughSequence: "2",
+        readAt: "2026-07-29T12:01:00.000Z",
+      },
+    });
+    harness.sync.emitRoomAction({
+      type: "chat_read_receipt",
+      receipt: {
+        participantSessionId: "participant-2",
+        participantSessionGeneration: 1,
+        readThroughSequence: "1",
+        readAt: "2026-07-29T12:02:00.000Z",
+      },
+    });
+    expect(harness.session.getSnapshot().chat.readReceipts).toEqual(expect.arrayContaining([expect.objectContaining({ participantSessionId: "participant-2", readThroughSequence: "2" })]));
+    await harness.session.leave();
+  });
+
   it("loads initial chat and follows later chat heads without counting history as unread", async () => {
     const harness = createHarness();
     harness.sync.chatHeadSequence = "2";
@@ -85,6 +133,7 @@ describe("ChalkSession", () => {
           displayName: "Grace",
           text: `Message ${sequence}`,
           createdAt: "2026-07-29T12:00:00.000Z",
+          attachments: [],
         },
       });
       return { status: "loaded", count: 1, hasOlder: input.afterSequence === undefined };
@@ -629,6 +678,7 @@ function chatMessageEvent(sequence: string): V3RoomActionClientEvent {
       displayName: "Grace",
       text: `Message ${sequence}`,
       createdAt: "2026-07-29T12:00:00.000Z",
+      attachments: [],
     },
   };
 }
@@ -725,9 +775,11 @@ class FakeSync implements ChalkSessionSyncClient {
   };
   getRoomActionsExtensionState = () => ({
     negotiated: this.snapshot.connection.phase === "live",
+    version: this.snapshot.connection.phase === "live" ? (2 as const) : null,
     capabilities: ["sendReaction", "sendChat"] as const,
     chatHeadSequence: this.chatHeadSequence,
     retainedFloorSequence: null,
+    readReceipts: [],
   });
   getParticipantRoomActionCapabilities = () => ({
     "participant-1": ["sendReaction", "sendChat"] as const,
@@ -744,7 +796,7 @@ class FakeSync implements ChalkSessionSyncClient {
     occurredAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 5_000).toISOString(),
   }));
-  sendChatMessage = vi.fn(async (input: { readonly text: string; readonly clientMessageId?: string }) => ({
+  sendChatMessage = vi.fn(async (input: ChalkSendChatMessageInput) => ({
     messageId: "message-1",
     clientMessageId: input.clientMessageId ?? "chat-message-1",
     sequence: "1",
@@ -752,6 +804,13 @@ class FakeSync implements ChalkSessionSyncClient {
     displayName: "Ada",
     text: input.text,
     createdAt: new Date().toISOString(),
+    attachments: input.attachments ?? [],
+  }));
+  markChatRead = vi.fn(async (sequence: string) => ({
+    participantSessionId: "participant-1",
+    participantSessionGeneration: 1,
+    readThroughSequence: sequence,
+    readAt: new Date().toISOString(),
   }));
   readChatPage = vi.fn(async () => ({ status: "loaded" as const, count: 0, hasOlder: false }));
   onDirectedRequest = (listener: (request: V3DirectedRequest) => void) => {

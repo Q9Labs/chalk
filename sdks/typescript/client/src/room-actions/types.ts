@@ -21,6 +21,46 @@ export type ChalkRoomReaction = {
   readonly expiresAt: string;
 };
 
+export const CHALK_CHAT_ATTACHMENT_LIMITS = {
+  maximumPerMessage: 5,
+  maximumByteLength: 25 * 1024 * 1024,
+  maximumFileNameBytes: 255,
+} as const;
+
+export const CHALK_CHAT_ATTACHMENT_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
+] as const;
+
+export type ChalkChatAttachmentMimeType = (typeof CHALK_CHAT_ATTACHMENT_MIME_TYPES)[number];
+
+export type ChalkChatAttachment = {
+  readonly attachmentId: string;
+  readonly fileName: string;
+  readonly mimeType: ChalkChatAttachmentMimeType;
+  readonly byteLength: number;
+};
+
+export type ChalkChatReadReceipt = {
+  readonly participantSessionId: string;
+  readonly participantSessionGeneration: number;
+  readonly readThroughSequence: string;
+  readonly readAt: string;
+};
+
 export type ChalkChatMessage = {
   readonly messageId: string;
   readonly clientMessageId: string;
@@ -29,11 +69,13 @@ export type ChalkChatMessage = {
   readonly displayName: string;
   readonly text: string;
   readonly createdAt: string;
+  readonly attachments: readonly ChalkChatAttachment[];
 };
 
 export type ChalkPendingChatMessageState<TFailure> = {
   readonly clientMessageId: string;
   readonly text: string;
+  readonly attachments: readonly ChalkChatAttachment[];
   readonly state: "sending" | "failed";
   readonly error: TFailure | null;
 };
@@ -46,6 +88,8 @@ export type ChalkChatStateSnapshot<TFailure, TPendingMessage> = {
   readonly historyTruncated: boolean;
   readonly retainedFloorSequence: string | null;
   readonly unreadCount: number;
+  readonly readReceipts: readonly ChalkChatReadReceipt[];
+  readonly localReadThroughSequence: string | null;
   readonly error: TFailure | null;
 };
 
@@ -53,6 +97,7 @@ export type ChalkChatPageResult = { readonly status: "loaded"; readonly count: n
 
 export type ChalkSendChatMessageInput = {
   readonly text: string;
+  readonly attachments?: readonly ChalkChatAttachment[];
   readonly clientMessageId?: string;
 };
 

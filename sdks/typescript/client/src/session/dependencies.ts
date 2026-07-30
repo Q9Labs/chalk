@@ -1,4 +1,5 @@
 import type { CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
+import type { ChalkChatFileTransport } from "../chat-files";
 import type { V3AdmissionPolicy, V3AssignableRole, V3CommandResult, V3SelfMediaTargetResult, V3SessionSnapshot, V3ClientMediaPlane } from "../sync";
 import type { V3DirectedRequest, V3DirectedRequestResult, V3RoomActionsClient } from "../sync/v3-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
@@ -80,10 +81,15 @@ export type ChalkSessionWhiteboardFactoryInput = {
   readonly onSummary: (summary: ChalkWhiteboardSummary) => void;
 };
 
+export type ChalkSessionChatFileFactoryInput = {
+  readonly token: () => Promise<string>;
+};
+
 export type ChalkSessionDependencies = {
   readonly clock: ChalkSessionClock;
   readonly mediaDevices: ChalkSessionMediaDevices;
   readonly createMediaClient: (input: ChalkSessionMediaFactoryInput) => ChalkSessionMediaClient;
   readonly createSyncClient: (input: ChalkSessionSyncFactoryInput) => ChalkSessionSyncClient;
+  readonly createChatFileTransport?: (input: ChalkSessionChatFileFactoryInput) => ChalkChatFileTransport | null;
   readonly createWhiteboardClient?: (input: ChalkSessionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null;
 };

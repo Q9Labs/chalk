@@ -21,7 +21,10 @@ beforeEach(() => {
   whiteboardPanelSpy.mockClear();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("SessionMeetingRoom", () => {
   it("connects the restored meeting controls to Chalk session actions", () => {
@@ -94,11 +97,28 @@ describe("SessionMeetingRoom", () => {
   it("exposes negotiated chat and reactions and delegates their actions", async () => {
     const sendChatMessage = vi.fn(() => Promise.resolve());
     const sendReaction = vi.fn(() => Promise.resolve());
-    const markChatRead = vi.fn();
+    const markChatRead = vi.fn(async () => null);
     const store = createStore(
       { sendChatMessage, sendReaction, markChatRead },
       {
-        roomActions: { phase: "healthy", capabilities: ["sendChat", "sendReaction"], error: null },
+        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat", "sendReaction"], error: null },
+        chat: {
+          ...emptyChat(),
+          status: "ready",
+          messages: [
+            {
+              messageId: "message-1",
+              clientMessageId: "client-1",
+              sequence: "1",
+              participantSessionId: "remote",
+              displayName: "Grace",
+              text: "Welcome",
+              createdAt: "2026-07-30T10:00:00.000Z",
+              attachments: [],
+            },
+          ],
+          unreadCount: 1,
+        },
       },
     );
 
@@ -112,8 +132,8 @@ describe("SessionMeetingRoom", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "  Hello team  " } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
 
-    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith({ text: "Hello team" }));
-    expect(markChatRead).toHaveBeenCalled();
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith({ text: "Hello team", attachments: [] }));
+    expect(markChatRead).toHaveBeenCalledWith("1");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Reactions" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "React with 👍" }));
@@ -126,7 +146,7 @@ describe("SessionMeetingRoom", () => {
     const store = createStore(
       { loadOlderChatMessages, retryChatMessage },
       {
-        roomActions: { phase: "healthy", capabilities: ["sendChat"], error: null },
+        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat"], error: null },
         chat: {
           status: "ready",
           messages: [],
@@ -134,6 +154,7 @@ describe("SessionMeetingRoom", () => {
             {
               clientMessageId: "client-1",
               text: "Please retry",
+              attachments: [],
               state: "failed",
               error: {
                 code: "command_rejected",
@@ -147,6 +168,8 @@ describe("SessionMeetingRoom", () => {
           historyTruncated: false,
           retainedFloorSequence: null,
           unreadCount: 0,
+          readReceipts: [],
+          localReadThroughSequence: null,
           error: null,
         },
       },
@@ -166,8 +189,55 @@ describe("SessionMeetingRoom", () => {
     await waitFor(() => expect(retryChatMessage).toHaveBeenCalledWith("client-1"));
   });
 
+  it("uploads chat attachments through the session transport before sending", async () => {
+    const sendChatMessage = vi.fn(() => Promise.resolve());
+    const finalizeUpload = vi.fn(async () => ({ attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain" as const, byteLength: 5 }));
+    const chatFiles = {
+      initiateUpload: vi.fn(async () => ({
+        attachmentId: "attachment-1",
+        uploadId: "upload-1",
+        method: "PUT" as const,
+        uploadUrl: "https://upload.test/signed",
+        headers: { "content-type": "text/plain", "x-upload-token": "signed" },
+        expiresAt: "2026-07-30T11:00:00.000Z",
+      })),
+      finalizeUpload,
+      getDownloadUrl: vi.fn(),
+    };
+    const fetch = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const store = createStore(
+      { sendChatMessage, chatFiles },
+      {
+        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat"], error: null },
+      },
+    );
+    render(
+      <ChalkProvider session={store}>
+        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+      </ChalkProvider>,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Chat" })[0]!);
+    fireEvent.change(screen.getByLabelText("Choose attachments"), { target: { files: [new File(["hello"], "note.txt", { type: "text/plain" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(finalizeUpload).toHaveBeenCalledWith("upload-1"));
+    expect(fetch).toHaveBeenCalledWith(
+      "https://upload.test/signed",
+      expect.objectContaining({
+        method: "PUT",
+        headers: { "content-type": "text/plain", "x-upload-token": "signed" },
+      }),
+    );
+    expect(sendChatMessage).toHaveBeenCalledWith({
+      text: "",
+      attachments: [{ attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 }],
+    });
+  });
+
   it("hides chat and reactions when room-actions negotiation does not grant them", () => {
-    const store = createStore({}, { roomActions: { phase: "disabled", capabilities: [], error: null } });
+    const store = createStore({}, { roomActions: { phase: "disabled", version: null, capabilities: [], error: null } });
 
     render(
       <ChalkProvider session={store}>
@@ -290,20 +360,11 @@ function createStore(actions: Partial<ChalkSessionStore>, snapshotOverrides: Par
     },
     remoteMedia: [],
     failure: null,
-    roomActions: { phase: "disabled", capabilities: [], error: null },
+    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
     participantRoomActionCapabilities: {},
     participantMedia: {},
     reactions: [],
-    chat: {
-      status: "idle",
-      messages: [],
-      pending: [],
-      hasOlder: false,
-      historyTruncated: false,
-      retainedFloorSequence: null,
-      unreadCount: 0,
-      error: null,
-    },
+    chat: emptyChat(),
     whiteboard: {
       status: "unsubscribed",
       sceneId: null,
@@ -341,13 +402,29 @@ function createStore(actions: Partial<ChalkSessionStore>, snapshotOverrides: Par
     sendChatMessage: resolved,
     retryChatMessage: resolved,
     loadOlderChatMessages: resolved,
-    markChatRead: () => undefined,
+    markChatRead: async () => null,
     requestUnmute: resolved,
     requestStartCamera: resolved,
     acceptMediaRequest: resolved,
     declineMediaRequest: () => undefined,
+    chatFiles: null,
     whiteboard: null,
     ...actions,
+  };
+}
+
+function emptyChat(): ChalkSessionSnapshot["chat"] {
+  return {
+    status: "idle",
+    messages: [],
+    pending: [],
+    hasOlder: false,
+    historyTruncated: false,
+    retainedFloorSequence: null,
+    unreadCount: 0,
+    readReceipts: [],
+    localReadThroughSequence: null,
+    error: null,
   };
 }
 

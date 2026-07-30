@@ -7,7 +7,24 @@ describe("native room-actions bridge", () => {
   it("projects only negotiated chat and reactions into native view models", () => {
     const projection = projectNativeRoomActions(
       snapshot({
-        roomActions: { phase: "healthy", capabilities: ["sendChat", "sendReaction"], error: null },
+        subject: {
+          tenantId: "tenant-1",
+          roomId: "room-1",
+          sessionId: "session-1",
+          participantSessionId: "participant-local",
+          participantGeneration: 2,
+        },
+        participants: [
+          {
+            participantSessionId: "participant-2",
+            displayName: "Grace",
+            handRaised: false,
+            role: "participant",
+            eligibleRoles: ["participant"],
+            capabilities: [],
+          },
+        ],
+        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat", "sendReaction"], error: null },
         chat: {
           status: "ready",
           messages: [
@@ -19,6 +36,20 @@ describe("native room-actions bridge", () => {
               displayName: "Ada",
               text: "Hello",
               createdAt: "2026-07-29T20:00:00.000Z",
+              attachments: [
+                {
+                  attachmentId: "attachment-image",
+                  fileName: "diagram.png",
+                  mimeType: "image/png",
+                  byteLength: 2_048,
+                },
+                {
+                  attachmentId: "attachment-file",
+                  fileName: "notes.pdf",
+                  mimeType: "application/pdf",
+                  byteLength: 4_096,
+                },
+              ],
             },
           ],
           pending: [],
@@ -26,6 +57,27 @@ describe("native room-actions bridge", () => {
           historyTruncated: false,
           retainedFloorSequence: null,
           unreadCount: 1,
+          readReceipts: [
+            {
+              participantSessionId: "participant-2",
+              participantSessionGeneration: 1,
+              readThroughSequence: "10",
+              readAt: "2026-07-29T20:01:00.000Z",
+            },
+            {
+              participantSessionId: "participant-local",
+              participantSessionGeneration: 2,
+              readThroughSequence: "10",
+              readAt: "2026-07-29T20:01:00.000Z",
+            },
+            {
+              participantSessionId: "participant-1",
+              participantSessionGeneration: 1,
+              readThroughSequence: "10",
+              readAt: "2026-07-29T20:01:00.000Z",
+            },
+          ],
+          localReadThroughSequence: null,
           error: null,
         },
         reactions: [
@@ -45,7 +97,16 @@ describe("native room-actions bridge", () => {
       expect.objectContaining({
         chatEnabled: true,
         reactionEnabled: true,
-        messages: [expect.objectContaining({ id: "message-1", senderId: "participant-1", content: "Hello" })],
+        messages: [
+          expect.objectContaining({
+            id: "message-1",
+            sequence: "1",
+            senderId: "participant-1",
+            content: "Hello",
+            attachments: [expect.objectContaining({ attachmentId: "attachment-image", fileName: "diagram.png" }), expect.objectContaining({ attachmentId: "attachment-file", fileName: "notes.pdf" })],
+            readBy: [expect.objectContaining({ participantSessionId: "participant-2", displayName: "Grace" })],
+          }),
+        ],
         reactions: [expect.objectContaining({ id: "reaction-1", emoji: "🎉", participantName: "Ada" })],
       }),
     );
@@ -114,7 +175,7 @@ function actionStore(): ChalkSessionStore {
 
 function snapshot(overrides: Partial<ChalkSessionSnapshot>): ChalkSessionSnapshot {
   return {
-    roomActions: { phase: "disabled", capabilities: [], error: null },
+    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
     chat: {
       status: "idle",
       messages: [],
@@ -123,6 +184,8 @@ function snapshot(overrides: Partial<ChalkSessionSnapshot>): ChalkSessionSnapsho
       historyTruncated: false,
       retainedFloorSequence: null,
       unreadCount: 0,
+      readReceipts: [],
+      localReadThroughSequence: null,
       error: null,
     },
     reactions: [],

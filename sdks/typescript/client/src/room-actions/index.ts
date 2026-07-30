@@ -1,2 +1,2 @@
 export * from "./types";
-export { chatMessageFromFrame, roomReactionFromFrame } from "./wire";
+export { chatMessageFromFrame, chatReadReceiptFromFrame, roomReactionFromFrame } from "./wire";

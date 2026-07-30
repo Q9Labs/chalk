@@ -15,6 +15,7 @@ import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Ic
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { Theme } from "../ui/theme";
+import { NativeChatMessageList } from "./NativeChatMessageList";
 import type { NativeMeetingPanelName, RoomParticipant } from "./native-meeting-room/types";
 
 export interface NativeMeetingPanelProps {
@@ -37,6 +38,7 @@ export interface NativeMeetingPanelProps {
   whiteboardElementCount: number;
   whiteboardParticipantCount: number;
   onChatDraftChange: (value: string) => void;
+  onLatestChatMessageVisible: (sequence: string) => void;
   onSendMessage: () => void;
   onClose: () => void;
   onSelectCamera: (deviceId: string) => void;
@@ -73,6 +75,7 @@ export function NativeMeetingPanelMacos({
   whiteboardElementCount,
   whiteboardParticipantCount,
   onChatDraftChange,
+  onLatestChatMessageVisible,
   onSendMessage,
   onClose,
   onSelectCamera,
@@ -111,25 +114,7 @@ export function NativeMeetingPanelMacos({
 
               {panel === "chat" ? (
                 <View style={styles.chatWrapper}>
-                  <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent} showsVerticalScrollIndicator={false}>
-                    {messages.length === 0 ? (
-                      <View style={styles.emptyState}>
-                        <HugeiconsIcon icon={Chat01Icon} size={40} color={Theme.colors.mutedForeground} />
-                        <Text style={styles.emptyText}>No messages yet.</Text>
-                      </View>
-                    ) : null}
-                    {messages.map((message, index) => {
-                      const isLocal = message.senderId === localParticipantId;
-                      return (
-                        <View key={`${message.id ?? "msg"}-${index}`} style={styles.messageGroup}>
-                          {!isLocal ? <Text style={styles.bubbleSender}>{message.senderName}</Text> : null}
-                          <View style={isLocal ? styles.localBubble : styles.remoteBubble}>
-                            <Text style={styles.bubbleText}>{message.content}</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </ScrollView>
+                  <NativeChatMessageList contentContainerStyle={styles.chatScrollContent} localParticipantId={localParticipantId} messages={messages} onLatestMessageVisible={onLatestChatMessageVisible} style={styles.chatScroll} />
                   <View style={styles.composerRow}>
                     <TextInput onChangeText={onChatDraftChange} onSubmitEditing={onSendMessage} placeholder="Type a message..." placeholderTextColor={Theme.colors.placeholder} style={styles.input} value={chatDraft} />
                     <Pressable onPress={onSendMessage} style={styles.sendButton}>

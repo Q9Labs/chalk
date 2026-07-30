@@ -108,9 +108,11 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
 
   getRoomActionsExtensionState = () => ({
     negotiated: true,
+    version: 2 as const,
     capabilities: ["sendReaction", "sendChat"] as const,
     chatHeadSequence: null,
     retainedFloorSequence: null,
+    readReceipts: [],
   });
 
   getParticipantRoomActionCapabilities = (): Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> => Object.fromEntries(this.#snapshot.control?.participants.map((participant) => [participant.participantSessionId, ["sendReaction", "sendChat"] as const]) ?? []);
@@ -130,6 +132,15 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
     const result = await this.#roomAction("send_chat", input);
     if (!result.message) throw new TypeError("Fixture chat response was incomplete");
     return result.message;
+  }
+
+  async markChatRead(sequence: string) {
+    return {
+      participantSessionId: this.#access.subject.participantSessionId,
+      participantSessionGeneration: this.#access.subject.participantGeneration,
+      readThroughSequence: sequence,
+      readAt: new Date().toISOString(),
+    };
   }
 
   async readChatPage(input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }): Promise<ChalkChatPageResult> {

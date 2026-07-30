@@ -11,8 +11,8 @@ export interface UseChatReturn {
   unreadCount: number;
   sendMessage: (content: string) => Promise<void>;
   reactToMessage: (messageId: string, emoji: ReactionEmoji) => void;
-  markAsRead: () => void;
-  markAsHidden: () => void;
+  markAsRead: (throughSequence?: string) => Promise<void>;
+  markAsHidden: (throughSequence?: string) => Promise<void>;
   getMessage: (id: string) => ChatMessage | undefined;
 }
 
@@ -32,7 +32,12 @@ export function useChat(): UseChatReturn {
   const reactToMessage = useCallback((_messageId: string, _emoji: ReactionEmoji) => {
     throw new Error("Per-message reactions are not part of the room-actions contract.");
   }, []);
-  const markAsRead = useCallback(() => store?.markChatRead(), [store]);
+  const markAsRead = useCallback(
+    async (throughSequence?: string) => {
+      await store?.markChatRead(throughSequence);
+    },
+    [store],
+  );
   const markAsHidden = markAsRead;
   const getMessage = useCallback((id: string) => projection.messages.find((message) => message.id === id), [projection.messages]);
 

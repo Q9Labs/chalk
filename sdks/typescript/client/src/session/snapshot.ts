@@ -30,7 +30,7 @@ export function initialChalkSessionSnapshot(): ChalkSessionSnapshot {
     localMedia: emptyLocalMedia(),
     remoteMedia: [],
     failure: null,
-    roomActions: { phase: "disabled", capabilities: [], error: null },
+    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
     participantRoomActionCapabilities: {},
     participantMedia: {},
     reactions: [],
@@ -91,7 +91,7 @@ export function projectChalkSessionSnapshot(input: {
         track: publication.track,
       })) ?? [],
     failure: input.failure ? { ...input.failure } : null,
-    roomActions: input.roomActions ?? { phase: "disabled", capabilities: [], error: null },
+    roomActions: input.roomActions ?? { phase: "disabled", version: null, capabilities: [], error: null },
     participantRoomActionCapabilities: input.participantRoomActionCapabilities ?? {},
     participantMedia: projectParticipantMedia(input.sync),
     reactions: input.reactions ?? [],
@@ -173,6 +173,8 @@ function emptyChat(): ChalkChatState {
     historyTruncated: false,
     retainedFloorSequence: null,
     unreadCount: 0,
+    readReceipts: [],
+    localReadThroughSequence: null,
     error: null,
   };
 }
@@ -256,15 +258,24 @@ function freezeSnapshot(snapshot: ChalkSessionSnapshot): ChalkSessionSnapshot {
     reactions: Object.freeze(snapshot.reactions.map((reaction) => Object.freeze(reaction))),
     chat: Object.freeze({
       ...snapshot.chat,
-      messages: Object.freeze(snapshot.chat.messages.map((message) => Object.freeze(message))),
+      messages: Object.freeze(
+        snapshot.chat.messages.map((message) =>
+          Object.freeze({
+            ...message,
+            attachments: Object.freeze(message.attachments.map((attachment) => Object.freeze(attachment))),
+          }),
+        ),
+      ),
       pending: Object.freeze(
         snapshot.chat.pending.map((message) =>
           Object.freeze({
             ...message,
+            attachments: Object.freeze(message.attachments.map((attachment) => Object.freeze(attachment))),
             error: message.error ? Object.freeze(message.error) : null,
           }),
         ),
       ),
+      readReceipts: Object.freeze(snapshot.chat.readReceipts.map((receipt) => Object.freeze(receipt))),
       error: snapshot.chat.error ? Object.freeze(snapshot.chat.error) : null,
     }),
     whiteboard: Object.freeze({

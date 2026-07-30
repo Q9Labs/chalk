@@ -96,7 +96,7 @@ export function useChalkActions(): ChalkSessionActions {
       sendChatMessage: (input) => session.sendChatMessage(input),
       retryChatMessage: (clientMessageId) => session.retryChatMessage(clientMessageId),
       loadOlderChatMessages: (limit) => session.loadOlderChatMessages(limit),
-      markChatRead: () => session.markChatRead(),
+      markChatRead: (throughSequence) => session.markChatRead(throughSequence),
       requestUnmute: (participantSessionId) => session.requestUnmute(participantSessionId),
       requestStartCamera: (participantSessionId) => session.requestStartCamera(participantSessionId),
       acceptMediaRequest: (requestId) => session.acceptMediaRequest(requestId),

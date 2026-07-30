@@ -10,6 +10,7 @@ import { cn } from "../../utils/cn";
 import { AudioRenderer } from "../atomic";
 import { ChatPanel, ConnectionLostOverlay, ControlBar, InviteModal, LeaveConfirmationDialog, MeetingHeader, ParticipantList, ReactionPicker, VideoGrid } from "../composite";
 import type { Participant } from "../composite";
+import { uploadChatAttachment } from "../composite/chat-file-upload";
 import { WhiteboardPanel } from "./WhiteboardPanel";
 
 const ROOM_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const satisfies readonly ChalkReaction[];
@@ -54,10 +55,6 @@ export function SessionMeetingRoom({ roomName, displayName, meetingLink, onLeave
   }, [snapshot.state]);
 
   useEffect(() => {
-    if (chatOpen) actions.markChatRead();
-  }, [actions, chatOpen, snapshot.chat.messages.length]);
-
-  useEffect(() => {
     const whiteboard = session.whiteboard;
     if (!whiteboardOpen || !whiteboard) return;
 
@@ -74,6 +71,10 @@ export function SessionMeetingRoom({ roomName, displayName, meetingLink, onLeave
   const localId = snapshot.subject?.participantSessionId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participants, remoteMedia, localId, displayName, localMedia), [displayName, localId, localMedia, participants, remoteMedia]);
   const audioParticipants = useMemo(() => toAudioParticipants(remoteMedia), [remoteMedia]);
+  const participantNames = useMemo(
+    () => Object.fromEntries([...participants.map((participant) => [participant.participantSessionId, participant.displayName] as const), [localId, participants.find((participant) => participant.participantSessionId === localId)?.displayName ?? displayName]]),
+    [displayName, localId, participants],
+  );
   const listParticipants = useMemo(
     () =>
       tiles.map((participant) => {
@@ -102,6 +103,7 @@ export function SessionMeetingRoom({ roomName, displayName, meetingLink, onLeave
   const canChat = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendChat");
   const canReact = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendReaction");
   const canUseWhiteboard = session.whiteboard !== null;
+  const chatFiles = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.version === 2 ? session.chatFiles : null;
   const incomingRequest = snapshot.incomingMediaRequests[0];
 
   const run = async (operation: () => Promise<unknown>, fallback: string) => {
@@ -189,26 +191,23 @@ export function SessionMeetingRoom({ roomName, displayName, meetingLink, onLeave
         {chatOpen && canChat ? (
           <aside className="absolute inset-x-3 top-20 bottom-24 z-40 overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-2xl md:static md:block md:w-[360px] md:shrink-0">
             <ChatPanel
-              messages={snapshot.chat.messages.map((message) => ({
-                id: message.messageId,
-                senderId: message.participantSessionId,
-                senderName: message.displayName,
-                content: message.text,
-                timestamp: new Date(message.createdAt),
-              }))}
-              pendingMessages={snapshot.chat.pending.map((pending) => ({
-                id: pending.clientMessageId,
-                content: pending.text,
-                state: pending.state,
-                error: pending.error?.message,
-              }))}
+              messages={snapshot.chat.messages}
+              pendingMessages={snapshot.chat.pending}
+              readReceipts={snapshot.chat.readReceipts}
+              localReadThroughSequence={snapshot.chat.localReadThroughSequence}
+              participantNames={participantNames}
               localParticipantId={localId}
               hasOlder={snapshot.chat.hasOlder}
               loadingOlder={loadingOlderChat}
               error={snapshot.chat.error?.message}
               onClose={() => setChatOpen(false)}
-              onSendMessage={async (text) => {
-                await actions.sendChatMessage({ text });
+              onSendMessage={async ({ text, attachments }) => {
+                await actions.sendChatMessage({ text, attachments });
+              }}
+              onUploadAttachment={chatFiles ? (file) => uploadChatAttachment(file, chatFiles) : undefined}
+              onResolveAttachmentUrl={chatFiles ? async (attachmentId) => (await chatFiles.getDownloadUrl(attachmentId)).downloadUrl : undefined}
+              onMarkRead={async (throughSequence) => {
+                await actions.markChatRead(throughSequence);
               }}
               onRetryMessage={async (id) => {
                 await actions.retryChatMessage(id);

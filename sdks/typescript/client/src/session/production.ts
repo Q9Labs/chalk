@@ -1,7 +1,8 @@
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
+import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createV3SyncClient } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileHttpTransport } from "../whiteboard";
-import type { ChalkSessionDependencies, ChalkSessionMediaFactoryInput, ChalkSessionSyncFactoryInput, ChalkSessionWhiteboardFactoryInput } from "./dependencies";
+import type { ChalkSessionChatFileFactoryInput, ChalkSessionDependencies, ChalkSessionMediaFactoryInput, ChalkSessionSyncFactoryInput, ChalkSessionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
 
 export function createDefaultChalkSessionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ChalkSessionDependencies {
@@ -14,8 +15,16 @@ export function createDefaultChalkSessionDependencies(options: { readonly apiBas
     mediaDevices: createBrowserMediaDevices(),
     createMediaClient: (input) => createMediaClient(options.apiBaseURL, input),
     createSyncClient: (input) => createSyncClient(options.syncURL, input),
+    createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardURL(options.syncURL), input),
   };
+}
+
+function createChatFileTransport(apiBaseURL: string, input: ChalkSessionChatFileFactoryInput) {
+  return createChalkChatFileHttpTransport({
+    baseUrl: apiBaseURL,
+    token: input.token,
+  });
 }
 
 function createMediaClient(apiBaseURL: string, input: ChalkSessionMediaFactoryInput): CloudflareSFUClient {

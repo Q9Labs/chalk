@@ -87,6 +87,7 @@ export interface NativeMeetingRoomController {
   toggleHand: () => void;
   sendReaction: (emoji: string) => void;
   sendChatMessage: () => void;
+  markChatMessageVisible: (sequence: string) => void;
   refreshDevices: () => void;
   removeParticipant: (participantId: string) => void;
   muteParticipant: (participantId: string) => void;
@@ -207,8 +208,6 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
   );
 
   store.sync({
-    panel,
-    markChatAsRead: chat.markAsRead,
     diagnostics: roomDiagnostics,
     onDiagnosticsChange,
   });
@@ -379,6 +378,9 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       }
       void runAsync(() => chat.sendMessage(snapshot.chatDraft.trim()));
       store.setChatDraft("");
+    },
+    markChatMessageVisible: (sequence: string) => {
+      void runAsync(() => chat.markAsRead(sequence));
     },
     refreshDevices: () => {
       void runAsync(devices.refreshDevices);

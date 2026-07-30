@@ -128,6 +128,7 @@ export function NativeMeetingRoomIosPhone(props: NativeMeetingRoomProps): React.
         onChatDraftChange={controller.setChatDraft}
         onClearWhiteboard={controller.whiteboard.clear}
         onClose={controller.closePanel}
+        onLatestChatMessageVisible={controller.markChatMessageVisible}
         onMuteParticipant={controller.canMuteParticipants ? controller.muteParticipant : undefined}
         onRequestStartParticipantCamera={controller.canRequestMedia ? controller.requestStartParticipantCamera : undefined}
         onRequestUnmuteParticipant={controller.canRequestMedia ? controller.requestUnmuteParticipant : undefined}

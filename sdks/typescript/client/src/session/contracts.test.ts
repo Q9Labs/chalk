@@ -11,6 +11,7 @@ import {
   requireParticipantAccess,
   type ChalkSessionActionName,
   type ChalkSessionActions,
+  type ChalkChatFileTransport,
   type ChalkSessionErrorCode,
   type ChalkSessionSnapshot,
   type ChalkSessionStore,
@@ -135,6 +136,7 @@ describe("public session contract", () => {
 function assertRoomActionTypes(): void {
   expectTypeOf<ChalkSessionSnapshot["roomActions"]>().toEqualTypeOf<{
     readonly phase: "disabled" | "negotiating" | "healthy" | "recovering" | "failed" | "stopped";
+    readonly version: 1 | 2 | null;
     readonly capabilities: readonly ("sendReaction" | "sendChat")[];
     readonly error: {
       readonly code: ChalkSessionErrorCode;
@@ -148,8 +150,15 @@ function assertRoomActionTypes(): void {
   expectTypeOf<ChalkSessionSnapshot["incomingMediaRequests"][number]["kind"]>().toEqualTypeOf<"unmute" | "start_camera">();
   expectTypeOf<Parameters<ChalkSessionActions["sendReaction"]>[0]>().toEqualTypeOf<"👍" | "❤️" | "😂" | "😮" | "😢" | "🎉">();
   expectTypeOf<Awaited<ReturnType<ChalkSessionActions["loadOlderChatMessages"]>>["status"]>().toEqualTypeOf<"loaded" | "cursor_reset">();
+  expectTypeOf<Awaited<ReturnType<ChalkSessionActions["markChatRead"]>>>().toEqualTypeOf<{
+    readonly participantSessionId: string;
+    readonly participantSessionGeneration: number;
+    readonly readThroughSequence: string;
+    readonly readAt: string;
+  } | null>();
   expectTypeOf<Awaited<ReturnType<ChalkSessionActions["requestUnmute"]>>["status"]>().toEqualTypeOf<"delivered" | "target_unavailable" | "expired" | "rejected" | "rate_limited">();
   expectTypeOf<ChalkSessionStore["whiteboard"]>().toEqualTypeOf<ChalkWhiteboardV1Transport | null>();
+  expectTypeOf<ChalkSessionStore["chatFiles"]>().toEqualTypeOf<ChalkChatFileTransport | null>();
 }
 
 function validAccess() {

@@ -51,10 +51,18 @@ export function projectNativeRoomActions(snapshot: ChalkSessionSnapshot | null):
     reactionEnabled: negotiated && snapshot.roomActions.capabilities.includes("sendReaction"),
     messages: snapshot.chat.messages.map((message) => ({
       id: message.messageId,
+      sequence: message.sequence,
       senderId: message.participantSessionId,
       senderName: message.displayName,
       text: message.text,
       content: message.text,
+      attachments: message.attachments.map((attachment) => ({ ...attachment })),
+      readBy: snapshot.chat.readReceipts
+        .filter((receipt) => receipt.participantSessionId !== message.participantSessionId && !isLocalReceipt(snapshot, receipt.participantSessionId, receipt.participantSessionGeneration) && sequenceAtOrAfter(receipt.readThroughSequence, message.sequence))
+        .map((receipt) => ({
+          ...receipt,
+          displayName: snapshot.participants.find((participant) => participant.participantSessionId === receipt.participantSessionId)?.displayName ?? "Participant",
+        })),
       timestamp: Date.parse(message.createdAt),
     })),
     reactions: snapshot.reactions.map((reaction) => ({
@@ -115,4 +123,14 @@ export function createNativeMediaRequestPrompt(request: ChalkIncomingMediaReques
 
 function isRoomReaction(value: string): value is ChalkReaction {
   return ROOM_REACTIONS.has(value as ChalkReaction);
+}
+
+function isLocalReceipt(snapshot: ChalkSessionSnapshot, participantSessionId: string, participantSessionGeneration: number): boolean {
+  return snapshot.subject?.participantSessionId === participantSessionId && snapshot.subject.participantGeneration === participantSessionGeneration;
+}
+
+function sequenceAtOrAfter(value: string, floor: string): boolean {
+  const normalizedValue = value.replace(/^0+(?=\d)/, "");
+  const normalizedFloor = floor.replace(/^0+(?=\d)/, "");
+  return normalizedValue.length > normalizedFloor.length || (normalizedValue.length === normalizedFloor.length && normalizedValue >= normalizedFloor);
 }

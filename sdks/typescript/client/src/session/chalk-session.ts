@@ -1,4 +1,5 @@
 import type { CloudflareSFUSnapshot } from "../media";
+import type { ChalkChatFileTransport } from "../chat-files";
 import type { V3SessionSnapshot } from "../sync";
 import type { V3DirectedRequest, V3RoomActionClientEvent, V3RoomActionsExtensionState } from "../sync/v3-types";
 import { ParticipantAccessError } from "./access";
@@ -16,6 +17,7 @@ import type {
   ChalkAssignableParticipantRole,
   ChalkChatMessage,
   ChalkChatPageResult,
+  ChalkChatReadReceipt,
   ChalkChatState,
   ChalkDirectedRequestResult,
   ChalkIncomingMediaRequest,
@@ -32,6 +34,7 @@ import type {
   ChalkWhiteboardV1Transport,
   ChalkWhiteboardSummary,
 } from "./types";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "../room-actions/types";
 
 const START_TIMEOUT_MS = 10_000;
 const LEAVE_TIMEOUT_MS = 5_000;
@@ -42,6 +45,10 @@ const DEFAULT_CHAT_PAGE_SIZE = 50;
 const MAX_CHAT_PAGE_SIZE = 100;
 const MAX_LOADED_CHAT_MESSAGES = 500;
 const MAX_VISIBLE_REACTIONS = 24;
+const MAX_CHAT_TEXT_BYTES = 16_384;
+const MAX_CHAT_TEXT_SCALARS = 4_000;
+const chatEncoder = new TextEncoder();
+const allowedChatAttachmentMimeTypes = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
 
 type RecoveryKind = "sync" | "media";
 type SyncRuntimeFailure = {
@@ -80,6 +87,7 @@ export type ChalkSessionOptions = {
 };
 
 export class ChalkSession implements ChalkSessionStore {
+  readonly chatFiles: ChalkChatFileTransport | null;
   readonly whiteboard: ChalkWhiteboardV1Transport | null;
   readonly #access: ChalkSessionAccessManager;
   readonly #dependencies: ChalkSessionDependencies;
@@ -128,6 +136,7 @@ export class ChalkSession implements ChalkSessionStore {
     const defaults = createDefaultChalkSessionDependencies({ apiBaseURL: options.apiBaseURL, syncURL: options.syncURL, whiteboardURL: options.whiteboardURL });
     this.#dependencies = { ...defaults, ...options.dependencies };
     this.#access = new ChalkSessionAccessManager(options.access, this.#dependencies.clock.now, options.accessRefreshWindowMs);
+    this.chatFiles = this.#createChatFileTransport();
     this.whiteboard = this.#createWhiteboardClient();
     this.#localIntent = {
       microphone: options.initialMicrophoneEnabled ?? true,
@@ -137,6 +146,12 @@ export class ChalkSession implements ChalkSessionStore {
     this.#recoveryBudgetMs = boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000);
     this.#recoveryBackoffMs = options.recovery?.backoffMs?.length ? [...options.recovery.backoffMs] : [100, 250, 500];
     this.#diagnostics = new ChalkSessionDiagnostics({ now: this.#dependencies.clock.now, ...options.diagnostics });
+  }
+
+  #createChatFileTransport(): ChalkChatFileTransport | null {
+    const create = this.#dependencies.createChatFileTransport;
+    if (!create) return null;
+    return create({ token: () => this.#access.getSyncToken() });
   }
 
   #createWhiteboardClient(): ChalkWhiteboardV1Transport | null {
@@ -275,9 +290,12 @@ export class ChalkSession implements ChalkSessionStore {
     });
 
   sendChatMessage = (input: ChalkSendChatMessageInput): Promise<ChalkChatMessage> => {
+    const inputFailure = validateChatMessageInput(input);
+    if (inputFailure) return Promise.reject(this.#error("invalid_payload", "sendChatMessage", false, inputFailure));
     const clientMessageId = input.clientMessageId ?? roomActionId();
-    this.#upsertPendingChat(clientMessageId, input.text, "sending", null);
-    return this.#runRoomAction("sendChatMessage", () => this.#sync!.sendChatMessage({ text: input.text, clientMessageId }))
+    const attachments = input.attachments ?? [];
+    this.#upsertPendingChat(clientMessageId, input.text, attachments, "sending", null);
+    return this.#runRoomAction("sendChatMessage", () => this.#sync!.sendChatMessage({ text: input.text, attachments, clientMessageId }))
       .then((message) => {
         this.#removePendingChat(clientMessageId);
         this.#observeChatMessage(message, false);
@@ -285,7 +303,7 @@ export class ChalkSession implements ChalkSessionStore {
       })
       .catch((cause) => {
         const failure = failureFrom(cause instanceof ChalkSessionError ? cause : this.#roomActionError("sendChatMessage", cause));
-        this.#upsertPendingChat(clientMessageId, input.text, "failed", failure);
+        this.#upsertPendingChat(clientMessageId, input.text, attachments, "failed", failure);
         throw cause instanceof ChalkSessionError ? cause : new ChalkSessionError(failure, { cause });
       });
   };
@@ -293,7 +311,7 @@ export class ChalkSession implements ChalkSessionStore {
   retryChatMessage = (clientMessageId: string): Promise<ChalkChatMessage> => {
     const pending = this.#chat.pending.find((message) => message.clientMessageId === clientMessageId);
     if (!pending) return Promise.reject(this.#error("invalid_payload", "retryChatMessage", false, "The failed chat message is no longer available"));
-    return this.sendChatMessage({ clientMessageId, text: pending.text });
+    return this.sendChatMessage({ clientMessageId, text: pending.text, attachments: pending.attachments });
   };
 
   loadOlderChatMessages = (limit = DEFAULT_CHAT_PAGE_SIZE): Promise<ChalkChatPageResult> =>
@@ -325,10 +343,20 @@ export class ChalkSession implements ChalkSessionStore {
       throw cause instanceof ChalkSessionError ? cause : new ChalkSessionError(failure, { cause });
     });
 
-  markChatRead = (): void => {
-    if (this.#chat.unreadCount === 0) return;
-    this.#chat = { ...this.#chat, unreadCount: 0 };
+  markChatRead = (throughSequence?: string): Promise<ChalkChatReadReceipt | null> => {
+    const sequence = throughSequence ?? this.#chat.messages.at(-1)?.sequence;
+    if (!sequence) return Promise.resolve(null);
+    const latestSequence = this.#chat.messages.at(-1)?.sequence;
+    if (latestSequence && compareSequence(sequence, latestSequence) > 0) {
+      return Promise.reject(this.#error("invalid_payload", "markChatRead", false, "Chat cannot be marked beyond the latest loaded message"));
+    }
+    this.#applyLocalReadThrough(sequence);
     this.#publish();
+    if (this.#sync?.getRoomActionsExtensionState().version !== 2) return Promise.resolve(null);
+    return this.#runRoomAction("markChatRead", () => this.#sync!.markChatRead(sequence)).then((receipt) => {
+      if (this.#mergeChatReadReceipt(receipt)) this.#publish();
+      return receipt;
+    });
   };
 
   requestUnmute = (participantSessionId: string): Promise<ChalkDirectedRequestResult> => this.#runRoomAction("requestUnmute", async () => directedRequestResult(await this.#sync!.requestUnmute(participantSessionId)));
@@ -527,6 +555,10 @@ export class ChalkSession implements ChalkSessionStore {
       this.#observeChatMessage(event.message, this.#state === "live");
       return;
     }
+    if (event.type === "chat_read_receipt") {
+      if (this.#mergeChatReadReceipt(event.receipt)) this.#publish();
+      return;
+    }
     this.#chat = {
       ...this.#chat,
       status: "ready",
@@ -567,12 +599,34 @@ export class ChalkSession implements ChalkSessionStore {
     this.#publish();
   }
 
-  #upsertPendingChat(clientMessageId: string, text: string, state: "sending" | "failed", error: ChalkSessionFailure | null): void {
+  #mergeChatReadReceipt(receipt: ChalkChatReadReceipt): boolean {
+    const existing = this.#chat.readReceipts.find((candidate) => candidate.participantSessionId === receipt.participantSessionId && candidate.participantSessionGeneration === receipt.participantSessionGeneration);
+    if (existing && compareSequence(existing.readThroughSequence, receipt.readThroughSequence) >= 0) return false;
+    const readReceipts = this.#chat.readReceipts.filter((candidate) => candidate.participantSessionId !== receipt.participantSessionId || candidate.participantSessionGeneration !== receipt.participantSessionGeneration);
+    const subject = this.#access.current?.subject;
+    const local = subject?.participantSessionId === receipt.participantSessionId && subject.participantGeneration === receipt.participantSessionGeneration;
+    this.#chat = {
+      ...this.#chat,
+      readReceipts: [...readReceipts, receipt],
+      localReadThroughSequence: local ? receipt.readThroughSequence : this.#chat.localReadThroughSequence,
+    };
+    return true;
+  }
+
+  #applyLocalReadThrough(sequence: string): void {
+    const current = this.#chat.localReadThroughSequence;
+    if (current && compareSequence(current, sequence) >= 0) return;
+    const localParticipantId = this.#access.current?.subject.participantSessionId;
+    const unreadCount = this.#chat.messages.filter((message) => message.participantSessionId !== localParticipantId && compareSequence(message.sequence, sequence) > 0).length;
+    this.#chat = { ...this.#chat, localReadThroughSequence: sequence, unreadCount };
+  }
+
+  #upsertPendingChat(clientMessageId: string, text: string, attachments: ChalkSendChatMessageInput["attachments"], state: "sending" | "failed", error: ChalkSessionFailure | null): void {
     const pending = this.#chat.pending.filter((message) => message.clientMessageId !== clientMessageId);
     this.#chat = {
       ...this.#chat,
       status: "ready",
-      pending: [...pending, { clientMessageId, text, state, error }],
+      pending: [...pending, { clientMessageId, text, attachments: attachments ?? [], state, error }],
     };
     this.#publish();
   }
@@ -628,6 +682,7 @@ export class ChalkSession implements ChalkSessionStore {
       return;
     }
     this.#removeRequestsFromMissingParticipants(snapshot);
+    for (const receipt of this.#sync?.getRoomActionsExtensionState().readReceipts ?? []) this.#mergeChatReadReceipt(receipt);
     if (this.#isRuntimeActive()) this.#handleSyncConnection(snapshot.connection.phase);
     this.#scheduleChatCatchUp();
     this.#publish();
@@ -1084,13 +1139,14 @@ export class ChalkSession implements ChalkSessionStore {
     if (!extension) {
       return {
         phase: this.#state === "idle" || this.#state === "left" ? "disabled" : "stopped",
+        version: null,
         capabilities: [],
         error: null,
       };
     }
     const syncPhase = this.#syncSnapshot?.connection.phase;
     const phase = syncPhase === "connecting" ? "negotiating" : syncPhase === "recovering" ? "recovering" : syncPhase === "stopped" ? "stopped" : extension.negotiated && syncPhase === "live" ? "healthy" : "disabled";
-    return { phase, capabilities: extension.capabilities, error: null };
+    return { phase, version: extension.version, capabilities: extension.capabilities, error: null };
   }
 
   #clearRoomActionTimers(): void {
@@ -1243,6 +1299,34 @@ function chatCatchUpRequest(latestSequence: string | null, extension: V3RoomActi
   return { kind: "newer", input: { afterSequence: latestSequence, limit: MAX_CHAT_PAGE_SIZE } };
 }
 
+function validateChatMessageInput(input: ChalkSendChatMessageInput): string | null {
+  const attachments = input.attachments ?? [];
+  if (input.text.length === 0 && attachments.length === 0) return "A chat message requires text or an attachment";
+  return validateChatText(input.text) ?? validateChatAttachments(attachments);
+}
+
+function validateChatText(text: string): string | null {
+  if (Array.from(text).length <= MAX_CHAT_TEXT_SCALARS && chatEncoder.encode(text).byteLength <= MAX_CHAT_TEXT_BYTES) return null;
+  return `Chat text must not exceed ${MAX_CHAT_TEXT_SCALARS} characters or ${MAX_CHAT_TEXT_BYTES} bytes`;
+}
+
+function validateChatAttachments(attachments: NonNullable<ChalkSendChatMessageInput["attachments"]>): string | null {
+  if (attachments.length > CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage) return `A chat message supports at most ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} attachments`;
+  if (new Set(attachments.map((attachment) => attachment.attachmentId)).size !== attachments.length) return "Chat attachment IDs must be unique";
+  for (const attachment of attachments) {
+    const failure = validateChatAttachment(attachment);
+    if (failure) return failure;
+  }
+  return null;
+}
+
+function validateChatAttachment(attachment: NonNullable<ChalkSendChatMessageInput["attachments"]>[number]): string | null {
+  const fileNameBytes = chatEncoder.encode(attachment.fileName).byteLength;
+  if (!attachment.attachmentId || fileNameBytes < 1 || fileNameBytes > CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes) return "Chat attachment metadata is invalid";
+  if (!Number.isSafeInteger(attachment.byteLength) || attachment.byteLength < 1 || attachment.byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength) return "Chat attachment metadata is invalid";
+  return allowedChatAttachmentMimeTypes.has(attachment.mimeType) ? null : "Chat attachment MIME type is not allowed";
+}
+
 function isPermissionDenied(error: unknown): boolean {
   return error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError");
 }
@@ -1262,6 +1346,8 @@ function emptyChatState(): ChalkChatState {
     historyTruncated: false,
     retainedFloorSequence: null,
     unreadCount: 0,
+    readReceipts: [],
+    localReadThroughSequence: null,
     error: null,
   };
 }

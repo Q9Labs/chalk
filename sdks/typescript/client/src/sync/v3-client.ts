@@ -1,6 +1,6 @@
 import { SyncProtocolLimits, type SyncV3ClientFrame, type SyncV3ServerFrame } from "../generated/sync-v3";
-import type { ChalkChatMessage, ChalkChatPageResult, ChalkReaction, ChalkRoomReaction, ChalkSendChatMessageInput, ChalkSyncV3RoomActionCapability } from "../room-actions/types";
-import { chatMessageFromFrame, roomReactionFromFrame } from "../room-actions/wire";
+import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkRoomReaction, ChalkSendChatMessageInput, ChalkSyncV3RoomActionCapability } from "../room-actions/types";
+import { chatMessageFromFrame, chatReadReceiptFromFrame, roomReactionFromFrame } from "../room-actions/wire";
 import { canonicalJsonBytesFromUnknown } from "./canonical";
 import { encodeV3ClientFrame, decodeV3ServerFrame } from "./v3-codec";
 import { InMemoryV3PendingTargetStore, compareV3PendingTargets } from "./v3-persistence";
@@ -66,6 +66,7 @@ type RequestDeferred = Deferred<V3DirectedRequestResult> & { readonly frame: Syn
 type ReactionDeferred = Deferred<ChalkRoomReaction>;
 type ChatSendDeferred = Deferred<ChalkChatMessage>;
 type ChatPageDeferred = Deferred<ChalkChatPageResult>;
+type ChatReadDeferred = Deferred<ChalkChatReadReceipt>;
 type Deferred<T> = { readonly resolve: (value: T) => void; readonly reject: (error: Error) => void; settled: boolean };
 type Recovery = { readonly id: string; readonly head: { readonly revision: number; readonly state_schema_version: number; readonly state_digest: string }; replayEvents: number; replayBytes: number; controlComplete: boolean };
 type CommandOptions = { readonly commandId?: string };
@@ -99,6 +100,7 @@ export class V3SyncClient implements V3RoomActionsClient {
   readonly #reactions = new Map<string, ReactionDeferred>();
   readonly #chatSends = new Map<string, ChatSendDeferred>();
   readonly #chatPages = new Map<string, ChatPageDeferred>();
+  readonly #chatReads = new Map<string, ChatReadDeferred>();
   readonly #commandRetryTimers = new Map<string, unknown>();
   readonly #liveRetryTimers = new Map<string, unknown>();
   readonly #liveDeadlineTimers = new Map<string, unknown>();
@@ -130,8 +132,7 @@ export class V3SyncClient implements V3RoomActionsClient {
   #roomActions: V3RoomActionsExtensionState;
   #participantRoomActionCapabilities: Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> = {};
   #chatAfterSequence: string | null;
-  #legacyRoomActions: boolean;
-  #legacyFallbackAttempted = false;
+  #requestedRoomActionsVersion: 0 | 1 | 2;
   #sentExtendedHello = false;
   #welcomedOnSocket = false;
   readonly #localMedia: Record<V3MediaSource, "unknown" | "requesting" | "enabled" | "disabled" | "failed"> = { microphone: "unknown", camera: "unknown", screen: "unknown" };
@@ -142,12 +143,14 @@ export class V3SyncClient implements V3RoomActionsClient {
     this.#store = options.pendingStore ?? new InMemoryV3PendingTargetStore();
     const cursor = options.roomActions === false ? { afterSequence: null, retainedFloorSequence: null } : (options.roomActions?.chatCursor ?? { afterSequence: null, retainedFloorSequence: null });
     this.#chatAfterSequence = cursor.afterSequence;
-    this.#legacyRoomActions = options.roomActions === false;
+    this.#requestedRoomActionsVersion = options.roomActions === false ? 0 : 2;
     this.#roomActions = {
       negotiated: false,
+      version: null,
       capabilities: [],
       chatHeadSequence: null,
       retainedFloorSequence: cursor.retainedFloorSequence,
+      readReceipts: [],
     };
   }
 
@@ -205,7 +208,7 @@ export class V3SyncClient implements V3RoomActionsClient {
     this.#phase = { phase: "stopped" };
     this.#rejectEphemeral("client_stopped");
     this.#rejectRoomActions("client_stopped");
-    this.#roomActions = { ...this.#roomActions, negotiated: false, capabilities: [] };
+    this.#roomActions = { ...this.#roomActions, negotiated: false, version: null, capabilities: [], readReceipts: [] };
     this.#participantRoomActionCapabilities = {};
     this.#localPublications = [];
     this.#remotePublications = [];
@@ -245,7 +248,7 @@ export class V3SyncClient implements V3RoomActionsClient {
   }
 
   getRoomActionsExtensionState(): V3RoomActionsExtensionState {
-    return { ...this.#roomActions, capabilities: [...this.#roomActions.capabilities] };
+    return { ...this.#roomActions, capabilities: [...this.#roomActions.capabilities], readReceipts: this.#roomActions.readReceipts.map((receipt) => ({ ...receipt })) };
   }
 
   getParticipantRoomActionCapabilities(): Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> {
@@ -273,9 +276,26 @@ export class V3SyncClient implements V3RoomActionsClient {
     this.#assertRoomActionCapacity();
     const clientMessageId = input.clientMessageId ?? this.#nextRoomActionId();
     this.#assertRoomActionIdAvailable(clientMessageId);
-    const frame = { type: "chat_send", client_message_id: clientMessageId, text: input.text } as const;
+    const attachments = input.attachments ?? [];
+    if (this.#roomActions.version === 1 && (attachments.length > 0 || input.text.length === 0)) {
+      throw new V3SyncError("chat attachments and attachment-only messages require room_actions_v2", "room_actions_unavailable");
+    }
+    const frame =
+      this.#roomActions.version === 2 ? ({ type: "chat_send", client_message_id: clientMessageId, text: input.text, attachment_ids: attachments.map((attachment) => attachment.attachmentId) } as const) : ({ type: "chat_send", client_message_id: clientMessageId, text: input.text } as const);
     encodeV3ClientFrame(frame);
     const promise = new Promise<ChalkChatMessage>((resolve, reject) => this.#chatSends.set(clientMessageId, { resolve, reject, settled: false }));
+    this.#send(frame);
+    return promise;
+  }
+
+  markChatRead(sequence: string): Promise<ChalkChatReadReceipt> {
+    this.#assertRoomActionReady();
+    if (this.#roomActions.version !== 2) throw new V3SyncError("durable chat read receipts require room_actions_v2", "room_actions_unavailable");
+    this.#assertRoomActionCapacity();
+    const requestId = this.#nextRoomActionId();
+    const frame = { type: "chat_read_set", request_id: requestId, sequence } as const;
+    encodeV3ClientFrame(frame);
+    const promise = new Promise<ChalkChatReadReceipt>((resolve, reject) => this.#chatReads.set(requestId, { resolve, reject, settled: false }));
     this.#send(frame);
     return promise;
   }
@@ -495,22 +515,19 @@ export class V3SyncClient implements V3RoomActionsClient {
           requests: { cursor: null },
         },
       } as const;
-      if (this.#legacyRoomActions) {
+      if (this.#requestedRoomActionsVersion === 0) {
         this.#send(hello);
       } else {
         this.#sentExtendedHello = true;
-        this.#send({
-          ...hello,
-          extensions: [
-            {
-              name: "room_actions_v1",
-              chat_cursor: {
-                after_sequence: this.#chatAfterSequence,
-                retained_floor_sequence: this.#roomActions.retainedFloorSequence,
-              },
-            },
-          ],
-        });
+        const chat_cursor = {
+          after_sequence: this.#chatAfterSequence,
+          retained_floor_sequence: this.#roomActions.retainedFloorSequence,
+        };
+        if (this.#requestedRoomActionsVersion === 2) {
+          this.#send({ ...hello, extensions: [{ name: "room_actions_v2", chat_cursor }] });
+        } else {
+          this.#send({ ...hello, extensions: [{ name: "room_actions_v1", chat_cursor }] });
+        }
       }
       this.#emit();
     } catch {
@@ -605,6 +622,18 @@ export class V3SyncClient implements V3RoomActionsClient {
         };
         this.#emit();
         return;
+      case "chat_read_receipt":
+        this.#requireLive();
+        this.#requireRoomActionsVersion(2);
+        {
+          const receipt = chatReadReceiptFromFrame(frame);
+          this.#rememberChatReadReceipt(receipt);
+          this.#emitRoomAction({ type: "chat_read_receipt", receipt });
+        }
+        return;
+      case "chat_read_result":
+        this.#chatReadResult(frame);
+        return;
       case "error":
         if ((frame.code === "invalid_frame" || frame.code === "unsupported_protocol") && this.#canFallbackToLegacyRoomActions()) {
           this.#fallbackToLegacyRoomActions();
@@ -622,19 +651,21 @@ export class V3SyncClient implements V3RoomActionsClient {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V3ReplicaError("unexpected welcome");
     this.#welcomedOnSocket = true;
     if ("extensions" in frame) {
-      if (this.#legacyRoomActions) throw new V3ReplicaError("legacy hello received an extended welcome");
       const extension = frame.extensions[0];
+      const version = extension.name === "room_actions_v2" ? 2 : 1;
+      if (this.#requestedRoomActionsVersion !== version) throw new V3ReplicaError("room-actions welcome version does not match the requested extension");
       this.#roomActions = {
         negotiated: true,
+        version,
         capabilities: [...extension.capabilities],
         chatHeadSequence: extension.chat_head_sequence,
         retainedFloorSequence: extension.retained_floor_sequence,
+        readReceipts: "read_receipts" in extension ? extension.read_receipts.map(chatReadReceiptFromWire) : [],
       };
       this.#participantRoomActionCapabilities = copyRoomActionCapabilities(extension.participant_capabilities);
     } else {
-      this.#legacyRoomActions = true;
-      this.#legacyFallbackAttempted = true;
-      this.#roomActions = { ...this.#roomActions, negotiated: false, capabilities: [] };
+      this.#requestedRoomActionsVersion = 0;
+      this.#roomActions = { ...this.#roomActions, negotiated: false, version: null, capabilities: [], readReceipts: [] };
       this.#participantRoomActionCapabilities = {};
     }
     this.#participantSessionId = frame.participant_session_id;
@@ -920,6 +951,7 @@ export class V3SyncClient implements V3RoomActionsClient {
     if (!deferred) return;
     this.#chatSends.delete(frame.client_message_id);
     if (frame.outcome === "accepted") {
+      this.#assertChatMessageVersion(frame.message);
       const message = chatMessageFromFrame(frame.message);
       this.#rememberChatSequence(message.sequence);
       resolveDeferred(deferred, message);
@@ -945,14 +977,48 @@ export class V3SyncClient implements V3RoomActionsClient {
       chatHeadSequence: frame.head_sequence,
       retainedFloorSequence: frame.retained_floor_sequence,
     };
-    for (const message of frame.messages) this.#observeChatMessage(message);
+    for (const message of frame.messages) {
+      this.#assertChatMessageVersion(message);
+      this.#observeChatMessage(message);
+    }
     resolveDeferred(deferred, { status: "loaded", count: frame.messages.length, hasOlder: frame.has_more });
   }
 
   #observeChatMessage(frame: Extract<SyncV3ServerFrame, { readonly type: "chat_message" }>): void {
+    this.#assertChatMessageVersion(frame);
     const message = chatMessageFromFrame(frame);
     this.#rememberChatSequence(message.sequence);
     this.#emitRoomAction({ type: "chat_message", message });
+  }
+
+  #chatReadResult(frame: Extract<SyncV3ServerFrame, { readonly type: "chat_read_result" }>): void {
+    this.#requireLive();
+    this.#requireRoomActionsVersion(2);
+    const deferred = this.#chatReads.get(frame.request_id);
+    if (!deferred) return;
+    this.#chatReads.delete(frame.request_id);
+    if (frame.outcome === "accepted") {
+      const receipt = chatReadReceiptFromFrame(frame);
+      this.#rememberChatReadReceipt(receipt);
+      resolveDeferred(deferred, receipt);
+    } else {
+      rejectDeferred(deferred, new V3SyncError(frame.error_code, frame.error_code));
+    }
+  }
+
+  #assertChatMessageVersion(frame: Extract<SyncV3ServerFrame, { readonly type: "chat_message" }>): void {
+    const version = this.#roomActions.version;
+    if (version === 2 && !("attachments" in frame)) throw new V3ReplicaError("room_actions_v2 received a v1 chat message");
+    if (version === 1 && "attachments" in frame) throw new V3ReplicaError("room_actions_v1 received a v2 chat message");
+  }
+
+  #rememberChatReadReceipt(receipt: ChalkChatReadReceipt): void {
+    const existing = this.#roomActions.readReceipts.find((candidate) => candidate.participantSessionId === receipt.participantSessionId && candidate.participantSessionGeneration === receipt.participantSessionGeneration);
+    if (existing && compareUnsignedDecimals(existing.readThroughSequence, receipt.readThroughSequence) >= 0) return;
+    this.#roomActions = {
+      ...this.#roomActions,
+      readReceipts: [...this.#roomActions.readReceipts.filter((candidate) => candidate.participantSessionId !== receipt.participantSessionId || candidate.participantSessionGeneration !== receipt.participantSessionGeneration), receipt],
+    };
   }
 
   #rememberChatSequence(sequence: string): void {
@@ -1065,8 +1131,7 @@ export class V3SyncClient implements V3RoomActionsClient {
   #disconnected(socket: V3Socket, closeCode?: number): void {
     if (socket !== this.#socket) return;
     if (closeCode === LEGACY_STRICT_FRAME_CLOSE_CODE && this.#canFallbackToLegacyRoomActions()) {
-      this.#legacyRoomActions = true;
-      this.#legacyFallbackAttempted = true;
+      this.#requestedRoomActionsVersion = previousRoomActionsVersion(this.#requestedRoomActionsVersion);
     }
     this.#socket = null;
     this.#recovery = null;
@@ -1076,7 +1141,7 @@ export class V3SyncClient implements V3RoomActionsClient {
     this.#presence = null;
     this.#rejectRequests("disconnected_before_delivery");
     this.#rejectRoomActions("disconnected_before_delivery");
-    this.#roomActions = { ...this.#roomActions, negotiated: false, capabilities: [] };
+    this.#roomActions = { ...this.#roomActions, negotiated: false, version: null, capabilities: [], readReceipts: [] };
     this.#participantRoomActionCapabilities = {};
     if (!this.#started || !this.#transportAvailable || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
@@ -1096,14 +1161,13 @@ export class V3SyncClient implements V3RoomActionsClient {
   }
 
   #canFallbackToLegacyRoomActions(): boolean {
-    return this.#sentExtendedHello && !this.#welcomedOnSocket && !this.#legacyFallbackAttempted;
+    return this.#sentExtendedHello && !this.#welcomedOnSocket && this.#requestedRoomActionsVersion > 0;
   }
 
   #fallbackToLegacyRoomActions(): void {
     const socket = this.#socket;
     if (!socket || !this.#canFallbackToLegacyRoomActions()) return;
-    this.#legacyRoomActions = true;
-    this.#legacyFallbackAttempted = true;
+    this.#requestedRoomActionsVersion = previousRoomActionsVersion(this.#requestedRoomActionsVersion);
     socket.close(CLIENT_RESTART_CLOSE_CODE, "room actions unsupported");
   }
 
@@ -1125,9 +1189,11 @@ export class V3SyncClient implements V3RoomActionsClient {
     for (const deferred of this.#reactions.values()) rejectDeferred(deferred, new V3SyncError(code, code));
     for (const deferred of this.#chatSends.values()) rejectDeferred(deferred, new V3SyncError(code, code));
     for (const deferred of this.#chatPages.values()) rejectDeferred(deferred, new V3SyncError(code, code));
+    for (const deferred of this.#chatReads.values()) rejectDeferred(deferred, new V3SyncError(code, code));
     this.#reactions.clear();
     this.#chatSends.clear();
     this.#chatPages.clear();
+    this.#chatReads.clear();
   }
 
   #rejectRequests(code: string): void {
@@ -1151,6 +1217,11 @@ export class V3SyncClient implements V3RoomActionsClient {
     if (!this.#roomActions.negotiated) throw new V3ReplicaError("room-actions frame arrived without a negotiated extension");
   }
 
+  #requireRoomActionsVersion(version: 1 | 2): void {
+    this.#requireRoomActionsNegotiated();
+    if (this.#roomActions.version !== version) throw new V3ReplicaError(`room_actions_v${version} frame arrived on a different extension version`);
+  }
+
   #requireControl(): V3ControlState {
     if (!this.#control) throw new V3ReplicaError("control replica is unavailable");
     return this.#control;
@@ -1166,18 +1237,18 @@ export class V3SyncClient implements V3RoomActionsClient {
   }
 
   #assertRoomActionReady(capability?: ChalkSyncV3RoomActionCapability): void {
-    if (!this.#roomActions.negotiated || this.#legacyRoomActions) throw new V3SyncError("room actions are unavailable", "room_actions_unavailable");
+    if (!this.#roomActions.negotiated) throw new V3SyncError("room actions are unavailable", "room_actions_unavailable");
     if (this.#phase.phase !== "live") throw new V3SyncError("room actions require a live connection", "not_live");
     if (capability && !this.#roomActions.capabilities.includes(capability)) throw new V3SyncError("room action capability denied", "capability_denied");
   }
 
   #assertRoomActionCapacity(): void {
     const maximum = Math.min(this.#options.maxPendingRoomActions ?? MAX_ROOM_ACTIONS_IN_FLIGHT, MAX_ROOM_ACTIONS_IN_FLIGHT);
-    if (this.#reactions.size + this.#chatSends.size + this.#chatPages.size >= maximum) throw new V3SyncError("room-action in-flight capacity exceeded", "capacity");
+    if (this.#reactions.size + this.#chatSends.size + this.#chatPages.size + this.#chatReads.size >= maximum) throw new V3SyncError("room-action in-flight capacity exceeded", "capacity");
   }
 
   #assertRoomActionIdAvailable(id: string): void {
-    if (this.#reactions.has(id) || this.#chatSends.has(id) || this.#chatPages.has(id)) throw new V3SyncError("room-action ID is already pending", "request_id_conflict");
+    if (this.#reactions.has(id) || this.#chatSends.has(id) || this.#chatPages.has(id) || this.#chatReads.has(id)) throw new V3SyncError("room-action ID is already pending", "request_id_conflict");
   }
 
   #nextRoomActionId(): string {
@@ -1367,6 +1438,19 @@ function frameSignature(frame: unknown): string {
 
 function copyRoomActionCapabilities(capabilities: Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>>): Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> {
   return Object.fromEntries(Object.entries(capabilities).map(([participantSessionId, values]) => [participantSessionId, [...values]]));
+}
+
+function chatReadReceiptFromWire(receipt: { readonly participant_session_id: string; readonly participant_session_generation: number; readonly sequence: string; readonly read_at: string }): ChalkChatReadReceipt {
+  return {
+    participantSessionId: receipt.participant_session_id,
+    participantSessionGeneration: receipt.participant_session_generation,
+    readThroughSequence: receipt.sequence,
+    readAt: receipt.read_at,
+  };
+}
+
+function previousRoomActionsVersion(version: 0 | 1 | 2): 0 | 1 {
+  return version === 2 ? 1 : 0;
 }
 
 function compareUnsignedDecimals(left: string, right: string): number {

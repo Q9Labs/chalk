@@ -2,6 +2,7 @@ import type { ParticipantAccessSubject } from "./access";
 import type {
   ChalkChatMessage,
   ChalkChatPageResult,
+  ChalkChatReadReceipt,
   ChalkChatStateSnapshot,
   ChalkDirectedRequestResult,
   ChalkIncomingMediaRequest,
@@ -14,12 +15,15 @@ import type {
   ChalkSendChatMessageInput,
   ChalkSyncV3RoomActionCapability,
 } from "../room-actions/types";
+import type { ChalkChatFileTransport } from "../chat-files/types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 
 export { ChalkWhiteboardV1Error } from "../whiteboard/types";
 export type {
+  ChalkChatAttachment,
   ChalkChatMessage,
   ChalkChatPageResult,
+  ChalkChatReadReceipt,
   ChalkDirectedRequestResult,
   ChalkIncomingMediaRequest,
   ChalkParticipantMediaState,
@@ -199,6 +203,7 @@ export type ChalkSessionSnapshot = {
   readonly failure: ChalkSessionFailure | null;
   readonly roomActions: {
     readonly phase: ChalkRoomActionsPhase;
+    readonly version: 1 | 2 | null;
     readonly capabilities: readonly ChalkSyncV3RoomActionCapability[];
     readonly error: ChalkSessionFailure | null;
   };
@@ -233,7 +238,7 @@ export type ChalkSessionActions = {
   readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
   readonly retryChatMessage: (clientMessageId: string) => Promise<ChalkChatMessage>;
   readonly loadOlderChatMessages: (limit?: number) => Promise<ChalkChatPageResult>;
-  readonly markChatRead: () => void;
+  readonly markChatRead: (throughSequence?: string) => Promise<ChalkChatReadReceipt | null>;
   readonly requestUnmute: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
   readonly requestStartCamera: (participantSessionId: string) => Promise<ChalkDirectedRequestResult>;
   readonly acceptMediaRequest: (requestId: string) => Promise<void>;
@@ -243,5 +248,6 @@ export type ChalkSessionActions = {
 export type ChalkSessionStore = ChalkSessionActions & {
   readonly getSnapshot: () => ChalkSessionSnapshot;
   readonly subscribe: (listener: () => void) => () => void;
+  readonly chatFiles: ChalkChatFileTransport | null;
   readonly whiteboard: ChalkWhiteboardV1Transport | null;
 };
