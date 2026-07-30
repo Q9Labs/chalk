@@ -18,3 +18,6 @@
   a custom-endpoint local storage path, managed exact-origin R2 CORS, and
   production runtime validation that requires R2 whenever whiteboard files are
   enabled.
+- 2026-07-30 10:24 PKT — Followed up on review feedback by enforcing the
+  whiteboard-file capability at startup and at the router boundary while
+  preserving shared-R2 chat attachments.

@@ -266,18 +266,22 @@ func run() error {
 		chatRepository := postgres.NewChatAttachmentRepository(pool)
 		chatCleanupWorker := chatattachments.NewCleanupWorker(chatRepository, recordingStorage)
 		chatCleanupScheduler = chatattachments.NewCleanupScheduler(chatCleanupWorker, 0, logger)
-		whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
-		whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, recordingStorage)
-		whiteboardCleanupScheduler = whiteboardfiles.NewCleanupScheduler(whiteboardCleanupWorker, 0, logger)
 		if syncParticipantVerifierConfigured {
 			chatService := chatattachments.NewService(chatRepository, recordingStorage)
 			chatVerifier := chatattachments.NewParticipantVerifier(syncParticipantVerifier)
 			chatAttachmentService = chatService
 			chatParticipantVerifier = chatVerifier
-			service := whiteboardfiles.NewService(whiteboardRepository, recordingStorage)
-			verifier := whiteboardfiles.NewParticipantVerifier(syncParticipantVerifier)
-			whiteboardFileService = service
-			whiteboardParticipantVerifier = verifier
+		}
+		if cfg.Capabilities.WhiteboardFiles {
+			whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
+			whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, recordingStorage)
+			whiteboardCleanupScheduler = whiteboardfiles.NewCleanupScheduler(whiteboardCleanupWorker, 0, logger)
+			if syncParticipantVerifierConfigured {
+				service := whiteboardfiles.NewService(whiteboardRepository, recordingStorage)
+				verifier := whiteboardfiles.NewParticipantVerifier(syncParticipantVerifier)
+				whiteboardFileService = service
+				whiteboardParticipantVerifier = verifier
+			}
 		}
 	}
 	var integrationService httpapi.IntegrationService
@@ -556,6 +560,10 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 	}
 	if !capabilities.Integrations {
 		options.Integrations = nil
+	}
+	if !capabilities.WhiteboardFiles {
+		options.WhiteboardFiles = nil
+		options.WhiteboardParticipants = nil
 	}
 	if capabilities.Transcription {
 		return
