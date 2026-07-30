@@ -1,7 +1,7 @@
 export { ChalkNativeProvider, ChalkNativeProvider as ChalkProvider, useChalkSession, useChalkSessionStore, useSession } from "./context/chalk-native-provider";
 export type { ChalkNativeProviderProps, ChalkNativeProviderProps as ChalkProviderProps } from "./context/chalk-native-provider";
 export { createNativeTelemetry } from "./telemetry";
-export type { NativeSessionTelemetry, NativeTelemetry, NativeTelemetryJourney } from "./telemetry";
+export type { NativeSessionTelemetry, NativeTelemetry, NativeTelemetryJourney, NativeWhiteboardMetric } from "./telemetry";
 export { nativeCallKit } from "./callkit/native-callkit";
 export type { NativeCallKitCallOptions, NativeCallKitConfiguration, NativeCallKitEndCallOptions, NativeCallKitEndReason, NativeCallKitEvent, NativeCallKitHandleType } from "./callkit/native-callkit";
 export type { NativeVideoConferenceCallKitOptions } from "./callkit/resolve-native-video-conference-callkit-options";

@@ -20,6 +20,29 @@ describe("createNativeTelemetry", () => {
     expect(journey.recordSyncFrame).toHaveBeenCalledWith({ direction: "client_to_server", frameType: "room.join" });
   });
 
+  it("records production whiteboard metrics without forwarding renderer attributes", () => {
+    const journey = createJourney();
+    const telemetry = createNativeTelemetry(journey);
+
+    telemetry.recordWhiteboardMetric({
+      name: "whiteboard.renderer.termination",
+      value: 1,
+      attributes: { renderer_generation: "private-cardinality-value" },
+    });
+
+    expect(journey.record).toHaveBeenCalledWith({
+      name: "diagnostic.timeline",
+      phase: "media",
+      state: "failed",
+      origin_kind: "diagnostic",
+      attributes: {
+        category: "whiteboard_renderer",
+        code: "whiteboard.renderer.termination",
+        metric_value: 1,
+      },
+    });
+  });
+
   it("records aggregate RTC summaries from native peer-connection stats", async () => {
     const journey = createJourney();
     const telemetry = createNativeTelemetry(journey);
@@ -42,6 +65,7 @@ describe("createNativeTelemetry", () => {
 });
 
 function createJourney(): NativeTelemetryJourney & {
+  record: ReturnType<typeof vi.fn>;
   recordRtcSummary: ReturnType<typeof vi.fn>;
   recordSyncFrame: ReturnType<typeof vi.fn>;
 } {
@@ -56,6 +80,7 @@ function createJourney(): NativeTelemetryJourney & {
       "x-chalk-journey-id": "00000000-0000-4000-8000-000000000001",
       traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
     },
+    record: vi.fn(),
     recordRtcSummary: vi.fn(),
     recordSyncFrame: vi.fn(),
   };

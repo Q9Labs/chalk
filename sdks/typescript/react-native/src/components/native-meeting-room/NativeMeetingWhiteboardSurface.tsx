@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { StyleSheet } from "react-native";
 
 import { ChalkEmbeddedWhiteboard } from "../ChalkEmbeddedWhiteboard";
+import type { NativeWhiteboardMetric } from "../../telemetry";
 import type { NativeMeetingWhiteboardController } from "./useNativeMeetingRoomController";
 
 export interface NativeMeetingWhiteboardSurfaceProps {
@@ -12,6 +13,10 @@ export function shouldRenderNativeMeetingWhiteboard(whiteboard: NativeMeetingWhi
   readonly transport: NonNullable<NativeMeetingWhiteboardController["transport"]>;
 } {
   return whiteboard.isOpen && whiteboard.transport !== null;
+}
+
+export function forwardNativeMeetingWhiteboardMetric(metric: NativeWhiteboardMetric, onMetric: NativeMeetingWhiteboardController["onMetric"]): void {
+  onMetric?.(metric);
 }
 
 export function NativeMeetingWhiteboardSurface({ whiteboard }: NativeMeetingWhiteboardSurfaceProps): React.JSX.Element | null {
@@ -27,7 +32,8 @@ export function NativeMeetingWhiteboardSurface({ whiteboard }: NativeMeetingWhit
     [whiteboard.journeyId],
   );
   const handleMetric = useCallback(
-    (metric: { readonly name: string; readonly value: number; readonly attributes?: Readonly<Record<string, string | number | boolean>> }) => {
+    (metric: NativeWhiteboardMetric) => {
+      forwardNativeMeetingWhiteboardMetric(metric, whiteboard.onMetric);
       if (typeof __DEV__ === "undefined" || !__DEV__) return;
       console.info("[chalk][embedded-whiteboard] renderer metric", {
         journeyId: whiteboard.journeyId,
@@ -36,7 +42,7 @@ export function NativeMeetingWhiteboardSurface({ whiteboard }: NativeMeetingWhit
         attributes: metric.attributes,
       });
     },
-    [whiteboard.journeyId],
+    [whiteboard.journeyId, whiteboard.onMetric],
   );
 
   if (!shouldRenderNativeMeetingWhiteboard(whiteboard)) return null;

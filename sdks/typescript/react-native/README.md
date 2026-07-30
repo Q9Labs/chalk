@@ -49,7 +49,9 @@ callbacks never contain scene contents, signed URLs, tokens, or file bytes.
 Build `@q9labsai/chalk-whiteboard` before
 `@q9labsai/chalk-react-native`; the React Native build then copies the generated
 renderer into the native resource directories. The Chalk mobile app's
-`prepare:whiteboard` script rebuilds only the renderer assets before copying
-them, so it can run alongside workspace package builds without deleting
-whiteboard declarations. Run `sync:whiteboard-assets` directly only when the
-whiteboard package has already produced `dist/embedded/chalk-whiteboard`.
+`prepare:whiteboard` script rebuilds the embedded module, its declarations, and
+the renderer assets before copying them. This clean-checkout path does not
+delete the rest of `dist`, so it can run alongside ordered workspace builds
+without serving stale controller code. Run `sync:whiteboard-assets` directly
+only when the whiteboard package has already produced both
+`dist/embedded/index.js` and `dist/embedded/chalk-whiteboard`.

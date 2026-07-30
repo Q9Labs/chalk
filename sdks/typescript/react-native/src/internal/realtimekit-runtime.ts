@@ -55,7 +55,9 @@ export class ChalkSession {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#joinGeneration += 1;
+    const meeting = this.#meeting;
     this.#detachMeeting();
+    if (meeting) void meeting.leave().catch(() => undefined);
     this.#stopTransportCorrelation?.();
   }
 

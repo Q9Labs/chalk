@@ -62,9 +62,11 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types && pnpm run build:embedded",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types && pnpm run build:renderer",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
-    "build:embedded": "node ./scripts/build-embedded.mjs",
+    "build:embedded": "pnpm run build:embedded-module && pnpm run build:renderer",
+    "build:embedded-module": "tsup ./src/embedded/index.ts --format esm --out-dir ./dist/embedded --platform browser && tsc --project tsconfig.embedded.json --emitDeclarationOnly --declaration --outDir dist",
+    "build:renderer": "node ./scripts/build-embedded.mjs",
     "dev": "tsup ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
     "test": "pnpm exec vitest run",
     "check-types": "tsc --noEmit",

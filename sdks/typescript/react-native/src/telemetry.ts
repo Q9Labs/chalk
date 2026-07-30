@@ -1,10 +1,17 @@
-import { syncTelemetryCorrelation, type JourneyTelemetryContext, type RtcConnectionStateSnapshot, type RtcStatsLike, type SyncFrameObservation } from "@q9labsai/chalk-client/telemetry";
+import { syncTelemetryCorrelation, type JourneyTelemetryContext, type RtcConnectionStateSnapshot, type RtcStatsLike, type SyncFrameObservation, type TelemetryEventDraft } from "@q9labsai/chalk-client/telemetry";
 
 export interface NativeTelemetryJourney {
   readonly context: JourneyTelemetryContext;
   readonly headers: Readonly<Record<string, string>>;
+  record?(draft: TelemetryEventDraft): unknown;
   recordRtcSummary(connection: RtcConnectionStateSnapshot, stats: Iterable<RtcStatsLike>): unknown;
   recordSyncFrame(observation: SyncFrameObservation): unknown;
+}
+
+export interface NativeWhiteboardMetric {
+  readonly name: string;
+  readonly value: number;
+  readonly attributes?: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface NativeSessionTelemetry {
@@ -30,6 +37,7 @@ export interface NativeTelemetry {
   readonly session: NativeSessionTelemetry;
   observePeerConnection(peerConnection: NativeRtcPeerConnection): () => void;
   recordSyncFrame(observation: SyncFrameObservation): void;
+  recordWhiteboardMetric(metric: NativeWhiteboardMetric): void;
 }
 
 /** Connects a typed journey to native API, WebSocket, and WebRTC boundaries without collecting raw media or network data. */
@@ -48,7 +56,24 @@ export function createNativeTelemetry(journey: NativeTelemetryJourney): NativeTe
     recordSyncFrame(observation) {
       journey.recordSyncFrame(observation);
     },
+    recordWhiteboardMetric(metric) {
+      journey.record?.({
+        name: "diagnostic.timeline",
+        phase: "media",
+        state: isFailedWhiteboardMetric(metric.name) ? "failed" : "observed",
+        origin_kind: "diagnostic",
+        attributes: {
+          category: "whiteboard_renderer",
+          code: metric.name,
+          metric_value: metric.value,
+        },
+      });
+    },
   };
+}
+
+function isFailedWhiteboardMetric(name: string): boolean {
+  return name.endsWith(".failure") || name.endsWith(".termination");
 }
 
 function observeNativeRtc(peerConnection: NativeRtcPeerConnection, journey: NativeTelemetryJourney): () => void {

@@ -107,6 +107,26 @@ describe("ChalkSession RealtimeKit runtime", () => {
     expect(session.participants.getState().count).toBe(0);
   });
 
+  it("leaves an active RealtimeKit meeting when the provider disposes its session", async () => {
+    const harness = createMeetingHarness();
+    const session = new ChalkSession({
+      apiUrl: "https://api.test",
+      token: "participant-token",
+      realtimeKitLoader: async () => ({ init: async () => harness.meeting }),
+      fetch: admissionFetch(),
+    });
+
+    await session.join("room-1", { userName: "Hasan" });
+    expect(totalListeners(harness)).toBeGreaterThan(0);
+
+    session.dispose();
+    session.dispose();
+
+    await vi.waitFor(() => expect(harness.leave).toHaveBeenCalledOnce());
+    expect(totalListeners(harness)).toBe(0);
+    expect(session.participants.getState().count).toBe(0);
+  });
+
   it("fails closed when media credentials or canonical capabilities are unavailable", async () => {
     const harness = createMeetingHarness();
     const session = new ChalkSession({

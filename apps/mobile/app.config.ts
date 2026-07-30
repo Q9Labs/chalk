@@ -81,7 +81,8 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             data: [
               ...PUBLIC_WEB_HOSTS.flatMap((host) => [
                 { scheme: "https", host, pathPrefix: "/j/" },
-                { scheme: "https", host, pathPrefix: "/room" },
+                { scheme: "https", host, path: "/room" },
+                { scheme: "https", host, pathPrefix: "/room/" },
               ]),
             ],
           },

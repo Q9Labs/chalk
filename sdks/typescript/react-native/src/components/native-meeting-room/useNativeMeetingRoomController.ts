@@ -17,6 +17,7 @@ import { useOptionalChalkSnapshot } from "../../hooks/useChalkRoomActions";
 import { createNativeMediaRequestPrompt, createNativeRoomActionCommands, projectNativeRoomActions } from "../../room-actions/native-room-actions";
 import { buildChalkInviteLink } from "../../utils/build-chalk-invite-link";
 import { isIosSimulator } from "../../utils/ios-simulator";
+import type { NativeWhiteboardMetric } from "../../telemetry";
 import type { NativeMeetingRoomProps } from "../NativeMeetingRoom";
 import { buildNativeMeetingRoomDiagnosticsSnapshot, type NativeMeetingRoomDiagnosticsSnapshot } from "./diagnostics";
 import { NativeMeetingRoomControllerStore } from "./native-meeting-room-controller-store";
@@ -47,6 +48,7 @@ export interface NativeMeetingWhiteboardController {
   readonly journeyId: string;
   readonly traceparent?: string;
   readonly tracestate?: string;
+  readonly onMetric?: (metric: NativeWhiteboardMetric) => void;
   readonly open: () => void;
   readonly close: () => void;
   readonly toggle: () => void;
@@ -231,6 +233,7 @@ export function useNativeMeetingRoomController({ roomName, features, onLeave, on
       journeyId: telemetry?.session.context.journeyId ?? fallbackJourneyId.current,
       ...(telemetry?.session.context.traceparent ? { traceparent: telemetry.session.context.traceparent } : {}),
       ...(telemetry?.session.context.tracestate ? { tracestate: telemetry.session.context.tracestate } : {}),
+      ...(telemetry ? { onMetric: telemetry.recordWhiteboardMetric } : {}),
       open: openWhiteboard,
       close: closeWhiteboard,
       toggle: toggleWhiteboard,

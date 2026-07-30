@@ -6,22 +6,23 @@ import { NativeReactionPicker } from "./NativeReactionPicker";
 import type { NativeMeetingRoomProps } from "./NativeMeetingRoom";
 import { NativeMeetingGrid } from "./native-meeting-room/NativeMeetingGrid.macos";
 import { NativeMeetingBottomDock } from "./native-meeting-room/NativeMeetingBottomDock.macos";
+import { withoutEmbeddedWhiteboard } from "./native-meeting-room/embedded-whiteboard-platform";
 import { NativeMeetingStage } from "./native-meeting-room/NativeMeetingStage.macos";
 import { NativeMeetingTopBar } from "./native-meeting-room/NativeMeetingTopBar.macos";
-import { NativeMeetingWhiteboardSurface } from "./native-meeting-room/NativeMeetingWhiteboardSurface";
 import { useNativeMeetingRoomController } from "./native-meeting-room/useNativeMeetingRoomController";
 
 export function NativeMeetingRoomMacos(props: NativeMeetingRoomProps): React.JSX.Element {
-  const controller = useNativeMeetingRoomController(props);
+  const controller = useNativeMeetingRoomController({
+    ...props,
+    features: withoutEmbeddedWhiteboard(props.features),
+  });
 
   return (
     <View style={styles.roomScreen}>
       <NativeMeetingTopBar formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
 
       <View style={styles.stageFrame}>
-        {controller.whiteboard.isOpen ? (
-          <NativeMeetingWhiteboardSurface whiteboard={controller.whiteboard} />
-        ) : controller.derived.isStageMode ? (
+        {controller.derived.isStageMode ? (
           <NativeMeetingStage
             activeReactions={controller.activeReactions}
             handRaised={controller.handRaised}

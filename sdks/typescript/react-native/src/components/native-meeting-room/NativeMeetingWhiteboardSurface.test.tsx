@@ -8,7 +8,7 @@ vi.mock("../ChalkEmbeddedWhiteboard", () => ({
 }));
 
 import type { NativeMeetingWhiteboardController } from "./useNativeMeetingRoomController";
-import { shouldRenderNativeMeetingWhiteboard } from "./NativeMeetingWhiteboardSurface";
+import { forwardNativeMeetingWhiteboardMetric, shouldRenderNativeMeetingWhiteboard } from "./NativeMeetingWhiteboardSurface";
 
 describe("NativeMeetingWhiteboardSurface", () => {
   it("renders only for an open canonical whiteboard transport", () => {
@@ -22,6 +22,15 @@ describe("NativeMeetingWhiteboardSurface", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("forwards renderer metrics in production runtimes", () => {
+    const onMetric = vi.fn();
+    const metric = { name: "whiteboard.frame.delay_ms", value: 17 };
+
+    forwardNativeMeetingWhiteboardMetric(metric, onMetric);
+
+    expect(onMetric).toHaveBeenCalledWith(metric);
   });
 });
 
