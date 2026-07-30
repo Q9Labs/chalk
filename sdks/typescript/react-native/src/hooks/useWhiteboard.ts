@@ -1,72 +1,37 @@
-import type { WhiteboardCursor, WhiteboardSnapshot, WhiteboardUpdate } from "../internal/core";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useSession } from "../context/chalk-native-provider";
-import { createWhiteboardStore } from "./whiteboard-store";
+import type { ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
+import { useCallback, useEffect, useState } from "react";
+
+import { useChalkSession } from "../context/chalk-native-provider";
+import { useChalkSnapshot } from "./useChalkRoomActions";
 
 export interface UseWhiteboardReturn {
-  isOpen: boolean;
-  canDraw: boolean;
-  elements: readonly unknown[];
-  cursors: readonly WhiteboardCursor[];
-  lastSeq: number;
-  openParticipants: readonly string[];
-  latestUpdate: WhiteboardUpdate | null;
-  latestSnapshot: WhiteboardSnapshot | null;
-  open: () => void;
-  close: () => void;
-  toggle: () => void;
-  sendUpdate: (elements: unknown[], files?: Record<string, unknown>, seq?: number) => void;
-  sendCursor: (x: number, y: number) => void;
-  requestSync: () => void;
-  clear: () => void;
-  grantPermission: (participantId: string) => void;
-  revokePermission: (participantId: string) => void;
+  readonly transport: ChalkWhiteboardV1Transport | null;
+  readonly status: ReturnType<typeof useChalkSnapshot>["whiteboard"]["status"];
+  readonly canDraw: boolean;
+  readonly canClear: boolean;
+  readonly latestEvent: ChalkWhiteboardV1Event | null;
+  readonly requestSnapshot: () => Promise<void>;
+  readonly clear: () => Promise<void>;
 }
 
 export function useWhiteboard(): UseWhiteboardReturn {
-  const session = useSession();
-  const { whiteboard } = session;
-  const store = useMemo(() => createWhiteboardStore(whiteboard), [whiteboard]);
-  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const { state, latestUpdate, latestSnapshot } = snapshot;
+  const session = useChalkSession();
+  const snapshot = useChalkSnapshot();
+  const [latestEvent, setLatestEvent] = useState<ChalkWhiteboardV1Event | null>(null);
 
-  const open = useCallback(() => whiteboard.open(), [whiteboard]);
-  const close = useCallback(() => whiteboard.close(), [whiteboard]);
-  const toggle = useCallback(() => {
-    if (state.isOpen) {
-      whiteboard.close();
-      return;
-    }
+  useEffect(() => session.whiteboard?.subscribe(setLatestEvent), [session.whiteboard]);
+  const requestSnapshot = useCallback(async () => session.whiteboard?.requestSnapshot(), [session.whiteboard]);
+  const clear = useCallback(async () => {
+    await session.whiteboard?.clear();
+  }, [session.whiteboard]);
 
-    whiteboard.open();
-  }, [state.isOpen, whiteboard]);
-  const sendUpdate = useCallback((elements: unknown[], files?: Record<string, unknown>, seq?: number) => whiteboard.sendUpdate(elements, files, seq), [whiteboard]);
-  const sendCursor = useCallback((x: number, y: number) => whiteboard.sendCursor(x, y), [whiteboard]);
-  const requestSync = useCallback(() => whiteboard.requestSync(), [whiteboard]);
-  const clear = useCallback(() => whiteboard.clear(), [whiteboard]);
-  const grantPermission = useCallback((participantId: string) => whiteboard.grantPermission(participantId), [whiteboard]);
-  const revokePermission = useCallback((participantId: string) => whiteboard.revokePermission(participantId), [whiteboard]);
-
-  return useMemo(
-    () => ({
-      isOpen: state.isOpen,
-      canDraw: state.canDraw,
-      elements: state.elements,
-      cursors: state.cursors,
-      lastSeq: state.lastSeq,
-      openParticipants: state.openParticipants,
-      latestUpdate,
-      latestSnapshot,
-      open,
-      close,
-      toggle,
-      sendUpdate,
-      sendCursor,
-      requestSync,
-      clear,
-      grantPermission,
-      revokePermission,
-    }),
-    [state, latestUpdate, latestSnapshot, open, close, toggle, sendUpdate, sendCursor, requestSync, clear, grantPermission, revokePermission],
-  );
+  return {
+    transport: session.whiteboard,
+    status: snapshot.whiteboard.status,
+    canDraw: snapshot.whiteboard.canDraw,
+    canClear: snapshot.whiteboard.canClear,
+    latestEvent,
+    requestSnapshot,
+    clear,
+  };
 }

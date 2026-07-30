@@ -89,6 +89,27 @@ try {
   assert.equal(calls.at(-1).body.initial_role, "participant");
   assert.deepEqual(calls.at(-1).body.eligible_roles, ["host", "cohost", "participant"]);
 
+  const nativeGuest = await nativePost("/local-chalk/client-session", { displayName: "Lin", inviteToken: host.body.inviteToken });
+  assert.equal(nativeGuest.response.status, 201);
+  assert.match(nativeGuest.body.clientSessionId, /^[A-Za-z0-9_-]{43}$/u);
+  assert.equal(nativeGuest.body.inviteToken, host.body.inviteToken);
+  const nativeAccess = await nativePost("/local-chalk/participant-access", {
+    clientSessionId: nativeGuest.body.clientSessionId,
+    inviteToken: nativeGuest.body.inviteToken,
+    replaceMediaConnection: false,
+  });
+  assert.equal(nativeAccess.response.status, 201);
+  assert.equal(nativeAccess.body.subject.participantSessionId.length > 0, true);
+  assert.equal(
+    (
+      await nativePost("/local-chalk/client-session/cleanup", {
+        clientSessionId: nativeGuest.body.clientSessionId,
+        inviteToken: nativeGuest.body.inviteToken,
+      })
+    ).response.status,
+    204,
+  );
+
   assert.equal((await post("/local-chalk/cleanup", {}, guest.cookie)).response.status, 204);
   calls = await apiCalls();
   assert.equal(calls.at(-1).path.endsWith("/remove"), true);
@@ -104,7 +125,7 @@ try {
   assert.equal((await post("/local-chalk/access", {}, alarmHost.cookie)).response.status, 401);
 
   calls = await apiCalls();
-  console.log(JSON.stringify({ alarmTerminalCleanup: "verified", calls: calls.length, durableObject: "verified", hostCleanup: "verified", hostResume: "verified", inviteJoin: "verified", status: "ok" }));
+  console.log(JSON.stringify({ alarmTerminalCleanup: "verified", calls: calls.length, durableObject: "verified", hostCleanup: "verified", hostResume: "verified", inviteJoin: "verified", nativeClientSession: "verified", status: "ok" }));
 } catch (error) {
   process.stderr.write(`${fakeOutput()}\n${brokerOutput()}`);
   throw error;
@@ -146,6 +167,15 @@ async function post(path, body, cookie) {
   });
   const setCookie = response.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
   return { response, cookie: setCookie, body: response.status === 204 ? undefined : await response.json() };
+}
+
+async function nativePost(path, body) {
+  const response = await fetch(`${workerOrigin}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return { response, body: response.status === 204 ? undefined : await response.json() };
 }
 
 async function apiCalls() {

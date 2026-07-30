@@ -17,20 +17,29 @@ export type BrowserSessionInput = {
   readonly inviteToken?: string;
 };
 
+export type ClientSessionInput = BrowserSessionInput & {
+  readonly clientSessionId?: string;
+};
+
 export type AccessInput = {
   readonly currentMediaToken?: string;
   readonly replaceMediaConnection: boolean;
 };
 
-export type InternalBrowserSessionInput = {
+export type ParticipantAccessInput = AccessInput & {
+  readonly inviteToken: string;
+  readonly clientSessionId: string;
+};
+
+export type InternalClientSessionInput = {
   readonly action: "create" | "join" | "resume";
-  readonly browserSessionId: string;
+  readonly clientSessionId: string;
   readonly displayName: string;
   readonly trace: TraceContext;
 };
 
 export type InternalSessionInput = {
-  readonly browserSessionId: string;
+  readonly clientSessionId: string;
   readonly trace: TraceContext;
 };
 

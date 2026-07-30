@@ -12,8 +12,7 @@ const sdkNodeModules = path.resolve(__dirname, "../../sdks/typescript/react-nati
 const escapePathForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Keep Metro focused on the app and the workspace packages it imports.
-// Watching the entire monorepo makes cold iOS dev bundles slow enough to
-// time out inside the Expo dev client splash screen.
+// Watching the entire monorepo makes cold iOS development bundles unnecessarily slow.
 config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, facehashRoot, whiteboardRoot];
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 config.resolver.extraNodeModules = {

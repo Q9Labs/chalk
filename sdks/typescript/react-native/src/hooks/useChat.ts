@@ -1,40 +1,55 @@
-import type { ChatMessage, ReactionEmoji } from "../internal/core";
+import type { ChalkPendingChatMessage, ChalkReaction, ChalkSendChatMessageInput } from "@q9labsai/chalk-client";
 import { useCallback, useMemo } from "react";
-import { useChalkSessionStore } from "../context/chalk-native-provider";
+import { useChalkSession } from "../context/chalk-native-provider";
 import { createNativeRoomActionCommands, projectNativeRoomActions } from "../room-actions/native-room-actions";
-import { useOptionalChalkSnapshot } from "./useChalkRoomActions";
+import type { NativeChatMessage } from "../ui/native-types";
+import { useChalkSnapshot } from "./useChalkRoomActions";
 
 export interface UseChatReturn {
-  messages: readonly ChatMessage[];
+  messages: readonly NativeChatMessage[];
   isEnabled: boolean;
   count: number;
   unreadCount: number;
-  sendMessage: (content: string) => Promise<void>;
-  reactToMessage: (messageId: string, emoji: ReactionEmoji) => void;
+  pendingMessages: readonly ChalkPendingChatMessage[];
+  hasMore: boolean;
+  isLoadingOlder: boolean;
+  sendMessage: (content: string | ChalkSendChatMessageInput) => Promise<void>;
+  retryMessage: (clientMessageId: string) => Promise<void>;
+  loadOlderMessages: () => Promise<void>;
+  reactToMessage: (messageId: string, emoji: ChalkReaction) => void;
   markAsRead: (throughSequence?: string) => Promise<void>;
   markAsHidden: (throughSequence?: string) => Promise<void>;
-  getMessage: (id: string) => ChatMessage | undefined;
+  getMessage: (id: string) => NativeChatMessage | undefined;
 }
 
 export function useChat(): UseChatReturn {
-  const store = useChalkSessionStore();
-  const snapshot = useOptionalChalkSnapshot();
+  const store = useChalkSession();
+  const snapshot = useChalkSnapshot();
   const projection = useMemo(() => projectNativeRoomActions(snapshot), [snapshot]);
-  const commands = useMemo(() => (store ? createNativeRoomActionCommands(store) : null), [store]);
+  const commands = useMemo(() => createNativeRoomActionCommands(store), [store]);
 
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!commands) throw new Error("ChalkNativeProvider requires sessionStore for durable chat.");
-      await commands.sendChatMessage(content);
+    async (content: string | ChalkSendChatMessageInput) => {
+      if (typeof content === "string") await commands.sendChatMessage(content);
+      else await store.sendChatMessage(content);
     },
     [commands],
   );
-  const reactToMessage = useCallback((_messageId: string, _emoji: ReactionEmoji) => {
+  const retryMessage = useCallback(
+    async (clientMessageId: string) => {
+      await store.retryChatMessage(clientMessageId);
+    },
+    [store],
+  );
+  const loadOlderMessages = useCallback(async () => {
+    await store.loadOlderChatMessages();
+  }, [store]);
+  const reactToMessage = useCallback((_messageId: string, _emoji: ChalkReaction) => {
     throw new Error("Per-message reactions are not part of the room-actions contract.");
   }, []);
   const markAsRead = useCallback(
     async (throughSequence?: string) => {
-      await store?.markChatRead(throughSequence);
+      await store.markChatRead(throughSequence);
     },
     [store],
   );
@@ -46,13 +61,18 @@ export function useChat(): UseChatReturn {
       messages: projection.messages,
       isEnabled: projection.chatEnabled,
       count: projection.messages.length,
-      unreadCount: snapshot?.chat.unreadCount ?? 0,
+      unreadCount: snapshot.chat.unreadCount,
+      pendingMessages: snapshot.chat.pending,
+      hasMore: snapshot.chat.hasOlder,
+      isLoadingOlder: snapshot.chat.status === "loading",
       sendMessage,
+      retryMessage,
+      loadOlderMessages,
       reactToMessage,
       markAsRead,
       markAsHidden,
       getMessage,
     }),
-    [projection, snapshot?.chat.unreadCount, sendMessage, reactToMessage, markAsRead, markAsHidden, getMessage],
+    [projection, snapshot.chat, sendMessage, retryMessage, loadOlderMessages, reactToMessage, markAsRead, markAsHidden, getMessage],
   );
 }

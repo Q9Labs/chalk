@@ -1,129 +1,84 @@
 export interface NativeMeetingRoomFeatureFlags {
-  chat: boolean;
-  participants: boolean;
-  transcripts: boolean;
-  settings: boolean;
-  screenShare: boolean;
-  recording: boolean;
-  reactions: boolean;
-  handRaise: boolean;
-  whiteboard: boolean;
+  readonly chat: boolean;
+  readonly participants: boolean;
+  readonly screenShare: boolean;
+  readonly reactions: boolean;
+  readonly handRaise: boolean;
+  readonly whiteboard: boolean;
 }
 
 export interface NativeMeetingRoomActionAvailability {
-  enabled: boolean;
-  reason: string | null;
-  detail: string | null;
+  readonly enabled: boolean;
+  readonly reason: string | null;
+  readonly detail: string | null;
 }
 
 export interface NativeMeetingRoomDiagnosticsSnapshot {
-  isHost: boolean;
-  participantCount: number;
-  raisedHandCount: number;
-  unreadChatCount: number;
-  featureFlags: NativeMeetingRoomFeatureFlags;
-  actionAvailability: {
-    screenShare: NativeMeetingRoomActionAvailability & {
-      isActive: boolean;
-      isLocalSharing: boolean;
-      sharerParticipantId: string | null;
-      visibleInBottomDock: boolean;
-      enabledInActionsSheet: boolean;
+  readonly isHost: boolean;
+  readonly participantCount: number;
+  readonly raisedHandCount: number;
+  readonly unreadChatCount: number;
+  readonly featureFlags: NativeMeetingRoomFeatureFlags;
+  readonly actionAvailability: {
+    readonly screenShare: NativeMeetingRoomActionAvailability & {
+      readonly isActive: boolean;
+      readonly isLocalSharing: boolean;
+      readonly sharerParticipantId: string | null;
+      readonly visibleInBottomDock: boolean;
+      readonly enabledInActionsSheet: boolean;
     };
-    reactions: NativeMeetingRoomActionAvailability;
-    handRaise: NativeMeetingRoomActionAvailability;
-    chat: NativeMeetingRoomActionAvailability;
-    participants: NativeMeetingRoomActionAvailability;
-    transcripts: NativeMeetingRoomActionAvailability;
-    recording: NativeMeetingRoomActionAvailability;
-    settings: NativeMeetingRoomActionAvailability;
-    whiteboard: NativeMeetingRoomActionAvailability;
-    moderation: NativeMeetingRoomActionAvailability & {
-      canMuteOthers: boolean;
-      canUnmuteOthers: boolean;
-    };
+    readonly reactions: NativeMeetingRoomActionAvailability;
+    readonly handRaise: NativeMeetingRoomActionAvailability;
+    readonly chat: NativeMeetingRoomActionAvailability;
+    readonly participants: NativeMeetingRoomActionAvailability;
+    readonly whiteboard: NativeMeetingRoomActionAvailability;
+    readonly moderation: NativeMeetingRoomActionAvailability;
   };
 }
 
-const enabledAction = (): NativeMeetingRoomActionAvailability => ({
-  enabled: true,
-  reason: null,
-  detail: null,
-});
-
-const disabledByFeature = (featureName: string): NativeMeetingRoomActionAvailability => ({
-  enabled: false,
-  reason: "feature-disabled",
-  detail: `features.${featureName}=false`,
-});
-
-export const buildNativeMeetingRoomDiagnosticsSnapshot = ({
-  featureFlags,
-  isHost,
-  participantCount,
-  raisedHandCount,
-  unreadChatCount,
-  isScreenShareActive,
-  isLocalScreenSharing,
-  screenShareSharerParticipantId,
-  screenShareAvailability,
-}: {
-  featureFlags: NativeMeetingRoomFeatureFlags;
-  isHost: boolean;
-  participantCount: number;
-  raisedHandCount: number;
-  unreadChatCount: number;
-  isScreenShareActive: boolean;
-  isLocalScreenSharing: boolean;
-  screenShareSharerParticipantId: string | null;
-  screenShareAvailability?: NativeMeetingRoomActionAvailability;
-}): NativeMeetingRoomDiagnosticsSnapshot => {
-  const resolvedScreenShareAvailability =
-    screenShareAvailability ??
-    (featureFlags.screenShare
-      ? enabledAction()
-      : {
-          ...disabledByFeature("screenShare"),
-          detail: "features.screenShare=false in meeting room props",
-        });
-
+export function buildNativeMeetingRoomDiagnosticsSnapshot(input: {
+  readonly featureFlags: NativeMeetingRoomFeatureFlags;
+  readonly isHost: boolean;
+  readonly participantCount: number;
+  readonly raisedHandCount: number;
+  readonly unreadChatCount: number;
+  readonly isScreenShareActive: boolean;
+  readonly isLocalScreenSharing: boolean;
+  readonly screenShareSharerParticipantId: string | null;
+  readonly canModerate: boolean;
+  readonly screenShareAvailability?: NativeMeetingRoomActionAvailability;
+}): NativeMeetingRoomDiagnosticsSnapshot {
+  const availability = (enabled: boolean, feature: keyof NativeMeetingRoomFeatureFlags) => (enabled ? enabledAction() : disabledAction(`features.${feature}=false`));
+  const screenShare = input.screenShareAvailability ?? availability(input.featureFlags.screenShare, "screenShare");
   return {
-    isHost,
-    participantCount,
-    raisedHandCount,
-    unreadChatCount,
-    featureFlags,
+    isHost: input.isHost,
+    participantCount: input.participantCount,
+    raisedHandCount: input.raisedHandCount,
+    unreadChatCount: input.unreadChatCount,
+    featureFlags: input.featureFlags,
     actionAvailability: {
       screenShare: {
-        ...resolvedScreenShareAvailability,
-        isActive: isScreenShareActive,
-        isLocalSharing: isLocalScreenSharing,
-        sharerParticipantId: screenShareSharerParticipantId,
-        visibleInBottomDock: resolvedScreenShareAvailability.enabled,
-        enabledInActionsSheet: resolvedScreenShareAvailability.enabled,
+        ...screenShare,
+        isActive: input.isScreenShareActive,
+        isLocalSharing: input.isLocalScreenSharing,
+        sharerParticipantId: input.screenShareSharerParticipantId,
+        visibleInBottomDock: false,
+        enabledInActionsSheet: screenShare.enabled,
       },
-      reactions: featureFlags.reactions ? enabledAction() : disabledByFeature("reactions"),
-      handRaise: featureFlags.handRaise ? enabledAction() : disabledByFeature("handRaise"),
-      chat: featureFlags.chat ? enabledAction() : disabledByFeature("chat"),
-      participants: featureFlags.participants ? enabledAction() : disabledByFeature("participants"),
-      transcripts: featureFlags.transcripts ? enabledAction() : disabledByFeature("transcripts"),
-      recording: featureFlags.recording ? enabledAction() : disabledByFeature("recording"),
-      settings: featureFlags.settings ? enabledAction() : disabledByFeature("settings"),
-      whiteboard: featureFlags.whiteboard ? enabledAction() : disabledByFeature("whiteboard"),
-      moderation: isHost
-        ? {
-            ...enabledAction(),
-            canMuteOthers: true,
-            canUnmuteOthers: true,
-            detail: "local participant role=host",
-          }
-        : {
-            enabled: false,
-            reason: "not-host",
-            detail: "local participant role is not host",
-            canMuteOthers: false,
-            canUnmuteOthers: false,
-          },
+      reactions: availability(input.featureFlags.reactions, "reactions"),
+      handRaise: availability(input.featureFlags.handRaise, "handRaise"),
+      chat: availability(input.featureFlags.chat, "chat"),
+      participants: availability(input.featureFlags.participants, "participants"),
+      whiteboard: availability(input.featureFlags.whiteboard, "whiteboard"),
+      moderation: input.canModerate ? enabledAction() : { enabled: false, reason: "not-host", detail: "The local role cannot moderate participants" },
     },
   };
-};
+}
+
+function enabledAction(): NativeMeetingRoomActionAvailability {
+  return { enabled: true, reason: null, detail: null };
+}
+
+function disabledAction(detail: string): NativeMeetingRoomActionAvailability {
+  return { enabled: false, reason: "feature-disabled", detail };
+}

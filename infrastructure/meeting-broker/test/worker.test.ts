@@ -57,7 +57,7 @@ describe("meeting broker Worker boundary", () => {
     const refreshed = await harness.post("/local-chalk/access", { currentMediaToken: "opaque-media", replaceMediaConnection: true }, { cookie: `__Secure-chalk_session=${inviteToken}.${browserSessionId}` });
     expect(refreshed.status).toBe(201);
     const body = await internalBody(harness.stub);
-    expect(body).toMatchObject({ browserSessionId, currentMediaToken: "opaque-media", replaceMediaConnection: true });
+    expect(body).toMatchObject({ clientSessionId: browserSessionId, currentMediaToken: "opaque-media", replaceMediaConnection: true });
     expect(body).not.toHaveProperty("participantSessionId");
     expect(body).not.toHaveProperty("tenantId");
   });
@@ -66,7 +66,7 @@ describe("meeting broker Worker boundary", () => {
     const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
     const resumed = await harness.post("/local-chalk/browser-session", { displayName: "Ada", inviteToken }, { cookie: `__Secure-chalk_session=${inviteToken}.${browserSessionId}` });
     expect(resumed.status).toBe(201);
-    expect(await internalBody(harness.stub)).toMatchObject({ action: "resume", browserSessionId, displayName: "Ada" });
+    expect(await internalBody(harness.stub)).toMatchObject({ action: "resume", clientSessionId: browserSessionId, displayName: "Ada" });
     expect(resumed.headers.get("set-cookie")).toContain(`${inviteToken}.${browserSessionId}`);
 
     await harness.post("/local-chalk/browser-session", { displayName: "Grace", inviteToken }, { cookie: `__Secure-chalk_session=${"x".repeat(43)}.${browserSessionId}` });
@@ -91,6 +91,37 @@ describe("meeting broker Worker boundary", () => {
     const limited = await harness.post("/local-chalk/browser-session", { displayName: "Ada" });
     expect(limited.status).toBe(429);
     expect(limited.headers.get("retry-after")).toBe("60");
+  });
+
+  it("issues opaque client credentials and participant access without relying on browser cookies", async () => {
+    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
+    const created = await harness.nativePost("/local-chalk/client-session", { displayName: "Ada" });
+    expect(created.status).toBe(201);
+    const session = (await created.json()) as { readonly clientSessionId: string; readonly inviteToken: string };
+    expect(session.clientSessionId).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    expect(session.inviteToken).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    expect(await internalBody(harness.stub)).toMatchObject({ action: "create", clientSessionId: session.clientSessionId, displayName: "Ada" });
+
+    harness.stub.fetch.mockResolvedValueOnce(jsonResponse({ subject: { participantSessionId: "participant-1" } }, 201));
+    const access = await harness.nativePost("/local-chalk/participant-access", {
+      clientSessionId: session.clientSessionId,
+      inviteToken: session.inviteToken,
+      replaceMediaConnection: true,
+    });
+    expect(access.status).toBe(201);
+    expect(await internalBody(harness.stub)).toMatchObject({ clientSessionId: session.clientSessionId, replaceMediaConnection: true });
+
+    harness.stub.fetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const cleaned = await harness.nativePost("/local-chalk/client-session/cleanup", { clientSessionId: session.clientSessionId, inviteToken: session.inviteToken });
+    expect(cleaned.status).toBe(204);
+    expect(await internalBody(harness.stub)).toMatchObject({ clientSessionId: session.clientSessionId });
+  });
+
+  it("rejects malformed client credentials and untrusted browser callers", async () => {
+    const harness = workerHarness();
+    expect((await harness.post("/local-chalk/client-session", { displayName: "Ada" }, { origin: "https://attacker.test" })).status).toBe(403);
+    expect((await harness.nativePost("/local-chalk/participant-access", { clientSessionId: "short", inviteToken, replaceMediaConnection: false })).status).toBe(401);
+    expect(harness.stub.fetch).not.toHaveBeenCalled();
   });
 });
 
@@ -124,6 +155,16 @@ function workerHarness(stubResponse: Response = jsonResponse({}, 201)) {
         new Request(`https://chalkmeet.com${path}`, {
           method: "POST",
           headers: { "content-type": "application/json", origin: "https://chalkmeet.com", ...headers },
+          body: JSON.stringify(body),
+        }),
+        env,
+        log,
+      ),
+    nativePost: (path: string, body: unknown) =>
+      handleBrokerRequest(
+        new Request(`https://chalkmeet.com${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         }),
         env,

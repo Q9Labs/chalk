@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../internal/core";
+import type { NativeChatMessage as ChatMessage } from "../ui/native-types";
 import { useCallback, useRef } from "react";
 import { type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, ScrollView, StyleSheet, Text, type StyleProp, View, type ViewStyle } from "react-native";
 import { Theme } from "../ui/theme";

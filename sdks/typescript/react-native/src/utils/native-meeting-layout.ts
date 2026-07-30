@@ -1,6 +1,6 @@
-import type { ParticipantState } from "../internal/core";
+import type { NativeParticipantState } from "../ui/native-types";
 
-type RoomParticipant = ParticipantState["participants"][number];
+type RoomParticipant = NativeParticipantState["participants"][number];
 
 export const NATIVE_COMPACT_VIEWPORT_MAX_WIDTH = 768;
 export const NATIVE_COMPACT_GRID_PAGE_SIZE = 4;

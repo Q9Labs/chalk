@@ -1,8 +1,7 @@
-import type { LayoutMode } from "../../internal/core";
+import type { NativeLayout } from "../../ui/native-types";
 import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
 import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
-import RecordIcon from "@hugeicons/core-free-icons/dist/esm/RecordIcon";
 import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { FlatList, StyleSheet, Text, View } from "react-native";
@@ -13,7 +12,7 @@ import { NativeMediaView } from "../NativeMediaView";
 import type { RoomParticipant } from "./types";
 
 export interface NativeMeetingStageProps {
-  layoutMode: LayoutMode;
+  layoutMode: NativeLayout;
   isCompactViewport: boolean;
   primaryContent: NativeMeetingPrimaryContent;
   screenSharer: RoomParticipant | null;
@@ -24,7 +23,6 @@ export interface NativeMeetingStageProps {
   isMuted: boolean;
   handRaised: boolean;
   raisedHandCount: number;
-  isRecording: boolean;
   activeReactions: readonly { id: string; emoji: string; participantName: string }[];
   whiteboard: {
     isOpen: boolean;
@@ -105,7 +103,7 @@ function NativeParticipantStrip({ participants, vertical }: { participants: read
   );
 }
 
-export function NativeMeetingStageAndroid({ layoutMode, isCompactViewport, primaryContent, screenSharer, screenShareTrack, stripParticipants, isHost, selfName, isMuted, handRaised, raisedHandCount, isRecording, activeReactions, whiteboard }: NativeMeetingStageProps): React.JSX.Element {
+export function NativeMeetingStageAndroid({ layoutMode, isCompactViewport, primaryContent, screenSharer, screenShareTrack, stripParticipants, isHost, selfName, isMuted, handRaised, raisedHandCount, activeReactions, whiteboard }: NativeMeetingStageProps): React.JSX.Element {
   const verticalStrip = !isCompactViewport && layoutMode === "speaker";
 
   let primaryStage: React.JSX.Element;
@@ -140,7 +138,6 @@ export function NativeMeetingStageAndroid({ layoutMode, isCompactViewport, prima
         {primaryStage}
 
         {raisedHandCount > 0 ? <InfoChip icon={WavingHand01Icon} label={raisedHandCount === 1 ? "1 hand raised" : `${raisedHandCount} hands raised`} /> : null}
-        {isRecording ? <InfoChip align="right" icon={RecordIcon} label="REC" /> : null}
 
         {activeReactions.length > 0 ? (
           <View style={styles.reactionRail}>

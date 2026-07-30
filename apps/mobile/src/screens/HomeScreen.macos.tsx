@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
-import { canCreateMeeting, createMeetingLobbyRoute, getApiUrl, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
+import { canCreateMeeting, createMeetingLobbyRoute, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
 
 const PUBLIC_SITE_URL = "https://chalkmeet.com";
 const PUBLIC_PRIVACY_URL = "https://chalkmeet.com/privacy";
@@ -21,8 +21,7 @@ interface HomeScreenProps {
 }
 
 export function HomeScreenMacos({ onNavigate, onDiagnosticsFailure }: HomeScreenProps): React.JSX.Element {
-  const apiUrl = useMemo(() => getApiUrl(), []);
-  const createEnabled = useMemo(() => canCreateMeeting(apiUrl), [apiUrl]);
+  const createEnabled = useMemo(() => canCreateMeeting(), []);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
@@ -47,7 +46,7 @@ export function HomeScreenMacos({ onNavigate, onDiagnosticsFailure }: HomeScreen
 
     try {
       setIsResolving(true);
-      onNavigate(await resolveJoinToken(joinToken, apiUrl));
+      onNavigate(await resolveJoinToken(joinToken));
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Invalid invite link";
       setError(message);
@@ -80,7 +79,7 @@ export function HomeScreenMacos({ onNavigate, onDiagnosticsFailure }: HomeScreen
     try {
       setError(null);
       setIsCreatingMeeting(true);
-      onNavigate(await createMeetingLobbyRoute(apiUrl));
+      onNavigate(await createMeetingLobbyRoute());
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to create meeting";
       setError(message);

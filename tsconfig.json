@@ -49,7 +49,6 @@
       "@q9labsai/chalk-react-native/ios-pad": ["./sdks/typescript/react-native/src/ios-pad.ts"],
       "@q9labsai/chalk-react-native/macos": ["./sdks/typescript/react-native/src/macos.ts"],
       "@q9labsai/chalk-react-native/runtime": ["./sdks/typescript/react-native/src/runtime.ts"],
-      "@q9labsai/chalk-react-native/storage": ["./sdks/typescript/react-native/src/storage.ts"],
       "@q9labsai/chalk-react-native/clipboard": ["./sdks/typescript/react-native/src/clipboard.ts"],
       "@q9labsai/chalk-react-native/diagnostics": ["./sdks/typescript/react-native/src/diagnostics.ts"],
       "@q9labsai/chalk-react-native/invites": ["./sdks/typescript/react-native/src/invites.ts"],

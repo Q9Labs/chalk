@@ -73,19 +73,24 @@ function isFailedWhiteboardMetric(name: string): boolean {
 }
 
 function observeNativeRtc(peerConnection: NativeRtcPeerConnection, journey: NativeTelemetryJourney): () => void {
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    for (const event of rtcStateEvents) peerConnection.removeEventListener(event, capture);
+  };
   const capture = () => {
     void peerConnection
       .getStats()
       .then((stats) => journey.recordRtcSummary(rtcConnectionState(peerConnection), rtcStats(stats)))
       .catch(() => undefined);
+    if (peerConnection.connectionState === "closed") dispose();
   };
 
   for (const event of rtcStateEvents) peerConnection.addEventListener(event, capture);
   capture();
 
-  return () => {
-    for (const event of rtcStateEvents) peerConnection.removeEventListener(event, capture);
-  };
+  return dispose;
 }
 
 function rtcConnectionState(peerConnection: NativeRtcPeerConnection): RtcConnectionStateSnapshot {

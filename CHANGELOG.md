@@ -14,6 +14,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- React Native and mobile parity with Chalk v2: canonical `ChalkSession` and
+  SyncEngine v3 ownership, native client-session broker routes, Cloudflare
+  WebRTC media, moderation, reactions, hand raising, protected chat files,
+  whiteboard, screen sharing, durable telemetry, resumable mobile sessions,
+  and production Android and iOS release surfaces without the legacy
+  RealtimeKit runtime.
 - A shared, fail-closed Sync reliability harness with pull-request correctness,
   nightly multi-node/network/PostgreSQL failover, and release soak, restart, and
   real-browser profiles; every run emits replayable commit-bound evidence.

@@ -1,38 +1,51 @@
-import type { ParticipantState } from "../internal/core";
-import { useMemo } from "react";
-import { useSession } from "../context/chalk-native-provider";
-import { useManagerState } from "./external-store";
+import { useCallback, useMemo } from "react";
 
-type RoomParticipant = ParticipantState["participants"][number];
+import { useChalkSession } from "../context/chalk-native-provider";
+import type { NativeParticipant, NativeParticipantState } from "../ui/native-types";
+import { useChalkSnapshot } from "./useChalkRoomActions";
 
-export interface UseParticipantsReturn {
-  participants: readonly RoomParticipant[];
-  localParticipant: RoomParticipant | null;
-  remoteParticipants: readonly RoomParticipant[];
-  activeSpeaker: RoomParticipant | null;
-  participantCount: number;
-  getParticipant: (id: string) => RoomParticipant | undefined;
-  updateDisplayName: (name: string) => Promise<void>;
+export interface UseParticipantsReturn extends NativeParticipantState {
+  readonly remoteParticipants: readonly NativeParticipant[];
+  readonly participantCount: number;
+  readonly getParticipant: (participantSessionId: string) => NativeParticipant | undefined;
+  readonly updateDisplayName: (displayName: string) => Promise<void>;
 }
 
 export function useParticipants(): UseParticipantsReturn {
-  const session = useSession();
-  const { participants: manager } = session;
-  const state = useManagerState<ParticipantState>(manager);
-
-  const getParticipant = useMemo(() => (id: string) => manager.getParticipant(id), [manager]);
-  const updateDisplayName = useMemo(() => (name: string) => session.updateOwnDisplayName(name), [session]);
-
-  return useMemo(
-    () => ({
-      participants: state.participants,
-      localParticipant: state.localParticipant,
-      remoteParticipants: manager.remoteParticipants,
-      activeSpeaker: state.activeSpeaker,
-      participantCount: state.count,
-      getParticipant,
-      updateDisplayName,
-    }),
-    [state, manager, getParticipant, updateDisplayName],
+  const session = useChalkSession();
+  const snapshot = useChalkSnapshot();
+  const localParticipantId = snapshot.subject?.participantSessionId ?? null;
+  const participants = useMemo(
+    () =>
+      snapshot.participants.map((participant): NativeParticipant => {
+        const participantMedia = snapshot.participantMedia[participant.participantSessionId];
+        const remoteMedia = snapshot.remoteMedia.filter((publication) => publication.participantSessionId === participant.participantSessionId);
+        const local = participant.participantSessionId === localParticipantId;
+        const localMedia = local ? snapshot.localMedia : null;
+        return {
+          ...participant,
+          id: participant.participantSessionId,
+          audioEnabled: local ? localMedia?.microphone.state === "enabled" : participantMedia?.microphone === "active",
+          videoEnabled: local ? localMedia?.camera.state === "enabled" : participantMedia?.camera === "active",
+          audioTrack: local ? (localMedia?.microphone.track ?? null) : (remoteMedia.find((publication) => publication.source === "microphone")?.track ?? null),
+          videoTrack: local ? (localMedia?.camera.track ?? null) : (remoteMedia.find((publication) => publication.source === "camera")?.track ?? null),
+          screenShareTrack: local ? (localMedia?.screen.track ?? null) : (remoteMedia.find((publication) => publication.source === "screen")?.track ?? null),
+        };
+      }),
+    [localParticipantId, snapshot.localMedia, snapshot.participantMedia, snapshot.participants, snapshot.remoteMedia],
   );
+  const localParticipant = participants.find((participant) => participant.id === localParticipantId) ?? null;
+  const remoteParticipants = participants.filter((participant) => participant.id !== localParticipantId);
+  const getParticipant = useCallback((participantSessionId: string) => participants.find((participant) => participant.id === participantSessionId), [participants]);
+
+  return {
+    participants,
+    localParticipant,
+    remoteParticipants,
+    activeSpeaker: null,
+    count: participants.length,
+    participantCount: participants.length,
+    getParticipant,
+    updateDisplayName: session.setDisplayName,
+  };
 }

@@ -3,8 +3,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PROD_API_URL = "https://chalk-api.q9labs.ai";
-const PROD_WS_URL = "wss://chalk-ws.q9labs.ai/ws";
+const PRODUCTION_BROKER_URL = "https://chalkmeet.com/local-chalk";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const mobileDir = dirname(scriptDir);
@@ -40,9 +39,7 @@ try {
     stdio: "inherit",
     env: {
       ...process.env,
-      EXPO_PUBLIC_API_URL: PROD_API_URL,
-      EXPO_PUBLIC_WS_URL: PROD_WS_URL,
-      EXPO_PUBLIC_CHALK_API_KEY: undefined,
+      EXPO_PUBLIC_CHALK_BROKER_URL: PRODUCTION_BROKER_URL,
       CHALK_APP_VARIANT: "production",
       NODE_ENV: "production",
     },

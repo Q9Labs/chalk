@@ -1,14 +1,14 @@
 import type { ChalkIncomingMediaRequest, ChalkReaction, ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
 
-import type { ActiveReaction, ChatMessage } from "../internal/core";
+import type { NativeChatMessage, NativeReaction } from "../ui/native-types";
 
 const ROOM_REACTIONS = new Set<ChalkReaction>(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
 
 export interface NativeRoomActionsProjection {
   readonly chatEnabled: boolean;
   readonly reactionEnabled: boolean;
-  readonly messages: readonly ChatMessage[];
-  readonly reactions: readonly ActiveReaction[];
+  readonly messages: readonly NativeChatMessage[];
+  readonly reactions: readonly NativeReaction[];
   readonly incomingRequest: ChalkIncomingMediaRequest | null;
 }
 

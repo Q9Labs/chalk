@@ -12,11 +12,17 @@ vi.mock("react", () => ({
 }));
 
 vi.mock("../context/chalk-native-provider", () => ({
-  useChalkSessionStore: () => state.store,
+  useChalkSession: () => {
+    if (!state.store) throw new Error("useChalkSession must be used within ChalkProvider");
+    return state.store;
+  },
 }));
 
 vi.mock("./useChalkRoomActions", () => ({
-  useOptionalChalkSnapshot: () => state.snapshot,
+  useChalkSnapshot: () => {
+    if (!state.snapshot) throw new Error("useChalkSession must be used within ChalkProvider");
+    return state.snapshot;
+  },
 }));
 
 describe("useInteractions canonical room actions", () => {
@@ -49,7 +55,7 @@ describe("useInteractions canonical room actions", () => {
 
   it("fails closed when no canonical store is available", async () => {
     const { useInteractions } = await import("./useInteractions");
-    await expect(useInteractions().raiseHand()).rejects.toThrow("requires sessionStore");
+    expect(() => useInteractions()).toThrow("within ChalkProvider");
   });
 });
 

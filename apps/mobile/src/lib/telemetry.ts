@@ -1,25 +1,35 @@
-import { createJourneyIntakeExporter, createTelemetryClient, type TelemetryClient } from "@q9labsai/chalk-client/telemetry";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createJourneyIntakeExporter, createKeyValueTelemetryStorage, createTelemetryClient, type TelemetryClient } from "@q9labsai/chalk-client/telemetry";
 
 export interface MobileTelemetryOptions {
-  readonly apiUrl: string;
   readonly enabled: boolean;
-  readonly tokenProvider?: () => Promise<string>;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly getAccess?: () =>
+    | {
+        readonly apiBaseURL: string;
+        readonly token: string;
+      }
+    | undefined;
 }
 
-/** Mobile keeps an explicitly bounded in-memory fallback until a platform queue adapter is supplied by the host app. */
-export function createMobileTelemetry({ apiUrl, enabled, tokenProvider }: MobileTelemetryOptions): TelemetryClient {
-  if (!tokenProvider) {
-    return createTelemetryClient({ enabled, maxQueueSize: 100 });
-  }
-
+export function createMobileTelemetry({ enabled, fetch, getAccess }: MobileTelemetryOptions): TelemetryClient {
   return createTelemetryClient({
     enabled,
-    exporter: createJourneyIntakeExporter({
-      baseUrl: apiUrl,
-      headers: async () => ({ Authorization: `Bearer ${await tokenProvider()}` }),
-      path: "/v1/telemetry/journey-events",
-    }),
     maxQueueSize: 100,
+    storage: createKeyValueTelemetryStorage(AsyncStorage, "chalk.mobile.telemetry.v1"),
+    ...(getAccess
+      ? {
+          exporter: async (events, options) => {
+            const access = getAccess();
+            if (!access) throw new Error("Participant telemetry access is not ready.");
+            return createJourneyIntakeExporter({
+              baseUrl: access.apiBaseURL,
+              fetch,
+              headers: { authorization: `Bearer ${access.token}` },
+            })(events, options);
+          },
+        }
+      : {}),
   });
 }
 

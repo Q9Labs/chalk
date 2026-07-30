@@ -9,7 +9,6 @@ class ChalkAndroidConnectionServicePackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
     return listOf(
       ChalkAndroidConnectionServiceModule(reactContext),
-      ChalkMeetingMultitaskingModule(reactContext),
     )
   }
 

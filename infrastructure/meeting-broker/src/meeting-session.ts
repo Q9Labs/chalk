@@ -1,9 +1,9 @@
 import { DurableObject, type DurableObjectState } from "cloudflare:workers";
 import { ChalkAPIError, createChalkServerClient, type ChalkServerClient, type ParticipantAccess } from "@q9labsai/chalk-client/server";
 
-import { BrokerError, maximumDisplayNameLength, maximumMeetingParticipants, meetingLifetimeSeconds, type InternalAccessInput, type InternalBrowserSessionInput, type InternalSessionInput, type TraceContext, type WorkerEnv } from "./contracts";
+import { BrokerError, maximumDisplayNameLength, maximumMeetingParticipants, meetingLifetimeSeconds, type InternalAccessInput, type InternalClientSessionInput, type InternalSessionInput, type TraceContext, type WorkerEnv } from "./contracts";
 import { empty, json } from "./http";
-import { MeetingStore, type BrowserRecord, type MeetingRecord } from "./store";
+import { MeetingStore, type ClientRecord, type MeetingRecord } from "./store";
 
 const participantCapabilities = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf"];
 const hostCapabilities = [...participantCapabilities, "manageAdmission", "promoteDemote", "transferHost", "muteOthers", "stopVideoOthers", "stopScreenOthers", "requestMediaOthers", "removeParticipant", "endMeeting"];
@@ -45,7 +45,7 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
     const path = new URL(request.url).pathname;
     try {
       const body = await request.json();
-      if (path === "/browser-session") return await this.createBrowserSession(internalBrowserSessionInput(body));
+      if (path === "/browser-session" || path === "/client-session") return await this.createClientSession(internalClientSessionInput(body));
       if (path === "/access") return await this.access(internalAccessInput(body));
       if (path === "/cleanup") return await this.cleanup(internalSessionInput(body));
       return json(404, { error: "Not found." });
@@ -57,7 +57,7 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
     }
   }
 
-  private async createBrowserSession(input: InternalBrowserSessionInput): Promise<Response> {
+  private async createClientSession(input: InternalClientSessionInput): Promise<Response> {
     const now = Date.now();
     let meeting = this.store.meeting();
     if (!meeting) {
@@ -66,24 +66,24 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
         logId: crypto.randomUUID(),
         createdAt: now,
         expiresAt: now + configuredLifetimeSeconds(this.environment) * 1_000,
-        hostBrowserSessionId: input.browserSessionId,
+        hostClientSessionId: input.clientSessionId,
       };
       this.store.createMeeting(meeting);
       await this.state.storage.setAlarm(meeting.expiresAt);
-      this.log("meeting_created", { meetingId: meeting.logId });
+      this.log("meeting_created", { meetingLogId: meeting.logId });
     } else if (input.action === "create") {
       throw new BrokerError(409, "The meeting could not be created.");
     }
     requireActive(meeting, now);
     if (input.action === "resume") {
-      const browser = requireBrowser(this.store.browser(input.browserSessionId));
-      this.store.touchBrowser(browser.browserSessionId, now);
-      this.log("browser_session_resumed", { meetingId: meeting.logId, role: browser.isHost ? "host" : "participant" });
+      const client = requireClient(this.store.client(input.clientSessionId));
+      this.store.touchClient(client.clientSessionId, now);
+      this.log("client_session_resumed", { meetingLogId: meeting.logId, role: client.isHost ? "host" : "participant" });
       return json(201, { apiBaseURL: this.environment.CHALK_API_URL, syncURL: this.environment.CHALK_SYNC_URL });
     }
-    if (this.store.browserCount() >= maximumMeetingParticipants) throw new BrokerError(409, "The meeting is full.");
-    this.store.addBrowser({ browserSessionId: input.browserSessionId, displayName: input.displayName, isHost: meeting.hostBrowserSessionId === input.browserSessionId }, now);
-    this.log("browser_session_created", { meetingId: meeting.logId, role: meeting.hostBrowserSessionId === input.browserSessionId ? "host" : "participant" });
+    if (this.store.clientCount() >= maximumMeetingParticipants) throw new BrokerError(409, "The meeting is full.");
+    this.store.addClient({ clientSessionId: input.clientSessionId, displayName: input.displayName, isHost: meeting.hostClientSessionId === input.clientSessionId }, now);
+    this.log("client_session_created", { meetingLogId: meeting.logId, role: meeting.hostClientSessionId === input.clientSessionId ? "host" : "participant" });
     return json(201, { apiBaseURL: this.environment.CHALK_API_URL, syncURL: this.environment.CHALK_SYNC_URL });
   }
 
@@ -91,8 +91,8 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
     const now = Date.now();
     let meeting = requireMeeting(this.store.meeting());
     requireActive(meeting, now);
-    let browser = requireBrowser(this.store.browser(input.browserSessionId));
-    this.store.touchBrowser(browser.browserSessionId, now);
+    let client = requireClient(this.store.client(input.clientSessionId));
+    this.store.touchClient(client.clientSessionId, now);
     const chalk = this.chalk(input.trace);
 
     if (!meeting.sessionId) {
@@ -104,61 +104,55 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
           maximum_duration_seconds: Math.max(1, Math.floor((meeting.expiresAt - now) / 1_000)),
           role_capabilities: { host: hostCapabilities, cohost: participantCapabilities, participant: participantCapabilities },
         },
-        { idempotencyKey: `web-meeting-session-${meeting.logId}` },
+        { idempotencyKey: `meeting-session-${meeting.logId}` },
       );
       this.store.setSession(session.id);
       meeting = { ...meeting, sessionId: session.id };
-      this.log("session_created", { meetingId: meeting.logId });
+      this.log("session_created", { meetingLogId: meeting.logId });
     }
     const sessionId = meeting.sessionId;
     if (!sessionId) throw new BrokerError(502, "The meeting session is incomplete.");
 
-    if (browser.participantGeneration === undefined) {
-      const participantSessionId = browser.participantSessionId ?? crypto.randomUUID();
-      this.store.setParticipant(browser.browserSessionId, participantSessionId);
+    if (client.participantGeneration === undefined) {
+      const participantSessionId = client.participantSessionId ?? crypto.randomUUID();
+      this.store.setParticipant(client.clientSessionId, participantSessionId);
       const admission = await chalk.participants.admit(
         this.environment.CHALK_ROOM_ID,
         sessionId,
         {
           participant_session_id: participantSessionId,
-          name: browser.displayName,
-          initial_role: browser.isHost ? "host" : "participant",
-          eligible_roles: browser.isHost ? ["host", "cohost", "participant"] : ["host", "cohost", "participant"],
+          name: client.displayName,
+          initial_role: client.isHost ? "host" : "participant",
+          eligible_roles: ["host", "cohost", "participant"],
         },
-        { idempotencyKey: `web-meeting-admit-${participantSessionId}` },
+        { idempotencyKey: `meeting-admit-${participantSessionId}` },
       );
-      this.store.setParticipant(browser.browserSessionId, participantSessionId, admission.participant.generation);
-      browser = { ...browser, participantSessionId, participantGeneration: admission.participant.generation };
-      this.log("participant_admitted", { meetingId: meeting.logId, role: browser.isHost ? "host" : "participant" });
+      this.store.setParticipant(client.clientSessionId, participantSessionId, admission.participant.generation);
+      client = { ...client, participantSessionId, participantGeneration: admission.participant.generation };
+      this.log("participant_admitted", { meetingLogId: meeting.logId, role: client.isHost ? "host" : "participant" });
       if (admission.access) return json(201, admission.access);
     }
 
-    return json(201, await issueAccess(chalk, this.environment.CHALK_ROOM_ID, sessionId, browser, input));
+    return json(201, await issueAccess(chalk, this.environment.CHALK_ROOM_ID, sessionId, client, input));
   }
 
   private async cleanup(input: InternalSessionInput): Promise<Response> {
     const meeting = requireMeeting(this.store.meeting());
-    const browser = requireBrowser(this.store.browser(input.browserSessionId));
-    if (!browser.isHost) {
-      await this.removeGuestParticipant(meeting, browser, input.trace);
-      this.store.deleteBrowser(browser.browserSessionId);
-      this.log("guest_cleaned", { meetingId: meeting.logId });
+    const client = requireClient(this.store.client(input.clientSessionId));
+    if (!client.isHost) {
+      await this.removeGuestParticipant(meeting, client, input.trace);
+      this.store.deleteClient(client.clientSessionId);
+      this.log("client_session_cleaned", { meetingLogId: meeting.logId });
       return empty(204);
     }
     await this.endMeeting(meeting, input.trace, "host_cleanup");
     return empty(204);
   }
 
-  private async removeGuestParticipant(meeting: MeetingRecord, browser: BrowserRecord, trace: TraceContext): Promise<void> {
-    if (!meeting.sessionId || !browser.participantSessionId || browser.participantGeneration === undefined) return;
+  private async removeGuestParticipant(meeting: MeetingRecord, client: ClientRecord, trace: TraceContext): Promise<void> {
+    if (!meeting.sessionId || !client.participantSessionId || client.participantGeneration === undefined) return;
     try {
-      await this.chalk(trace).participants.remove(
-        this.environment.CHALK_ROOM_ID,
-        meeting.sessionId,
-        browser.participantSessionId,
-        { participantSessionGeneration: browser.participantGeneration },
-        { idempotencyKey: `web-meeting-remove-${browser.participantSessionId}-${browser.participantGeneration}` },
-      );
+      await this.chalk(trace).participants.remove(this.environment.CHALK_ROOM_ID, meeting.sessionId, client.participantSessionId, { participantSessionGeneration: client.participantGeneration }, { idempotencyKey: `meeting-remove-${client.participantSessionId}-${client.participantGeneration}` });
     } catch (error) {
       if (error instanceof ChalkAPIError && ["participant_not_active", "participant_not_found", "session_not_active", "session_not_found"].includes(error.code)) return;
       throw error;
@@ -177,7 +171,7 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
       await this.endMeeting(meeting, trace, "lifetime_alarm");
     } catch {
       await this.state.storage.setAlarm(Date.now() + 60_000);
-      this.log("meeting_end_retry_scheduled", { meetingId: meeting.logId });
+      this.log("meeting_end_retry_scheduled", { meetingLogId: meeting.logId });
       throw new Error("Meeting end retry scheduled");
     }
   }
@@ -185,14 +179,14 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
   private async endMeeting(meeting: MeetingRecord, trace: TraceContext, reason: string): Promise<void> {
     if (meeting.sessionId) {
       try {
-        await this.chalk(trace).sessions.end(this.environment.CHALK_ROOM_ID, meeting.sessionId, { idempotencyKey: `web-meeting-end-${meeting.logId}` });
+        await this.chalk(trace).sessions.end(this.environment.CHALK_ROOM_ID, meeting.sessionId, { idempotencyKey: `meeting-end-${meeting.logId}` });
       } catch (error) {
         if (!(error instanceof ChalkAPIError) || !["session_not_active", "session_not_found"].includes(error.code)) throw error;
       }
     }
     this.store.clearMeeting();
     await this.state.storage.deleteAlarm();
-    this.log("meeting_ended", { meetingId: meeting.logId, reason });
+    this.log("meeting_ended", { meetingLogId: meeting.logId, reason });
   }
 
   private chalk(trace: TraceContext): ChalkServerClient {
@@ -223,54 +217,54 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
   }
 }
 
-async function issueAccess(chalk: ChalkServerClient, roomId: string, sessionId: string, browser: BrowserRecord, input: InternalAccessInput): Promise<ParticipantAccess> {
-  if (!browser.participantSessionId || browser.participantGeneration === undefined) throw new BrokerError(502, "The participant session is incomplete.");
+async function issueAccess(chalk: ChalkServerClient, roomId: string, sessionId: string, client: ClientRecord, input: InternalAccessInput): Promise<ParticipantAccess> {
+  if (!client.participantSessionId || client.participantGeneration === undefined) throw new BrokerError(502, "The participant session is incomplete.");
   if (input.replaceMediaConnection) {
-    return chalk.participants.issueAccess(roomId, sessionId, browser.participantSessionId, { participantSessionGeneration: browser.participantGeneration, replaceMediaConnection: true });
+    return chalk.participants.issueAccess(roomId, sessionId, client.participantSessionId, { participantSessionGeneration: client.participantGeneration, replaceMediaConnection: true });
   }
   if (input.currentMediaToken) {
-    return chalk.participants.issueAccess(roomId, sessionId, browser.participantSessionId, {
-      participantSessionGeneration: browser.participantGeneration,
+    return chalk.participants.issueAccess(roomId, sessionId, client.participantSessionId, {
+      participantSessionGeneration: client.participantGeneration,
       currentMediaToken: input.currentMediaToken,
       replaceMediaConnection: false,
     });
   }
-  return chalk.participants.issueAccess(roomId, sessionId, browser.participantSessionId, { participantSessionGeneration: browser.participantGeneration, replaceMediaConnection: true });
+  return chalk.participants.issueAccess(roomId, sessionId, client.participantSessionId, { participantSessionGeneration: client.participantGeneration, replaceMediaConnection: true });
 }
 
 function requireMeeting(meeting: MeetingRecord | undefined): MeetingRecord {
-  if (!meeting) throw new BrokerError(401, "The browser session is missing or expired.");
+  if (!meeting) throw new BrokerError(401, "The client session is missing or expired.");
   return meeting;
 }
 
-function requireBrowser(browser: BrowserRecord | undefined): BrowserRecord {
-  if (!browser) throw new BrokerError(401, "The browser session is missing or expired.");
-  return browser;
+function requireClient(client: ClientRecord | undefined): ClientRecord {
+  if (!client) throw new BrokerError(401, "The client session is missing or expired.");
+  return client;
 }
 
 function requireActive(meeting: MeetingRecord, now: number): void {
   if (now >= meeting.expiresAt) throw new BrokerError(410, "The meeting has ended.");
 }
 
-function internalBrowserSessionInput(value: unknown): InternalBrowserSessionInput {
+function internalClientSessionInput(value: unknown): InternalClientSessionInput {
   const input = record(value);
   const action = input.action;
   const displayName = typeof input.displayName === "string" ? input.displayName.trim() : "";
-  if ((action !== "create" && action !== "join" && action !== "resume") || !capability(input.browserSessionId) || !displayName || displayName.length > maximumDisplayNameLength) throw new BrokerError(400, "Invalid browser session request.");
-  return { action, browserSessionId: input.browserSessionId, displayName, trace: trace(input.trace) };
+  if ((action !== "create" && action !== "join" && action !== "resume") || !capability(input.clientSessionId) || !displayName || displayName.length > maximumDisplayNameLength) throw new BrokerError(400, "Invalid client session request.");
+  return { action, clientSessionId: input.clientSessionId, displayName, trace: trace(input.trace) };
 }
 
 function internalAccessInput(value: unknown): InternalAccessInput {
   const input = record(value);
-  if (!capability(input.browserSessionId) || typeof input.replaceMediaConnection !== "boolean") throw new BrokerError(400, "Invalid access request.");
+  if (!capability(input.clientSessionId) || typeof input.replaceMediaConnection !== "boolean") throw new BrokerError(400, "Invalid access request.");
   if (input.currentMediaToken !== undefined && typeof input.currentMediaToken !== "string") throw new BrokerError(400, "Invalid access request.");
-  return { browserSessionId: input.browserSessionId, replaceMediaConnection: input.replaceMediaConnection, ...(typeof input.currentMediaToken === "string" ? { currentMediaToken: input.currentMediaToken } : {}), trace: trace(input.trace) };
+  return { clientSessionId: input.clientSessionId, replaceMediaConnection: input.replaceMediaConnection, ...(typeof input.currentMediaToken === "string" ? { currentMediaToken: input.currentMediaToken } : {}), trace: trace(input.trace) };
 }
 
 function internalSessionInput(value: unknown): InternalSessionInput {
   const input = record(value);
-  if (!capability(input.browserSessionId)) throw new BrokerError(400, "Invalid cleanup request.");
-  return { browserSessionId: input.browserSessionId, trace: trace(input.trace) };
+  if (!capability(input.clientSessionId)) throw new BrokerError(400, "Invalid cleanup request.");
+  return { clientSessionId: input.clientSessionId, trace: trace(input.trace) };
 }
 
 function trace(value: unknown): TraceContext {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { NativeMediaStream, NativeMediaStreamTrack } from "../media/realtimekit/native-webrtc";
+import type { NativeMediaStream, NativeMediaStreamTrack } from "../media/native-webrtc";
 import { createPreJoinPreviewStore } from "./pre-join-preview-store";
 
 function createStream(withVideoTrack: boolean): { stream: NativeMediaStream; wasStopped: () => boolean } {

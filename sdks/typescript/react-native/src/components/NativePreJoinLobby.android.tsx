@@ -1,5 +1,5 @@
-import { getParticipantAvatarRecipe } from "../internal/core";
-import { RTCView } from "../media/realtimekit/native-webrtc";
+import { getParticipantAvatarRecipe } from "../ui/participant-avatar";
+import { RTCView } from "../media/native-webrtc";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowLeft01Icon";
 import Mic01Icon from "@hugeicons/core-free-icons/dist/esm/Mic01Icon";
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";

@@ -1,51 +1,51 @@
-import type { ScreenShareOptions, ScreenShareState } from "../internal/core";
 import { useCallback, useMemo } from "react";
-import { useSession } from "../context/chalk-native-provider";
-import { useManagerState } from "./external-store";
+
+import { useChalkSession } from "../context/chalk-native-provider";
+import { useChalkSnapshot } from "./useChalkRoomActions";
 
 export interface UseScreenShareReturn {
-  isActive: boolean;
-  isStarting: boolean;
-  isLocalSharing: boolean;
-  sharerParticipantId: string | null;
-  videoTrack: MediaStreamTrack | null;
-  audioTrack: MediaStreamTrack | null;
-  start: (options?: ScreenShareOptions) => Promise<boolean>;
-  stop: () => Promise<void>;
-  toggle: (options?: ScreenShareOptions) => Promise<boolean>;
+  readonly isActive: boolean;
+  readonly isStarting: boolean;
+  readonly isLocalSharing: boolean;
+  readonly sharerParticipantId: string | null;
+  readonly videoTrack: MediaStreamTrack | null;
+  readonly audioTrack: MediaStreamTrack | null;
+  readonly start: () => Promise<boolean>;
+  readonly stop: () => Promise<void>;
+  readonly toggle: () => Promise<boolean>;
 }
 
 export function useScreenShare(): UseScreenShareReturn {
-  const session = useSession();
-  const { screenShare } = session;
-  const state = useManagerState<ScreenShareState>(screenShare);
-
-  const start = useCallback((options?: ScreenShareOptions) => screenShare.start(options), [screenShare]);
-  const stop = useCallback(() => screenShare.stop(), [screenShare]);
-  const toggle = useCallback(
-    async (options?: ScreenShareOptions) => {
-      if (state.isLocalSharing) {
-        await screenShare.stop();
-        return false;
-      }
-
-      return screenShare.start(options);
-    },
-    [screenShare, state.isLocalSharing],
-  );
+  const session = useChalkSession();
+  const snapshot = useChalkSnapshot();
+  const local = snapshot.localMedia.screen;
+  const remote = snapshot.remoteMedia.find((publication) => publication.source === "screen") ?? null;
+  const isLocalSharing = local.state === "enabled" || local.state === "requesting";
+  const start = useCallback(async () => {
+    await session.startScreenShare();
+    return true;
+  }, [session]);
+  const stop = useCallback(() => session.stopScreenShare(), [session]);
+  const toggle = useCallback(async () => {
+    if (isLocalSharing) {
+      await stop();
+      return false;
+    }
+    return start();
+  }, [isLocalSharing, start, stop]);
 
   return useMemo(
     () => ({
-      isActive: state.isActive,
-      isStarting: state.isStarting,
-      isLocalSharing: state.isLocalSharing,
-      sharerParticipantId: state.sharerParticipantId,
-      videoTrack: state.videoTrack,
-      audioTrack: state.audioTrack,
+      isActive: isLocalSharing || remote !== null,
+      isStarting: local.state === "requesting",
+      isLocalSharing,
+      sharerParticipantId: isLocalSharing ? (snapshot.subject?.participantSessionId ?? null) : (remote?.participantSessionId ?? null),
+      videoTrack: isLocalSharing ? local.track : (remote?.track ?? null),
+      audioTrack: null,
       start,
       stop,
       toggle,
     }),
-    [state, start, stop, toggle],
+    [isLocalSharing, local.state, local.track, remote, snapshot.subject?.participantSessionId, start, stop, toggle],
   );
 }

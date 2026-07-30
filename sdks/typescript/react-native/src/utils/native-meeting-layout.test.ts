@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ParticipantState } from "../internal/core";
+import type { NativeParticipantState } from "../ui/native-types";
 import { buildCompactParticipantPages, normalizeStageParticipants, resolveNativeMeetingLayout } from "./native-meeting-layout";
 
-type RoomParticipant = ParticipantState["participants"][number];
+type RoomParticipant = NativeParticipantState["participants"][number];
 
 function track(readyState: "live" | "ended" = "live"): MediaStreamTrack {
   return { readyState } as MediaStreamTrack;

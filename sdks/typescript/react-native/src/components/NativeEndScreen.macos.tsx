@@ -3,7 +3,6 @@ import CheckmarkCircle01Icon from "@hugeicons/core-free-icons/dist/esm/Checkmark
 import Clock01Icon from "@hugeicons/core-free-icons/dist/esm/Clock01Icon";
 import Home01Icon from "@hugeicons/core-free-icons/dist/esm/Home01Icon";
 import Message01Icon from "@hugeicons/core-free-icons/dist/esm/Message01Icon";
-import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -28,7 +27,6 @@ export function NativeEndScreenMacos({ data, onRejoin, onGoHome }: NativeEndScre
           <StatItem icon={Clock01Icon} label="Duration" value={formatDuration(data.durationSeconds)} />
           <StatItem icon={UserGroupIcon} label="Participants" value={data.participantCount.toString()} />
           <StatItem icon={Message01Icon} label="Messages" value={data.chatCount.toString()} />
-          <StatItem icon={TextFontIcon} label="Transcript" value={`${data.transcriptCount} lines`} />
         </View>
 
         <View style={styles.actions}>

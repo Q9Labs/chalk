@@ -10,7 +10,6 @@
       "@q9labsai/chalk-react-native/diagnostics": ["../../sdks/typescript/react-native/src/diagnostics.ts"],
       "@q9labsai/chalk-react-native/invites": ["../../sdks/typescript/react-native/src/invites.ts"],
       "@q9labsai/chalk-react-native/runtime": ["../../sdks/typescript/react-native/src/runtime.ts"],
-      "@q9labsai/chalk-react-native/storage": ["../../sdks/typescript/react-native/src/storage.ts"],
       "@q9labsai/chalk-react-native/theme": ["../../sdks/typescript/react-native/src/ui/theme.ts"]
     }
   },

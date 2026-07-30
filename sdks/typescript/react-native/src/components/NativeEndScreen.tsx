@@ -10,7 +10,6 @@ export interface NativeMeetingEndData {
   durationSeconds: number;
   participantCount: number;
   chatCount: number;
-  transcriptCount: number;
 }
 
 export interface NativeEndScreenProps {

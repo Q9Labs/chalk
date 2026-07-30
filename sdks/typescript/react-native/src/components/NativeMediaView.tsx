@@ -1,5 +1,5 @@
-import type { Participant } from "../internal/core";
-import { createNativeMediaStream, type NativeMediaStreamTrack } from "../media/realtimekit/native-webrtc";
+import type { NativeParticipant as Participant } from "../ui/native-types";
+import { createNativeMediaStream, type NativeMediaStreamTrack } from "../media/native-webrtc";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Theme } from "../ui/theme";

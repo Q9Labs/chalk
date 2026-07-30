@@ -1,4 +1,4 @@
-import { getParticipantAvatarRecipe } from "../internal/core";
+import { getParticipantAvatarRecipe } from "../ui/participant-avatar";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowLeft01Icon";
 import Mic01Icon from "@hugeicons/core-free-icons/dist/esm/Mic01Icon";
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";

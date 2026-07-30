@@ -3,7 +3,6 @@ import CheckmarkCircle01Icon from "@hugeicons/core-free-icons/dist/esm/Checkmark
 import Clock01Icon from "@hugeicons/core-free-icons/dist/esm/Clock01Icon";
 import Home01Icon from "@hugeicons/core-free-icons/dist/esm/Home01Icon";
 import Message01Icon from "@hugeicons/core-free-icons/dist/esm/Message01Icon";
-import TextFontIcon from "@hugeicons/core-free-icons/dist/esm/TextFontIcon";
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -31,7 +30,6 @@ export function NativeEndScreenIosPad({ data, onRejoin, onGoHome }: NativeEndScr
           <StatItem icon={Clock01Icon} isLandscape={isLandscape} label="Duration" value={formatDuration(data.durationSeconds)} />
           <StatItem icon={UserGroupIcon} isLandscape={isLandscape} label="Participants" value={data.participantCount.toString()} />
           <StatItem icon={Message01Icon} isLandscape={isLandscape} label="Messages" value={data.chatCount.toString()} />
-          <StatItem icon={TextFontIcon} isLandscape={isLandscape} label="Transcript" value={`${data.transcriptCount} lines`} />
         </View>
 
         <View style={[styles.actions, isLandscape && styles.actionsLandscape]}>

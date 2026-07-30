@@ -1,4 +1,4 @@
-import type { NativeMediaStream } from "../media/realtimekit/native-webrtc";
+import type { NativeMediaStream } from "../media/native-webrtc";
 import type { ExternalStore } from "./external-store";
 
 export interface PreviewSnapshot {

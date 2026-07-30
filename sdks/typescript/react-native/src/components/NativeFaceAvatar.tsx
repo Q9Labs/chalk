@@ -1,4 +1,5 @@
-import { getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../internal/core";
+import { getParticipantAvatarRecipe } from "../ui/participant-avatar";
+import type { ParticipantGradientPreference } from "../ui/native-types";
 import { FacehashNative } from "@q9labsai/facehash/react-native";
 import { memo, useMemo, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";

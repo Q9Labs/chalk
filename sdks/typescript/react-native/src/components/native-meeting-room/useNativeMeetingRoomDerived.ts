@@ -1,10 +1,10 @@
-import type { ParticipantState } from "../../internal/core";
+import type { NativeParticipantState } from "../../ui/native-types";
 import { useMemo } from "react";
 import { useWindowDimensions } from "react-native";
 import type { UseScreenShareReturn } from "../../hooks/useScreenShare";
 import { NATIVE_COMPACT_VIEWPORT_MAX_WIDTH, resolveNativeMeetingLayout } from "../../utils/native-meeting-layout";
 
-type RoomParticipant = ParticipantState["participants"][number];
+type RoomParticipant = NativeParticipantState["participants"][number];
 
 interface UseNativeMeetingRoomDerivedOptions {
   participants: readonly RoomParticipant[];

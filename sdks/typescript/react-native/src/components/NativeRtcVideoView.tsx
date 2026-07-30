@@ -1,4 +1,4 @@
-import { RTCView } from "../media/realtimekit/native-webrtc";
+import { RTCView } from "../media/native-webrtc";
 import { canRenderNativeRtcVideoView, type NativeRtcVideoViewProps } from "./native-rtc-video-view-availability";
 
 export function hasNativeRtcVideoView(): boolean {

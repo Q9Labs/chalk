@@ -1,4 +1,4 @@
-import { BrokerError, browserSessionCookie, maximumBodyBytes, maximumDisplayNameLength, type AccessInput, type BrowserSessionInput, type TraceContext } from "./contracts";
+import { BrokerError, browserSessionCookie, maximumBodyBytes, maximumDisplayNameLength, type AccessInput, type BrowserSessionInput, type ClientSessionInput, type ParticipantAccessInput, type TraceContext } from "./contracts";
 
 const capabilityPattern = /^[A-Za-z0-9_-]{43}$/u;
 const traceparentPattern = /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/u;
@@ -60,6 +60,31 @@ export function accessInput(value: unknown): AccessInput {
   };
 }
 
+export function clientSessionInput(value: unknown): ClientSessionInput {
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["clientSessionId", "displayName", "inviteToken"])) throw new BrokerError(400, "Only clientSessionId, displayName, and inviteToken are accepted.");
+  const displayName = typeof value.displayName === "string" ? value.displayName.trim() : "";
+  if (!displayName || displayName.length > maximumDisplayNameLength) throw new BrokerError(400, "Display name must be between 1 and 80 characters.");
+  if (value.inviteToken !== undefined && !isCapability(value.inviteToken)) throw new BrokerError(400, "The meeting invite is invalid.");
+  if (value.clientSessionId !== undefined && !isCapability(value.clientSessionId)) throw new BrokerError(400, "The client session is invalid.");
+  return {
+    displayName,
+    ...(typeof value.inviteToken === "string" ? { inviteToken: value.inviteToken } : {}),
+    ...(typeof value.clientSessionId === "string" ? { clientSessionId: value.clientSessionId } : {}),
+  };
+}
+
+export function participantAccessInput(value: unknown): ParticipantAccessInput {
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["clientSessionId", "currentMediaToken", "inviteToken", "replaceMediaConnection"])) throw new BrokerError(400, "The participant access request is invalid.");
+  if (!isCapability(value.inviteToken) || !isCapability(value.clientSessionId)) throw new BrokerError(401, "The client session is missing or expired.");
+  return { ...accessInput({ currentMediaToken: value.currentMediaToken, replaceMediaConnection: value.replaceMediaConnection }), inviteToken: value.inviteToken, clientSessionId: value.clientSessionId };
+}
+
+export function clientSessionCredentialInput(value: unknown): { readonly inviteToken: string; readonly clientSessionId: string } {
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["clientSessionId", "inviteToken"])) throw new BrokerError(400, "The client session request is invalid.");
+  if (!isCapability(value.inviteToken) || !isCapability(value.clientSessionId)) throw new BrokerError(401, "The client session is missing or expired.");
+  return { inviteToken: value.inviteToken, clientSessionId: value.clientSessionId };
+}
+
 export function emptyInput(value: unknown): void {
   if (!isRecord(value) || Object.keys(value).length > 0) throw new BrokerError(400, "The cleanup request body must be empty.");
 }
@@ -74,6 +99,11 @@ export function requireOrigin(request: Request, expectedOrigin: string): void {
   if (configured.origin !== expectedOrigin || request.headers.get("origin") !== configured.origin) {
     throw new BrokerError(403, "The meeting broker only accepts requests from the Chalk web app.");
   }
+}
+
+export function requireTrustedCaller(request: Request, expectedOrigin: string): void {
+  const origin = request.headers.get("origin");
+  if (origin !== null) requireOrigin(request, expectedOrigin);
 }
 
 export function traceContext(request: Request): TraceContext {

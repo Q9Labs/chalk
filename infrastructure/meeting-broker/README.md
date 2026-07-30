@@ -1,10 +1,10 @@
 # Chalk meeting broker
 
-The meeting broker is the server-side boundary for the public web room. Cloudflare routes `https://chalkmeet.com/local-chalk/*` to this Worker before the Pages origin, while localhost keeps using `apps/web/scripts/local-chalk-backend.mjs` through the Vite proxy.
+The meeting broker is the server-side participant-access boundary for Chalk web and native clients. Cloudflare routes `https://chalkmeet.com/local-chalk/*` to this Worker before the Pages origin, while localhost keeps using `apps/web/scripts/local-chalk-backend.mjs` through the Vite proxy.
 
-Each new meeting receives a 256-bit capability token and maps to one SQLite-backed Durable Object. The object persists the meeting lifetime, host, browser sessions, participant identities, and participant generations. It creates an idempotent Chalk session in one pre-provisioned room only when the SDK first requests access, then admits that browser and returns the short-lived participant access response. The API key, tenant, room, and transport endpoints remain Worker bindings and never enter the browser bundle.
+Each new meeting receives a 256-bit capability token and maps to one SQLite-backed Durable Object. The object persists the meeting lifetime, host, client sessions, participant identities, and participant generations. It creates an idempotent Chalk session in one pre-provisioned room only when an SDK first requests access, admits that client, and returns short-lived `ParticipantAccess`. The API key, tenant, room, and transport endpoints remain Worker bindings and never enter client bundles.
 
-The hard limits are an 8,192-byte JSON body, an 80-character display name, 32 browser sessions per meeting, a 60-minute meeting/cookie/session lifetime, 20 browser-session attempts per minute for an anonymous source, and 120 authenticated broker calls per browser session per minute. The host's cleanup ends the Chalk session and deletes the meeting's SQLite rows and alarm. Guest cleanup deletes only that guest's durable browser state. The Durable Object alarm repeats host-style cleanup at expiry, while the Chalk session's own remaining maximum duration is the independent upper bound. `CHALK_MEETING_LIFETIME_SECONDS` exists for short local alarm proofs but is clamped to 3,600 seconds in code.
+The hard limits are an 8,192-byte JSON body, an 80-character display name, 32 client sessions per meeting, a 60-minute meeting/session lifetime, 20 creation attempts per minute for an anonymous source, and 120 authenticated broker calls per client session per minute. The host's cleanup ends the Chalk session and deletes the meeting's SQLite rows and alarm. Guest cleanup deletes only that guest's durable client state. The Durable Object alarm repeats host-style cleanup at expiry, while the Chalk session's own remaining maximum duration is the independent upper bound. `CHALK_MEETING_LIFETIME_SECONDS` exists for short local alarm proofs but is clamped to 3,600 seconds in code.
 
 ## Deployment bindings
 
@@ -17,13 +17,21 @@ pnpm exec wrangler secret put CHALK_ROOM_ID
 pnpm exec wrangler deploy
 ```
 
-`CHALK_ROOM_ID` must identify an active `cf_sfu` room owned by `CHALK_TENANT_ID`. The production API and Sync endpoints are committed as `https://api.chalkmeet.com` and `wss://sync.chalkmeet.com/v3/sync`. The committed route disables `workers.dev` and preview URLs, so production is reachable only through the narrow `chalkmeet.com/local-chalk/*` route. Verify `GET https://chalkmeet.com/local-chalk/health` after deployment; all state-changing routes require an exact `Origin: https://chalkmeet.com` and JSON `POST`.
+`CHALK_ROOM_ID` must identify an active `cf_sfu` room owned by `CHALK_TENANT_ID`. The production API and Sync endpoints are committed as `https://api.chalkmeet.com` and `wss://sync.chalkmeet.com/v3/sync`. The committed route disables `workers.dev` and preview URLs, so production is reachable only through the narrow `chalkmeet.com/local-chalk/*` route. Verify `GET https://chalkmeet.com/local-chalk/health` after deployment. Browser routes require an exact `Origin: https://chalkmeet.com`; native routes accept the platform's normal no-`Origin` request. Every state-changing route requires JSON `POST`.
+
+The shared client contract is:
+
+- `POST /client-session` creates, joins, or resumes an opaque client session.
+- `POST /participant-access` issues or refreshes `ParticipantAccess` for that client.
+- `POST /client-session/cleanup` removes the client or ends the meeting when the client is the host.
+
+The web-only `/browser-session`, `/access`, and `/cleanup` routes project the same contract through an `HttpOnly` cookie.
 
 ## Local proof
 
 Wrangler can exercise the actual Worker, SQLite Durable Object, alarm storage, and rate-limit bindings. Supply disposable local values on the command line and point `CHALK_API_URL` at a local fake or development API; never place credentials in a tracked file.
 
-The checked-in end-to-end proof starts a service-bound fake Chalk API and two local Wrangler runtimes, verifies that browser-session creation has no upstream side effects, then exercises host admission, access refresh, capability-based guest admission, guest deletion, host meeting end, and alarm-driven expiry:
+The checked-in end-to-end proof starts a service-bound fake Chalk API and two local Wrangler runtimes, verifies that client-session creation has no upstream side effects, then exercises browser and native admission, access refresh, capability-based guest admission, cleanup, host meeting end, and alarm-driven expiry:
 
 ```bash
 node test/wrangler-e2e.mjs

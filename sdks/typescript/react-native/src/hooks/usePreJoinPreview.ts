@@ -1,4 +1,4 @@
-import { mediaDevices, type NativeMediaStream } from "../media/realtimekit/native-webrtc";
+import { mediaDevices, type NativeMediaStream } from "../media/native-webrtc";
 import { useMemo, useSyncExternalStore } from "react";
 import { getIosSimulatorVideoMessage, isIosSimulator } from "../utils/ios-simulator";
 import { createPreJoinPreviewStore } from "./pre-join-preview-store";

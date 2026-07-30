@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canUseLocalHostBootstrap, createStorageScopeId, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl, shouldAutoReadClipboard } from "./runtime";
+import { canUseLocalHostBootstrap, getMetroHostFromScriptUrl, isConfiguredLocalApiUrl, isDeviceLocalUrl, resolveAppRuntimeUrl, resolveDeviceLocalUrl, shouldAutoReadClipboard } from "./runtime";
 
 vi.mock("react-native", () => ({
   NativeModules: { SourceCode: { scriptURL: null } },
@@ -11,11 +11,6 @@ vi.mock("react-native", () => ({
 }));
 
 describe("mobile runtime helpers", () => {
-  it("derives a stable scoped token namespace", () => {
-    expect(createStorageScopeId("https://chalk-api.q9labs.ai", "ck_live_test")).toBe(createStorageScopeId("https://chalk-api.q9labs.ai", "ck_live_test"));
-    expect(createStorageScopeId("https://chalk-api.q9labs.ai", "ck_live_test")).not.toBe(createStorageScopeId("https://chalk-api.q9labs.ai", "ck_other"));
-  });
-
   it("extracts the Metro host from a device script URL", () => {
     expect(getMetroHostFromScriptUrl("http://192.168.18.245:8081/index.bundle?platform=android")).toBe("192.168.18.245");
     expect(getMetroHostFromScriptUrl(null)).toBeNull();

@@ -2,21 +2,21 @@
 
 Release builds should come from controlled CI, not local `.env.local`.
 
-Required release env:
+Release client contract:
 
-- `EXPO_PUBLIC_API_URL=<production API URL>`
-- `EXPO_PUBLIC_WS_URL=<production websocket URL>`
+- `EXPO_PUBLIC_CHALK_BROKER_URL=https://chalkmeet.com/local-chalk`
 
 Rules:
 
 - treat `apps/mobile/.env.local` as dev-only
-- never put a tenant or host API key in an `EXPO_PUBLIC_*` variable; Expo embeds
-  public variables in the application bundle
-- production mobile meeting creation remains disabled until Chalk has a native
-  participant-access broker
-- invite-link participants may still join through the public join-token exchange
+- never put a tenant, API key, participant credential, or client-session
+  credential in an `EXPO_PUBLIC_*` variable; Expo embeds public variables in the
+  application bundle
+- both meeting creation and invite joins use the broker's opaque client-session
+  and `ParticipantAccess` contract
+- API and Sync endpoints come from the broker response and are not independently
+  configured in the application bundle
 - local prod builds must run through `apps/mobile/scripts/run-with-production-mobile-env.ts`
-- if local mobile host auth drifts, run `pnpm run mobile:sync-local-env`
 - Android closed/prod releases: CI artifact only
 - sideloadable production Android APKs: CI artifact only
 - Android signing material stays in CI secrets, recreated only on the runner

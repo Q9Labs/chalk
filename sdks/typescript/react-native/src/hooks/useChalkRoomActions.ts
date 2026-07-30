@@ -1,67 +1,51 @@
 import type { ChalkSessionActions, ChalkSessionSnapshot } from "@q9labsai/chalk-client";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
-import { useChalkSessionStore } from "../context/chalk-native-provider";
+import { useChalkSession } from "../context/chalk-native-provider";
 
 export type ChalkSelector<T> = (snapshot: ChalkSessionSnapshot) => T;
 
-const subscribeToNothing = () => () => undefined;
-const getMissingSnapshot = () => null;
-
-export function useOptionalChalkSnapshot(): ChalkSessionSnapshot | null {
-  const store = useChalkSessionStore();
-  const subscribe = useCallback((listener: () => void) => store?.subscribe(listener) ?? subscribeToNothing(), [store]);
-  const getSnapshot = useCallback(() => store?.getSnapshot() ?? getMissingSnapshot(), [store]);
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+export function useChalkSnapshot(): ChalkSessionSnapshot {
+  const session = useChalkSession();
+  return useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
 }
 
 export function useChalkSelector<T>(selector: ChalkSelector<T>): T {
-  const snapshot = useOptionalChalkSnapshot();
-  if (!snapshot) {
-    throw new Error("ChalkNativeProvider requires sessionStore for Sync v3 room actions.");
-  }
-  return selector(snapshot);
+  return selector(useChalkSnapshot());
 }
 
 export function useChalkActions(): ChalkSessionActions {
-  const store = useChalkSessionStore();
-  const actions = useMemo<ChalkSessionActions | null>(
-    () =>
-      store
-        ? {
-            join: () => store.join(),
-            leave: () => store.leave(),
-            setMicrophoneEnabled: (enabled) => store.setMicrophoneEnabled(enabled),
-            setCameraEnabled: (enabled) => store.setCameraEnabled(enabled),
-            startScreenShare: () => store.startScreenShare(),
-            stopScreenShare: () => store.stopScreenShare(),
-            setHandRaised: (raised) => store.setHandRaised(raised),
-            setDisplayName: (displayName) => store.setDisplayName(displayName),
-            setAdmissionPolicy: (policy) => store.setAdmissionPolicy(policy),
-            setParticipantRole: (participantSessionId, role) => store.setParticipantRole(participantSessionId, role),
-            transferHost: (participantSessionId) => store.transferHost(participantSessionId),
-            admitParticipant: (admissionRequestId) => store.admitParticipant(admissionRequestId),
-            denyAdmission: (admissionRequestId) => store.denyAdmission(admissionRequestId),
-            muteParticipant: (participantSessionId) => store.muteParticipant(participantSessionId),
-            stopParticipantCamera: (participantSessionId) => store.stopParticipantCamera(participantSessionId),
-            stopParticipantScreenShare: (participantSessionId) => store.stopParticipantScreenShare(participantSessionId),
-            removeParticipant: (participantSessionId) => store.removeParticipant(participantSessionId),
-            endSession: () => store.endSession(),
-            sendReaction: (reaction) => store.sendReaction(reaction),
-            sendChatMessage: (input) => store.sendChatMessage(input),
-            retryChatMessage: (clientMessageId) => store.retryChatMessage(clientMessageId),
-            loadOlderChatMessages: (limit) => store.loadOlderChatMessages(limit),
-            markChatRead: (throughSequence) => store.markChatRead(throughSequence),
-            requestUnmute: (participantSessionId) => store.requestUnmute(participantSessionId),
-            requestStartCamera: (participantSessionId) => store.requestStartCamera(participantSessionId),
-            acceptMediaRequest: (requestId) => store.acceptMediaRequest(requestId),
-            declineMediaRequest: (requestId) => store.declineMediaRequest(requestId),
-          }
-        : null,
-    [store],
+  const session = useChalkSession();
+  return useMemo<ChalkSessionActions>(
+    () => ({
+      join: session.join,
+      leave: session.leave,
+      setMicrophoneEnabled: session.setMicrophoneEnabled,
+      setCameraEnabled: session.setCameraEnabled,
+      startScreenShare: session.startScreenShare,
+      stopScreenShare: session.stopScreenShare,
+      setHandRaised: session.setHandRaised,
+      setDisplayName: session.setDisplayName,
+      setAdmissionPolicy: session.setAdmissionPolicy,
+      setParticipantRole: session.setParticipantRole,
+      transferHost: session.transferHost,
+      admitParticipant: session.admitParticipant,
+      denyAdmission: session.denyAdmission,
+      muteParticipant: session.muteParticipant,
+      stopParticipantCamera: session.stopParticipantCamera,
+      stopParticipantScreenShare: session.stopParticipantScreenShare,
+      removeParticipant: session.removeParticipant,
+      endSession: session.endSession,
+      sendReaction: session.sendReaction,
+      sendChatMessage: session.sendChatMessage,
+      retryChatMessage: session.retryChatMessage,
+      loadOlderChatMessages: session.loadOlderChatMessages,
+      markChatRead: session.markChatRead,
+      requestUnmute: session.requestUnmute,
+      requestStartCamera: session.requestStartCamera,
+      acceptMediaRequest: session.acceptMediaRequest,
+      declineMediaRequest: session.declineMediaRequest,
+    }),
+    [session],
   );
-  if (!actions) {
-    throw new Error("ChalkNativeProvider requires sessionStore for Sync v3 room actions.");
-  }
-  return actions;
 }

@@ -1,4 +1,5 @@
 import { resolveNativePlatformVariant } from "../platform/native-platform";
+import type { ChalkChatAttachment, ChalkSessionStore } from "@q9labsai/chalk-client";
 import { NativeMeetingRoomAndroid } from "./NativeMeetingRoom.android";
 import { NativeMeetingRoomIosPad } from "./NativeMeetingRoom.ios-pad";
 import { NativeMeetingRoomIosPhone } from "./NativeMeetingRoom.ios-phone";
@@ -8,10 +9,7 @@ import type { NativeMeetingRoomDiagnosticsSnapshot } from "./native-meeting-room
 export interface NativeMeetingRoomFeatures {
   chat?: boolean;
   participants?: boolean;
-  transcripts?: boolean;
-  settings?: boolean;
   screenShare?: boolean;
-  recording?: boolean;
   reactions?: boolean;
   handRaise?: boolean;
   whiteboard?: boolean;
@@ -19,7 +17,9 @@ export interface NativeMeetingRoomFeatures {
 
 export interface NativeMeetingRoomProps {
   roomName?: string;
+  meetingLink?: string;
   features?: NativeMeetingRoomFeatures;
+  pickChatAttachments?: (chatFiles: NonNullable<ChalkSessionStore["chatFiles"]>) => Promise<readonly ChalkChatAttachment[]>;
   onLeave: () => void | Promise<void>;
   onEndForAll?: () => void | Promise<void>;
   onDiagnosticsChange?: (snapshot: NativeMeetingRoomDiagnosticsSnapshot) => void;

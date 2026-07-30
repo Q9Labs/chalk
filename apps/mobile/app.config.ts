@@ -15,35 +15,20 @@ function isLocalUrl(url: string | undefined): boolean {
 
 export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development") {
   const isProductionBuild = buildProfile === "production";
-  const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  const configuredWsUrl = process.env.EXPO_PUBLIC_WS_URL?.trim();
-  const apiUrl = isProductionBuild && isLocalUrl(configuredApiUrl) ? "https://chalk-api.q9labs.ai" : configuredApiUrl || "https://chalk-api.q9labs.ai";
-  const wsUrl = isProductionBuild && isLocalUrl(configuredWsUrl) ? "wss://chalk-ws.q9labs.ai/ws" : configuredWsUrl || "wss://chalk-ws.q9labs.ai/ws";
+  const configuredBrokerUrl = process.env.EXPO_PUBLIC_CHALK_BROKER_URL?.trim();
+  const brokerUrl = isProductionBuild && isLocalUrl(configuredBrokerUrl) ? "https://chalkmeet.com/local-chalk" : configuredBrokerUrl || "https://chalkmeet.com/local-chalk";
 
   return {
     expo: {
       name: "Chalk",
       slug: "chalk-mobile",
-      scheme: ["chalk", "ai.q9labs.chalk.mobile"],
+      scheme: "chalk",
       version: "1.0.1",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
-      plugins: [
-        ...(isProductionBuild ? [] : ["expo-dev-client"]),
-        "expo-secure-store",
-        [
-          "expo-audio",
-          {
-            enableBackgroundPlayback: false,
-            enableBackgroundRecording: true,
-            microphonePermission: "Chalk uses your microphone for background dictation.",
-          },
-        ],
-        "expo-sqlite",
-        "@cloudflare/realtimekit-react-native",
-      ],
+      plugins: ["expo-secure-store"],
       splash: {
         image: "./assets/splash-logo.png",
         resizeMode: "contain",
@@ -61,7 +46,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you during meetings.",
-          NSMicrophoneUsageDescription: "Chalk uses your microphone for background dictation.",
+          NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you during meetings.",
           RTCAppScreenSharingExtension: "ai.q9labs.chalk.mobile.screenshare",
           UIBackgroundModes: ["audio", "voip"],
         },
@@ -93,9 +78,9 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
           "android.permission.BLUETOOTH",
           "android.permission.CAMERA",
           "android.permission.FOREGROUND_SERVICE",
+          "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
           "android.permission.FOREGROUND_SERVICE_MICROPHONE",
           "android.permission.INTERNET",
-          "android.permission.MANAGE_OWN_CALLS",
           "android.permission.MODIFY_AUDIO_SETTINGS",
           "android.permission.POST_NOTIFICATIONS",
           "android.permission.RECORD_AUDIO",
@@ -104,8 +89,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         ],
       },
       extra: {
-        apiUrl,
-        wsUrl,
+        brokerUrl,
         buildProfile,
       },
     },

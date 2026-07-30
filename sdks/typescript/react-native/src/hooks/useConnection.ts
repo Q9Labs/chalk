@@ -1,41 +1,24 @@
-import type { JoinOptions, LeaveOptions, RoomState } from "../internal/core";
-import { useCallback, useMemo } from "react";
-import { useSession } from "../context/chalk-native-provider";
-import { useManagerState } from "./external-store";
+import { useChalkSession } from "../context/chalk-native-provider";
+import { useChalkSnapshot } from "./useChalkRoomActions";
 
 export interface UseConnectionReturn {
-  status: RoomState["status"];
-  isConnected: boolean;
-  isJoining: boolean;
-  join: (roomId: string, options: JoinOptions) => Promise<void>;
-  leave: (options?: LeaveOptions) => Promise<void>;
-  createSession: (name?: string) => Promise<string>;
-  endSession: (roomId: string) => Promise<void>;
+  readonly status: "connecting" | "connected" | "disconnected" | "failed" | "reconnecting";
+  readonly isConnected: boolean;
+  readonly isJoining: boolean;
+  readonly join: () => Promise<void>;
+  readonly leave: () => Promise<void>;
+  readonly endSession: () => Promise<void>;
 }
 
 export function useConnection(): UseConnectionReturn {
-  const session = useSession();
-  const { room } = session;
-  const state = useManagerState<RoomState>(room);
-
-  const join = useCallback(async (roomId: string, options: JoinOptions) => session.join(roomId, options), [session]);
-
-  const leave = useCallback(async (options?: LeaveOptions) => session.leave(options), [session]);
-
-  const createSession = useCallback(async (name?: string) => session.createSession(name), [session]);
-
-  const endSession = useCallback(async (roomId: string) => session.endSession(roomId), [session]);
-
-  return useMemo(
-    () => ({
-      status: state.status,
-      isConnected: state.status === "connected",
-      isJoining: state.isJoining,
-      join,
-      leave,
-      createSession,
-      endSession,
-    }),
-    [state.status, state.isJoining, join, leave, createSession, endSession],
-  );
+  const session = useChalkSession();
+  const snapshot = useChalkSnapshot();
+  return {
+    status: snapshot.state === "joining" ? "connecting" : snapshot.state === "live" ? "connected" : snapshot.state === "reconnecting" ? "reconnecting" : snapshot.state === "failed" ? "failed" : "disconnected",
+    isConnected: snapshot.state === "live",
+    isJoining: snapshot.state === "joining",
+    join: session.join,
+    leave: session.leave,
+    endSession: session.endSession,
+  };
 }

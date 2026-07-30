@@ -1,31 +1,35 @@
-import type { RoomState } from "../internal/core";
 import { useMemo } from "react";
-import { useSession } from "../context/chalk-native-provider";
-import { useManagerState } from "./external-store";
+
+import { useChalkSnapshot } from "./useChalkRoomActions";
 
 export interface UseRoomReturn {
-  roomId: string | null;
-  roomName: string | null;
-  status: RoomState["status"];
-  isConnected: boolean;
-  isJoining: boolean;
-  hostId: string | null;
+  readonly roomId: string | null;
+  readonly roomName: string | null;
+  readonly status: "connecting" | "connected" | "disconnected" | "failed" | "reconnecting";
+  readonly isConnected: boolean;
+  readonly isJoining: boolean;
+  readonly hostId: string | null;
 }
 
 export function useRoom(): UseRoomReturn {
-  const session = useSession();
-  const { room } = session;
-  const state = useManagerState<RoomState>(room);
+  const snapshot = useChalkSnapshot();
+  return useMemo(() => {
+    const host = snapshot.participants.find((participant) => participant.role === "host");
+    return {
+      roomId: snapshot.subject?.roomId ?? null,
+      roomName: null,
+      status: sessionStatus(snapshot.state),
+      isConnected: snapshot.state === "live",
+      isJoining: snapshot.state === "joining",
+      hostId: host?.participantSessionId ?? null,
+    };
+  }, [snapshot]);
+}
 
-  return useMemo(
-    () => ({
-      roomId: state.roomId,
-      roomName: state.roomName,
-      status: state.status,
-      isConnected: state.status === "connected",
-      isJoining: state.isJoining,
-      hostId: state.hostId,
-    }),
-    [state],
-  );
+function sessionStatus(state: ReturnType<typeof useChalkSnapshot>["state"]): UseRoomReturn["status"] {
+  if (state === "joining") return "connecting";
+  if (state === "live") return "connected";
+  if (state === "reconnecting") return "reconnecting";
+  if (state === "failed") return "failed";
+  return "disconnected";
 }

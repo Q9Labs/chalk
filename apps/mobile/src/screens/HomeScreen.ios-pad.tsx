@@ -13,7 +13,7 @@ import { KeyboardAvoidingView, Linking, Pressable, StyleSheet, Text, TextInput, 
 import * as Clipboard from "expo-clipboard";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { canCreateMeeting, createMeetingLobbyRoute, getApiUrl, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
+import { canCreateMeeting, createMeetingLobbyRoute, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
 
 const PUBLIC_SITE_URL = "https://chalkmeet.com";
@@ -24,8 +24,7 @@ interface HomeScreenProps {
 }
 
 export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScreenProps): React.JSX.Element {
-  const apiUrl = useMemo(() => getApiUrl(), []);
-  const createEnabled = useMemo(() => canCreateMeeting(apiUrl), [apiUrl]);
+  const createEnabled = useMemo(() => canCreateMeeting(), []);
   const [input, setInput] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +74,7 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
 
     try {
       setIsResolving(true);
-      onNavigate(await resolveJoinToken(joinToken, apiUrl));
+      onNavigate(await resolveJoinToken(joinToken));
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Invalid invite link";
       setError(message);
@@ -105,7 +104,7 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
     try {
       setError(null);
       setIsCreatingMeeting(true);
-      onNavigate(await createMeetingLobbyRoute(apiUrl, newRoomName.trim() || undefined));
+      onNavigate(await createMeetingLobbyRoute(newRoomName.trim() || undefined));
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to create meeting";
       setError(message);

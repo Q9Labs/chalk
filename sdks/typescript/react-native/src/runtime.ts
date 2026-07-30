@@ -1,5 +1,4 @@
 import { NativeModules, Platform } from "react-native";
-export { createStorageScopeId } from "./utils/storage-scope";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
 

@@ -2,22 +2,22 @@ import { describe, expect, it } from "vitest";
 import { createExpoConfig } from "./app.config";
 
 describe("createExpoConfig", () => {
-  it("keeps dev client enabled outside production", () => {
+  it("keeps development builds on the same native module graph", () => {
     const config = createExpoConfig("development");
 
-    expect(config.expo.plugins).toContain("expo-dev-client");
+    expect(config.expo.plugins).toEqual(["expo-secure-store"]);
     expect(config.expo.android.blockedPermissions).toContain("android.permission.SYSTEM_ALERT_WINDOW");
   });
 
-  it("drops dev client in production builds", () => {
+  it("configures production builds without development-only native modules", () => {
     const config = createExpoConfig("production");
 
-    expect(config.expo.plugins).not.toContain("expo-dev-client");
+    expect(config.expo.plugins).toEqual(["expo-secure-store"]);
     expect(config.expo.ios.infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
     expect(config.expo.ios.infoPlist.RTCAppScreenSharingExtension).toBe("ai.q9labs.chalk.mobile.screenshare");
     expect(config.expo.ios.entitlements?.["com.apple.security.application-groups"]).toEqual(["group.ai.q9labs.chalk.mobile"]);
     expect(config.expo.ios.associatedDomains).toEqual(["applinks:chalkmeet.com", "applinks:chalk.q9labs.ai"]);
-    expect(config.expo.scheme).toEqual(["chalk", "ai.q9labs.chalk.mobile"]);
+    expect(config.expo.scheme).toBe("chalk");
     expect(config.expo.splash.image).toBe("./assets/splash-logo.png");
     expect(config.expo.splash.backgroundColor).toBe("#0b0c14");
     expect(config.expo.android.adaptiveIcon.backgroundColor).toBe("#0b0c14");
@@ -29,22 +29,18 @@ describe("createExpoConfig", () => {
       { scheme: "https", host: "chalk.q9labs.ai", path: "/room" },
       { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
     ]);
-    expect(config.expo.extra.wsUrl).toBeDefined();
+    expect(config.expo.extra.brokerUrl).toBe("https://chalkmeet.com/local-chalk");
   });
 
-  it("forces production API and WS URLs when local env values leak into production builds", () => {
-    const originalApiUrl = process.env.EXPO_PUBLIC_API_URL;
-    const originalWsUrl = process.env.EXPO_PUBLIC_WS_URL;
+  it("forces the production broker when a local URL leaks into a production build", () => {
+    const originalBrokerUrl = process.env.EXPO_PUBLIC_CHALK_BROKER_URL;
 
-    process.env.EXPO_PUBLIC_API_URL = "http://localhost:8080";
-    process.env.EXPO_PUBLIC_WS_URL = "ws://localhost:8080/ws";
+    process.env.EXPO_PUBLIC_CHALK_BROKER_URL = "http://localhost:8787/local-chalk";
 
     const config = createExpoConfig("production");
 
-    expect(config.expo.extra.apiUrl).toBe("https://chalk-api.q9labs.ai");
-    expect(config.expo.extra.wsUrl).toBe("wss://chalk-ws.q9labs.ai/ws");
+    expect(config.expo.extra.brokerUrl).toBe("https://chalkmeet.com/local-chalk");
 
-    process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
-    process.env.EXPO_PUBLIC_WS_URL = originalWsUrl;
+    process.env.EXPO_PUBLIC_CHALK_BROKER_URL = originalBrokerUrl;
   });
 });

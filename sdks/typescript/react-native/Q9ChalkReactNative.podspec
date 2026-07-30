@@ -24,5 +24,4 @@ Pod::Spec.new do |spec|
   }
 
   spec.dependency "React-Core"
-  spec.dependency "RTKWebRTC"
 end

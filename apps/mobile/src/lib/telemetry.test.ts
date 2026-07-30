@@ -1,25 +1,30 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMobileTelemetry, flushAndDisposeTelemetry } from "./telemetry";
 
 describe("createMobileTelemetry", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+  it("creates a bounded client without a long-lived application credential", async () => {
+    const telemetry = createMobileTelemetry({ enabled: true });
+    telemetry.startJourney({ kind: "meeting.join" });
+    await expect(telemetry.flush()).resolves.toBeUndefined();
+    telemetry.dispose();
   });
 
-  it("adds bearer authentication when a token provider exists", async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 202 }));
-    vi.stubGlobal("fetch", fetchMock);
-    const tokenProvider = vi.fn(async () => "local-token");
-    const telemetry = createMobileTelemetry({ apiUrl: "http://127.0.0.1:8080", enabled: true, tokenProvider });
+  it("exports through the participant telemetry intake capability", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ accepted_count: 1, duplicate_count: 0 }, { status: 202 }));
+    const telemetry = createMobileTelemetry({
+      enabled: true,
+      fetch,
+      getAccess: () => ({
+        apiBaseURL: "https://api.chalk.test",
+        token: "participant-access",
+      }),
+    });
     telemetry.startJourney({ kind: "meeting.join" });
     await telemetry.flush();
 
-    expect(tokenProvider).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:8080/v1/telemetry/journey-events");
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
-      headers: expect.objectContaining({ Authorization: "Bearer local-token" }),
-    });
+    const [url, init] = fetch.mock.calls.at(-1) ?? [];
+    expect(url).toBe("https://api.chalk.test/v1/telemetry/journey-events");
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer participant-access");
     telemetry.dispose();
   });
 

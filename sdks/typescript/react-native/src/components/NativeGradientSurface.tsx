@@ -1,7 +1,8 @@
 import { memo, useMemo } from "react";
 import { StyleSheet } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { getParticipantAvatarRecipe, getParticipantColor, type ParticipantGradientPreference } from "../internal/core";
+import { getParticipantAvatarRecipe, getParticipantColor } from "../ui/participant-avatar";
+import type { ParticipantGradientPreference } from "../ui/native-types";
 
 export interface NativeGradientSurfaceProps {
   participantId?: string;

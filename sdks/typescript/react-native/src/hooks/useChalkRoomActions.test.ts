@@ -10,7 +10,10 @@ vi.mock("react", () => ({
 }));
 
 vi.mock("../context/chalk-native-provider", () => ({
-  useChalkSessionStore: () => state.store,
+  useChalkSession: () => {
+    if (!state.store) throw new Error("useChalkSession must be used within ChalkProvider");
+    return state.store;
+  },
 }));
 
 describe("canonical native room-action hooks", () => {
@@ -26,9 +29,9 @@ describe("canonical native room-action hooks", () => {
       subscribe: vi.fn(() => () => undefined),
       sendReaction,
     } as unknown as ChalkSessionStore;
-    const { useChalkActions, useChalkSelector, useOptionalChalkSnapshot } = await import("./useChalkRoomActions");
+    const { useChalkActions, useChalkSelector, useChalkSnapshot } = await import("./useChalkRoomActions");
 
-    expect(useOptionalChalkSnapshot()).toBe(snapshot);
+    expect(useChalkSnapshot()).toBe(snapshot);
     expect(useChalkSelector((value) => value.state)).toBe("live");
     await useChalkActions().sendReaction("🎉");
     expect(sendReaction).toHaveBeenCalledWith("🎉");
@@ -49,10 +52,10 @@ describe("canonical native room-action hooks", () => {
   });
 
   it("fails closed when the provider has no canonical session store", async () => {
-    const { useChalkActions, useChalkSelector, useOptionalChalkSnapshot } = await import("./useChalkRoomActions");
+    const { useChalkActions, useChalkSelector, useChalkSnapshot } = await import("./useChalkRoomActions");
 
-    expect(useOptionalChalkSnapshot()).toBeNull();
-    expect(() => useChalkSelector((snapshot) => snapshot.state)).toThrow(/requires sessionStore/u);
-    expect(() => useChalkActions()).toThrow(/requires sessionStore/u);
+    expect(() => useChalkSnapshot()).toThrow(/within ChalkProvider/u);
+    expect(() => useChalkSelector((snapshot) => snapshot.state)).toThrow(/within ChalkProvider/u);
+    expect(() => useChalkActions()).toThrow(/within ChalkProvider/u);
   });
 });

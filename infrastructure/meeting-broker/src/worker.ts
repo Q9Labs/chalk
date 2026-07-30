@@ -1,5 +1,5 @@
 import { BrokerError, brokerPath, browserSessionCookie, meetingLifetimeSeconds, type DurableObjectStubLike, type WorkerEnv } from "./contracts";
-import { accessInput, browserSessionInput, cookieValue, emptyInput, json, privateHeaders, randomCapability, readJSON, requireOrigin, traceContext } from "./http";
+import { accessInput, browserSessionInput, clientSessionCredentialInput, clientSessionInput, cookieValue, emptyInput, json, participantAccessInput, privateHeaders, randomCapability, readJSON, requireOrigin, requireTrustedCaller, traceContext } from "./http";
 
 type Log = (event: string, fields: Readonly<Record<string, boolean | number | string>>) => void;
 
@@ -23,11 +23,11 @@ async function route(request: Request, env: WorkerEnv, url: URL): Promise<Respon
   if (url.pathname === `${brokerPath}/health`) return health(request, env);
   if (!url.pathname.startsWith(`${brokerPath}/`)) throw new BrokerError(404, "Not found.");
   if (request.method !== "POST") throw new BrokerError(405, "Method not allowed.", { allow: "POST" });
-  requireOrigin(request, env.CHALK_APP_ORIGIN);
   const body = await readJSON(request);
   const trace = traceContext(request);
 
   if (url.pathname === `${brokerPath}/browser-session`) {
+    requireOrigin(request, env.CHALK_APP_ORIGIN);
     const input = browserSessionInput(body);
     await enforceRateLimit(env.CREATE_RATE_LIMITER, await anonymousRateKey(request));
     const existingSession = cookieValue(request.headers.get("cookie"));
@@ -37,7 +37,7 @@ async function route(request: Request, env: WorkerEnv, url: URL): Promise<Respon
     const stub = meetingStub(env, inviteToken);
     const brokerResponse = await internalRequest(stub, "/browser-session", {
       action: resume ? "resume" : input.inviteToken ? "join" : "create",
-      browserSessionId,
+      clientSessionId: browserSessionId,
       displayName: input.displayName,
       trace,
     });
@@ -46,6 +46,43 @@ async function route(request: Request, env: WorkerEnv, url: URL): Promise<Respon
     return json(201, { ...responseBody, inviteToken }, { "set-cookie": sessionCookie(inviteToken, browserSessionId) });
   }
 
+  if (url.pathname === `${brokerPath}/client-session`) {
+    requireTrustedCaller(request, env.CHALK_APP_ORIGIN);
+    const input = clientSessionInput(body);
+    await enforceRateLimit(env.CREATE_RATE_LIMITER, await anonymousRateKey(request));
+    const inviteToken = input.inviteToken ?? randomCapability();
+    const clientSessionId = input.clientSessionId ?? randomCapability();
+    const stub = meetingStub(env, inviteToken);
+    const brokerResponse = await internalRequest(stub, "/client-session", {
+      action: input.clientSessionId ? "resume" : input.inviteToken ? "join" : "create",
+      clientSessionId,
+      displayName: input.displayName,
+      trace,
+    });
+    if (!brokerResponse.ok) return brokerResponse;
+    return json(201, { ...(await brokerResponse.json()), clientSessionId, inviteToken });
+  }
+
+  if (url.pathname === `${brokerPath}/participant-access`) {
+    requireTrustedCaller(request, env.CHALK_APP_ORIGIN);
+    const input = participantAccessInput(body);
+    await enforceRateLimit(env.SESSION_RATE_LIMITER, input.clientSessionId);
+    return internalRequest(meetingStub(env, input.inviteToken), "/access", {
+      clientSessionId: input.clientSessionId,
+      currentMediaToken: input.currentMediaToken,
+      replaceMediaConnection: input.replaceMediaConnection,
+      trace,
+    });
+  }
+
+  if (url.pathname === `${brokerPath}/client-session/cleanup`) {
+    requireTrustedCaller(request, env.CHALK_APP_ORIGIN);
+    const input = clientSessionCredentialInput(body);
+    await enforceRateLimit(env.SESSION_RATE_LIMITER, input.clientSessionId);
+    return internalRequest(meetingStub(env, input.inviteToken), "/cleanup", { clientSessionId: input.clientSessionId, trace });
+  }
+
+  requireOrigin(request, env.CHALK_APP_ORIGIN);
   const session = cookieValue(request.headers.get("cookie"));
   if (!session) throw new BrokerError(401, "The browser session is missing or expired.");
   await enforceRateLimit(env.SESSION_RATE_LIMITER, session.browserSessionId);
@@ -53,11 +90,11 @@ async function route(request: Request, env: WorkerEnv, url: URL): Promise<Respon
 
   if (url.pathname === `${brokerPath}/access`) {
     const input = accessInput(body);
-    return internalRequest(stub, "/access", { ...input, browserSessionId: session.browserSessionId, trace });
+    return internalRequest(stub, "/access", { ...input, clientSessionId: session.browserSessionId, trace });
   }
   if (url.pathname === `${brokerPath}/cleanup`) {
     emptyInput(body);
-    const brokerResponse = await internalRequest(stub, "/cleanup", { browserSessionId: session.browserSessionId, trace });
+    const brokerResponse = await internalRequest(stub, "/cleanup", { clientSessionId: session.browserSessionId, trace });
     const headers = new Headers(brokerResponse.headers);
     if (brokerResponse.ok) headers.set("set-cookie", expiredSessionCookie());
     return new Response(brokerResponse.body, { status: brokerResponse.status, headers: privateHeaders(Object.fromEntries(headers)) });

@@ -1,7 +1,7 @@
-import type { ParticipantState } from "../../internal/core";
+import type { NativeParticipantState } from "../../ui/native-types";
 
-export type RoomParticipant = ParticipantState["participants"][number];
-export type NativeMeetingPanelName = "chat" | "participants" | "settings" | "transcripts" | "whiteboard";
+export type RoomParticipant = NativeParticipantState["participants"][number];
+export type NativeMeetingPanelName = "chat" | "participants" | "whiteboard";
 
 export interface NativeMeetingBottomDockProps {
   simulatorMediaDisabled: boolean;
@@ -20,31 +20,4 @@ export interface NativeMeetingBottomDockProps {
   onOpenReactions?: () => void;
   onOpenMore: () => void;
   onLeave: () => void;
-}
-
-export interface NativeMeetingActionsSheetProps {
-  visible: boolean;
-  isHandRaised: boolean;
-  isScreenSharing: boolean;
-  chatEnabled: boolean;
-  reactionsEnabled: boolean;
-  peopleEnabled: boolean;
-  transcriptsEnabled: boolean;
-  whiteboardEnabled: boolean;
-  screenShareEnabled: boolean;
-  settingsEnabled: boolean;
-  chatUnreadCount: number;
-  participantCount: number;
-  raisedHandCount: number;
-  onClose: () => void;
-  onInviteParticipants: () => void;
-  onOpenChat: () => void;
-  onOpenParticipants: () => void;
-  onToggleHand: () => void;
-  onOpenReactions: () => void;
-  onOpenWhiteboard: () => void;
-  onToggleScreenShare: () => void;
-  onOpenTranscripts: () => void;
-  onOpenSettings: () => void;
-  onLeaveMeeting: () => void;
 }
