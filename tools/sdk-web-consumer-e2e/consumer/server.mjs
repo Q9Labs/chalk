@@ -257,6 +257,7 @@ function sendChat(socket, actor, request) {
     participantSessionId: actor,
     displayName: actor,
     text: String(request.payload?.text),
+    attachments: [],
     createdAt: new Date().toISOString(),
   };
   chatMessages.push(message);

@@ -118,3 +118,6 @@
 - The packed-browser workflow also exposed an existing workspace invocation
   error: root `pnpm exec` could not resolve the client-owned Playwright binary.
   Both CI-only failures were patched for a focused rerun.
+- The rerun proved Docker topology and evidence upload green. Packed-browser
+  verification then reached room actions and exposed stale fixture data: its
+  chat-message wire object omitted the now-required empty `attachments` array.
