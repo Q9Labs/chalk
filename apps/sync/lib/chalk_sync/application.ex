@@ -9,6 +9,7 @@ defmodule ChalkSync.Application do
   def start(_type, _args) do
     children =
       [
+        %{id: :pg, start: {:pg, :start_link, []}},
         {Registry, keys: :unique, name: ChalkSync.Rooms.Registry},
         {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Rooms.Supervisor},
         {Registry, keys: :unique, name: ChalkSync.Sessions.Registry},

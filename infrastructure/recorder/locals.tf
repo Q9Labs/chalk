@@ -15,6 +15,14 @@ locals {
   render_image_digest        = coalesce(var.render_image_digest, "")
   capture_bootstrap_endpoint = coalesce(var.capture_bootstrap_endpoint, "")
   render_bootstrap_endpoint  = coalesce(var.render_bootstrap_endpoint, "")
+  whiteboard_cors_allowed_headers = [
+    "Content-Type",
+    "If-None-Match",
+    "x-amz-checksum-sha256",
+    "x-amz-meta-chalk-attachment-id",
+    "x-amz-meta-chalk-upload-id",
+    "x-amz-meta-chalk-sha256",
+  ]
 }
 
 check "capture_admission_ceiling" {
@@ -53,6 +61,18 @@ check "production_bucket_adoption_contract" {
   assert {
     condition     = var.environment == "staging" || (var.recording_bucket_name != null && var.recording_bucket_import_id != null && var.recording_bucket_adoption_plan_digest != null)
     error_message = "production requires an explicit existing R2 bucket name, inventory import ID, and no-delete adoption-plan digest before planning."
+  }
+}
+
+check "whiteboard_cors_contract" {
+  assert {
+    condition     = !var.enable_apply || length(var.whiteboard_allowed_origins) > 0
+    error_message = "recorder apply requires at least one exact whiteboard browser origin for R2 CORS."
+  }
+
+  assert {
+    condition     = contains(local.whiteboard_cors_allowed_headers, "x-amz-meta-chalk-attachment-id")
+    error_message = "R2 CORS must allow the signed chat attachment identity metadata header."
   }
 }
 

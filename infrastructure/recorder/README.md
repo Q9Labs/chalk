@@ -36,6 +36,13 @@ explicit generated name. All backend configuration and credentials are
 provided outside this tree; `gate.sh` always initializes with the backend
 disabled and never applies a provider.
 
+The private bucket also serves browser-authorized whiteboard files through
+short-lived presigned URLs. Every apply must set `whiteboard_allowed_origins`
+to the exact web origins for that environment. The managed CORS rule permits
+only `GET`, `PUT`, the four headers signed by whiteboard-v1, and the SHA-256
+checksum and attachment identity headers used by chat uploads; it does not make
+the bucket public. Wildcard origins, paths, and trailing slashes are rejected.
+
 The reference bootstrap templates describe the external handshake only. A
 reconciler must deliver a signed, one-time assertion bound to environment,
 role, release, intended Droplet, region, and boot generation, verify live

@@ -582,14 +582,14 @@ func TestReady(t *testing.T) {
 	if body.Dependencies["postgres"] != "ok" {
 		t.Fatalf("postgres readiness = %q, want ok", body.Dependencies["postgres"])
 	}
-	if body.Capabilities["integrations"] != "enabled" || body.Capabilities["transcription"] != "disabled" {
-		t.Fatalf("capabilities = %#v, want integrations enabled and transcription disabled", body.Capabilities)
+	if body.Capabilities["integrations"] != "enabled" || body.Capabilities["transcription"] != "disabled" || body.Capabilities["whiteboard_files"] != "disabled" {
+		t.Fatalf("capabilities = %#v, want integrations enabled and transcription and whiteboard files disabled", body.Capabilities)
 	}
 }
 
 func TestReadyUnavailable(t *testing.T) {
 	res := requestWithOptions(t, http.MethodGet, "/readyz", httpapi.Options{
-		Capabilities: httpapi.CapabilityStatus{Transcription: true},
+		Capabilities: httpapi.CapabilityStatus{Transcription: true, WhiteboardFiles: true},
 		Readiness: readinessCheckerFunc(func(context.Context) error {
 			return errors.New("database unavailable")
 		}),
@@ -606,8 +606,8 @@ func TestReadyUnavailable(t *testing.T) {
 	if body.Dependencies["postgres"] != "unavailable" {
 		t.Fatalf("postgres readiness = %q, want unavailable", body.Dependencies["postgres"])
 	}
-	if body.Capabilities["integrations"] != "disabled" || body.Capabilities["transcription"] != "enabled" {
-		t.Fatalf("capabilities = %#v, want integrations disabled and transcription enabled", body.Capabilities)
+	if body.Capabilities["integrations"] != "disabled" || body.Capabilities["transcription"] != "enabled" || body.Capabilities["whiteboard_files"] != "enabled" {
+		t.Fatalf("capabilities = %#v, want integrations disabled and transcription and whiteboard files enabled", body.Capabilities)
 	}
 }
 

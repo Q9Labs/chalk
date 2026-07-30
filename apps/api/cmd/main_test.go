@@ -22,7 +22,7 @@ func TestApplyCapabilityProfileDisablesOptionalRouteServices(t *testing.T) {
 
 	applyCapabilityProfile(&options, config.CapabilityConfig{})
 
-	if options.Capabilities.Integrations || options.Capabilities.Transcription {
+	if options.Capabilities.Integrations || options.Capabilities.Transcription || options.Capabilities.WhiteboardFiles {
 		t.Fatalf("capabilities = %#v, want disabled", options.Capabilities)
 	}
 	if options.Integrations != nil || options.Transcripts != nil || options.TranscriptArtifacts != nil || options.TranscriptWorker != nil || options.WorkloadAuthorizer != nil || options.ChunkAuthority != nil || options.ManifestAuthority != nil || options.ResultAuthority != nil || options.CleanupWorker != nil || options.CleanupDeleteAuthority != nil || options.FinalizerWorker != nil || options.FinalizerAuthority != nil {
@@ -33,9 +33,9 @@ func TestApplyCapabilityProfileDisablesOptionalRouteServices(t *testing.T) {
 func TestApplyCapabilityProfilePreservesEnabledRouteServices(t *testing.T) {
 	options := populatedCapabilityOptions()
 
-	applyCapabilityProfile(&options, config.CapabilityConfig{Integrations: true, Transcription: true})
+	applyCapabilityProfile(&options, config.CapabilityConfig{Integrations: true, Transcription: true, WhiteboardFiles: true})
 
-	if !options.Capabilities.Integrations || !options.Capabilities.Transcription {
+	if !options.Capabilities.Integrations || !options.Capabilities.Transcription || !options.Capabilities.WhiteboardFiles {
 		t.Fatalf("capabilities = %#v, want enabled", options.Capabilities)
 	}
 	if options.Integrations == nil || options.Transcripts == nil || options.TranscriptArtifacts == nil || options.TranscriptWorker == nil || options.WorkloadAuthorizer == nil || options.ChunkAuthority == nil || options.ManifestAuthority == nil || options.ResultAuthority == nil || options.CleanupWorker == nil || options.CleanupDeleteAuthority == nil || options.FinalizerWorker == nil || options.FinalizerAuthority == nil {

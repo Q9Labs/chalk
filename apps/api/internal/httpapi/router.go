@@ -31,8 +31,9 @@ type MeetingCredentialVerifier interface {
 }
 
 type CapabilityStatus struct {
-	Integrations  bool
-	Transcription bool
+	Integrations    bool
+	Transcription   bool
+	WhiteboardFiles bool
 }
 
 type Options struct {
@@ -187,8 +188,9 @@ func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus) {
 
 func capabilityReadiness(capabilities CapabilityStatus) map[string]string {
 	return map[string]string{
-		"integrations":  enabledStatus(capabilities.Integrations),
-		"transcription": enabledStatus(capabilities.Transcription),
+		"integrations":     enabledStatus(capabilities.Integrations),
+		"transcription":    enabledStatus(capabilities.Transcription),
+		"whiteboard_files": enabledStatus(capabilities.WhiteboardFiles),
 	}
 }
 

@@ -225,3 +225,22 @@ resource "cloudflare_r2_bucket_lifecycle" "recording" {
     },
   ]
 }
+
+resource "cloudflare_r2_bucket_cors" "whiteboard" {
+  count       = var.enable_apply ? 1 : 0
+  account_id  = var.cloudflare_account_id
+  bucket_name = cloudflare_r2_bucket.recording[0].name
+
+  rules = [
+    {
+      id = "whiteboard-v1-browser-files"
+      allowed = {
+        origins = var.whiteboard_allowed_origins
+        methods = ["GET", "PUT"]
+        headers = local.whiteboard_cors_allowed_headers
+      }
+      expose_headers  = ["ETag"]
+      max_age_seconds = 3600
+    }
+  ]
+}

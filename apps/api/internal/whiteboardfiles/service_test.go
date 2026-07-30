@@ -10,7 +10,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestInitiatePreservesExactSignedHeaders(t *testing.T) {
+func TestInitiatePreservesBrowserSettableSignedHeaders(t *testing.T) {
 	repository := &repositoryStub{}
 	objects := &objectStoreStub{
 		uploadURL: objectstorage.SignedURL{
@@ -18,7 +18,6 @@ func TestInitiatePreservesExactSignedHeaders(t *testing.T) {
 			ExpiresAt: time.Date(2026, time.July, 29, 12, 10, 0, 0, time.UTC),
 			SignedHeader: map[string][]string{
 				"Content-Type":     {"image/png"},
-				"Content-Length":   {"32"},
 				"If-None-Match":    {"*"},
 				"X-Amz-Meta-Chalk": {"value"},
 			},

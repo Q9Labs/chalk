@@ -2,6 +2,7 @@ package objectstorage
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"mime"
@@ -24,6 +25,8 @@ var (
 	ErrInvalidObjectBody    = errors.New("invalid object body")
 	ErrInvalidObjectSize    = errors.New("invalid object size")
 	ErrInvalidMetadata      = errors.New("invalid object metadata")
+	ErrInvalidChecksum      = errors.New("invalid object checksum")
+	ErrInvalidDisposition   = errors.New("invalid content disposition")
 	ErrInvalidURLExpiration = errors.New("invalid object url expiration")
 	ErrStoreUnavailable     = errors.New("object store unavailable")
 	ErrObjectNotFound       = errors.New("object not found")
@@ -56,17 +59,19 @@ type PutObjectInput struct {
 }
 
 type CreateUploadURLInput struct {
-	Key           string
-	ContentType   string
-	ContentLength int64
-	ExpiresIn     time.Duration
-	Metadata      map[string]string
-	IfNoneMatch   bool
+	Key            string
+	ContentType    string
+	ContentLength  int64
+	ChecksumSHA256 string
+	ExpiresIn      time.Duration
+	Metadata       map[string]string
+	IfNoneMatch    bool
 }
 
 type CreateDownloadURLInput struct {
-	Key       string
-	ExpiresIn time.Duration
+	Key                string
+	ContentDisposition string
+	ExpiresIn          time.Duration
 }
 
 type CreateDeleteURLInput struct {
@@ -235,6 +240,12 @@ func normalizeCreateUploadURLInput(input *CreateUploadURLInput) error {
 	if input.ContentLength < 0 || (input.IfNoneMatch && input.ContentLength == 0) {
 		return ErrInvalidObjectSize
 	}
+	if input.ChecksumSHA256 != "" {
+		checksum, err := base64.StdEncoding.Strict().DecodeString(input.ChecksumSHA256)
+		if err != nil || len(checksum) != 32 {
+			return ErrInvalidChecksum
+		}
+	}
 	if err := validateMetadata(input.Metadata); err != nil {
 		return err
 	}
@@ -251,6 +262,10 @@ func normalizeCreateDownloadURLInput(input *CreateDownloadURLInput) error {
 
 	if input.ExpiresIn <= 0 {
 		return ErrInvalidURLExpiration
+	}
+	input.ContentDisposition = strings.TrimSpace(input.ContentDisposition)
+	if strings.ContainsAny(input.ContentDisposition, "\r\n") {
+		return ErrInvalidDisposition
 	}
 
 	return nil

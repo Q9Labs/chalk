@@ -2,9 +2,11 @@ package r2
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"testing"
 	"time"
@@ -181,21 +183,26 @@ func TestStoreCreateUploadURL(t *testing.T) {
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	presign := &presignClientStub{
 		putRequest: &v4.PresignedHTTPRequest{
-			Method:       http.MethodPut,
-			URL:          "https://storage.test/upload",
-			SignedHeader: http.Header{"Content-Type": []string{"image/png"}},
+			Method: http.MethodPut,
+			URL:    "https://storage.test/upload",
+			SignedHeader: http.Header{
+				"Content-Length": []string{"2048"},
+				"Content-Type":   []string{"image/png"},
+				"Host":           []string{"storage.test"},
+			},
 		},
 	}
 	store := newStore("chalk-media", nil, presign)
 	store.now = func() time.Time { return now }
 
 	url, err := store.CreateUploadURL(context.Background(), objectstorage.CreateUploadURLInput{
-		Key:           "tenants/tenant_123/images/avatar.png",
-		ContentType:   "image/png",
-		ContentLength: 2048,
-		ExpiresIn:     15 * time.Minute,
-		IfNoneMatch:   true,
-		Metadata:      map[string]string{"checksum": "sha256:value"},
+		Key:            "tenants/tenant_123/images/avatar.png",
+		ContentType:    "image/png",
+		ContentLength:  2048,
+		ChecksumSHA256: base64.StdEncoding.EncodeToString(make([]byte, 32)),
+		ExpiresIn:      15 * time.Minute,
+		IfNoneMatch:    true,
+		Metadata:       map[string]string{"checksum": "sha256:value"},
 	})
 	if err != nil {
 		t.Fatalf("create upload url: %v", err)
@@ -213,6 +220,9 @@ func TestStoreCreateUploadURL(t *testing.T) {
 	if aws.ToString(presign.putInput.ContentType) != "image/png" {
 		t.Fatalf("content type = %q, want image/png", aws.ToString(presign.putInput.ContentType))
 	}
+	if aws.ToString(presign.putInput.ChecksumSHA256) == "" {
+		t.Fatal("checksum was not mapped")
+	}
 	if aws.ToInt64(presign.putInput.ContentLength) != 2048 || aws.ToString(presign.putInput.IfNoneMatch) != "*" {
 		t.Fatalf("immutable upload constraints = %#v", presign.putInput)
 	}
@@ -221,6 +231,49 @@ func TestStoreCreateUploadURL(t *testing.T) {
 	}
 	if len(url.SignedHeader["Content-Type"]) != 1 {
 		t.Fatalf("signed headers = %#v, want content type header", url.SignedHeader)
+	}
+	headers := http.Header(url.SignedHeader)
+	if headers.Get("Host") != "" || headers.Get("Content-Length") != "" {
+		t.Fatalf("browser-forbidden signed headers leaked: %#v", url.SignedHeader)
+	}
+}
+
+func TestStoreCreateUploadURLReturnsOnlyBrowserSettableHeaders(t *testing.T) {
+	store, err := NewStore(config.R2Config{
+		AccessKeyID: "access-key", Bucket: "chalk-media",
+		Endpoint: "https://storage.chalk.test", SecretAccessKey: "secret-key",
+		RequestTimeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	signed, err := store.CreateUploadURL(context.Background(), objectstorage.CreateUploadURLInput{
+		Key: "whiteboard-v1/uploads/upload-id", ContentType: "image/png",
+		ContentLength: 2048, ChecksumSHA256: base64.StdEncoding.EncodeToString(make([]byte, 32)),
+		ExpiresIn: time.Minute, IfNoneMatch: true,
+		Metadata: map[string]string{
+			"chalk-upload-id": "upload-id",
+			"chalk-sha256":    strings.Repeat("a", 64),
+		},
+	})
+	if err != nil {
+		t.Fatalf("create upload URL: %v", err)
+	}
+
+	for _, name := range []string{"Host", "Content-Length"} {
+		if http.Header(signed.SignedHeader).Get(name) != "" {
+			t.Fatalf("%s leaked into browser instructions: %#v", name, signed.SignedHeader)
+		}
+	}
+	for _, name := range []string{"Content-Type", "If-None-Match", "X-Amz-Meta-Chalk-Upload-Id", "X-Amz-Meta-Chalk-Sha256"} {
+		if http.Header(signed.SignedHeader).Get(name) == "" {
+			t.Fatalf("%s missing from browser instructions: %#v", name, signed.SignedHeader)
+		}
+	}
+	parsed, err := neturl.Parse(signed.URL)
+	if err != nil || parsed.Query().Get("X-Amz-Checksum-Sha256") == "" {
+		t.Fatalf("checksum missing from presigned URL: %q", signed.URL)
 	}
 }
 
@@ -234,8 +287,9 @@ func TestStoreCreateDownloadURL(t *testing.T) {
 	store := newStore("chalk-media", nil, presign)
 
 	url, err := store.CreateDownloadURL(context.Background(), objectstorage.CreateDownloadURLInput{
-		Key:       "tenants/tenant_123/files/report.pdf",
-		ExpiresIn: 15 * time.Minute,
+		Key:                "tenants/tenant_123/files/report.pdf",
+		ContentDisposition: `attachment; filename="report.pdf"`,
+		ExpiresIn:          15 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("create download url: %v", err)
@@ -246,6 +300,9 @@ func TestStoreCreateDownloadURL(t *testing.T) {
 	}
 	if aws.ToString(presign.getInput.Key) != "tenants/tenant_123/files/report.pdf" {
 		t.Fatalf("key = %q, want input key", aws.ToString(presign.getInput.Key))
+	}
+	if aws.ToString(presign.getInput.ResponseContentDisposition) != `attachment; filename="report.pdf"` {
+		t.Fatalf("response content disposition = %q", aws.ToString(presign.getInput.ResponseContentDisposition))
 	}
 }
 

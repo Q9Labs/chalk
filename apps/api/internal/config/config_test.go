@@ -109,7 +109,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Auth.SessionTTL != config.DefaultSessionTTL {
 		t.Fatalf("session ttl = %s, want %s", cfg.Auth.SessionTTL, config.DefaultSessionTTL)
 	}
-	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription {
+	if cfg.Capabilities.Integrations || cfg.Capabilities.Transcription || cfg.Capabilities.WhiteboardFiles {
 		t.Fatalf("local capabilities = %#v, want disabled", cfg.Capabilities)
 	}
 	if cfg.Database.URL != config.DefaultDatabaseURL {
@@ -838,8 +838,48 @@ func TestLoadRejectsIncompleteEnabledTranscription(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsIncompleteEnabledWhiteboardFiles(t *testing.T) {
+	t.Setenv(config.WhiteboardFilesEnabled, "true")
+	t.Setenv(config.R2Bucket, "chalk-whiteboard-test")
+	t.Setenv(config.R2Endpoint, "http://localhost:9000")
+	t.Setenv(config.R2AccessKeyID, "access-key")
+	t.Setenv(config.R2SecretAccessKey, "secret-key")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), config.SyncTokenPrivateKey) {
+		t.Fatalf("error = %v, want missing Sync participant auth rejection", err)
+	}
+}
+
+func TestLoadRejectsEnabledWhiteboardFilesWithoutObjectStorage(t *testing.T) {
+	t.Setenv(config.WhiteboardFilesEnabled, "true")
+	setSyncTokenConfig(t)
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), config.R2Bucket) {
+		t.Fatalf("error = %v, want missing R2 rejection", err)
+	}
+}
+
+func TestLoadAcceptsLocalWhiteboardFilesWithCustomObjectStorage(t *testing.T) {
+	t.Setenv(config.WhiteboardFilesEnabled, "true")
+	t.Setenv(config.R2Bucket, "chalk-whiteboard-test")
+	t.Setenv(config.R2Endpoint, "http://localhost:9000")
+	t.Setenv(config.R2AccessKeyID, "access-key")
+	t.Setenv(config.R2SecretAccessKey, "secret-key")
+	setSyncTokenConfig(t)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Capabilities.WhiteboardFiles || cfg.R2.Endpoint != "http://localhost:9000" {
+		t.Fatalf("whiteboard file config = capabilities %#v, R2 %#v", cfg.Capabilities, cfg.R2)
+	}
+}
+
 func TestLoadRejectsInvalidCapabilityFlags(t *testing.T) {
-	for _, name := range []string{config.IntegrationsEnabled, config.TranscriptionEnabled} {
+	for _, name := range []string{config.IntegrationsEnabled, config.TranscriptionEnabled, config.WhiteboardFilesEnabled} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(name, "sometimes")
 			_, err := config.Load()
@@ -880,6 +920,18 @@ func setTranscriptionConfig(t *testing.T) {
 	t.Setenv(config.R2Endpoint, "https://storage.chalk.test")
 	t.Setenv(config.R2AccessKeyID, "access-key")
 	t.Setenv(config.R2SecretAccessKey, "secret-key")
+}
+
+func setSyncTokenConfig(t *testing.T) {
+	t.Helper()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.SyncTokenAudience, "chalk-sync")
+	t.Setenv(config.SyncTokenIssuer, "https://api.chalk.test")
+	t.Setenv(config.SyncTokenKeyID, "launch-1")
+	t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(privateKey))
 }
 
 func TestLoadRejectsInvalidDatabasePoolSettings(t *testing.T) {

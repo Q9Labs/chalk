@@ -521,8 +521,9 @@ func r2Configured(cfg config.R2Config) bool {
 
 func applyCapabilityProfile(options *httpapi.Options, capabilities config.CapabilityConfig) {
 	options.Capabilities = httpapi.CapabilityStatus{
-		Integrations:  capabilities.Integrations,
-		Transcription: capabilities.Transcription,
+		Integrations:    capabilities.Integrations,
+		Transcription:   capabilities.Transcription,
+		WhiteboardFiles: capabilities.WhiteboardFiles,
 	}
 	if !capabilities.Integrations {
 		options.Integrations = nil

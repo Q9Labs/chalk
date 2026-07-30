@@ -85,6 +85,7 @@ const (
 	TranscriptionControlAudience    = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
 	TranscriptionEnabled            = "CHALK_TRANSCRIPTION_ENABLED"
+	WhiteboardFilesEnabled          = "CHALK_WHITEBOARD_FILES_ENABLED"
 
 	ResendAPIKey                    = "CHALK_RESEND_API_KEY"
 	ResendTimeoutMS                 = "CHALK_RESEND_TIMEOUT_MS"
@@ -135,8 +136,9 @@ type APIConfig struct {
 }
 
 type CapabilityConfig struct {
-	Integrations  bool
-	Transcription bool
+	Integrations    bool
+	Transcription   bool
+	WhiteboardFiles bool
 }
 
 type DatabaseConfig struct {
@@ -429,6 +431,11 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 	}
+	if capabilities.WhiteboardFiles {
+		if err := validateWhiteboardFilesConfig(syncToken, r2Config); err != nil {
+			return Config{}, err
+		}
+	}
 
 	return Config{
 		API: APIConfig{
@@ -511,7 +518,11 @@ func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 	if err != nil {
 		return CapabilityConfig{}, err
 	}
-	return CapabilityConfig{Integrations: integrations, Transcription: transcription}, nil
+	whiteboardFiles, err := envStrictBool(WhiteboardFilesEnabled, false)
+	if err != nil {
+		return CapabilityConfig{}, err
+	}
+	return CapabilityConfig{Integrations: integrations, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
 }
 
 func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config) error {
@@ -521,8 +532,22 @@ func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config)
 	if strings.TrimSpace(transcription.DispatcherFunction) == "" {
 		return fmt.Errorf("%s must be set when %s=true", TranscriptionDispatcherFunction, TranscriptionEnabled)
 	}
+	if err := validateR2Config(r2, TranscriptionEnabled); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateWhiteboardFilesConfig(syncToken SyncTokenConfig, r2 R2Config) error {
+	if len(syncToken.PrivateKey) == 0 {
+		return fmt.Errorf("%s, %s, %s, and %s must be set when %s=true", SyncTokenAudience, SyncTokenIssuer, SyncTokenKeyID, SyncTokenPrivateKey, WhiteboardFilesEnabled)
+	}
+	return validateR2Config(r2, WhiteboardFilesEnabled)
+}
+
+func validateR2Config(r2 R2Config, capability string) error {
 	if strings.TrimSpace(r2.Bucket) == "" || (strings.TrimSpace(r2.AccountID) == "" && strings.TrimSpace(r2.Endpoint) == "") || strings.TrimSpace(r2.AccessKeyID) == "" || strings.TrimSpace(r2.SecretAccessKey) == "" {
-		return fmt.Errorf("%s, either %s or %s, %s, and %s must be set when %s=true", R2Bucket, R2AccountID, R2Endpoint, R2AccessKeyID, R2SecretAccessKey, TranscriptionEnabled)
+		return fmt.Errorf("%s, either %s or %s, %s, and %s must be set when %s=true", R2Bucket, R2AccountID, R2Endpoint, R2AccessKeyID, R2SecretAccessKey, capability)
 	}
 	return nil
 }

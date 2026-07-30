@@ -83,6 +83,40 @@ digest_b="$(printf 'b%.0s' {1..64})"
   --rendered-root "${fixture_root}/rendered" \
   --allow-dirty >/dev/null
 
+cp -R "${fixture_root}/env" "${fixture_root}/whiteboard-env"
+sed -i.bak \
+  -e '/^CHALK_R2_ACCOUNT_ID=/d' \
+  -e '/^CHALK_R2_ACCESS_KEY_ID=/d' \
+  -e '/^CHALK_R2_SECRET_ACCESS_KEY=/d' \
+  -e '/^CHALK_R2_BUCKET=/d' \
+  "${fixture_root}/whiteboard-env/api.env"
+rm "${fixture_root}/whiteboard-env/api.env.bak"
+sed -i.bak 's/^CHALK_WHITEBOARD_FILES_ENABLED=false$/CHALK_WHITEBOARD_FILES_ENABLED=true/' \
+  "${fixture_root}/whiteboard-env/api.env"
+rm "${fixture_root}/whiteboard-env/api.env.bak"
+if "${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/whiteboard-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null 2>&1; then
+  echo "enabled whiteboard files were accepted without R2 configuration" >&2
+  exit 1
+fi
+printf '%s\n' \
+  'CHALK_R2_ACCOUNT_ID=test-account' \
+  'CHALK_R2_ACCESS_KEY_ID=test-access-key' \
+  'CHALK_R2_SECRET_ACCESS_KEY=test-secret-key' \
+  'CHALK_R2_BUCKET=chalk-whiteboard-test' >>"${fixture_root}/whiteboard-env/api.env"
+"${managed_root}/scripts/validate-runtime" \
+  --env-root "${fixture_root}/whiteboard-env" \
+  --secret-root "${fixture_root}/secrets" \
+  --manifest "${fixture_root}/release-manifest.json" \
+  --sync-proof "${fixture_root}/sync-proof.json" \
+  --rendered-root "${fixture_root}/rendered" \
+  --allow-dirty >/dev/null
+
 cp "${managed_root}/contracts/planetscale-sync-proof.example.json" "${fixture_root}/unverified-sync-proof.json"
 chmod 600 "${fixture_root}/unverified-sync-proof.json"
 if "${managed_root}/scripts/validate-runtime" \

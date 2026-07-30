@@ -2,6 +2,7 @@ package objectstorage_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"strings"
@@ -78,18 +79,22 @@ func TestServiceCreateUploadURLPreservesImmutableUploadConstraints(t *testing.T)
 	service := objectstorage.NewService(store)
 
 	_, err := service.CreateUploadURL(context.Background(), objectstorage.CreateUploadURLInput{
-		Key:           "tenants/tenant_123/recordings/bundles/random-key",
-		ContentType:   "application/octet-stream",
-		ContentLength: 4096,
-		ExpiresIn:     time.Minute,
-		IfNoneMatch:   true,
-		Metadata:      map[string]string{"checksum": "sha256:value", "attempt": "2"},
+		Key:            "tenants/tenant_123/recordings/bundles/random-key",
+		ContentType:    "application/octet-stream",
+		ContentLength:  4096,
+		ChecksumSHA256: base64.StdEncoding.EncodeToString(make([]byte, 32)),
+		ExpiresIn:      time.Minute,
+		IfNoneMatch:    true,
+		Metadata:       map[string]string{"checksum": "sha256:value", "attempt": "2"},
 	})
 	if err != nil {
 		t.Fatalf("create upload url: %v", err)
 	}
 	if store.uploadInput.ContentLength != 4096 || !store.uploadInput.IfNoneMatch {
 		t.Fatalf("upload constraints = %#v", store.uploadInput)
+	}
+	if store.uploadInput.ChecksumSHA256 == "" {
+		t.Fatal("upload checksum was not preserved")
 	}
 	if store.uploadInput.Metadata["attempt"] != "2" {
 		t.Fatalf("metadata = %#v", store.uploadInput.Metadata)
@@ -104,8 +109,9 @@ func TestServiceCreateDownloadURL(t *testing.T) {
 	service := objectstorage.NewService(store)
 
 	url, err := service.CreateDownloadURL(context.Background(), objectstorage.CreateDownloadURLInput{
-		Key:       " tenants/tenant_123/videos/recording.mp4 ",
-		ExpiresIn: expiresIn,
+		Key:                " tenants/tenant_123/videos/recording.mp4 ",
+		ContentDisposition: ` attachment; filename="recording.mp4" `,
+		ExpiresIn:          expiresIn,
 	})
 	if err != nil {
 		t.Fatalf("create download url: %v", err)
@@ -116,6 +122,9 @@ func TestServiceCreateDownloadURL(t *testing.T) {
 	}
 	if store.downloadInput.Key != "tenants/tenant_123/videos/recording.mp4" {
 		t.Fatalf("key = %q, want canonical key", store.downloadInput.Key)
+	}
+	if store.downloadInput.ContentDisposition != `attachment; filename="recording.mp4"` {
+		t.Fatalf("content disposition = %q", store.downloadInput.ContentDisposition)
 	}
 }
 
@@ -217,6 +226,27 @@ func TestServiceRejectsInvalidInput(t *testing.T) {
 				return err
 			},
 			want: objectstorage.ErrInvalidObjectSize,
+		},
+		{
+			name: "invalid upload checksum",
+			run: func(service objectstorage.Service) error {
+				_, err := service.CreateUploadURL(context.Background(), objectstorage.CreateUploadURLInput{
+					Key: "tenants/tenant_123/files/report.pdf", ContentType: "application/pdf",
+					ContentLength: 1, ChecksumSHA256: "not-base64", ExpiresIn: time.Minute,
+				})
+				return err
+			},
+			want: objectstorage.ErrInvalidChecksum,
+		},
+		{
+			name: "unsafe download disposition",
+			run: func(service objectstorage.Service) error {
+				_, err := service.CreateDownloadURL(context.Background(), objectstorage.CreateDownloadURLInput{
+					Key: "tenants/tenant_123/files/report.pdf", ContentDisposition: "attachment\r\nx-injected: true", ExpiresIn: time.Minute,
+				})
+				return err
+			},
+			want: objectstorage.ErrInvalidDisposition,
 		},
 		{
 			name: "unsafe metadata",

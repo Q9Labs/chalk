@@ -180,12 +180,13 @@ func (s Store) CreateUploadURL(ctx context.Context, input objectstorage.CreateUp
 	}
 
 	request, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
-		Bucket:        aws.String(s.bucket),
-		Key:           aws.String(input.Key),
-		ContentType:   aws.String(input.ContentType),
-		ContentLength: positiveInt64(input.ContentLength),
-		IfNoneMatch:   conditionalCreate(input.IfNoneMatch),
-		Metadata:      input.Metadata,
+		Bucket:         aws.String(s.bucket),
+		Key:            aws.String(input.Key),
+		ChecksumSHA256: stringPtr(input.ChecksumSHA256),
+		ContentType:    aws.String(input.ContentType),
+		ContentLength:  positiveInt64(input.ContentLength),
+		IfNoneMatch:    conditionalCreate(input.IfNoneMatch),
+		Metadata:       input.Metadata,
 	}, presignExpires(input.ExpiresIn))
 	if err != nil {
 		return objectstorage.SignedURL{}, providerError("presign r2 upload", err)
@@ -203,8 +204,9 @@ func (s Store) CreateDownloadURL(ctx context.Context, input objectstorage.Create
 	}
 
 	request, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(input.Key),
+		Bucket:                     aws.String(s.bucket),
+		Key:                        aws.String(input.Key),
+		ResponseContentDisposition: stringPtr(input.ContentDisposition),
 	}, presignExpires(input.ExpiresIn))
 	if err != nil {
 		return objectstorage.SignedURL{}, providerError("presign r2 download", err)
@@ -253,7 +255,7 @@ func signedURL(request *v4.PresignedHTTPRequest, signedAt time.Time, expiresIn t
 		URL:          request.URL,
 		SignedAt:     signedAt,
 		ExpiresAt:    signedAt.Add(expiresIn),
-		SignedHeader: cloneHeader(request.SignedHeader),
+		SignedHeader: clientSignedHeaders(request.SignedHeader),
 	}
 }
 
@@ -296,14 +298,20 @@ func objectNotFound(err error) bool {
 	}
 }
 
-func cloneHeader(header http.Header) map[string][]string {
+func clientSignedHeaders(header http.Header) map[string][]string {
 	if len(header) == 0 {
 		return nil
 	}
 
 	values := make(map[string][]string, len(header))
 	for key, entry := range header {
+		if strings.EqualFold(key, "Host") || strings.EqualFold(key, "Content-Length") {
+			continue
+		}
 		values[key] = append([]string(nil), entry...)
+	}
+	if len(values) == 0 {
+		return nil
 	}
 	return values
 }
