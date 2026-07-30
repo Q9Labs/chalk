@@ -121,3 +121,7 @@
 - The rerun proved Docker topology and evidence upload green. Packed-browser
   verification then reached room actions and exposed stale fixture data: its
   chat-message wire object omitted the now-required empty `attachments` array.
+- After that fixture fix, the dedicated Chromium/Firefox/WebKit workflow passed.
+  The generic smart gate still lacked a browser binary, so its packed-consumer
+  check was narrowed to Chromium and pointed at GitHub's installed Chrome; the
+  dedicated workflow retains the complete three-browser matrix.

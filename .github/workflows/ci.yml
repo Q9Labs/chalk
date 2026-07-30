@@ -65,6 +65,7 @@ jobs:
 
       - name: Run smart gate
         env:
+          CHALK_E2E_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
           GATE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
           GATE_HEAD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
