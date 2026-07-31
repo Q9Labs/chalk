@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertV3ControlSemantics, computeV3StateDigest, optimisticV3Control, V3ReplicaError } from "./v3-reducer";
 import type { V3ControlState } from "./v3-types";
 
@@ -28,6 +28,13 @@ describe("SyncEngine v3 reducer", () => {
 
     const reversed = { ...durable, participants: [...durable.participants].reverse() };
     expect(await computeV3StateDigest(reversed)).toBe(await computeV3StateDigest(durable));
+  });
+
+  it("verifies state without requiring Web Crypto from the runtime", async () => {
+    const webCryptoDigest = vi.spyOn(globalThis.crypto.subtle, "digest").mockRejectedValue(new Error("Web Crypto is unavailable"));
+
+    await expect(computeV3StateDigest(controlState())).resolves.toMatch(/^[0-9a-f]{64}$/u);
+    expect(webCryptoDigest).not.toHaveBeenCalled();
   });
 });
 

@@ -68,6 +68,33 @@ export function createNativeTelemetry(journey: NativeTelemetryJourney): NativeTe
   };
 }
 
+export function nativeSyncTransportCloseDiagnostic(event: { readonly code?: unknown; readonly reason?: unknown }): DiagnosticObservation {
+  const code = typeof event.code === "number" ? event.code : null;
+  const reason = typeof event.reason === "string" ? event.reason : "";
+  return {
+    category: "network",
+    code: code === null ? "sync_websocket_closed_unknown" : `sync_websocket_closed_${code}_${syncCloseReason(reason)}`,
+    phase: "signaling",
+    state: code === 1000 ? "observed" : "failed",
+  };
+}
+
+function syncCloseReason(reason: string): string {
+  switch (reason) {
+    case "authentication failed":
+    case "heartbeat timeout":
+    case "hello timeout":
+    case "invalid token":
+    case "policy violation":
+    case "room actions unsupported":
+    case "text frames only":
+    case "transport error":
+      return reason.replaceAll(" ", "_");
+    default:
+      return reason ? "other" : "none";
+  }
+}
+
 function isFailedWhiteboardMetric(name: string): boolean {
   return name.endsWith(".failure") || name.endsWith(".termination");
 }

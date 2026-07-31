@@ -218,6 +218,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Made resumed mobile client-session keys compatible with Expo SecureStore so
   Android and iOS can persist broker credentials without rejecting invite-token
   keys.
+- Made React Native Sync snapshot verification portable beyond Web Crypto,
+  preserved the primary join failure when durable cleanup could not be
+  confirmed, removed stale mobile broker credentials after failed joins, kept
+  bounded mobile telemetry local when no supported intake credential exists,
+  and added bounded native Sync WebSocket close diagnostics.
 - Kept incremental screen-share publication and remote-track discovery failures
   scoped to the affected media operation so an SFU signaling rejection no
   longer forces every participant into whole-session recovery. Screen retries

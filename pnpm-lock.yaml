@@ -425,6 +425,9 @@ importers:
 
   sdks/typescript/client:
     dependencies:
+      '@noble/hashes':
+        specifier: 2.2.0
+        version: 2.2.0
       effect:
         specifier: 4.0.0-beta.94
         version: 4.0.0-beta.94

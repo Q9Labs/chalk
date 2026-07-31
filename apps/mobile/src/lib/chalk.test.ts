@@ -15,7 +15,7 @@ vi.mock("@q9labsai/chalk-react-native/runtime", () => ({
   resolveAppRuntimeUrl: vi.fn(),
 }));
 
-import { loadClientSessionCredential, saveClientSessionCredential } from "./chalk";
+import { cleanupClientSession, loadClientSessionCredential, saveClientSessionCredential } from "./chalk";
 
 const inviteToken = "i".repeat(43);
 const credential = {
@@ -41,5 +41,25 @@ describe("client-session credential storage", () => {
     secureStore.getItemAsync.mockResolvedValueOnce(JSON.stringify(credential));
     await expect(loadClientSessionCredential(inviteToken)).resolves.toEqual(credential);
     expect(secureStore.getItemAsync).toHaveBeenCalledWith(`chalk_mobile_client_session_v2.${inviteToken}`);
+  });
+
+  it("clears the persisted credential when broker cleanup fails", async () => {
+    const cleanup = vi.fn().mockRejectedValue(new Error("cleanup failed"));
+    secureStore.getItemAsync.mockResolvedValueOnce(inviteToken);
+
+    await expect(
+      cleanupClientSession({
+        ...credential,
+        apiBaseURL: "https://api.chalkmeet.com",
+        syncURL: "wss://sync.chalkmeet.com/v3/sync",
+        meetingLink: `https://chalkmeet.com/#meeting=${inviteToken}`,
+        access: vi.fn(),
+        cleanup,
+      }),
+    ).rejects.toThrow("cleanup failed");
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(`chalk_mobile_client_session_v2.${inviteToken}`);
+    expect(secureStore.deleteItemAsync).toHaveBeenCalledWith("chalk_mobile_last_invite_v2");
   });
 });

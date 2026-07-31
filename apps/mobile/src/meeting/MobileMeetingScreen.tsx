@@ -4,7 +4,7 @@ import { NativeVideoConference, ChalkClientSessionError, createChalkClientSessio
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { clearClientSessionCredential, loadClientSessionCredential, saveClientSessionCredential, type LobbyRoute } from "../lib/chalk";
+import { cleanupClientSession, clearClientSessionCredential, loadClientSessionCredential, saveClientSessionCredential, type LobbyRoute } from "../lib/chalk";
 import { pickAndUploadChatAttachments } from "../lib/chat-attachments";
 import { createMobileTelemetry, flushAndDisposeTelemetry } from "../lib/telemetry";
 import { MOBILE_MEETING_FEATURES } from "./mobile-meeting-features";
@@ -20,15 +20,7 @@ export interface MeetingScreenProps {
 }
 
 export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsChange, onDiagnosticsError, onSessionChange }: MeetingScreenProps): React.JSX.Element {
-  const telemetryAccessRef = useRef<{ readonly apiBaseURL: string; readonly token: string } | undefined>(undefined);
-  const telemetry = useMemo(
-    () =>
-      createMobileTelemetry({
-        enabled: true,
-        getAccess: () => telemetryAccessRef.current,
-      }),
-    [],
-  );
+  const telemetry = useMemo(() => createMobileTelemetry({ enabled: true }), []);
   const journeyRef = useRef<TelemetryJourney | undefined>(undefined);
   const clientSessionRef = useRef<ChalkClientSession | null>(null);
   const [journey, setJourney] = useState<TelemetryJourney | undefined>(undefined);
@@ -81,14 +73,7 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
       clientSessionRef.current = clientSession;
       setMeetingLink(clientSession.meetingLink);
       await saveClientSessionCredential(clientSession);
-      const access: ChalkSessionAccessProvider = async (request) => {
-        const participantAccess = await clientSession.access(request);
-        telemetryAccessRef.current = {
-          apiBaseURL: clientSession.apiBaseURL,
-          token: participantAccess.sync.token,
-        };
-        return participantAccess;
-      };
+      const access: ChalkSessionAccessProvider = (request) => clientSession.access(request);
       return createChalkNativeSession({
         access,
         apiBaseURL: clientSession.apiBaseURL,
@@ -107,13 +92,24 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
     void telemetry.flush();
   }, [telemetry]);
 
+  const cleanupCurrentClientSession = useCallback(async () => {
+    const clientSession = clientSessionRef.current;
+    clientSessionRef.current = null;
+    if (clientSession) await cleanupClientSession(clientSession);
+  }, []);
+
   const handleError = useCallback(
     (error: { message: string }) => {
       terminalizeMobileMeetingJourney(journeyRef.current, "error");
       void telemetry.flush();
       onDiagnosticsError?.(error);
+      void cleanupCurrentClientSession().catch((cause: unknown) => {
+        onDiagnosticsError?.({
+          message: cause instanceof Error ? cause.message : "The client session could not be cleaned up",
+        });
+      });
     },
-    [onDiagnosticsError, telemetry],
+    [cleanupCurrentClientSession, onDiagnosticsError, telemetry],
   );
 
   const handleEnd = useCallback(() => {
@@ -121,28 +117,16 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
     void telemetry.flush();
   }, [telemetry]);
 
-  const cleanupClientSession = useCallback(async () => {
-    const clientSession = clientSessionRef.current;
-    clientSessionRef.current = null;
-    telemetryAccessRef.current = undefined;
-    if (!clientSession) return;
-    try {
-      await clientSession.cleanup();
-    } finally {
-      await clearClientSessionCredential(clientSession.inviteToken);
-    }
-  }, []);
-
   const handleClose = useCallback(async () => {
     terminalizeMobileMeetingJourney(journeyRef.current, "meeting_closed");
     void telemetry.flush();
-    await cleanupClientSession().catch((error: unknown) => {
+    await cleanupCurrentClientSession().catch((error: unknown) => {
       onDiagnosticsError?.({
         message: error instanceof Error ? error.message : "The client session could not be cleaned up",
       });
     });
     await onClose();
-  }, [cleanupClientSession, onClose, onDiagnosticsError, telemetry]);
+  }, [cleanupCurrentClientSession, onClose, onDiagnosticsError, telemetry]);
 
   if (!journey) return <></>;
 

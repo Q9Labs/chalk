@@ -208,6 +208,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@noble/hashes": "2.2.0",
     "effect": "4.0.0-beta.94"
   },
   "devDependencies": {

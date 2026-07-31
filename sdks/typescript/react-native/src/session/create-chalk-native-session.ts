@@ -22,7 +22,7 @@ import {
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 
-import { createNativeTelemetry, type NativeRtcPeerConnection, type NativeTelemetryJourney } from "../telemetry";
+import { createNativeTelemetry, nativeSyncTransportCloseDiagnostic, type NativeRtcPeerConnection, type NativeTelemetryJourney } from "../telemetry";
 
 export type ChalkNativeSessionOptions = Omit<ChalkSessionOptions, "dependencies"> & {
   readonly storage?: ReactNativeAsyncStorage;
@@ -150,7 +150,7 @@ function nativeWebSocketConstructor(journey: NativeTelemetryJourney | undefined)
   return class ChalkNativeWebSocket implements ReactNativeWebSocket {
     onopen: ((event: unknown) => void) | null = null;
     onmessage: ((event: { readonly data: unknown }) => void) | null = null;
-    onclose: ((event: { readonly code?: unknown }) => void) | null = null;
+    onclose: ((event: { readonly code?: unknown; readonly reason?: unknown }) => void) | null = null;
     onerror: ((event: unknown) => void) | null = null;
     readonly #socket: ReactNativeWebSocket;
 
@@ -161,8 +161,14 @@ function nativeWebSocketConstructor(journey: NativeTelemetryJourney | undefined)
         recordSyncFrame(journey, "server_to_client", event.data);
         this.onmessage?.(event);
       };
-      this.#socket.onclose = (event) => this.onclose?.(event);
-      this.#socket.onerror = (event) => this.onerror?.(event);
+      this.#socket.onclose = (event) => {
+        recordSyncTransportClose(journey, event);
+        this.onclose?.(event);
+      };
+      this.#socket.onerror = (event) => {
+        journey?.recordDiagnostic({ category: "network", code: "sync_websocket_error", phase: "signaling", state: "failed" });
+        this.onerror?.(event);
+      };
     }
 
     send(data: string): void {
@@ -174,6 +180,11 @@ function nativeWebSocketConstructor(journey: NativeTelemetryJourney | undefined)
       this.#socket.close(code, reason);
     }
   };
+}
+
+function recordSyncTransportClose(journey: NativeTelemetryJourney | undefined, event: { readonly code?: unknown; readonly reason?: unknown }): void {
+  if (!journey) return;
+  journey.recordDiagnostic(nativeSyncTransportCloseDiagnostic(event));
 }
 
 function recordSyncFrame(journey: NativeTelemetryJourney | undefined, direction: "client_to_server" | "server_to_client", data: unknown): void {

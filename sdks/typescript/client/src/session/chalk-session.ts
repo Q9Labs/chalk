@@ -383,13 +383,21 @@ export class ChalkSession implements ChalkSessionStore {
       this.#assertEpoch(epoch);
       const access = await this.#access.initialize();
       this.#assertEpoch(epoch);
-      this.#media = this.#dependencies.createMediaClient({
-        access,
-        credential: () => this.#access.getMediaToken(),
-        onFailure: () => this.#handleMediaFailure(),
-        onScreenEnded: () => this.#handleScreenEnded(),
-      });
-      this.#sync = this.#dependencies.createSyncClient({ access, token: () => this.#access.getSyncToken(), media: this.#media });
+      try {
+        this.#media = this.#dependencies.createMediaClient({
+          access,
+          credential: () => this.#access.getMediaToken(),
+          onFailure: () => this.#handleMediaFailure(),
+          onScreenEnded: () => this.#handleScreenEnded(),
+        });
+      } catch (cause) {
+        throw new StartupFailure("media", cause);
+      }
+      try {
+        this.#sync = this.#dependencies.createSyncClient({ access, token: () => this.#access.getSyncToken(), media: this.#media });
+      } catch (cause) {
+        throw new StartupFailure("sync", cause);
+      }
       this.#subscribeLowerLayers();
       const media = this.#media;
       const sync = this.#sync;
@@ -413,8 +421,9 @@ export class ChalkSession implements ChalkSessionStore {
       const cancelled = cause instanceof StaleEpoch;
       const confirmed = await this.#teardown(this.#access.current !== null);
       this.#joinCleanupConfirmed = confirmed;
+      if (!confirmed) this.#diagnostics.record({ event: "cleanup_unconfirmed", state: this.#state, epoch: this.#epoch, code: "join_cleanup_unconfirmed" });
       if (cancelled && this.#state === "leaving") throw this.#error("invalid_state", "join", false, "Join was cancelled by Leave", cause);
-      const error = confirmed ? this.#joinError(cause) : this.#error("join_cleanup_unconfirmed", "join", false, "Join failed and durable cleanup could not be confirmed", cause);
+      const error = this.#joinError(cause);
       this.#failure = failureFrom(error);
       this.#transition("failed");
       throw error;
@@ -995,7 +1004,7 @@ export class ChalkSession implements ChalkSessionStore {
     return new Promise((resolve, reject) => {
       let settled = false;
       let unsubscribe: (() => void) | undefined;
-      const timer = this.#dependencies.clock.setTimeout(() => finish(() => reject(new TypeError("Sync did not become live before the startup deadline"))), timeoutMs);
+      const timer = this.#dependencies.clock.setTimeout(() => finish(() => reject(new SyncStartupDeadline(sync.getSnapshot()))), timeoutMs);
       const finish = (complete: () => void) => {
         if (settled) return;
         settled = true;
@@ -1186,8 +1195,8 @@ export class ChalkSession implements ChalkSessionStore {
   #joinError(cause: unknown): ChalkSessionError {
     if (cause instanceof ChalkSessionError) return cause;
     if (cause instanceof StartupFailure) {
-      const code = cause.layer === "sync" ? "sync_start_failed" : "media_start_failed";
-      return this.#error(code, "join", true, `The ${cause.layer} layer could not start`, cause.cause);
+      const { code, message } = startupFailureDetails(cause);
+      return this.#error(code, "join", true, message, cause.cause);
     }
     if (cause instanceof ParticipantAccessError || (cause instanceof TypeError && this.#access.current === null)) return this.#error("invalid_access", "join", false, "Participant access was rejected", cause);
     const code = this.#access.current === null ? "access_unavailable" : this.#syncSnapshot?.connection.phase !== "live" ? "sync_start_failed" : "media_start_failed";
@@ -1217,6 +1226,26 @@ class StartupFailure extends Error {
   ) {
     super(`${layer} startup failed`);
   }
+}
+
+class SyncStartupDeadline extends TypeError {
+  constructor(readonly snapshot: V3SessionSnapshot) {
+    super("Sync did not become live before the startup deadline");
+  }
+}
+
+function syncStartupDeadlineMessage(snapshot: V3SessionSnapshot): string {
+  if (snapshot.connection.phase === "connecting") return "The Sync transport could not establish a connection";
+  if (snapshot.connection.phase !== "recovering") return "The Sync layer did not become live";
+  if (snapshot.participantSessionId === null) return "The Sync transport connected but did not receive its welcome frame";
+  const missing = [snapshot.control === null ? "control state" : null, snapshot.media === null ? "media projection" : null, snapshot.presence === null ? "presence projection" : null].filter((value): value is string => value !== null);
+  return missing.length === 0 ? "The Sync layer did not finish recovery" : `The Sync layer did not receive its ${missing.join(", ")}`;
+}
+
+function startupFailureDetails(failure: StartupFailure): { readonly code: "sync_start_failed" | "media_start_failed"; readonly message: string } {
+  if (failure.layer === "media") return { code: "media_start_failed", message: "The media layer could not start" };
+  if (failure.cause instanceof SyncStartupDeadline) return { code: "sync_start_failed", message: syncStartupDeadlineMessage(failure.cause.snapshot) };
+  return { code: "sync_start_failed", message: "The sync layer could not start" };
 }
 
 function failureFrom(error: ChalkSessionError): ChalkSessionFailure {

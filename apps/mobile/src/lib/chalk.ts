@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { maskSecret } from "@q9labsai/chalk-react-native/diagnostics";
 import { extractJoinTokenFromInviteLink } from "@q9labsai/chalk-react-native/invites";
 import { getNativeDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
-import type { ChalkClientSessionCredential } from "@q9labsai/chalk-react-native";
+import type { ChalkClientSession, ChalkClientSessionCredential } from "@q9labsai/chalk-react-native";
 
 const CLIENT_SESSION_PREFIX = "chalk_mobile_client_session_v2.";
 const LAST_INVITE_KEY = "chalk_mobile_last_invite_v2";
@@ -98,7 +98,16 @@ export async function saveClientSessionCredential(credential: ChalkClientSession
 }
 
 export async function clearClientSessionCredential(inviteToken: string): Promise<void> {
-  await SecureStore.deleteItemAsync(credentialKey(inviteToken));
+  const lastInviteToken = await SecureStore.getItemAsync(LAST_INVITE_KEY);
+  await Promise.all([SecureStore.deleteItemAsync(credentialKey(inviteToken)), ...(lastInviteToken === inviteToken ? [SecureStore.deleteItemAsync(LAST_INVITE_KEY)] : [])]);
+}
+
+export async function cleanupClientSession(clientSession: ChalkClientSession): Promise<void> {
+  try {
+    await clientSession.cleanup();
+  } finally {
+    await clearClientSessionCredential(clientSession.inviteToken);
+  }
 }
 
 export async function clearJoinContext(): Promise<void> {

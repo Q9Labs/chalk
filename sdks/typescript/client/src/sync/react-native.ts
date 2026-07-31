@@ -9,6 +9,7 @@ export type ReactNativeAsyncStorage = {
 
 export type ReactNativeWebSocketCloseEvent = {
   readonly code?: unknown;
+  readonly reason?: unknown;
 };
 
 export type ReactNativeWebSocket = {

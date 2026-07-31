@@ -1,6 +1,6 @@
 import type { ChalkSessionErrorCode, ChalkSessionState } from "./types";
 
-export type ChalkSessionDiagnosticEventName = "state_changed" | "access_refreshed" | "access_refresh_failed" | "recovery_attempt" | "recovery_succeeded" | "recovery_exhausted" | "cleanup_completed";
+export type ChalkSessionDiagnosticEventName = "state_changed" | "access_refreshed" | "access_refresh_failed" | "recovery_attempt" | "recovery_succeeded" | "recovery_exhausted" | "cleanup_completed" | "cleanup_unconfirmed";
 
 export type ChalkSessionDiagnostic = {
   readonly timestamp: number;

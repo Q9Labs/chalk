@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNativeTelemetry, type NativeRtcPeerConnection, type NativeTelemetryJourney } from "./telemetry";
+import { createNativeTelemetry, nativeSyncTransportCloseDiagnostic, type NativeRtcPeerConnection, type NativeTelemetryJourney } from "./telemetry";
 
 describe("createNativeTelemetry", () => {
+  it("bounds Sync transport close diagnostics without recording raw reasons", () => {
+    expect(nativeSyncTransportCloseDiagnostic({ code: 1008, reason: "invalid token" })).toEqual({
+      category: "network",
+      code: "sync_websocket_closed_1008_invalid_token",
+      phase: "signaling",
+      state: "failed",
+    });
+    expect(nativeSyncTransportCloseDiagnostic({ code: 1008, reason: "secret detail" }).code).toBe("sync_websocket_closed_1008_other");
+    expect(nativeSyncTransportCloseDiagnostic({ code: 1000, reason: "" }).state).toBe("observed");
+  });
+
   it("propagates one journey through API and sync transport configuration", () => {
     const journey = createJourney();
     const telemetry = createNativeTelemetry(journey);

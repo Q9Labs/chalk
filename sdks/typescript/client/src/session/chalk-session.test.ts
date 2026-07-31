@@ -264,20 +264,56 @@ describe("ChalkSession", () => {
     expect(harness.session.getSnapshot().state).toBe("left");
   });
 
-  it("attempts durable Leave after a startup failure and exposes unconfirmed cleanup", async () => {
+  it("preserves the startup failure when durable cleanup is unconfirmed", async () => {
     const harness = createHarness({ failMediaStart: true, failLeave: true });
 
-    await expect(harness.session.join()).rejects.toMatchObject({ code: "join_cleanup_unconfirmed" });
-    expect(harness.sync.leave).toHaveBeenCalledTimes(1);
+    await expectMediaStartupFailure(harness);
+    expect(harness.session.getDiagnostics()).toContainEqual(expect.objectContaining({ event: "cleanup_unconfirmed", code: "join_cleanup_unconfirmed" }));
     expectLowerLayersStopped(harness);
   });
 
   it("reports the failed startup layer when durable cleanup succeeds", async () => {
     const harness = createHarness({ failMediaStart: true });
 
-    await expect(harness.session.join()).rejects.toMatchObject({ code: "media_start_failed" });
-    expect(harness.sync.leave).toHaveBeenCalledTimes(1);
+    await expectMediaStartupFailure(harness);
     expect(harness.session.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "media_start_failed" } });
+  });
+
+  it.each([
+    ["media", { failMediaCreate: true }, "media_start_failed"],
+    ["sync", { failSyncCreate: true }, "sync_start_failed"],
+  ] as const)("attributes a synchronous %s client construction failure to its startup layer", async (_layer, options, code) => {
+    const harness = createHarness(options);
+
+    await expect(harness.session.join()).rejects.toMatchObject({ code });
+    expect(harness.session.getSnapshot()).toMatchObject({ state: "failed", failure: { code } });
+  });
+
+  it.each([
+    ["connecting", syncSnapshot("connecting"), "The Sync transport could not establish a connection"],
+    ["waiting for welcome", syncSnapshot("recovering"), "The Sync transport connected but did not receive its welcome frame"],
+    [
+      "waiting for projections",
+      {
+        ...syncSnapshot("recovering"),
+        participantSessionId: "participant-1",
+        participantSessionGeneration: 1,
+      },
+      "The Sync layer did not receive its control state, media projection, presence projection",
+    ],
+  ] as const)("reports the bounded Sync startup stage when %s", async (_stage, startupSnapshot, message) => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness({ syncStartupSnapshot: startupSnapshot });
+      const join = harness.session.join();
+      const rejection = expect(join).rejects.toMatchObject({ code: "sync_start_failed", message });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shares concurrent Leave and tears down tracks, observers, media, and Sync", async () => {
@@ -599,6 +635,9 @@ function createHarness(
     readonly failMediaStart?: boolean;
     readonly failMediaRestart?: boolean;
     readonly failLeave?: boolean;
+    readonly failMediaCreate?: boolean;
+    readonly failSyncCreate?: boolean;
+    readonly syncStartupSnapshot?: V3SessionSnapshot;
     readonly access?: readonly ParticipantAccess[];
     readonly initialMicrophoneEnabled?: boolean;
     readonly initialCameraEnabled?: boolean;
@@ -615,12 +654,16 @@ function createHarness(
   const accesses = [...(options.access ?? [participantAccess("connection-1", "initial")])];
   const access = vi.fn(async () => accesses.shift() ?? participantAccess("connection-1", "refreshed"));
   const media = new FakeMedia(options.failMediaStart ?? false, options.failMediaRestart ?? false);
-  const sync = new FakeSync(options.failLeave ?? false);
+  const sync = new FakeSync(options.failLeave ?? false, options.syncStartupSnapshot);
   const createMediaClient = vi.fn((_input: ChalkSessionMediaFactoryInput) => {
+    if (options.failMediaCreate) throw new Error("media construction failed");
     media.callbacks = _input;
     return media;
   });
-  const createSyncClient = vi.fn(() => sync);
+  const createSyncClient = vi.fn(() => {
+    if (options.failSyncCreate) throw new Error("sync construction failed");
+    return sync;
+  });
   const dependencies: ChalkSessionDependencies = {
     clock: options.clock ?? {
       now: () => Date.parse("2026-07-21T12:00:00.000Z"),
@@ -642,6 +685,11 @@ function createHarness(
     dependencies,
   });
   return { session, access, media, sync, createMediaClient, createSyncClient, getUserMedia, getDisplayMedia, tracks };
+}
+
+async function expectMediaStartupFailure(harness: ReturnType<typeof createHarness>): Promise<void> {
+  await expect(harness.session.join()).rejects.toMatchObject({ code: "media_start_failed" });
+  expect(harness.sync.leave).toHaveBeenCalledTimes(1);
 }
 
 async function joinedRecoveryHarness() {
@@ -775,9 +823,12 @@ class FakeSync implements ChalkSessionSyncClient {
   readonly roomActionListeners = new Set<(event: V3RoomActionClientEvent) => void>();
   snapshot = syncSnapshot("idle");
   chatHeadSequence: string | null = null;
-  constructor(readonly failLeave: boolean) {}
+  constructor(
+    readonly failLeave: boolean,
+    readonly startupSnapshot?: V3SessionSnapshot,
+  ) {}
   start = vi.fn(async () => {
-    this.snapshot = syncSnapshot("live");
+    this.snapshot = this.startupSnapshot ?? syncSnapshot("live");
     this.emit();
   });
   stop = vi.fn(() => {

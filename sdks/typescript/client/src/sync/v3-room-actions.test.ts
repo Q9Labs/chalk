@@ -133,20 +133,7 @@ describe("V3SyncClient room_actions_v2", () => {
   });
 
   it("falls back from v2 to v1 only once when invalid_frame and close 1009 reject the same hello", async () => {
-    const sockets: TestSocket[] = [];
-    const client = new V3SyncClient({
-      url: "ws://sync.test/v3/sync",
-      token: async () => "token",
-      reconnectDelayMs: 0,
-      webSocket: {
-        connect: () => {
-          const socket = new TestSocket();
-          sockets.push(socket);
-          return socket;
-        },
-      },
-    });
-    await client.start();
+    const { client, sockets } = await fallbackClient();
     sockets[0]!.open();
     await settle();
     expect(sockets[0]!.frames()[0]).toMatchObject({ extensions: [{ name: "room_actions_v2" }] });
@@ -169,7 +156,48 @@ describe("V3SyncClient room_actions_v2", () => {
     expect(client.getRoomActionsExtensionState()).toMatchObject({ negotiated: true, version: 1, capabilities: ["sendReaction", "sendChat"] });
     expect(() => client.sendChatMessage({ text: "", attachments: [{ attachmentId: requestIds[11]!, fileName: "notes.txt", mimeType: "text/plain", byteLength: 1 }] })).toThrowError(/require room_actions_v2/u);
   });
+
+  it("falls back through v1 to an unextended hello for a strict legacy server", async () => {
+    const { client, sockets } = await fallbackClient();
+
+    for (const version of ["room_actions_v2", "room_actions_v1"] as const) {
+      const socket = sockets.at(-1)!;
+      socket.open();
+      await settle();
+      expect(socket.frames()[0]).toMatchObject({ extensions: [{ name: version }] });
+      socket.remoteClose(1009);
+      for (let attempt = 0; attempt < 50 && sockets.at(-1) === socket; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    const legacySocket = sockets.at(-1)!;
+    legacySocket.open();
+    await settle();
+    expect(legacySocket.frames()[0]).not.toHaveProperty("extensions");
+    const { state } = await recover(legacySocket, false);
+    expect(client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, control: { revision: state.revision } });
+    expect(client.getRoomActionsExtensionState()).toMatchObject({ negotiated: false, version: null });
+  });
 });
+
+async function fallbackClient(): Promise<{ readonly client: V3SyncClient; readonly sockets: TestSocket[] }> {
+  const sockets: TestSocket[] = [];
+  const client = new V3SyncClient({
+    url: "ws://sync.test/v3/sync",
+    token: async () => "token",
+    reconnectDelayMs: 0,
+    webSocket: {
+      connect: () => {
+        const socket = new TestSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    },
+  });
+  await client.start();
+  return { client, sockets };
+}
 
 async function liveRoomActionsClient(overrides: Partial<ConstructorParameters<typeof V3SyncClient>[0]> = {}) {
   const socket = new TestSocket();

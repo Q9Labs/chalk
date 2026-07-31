@@ -1,4 +1,5 @@
 import { SnapshotSchema, type SyncV3ServerFrame } from "../generated/sync-v3";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { canonicalJsonBytesFromUnknown } from "./canonical";
 import type { V3AdmissionRequest, V3ControlState, V3Participant, V3Role, V3TargetCommand } from "./v3-types";
 
@@ -127,8 +128,7 @@ export async function computeV3StateDigest(state: V3ControlState): Promise<strin
   const version = new Uint8Array(4);
   new DataView(version.buffer).setUint32(0, state.stateSchemaVersion, false);
   const bytes = joinBytes(digestPrefix, version, canonicalJsonBytesFromUnknown(durableProjection(state)));
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(sha256(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function durableProjection(state: V3ControlState): unknown {
