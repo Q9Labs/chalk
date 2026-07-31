@@ -5,7 +5,7 @@ import { extractJoinTokenFromInviteLink } from "@q9labsai/chalk-react-native/inv
 import { getNativeDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
 import type { ChalkClientSessionCredential } from "@q9labsai/chalk-react-native";
 
-const CLIENT_SESSION_PREFIX = "chalk_mobile_client_session_v2:";
+const CLIENT_SESSION_PREFIX = "chalk_mobile_client_session_v2.";
 const LAST_INVITE_KEY = "chalk_mobile_last_invite_v2";
 const PRODUCTION_BROKER_URL = "https://chalkmeet.com/local-chalk";
 

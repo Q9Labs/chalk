@@ -215,6 +215,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made resumed mobile client-session keys compatible with Expo SecureStore so
+  Android and iOS can persist broker credentials without rejecting invite-token
+  keys.
 - Kept incremental screen-share publication and remote-track discovery failures
   scoped to the affected media operation so an SFU signaling rejection no
   longer forces every participant into whole-session recovery. Screen retries
