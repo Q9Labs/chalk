@@ -71,6 +71,7 @@ export type ChalkSessionOptions = {
   readonly syncURL: string;
   readonly apiBaseURL: string;
   readonly whiteboardURL?: string | null;
+  readonly syncStartupTimeoutMs?: number;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
   readonly accessRefreshWindowMs?: number;
@@ -99,6 +100,7 @@ export class ChalkSession implements ChalkSessionStore {
   readonly #maxRecoveryAttempts: number;
   readonly #recoveryBackoffMs: readonly number[];
   readonly #recoveryBudgetMs: number;
+  readonly #syncStartupTimeoutMs: number;
   readonly #localIntent: Record<"microphone" | "camera", boolean>;
   #epoch = 0;
   #failure: ChalkSessionFailure | null = null;
@@ -145,6 +147,7 @@ export class ChalkSession implements ChalkSessionStore {
     };
     this.#maxRecoveryAttempts = boundedInteger(options.recovery?.maxAttempts, MAX_RECOVERY_ATTEMPTS, 1, 10);
     this.#recoveryBudgetMs = boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000);
+    this.#syncStartupTimeoutMs = boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60_000);
     this.#recoveryBackoffMs = options.recovery?.backoffMs?.length ? [...options.recovery.backoffMs] : [100, 250, 500];
     this.#diagnostics = new ChalkSessionDiagnostics({ now: this.#dependencies.clock.now, ...options.diagnostics });
   }
@@ -411,7 +414,7 @@ export class ChalkSession implements ChalkSessionStore {
         }),
         sync
           .start()
-          .then(() => this.#waitForSyncLive(sync, START_TIMEOUT_MS))
+          .then(() => this.#waitForSyncLive(sync, this.#syncStartupTimeoutMs))
           .catch((cause) => {
             throw new StartupFailure("sync", cause);
           }),

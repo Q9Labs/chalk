@@ -316,6 +316,29 @@ describe("ChalkSession", () => {
     }
   });
 
+  it("honors a configured Sync startup budget", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness({
+        syncStartupSnapshot: syncSnapshot("connecting"),
+        syncStartupTimeoutMs: 30_000,
+      });
+      const join = harness.session.join();
+      const rejection = expect(join).rejects.toMatchObject({
+        code: "sync_start_failed",
+        message: "The Sync transport could not establish a connection",
+      });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(harness.session.getSnapshot().state).toBe("joining");
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shares concurrent Leave and tears down tracks, observers, media, and Sync", async () => {
     const harness = createHarness();
     await harness.session.join();
@@ -650,6 +673,7 @@ function createHarness(
     readonly failMediaCreate?: boolean;
     readonly failSyncCreate?: boolean;
     readonly syncStartupSnapshot?: V3SessionSnapshot;
+    readonly syncStartupTimeoutMs?: number;
     readonly access?: readonly ParticipantAccess[];
     readonly initialMicrophoneEnabled?: boolean;
     readonly initialCameraEnabled?: boolean;
@@ -690,6 +714,7 @@ function createHarness(
     access,
     apiBaseURL: "http://localhost:8080",
     syncURL: "ws://localhost:4000/v3",
+    syncStartupTimeoutMs: options.syncStartupTimeoutMs,
     initialMicrophoneEnabled: options.initialMicrophoneEnabled,
     initialCameraEnabled: options.initialCameraEnabled,
     recovery: { backoffMs: options.recoveryBackoffMs, maxAttempts: options.maxRecoveryAttempts, budgetMs: options.recoveryBudgetMs },

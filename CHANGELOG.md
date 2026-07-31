@@ -227,6 +227,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   confirmed, removed stale mobile broker credentials after failed joins, kept
   bounded mobile telemetry local when no supported intake credential exists,
   and added bounded native Sync WebSocket close diagnostics.
+- Gave React Native Sync startup a 30-second budget while preserving the
+  10-second web and client default, allowing Android to retry after its native
+  WebSocket connection attempt times out.
 - Kept incremental screen-share publication and remote-track discovery failures
   scoped to the affected media operation so an SFU signaling rejection no
   longer forces every participant into whole-session recovery. Screen retries

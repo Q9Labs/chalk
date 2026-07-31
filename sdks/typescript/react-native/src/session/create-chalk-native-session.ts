@@ -24,6 +24,8 @@ import { AppState } from "react-native";
 
 import { createNativeTelemetry, nativeSyncTransportCloseDiagnostic, type NativeRtcPeerConnection, type NativeTelemetryJourney } from "../telemetry";
 
+const REACT_NATIVE_SYNC_STARTUP_TIMEOUT_MS = 30_000;
+
 export type ChalkNativeSessionOptions = Omit<ChalkSessionOptions, "dependencies"> & {
   readonly storage?: ReactNativeAsyncStorage;
   readonly telemetry?: NativeTelemetryJourney;
@@ -53,6 +55,7 @@ export function createChalkNativeSession(options: ChalkNativeSessionOptions): Ch
 
   return new ChalkSession({
     ...sessionOptions,
+    syncStartupTimeoutMs: sessionOptions.syncStartupTimeoutMs ?? REACT_NATIVE_SYNC_STARTUP_TIMEOUT_MS,
     diagnostics: {
       ...options.diagnostics,
       onEvent: (event) => {
