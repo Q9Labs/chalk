@@ -383,6 +383,7 @@ describe("V3SyncClient", () => {
     const operation = client.endSession({ commandId: commandIds[0] });
 
     socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
+    socket.close();
     socket.receive({
       type: "event",
       stream: "control",
@@ -408,6 +409,7 @@ describe("V3SyncClient", () => {
     const operation = client.leave({ commandId: commandIds[0] });
 
     socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
+    socket.close();
     socket.receive({
       type: "event",
       stream: "control",
@@ -423,6 +425,58 @@ describe("V3SyncClient", () => {
 
     await expect(operation).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: 2, state_digest: digest });
     expect(client.getSnapshot().pendingCommandCount).toBe(0);
+  });
+
+  it.each([
+    { operation: "end_session" as const, reason: "session_ended" as const },
+    { operation: "participant_leave" as const, reason: "participant_inactive" as const },
+  ])("settles $operation from the authoritative $reason terminal recovery head", async ({ operation, reason }) => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V3SyncClient({
+      url: "ws://sync.test/v3/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 0,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    await client.start();
+    sockets[0]!.open();
+    await settle();
+    await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+    const pending = operation === "end_session" ? client.endSession({ commandId: commandIds[0] }) : client.leave({ commandId: commandIds[0] });
+    sockets[0]!.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
+    await settle();
+
+    sockets[0]!.close(1012);
+    clock.advance(0);
+    await settle();
+    clock.advance(0);
+    expect(sockets).toHaveLength(2);
+    sockets[1]!.open();
+    await settle();
+    const terminalHead = { revision: 2, state_schema_version: 3, state_digest: "a".repeat(64) };
+    sockets[1]!.receive({
+      type: "welcome",
+      protocol: 3,
+      participant_session_id: hostId,
+      participant_session_generation: 1,
+      recovery_id: recoveryId,
+      head: terminalHead,
+      mode: "terminal",
+      reason,
+    });
+
+    await expect(pending).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: terminalHead.revision, state_digest: terminalHead.state_digest });
+    expect(client.getSnapshot().connection).toEqual({ phase: "terminal", terminalReason: reason });
   });
 
   it("retains exact control-event evidence and recovers on conflicting duplicates", async () => {
@@ -761,6 +815,8 @@ describe("V3SyncClient", () => {
     sockets[0]!.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
     await settle();
     sockets[0]!.close(1012);
+    clock.advance(0);
+    await settle();
     clock.advance(0);
     expect(sockets).toHaveLength(2);
     sockets[1]!.open();

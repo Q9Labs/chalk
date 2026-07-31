@@ -165,7 +165,7 @@ describe("V3SyncClient room_actions_v2", () => {
       socket.open();
       await settle();
       expect(socket.frames()[0]).toMatchObject({ extensions: [{ name: version }] });
-      socket.remoteClose(1009);
+      socket.remoteCloseAndRecycleEvent(1009);
       for (let attempt = 0; attempt < 50 && sockets.at(-1) === socket; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
@@ -392,6 +392,12 @@ class TestSocket implements SyncSocket {
 
   remoteClose(code: number): void {
     this.onclose?.({ code });
+  }
+
+  remoteCloseAndRecycleEvent(code: number): void {
+    const event: { code: number | undefined } = { code };
+    this.onclose?.(event as { readonly code: number });
+    event.code = undefined;
   }
 
   open(): void {

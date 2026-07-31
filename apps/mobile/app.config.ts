@@ -38,7 +38,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         jsEngine: "jsc",
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "23",
+        buildNumber: "28",
         associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
         entitlements: {
           "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"],
@@ -53,7 +53,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       },
       android: {
         package: "ai.q9labs.chalk.mobile",
-        versionCode: 23,
+        versionCode: 28,
         adaptiveIcon: {
           foregroundImage: "./assets/icon.png",
           backgroundColor: "#0b0c14",

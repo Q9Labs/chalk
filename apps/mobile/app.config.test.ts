@@ -14,8 +14,8 @@ describe("createExpoConfig", () => {
 
     expect(config.expo.plugins).toEqual(["expo-secure-store"]);
     expect(config.expo.version).toBe("2.0.0");
-    expect(config.expo.ios.buildNumber).toBe("23");
-    expect(config.expo.android.versionCode).toBe(23);
+    expect(config.expo.ios.buildNumber).toBe("28");
+    expect(config.expo.android.versionCode).toBe(28);
     expect(config.expo.ios.infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
     expect(config.expo.ios.infoPlist.RTCAppScreenSharingExtension).toBe("ai.q9labs.chalk.mobile.screenshare");
     expect(config.expo.ios.entitlements?.["com.apple.security.application-groups"]).toEqual(["group.ai.q9labs.chalk.mobile"]);

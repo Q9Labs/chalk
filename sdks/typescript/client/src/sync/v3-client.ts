@@ -117,6 +117,7 @@ export class V3SyncClient implements V3RoomActionsClient {
   #recovery: Recovery | null = null;
   #started = false;
   #startupGeneration = 0;
+  #connectionGeneration = 0;
   #reconnectTimer: unknown;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -491,12 +492,19 @@ export class V3SyncClient implements V3RoomActionsClient {
     this.#sentExtendedHello = false;
     this.#emit();
     const socket = this.#options.webSocket.connect(this.#options.url);
+    const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
     socket.onopen = () => void this.#authenticate(socket);
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
-    socket.onclose = (event) => this.#disconnected(socket, event.code);
+    socket.onclose = (event) => {
+      const closeCode = event.code;
+      this.#clock().setTimeout(() => {
+        if (connectionGeneration !== this.#connectionGeneration) return;
+        this.#inbound = this.#inbound.then(() => this.#disconnected(socket, closeCode));
+      }, 0);
+    };
     socket.onerror = () => socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
   }
 
@@ -674,6 +682,7 @@ export class V3SyncClient implements V3RoomActionsClient {
     this.#participantSessionGeneration = frame.participant_session_generation;
     this.#updateLocalMediaStates();
     if (frame.mode === "terminal") {
+      await this.#settleTerminalRecoveryCommands(frame);
       this.#phase = { phase: "terminal", terminalReason: frame.reason };
       this.#socket?.close(1000, "terminal recovery");
       this.#emit();
@@ -786,6 +795,27 @@ export class V3SyncClient implements V3RoomActionsClient {
         outcome: "satisfied",
         revision: frame.revision,
         state_digest: frame.resulting_state_digest,
+      });
+    }
+  }
+
+  async #settleTerminalRecoveryCommands(frame: Extract<SyncV3ServerFrame, { readonly type: "welcome"; readonly mode: "terminal" }>): Promise<void> {
+    const satisfiedOperations = new Set<V3OperationName>();
+    if (frame.reason === "session_ended") {
+      satisfiedOperations.add("end_session");
+      satisfiedOperations.add("participant_leave");
+    } else if (frame.reason === "participant_inactive") {
+      satisfiedOperations.add("participant_leave");
+    }
+    for (const [commandId, deferred] of this.#commands) {
+      if (deferred.frame.type !== "operation" || !satisfiedOperations.has(deferred.frame.name)) continue;
+      await this.#finishCommand(commandId, {
+        type: "ack",
+        command_id: commandId,
+        delivery: "duplicate",
+        outcome: "satisfied",
+        revision: frame.head.revision,
+        state_digest: frame.head.state_digest,
       });
     }
   }

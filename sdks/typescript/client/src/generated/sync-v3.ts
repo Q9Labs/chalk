@@ -270,7 +270,7 @@ export const SyncProtocolMetadata = {
     {
       code: 1000,
       connection: "closed",
-      reasons: ["terminal recovery drained"],
+      reasons: ["terminal event acknowledged", "terminal recovery drained"],
     },
     {
       code: 1008,
@@ -285,7 +285,7 @@ export const SyncProtocolMetadata = {
     {
       code: 1012,
       connection: "closed",
-      reasons: ["service restart", "server draining"],
+      reasons: ["service restart", "server draining", "terminal acknowledgement timeout"],
     },
   ],
 } as const;

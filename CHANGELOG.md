@@ -219,6 +219,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   as final proof for participant Leave and Session end when the initiating
   client is removed before a final acknowledgement, and skipped redundant
   participant Leave after a confirmed Session end.
+- Preserved terminal lifecycle confirmation across native Sync closure by
+  retaining terminal control events until their exact delivery acknowledgement,
+  draining final frames before teardown, and accepting authoritative terminal
+  recovery heads for participant Leave and Session end.
 - Made resumed mobile client-session keys compatible with Expo SecureStore so
   Android and iOS can persist broker credentials without rejecting invite-token
   keys.

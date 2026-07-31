@@ -116,7 +116,10 @@ defmodule ChalkSync.Sessions.Coordinator do
     end
   end
 
-  @spec pop(pid(), pid()) :: {:ok, binary(), boolean()} | :empty | {:error, atom()}
+  @spec pop(pid(), pid()) ::
+          {:ok, binary(), false | {:terminal, pos_integer(), String.t()}}
+          | :empty
+          | {:error, atom()}
   def pop(coordinator, socket \\ self()) do
     GenServer.call(coordinator, {:pop, socket}, 1_000)
   catch
@@ -1060,11 +1063,14 @@ defmodule ChalkSync.Sessions.Coordinator do
   defp popped_entry(
          state,
          socket,
-         %{terminal_revision: revision},
-         %{revision: revision, encoded: encoded}
+         %{terminal_revision: revision} = subscriber,
+         %{revision: revision, state_digest: state_digest, encoded: encoded}
        )
-       when is_integer(revision) do
-    {:reply, {:ok, encoded, true}, remove_socket(state, socket)}
+       when is_integer(revision) and is_binary(state_digest) do
+    next_subscriber = %{subscriber | notified?: false}
+
+    {:reply, {:ok, encoded, {:terminal, revision, state_digest}},
+     %{state | sockets: Map.put(state.sockets, socket, next_subscriber)}}
   end
 
   defp popped_entry(state, socket, subscriber, entry) do

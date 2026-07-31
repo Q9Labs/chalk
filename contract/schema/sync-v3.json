@@ -859,9 +859,9 @@
     "conflict": "preserves_original_receipt"
   },
   "closeCodes": [
-    { "code": 1000, "connection": "closed", "reasons": ["terminal recovery drained"] },
+    { "code": 1000, "connection": "closed", "reasons": ["terminal event acknowledged", "terminal recovery drained"] },
     { "code": 1008, "connection": "closed", "reasons": ["invalid token", "policy violation"] },
     { "code": 1009, "connection": "closed", "reasons": ["malformed frame", "oversized frame"] },
-    { "code": 1012, "connection": "closed", "reasons": ["service restart", "server draining"] }
+    { "code": 1012, "connection": "closed", "reasons": ["service restart", "server draining", "terminal acknowledgement timeout"] }
   ]
 }

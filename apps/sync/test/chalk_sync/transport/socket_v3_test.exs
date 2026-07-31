@@ -7,6 +7,7 @@ defmodule ChalkSync.Transport.SocketV3Test do
   alias ChalkSync.RoomActions.Fanout
   alias ChalkSync.RoomActions.OutboundQueue, as: RoomActionQueue
   alias ChalkSync.Sessions.Coordinator
+  alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.Stateholder.OperationDecision
@@ -740,6 +741,63 @@ defmodule ChalkSync.Transport.SocketV3Test do
     assert rejected["outcome"] == "rejected"
     assert rejected["reason"] == "external_operation_failed"
     refute Map.has_key?(rejected, "external_operation_id")
+  end
+
+  test "terminal control delivery waits for the exact client acknowledgement", %{port: port} do
+    identity = seed_identity()
+    client = connect_live(port, identity)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "operation",
+        "command_id" => "terminal-ack-operation-0001",
+        "name" => "end_session",
+        "payload" => %{}
+      })
+
+    assert {:json,
+            %{
+              "type" => "retryable_error",
+              "command_id" => "terminal-ack-operation-0001",
+              "code" => "external_operation_pending"
+            }, client} = Client.recv(client)
+
+    assert {:ok, operations} = Memory.claim_operations(64)
+
+    assert {_session, %ExternalOperation{} = operation} =
+             Enum.find(operations, fn {session, operation} ->
+               session == identity.session and
+                 operation.request_key == "terminal-ack-operation-0001"
+             end)
+
+    assert {:ok, decision} =
+             Memory.finalize_operation(
+               identity.session,
+               operation.external_operation_id,
+               {:applied, :session_ended, %{"reason" => "ended_by_participant"}}
+             )
+
+    Coordinator.hint(identity.session, decision.revision)
+
+    assert {:json,
+            %{
+              "type" => "event",
+              "name" => "session_ended",
+              "revision" => revision,
+              "resulting_state_digest" => state_digest
+            }, client} = Client.recv(client)
+
+    assert {:error, :timeout, client} = Client.recv_frame(client, 50)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "delivery_ack",
+        "stream" => "control",
+        "revision" => revision,
+        "state_digest" => state_digest
+      })
+
+    assert {:closed, 1000, "terminal event acknowledged", _client} = Client.recv(client)
   end
 
   test "all five v3 durable commands use exact ACKs and event delivery", %{port: port} do

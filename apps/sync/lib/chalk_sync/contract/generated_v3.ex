@@ -82,7 +82,7 @@ defmodule ChalkSync.Contract.GeneratedV3 do
     1000 => %{
       "code" => 1000,
       "connection" => "closed",
-      "reasons" => ["terminal recovery drained"]
+      "reasons" => ["terminal event acknowledged", "terminal recovery drained"]
     },
     1008 => %{
       "code" => 1008,
@@ -97,7 +97,7 @@ defmodule ChalkSync.Contract.GeneratedV3 do
     1012 => %{
       "code" => 1012,
       "connection" => "closed",
-      "reasons" => ["service restart", "server draining"]
+      "reasons" => ["service restart", "server draining", "terminal acknowledgement timeout"]
     }
   }
   @metadata %{
@@ -441,7 +441,11 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       "conflict" => "preserves_original_receipt"
     },
     "closeCodes" => [
-      %{"code" => 1000, "connection" => "closed", "reasons" => ["terminal recovery drained"]},
+      %{
+        "code" => 1000,
+        "connection" => "closed",
+        "reasons" => ["terminal event acknowledged", "terminal recovery drained"]
+      },
       %{
         "code" => 1008,
         "connection" => "closed",
@@ -455,7 +459,7 @@ defmodule ChalkSync.Contract.GeneratedV3 do
       %{
         "code" => 1012,
         "connection" => "closed",
-        "reasons" => ["service restart", "server draining"]
+        "reasons" => ["service restart", "server draining", "terminal acknowledgement timeout"]
       }
     ]
   }

@@ -23,6 +23,7 @@ defmodule ChalkSync.Transport.SocketV3 do
   @hello_timeout_ms 5_000
   @heartbeat_interval_ms 20_000
   @missed_heartbeat_limit 2
+  @terminal_ack_timeout_ms 5_000
 
   @impl true
   def init(opts) do
@@ -40,6 +41,8 @@ defmodule ChalkSync.Transport.SocketV3 do
        phase: :awaiting_hello,
        hello_timer: timer,
        heartbeat_timer: nil,
+       terminal_ack_timer: nil,
+       terminal_head: nil,
        missed_heartbeats: 0,
        identity: nil,
        coordinator: nil,
@@ -83,6 +86,14 @@ defmodule ChalkSync.Transport.SocketV3 do
   end
 
   def handle_info(:heartbeat_check, state), do: {:ok, %{state | heartbeat_timer: nil}}
+
+  def handle_info(:terminal_ack_timeout, %{phase: :terminal} = state),
+    do:
+      {:stop, :normal, {1012, "terminal acknowledgement timeout"},
+       %{state | terminal_ack_timer: nil}}
+
+  def handle_info(:terminal_ack_timeout, state),
+    do: {:ok, %{state | terminal_ack_timer: nil}}
 
   def handle_info(
         {:sync_command_result, lease, command_id, result},
@@ -192,6 +203,7 @@ defmodule ChalkSync.Transport.SocketV3 do
   @impl true
   def terminate(_reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
     cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.terminal_ack_timer)
     unsubscribe_room_actions(state)
     RoomActionQueue.close(state.room_actions_queue)
     Coordinator.unsubscribe(coordinator, self())
@@ -206,6 +218,7 @@ defmodule ChalkSync.Transport.SocketV3 do
 
   def terminate(_reason, state) do
     cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.terminal_ack_timer)
     unsubscribe_room_actions(state)
     RoomActionQueue.close(state.room_actions_queue)
 
@@ -262,6 +275,26 @@ defmodule ChalkSync.Transport.SocketV3 do
   end
 
   defp handle_frame({:hello, _hello}, state), do: protocol_error(:already_authenticated, state)
+
+  defp handle_frame(
+         {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
+         %{
+           phase: :terminal,
+           coordinator: coordinator,
+           terminal_head: %{revision: revision, state_digest: state_digest}
+         } = state
+       ) do
+    case Coordinator.acknowledge(coordinator, revision, state_digest, self()) do
+      :ok ->
+        cancel_timer(state.terminal_ack_timer)
+
+        {:stop, :normal, {1000, "terminal event acknowledged"},
+         %{state | terminal_ack_timer: nil}}
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "delivery recovery required"}, state}
+    end
+  end
 
   defp handle_frame(
          {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
@@ -571,9 +604,18 @@ defmodule ChalkSync.Transport.SocketV3 do
       {:ok, encoded, false} ->
         {:push, {:text, encoded}, mark_control_checked(state)}
 
-      {:ok, encoded, true} ->
-        {:stop, :normal, {1000, "terminal event drained"}, {:text, encoded},
-         %{state | phase: :terminal}}
+      {:ok, encoded, {:terminal, revision, state_digest}} ->
+        cancel_timer(state.heartbeat_timer)
+        timer = Process.send_after(self(), :terminal_ack_timeout, @terminal_ack_timeout_ms)
+
+        {:push, {:text, encoded},
+         %{
+           state
+           | phase: :terminal,
+             heartbeat_timer: nil,
+             terminal_ack_timer: timer,
+             terminal_head: %{revision: revision, state_digest: state_digest}
+         }}
 
       :empty ->
         {:ok, state}
