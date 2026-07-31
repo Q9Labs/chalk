@@ -215,6 +215,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Accepted committed Sync acknowledgements and matching terminal control events
+  as final proof for participant Leave and Session end when the initiating
+  client is removed before a final acknowledgement, and skipped redundant
+  participant Leave after a confirmed Session end.
 - Made resumed mobile client-session keys compatible with Expo SecureStore so
   Android and iOS can persist broker credentials without rejecting invite-token
   keys.

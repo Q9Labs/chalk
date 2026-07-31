@@ -112,6 +112,7 @@ export class ChalkSession implements ChalkSessionStore {
   #recoveryPromise: Promise<void> | null = null;
   #refreshTimer: unknown;
   #screenEndedPending = false;
+  #sessionEndConfirmed = false;
   #snapshot = initialChalkSessionSnapshot();
   #state: ChalkSessionState = "idle";
   #sync: ChalkSessionSyncClient | null = null;
@@ -280,7 +281,10 @@ export class ChalkSession implements ChalkSessionStore {
   stopParticipantCamera = (participantSessionId: string): Promise<void> => this.#runCommand("stopParticipantCamera", () => this.#sync!.stopParticipantCamera(participantSessionId));
   stopParticipantScreenShare = (participantSessionId: string): Promise<void> => this.#runCommand("stopParticipantScreenShare", () => this.#sync!.stopParticipantScreenShare(participantSessionId));
   removeParticipant = (participantSessionId: string): Promise<void> => this.#runCommand("removeParticipant", () => this.#sync!.removeParticipant(participantSessionId));
-  endSession = (): Promise<void> => this.#runCommand("endSession", () => this.#sync!.endSession());
+  endSession = async (): Promise<void> => {
+    await this.#runCommand("endSession", () => this.#sync!.endSession());
+    this.#sessionEndConfirmed = true;
+  };
 
   sendReaction = (reaction: ChalkReaction): Promise<ChalkRoomReaction> =>
     this.#runRoomAction("sendReaction", async () => {
@@ -977,6 +981,7 @@ export class ChalkSession implements ChalkSessionStore {
   }
 
   async #confirmDurableLeave(durableLeave: boolean): Promise<boolean> {
+    if (this.#sessionEndConfirmed) return true;
     if (!durableLeave || this.#access.current === null) return true;
     if (!this.#sync) return false;
     try {
@@ -1136,6 +1141,7 @@ export class ChalkSession implements ChalkSessionStore {
     this.#pendingRecovery = null;
     this.#joinCleanupConfirmed = null;
     this.#screenEndedPending = false;
+    this.#sessionEndConfirmed = false;
     this.#failedCleanupRequired = false;
     this.#clearRoomActionTimers();
     this.#reactions = [];

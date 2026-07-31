@@ -530,6 +530,18 @@ describe("ChalkSession", () => {
     expect(harness.sync.setParticipantRole).toHaveBeenCalledWith("participant-2", "cohost");
     expect(harness.sync.endSession).toHaveBeenCalledTimes(1);
     await harness.session.leave();
+    expect(harness.sync.leave).not.toHaveBeenCalled();
+  });
+
+  it("still sends participant Leave when Session end is not confirmed", async () => {
+    const harness = createHarness();
+    harness.sync.endSession.mockRejectedValueOnce(new TypeError("end failed"));
+    await harness.session.join();
+
+    await expect(harness.session.endSession()).rejects.toMatchObject({ code: "command_rejected", action: "endSession" });
+    await harness.session.leave();
+
+    expect(harness.sync.leave).toHaveBeenCalledTimes(1);
   });
 
   it.each([

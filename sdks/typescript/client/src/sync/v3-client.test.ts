@@ -359,6 +359,72 @@ describe("V3SyncClient", () => {
     expect(client.getSnapshot().pendingCommandCount).toBe(0);
   });
 
+  it.each(["participant_leave", "end_session"] as const)("settles %s from its committed ACK without waiting for a control event the departing client may not receive", async (operationName) => {
+    const { client, socket } = await liveClient();
+    const operation = operationName === "participant_leave" ? client.leave({ commandId: commandIds[0] }) : client.endSession({ commandId: commandIds[0] });
+
+    socket.receive({
+      type: "ack",
+      command_id: commandIds[0],
+      delivery: "original",
+      outcome: "committed",
+      event_id: recoveryId,
+      revision: 2,
+      state_digest: "0".repeat(64),
+    });
+
+    await expect(operation).resolves.toMatchObject({ outcome: "committed" });
+  });
+
+  it("settles Session end from the terminal control event when the server closes without a final ACK", async () => {
+    const { client, socket, state } = await liveClient();
+    const ended = { ...state, revision: 2, stateDigest: "0".repeat(64), status: "ended" as const, hostParticipantSessionId: null, participants: [], admissionRequests: [], recording: null };
+    const digest = await computeV3StateDigest(ended);
+    const operation = client.endSession({ commandId: commandIds[0] });
+
+    socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
+    socket.receive({
+      type: "event",
+      stream: "control",
+      name: "session_ended",
+      event_id: recoveryId,
+      base_revision: 1,
+      revision: 2,
+      schema_version: 3,
+      resulting_state_digest: digest,
+      payload: { reason: "ended_by_participant" },
+      external_operation_id: commandIds[1],
+    });
+
+    await expect(operation).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: 2, state_digest: digest });
+    expect(client.getSnapshot().pendingCommandCount).toBe(0);
+  });
+
+  it("settles participant Leave from the self-removal control event when the server closes without a final ACK", async () => {
+    const initial = stateWithPeer("participant");
+    const { client, socket, state } = await liveClient({}, initial, peerId);
+    const left = { ...state, revision: 2, stateDigest: "0".repeat(64), participants: state.participants.filter((participant) => participant.participantSessionId !== peerId) };
+    const digest = await computeV3StateDigest(left);
+    const operation = client.leave({ commandId: commandIds[0] });
+
+    socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
+    socket.receive({
+      type: "event",
+      stream: "control",
+      name: "participant_left",
+      event_id: recoveryId,
+      base_revision: 1,
+      revision: 2,
+      schema_version: 3,
+      resulting_state_digest: digest,
+      payload: { participant_session_id: peerId, reason: "left" },
+      external_operation_id: commandIds[1],
+    });
+
+    await expect(operation).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: 2, state_digest: digest });
+    expect(client.getSnapshot().pendingCommandCount).toBe(0);
+  });
+
   it("retains exact control-event evidence and recovers on conflicting duplicates", async () => {
     for (let repetition = 0; repetition < 200; repetition += 1) await exerciseConflictingControlEvidence();
   }, 20_000);
@@ -1062,7 +1128,7 @@ describe("v3 exact decoding and durable state", () => {
   });
 });
 
-async function liveClient(overrides: Partial<ConstructorParameters<typeof V3SyncClient>[0]> = {}, initialState = baseState()) {
+async function liveClient(overrides: Partial<ConstructorParameters<typeof V3SyncClient>[0]> = {}, initialState = baseState(), participantSessionId = hostId) {
   const socket = new TestSocket();
   const factory: SyncWebSocketFactory = { connect: () => socket };
   const mediaPlane = new TestMediaPlane();
@@ -1075,7 +1141,7 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V3Sync
   socket.receive({
     type: "welcome",
     protocol: 3,
-    participant_session_id: hostId,
+    participant_session_id: participantSessionId,
     participant_session_generation: 1,
     recovery_id: recoveryId,
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },

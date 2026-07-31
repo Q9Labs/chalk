@@ -572,6 +572,7 @@ export class V3SyncClient implements V3RoomActionsClient {
           this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
           this.#rememberControlEvent(frame);
         }
+        await this.#settleTerminalLifecycleCommands(frame);
         await this.#settleProvenCommands();
         {
           const control = this.#requireControl();
@@ -748,6 +749,10 @@ export class V3SyncClient implements V3RoomActionsClient {
       await this.#finishCommand(frame.command_id, frame);
       return;
     }
+    if (isTerminalLifecycleOperation(deferred.frame)) {
+      await this.#finishCommand(frame.command_id, frame);
+      return;
+    }
     if (!this.#ackHeadIsProven(frame)) {
       const previous = this.#acknowledgements.get(frame.command_id);
       if (previous && JSON.stringify(previous) !== JSON.stringify(frame)) throw new V3ReplicaError("conflicting duplicate command ACK");
@@ -761,6 +766,27 @@ export class V3SyncClient implements V3RoomActionsClient {
     for (const commandId of this.#commands.keys()) {
       const ack = this.#acknowledgements.get(commandId);
       if (ack && this.#ackHeadIsProven(ack)) await this.#finishCommand(commandId, ack);
+    }
+  }
+
+  async #settleTerminalLifecycleCommands(frame: Extract<SyncV3ServerFrame, { readonly type: "event" }>): Promise<void> {
+    const operationName =
+      frame.name === "session_ended"
+        ? "end_session"
+        : (frame.name === "participant_left" && frame.payload.participant_session_id === this.#participantSessionId) || (frame.name === "host_left_and_transferred" && frame.payload.departing_participant_session_id === this.#participantSessionId)
+          ? "participant_leave"
+          : null;
+    if (!operationName) return;
+    for (const [commandId, deferred] of this.#commands) {
+      if (deferred.frame.type !== "operation" || deferred.frame.name !== operationName) continue;
+      await this.#finishCommand(commandId, {
+        type: "ack",
+        command_id: commandId,
+        delivery: "duplicate",
+        outcome: "satisfied",
+        revision: frame.revision,
+        state_digest: frame.resulting_state_digest,
+      });
     }
   }
 
@@ -1498,6 +1524,10 @@ function validMediaPublication(publication: V3MediaPublication): boolean {
 
 function validMediaPlaneResult(result: V3MediaPlaneResult): boolean {
   return (result.outcome === "confirmed" || result.outcome === "satisfied" || result.outcome === "retryable_failure" || result.outcome === "terminal_failure" || result.outcome === "ambiguous") && (result.errorCode === null || typeof result.errorCode === "string");
+}
+
+function isTerminalLifecycleOperation(frame: SyncV3ClientFrame): boolean {
+  return frame.type === "operation" && (frame.name === "participant_leave" || frame.name === "end_session");
 }
 
 function assertV3Url(value: string): void {
