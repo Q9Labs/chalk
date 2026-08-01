@@ -719,6 +719,23 @@ Canonical examples include CameraPreview and AudioLevelPreview.
 retired because Output describes its purpose and Renderer exposes an
 implementation detail.
 
+## Feature surfaces
+
+These feature components follow the same shape vocabulary and are public
+because they are independently composable through `/components`:
+
+- **DevicePopover** is the anchored device-selection surface for microphone,
+  camera, and related output choices. `DeviceControlButton` is retired because
+  the component owns a popover as well as its trigger.
+- **MediaRequestDialog** is the decision surface for an incoming request to
+  start or stop participant media. `IncomingMediaRequestDialog` is retired.
+- **ReactionsOverlay** presents transient participant reactions over the
+  ConferenceView or Stage.
+- **PinnedMessageBanner** presents an ongoing pinned chat message in the
+  conference chrome.
+- **GuidedTour** owns the stateful guided-tour presentation built from tour
+  steps and highlights.
+
 ## Component naming map
 
 | Current name                                  | Canonical name                          |
@@ -739,6 +756,7 @@ implementation detail.
 | `ParticipantList` used as a full panel        | `ParticipantsPanel`                     |
 | `TranscriptionPanel`                          | `TranscriptPanel`                       |
 | `ControlButton`                               | `ControlBarButton`                      |
+| `DeviceControlButton`                         | `DevicePopover`                         |
 | `MobilePanel`                                 | responsive Panel presentation           |
 | `MobileControlSheet`                          | responsive ControlBar presentation      |
 | `InviteModal`                                 | `InviteDialog`                          |
@@ -747,6 +765,7 @@ implementation detail.
 | `NotificationStack`                           | `ToastStack`                            |
 | `AudioRenderer`                               | `AudioOutput`                           |
 | `LayoutSwitcher`                              | `LayoutPicker`                          |
+| `IncomingMediaRequestDialog`                  | `MediaRequestDialog`                    |
 
 ## Cross-platform public symbols
 

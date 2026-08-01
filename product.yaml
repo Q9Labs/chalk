@@ -137,7 +137,7 @@ domains:
       evidence: ["packages/whiteboard/src/collab"]
     - capability: "React Excalidraw canvas and math authoring"
       done: true
-      evidence: ["packages/whiteboard/src/react", "sdks/typescript/react/src/components/full/WhiteboardPanel.tsx"]
+      evidence: ["packages/whiteboard/src/react", "sdks/typescript/react/src/components/whiteboard-view/WhiteboardView.tsx"]
     - capability: "Whiteboard is wired into the public web app"
       done: false
       evidence: ["apps/web/src/routes/whiteboard.tsx"]

@@ -94,6 +94,49 @@ names in both packages.
 | `@q9labsai/chalk-react-native` | `JoinSettings.audioEnabled` | `PreJoinSettings.microphoneEnabled` |
 | `@q9labsai/chalk-react-native` | `JoinSettings.videoEnabled` | `PreJoinSettings.cameraEnabled`     |
 
+Phase 5 adopts the canonical component vocabulary across the React and React
+Native packages. These are breaking export and prop renames; no compatibility
+aliases are retained.
+
+| Package                        | Old export or prop                   | New export or prop                          |
+| ------------------------------ | ------------------------------------ | ------------------------------------------- |
+| `@q9labsai/chalk-react`        | `MeetingRoom`                        | `ConferenceView`                            |
+| `@q9labsai/chalk-react`        | `MeetingHeader`                      | `ConferenceHeader`                          |
+| `@q9labsai/chalk-react`        | `MeetingHub`                         | `ConferenceInfoDialog`                      |
+| `@q9labsai/chalk-react`        | `PreJoinLobby`                       | `PreJoinScreen`                             |
+| `@q9labsai/chalk-react`        | `LoadingScreen`                      | `JoiningScreen`                             |
+| `@q9labsai/chalk-react`        | host-facing `WaitingRoom`            | `AdmissionPanel`                            |
+| `@q9labsai/chalk-react`        | `VideoGrid`                          | `ParticipantGrid`                           |
+| `@q9labsai/chalk-react`        | `VideoTile`                          | `ParticipantTile`                           |
+| `@q9labsai/chalk-react`        | `WhiteboardPanel`                    | `WhiteboardView`                            |
+| `@q9labsai/chalk-react`        | panel `ParticipantList`              | `ParticipantsPanel`                         |
+| `@q9labsai/chalk-react`        | `TranscriptionPanel`                 | `TranscriptPanel`                           |
+| `@q9labsai/chalk-react`        | `ControlButton`                      | `ControlBarButton`                          |
+| `@q9labsai/chalk-react`        | `DeviceControlButton`                | `DevicePopover`                             |
+| `@q9labsai/chalk-react`        | `InviteModal`                        | `InviteDialog`                              |
+| `@q9labsai/chalk-react`        | `LeaveConfirmationDialog`            | `LeaveDialog`                               |
+| `@q9labsai/chalk-react`        | `ConnectionLostOverlay`              | `ReconnectingOverlay`                       |
+| `@q9labsai/chalk-react`        | `NotificationStack` / `Notification` | `ToastStack` / `Toast`                      |
+| `@q9labsai/chalk-react`        | `AudioRenderer`                      | `AudioOutput`                               |
+| `@q9labsai/chalk-react`        | `LayoutSwitcher`                     | `LayoutPicker`                              |
+| `@q9labsai/chalk-react`        | `IncomingMediaRequestDialog`         | `MediaRequestDialog`                        |
+| `@q9labsai/chalk-react`        | `SplitStage`                         | one Stage with a Layout                     |
+| `@q9labsai/chalk-react`        | `/atomic`, `/composite`, `/full`     | explicit `/components` exports              |
+| `@q9labsai/chalk-react`        | `layout: spotlight` / `screen-share` | `layout: focus` / `presentation`            |
+| `@q9labsai/chalk-react`        | `layout: sidebar`                    | `layout: focus` plus Filmstrip              |
+| `@q9labsai/chalk-react`        | `variant: dock`                      | `placement: floating`                       |
+| `@q9labsai/chalk-react`        | `DevicePopover.appearance: dock`     | `appearance: floating`                      |
+| `@q9labsai/chalk-react`        | `variant: mobile`                    | `placement: floating`, `density: compact`   |
+| `@q9labsai/chalk-react`        | default `variant`                    | `placement: inline`, `density: comfortable` |
+| `@q9labsai/chalk-react-native` | `MeetingRoom`                        | `ConferenceView`                            |
+| `@q9labsai/chalk-react-native` | `PreJoinLobby`                       | `PreJoinScreen`                             |
+| `@q9labsai/chalk-react-native` | `JoiningLoadingScreen`               | `JoiningScreen`                             |
+| `@q9labsai/chalk-react-native` | `MeetingRoomDiagnosticsSnapshot`     | `ConferenceViewDiagnosticsSnapshot`         |
+| `@q9labsai/chalk-react-native` | `MeetingRoomFeatures`                | `ConferenceViewFeatures`                    |
+| `@q9labsai/chalk-react-native` | `MeetingRoomProps`                   | `ConferenceViewProps`                       |
+| `@q9labsai/chalk-react-native` | diagnostics field `meetingRoom`      | `conferenceView`                            |
+| `@q9labsai/chalk-react-native` | `layout: speaker` / `sidebar`        | `layout: focus` / `presentation`            |
+
 ### Added
 
 - A shared client `ConferencePhase` derivation primitive and tested internal lifecycle hooks for React and React Native, preserving the existing UI phase surfaces and public component APIs.
