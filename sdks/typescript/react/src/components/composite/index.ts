@@ -1,7 +1,9 @@
 // Overlays & Feedback
 export * from "./NotificationStack";
 export * from "./ConnectionLostOverlay";
+export * from "./CommandErrorAlert";
 export * from "./LeaveConfirmationDialog";
+export * from "./IncomingMediaRequestDialog";
 
 // Headers & Info
 export * from "./MeetingHeader";
@@ -46,5 +48,6 @@ export * from "./ControlBar";
 export * from "./MobileControlSheet";
 export * from "./MobilePanel";
 export * from "./ReactionPicker";
+export * from "./ReactionsOverlay";
 export * from "./RecordingControls";
 export * from "./WhatsNewDialog";

@@ -1,14 +1,13 @@
 import type { ChalkChatAttachment, ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { TelemetryJourney } from "../telemetry";
 import { ChalkProvider, useChalkSession } from "../context/chalk-provider";
 import { useChalkSnapshot } from "../hooks/useChalkSnapshot";
 import { useMeetingParticipants } from "../hooks/useMeetingParticipants";
-import { Theme } from "../ui/theme";
 import { isIosSimulator } from "../utils/ios-simulator";
 import { EndScreen, type MeetingEndData } from "./EndScreen";
+import { JoinFailedScreen } from "./JoinFailedScreen";
 import { JoiningLoadingScreen } from "./JoiningLoadingScreen";
 import { MeetingRoom, type MeetingRoomFeatures } from "./MeetingRoom";
 import { PreJoinLobby, type JoinSettings } from "./PreJoinLobby";
@@ -245,28 +244,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   }
 
   if (snapshot.state === "failed") {
-    return (
-      <ScrollView contentContainerStyle={styles.errorScreen}>
-        <Text style={styles.eyebrow}>Join failed</Text>
-        <Text style={styles.title}>{props.roomName || props.roomId}</Text>
-        <Text style={styles.body}>{snapshot.failure?.message ?? props.joinError ?? "Unable to join the meeting."}</Text>
-        <View style={styles.actionRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Retry joining" onPress={() => void session.join().catch(props.onJoinFailure)} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Retry</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Return home"
-            onPress={() => {
-              void session.leave().finally(() => props.onClose?.());
-            }}
-            style={styles.secondaryButton}
-          >
-            <Text style={styles.secondaryButtonText}>Home</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    );
+    return <JoinFailedScreen roomName={props.roomName || props.roomId} message={snapshot.failure?.message ?? props.joinError ?? "Unable to join the meeting."} onRetry={() => void session.join().catch(props.onJoinFailure)} onHome={() => void session.leave().finally(() => props.onClose?.())} />;
   }
 
   return <MeetingRoom features={props.features} meetingLink={props.meetingLink} onDiagnosticsChange={setMeetingRoomDiagnostics} onEndForAll={props.role === "host" ? endForAll : undefined} onLeave={finish} pickChatAttachments={props.pickChatAttachments} roomName={props.roomName || props.roomId} />;
@@ -281,38 +259,3 @@ function meetingEndData(props: VideoConferenceProps, joinedAt: Date | null, part
     chatCount,
   };
 }
-
-const styles = StyleSheet.create({
-  errorScreen: {
-    flexGrow: 1,
-    backgroundColor: Theme.colors.background,
-    paddingHorizontal: Theme.spacing["2xl"],
-    paddingTop: Theme.spacing["6xl"],
-    paddingBottom: Theme.spacing["3xl"],
-    gap: Theme.spacing.lg,
-  },
-  eyebrow: { ...Theme.typography.eyebrow, color: Theme.colors.primary },
-  title: { ...Theme.typography.title, color: Theme.colors.foreground },
-  body: { ...Theme.typography.body, color: Theme.colors.mutedForeground },
-  actionRow: { flexDirection: "row", gap: Theme.spacing.md },
-  primaryButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Theme.radius.lg,
-    backgroundColor: Theme.colors.primary,
-    paddingHorizontal: Theme.spacing.xl,
-    paddingVertical: Theme.spacing.md,
-  },
-  primaryButtonText: { color: Theme.colors.primaryForeground, fontSize: 16, fontWeight: "800" },
-  secondaryButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Theme.radius.lg,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.secondary,
-    paddingHorizontal: Theme.spacing.xl,
-    paddingVertical: Theme.spacing.md,
-  },
-  secondaryButtonText: { color: Theme.colors.foreground, fontSize: 15, fontWeight: "700" },
-});

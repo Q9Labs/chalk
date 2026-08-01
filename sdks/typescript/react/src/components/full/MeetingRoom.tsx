@@ -9,7 +9,7 @@ import { toAudioParticipants, toListParticipants, toParticipantNames, toVideoPar
 import { cn } from "../../utils/cn";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { AudioRenderer } from "../atomic";
-import { ChatPanel, ConnectionLostOverlay, ControlBar, InviteModal, LeaveConfirmationDialog, MeetingHeader, ParticipantList, ReactionPicker, VideoGrid } from "../composite";
+import { ChatPanel, CommandErrorAlert, ConnectionLostOverlay, ControlBar, IncomingMediaRequestDialog, InviteModal, LeaveConfirmationDialog, MeetingHeader, ParticipantList, ReactionPicker, ReactionsOverlay, VideoGrid } from "../composite";
 import { uploadChatAttachment } from "../composite/chat-file-upload";
 import { WhiteboardPanel } from "./WhiteboardPanel";
 
@@ -200,16 +200,7 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
         ) : null}
       </div>
 
-      <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden" aria-live="polite" aria-atomic="false">
-        {snapshot.reactions.slice(-6).map((reaction, index) => (
-          <div key={reaction.eventId} className="absolute bottom-28 rounded-full bg-card/90 px-3 py-2 text-2xl shadow-xl" style={{ left: `${18 + index * 12}%` }}>
-            <span aria-hidden="true">{reaction.reaction}</span>
-            <span className="sr-only">
-              {reaction.displayName} reacted {reaction.reaction}
-            </span>
-          </div>
-        ))}
-      </div>
+      <ReactionsOverlay reactions={snapshot.reactions.slice(-6)} />
 
       <div className="absolute inset-x-0 bottom-0 z-30 hidden px-5 md:block">
         <ControlBar
@@ -264,27 +255,9 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
         </div>
       ) : null}
 
-      {incomingRequest ? (
-        <div role="dialog" aria-modal="true" aria-label={incomingRequest.kind === "unmute" ? "Unmute request" : "Camera request"} className="absolute bottom-24 left-1/2 z-50 w-[min(92vw,380px)] -translate-x-1/2 rounded-2xl border border-border bg-popover p-5 shadow-2xl">
-          <p className="font-semibold">
-            {incomingRequest.actorDisplayName ?? "A meeting moderator"} is asking you to {incomingRequest.kind === "unmute" ? "unmute" : "start your camera"}.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <button type="button" className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => actions.declineMediaRequest(incomingRequest.requestId)}>
-              Not now
-            </button>
-            <button type="button" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" onClick={() => void run(() => actions.acceptMediaRequest(incomingRequest.requestId), "Media request failed")}>
-              Allow
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {incomingRequest ? <IncomingMediaRequestDialog request={incomingRequest} onDecline={() => actions.declineMediaRequest(incomingRequest.requestId)} onAllow={() => void run(() => actions.acceptMediaRequest(incomingRequest.requestId), "Media request failed")} /> : null}
 
-      {(commandError || (snapshot.state === "live" && snapshot.failure)) && (
-        <p role="alert" className="absolute bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-full border border-destructive/30 bg-destructive/15 px-4 py-2 text-sm text-destructive backdrop-blur">
-          {commandError || snapshot.failure?.message}
-        </p>
-      )}
+      <CommandErrorAlert message={commandError || (snapshot.state === "live" ? snapshot.failure?.message : undefined)} />
       <ConnectionLostOverlay
         isVisible={snapshot.state === "joining" || snapshot.state === "reconnecting" || snapshot.state === "failed"}
         status={snapshot.state === "failed" ? "failed" : snapshot.state === "reconnecting" ? "reconnecting" : "connecting"}

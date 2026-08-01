@@ -24,6 +24,8 @@ export { GradientSurface } from "./components/GradientSurface";
 export type { GradientSurfaceProps } from "./components/GradientSurface";
 export { JoiningLoadingScreen } from "./components/JoiningLoadingScreen";
 export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScreen";
+export { JoinFailedScreen } from "./components/JoinFailedScreen";
+export type { JoinFailedScreenProps } from "./components/JoinFailedScreen";
 export { MediaView } from "./components/MediaView";
 export type { MediaViewProps } from "./components/MediaView";
 export { MeetingRoom } from "./components/MeetingRoom";
