@@ -56,9 +56,7 @@ returns each command's original promise.
 Use the narrowest import that matches the UI layer you need:
 
 ```tsx
-import { Avatar, VideoTile } from "@q9labsai/chalk-react/atomic";
-import { ChatPanel, ControlBar } from "@q9labsai/chalk-react/composite";
-import { EndScreen, LoadingScreen, MeetingRoom } from "@q9labsai/chalk-react/full";
+import { Avatar, ParticipantTile, ChatPanel, ControlBar, EndScreen, JoiningScreen, ConferenceView } from "@q9labsai/chalk-react/components";
 ```
 
 The root import is kept for convenience, but bundle-sensitive apps should prefer
@@ -68,6 +66,6 @@ the layer subpaths.
 
 The hooks own React subscriptions only. Joining, transport, permissions,
 diagnostics, and recovery stay in `@q9labsai/chalk-client`. Recording and
-transcription are not part of this launch surface. The styled `WhiteboardPanel`
+transcription are not part of this launch surface. The styled `WhiteboardView`
 is backed by `@q9labsai/chalk-whiteboard`; callers still own its room state and
 transport wiring.

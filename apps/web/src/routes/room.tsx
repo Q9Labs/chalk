@@ -1,5 +1,5 @@
 import { ChalkSession, type ChalkSessionStore } from "@q9labsai/chalk-client";
-import { ChalkProvider, PreJoinLobby, MeetingRoom, type PreJoinSettings } from "@q9labsai/chalk-react";
+import { ChalkProvider, PreJoinScreen, ConferenceView, type PreJoinSettings } from "@q9labsai/chalk-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
@@ -40,7 +40,7 @@ function LocalRoomPage() {
   };
 
   if (!active) {
-    return <PreJoinLobby roomName="Chalk meeting" logoUrl="/brand/chalk/chalk-logo.svg" defaultDisplayName={initialName} isJoining={isCreating} error={error} onJoin={join} />;
+    return <PreJoinScreen roomName="Chalk meeting" logoUrl="/brand/chalk/chalk-logo.svg" defaultDisplayName={initialName} isJoining={isCreating} error={error} onJoin={join} />;
   }
 
   return (
@@ -76,7 +76,7 @@ function LiveRoom({ displayName, session, onLeave }: { readonly displayName: str
 
   return (
     <>
-      <MeetingRoom roomName="Chalk meeting" displayName={displayName} meetingLink={globalThis.location?.href} onLeave={leave} />
+      <ConferenceView roomName="Chalk meeting" displayName={displayName} meetingLink={globalThis.location?.href} onLeave={leave} />
       {leaveError ? (
         <div role="alert" className="fixed bottom-24 left-1/2 z-50 max-w-md -translate-x-1/2 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
           {leaveError}

@@ -1,8 +1,8 @@
 import type { ChalkLocalMedia, ChalkMediaSource, ChalkParticipant, ChalkParticipantMediaState, ChalkRemoteMedia } from "@q9labsai/chalk-client";
 
-import type { AudioParticipant } from "../components/atomic/AudioRenderer";
-import type { Participant } from "../components/composite/VideoGrid";
-import type { ParticipantListParticipant } from "../components/composite/ParticipantList/ParticipantList";
+import type { AudioParticipant } from "../components/audio-output/AudioOutput";
+import type { Participant } from "../components/participant-grid/ParticipantGrid";
+import type { ParticipantListParticipant } from "../components/participants-panel/ParticipantsPanel";
 
 export function toVideoParticipants(participants: readonly ChalkParticipant[], remoteMedia: readonly ChalkRemoteMedia[], localId: string, displayName: string, localMedia: Readonly<Record<ChalkMediaSource, ChalkLocalMedia>>): Participant[] {
   const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>>>();

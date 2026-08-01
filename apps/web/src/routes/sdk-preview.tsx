@@ -3,14 +3,14 @@ import { useMemo, useState } from "react";
 
 import type { ChalkChatMessage } from "../../../../sdks/typescript/client/src/room-actions/types";
 import { ChatPanel } from "../../../../sdks/typescript/react/src/components/composite/ChatPanel";
-import { ControlBar } from "../../../../sdks/typescript/react/src/components/composite/ControlBar";
-import { MeetingHeader } from "../../../../sdks/typescript/react/src/components/composite/MeetingHeader";
-import { MeetingHub } from "../../../../sdks/typescript/react/src/components/composite/MeetingHub";
-import { NotificationStack, type Notification } from "../../../../sdks/typescript/react/src/components/composite/NotificationStack";
-import { ParticipantList, type ParticipantListParticipant } from "../../../../sdks/typescript/react/src/components/composite/ParticipantList/ParticipantList";
-import { VideoGrid, type Participant as GridParticipant, type VideoGridProps } from "../../../../sdks/typescript/react/src/components/composite/VideoGrid";
-import { PreJoinLobby, type PreJoinSettings } from "../../../../sdks/typescript/react/src/components/full/PreJoinLobby";
-import { WhiteboardPanel } from "../../../../sdks/typescript/react/src/components/full/WhiteboardPanel";
+import { ControlBar } from "../../../../sdks/typescript/react/src/components/control-bar/ControlBar";
+import { ConferenceHeader } from "../../../../sdks/typescript/react/src/components/conference-header/ConferenceHeader";
+import { ConferenceInfoDialog } from "../../../../sdks/typescript/react/src/components/conference-info-dialog/ConferenceInfoDialog";
+import { ToastStack, type Toast } from "../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
+import { ParticipantsPanel, type ParticipantListParticipant } from "../../../../sdks/typescript/react/src/components/participants-panel/ParticipantsPanel";
+import { ParticipantGrid, type Participant as GridParticipant, type ParticipantGridProps } from "../../../../sdks/typescript/react/src/components/participant-grid/ParticipantGrid";
+import { PreJoinScreen, type PreJoinSettings } from "../../../../sdks/typescript/react/src/components/pre-join-screen/PreJoinScreen";
+import { WhiteboardView } from "../../../../sdks/typescript/react/src/components/whiteboard-view/WhiteboardView";
 import { useIsMobile } from "../../../../sdks/typescript/react/src/internal/useMediaQuery";
 import { MeetingSettingsModal } from "../components/sdk-preview/MeetingSettingsModal";
 import { PreviewTweaker } from "../components/sdk-preview/PreviewTweaker";
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/sdk-preview")({
 });
 
 type PreviewSurface = "lobby" | "conference";
-type MeetingLayout = NonNullable<VideoGridProps["layout"]>;
+type MeetingLayout = NonNullable<ParticipantGridProps["layout"]>;
 
 const roomParticipants: GridParticipant[] = [
   {
@@ -115,10 +115,10 @@ function SdkPreviewPage() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
-  const [layout, setLayout] = useState<MeetingLayout>("spotlight");
+  const [layout, setLayout] = useState<MeetingLayout>("focus");
   const [isHubOpen, setIsHubOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<Toast[]>([]);
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
   const previewUrl = typeof window === "undefined" ? "http://localhost:3070/sdk-preview" : `${window.location.origin}/sdk-preview`;
 
@@ -152,8 +152,8 @@ function SdkPreviewPage() {
     setSurface("conference");
   };
 
-  const showNotification = (type: NonNullable<Notification["type"]>) => {
-    const messages: Record<NonNullable<Notification["type"]>, string> = {
+  const showNotification = (type: NonNullable<Toast["type"]>) => {
+    const messages: Record<NonNullable<Toast["type"]>, string> = {
       info: "Nora joined from a new device.",
       success: "Meeting link copied to your clipboard.",
       warning: "Akash raised a hand.",
@@ -163,26 +163,35 @@ function SdkPreviewPage() {
   };
 
   if (surface === "lobby") {
-    return <PreJoinLobby roomName="Design review" logoUrl="/brand/chalk/chalk-logo.svg" defaultDisplayName={displayName} initialMicrophoneEnabled={!isMuted} initialCameraEnabled={isVideoEnabled} onJoin={joinPreview} />;
+    return <PreJoinScreen roomName="Design review" logoUrl="/brand/chalk/chalk-logo.svg" defaultDisplayName={displayName} initialMicrophoneEnabled={!isMuted} initialCameraEnabled={isVideoEnabled} onJoin={joinPreview} />;
   }
 
   return (
     <main data-chalk data-chalk-theme="light" className="h-dvh min-h-[620px] bg-[#f7f6f2] text-[#0c0e12]">
       <section className="relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[#deddd7] bg-[#fbfaf7]">
-        <MeetingHeader roomName="Design review" logoUrl="/brand/chalk/chalk-logo.svg" duration={18 * 60 + 42} isRecording={isRecording} isTranscribing={isTranscribing} layout={layout === "screen-share" ? "grid" : layout} onLayoutChange={setLayout} onInfo={() => setIsHubOpen(true)} />
+        <ConferenceHeader roomName="Design review" logoUrl="/brand/chalk/chalk-logo.svg" duration={18 * 60 + 42} isRecording={isRecording} isTranscribing={isTranscribing} layout={layout} onLayoutChange={setLayout} onInfo={() => setIsHubOpen(true)} />
 
         <div className={`mx-auto grid min-h-0 w-full max-w-[1320px] flex-1 grid-cols-1 gap-3 overflow-hidden px-3 pt-5 lg:px-8 lg:pt-6 ${isParticipantsOpen || isChatOpen ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
           <div className="min-h-0 bg-[#fbfaf7]">
             {isWhiteboardOpen ? (
-              <WhiteboardPanel canDraw theme="light" localParticipantColor="#55aac9" excalidrawCssPath="https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css" className="h-full min-h-0" />
+              <WhiteboardView canDraw theme="light" localParticipantColor="#55aac9" excalidrawCssPath="https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css" className="h-full min-h-0" />
             ) : (
-              <VideoGrid participants={participants} layout={layout} pinnedParticipantId="nora" maxVisibleParticipants={9} className="h-full" screenShareContent={layout === "screen-share" ? <ScreenShareMock /> : undefined} />
+              <ParticipantGrid participants={participants} layout={layout} pinnedParticipantId="nora" maxVisibleParticipants={9} className="h-full" screenShareContent={layout === "presentation" ? <ScreenShareMock /> : undefined} />
             )}
           </div>
 
           {isParticipantsOpen && (
             <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-[0_8px_30px_rgba(12,14,18,0.06)] lg:static">
-              <ParticipantList participants={participantList} variant="sidebar" canManageParticipants onClose={() => setIsParticipantsOpen(false)} onAddPeople={() => setIsHubOpen(true)} onUpdateDisplayName={setDisplayName} onMuteParticipant={() => undefined} onRemoveParticipant={() => undefined} />
+              <ParticipantsPanel
+                participants={participantList}
+                variant="sidebar"
+                canManageParticipants
+                onClose={() => setIsParticipantsOpen(false)}
+                onAddPeople={() => setIsHubOpen(true)}
+                onUpdateDisplayName={setDisplayName}
+                onMuteParticipant={() => undefined}
+                onRemoveParticipant={() => undefined}
+              />
             </aside>
           )}
 
@@ -215,7 +224,8 @@ function SdkPreviewPage() {
 
         <div className="z-30 shrink-0">
           <ControlBar
-            variant={isMobile ? "mobile" : "dock"}
+            placement="floating"
+            density={isMobile ? "compact" : "comfortable"}
             buttons={["mic", "video", "screenshare", "whiteboard", "participants", "chat", "more", "leave"]}
             meetingDuration={18 * 60 + 42}
             isMuted={isMuted}
@@ -226,7 +236,7 @@ function SdkPreviewPage() {
             isTranscriptionEnabled={isTranscribing}
             isHandRaised={isHandRaised}
             isWhiteboardOpen={isWhiteboardOpen}
-            isScreenSharing={layout === "screen-share"}
+            isScreenSharing={layout === "presentation"}
             unreadChatCount={3}
             selectedAudioInput="default-mic"
             selectedAudioOutput="default-speaker"
@@ -235,7 +245,7 @@ function SdkPreviewPage() {
             onToggleVideo={() => setIsVideoEnabled((value) => !value)}
             onToggleScreenShare={() => {
               setIsWhiteboardOpen(false);
-              setLayout((value) => (value === "screen-share" ? "grid" : "screen-share"));
+              setLayout((value) => (value === "presentation" ? "grid" : "presentation"));
             }}
             onToggleRecording={() => setIsRecording((value) => !value)}
             onToggleChat={() => {
@@ -250,7 +260,7 @@ function SdkPreviewPage() {
             onToggleHandRaise={() => setIsHandRaised((value) => !value)}
             onToggleWhiteboard={() => {
               setIsWhiteboardOpen((value) => !value);
-              setLayout("spotlight");
+              setLayout("focus");
             }}
             onOpenReactions={() => undefined}
             onOpenMore={() => setIsSettingsOpen(true)}
@@ -260,7 +270,7 @@ function SdkPreviewPage() {
           />
         </div>
 
-        <MeetingHub
+        <ConferenceInfoDialog
           isOpen={isHubOpen}
           onClose={() => setIsHubOpen(false)}
           roomName="Design review"
@@ -273,7 +283,7 @@ function SdkPreviewPage() {
           meetingDuration={18 * 60 + 42}
         />
         <MeetingSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-        <NotificationStack notifications={notifications} onDismiss={(id) => setNotifications((current) => current.filter((notification) => notification.id !== id))} />
+        <ToastStack toasts={notifications} onDismiss={(id) => setNotifications((current) => current.filter((notification) => notification.id !== id))} />
         <PreviewTweaker
           onNotify={showNotification}
           onShowPeople={() => {
@@ -286,11 +296,11 @@ function SdkPreviewPage() {
           }}
           onShowScreenShare={() => {
             setIsWhiteboardOpen(false);
-            setLayout("screen-share");
+            setLayout("presentation");
           }}
           onShowWhiteboard={() => {
             setIsWhiteboardOpen(true);
-            setLayout("spotlight");
+            setLayout("focus");
           }}
           onShowMeetingInfo={() => setIsHubOpen(true)}
           onShowSettings={() => setIsSettingsOpen(true)}
