@@ -96,6 +96,7 @@ names in both packages.
 
 ### Added
 
+- A shared client `ConferencePhase` derivation primitive and tested internal lifecycle hooks for React and React Native, preserving the existing UI phase surfaces and public component APIs.
 - A single light-first Chalk design system for marketing, lobby, meeting, SDK,
   and mobile surfaces, with normative tokens, component and layout rules,
   accessibility guidance, and a high-fidelity visual reference board.
