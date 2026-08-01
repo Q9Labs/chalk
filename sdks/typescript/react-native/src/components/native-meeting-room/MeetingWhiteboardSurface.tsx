@@ -3,19 +3,19 @@ import { StyleSheet } from "react-native";
 
 import { ChalkEmbeddedWhiteboard } from "../ChalkEmbeddedWhiteboard";
 import type { WhiteboardMetric } from "../../telemetry";
-import type { MeetingWhiteboardController } from "./useMeetingRoomController";
+import type { MeetingWhiteboardState } from "./useMeetingRoomPanels";
 
 export interface MeetingWhiteboardSurfaceProps {
-  readonly whiteboard: MeetingWhiteboardController;
+  readonly whiteboard: MeetingWhiteboardState;
 }
 
-export function shouldRenderNativeMeetingWhiteboard(whiteboard: MeetingWhiteboardController): whiteboard is MeetingWhiteboardController & {
-  readonly transport: NonNullable<MeetingWhiteboardController["transport"]>;
+export function shouldRenderNativeMeetingWhiteboard(whiteboard: MeetingWhiteboardState): whiteboard is MeetingWhiteboardState & {
+  readonly transport: NonNullable<MeetingWhiteboardState["transport"]>;
 } {
   return whiteboard.isOpen && whiteboard.transport !== null;
 }
 
-export function forwardNativeMeetingWhiteboardMetric(metric: WhiteboardMetric, onMetric: MeetingWhiteboardController["onMetric"]): void {
+export function forwardNativeMeetingWhiteboardMetric(metric: WhiteboardMetric, onMetric: MeetingWhiteboardState["onMetric"]): void {
   onMetric?.(metric);
 }
 

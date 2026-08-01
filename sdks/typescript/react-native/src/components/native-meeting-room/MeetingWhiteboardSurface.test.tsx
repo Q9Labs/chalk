@@ -7,7 +7,7 @@ vi.mock("../ChalkEmbeddedWhiteboard", () => ({
   ChalkEmbeddedWhiteboard: "ChalkEmbeddedWhiteboard",
 }));
 
-import type { MeetingWhiteboardController } from "./useMeetingRoomController";
+import type { MeetingWhiteboardState } from "./useMeetingRoomPanels";
 import { forwardNativeMeetingWhiteboardMetric, shouldRenderNativeMeetingWhiteboard } from "./MeetingWhiteboardSurface";
 
 describe("MeetingWhiteboardSurface", () => {
@@ -18,7 +18,7 @@ describe("MeetingWhiteboardSurface", () => {
       shouldRenderNativeMeetingWhiteboard(
         controller({
           isOpen: true,
-          transport: {} as NonNullable<MeetingWhiteboardController["transport"]>,
+          transport: {} as NonNullable<MeetingWhiteboardState["transport"]>,
         }),
       ),
     ).toBe(true);
@@ -34,7 +34,7 @@ describe("MeetingWhiteboardSurface", () => {
   });
 });
 
-function controller(overrides: Partial<MeetingWhiteboardController>): MeetingWhiteboardController {
+function controller(overrides: Partial<MeetingWhiteboardState>): MeetingWhiteboardState {
   return {
     isOpen: false,
     canDraw: false,
