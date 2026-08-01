@@ -143,7 +143,31 @@ await chalkSession.stopScreenShare();
 await chalkSession.leave();
 ```
 
-## Bind React to the session
+## Render the turnkey conference
+
+`VideoConference` owns the pre-join, join, active, reconnecting, and end
+surfaces. Supply the session factory that already knows how to obtain the
+short-lived participant access bundle:
+
+```tsx
+import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import { VideoConference, type PreJoinSettings } from "@q9labsai/chalk-react";
+import { chalkSession } from "./chalk-session";
+
+const createSession = (_settings: PreJoinSettings): ChalkSessionStore => chalkSession;
+
+export function MeetingRoute() {
+  return <VideoConference roomId="design-review" roomName="Design review" createSession={createSession} />;
+}
+```
+
+Applications can control `layout` and observe `phase`; feature availability is
+expressed with `<feature>Enabled` props and capability overrides with
+`can<Action>` props. The current client snapshot has no admission-wait status,
+so a `waiting` phase is rendered with `JoiningScreen` until the runtime exposes
+that fact.
+
+## Bind React to an existing session
 
 ```tsx
 import { ChalkProvider, useChalkActions, useChalkSnapshot } from "@q9labsai/chalk-react";
@@ -171,7 +195,10 @@ export function MeetingRoute() {
 }
 ```
 
-The provider and hooks project `ChalkSession`; they do not fetch credentials or create independent Sync, WebRTC, or lifecycle owners.
+The provider and hooks project `ChalkSession`; they do not fetch credentials or
+create independent Sync, WebRTC, or lifecycle owners. Use this lower-level
+surface when the application needs to compose the active UI itself; turnkey
+consumers should use `VideoConference`.
 
 ## Verified scope
 

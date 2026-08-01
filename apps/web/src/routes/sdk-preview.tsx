@@ -1,18 +1,8 @@
+import type { ChalkChatMessage, ChalkRoomReaction } from "@q9labsai/chalk-client";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import type { ChalkChatMessage } from "../../../../sdks/typescript/client/src/room-actions/types";
-import { ChatPanel } from "../../../../sdks/typescript/react/src/components/composite/ChatPanel";
-import { ControlBar } from "../../../../sdks/typescript/react/src/components/control-bar/ControlBar";
-import { ConferenceHeader } from "../../../../sdks/typescript/react/src/components/conference-header/ConferenceHeader";
-import { ConferenceInfoDialog } from "../../../../sdks/typescript/react/src/components/conference-info-dialog/ConferenceInfoDialog";
-import { ToastStack, type Toast } from "../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
-import { ParticipantsPanel, type ParticipantListParticipant } from "../../../../sdks/typescript/react/src/components/participants-panel/ParticipantsPanel";
-import { ParticipantGrid, type Participant as GridParticipant, type ParticipantGridProps } from "../../../../sdks/typescript/react/src/components/participant-grid/ParticipantGrid";
-import { PreJoinScreen, type PreJoinSettings } from "../../../../sdks/typescript/react/src/components/pre-join-screen/PreJoinScreen";
-import { WhiteboardView } from "../../../../sdks/typescript/react/src/components/whiteboard-view/WhiteboardView";
-import { useIsMobile } from "../../../../sdks/typescript/react/src/internal/useMediaQuery";
-import { MeetingSettingsModal } from "../components/sdk-preview/MeetingSettingsModal";
+import { ConferenceView, PreJoinScreen, type ConferenceLayout, type ConferencePanel, type Participant, type ParticipantListParticipant, type SettingsDialogValue, type Toast } from "@q9labsai/chalk-react/components";
 import { PreviewTweaker } from "../components/sdk-preview/PreviewTweaker";
 import { ScreenShareMock } from "../components/sdk-preview/ScreenShareMock";
 import "../styles/chalk-excalidraw.css";
@@ -22,9 +12,9 @@ export const Route = createFileRoute("/sdk-preview")({
 });
 
 type PreviewSurface = "lobby" | "conference";
-type MeetingLayout = NonNullable<ParticipantGridProps["layout"]>;
+type PreviewParticipant = Participant & { readonly role: "host" | "co-host" | "participant" };
 
-const roomParticipants: GridParticipant[] = [
+const roomParticipants: PreviewParticipant[] = [
   {
     id: "you",
     displayName: "Hasan",
@@ -33,7 +23,7 @@ const roomParticipants: GridParticipant[] = [
     isVideoEnabled: true,
     role: "host",
     connectionQuality: 4,
-  } as GridParticipant & { role: "host" },
+  },
   {
     id: "nora",
     displayName: "Nora Williams",
@@ -42,7 +32,7 @@ const roomParticipants: GridParticipant[] = [
     isVideoEnabled: true,
     role: "co-host",
     connectionQuality: 4,
-  } as GridParticipant & { role: "co-host" },
+  },
   {
     id: "akash",
     displayName: "Akash Jain",
@@ -51,7 +41,7 @@ const roomParticipants: GridParticipant[] = [
     isHandRaised: true,
     role: "participant",
     connectionQuality: 3,
-  } as GridParticipant & { role: "participant" },
+  },
   {
     id: "sofia",
     displayName: "Sofia Chen",
@@ -59,7 +49,7 @@ const roomParticipants: GridParticipant[] = [
     isVideoEnabled: true,
     role: "participant",
     connectionQuality: 2,
-  } as GridParticipant & { role: "participant" },
+  },
   {
     id: "malik",
     displayName: "Malik Brooks",
@@ -67,7 +57,7 @@ const roomParticipants: GridParticipant[] = [
     isVideoEnabled: true,
     role: "participant",
     connectionQuality: 4,
-  } as GridParticipant & { role: "participant" },
+  },
 ];
 
 const INITIAL_CHAT_MESSAGES: ChalkChatMessage[] = [
@@ -103,54 +93,74 @@ const INITIAL_CHAT_MESSAGES: ChalkChatMessage[] = [
   },
 ];
 
+const INITIAL_SETTINGS: SettingsDialogValue = {
+  identity: { displayName: "Hasan" },
+  join: { videoEnabled: true, audioEnabled: true },
+  audio: { selectedInput: "default-mic", selectedOutput: "default-speaker", outputVolume: 68, noiseSuppression: true, echoCancellation: true, autoGainControl: true },
+  video: { selectedInput: "default-camera", quality: "auto" },
+  appearance: { layout: "focus", theme: "light", gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
+  experience: { captions: false, compactMode: false, showInviteToast: false, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
+};
+
+const previewTrack = {} as MediaStreamTrack;
+
 function SdkPreviewPage() {
-  const isMobile = useIsMobile();
   const [surface, setSurface] = useState<PreviewSurface>("lobby");
   const [displayName, setDisplayName] = useState("Hasan");
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isHandRaised, setIsHandRaised] = useState(false);
-  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
-  const [layout, setLayout] = useState<MeetingLayout>("focus");
-  const [isHubOpen, setIsHubOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<ConferencePanel | null>(null);
+  const [isSettingsOpen, setSettingsOpen] = useState(false);
+  const [isInfoOpen, setInfoOpen] = useState(false);
+  const [isWhiteboardOpen, setWhiteboardOpen] = useState(false);
+  const [layout, setLayout] = useState<ConferenceLayout>("focus");
   const [notifications, setNotifications] = useState<Toast[]>([]);
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
+  const [settings, setSettings] = useState(INITIAL_SETTINGS);
   const previewUrl = typeof window === "undefined" ? "http://localhost:3070/sdk-preview" : `${window.location.origin}/sdk-preview`;
 
-  const participants = useMemo(() => {
-    return roomParticipants.map((participant) => {
-      if (participant.id !== "you") return participant;
-      return {
-        ...participant,
-        displayName,
-        isMuted,
-        isVideoEnabled,
-        isHandRaised,
-      };
-    });
-  }, [displayName, isHandRaised, isMuted, isVideoEnabled]);
-
-  const participantList = participants.map<ParticipantListParticipant>((participant) => ({
-    id: participant.id,
-    displayName: participant.displayName,
-    isLocal: participant.isLocal,
-    isMuted: participant.isMuted,
-    isVideoEnabled: participant.isVideoEnabled,
-    isHandRaised: participant.isHandRaised,
-    role: participant.id === "you" ? "host" : participant.id === "nora" ? "co-host" : "participant",
-  }));
-
-  const joinPreview = (settings: PreJoinSettings) => {
-    setDisplayName(settings.displayName);
-    setIsMuted(!settings.microphoneEnabled);
-    setIsVideoEnabled(settings.cameraEnabled);
-    setSurface("conference");
-  };
+  const participants = useMemo<PreviewParticipant[]>(
+    () =>
+      roomParticipants.map((participant) =>
+        participant.id === "you"
+          ? {
+              ...participant,
+              displayName,
+              isMuted,
+              isVideoEnabled,
+              isHandRaised,
+            }
+          : participant,
+      ),
+    [displayName, isHandRaised, isMuted, isVideoEnabled],
+  );
+  const participantList = useMemo<ParticipantListParticipant[]>(
+    () =>
+      participants.map((participant) => ({
+        id: participant.id,
+        displayName: participant.displayName,
+        isLocal: participant.isLocal,
+        isMuted: participant.isMuted,
+        isVideoEnabled: participant.isVideoEnabled,
+        isHandRaised: participant.isHandRaised,
+        role: participant.role,
+      })),
+    [participants],
+  );
+  const reactions = useMemo<ChalkRoomReaction[]>(
+    () => [
+      {
+        eventId: "preview-reaction-1",
+        participantSessionId: "nora",
+        displayName: "Nora Williams",
+        reaction: "🎉",
+        occurredAt: "2026-08-01T10:15:00.000Z",
+        expiresAt: "2026-08-01T10:16:00.000Z",
+      },
+    ],
+    [],
+  );
 
   const showNotification = (type: NonNullable<Toast["type"]>) => {
     const messages: Record<NonNullable<Toast["type"]>, string> = {
@@ -162,151 +172,145 @@ function SdkPreviewPage() {
     setNotifications((current) => [...current, { id: `${type}-${Date.now()}`, message: messages[type], type }]);
   };
 
+  const updateSettings = <Section extends keyof SettingsDialogValue>(section: Section, updates: Partial<SettingsDialogValue[Section]>) => {
+    setSettings((current) => ({ ...current, [section]: { ...current[section], ...updates } }));
+  };
+
   if (surface === "lobby") {
-    return <PreJoinScreen roomName="Design review" logoUrl="/brand/chalk/chalk-logo.svg" defaultDisplayName={displayName} initialMicrophoneEnabled={!isMuted} initialCameraEnabled={isVideoEnabled} onJoin={joinPreview} />;
+    return (
+      <PreJoinScreen
+        roomName="Design review"
+        logoUrl="/brand/chalk/chalk-logo.svg"
+        defaultDisplayName={displayName}
+        initialMicrophoneEnabled={!isMuted}
+        initialCameraEnabled={isVideoEnabled}
+        onJoin={(nextSettings) => {
+          setDisplayName(nextSettings.displayName);
+          setIsMuted(!nextSettings.microphoneEnabled);
+          setIsVideoEnabled(nextSettings.cameraEnabled);
+          setSurface("conference");
+        }}
+      />
+    );
   }
 
   return (
-    <main data-chalk data-chalk-theme="light" className="h-dvh min-h-[620px] bg-[#f7f6f2] text-[#0c0e12]">
-      <section className="relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[#deddd7] bg-[#fbfaf7]">
-        <ConferenceHeader roomName="Design review" logoUrl="/brand/chalk/chalk-logo.svg" duration={18 * 60 + 42} isRecording={isRecording} isTranscribing={isTranscribing} layout={layout} onLayoutChange={setLayout} onInfo={() => setIsHubOpen(true)} />
-
-        <div className={`mx-auto grid min-h-0 w-full max-w-[1320px] flex-1 grid-cols-1 gap-3 overflow-hidden px-3 pt-5 lg:px-8 lg:pt-6 ${isParticipantsOpen || isChatOpen ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
-          <div className="min-h-0 bg-[#fbfaf7]">
-            {isWhiteboardOpen ? (
-              <WhiteboardView canDraw theme="light" localParticipantColor="#55aac9" excalidrawCssPath="https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css" className="h-full min-h-0" />
-            ) : (
-              <ParticipantGrid participants={participants} layout={layout} pinnedParticipantId="nora" maxVisibleParticipants={9} className="h-full" screenShareContent={layout === "presentation" ? <ScreenShareMock /> : undefined} />
-            )}
-          </div>
-
-          {isParticipantsOpen && (
-            <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-[0_8px_30px_rgba(12,14,18,0.06)] lg:static">
-              <ParticipantsPanel
-                participants={participantList}
-                variant="sidebar"
-                canManageParticipants
-                onClose={() => setIsParticipantsOpen(false)}
-                onAddPeople={() => setIsHubOpen(true)}
-                onUpdateDisplayName={setDisplayName}
-                onMuteParticipant={() => undefined}
-                onRemoveParticipant={() => undefined}
-              />
-            </aside>
-          )}
-
-          {isChatOpen && (
-            <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-[0_8px_30px_rgba(12,14,18,0.06)] lg:static">
-              <ChatPanel
-                messages={chatMessages}
-                localParticipantId="you"
-                participantNames={Object.fromEntries(participants.map((participant) => [participant.id, participant.displayName]))}
-                onClose={() => setIsChatOpen(false)}
-                onSendMessage={async ({ text, attachments }) => {
-                  setChatMessages((current) => [
-                    ...current,
-                    {
-                      messageId: `preview-message-${current.length + 1}`,
-                      clientMessageId: `preview-client-${current.length + 1}`,
-                      sequence: String(current.length + 1),
-                      participantSessionId: "you",
-                      displayName,
-                      text,
-                      createdAt: new Date().toISOString(),
-                      attachments: attachments ?? [],
-                    },
-                  ]);
-                }}
-              />
-            </aside>
-          )}
-        </div>
-
-        <div className="z-30 shrink-0">
-          <ControlBar
-            placement="floating"
-            density={isMobile ? "compact" : "comfortable"}
-            buttons={["mic", "video", "screenshare", "whiteboard", "participants", "chat", "more", "leave"]}
-            meetingDuration={18 * 60 + 42}
-            isMuted={isMuted}
-            isVideoEnabled={isVideoEnabled}
-            isRecording={isRecording}
-            isChatOpen={isChatOpen}
-            isParticipantsOpen={isParticipantsOpen}
-            isTranscriptionEnabled={isTranscribing}
-            isHandRaised={isHandRaised}
-            isWhiteboardOpen={isWhiteboardOpen}
-            isScreenSharing={layout === "presentation"}
-            unreadChatCount={3}
-            selectedAudioInput="default-mic"
-            selectedAudioOutput="default-speaker"
-            selectedVideoInput="default-camera"
-            onToggleMute={() => setIsMuted((value) => !value)}
-            onToggleVideo={() => setIsVideoEnabled((value) => !value)}
-            onToggleScreenShare={() => {
-              setIsWhiteboardOpen(false);
-              setLayout((value) => (value === "presentation" ? "grid" : "presentation"));
-            }}
-            onToggleRecording={() => setIsRecording((value) => !value)}
-            onToggleChat={() => {
-              setIsParticipantsOpen(false);
-              setIsChatOpen((value) => !value);
-            }}
-            onToggleParticipants={() => {
-              setIsChatOpen(false);
-              setIsParticipantsOpen((value) => !value);
-            }}
-            onToggleTranscription={() => setIsTranscribing((value) => !value)}
-            onToggleHandRaise={() => setIsHandRaised((value) => !value)}
-            onToggleWhiteboard={() => {
-              setIsWhiteboardOpen((value) => !value);
-              setLayout("focus");
-            }}
-            onOpenReactions={() => undefined}
-            onOpenMore={() => setIsSettingsOpen(true)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenDiagnostics={() => setIsHubOpen(true)}
-            onLeave={() => setSurface("lobby")}
-          />
-        </div>
-
-        <ConferenceInfoDialog
-          isOpen={isHubOpen}
-          onClose={() => setIsHubOpen(false)}
-          roomName="Design review"
-          meetingUrl={previewUrl}
-          onCopyLink={() => {
-            void navigator.clipboard?.writeText(previewUrl);
-          }}
-          isRecording={isRecording}
-          isTranscribing={isTranscribing}
-          meetingDuration={18 * 60 + 42}
-        />
-        <MeetingSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-        <ToastStack toasts={notifications} onDismiss={(id) => setNotifications((current) => current.filter((notification) => notification.id !== id))} />
-        <PreviewTweaker
-          onNotify={showNotification}
-          onShowPeople={() => {
-            setIsChatOpen(false);
-            setIsParticipantsOpen(true);
-          }}
-          onShowChat={() => {
-            setIsParticipantsOpen(false);
-            setIsChatOpen(true);
-          }}
-          onShowScreenShare={() => {
-            setIsWhiteboardOpen(false);
-            setLayout("presentation");
-          }}
-          onShowWhiteboard={() => {
-            setIsWhiteboardOpen(true);
+    <>
+      <ConferenceView
+        roomName="Design review"
+        displayName={displayName}
+        logoUrl="/brand/chalk/chalk-logo.svg"
+        meetingLink={previewUrl}
+        duration={18 * 60 + 42}
+        layout={layout}
+        onLayoutChange={(nextLayout) => {
+          setLayout(nextLayout);
+          updateSettings("appearance", { layout: nextLayout });
+        }}
+        participants={participants}
+        screenShare={layout === "presentation" ? { screenShareTrack: previewTrack, sharedByName: "Nora Williams", content: <ScreenShareMock /> } : undefined}
+        whiteboard={isWhiteboardOpen ? { isOpen: true, props: { canDraw: true, theme: "light", localParticipantColor: "#55aac9", excalidrawCssPath: "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css", className: "h-full min-h-0" } } : undefined}
+        controls={{
+          buttons: ["mic", "video", "screenshare", "whiteboard", "participants", "chat", "reactions", "more", "leave"],
+          isMuted,
+          isVideoEnabled,
+          isHandRaised,
+          isWhiteboardOpen,
+          isScreenSharing: layout === "presentation",
+          isChatOpen: activePanel === "chat",
+          isParticipantsOpen: activePanel === "participants",
+          unreadChatCount: 3,
+          onToggleMute: () => setIsMuted((value) => !value),
+          onToggleVideo: () => setIsVideoEnabled((value) => !value),
+          onToggleScreenShare: () => {
+            setWhiteboardOpen(false);
+            setLayout((value) => (value === "presentation" ? "focus" : "presentation"));
+          },
+          onToggleWhiteboard: () => {
+            setWhiteboardOpen((value) => !value);
             setLayout("focus");
-          }}
-          onShowMeetingInfo={() => setIsHubOpen(true)}
-          onShowSettings={() => setIsSettingsOpen(true)}
-          onToggleHand={() => setIsHandRaised((value) => !value)}
-        />
-      </section>
-    </main>
+          },
+          onToggleHandRaise: () => setIsHandRaised((value) => !value),
+          onToggleChat: () => setActivePanel((value) => (value === "chat" ? null : "chat")),
+          onToggleParticipants: () => setActivePanel((value) => (value === "participants" ? null : "participants")),
+          onOpenMore: () => setSettingsOpen(true),
+        }}
+        mobileControlButtons={["mic", "video", "participants", "chat", "more", "leave"]}
+        panels={{
+          active: activePanel,
+          onChange: setActivePanel,
+          participants: {
+            participants: participantList,
+            searchable: true,
+            canManageParticipants: true,
+            onAddPeople: () => setInfoOpen(true),
+            onUpdateDisplayName: setDisplayName,
+          },
+          chat: {
+            messages: chatMessages,
+            localParticipantId: "you",
+            participantNames: Object.fromEntries(participants.map((participant) => [participant.id, participant.displayName])),
+            onSendMessage: async ({ text, attachments }) => {
+              setChatMessages((current) => [
+                ...current,
+                {
+                  messageId: `preview-message-${current.length + 1}`,
+                  clientMessageId: `preview-client-${current.length + 1}`,
+                  sequence: String(current.length + 1),
+                  participantSessionId: "you",
+                  displayName,
+                  text,
+                  createdAt: new Date().toISOString(),
+                  attachments: attachments ?? [],
+                },
+              ]);
+            },
+          },
+        }}
+        infoDialog={{
+          isOpen: isInfoOpen,
+          onOpenChange: setInfoOpen,
+          roomName: "Design review",
+          meetingUrl: previewUrl,
+          onCopyLink: () => {
+            void navigator.clipboard?.writeText(previewUrl);
+          },
+          meetingDuration: 18 * 60 + 42,
+        }}
+        settingsDialog={{
+          isOpen: isSettingsOpen,
+          onOpenChange: setSettingsOpen,
+          settings,
+          onUpdateIdentity: (updates) => updateSettings("identity", updates),
+          onUpdateJoin: (updates) => updateSettings("join", updates),
+          onUpdateAudio: (updates) => updateSettings("audio", updates),
+          onUpdateVideo: (updates) => updateSettings("video", updates),
+          onUpdateAppearance: (updates) => updateSettings("appearance", updates),
+          onUpdateExperience: (updates) => updateSettings("experience", updates),
+          videoTrack: previewTrack,
+          participantColorSeed: displayName,
+        }}
+        reactions={{ reactions, allowedReactions: ["👍", "❤️", "😂", "😮", "😢", "🎉"], onSelect: () => showNotification("success") }}
+        toasts={notifications}
+        onDismissToast={(id) => setNotifications((current) => current.filter((toast) => toast.id !== id))}
+        onLeave={() => setSurface("lobby")}
+      />
+      <PreviewTweaker
+        onNotify={showNotification}
+        onShowPeople={() => setActivePanel("participants")}
+        onShowChat={() => setActivePanel("chat")}
+        onShowScreenShare={() => {
+          setWhiteboardOpen(false);
+          setLayout("presentation");
+        }}
+        onShowWhiteboard={() => {
+          setWhiteboardOpen(true);
+          setLayout("focus");
+        }}
+        onShowMeetingInfo={() => setInfoOpen(true)}
+        onShowSettings={() => setSettingsOpen(true)}
+        onToggleHand={() => setIsHandRaised((value) => !value)}
+      />
+    </>
   );
 }

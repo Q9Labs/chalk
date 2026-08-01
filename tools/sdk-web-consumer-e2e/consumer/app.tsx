@@ -1,25 +1,12 @@
-import { ChalkSession, requireParticipantAccess, type ChalkSessionAccessRequest, type ChalkSessionSnapshot } from "@q9labsai/chalk-client";
-import { ChalkProvider, useChalkActions, useChalkSnapshot } from "@q9labsai/chalk-react";
-import React, { useEffect } from "react";
+import { ChalkSession, requireParticipantAccess, type ChalkSessionAccessRequest, type ChalkSessionActions, type ChalkSessionSnapshot, type ChalkSessionStore } from "@q9labsai/chalk-client";
+import { VideoConference } from "@q9labsai/chalk-react";
 import { createRoot } from "react-dom/client";
 
 import { FixtureMediaClient } from "./media-client";
 import { fixtureClock, fixtureMediaDevices, resourceCounts } from "./resource-ledger";
 import { FixtureSyncClient } from "./sync-client";
 
-type Harness = {
-  readonly join: () => Promise<void>;
-  readonly leave: () => Promise<void>;
-  readonly setCameraEnabled: (enabled: boolean) => Promise<void>;
-  readonly setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
-  readonly startScreenShare: () => Promise<void>;
-  readonly stopScreenShare: () => Promise<void>;
-  readonly removeParticipant: (participantSessionId: string) => Promise<void>;
-  readonly sendReaction: ReturnType<typeof useChalkActions>["sendReaction"];
-  readonly sendChatMessage: ReturnType<typeof useChalkActions>["sendChatMessage"];
-  readonly requestUnmute: ReturnType<typeof useChalkActions>["requestUnmute"];
-  readonly requestStartCamera: ReturnType<typeof useChalkActions>["requestStartCamera"];
-  readonly declineMediaRequest: ReturnType<typeof useChalkActions>["declineMediaRequest"];
+type Harness = ChalkSessionActions & {
   readonly snapshot: () => ReturnType<typeof publicSnapshot>;
   readonly resources: typeof resourceCounts;
   readonly diagnostics: () => ReturnType<ChalkSession["getDiagnostics"]>;
@@ -68,54 +55,47 @@ function accessRequestBody(request?: ChalkSessionAccessRequest) {
   };
 }
 
-function Meeting(): React.JSX.Element {
-  const snapshot = useChalkSnapshot();
-  const actions = useChalkActions();
-
-  useEffect(() => {
-    window.__chalk = {
-      ...actions,
-      snapshot: () => publicSnapshot(session.getSnapshot()),
-      resources: resourceCounts,
-      diagnostics: () => session.getDiagnostics(),
-      accessRequests: () => accessRequests,
-    };
-    return () => {
-      delete window.__chalk;
-    };
-  }, [actions]);
-
-  return (
-    <main>
-      <h1>Packed Chalk SDK consumer</h1>
-      <button data-testid="join" onClick={() => void actions.join()}>
-        Join
-      </button>
-      <button data-testid="send-chat" onClick={() => void actions.sendChatMessage({ clientMessageId: "helium-chat", text: "Hello from Helium" })}>
-        Send chat
-      </button>
-      <button data-testid="send-reaction" onClick={() => void actions.sendReaction("🎉")}>
-        React
-      </button>
-      <button data-testid="request-unmute" onClick={() => void actions.requestUnmute("bob")}>
-        Ask Bob to unmute
-      </button>
-      <button data-testid="request-camera" onClick={() => void actions.requestStartCamera("bob")}>
-        Ask Bob to start camera
-      </button>
-      <button data-testid="decline-request" onClick={() => snapshot.incomingMediaRequests[0] && actions.declineMediaRequest(snapshot.incomingMediaRequests[0].requestId)}>
-        Decline request
-      </button>
-      <output data-testid="state">{snapshot.state}</output>
-      <output data-testid="participants">{snapshot.participants.length}</output>
-      <output data-testid="remote-media">{snapshot.remoteMedia.map((item) => `${item.participantSessionId}:${item.source}`).join(",")}</output>
-      <output data-testid="room-actions">{snapshot.roomActions.phase}</output>
-      <output data-testid="chat">{snapshot.chat.messages.map((message) => `${message.participantSessionId}:${message.text}`).join("|")}</output>
-      <output data-testid="reactions">{snapshot.reactions.map((reaction) => `${reaction.participantSessionId}:${reaction.reaction}`).join("|")}</output>
-      <output data-testid="requests">{snapshot.incomingMediaRequests.map((request) => `${request.actorParticipantSessionId}:${request.kind}`).join("|")}</output>
-    </main>
-  );
+function installHarness(nextSession: ChalkSessionStore): void {
+  window.__chalk = {
+    join: nextSession.join,
+    leave: nextSession.leave,
+    setCameraEnabled: nextSession.setCameraEnabled,
+    setMicrophoneEnabled: nextSession.setMicrophoneEnabled,
+    startScreenShare: nextSession.startScreenShare,
+    stopScreenShare: nextSession.stopScreenShare,
+    removeParticipant: nextSession.removeParticipant,
+    sendReaction: nextSession.sendReaction,
+    sendChatMessage: nextSession.sendChatMessage,
+    requestUnmute: nextSession.requestUnmute,
+    requestStartCamera: nextSession.requestStartCamera,
+    declineMediaRequest: nextSession.declineMediaRequest,
+    setHandRaised: nextSession.setHandRaised,
+    setDisplayName: nextSession.setDisplayName,
+    setAdmissionPolicy: nextSession.setAdmissionPolicy,
+    setParticipantRole: nextSession.setParticipantRole,
+    transferHost: nextSession.transferHost,
+    admitParticipant: nextSession.admitParticipant,
+    denyAdmission: nextSession.denyAdmission,
+    stopParticipantCamera: nextSession.stopParticipantCamera,
+    stopParticipantScreenShare: nextSession.stopParticipantScreenShare,
+    muteParticipant: nextSession.muteParticipant,
+    endSession: nextSession.endSession,
+    retryChatMessage: nextSession.retryChatMessage,
+    loadOlderChatMessages: nextSession.loadOlderChatMessages,
+    markChatRead: nextSession.markChatRead,
+    acceptMediaRequest: nextSession.acceptMediaRequest,
+    snapshot: () => publicSnapshot(nextSession.getSnapshot()),
+    resources: resourceCounts,
+    diagnostics: () => (nextSession instanceof ChalkSession ? nextSession.getDiagnostics() : []),
+    accessRequests: () => accessRequests,
+  };
 }
+
+installHarness(session);
+
+createRoot(document.getElementById("root")!).render(
+  <VideoConference roomId="packed-e2e-room" roomName="Packed SDK consumer" userName={fixtureUser ?? "Packed user"} autoJoin createSession={() => session} chatEnabled participantsEnabled screenShareEnabled reactionsEnabled handRaiseEnabled canLeave />,
+);
 
 function publicSnapshot(snapshot: ChalkSessionSnapshot) {
   return {
@@ -132,9 +112,3 @@ function publicSnapshot(snapshot: ChalkSessionSnapshot) {
     failure: snapshot.failure,
   };
 }
-
-createRoot(document.getElementById("root")!).render(
-  <ChalkProvider session={session}>
-    <Meeting />
-  </ChalkProvider>,
-);

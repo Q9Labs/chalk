@@ -4,12 +4,13 @@ import { join as joinPath } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("public SDK room", () => {
-  it("creates one ChalkSession and consumes state through the React SDK surface", () => {
+  it("creates one ChalkSession and delegates the lifecycle to the turnkey React SDK surface", () => {
     const source = roomSource();
     expect(source.match(/new ChalkSession\(/gu)).toHaveLength(1);
-    expect(source).toContain("<ChalkProvider");
-    expect(source).toContain("<PreJoinScreen");
-    expect(source).toContain("<ConferenceView");
+    expect(source).toContain("<VideoConference");
+    expect(source).not.toContain("<ChalkProvider");
+    expect(source).not.toContain("<PreJoinScreen");
+    expect(source).not.toContain("<ConferenceView");
     expect(source).toContain("initialMicrophoneEnabled: settings.microphoneEnabled");
     expect(source).toContain("initialCameraEnabled: settings.cameraEnabled");
   });
@@ -23,11 +24,11 @@ describe("public SDK room", () => {
     expect(source).not.toContain("createCloudflareSFUHTTPTransport");
   });
 
-  it("schedules a best-effort SDK leave after a real SPA unmount", () => {
+  it("lets VideoConference own best-effort SDK leave after a real SPA unmount", () => {
     const source = roomSource();
-    expect(source).toContain("mountedSessions.set(session, true)");
-    expect(source).toContain("queueMicrotask");
-    expect(source).toMatch(/session\s*\.leave\(\)/u);
+    expect(source).toContain("<VideoConference");
+    expect(source).not.toContain("mountedSessions");
+    expect(source).not.toContain("queueMicrotask");
   });
 
   it("keeps refresh and navigation teardown separate from an explicit meeting cleanup", () => {
@@ -35,7 +36,7 @@ describe("public SDK room", () => {
     expect(source).not.toContain("pagehide");
     expect(source).not.toContain("beaconLocalBrowserSessionCleanup");
     expect(source.match(/cleanupLocalBrowserSession\(\)/gu)).toHaveLength(1);
-    expect(source).toMatch(/const leave = async \(\) => \{[\s\S]*?await cleanupLocalBrowserSession\(\);[\s\S]*?onLeave\(\);[\s\S]*?\};/u);
+    expect(source).toMatch(/onLeave=\{async \(\) => \{[\s\S]*?await cleanupLocalBrowserSession\(\);[\s\S]*?clearMeetingInviteToken\(\);[\s\S]*?\}\}/u);
   });
 
   it("keeps the production invite capability in the URL fragment", () => {
