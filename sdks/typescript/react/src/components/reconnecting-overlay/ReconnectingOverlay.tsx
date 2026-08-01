@@ -23,10 +23,10 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
   };
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-background/95 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
-      <div className="flex flex-col items-center justify-center p-8 bg-background rounded-[var(--chalk-border-radius-lg)] shadow-[var(--chalk-shadow-xl)] max-w-sm w-full border border-border">
+    <div className={cn("absolute inset-0 z-50 flex items-center justify-center bg-[#fbfaf7]/90 p-4 backdrop-blur-[2px] transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
+      <div className="flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[#deddd7] bg-[#fbfaf7] p-8 text-[#0c0e12] shadow-[0_24px_70px_rgba(12,14,18,0.16)]">
         {status === "failed" ? (
-          <div className="mb-6 p-4 rounded-full bg-card text-destructive">
+          <div className="mb-6 rounded-full bg-[#f8e4e4] p-4 text-[#9f3f3f]">
             <WifiOffIcon size={48} strokeWidth={1.5} />
           </div>
         ) : (
@@ -35,29 +35,25 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
           </div>
         )}
 
-        <h2 id="connection-status-title" className="text-xl font-semibold text-foreground mb-2 text-center">
+        <h2 id="connection-status-title" className="mb-2 text-center text-xl font-semibold text-[#0c0e12]">
           {status === "failed" ? "Connection Failed" : "Connecting"}
         </h2>
 
-        <p id="connection-status-desc" className="text-muted-foreground text-center mb-8">
+        <p id="connection-status-desc" className="mb-8 text-center text-[#6d727b]">
           {message || defaultMessages[status]}
         </p>
 
         {supportCode && (
-          <div className="w-full mb-6 rounded-[var(--chalk-border-radius-md)] border border-border bg-card p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Support Code</p>
-            <p className="mt-1 break-all font-mono text-xs text-foreground">{supportCode}</p>
+          <div className="mb-6 w-full rounded-[8px] border border-[#deddd7] bg-white p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6d727b]">Support Code</p>
+            <p className="mt-1 break-all font-mono text-xs text-[#0c0e12]">{supportCode}</p>
           </div>
         )}
 
         {status === "failed" && (
-          <div className="flex flex-col gap-3 w-full">
+          <div className="flex w-full flex-col gap-3">
             {onRetry && (
-              <button
-                type="button"
-                onClick={onRetry}
-                className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-[var(--chalk-border-radius-md)] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-              >
+              <button type="button" onClick={onRetry} className="w-full rounded-[8px] bg-[#202329] px-4 py-2.5 font-medium text-white transition-colors hover:bg-[#343840] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#74b7cf] focus-visible:ring-offset-2">
                 Try Again
               </button>
             )}
@@ -65,7 +61,7 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
               <button
                 type="button"
                 onClick={onLeave}
-                className="w-full py-2.5 px-4 bg-card hover:bg-muted text-foreground rounded-[var(--chalk-border-radius-md)] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+                className="w-full rounded-[8px] border border-[#deddd7] bg-white px-4 py-2.5 font-medium text-[#202329] transition-colors hover:bg-[#f7f6f2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#74b7cf] focus-visible:ring-offset-2"
               >
                 Leave Meeting
               </button>

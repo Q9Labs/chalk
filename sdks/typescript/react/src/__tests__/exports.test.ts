@@ -10,11 +10,13 @@ describe("React SDK public UI exports", () => {
     expect(components.JoiningScreen).toBeDefined();
     expect(components.PreJoinScreen).toBeDefined();
     expect(components.ConferenceView).toBeDefined();
+    expect(components.VideoConference).toBeDefined();
   });
 
-  it("exports the UI catalog and managed-session React bindings from the package root", () => {
-    expect(sdk.ConferenceView).toBeDefined();
-    expect(sdk.ParticipantGrid).toBeDefined();
+  it("exports only the turnkey component and managed-session React bindings from the package root", () => {
+    expect(sdk.VideoConference).toBeDefined();
+    expect("ConferenceView" in sdk).toBe(false);
+    expect("ParticipantGrid" in sdk).toBe(false);
     expect(sdk.ChalkProvider).toBeDefined();
     expect(sdk.useChalkSession).toBeDefined();
   });

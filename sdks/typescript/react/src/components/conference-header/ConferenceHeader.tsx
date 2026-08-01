@@ -1,6 +1,6 @@
 import React from "react";
 
-import { ColumnIcon, InformationCircleIcon, LayoutGridIcon, Maximize01Icon, Settings01Icon, UserGroupIcon } from "../../utils/icons";
+import { InformationCircleIcon, LayoutGridIcon, Maximize01Icon, Monitor01Icon, Settings01Icon, UserGroupIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { StatusBadge } from "../atomic/StatusBadge";
 
@@ -72,12 +72,12 @@ export const ConferenceHeader = React.memo<ConferenceHeaderProps>(({ roomName, l
             </button>
             <button
               type="button"
-              onClick={() => onLayoutChange("focus")}
-              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[#6d727b] transition", layout === "focus" ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.08)]" : "hover:text-[#202329]")}
-              aria-label="Sidebar layout"
-              aria-pressed={layout === "focus"}
+              onClick={() => onLayoutChange("presentation")}
+              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[#6d727b] transition", layout === "presentation" ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.08)]" : "hover:text-[#202329]")}
+              aria-label="Presentation layout"
+              aria-pressed={layout === "presentation"}
             >
-              <ColumnIcon size={15} />
+              <Monitor01Icon size={15} />
             </button>
           </div>
         )}

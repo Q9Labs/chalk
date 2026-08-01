@@ -40,7 +40,8 @@
     },
     "./components": {
       "types": "./dist/components/index.d.ts",
-      "import": "./dist/components/index.js"
+      "import": "./dist/components/index.js",
+      "default": "./dist/components/index.js"
     },
     "./ui": {
       "types": "./dist/components/ui/index.d.ts",
@@ -56,10 +57,10 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && NODE_ENV=production tsup ./src/index.ts ./src/components/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-client --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge && pnpm run build:fix-use-client && pnpm run build:types",
+    "build": "rm -rf ./dist && NODE_ENV=production tsup ./src/index.ts ./src/components/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-client --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external react-markdown --external sonner --external tailwind-merge && pnpm run build:fix-use-client && pnpm run build:types",
     "build:fix-use-client": "node -e \"const fs=require('fs');const files=['./dist/index.js','./dist/components/index.js','./dist/components/ui/index.js','./dist/utils/index.js'];for(const f of files){if(!fs.existsSync(f))continue;let c=fs.readFileSync(f,'utf8');c=c.replace(/['\\\"]use client['\\\"];?\\n?/g,'');c='\\\"use client\\\";\\n'+c;fs.writeFileSync(f,c);}\"",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
-    "dev": "tsup ./src/index.ts ./src/components/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-client --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external react-markdown --external react-resizable-panels --external sonner --external tailwind-merge --watch",
+    "dev": "tsup ./src/index.ts ./src/components/index.ts ./src/components/ui/index.ts ./src/utils/index.ts --format esm --out-dir ./dist --platform browser --external react --external react-dom --external @base-ui/react --external @hugeicons/core-free-icons --external @hugeicons/react --external @q9labsai/chalk-client --external @q9labsai/chalk-ui --external @q9labsai/chalk-ui/reactions --external @q9labsai/chalk-whiteboard --external @q9labsai/facehash --external @q9labsai/facehash/react --external class-variance-authority --external clsx --external react-markdown --external sonner --external tailwind-merge --watch",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
@@ -76,7 +77,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^4.6.2",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.6.0"
   },

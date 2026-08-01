@@ -1,254 +1,238 @@
 "use client";
 
-import type { ChalkReaction } from "@q9labsai/chalk-client";
+import type { ChalkReaction, ChalkRoomReaction } from "@q9labsai/chalk-client";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import { useAutoJoin } from "../../session/use-auto-join";
-import { useConferenceDuration } from "../../session/use-conference-duration";
-import { useChalkActions, useChalkSession, useChalkSnapshot, useLocalMedia, useParticipants, useRemoteMedia } from "../../session";
-import { useWhiteboardScene } from "../../session/use-whiteboard-scene";
-import { toAudioParticipants, toListParticipants, toParticipantNames, toVideoParticipants } from "../../selectors/meeting-room-selectors";
+import { AudioOutput, type AudioParticipant } from "../audio-output/AudioOutput";
+import { ChatPanel, type ChatPanelProps } from "../composite/ChatPanel";
+import { ConferenceHeader } from "../conference-header/ConferenceHeader";
+import { ConferenceInfoDialog, type ConferenceInfoDialogProps } from "../conference-info-dialog/ConferenceInfoDialog";
+import { ControlBar, type ControlBarButtonName, type ControlBarProps } from "../control-bar/ControlBar";
+import { InviteDialog, type InviteDialogProps } from "../invite-dialog/InviteDialog";
+import { LeaveDialog } from "../leave-dialog/LeaveDialog";
+import { AdmissionPanel, type AdmissionPanelProps } from "../admission-panel/AdmissionPanel";
+import { ParticipantsPanel, type ParticipantsPanelProps } from "../participants-panel/ParticipantsPanel";
+import { ParticipantGrid, type Participant, type ParticipantGridProps } from "../participant-grid/ParticipantGrid";
+import { ReactionPicker } from "../composite/ReactionPicker";
+import { ReactionsOverlay } from "../composite/ReactionsOverlay";
+import { ReconnectingOverlay, type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
+import { SettingsDialog } from "../composite/SettingsDialog";
+import { ScreenShareView, type ScreenShareViewProps } from "../composite/ScreenShareView";
+import { ToastStack, type Toast } from "../toast-stack/ToastStack";
+import { TranscriptPanel, type TranscriptPanelProps } from "../transcript-panel/TranscriptPanel";
+import { WhiteboardView, type WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { cn } from "../../utils/cn";
-import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
-import { AudioOutput } from "../atomic";
-import { ChatPanel, CommandErrorAlert, ReconnectingOverlay, ControlBar, MediaRequestDialog, InviteDialog, LeaveDialog, ConferenceHeader, ParticipantsPanel, ReactionPicker, ReactionsOverlay, ParticipantGrid } from "../composite";
-import { uploadChatAttachment } from "../composite/chat-file-upload";
-import { WhiteboardView } from "../whiteboard-view/WhiteboardView";
 
-const ROOM_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const satisfies readonly ChalkReaction[];
+export type ConferenceLayout = NonNullable<ParticipantGridProps["layout"]>;
+export type ConferencePanel = "chat" | "participants" | "transcript" | "admission" | "settings";
+
+export type ConferenceViewPanelProps = {
+  readonly active: ConferencePanel | null;
+  readonly onChange: (panel: ConferencePanel | null) => void;
+  readonly chat?: Omit<ChatPanelProps, "variant" | "onClose">;
+  readonly participants?: Omit<ParticipantsPanelProps, "variant" | "onClose">;
+  readonly transcript?: Omit<TranscriptPanelProps, "variant" | "onClose">;
+  readonly admission?: AdmissionPanelProps;
+  readonly settings?: React.ReactNode;
+};
+
+export type ConferenceViewSettingsDialogProps = Omit<React.ComponentProps<typeof SettingsDialog>, "isOpen" | "onClose"> & {
+  readonly isOpen: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+};
+
+export type ConferenceViewInfoDialogProps = Omit<ConferenceInfoDialogProps, "isOpen" | "onClose"> & {
+  readonly isOpen: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+};
+
+export type ConferenceViewInviteDialogProps = Omit<InviteDialogProps, "isOpen" | "onClose"> & {
+  readonly isOpen: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+};
+
+export type ConferenceViewReactions = {
+  readonly reactions: readonly ChalkRoomReaction[];
+  readonly allowedReactions?: readonly ChalkReaction[];
+  readonly onSelect: (reaction: ChalkReaction) => void | Promise<void>;
+};
+
+export type ConferenceViewScreenShare = Omit<ScreenShareViewProps, "participants" | "className"> & {
+  readonly content?: React.ReactNode;
+};
+
+export type ConferenceViewWhiteboard = {
+  readonly isOpen: boolean;
+  readonly props: WhiteboardViewProps;
+};
 
 export interface ConferenceViewProps {
   readonly roomName: string;
   readonly displayName: string;
   readonly logoUrl?: string;
   readonly meetingLink?: string;
+  readonly duration?: number;
+  readonly layout?: ConferenceLayout;
+  readonly onLayoutChange?: (layout: ConferenceLayout) => void;
+  readonly participants: readonly Participant[];
+  readonly audioParticipants?: readonly AudioParticipant[];
+  readonly screenShare?: ConferenceViewScreenShare;
+  readonly whiteboard?: ConferenceViewWhiteboard;
+  readonly controls?: Omit<ControlBarProps, "placement" | "density" | "meetingDuration" | "onLeave">;
+  readonly mobileControlButtons?: readonly ControlBarButtonName[];
+  readonly panels?: ConferenceViewPanelProps;
+  readonly infoDialog?: ConferenceViewInfoDialogProps;
+  readonly settingsDialog?: ConferenceViewSettingsDialogProps;
+  readonly inviteDialog?: ConferenceViewInviteDialogProps;
+  readonly reactions?: ConferenceViewReactions;
+  readonly toasts?: readonly Toast[];
+  readonly onDismissToast?: (id: string) => void;
+  readonly reconnecting?: Omit<ReconnectingOverlayProps, "isVisible"> & {
+    readonly isVisible: boolean;
+  };
+  readonly overlay?: React.ReactNode;
   readonly onLeave?: () => void | Promise<void>;
   readonly className?: string;
 }
 
-export function ConferenceView({ roomName, displayName, logoUrl, meetingLink, onLeave, className }: ConferenceViewProps): React.JSX.Element {
-  const snapshot = useChalkSnapshot();
-  const participants = useParticipants();
-  const localMedia = useLocalMedia();
-  const remoteMedia = useRemoteMedia();
-  const actions = useChalkActions();
-  const session = useChalkSession();
-  const [layout, setLayout] = useState<"grid" | "focus" | "presentation">("focus");
-  const [participantsOpen, setParticipantsOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
-  const [loadingOlderChat, setLoadingOlderChat] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [leaveOpen, setLeaveOpen] = useState(false);
-  const [commandError, setCommandError] = useState("");
+const DEFAULT_REACTIONS: readonly ChalkReaction[] = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
 
-  useAutoJoin(actions.join);
-  const duration = useConferenceDuration(snapshot.state);
-  useWhiteboardScene(session.whiteboard, whiteboardOpen, setCommandError);
+export function ConferenceView({
+  roomName,
+  displayName,
+  logoUrl,
+  meetingLink,
+  duration = 0,
+  layout = "focus",
+  onLayoutChange,
+  participants,
+  audioParticipants = [],
+  screenShare,
+  whiteboard,
+  controls = { buttons: [] },
+  mobileControlButtons,
+  panels,
+  infoDialog,
+  settingsDialog,
+  inviteDialog,
+  reactions,
+  toasts = [],
+  onDismissToast,
+  reconnecting,
+  overlay,
+  onLeave,
+  className,
+}: ConferenceViewProps): React.JSX.Element {
+  const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [isLeaveDialogOpen, setLeaveDialogOpen] = useState(false);
 
-  const localId = snapshot.subject?.participantSessionId ?? "local";
-  const tiles = useMemo(() => toVideoParticipants(participants, remoteMedia, localId, displayName, localMedia), [displayName, localId, localMedia, participants, remoteMedia]);
-  const audioParticipants = useMemo(() => toAudioParticipants(remoteMedia), [remoteMedia]);
-  const participantNames = useMemo(() => toParticipantNames(participants, localId, displayName), [displayName, localId, participants]);
-  const listParticipants = useMemo(() => toListParticipants(tiles, participants, snapshot.participantMedia), [participants, snapshot.participantMedia, tiles]);
-  const microphoneEnabled = localMedia.microphone.state === "enabled" || localMedia.microphone.state === "requesting";
-  const cameraEnabled = localMedia.camera.state === "enabled" || localMedia.camera.state === "requesting";
-  const screenSharing = localMedia.screen.state === "enabled" || localMedia.screen.state === "requesting";
-  const localParticipant = participants.find((participant) => participant.participantSessionId === localId);
-  const handRaised = localParticipant?.handRaised ?? false;
-  const effectiveLayout = screenSharing || tiles.some((participant) => participant.isScreenSharing) ? "presentation" : layout;
-  const localCapabilities = localParticipant?.capabilities ?? [];
-  const canRequestMedia = localCapabilities.includes("requestMediaOthers");
-  const canManageParticipants = localCapabilities.some((capability) => ["muteOthers", "stopVideoOthers", "removeParticipant", "promoteDemote", "transferHost"].includes(capability));
-  const canChat = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendChat");
-  const canReact = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendReaction");
-  const canUseWhiteboard = session.whiteboard !== null;
-  const chatFiles = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.version === 2 ? session.chatFiles : null;
-  const incomingRequest = snapshot.incomingMediaRequests[0];
+  const panelContent = panels ? renderPanel(panels) : null;
+  const desktopButtons = controls.buttons;
+  const compactButtons = mobileControlButtons ? [...mobileControlButtons] : desktopButtons;
+  const openReactionPicker = () => {
+    setReactionPickerOpen(true);
+    controls.onOpenReactions?.();
+  };
+  const closeReactionPicker = () => setReactionPickerOpen(false);
+  const confirmLeave = () => {
+    setLeaveDialogOpen(false);
+    void onLeave?.();
+  };
 
-  const run = async (operation: () => Promise<unknown>, fallback: string) => {
-    try {
-      await operation();
-      setCommandError("");
-    } catch (cause) {
-      setCommandError(cause instanceof Error ? cause.message : fallback);
-    }
-  };
-  const confirmLeave = async () => {
-    setLeaveOpen(false);
-    try {
-      await actions.leave();
-    } catch (cause) {
-      setCommandError(cause instanceof Error ? cause.message : "The meeting could not confirm your leave");
-    } finally {
-      await onLeave?.();
-    }
-  };
-  const copyLink = async () => {
-    if (meetingLink) await navigator.clipboard.writeText(meetingLink);
-  };
-  const loadOlderChat = async () => {
-    setLoadingOlderChat(true);
-    try {
-      await actions.loadOlderChatMessages();
-    } finally {
-      setLoadingOlderChat(false);
-    }
-  };
-  const togglePanel = (panel: "chat" | "participants") => {
-    setChatOpen(panel === "chat" ? (value) => !value : false);
-    setParticipantsOpen(panel === "participants" ? (value) => !value : false);
+  const controlProps = {
+    ...controls,
+    participantColorSeed: controls.participantColorSeed ?? displayName,
+    meetingDuration: duration,
+    onOpenReactions: reactions ? openReactionPicker : controls.onOpenReactions,
+    onLeave: onLeave ? () => setLeaveDialogOpen(true) : undefined,
   };
 
   return (
-    <main data-chalk data-chalk-theme="light" className={cn("chalk-root relative flex h-dvh min-h-[620px] flex-col overflow-hidden bg-[#f7f6f2] text-[#0c0e12]", className)}>
-      <AudioOutput participants={audioParticipants} />
-      <ConferenceHeader roomName={roomName} logoUrl={logoUrl} duration={duration} layout={layout} onLayoutChange={setLayout} className="relative z-20" />
-      <div className="mx-auto flex min-h-0 w-full max-w-[1320px] flex-1 gap-3 px-3 pt-5 pb-3 sm:px-5 sm:pt-6 lg:px-8">
-        <section className="min-w-0 flex-1 overflow-hidden rounded-[10px]" aria-label="Meeting stage">
-          {whiteboardOpen && session.whiteboard ? (
-            <WhiteboardView
-              canDraw={snapshot.whiteboard.canDraw}
-              collab={{
-                canDraw: snapshot.whiteboard.canDraw,
-                subscribe: (listener) => session.whiteboard!.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
-                submitUpdate: async (input) =>
-                  session.whiteboard!.submitUpdate({
-                    sceneId: input.sceneId,
-                    syncAll: input.syncAll,
-                    elements: input.elements.map(fromWhiteboardWireElement),
-                  }),
-                sendCursor: (input) => session.whiteboard!.sendCursor(input),
-                requestSnapshot: () => session.whiteboard!.requestSnapshot(),
-                clear: () => session.whiteboard!.clear(),
-                initiateUpload: (input) => session.whiteboard!.files.initiateUpload(input),
-                finalizeUpload: (uploadId) => session.whiteboard!.files.finalizeUpload(uploadId),
-                presignDownload: async (fileId) => session.whiteboard!.files.getDownloadUrl(fileId),
-              }}
-            />
-          ) : (
-            <ParticipantGrid participants={tiles} layout={effectiveLayout} className="h-full" />
-          )}
-        </section>
-        {participantsOpen && (
-          <aside className="absolute inset-x-3 top-20 bottom-24 z-40 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-2xl md:static md:block md:w-[340px] md:shrink-0">
-            <ParticipantsPanel
-              participants={listParticipants}
-              variant="sidebar"
-              onClose={() => setParticipantsOpen(false)}
-              searchable
-              canManageParticipants={canManageParticipants || canRequestMedia}
-              onMuteParticipant={localCapabilities.includes("muteOthers") ? (id) => void run(() => actions.muteParticipant(id), "Mute failed") : undefined}
-              onRequestUnmute={canRequestMedia ? (id) => void run(() => actions.requestUnmute(id), "Unmute request failed") : undefined}
-              onStopParticipantCamera={localCapabilities.includes("stopVideoOthers") ? (id) => void run(() => actions.stopParticipantCamera(id), "Camera stop failed") : undefined}
-              onRequestStartCamera={canRequestMedia ? (id) => void run(() => actions.requestStartCamera(id), "Camera request failed") : undefined}
-              onRemoveParticipant={localCapabilities.includes("removeParticipant") ? (id) => void run(() => actions.removeParticipant(id), "Remove failed") : undefined}
-              onMakeHost={localCapabilities.includes("transferHost") ? (id) => void run(() => actions.transferHost(id), "Host transfer failed") : undefined}
-              onMakeCoHost={localCapabilities.includes("promoteDemote") ? (id) => void run(() => actions.setParticipantRole(id, "cohost"), "Role update failed") : undefined}
-            />
-          </aside>
-        )}
-        {chatOpen && canChat ? (
-          <aside className="absolute inset-x-3 top-20 bottom-24 z-40 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-2xl md:static md:block md:w-[360px] md:shrink-0">
-            <ChatPanel
-              messages={snapshot.chat.messages}
-              pendingMessages={snapshot.chat.pending}
-              readReceipts={snapshot.chat.readReceipts}
-              localReadThroughSequence={snapshot.chat.localReadThroughSequence}
-              participantNames={participantNames}
-              localParticipantId={localId}
-              hasOlder={snapshot.chat.hasOlder}
-              loadingOlder={loadingOlderChat}
-              error={snapshot.chat.error?.message}
-              onClose={() => setChatOpen(false)}
-              onSendMessage={async ({ text, attachments }) => {
-                await actions.sendChatMessage({ text, attachments });
-              }}
-              onUploadAttachment={chatFiles ? (file) => uploadChatAttachment(file, chatFiles) : undefined}
-              onResolveAttachmentUrl={chatFiles ? async (attachmentId) => (await chatFiles.getDownloadUrl(attachmentId)).downloadUrl : undefined}
-              onMarkRead={async (throughSequence) => {
-                await actions.markChatRead(throughSequence);
-              }}
-              onRetryMessage={async (id) => {
-                await actions.retryChatMessage(id);
-              }}
-              onLoadOlder={loadOlderChat}
-            />
-          </aside>
-        ) : null}
-      </div>
-
-      <ReactionsOverlay reactions={snapshot.reactions.slice(-6)} />
-
-      <div className="z-30 hidden shrink-0 px-5 md:block">
-        <ControlBar
-          placement="floating"
-          density="comfortable"
-          meetingDuration={duration}
-          buttons={["mic", "video", "screenshare", ...(canUseWhiteboard ? (["whiteboard"] as const) : []), "handraise", "leave", "participants", ...(canChat ? (["chat"] as const) : []), ...(canReact ? (["reactions"] as const) : [])]}
-          isMuted={!microphoneEnabled}
-          isVideoEnabled={cameraEnabled}
-          isScreenSharing={screenSharing}
-          isHandRaised={handRaised}
-          isParticipantsOpen={participantsOpen}
-          isChatOpen={chatOpen}
-          isWhiteboardOpen={whiteboardOpen}
-          unreadChatCount={snapshot.chat.unreadCount}
-          onToggleMute={() => void run(() => actions.setMicrophoneEnabled(!microphoneEnabled), "Microphone update failed")}
-          onToggleVideo={() => void run(() => actions.setCameraEnabled(!cameraEnabled), "Camera update failed")}
-          onToggleScreenShare={() => void run(() => (screenSharing ? actions.stopScreenShare() : actions.startScreenShare()), "Screen sharing update failed")}
-          onToggleHandRaise={() => void run(() => actions.setHandRaised(!handRaised), "Hand raise update failed")}
-          onToggleParticipants={() => togglePanel("participants")}
-          onToggleChat={canChat ? () => togglePanel("chat") : undefined}
-          onOpenReactions={canReact ? () => setReactionPickerOpen(true) : undefined}
-          onToggleWhiteboard={canUseWhiteboard ? () => setWhiteboardOpen((value) => !value) : undefined}
-          onLeave={() => setLeaveOpen(true)}
-          participantColorSeed={displayName}
+    <main data-chalk data-chalk-theme="light" className={cn("chalk-root relative h-dvh min-h-[620px] overflow-hidden bg-[#f7f6f2] text-[#0c0e12]", className)}>
+      <section className="relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[#deddd7] bg-[#fbfaf7]">
+        <AudioOutput participants={[...audioParticipants]} />
+        <ConferenceHeader
+          roomName={roomName}
+          logoUrl={logoUrl}
+          duration={duration}
+          layout={layout}
+          onLayoutChange={onLayoutChange}
+          onInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
+          onInvite={inviteDialog ? () => inviteDialog.onOpenChange(true) : undefined}
+          onSettings={settingsDialog ? () => settingsDialog.onOpenChange(true) : undefined}
+          className="relative z-20"
         />
-      </div>
-      <div className="z-30 shrink-0 md:hidden">
-        <ControlBar
-          placement="floating"
-          density="compact"
-          buttons={["mic", "video", ...(canUseWhiteboard ? (["whiteboard"] as const) : []), "handraise", "leave", "participants", ...(canChat ? (["chat"] as const) : []), ...(canReact ? (["reactions"] as const) : [])]}
-          isMuted={!microphoneEnabled}
-          isVideoEnabled={cameraEnabled}
-          isHandRaised={handRaised}
-          isParticipantsOpen={participantsOpen}
-          isChatOpen={chatOpen}
-          isWhiteboardOpen={whiteboardOpen}
-          unreadChatCount={snapshot.chat.unreadCount}
-          onToggleMute={() => void run(() => actions.setMicrophoneEnabled(!microphoneEnabled), "Microphone update failed")}
-          onToggleVideo={() => void run(() => actions.setCameraEnabled(!cameraEnabled), "Camera update failed")}
-          onToggleHandRaise={() => void run(() => actions.setHandRaised(!handRaised), "Hand raise update failed")}
-          onToggleParticipants={() => togglePanel("participants")}
-          onToggleChat={canChat ? () => togglePanel("chat") : undefined}
-          onToggleWhiteboard={canUseWhiteboard ? () => setWhiteboardOpen((value) => !value) : undefined}
-          onOpenReactions={canReact ? () => setReactionPickerOpen(true) : undefined}
-          onLeave={() => setLeaveOpen(true)}
-        />
-      </div>
 
-      {canReact ? (
-        <div className="absolute bottom-24 left-1/2 z-50">
-          <ReactionPicker isOpen={reactionPickerOpen} onClose={() => setReactionPickerOpen(false)} allowedReactions={ROOM_REACTIONS} onSelect={(reaction) => void run(() => actions.sendReaction(reaction as ChalkReaction), "Reaction failed")} size="compact" />
+        <div className={cn("relative mx-auto flex min-h-0 w-full max-w-[1320px] flex-1 gap-3 overflow-hidden px-3 pt-5 pb-3 sm:px-5 sm:pt-6 lg:px-8", panelContent && "lg:grid lg:grid-cols-[minmax(0,1fr)_340px]")}>
+          <section className="min-h-0 min-w-0 overflow-hidden rounded-[10px] bg-[#fbfaf7]" aria-label="Meeting stage">
+            {whiteboard?.isOpen ? (
+              <WhiteboardView {...whiteboard.props} className={cn("h-full min-h-0", whiteboard.props.className)} />
+            ) : layout === "presentation" && screenShare ? (
+              (screenShare.content ?? <ScreenShareView {...screenShare} participants={[...participants]} className="h-full" />)
+            ) : (
+              <ParticipantGrid participants={[...participants]} layout={layout} className="h-full" screenShareContent={layout === "presentation" ? screenShare?.content : undefined} />
+            )}
+          </section>
+
+          {panelContent ? <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-[0_8px_30px_rgba(12,14,18,0.06)] lg:static lg:block lg:w-[340px] lg:shrink-0">{panelContent}</aside> : null}
         </div>
-      ) : null}
 
-      {incomingRequest ? <MediaRequestDialog request={incomingRequest} onDecline={() => actions.declineMediaRequest(incomingRequest.requestId)} onAllow={() => void run(() => actions.acceptMediaRequest(incomingRequest.requestId), "Media request failed")} /> : null}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
+          <div className="pointer-events-auto hidden md:block">
+            <ControlBar {...controlProps} placement="floating" density="comfortable" buttons={desktopButtons} />
+          </div>
+          <div className="pointer-events-auto md:hidden">
+            <ControlBar {...controlProps} placement="floating" density="compact" buttons={compactButtons} />
+          </div>
+        </div>
 
-      <CommandErrorAlert message={commandError || (snapshot.state === "live" ? snapshot.failure?.message : undefined)} />
-      <ReconnectingOverlay
-        isVisible={snapshot.state === "joining" || snapshot.state === "reconnecting" || snapshot.state === "failed"}
-        status={snapshot.state === "failed" ? "failed" : snapshot.state === "reconnecting" ? "reconnecting" : "connecting"}
-        message={snapshot.failure?.message}
-        onRetry={snapshot.state === "failed" && snapshot.failure?.recoverable ? () => void actions.join() : undefined}
-        onLeave={() => void confirmLeave()}
-      />
-      <InviteDialog isOpen={inviteOpen} onClose={() => setInviteOpen(false)} meetingLink={meetingLink ?? ""} onCopyLink={meetingLink ? copyLink : undefined} />
-      <LeaveDialog isOpen={leaveOpen} onClose={() => setLeaveOpen(false)} onConfirm={() => void confirmLeave()} />
+        <ReactionsOverlay reactions={reactions?.reactions.slice(-6) ?? []} />
+        {reactions ? (
+          <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
+            <ReactionPicker
+              isOpen={isReactionPickerOpen}
+              onClose={closeReactionPicker}
+              allowedReactions={reactions.allowedReactions ?? DEFAULT_REACTIONS}
+              onSelect={(reaction) => {
+                const allowedReactions = reactions.allowedReactions ?? DEFAULT_REACTIONS;
+                if (!isAllowedReaction(reaction, allowedReactions)) return;
+                void Promise.resolve(reactions.onSelect(reaction)).finally(closeReactionPicker);
+              }}
+              size="compact"
+            />
+          </div>
+        ) : null}
+
+        {overlay}
+        {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
+        {infoDialog ? <ConferenceInfoDialog {...infoDialog} isOpen={infoDialog.isOpen} onClose={() => infoDialog.onOpenChange(false)} /> : null}
+        {settingsDialog ? <SettingsDialog {...settingsDialog} isOpen={settingsDialog.isOpen} onClose={() => settingsDialog.onOpenChange(false)} /> : null}
+        {inviteDialog ? <InviteDialog {...inviteDialog} meetingLink={inviteDialog.meetingLink || meetingLink || ""} isOpen={inviteDialog.isOpen} onClose={() => inviteDialog.onOpenChange(false)} /> : null}
+        {onLeave ? <LeaveDialog isOpen={isLeaveDialogOpen} onClose={() => setLeaveDialogOpen(false)} onConfirm={confirmLeave} /> : null}
+        {onDismissToast ? <ToastStack toasts={[...toasts]} onDismiss={onDismissToast} /> : null}
+      </section>
     </main>
   );
+}
+
+function renderPanel(panels: ConferenceViewPanelProps): React.ReactNode {
+  switch (panels.active) {
+    case "chat":
+      return panels.chat ? <ChatPanel {...panels.chat} variant="sidebar" onClose={() => panels.onChange(null)} /> : null;
+    case "participants":
+      return panels.participants ? <ParticipantsPanel {...panels.participants} variant="sidebar" onClose={() => panels.onChange(null)} /> : null;
+    case "transcript":
+      return panels.transcript ? <TranscriptPanel {...panels.transcript} variant="sidebar" onClose={() => panels.onChange(null)} /> : null;
+    case "admission":
+      return panels.admission ? <AdmissionPanel {...panels.admission} /> : null;
+    case "settings":
+      return panels.settings ?? null;
+    case null:
+      return null;
+  }
+}
+
+function isAllowedReaction(value: string, allowedReactions: readonly ChalkReaction[]): value is ChalkReaction {
+  return allowedReactions.some((reaction) => reaction === value);
 }

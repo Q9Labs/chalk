@@ -143,4 +143,24 @@ export { uploadChatAttachment } from "./composite/chat-file-upload";
 export type { UploadChatAttachmentOptions } from "./composite/chat-file-upload";
 
 export { EndScreen, GuidedTour, JoiningScreen, PreJoinScreen, ConferenceView, WhiteboardView } from "./full";
-export type { EndScreenProps, GuidedTourProps, JoiningScreenProps, PreJoinScreenProps, PreJoinSettings, ConferenceViewProps, WhiteboardCollabOptions, WhiteboardViewProps } from "./full";
+export type {
+  ConferenceLayout,
+  ConferencePanel,
+  ConferenceViewInfoDialogProps,
+  ConferenceViewInviteDialogProps,
+  ConferenceViewPanelProps,
+  ConferenceViewProps,
+  ConferenceViewReactions,
+  ConferenceViewScreenShare,
+  ConferenceViewSettingsDialogProps,
+  ConferenceViewWhiteboard,
+  EndScreenProps,
+  GuidedTourProps,
+  JoiningScreenProps,
+  PreJoinScreenProps,
+  PreJoinSettings,
+  WhiteboardCollabOptions,
+  WhiteboardViewProps,
+} from "./full";
+export { VideoConference } from "./video-conference/VideoConference";
+export type { VideoConferenceProps, VideoConferenceRole } from "./video-conference/VideoConference";

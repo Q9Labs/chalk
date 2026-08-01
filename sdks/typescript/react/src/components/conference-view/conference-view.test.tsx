@@ -1,24 +1,43 @@
 // @vitest-environment happy-dom
 
-import type { ChalkSessionSnapshot, ChalkSessionStore, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ChalkRoomReaction } from "@q9labsai/chalk-client";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ChalkProvider } from "../../session";
+import type { ConferenceViewProps } from "./ConferenceView";
 import { ConferenceView } from "./ConferenceView";
 
-const audioRendererSpy = vi.hoisted(() => vi.fn((_props: unknown) => null));
-const videoGridSpy = vi.hoisted(() => vi.fn((_props: unknown) => null));
-const whiteboardPanelSpy = vi.hoisted(() => vi.fn((_props: unknown) => <div data-testid="whiteboard-panel" />));
+const audioOutputSpy = vi.hoisted(() => vi.fn((_props: unknown) => null));
+const controlBarSpy = vi.hoisted(() =>
+  vi.fn((props: { readonly buttons?: readonly string[]; readonly onLeave?: () => void; readonly onOpenReactions?: () => void }) => (
+    <>
+      <button type="button" onClick={props.onLeave}>
+        Leave meeting
+      </button>
+      {props.buttons?.includes("reactions") ? (
+        <button type="button" onClick={props.onOpenReactions}>
+          Reactions
+        </button>
+      ) : null}
+    </>
+  )),
+);
+const participantGridSpy = vi.hoisted(() => vi.fn((props: { readonly layout: string }) => <div data-testid="participant-grid">{props.layout}</div>));
+const screenShareSpy = vi.hoisted(() => vi.fn(() => <div data-testid="screen-share-view" />));
+const whiteboardSpy = vi.hoisted(() => vi.fn(() => <div data-testid="whiteboard-view" />));
 
-vi.mock("../atomic", async (importOriginal) => ({ ...(await importOriginal<typeof import("../atomic")>()), AudioOutput: audioRendererSpy }));
-vi.mock("../composite", async (importOriginal) => ({ ...(await importOriginal<typeof import("../composite")>()), ParticipantGrid: videoGridSpy }));
-vi.mock("../whiteboard-view/WhiteboardView", () => ({ WhiteboardView: whiteboardPanelSpy }));
+vi.mock("../audio-output/AudioOutput", () => ({ AudioOutput: audioOutputSpy }));
+vi.mock("../control-bar/ControlBar", () => ({ ControlBar: controlBarSpy }));
+vi.mock("../participant-grid/ParticipantGrid", () => ({ ParticipantGrid: participantGridSpy }));
+vi.mock("../composite/ScreenShareView", () => ({ ScreenShareView: screenShareSpy }));
+vi.mock("../whiteboard-view/WhiteboardView", () => ({ WhiteboardView: whiteboardSpy }));
 
 beforeEach(() => {
-  audioRendererSpy.mockClear();
-  videoGridSpy.mockClear();
-  whiteboardPanelSpy.mockClear();
+  audioOutputSpy.mockClear();
+  controlBarSpy.mockClear();
+  participantGridSpy.mockClear();
+  screenShareSpy.mockClear();
+  whiteboardSpy.mockClear();
 });
 
 afterEach(() => {
@@ -27,425 +46,114 @@ afterEach(() => {
 });
 
 describe("ConferenceView", () => {
-  it("connects the restored meeting controls to Chalk session actions", () => {
-    const join = vi.fn(() => Promise.resolve());
-    const setMicrophoneEnabled = vi.fn(() => Promise.resolve());
-    const store = createStore({ join, setMicrophoneEnabled });
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
+  it("renders the approved active chrome from caller-owned props without a session provider", () => {
+    const props = createProps({
+      layout: "grid",
+      participants: [participant("ada"), participant("grace")],
+      audioParticipants: [{ id: "grace", audioTrack: { readyState: "live" } as MediaStreamTrack }],
+      controls: { buttons: ["mic", "participants"] },
+    });
 
-    expect(screen.getByRole("heading", { name: "Design review" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Meeting stage")).toBeInTheDocument();
+    render(<ConferenceView {...props} />);
+
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-theme", "light");
-    expect(videoGridSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ layout: "focus" }));
-    fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "People" })[0]!);
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.getByLabelText("Meeting stage")).toBeInTheDocument();
+    expect(participantGridSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ layout: "grid", participants: props.participants }));
+    expect(audioOutputSpy.mock.calls[0]?.[0]).toEqual({ participants: props.audioParticipants });
+    expect(controlBarSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ placement: "floating", density: "comfortable", buttons: ["mic", "participants"] }));
+  });
+
+  it("renders one responsive panel and lets the panel close through its controlled callback", () => {
+    const onPanelChange = vi.fn();
+    render(
+      <ConferenceView
+        {...createProps({
+          panels: {
+            active: "participants",
+            onChange: onPanelChange,
+            participants: { participants: [participant("ada")], searchable: false },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("complementary", { name: "Participants list" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onPanelChange).toHaveBeenCalledWith(null);
+  });
+
+  it("selects whiteboard and screen-share Stage content from props", () => {
+    const screenShare = {
+      screenShareTrack: { readyState: "live" } as MediaStreamTrack,
+      sharedByName: "Grace",
+    };
+    const { rerender } = render(<ConferenceView {...createProps({ layout: "presentation", screenShare })} />);
+
+    expect(screenShareSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ sharedByName: "Grace" }));
+    expect(participantGridSpy).not.toHaveBeenCalled();
+
+    rerender(<ConferenceView {...createProps({ layout: "focus", whiteboard: { isOpen: true, props: { canDraw: false } } })} />);
+    expect(whiteboardSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ canDraw: false }));
+  });
+
+  it("keeps recovery over the active view and delegates leave to the caller", () => {
+    const onLeave = vi.fn(() => Promise.resolve());
+    render(
+      <ConferenceView
+        {...createProps({
+          onLeave,
+          reconnecting: { isVisible: true, status: "reconnecting" },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Leave meeting" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Leave" }));
-
-    expect(join).toHaveBeenCalledOnce();
-    expect(setMicrophoneEnabled).toHaveBeenCalledWith(false);
-    expect(screen.getByRole("dialog", { name: "Leave meeting?" })).toBeInTheDocument();
+    expect(onLeave).toHaveBeenCalledOnce();
   });
 
-  it("routes remote microphone and screen-share audio to the audio renderer", () => {
-    const microphoneTrack = { kind: "audio" } as MediaStreamTrack;
-    const screenTrack = { kind: "audio" } as MediaStreamTrack;
-    const store = createStore(
-      {},
-      {
-        remoteMedia: [
-          { participantSessionId: "remote", source: "microphone", publicationId: "mic", track: microphoneTrack },
-          { participantSessionId: "remote", source: "screen", publicationId: "screen-audio", track: screenTrack },
-        ],
-      },
-    );
-
+  it("passes reactions through the overlay and picker callback", () => {
+    const onSelect = vi.fn();
+    const reaction: ChalkRoomReaction = {
+      eventId: "reaction-1",
+      participantSessionId: "grace",
+      displayName: "Grace",
+      reaction: "🎉",
+      createdAt: "2026-08-01T10:00:00.000Z",
+    };
     render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
+      <ConferenceView
+        {...createProps({
+          controls: { buttons: ["reactions"] },
+          reactions: { reactions: [reaction], allowedReactions: ["🎉"], onSelect },
+        })}
+      />,
     );
-
-    expect(audioRendererSpy.mock.calls.at(-1)?.[0]).toEqual({ participants: [{ id: "remote", audioTrack: microphoneTrack, screenShareAudioTrack: screenTrack }] });
-  });
-
-  it("marks a camera-off screen share as renderable video", () => {
-    const screenTrack = { kind: "video" } as MediaStreamTrack;
-    const store = createStore(
-      {},
-      {
-        participants: [
-          { participantSessionId: "local", displayName: "Ada", handRaised: false, role: "host", eligibleRoles: ["host"], capabilities: [] },
-          { participantSessionId: "remote", displayName: "Grace", handRaised: false, role: "participant", eligibleRoles: ["participant"], capabilities: [] },
-        ],
-        remoteMedia: [{ participantSessionId: "remote", source: "screen", publicationId: "screen", track: screenTrack }],
-      },
-    );
-
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    const videoGridProps = videoGridSpy.mock.calls.at(-1)?.[0] as { readonly layout: string; readonly participants: readonly unknown[] };
-    expect(videoGridProps.layout).toBe("presentation");
-    expect(videoGridProps.participants).toEqual(expect.arrayContaining([expect.objectContaining({ id: "remote", isVideoEnabled: true, isScreenSharing: true, screenShareTrack: screenTrack })]));
-  });
-
-  it("exposes negotiated chat and reactions and delegates their actions", async () => {
-    const sendChatMessage = vi.fn(() => Promise.resolve());
-    const sendReaction = vi.fn(() => Promise.resolve());
-    const markChatRead = vi.fn(async () => null);
-    const store = createStore(
-      { sendChatMessage, sendReaction, markChatRead },
-      {
-        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat", "sendReaction"], error: null },
-        chat: {
-          ...emptyChat(),
-          status: "ready",
-          messages: [
-            {
-              messageId: "message-1",
-              clientMessageId: "client-1",
-              sequence: "1",
-              participantSessionId: "remote",
-              displayName: "Grace",
-              text: "Welcome",
-              createdAt: "2026-07-30T10:00:00.000Z",
-              attachments: [],
-            },
-          ],
-          unreadCount: 1,
-        },
-      },
-    );
-
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Chat" })[0]!);
-    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "  Hello team  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-
-    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith({ text: "Hello team", attachments: [] }));
-    expect(markChatRead).toHaveBeenCalledWith("1");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Reactions" })[0]!);
-    fireEvent.click(screen.getByRole("button", { name: "React with 👍" }));
-    await waitFor(() => expect(sendReaction).toHaveBeenCalledWith("👍"));
-  });
-
-  it("exposes durable chat pagination and failed-message retry", async () => {
-    const loadOlderChatMessages = vi.fn(() => Promise.resolve());
-    const retryChatMessage = vi.fn(() => Promise.resolve());
-    const store = createStore(
-      { loadOlderChatMessages, retryChatMessage },
-      {
-        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat"], error: null },
-        chat: {
-          status: "ready",
-          messages: [],
-          pending: [
-            {
-              clientMessageId: "client-1",
-              text: "Please retry",
-              attachments: [],
-              state: "failed",
-              error: {
-                code: "command_rejected",
-                action: "sendChatMessage",
-                recoverable: true,
-                message: "Message was not acknowledged",
-              },
-            },
-          ],
-          hasOlder: true,
-          historyTruncated: false,
-          retainedFloorSequence: null,
-          unreadCount: 0,
-          readReceipts: [],
-          localReadThroughSequence: null,
-          error: null,
-        },
-      },
-    );
-
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Chat" })[0]!);
-    fireEvent.click(screen.getByRole("button", { name: "Load earlier messages" }));
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-
-    await waitFor(() => expect(loadOlderChatMessages).toHaveBeenCalledOnce());
-    await waitFor(() => expect(retryChatMessage).toHaveBeenCalledWith("client-1"));
-  });
-
-  it("uploads chat attachments through the session transport before sending", async () => {
-    const sendChatMessage = vi.fn(() => Promise.resolve());
-    const finalizeUpload = vi.fn(async () => ({ attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain" as const, byteLength: 5 }));
-    const chatFiles = {
-      initiateUpload: vi.fn(async () => ({
-        attachmentId: "attachment-1",
-        uploadId: "upload-1",
-        method: "PUT" as const,
-        uploadUrl: "https://upload.test/signed",
-        headers: { "content-type": "text/plain", "x-upload-token": "signed" },
-        expiresAt: "2026-07-30T11:00:00.000Z",
-      })),
-      finalizeUpload,
-      getDownloadUrl: vi.fn(),
-    };
-    const fetch = vi.fn(async () => new Response(null, { status: 200 }));
-    vi.stubGlobal("fetch", fetch);
-    const store = createStore(
-      { sendChatMessage, chatFiles },
-      {
-        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat"], error: null },
-      },
-    );
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Chat" })[0]!);
-    fireEvent.change(screen.getByLabelText("Choose attachments"), { target: { files: [new File(["hello"], "note.txt", { type: "text/plain" })] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-
-    await waitFor(() => expect(finalizeUpload).toHaveBeenCalledWith("upload-1"));
-    expect(fetch).toHaveBeenCalledWith(
-      "https://upload.test/signed",
-      expect.objectContaining({
-        method: "PUT",
-        headers: { "content-type": "text/plain", "x-upload-token": "signed" },
-      }),
-    );
-    expect(sendChatMessage).toHaveBeenCalledWith({
-      text: "",
-      attachments: [{ attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 }],
-    });
-  });
-
-  it("hides chat and reactions when room-actions negotiation does not grant them", () => {
-    const store = createStore({}, { roomActions: { phase: "disabled", version: null, capabilities: [], error: null } });
-
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    expect(screen.queryAllByRole("button", { name: "Chat" })).toHaveLength(0);
-    expect(screen.queryAllByRole("button", { name: "Reactions" })).toHaveLength(0);
-  });
-
-  it("routes directed media requests without exposing force-unmute", async () => {
-    const requestUnmute = vi.fn(() => Promise.resolve());
-    const requestStartCamera = vi.fn(() => Promise.resolve());
-    const store = createStore(
-      { requestUnmute, requestStartCamera },
-      {
-        participants: [
-          { participantSessionId: "local", displayName: "Ada", handRaised: false, role: "host", eligibleRoles: ["host"], capabilities: ["requestMediaOthers"] },
-          { participantSessionId: "remote", displayName: "Grace", handRaised: false, role: "participant", eligibleRoles: ["participant"], capabilities: [] },
-        ],
-      },
-    );
-
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    fireEvent.click(screen.getAllByRole("button", { name: "People" })[0]!);
-    fireEvent.click(screen.getByRole("button", { name: "Options for Grace" }));
-    expect(screen.queryByRole("button", { name: "Unmute" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Ask to unmute" }));
-    await waitFor(() => expect(requestUnmute).toHaveBeenCalledWith("remote"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Options for Grace" }));
-    fireEvent.click(screen.getByRole("button", { name: "Ask to start camera" }));
-    await waitFor(() => expect(requestStartCamera).toHaveBeenCalledWith("remote"));
-  });
-
-  it("lets a participant accept or decline an incoming media request", async () => {
-    const acceptMediaRequest = vi.fn(() => Promise.resolve());
-    const declineMediaRequest = vi.fn();
-    const store = createStore(
-      { acceptMediaRequest, declineMediaRequest },
-      {
-        incomingMediaRequests: [
-          {
-            requestId: "request-1",
-            kind: "unmute",
-            actorParticipantSessionId: "host",
-            actorDisplayName: "Grace",
-            expiresAt: "2026-07-29T20:00:00.000Z",
-          },
-        ],
-      },
-    );
-
-    render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    expect(screen.getByRole("dialog", { name: "Unmute request" })).toHaveTextContent("Grace is asking you to unmute");
-    fireEvent.click(screen.getByRole("button", { name: "Allow" }));
-    await waitFor(() => expect(acceptMediaRequest).toHaveBeenCalledWith("request-1"));
-    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
-    expect(declineMediaRequest).toHaveBeenCalledWith("request-1");
-  });
-
-  it("starts and stops the separate whiteboard-v1 transport with the board", async () => {
-    const startSceneSubscription = vi.fn(() => Promise.resolve());
-    const stopSceneSubscription = vi.fn();
-    const whiteboard = createWhiteboard({ startSceneSubscription, stopSceneSubscription });
-    const store = createStore(
-      { whiteboard },
-      {
-        whiteboard: {
-          status: "ready",
-          sceneId: "scene-1",
-          revision: "1",
-          capabilities: ["drawWhiteboard"],
-          canDraw: true,
-          canClear: false,
-          error: null,
-        },
-      },
-    );
-    const { unmount } = render(
-      <ChalkProvider session={store}>
-        <ConferenceView roomName="Design review" displayName="Ada" />
-      </ChalkProvider>,
-    );
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Whiteboard" })[0]!);
-    await waitFor(() => expect(startSceneSubscription).toHaveBeenCalledOnce());
-    expect(screen.getByTestId("whiteboard-panel")).toBeInTheDocument();
-    expect(whiteboardPanelSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ canDraw: true, collab: expect.objectContaining({ subscribe: expect.any(Function), submitUpdate: expect.any(Function) }) }));
-
-    unmount();
-    expect(stopSceneSubscription).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "React with 🎉" }));
+    expect(onSelect).toHaveBeenCalledWith("🎉");
+    expect(screen.getByText("🎉")).toBeInTheDocument();
   });
 });
 
-function createStore(actions: Partial<ChalkSessionStore>, snapshotOverrides: Partial<ChalkSessionSnapshot> = {}): ChalkSessionStore {
-  const resolved = () => Promise.resolve();
-  const snapshot: ChalkSessionSnapshot = {
-    state: "live",
-    subject: { tenantId: "tenant", roomId: "room", sessionId: "session", participantSessionId: "local", participantGeneration: 1 },
-    connection: { sync: "healthy", media: "healthy" },
-    admissionPolicy: "open",
-    participants: [{ participantSessionId: "local", displayName: "Ada", handRaised: false, role: "host", eligibleRoles: ["host"], capabilities: [] }],
-    admissionRequests: [],
-    localMedia: {
-      microphone: { source: "microphone", state: "enabled", track: null },
-      camera: { source: "camera", state: "disabled", track: null },
-      screen: { source: "screen", state: "disabled", track: null },
-    },
-    remoteMedia: [],
-    failure: null,
-    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
-    participantRoomActionCapabilities: {},
-    participantMedia: {},
-    reactions: [],
-    chat: emptyChat(),
-    whiteboard: {
-      status: "unsubscribed",
-      sceneId: null,
-      revision: null,
-      capabilities: [],
-      canDraw: false,
-      canClear: false,
-      error: null,
-    },
-    incomingMediaRequests: [],
-    ...snapshotOverrides,
-  };
+function createProps(overrides: Partial<ConferenceViewProps> = {}): ConferenceViewProps {
   return {
-    getSnapshot: () => snapshot,
-    subscribe: () => () => undefined,
-    join: resolved,
-    leave: resolved,
-    setMicrophoneEnabled: resolved,
-    setCameraEnabled: resolved,
-    startScreenShare: resolved,
-    stopScreenShare: resolved,
-    setHandRaised: resolved,
-    setDisplayName: resolved,
-    setAdmissionPolicy: resolved,
-    setParticipantRole: resolved,
-    transferHost: resolved,
-    admitParticipant: resolved,
-    denyAdmission: resolved,
-    muteParticipant: resolved,
-    stopParticipantCamera: resolved,
-    stopParticipantScreenShare: resolved,
-    removeParticipant: resolved,
-    endSession: resolved,
-    sendReaction: resolved,
-    sendChatMessage: resolved,
-    retryChatMessage: resolved,
-    loadOlderChatMessages: resolved,
-    markChatRead: async () => null,
-    requestUnmute: resolved,
-    requestStartCamera: resolved,
-    acceptMediaRequest: resolved,
-    declineMediaRequest: () => undefined,
-    chatFiles: null,
-    whiteboard: null,
-    ...actions,
-  };
-}
-
-function emptyChat(): ChalkSessionSnapshot["chat"] {
-  return {
-    status: "idle",
-    messages: [],
-    pending: [],
-    hasOlder: false,
-    historyTruncated: false,
-    retainedFloorSequence: null,
-    unreadCount: 0,
-    readReceipts: [],
-    localReadThroughSequence: null,
-    error: null,
-  };
-}
-
-function createWhiteboard(overrides: Partial<ChalkWhiteboardV1Transport> = {}): ChalkWhiteboardV1Transport {
-  const resolved = () => Promise.resolve();
-  return {
-    startSceneSubscription: resolved,
-    stopSceneSubscription: () => undefined,
-    subscribe: () => () => undefined,
-    submitUpdate: resolved,
-    sendCursor: () => undefined,
-    requestSnapshot: resolved,
-    clear: resolved,
-    setDrawPermission: resolved,
-    files: {
-      initiateUpload: resolved,
-      finalizeUpload: resolved,
-      getDownloadUrl: resolved,
-    },
+    roomName: "Design review",
+    displayName: "Ada",
+    participants: [participant("ada")],
     ...overrides,
-  } as ChalkWhiteboardV1Transport;
+  };
+}
+
+function participant(id: string) {
+  return {
+    id,
+    displayName: id === "ada" ? "Ada" : "Grace",
+    isLocal: id === "ada",
+    isMuted: false,
+    isVideoEnabled: true,
+  };
 }

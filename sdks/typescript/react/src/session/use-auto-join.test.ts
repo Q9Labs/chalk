@@ -10,12 +10,21 @@ describe("useAutoJoin", () => {
   it("joins once across StrictMode effect replay and re-renders", () => {
     const join = vi.fn(() => Promise.resolve());
     const wrapper = ({ children }: PropsWithChildren) => createElement(StrictMode, null, children);
-    const { rerender, unmount } = renderHook(() => useAutoJoin(join), { wrapper });
+    const { rerender, unmount } = renderHook(() => useAutoJoin(true, join), { wrapper });
 
     rerender();
     expect(join).toHaveBeenCalledOnce();
 
     unmount();
+    expect(join).toHaveBeenCalledOnce();
+  });
+
+  it("waits until enabled before joining", () => {
+    const join = vi.fn(() => Promise.resolve());
+    const { rerender } = renderHook(({ enabled }) => useAutoJoin(enabled, join), { initialProps: { enabled: false } });
+
+    expect(join).not.toHaveBeenCalled();
+    rerender({ enabled: true });
     expect(join).toHaveBeenCalledOnce();
   });
 });

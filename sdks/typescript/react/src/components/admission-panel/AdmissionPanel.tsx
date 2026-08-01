@@ -7,7 +7,7 @@ export interface WaitingParticipant {
   id: string;
   displayName: string;
   avatarUrl?: string;
-  joinedAt: Date;
+  joinedAt?: Date;
 }
 
 export interface AdmissionPanelProps {
@@ -28,7 +28,8 @@ export const AdmissionPanel = React.memo(({ participants, onAdmit, onDeny, onAdm
     return () => clearInterval(timer);
   }, []);
 
-  const getWaitingLabel = (date: Date) => {
+  const getWaitingLabel = (date?: Date) => {
+    if (!date) return "Waiting to join";
     const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
     if (minutes < 1) return "Joined just now";
     if (minutes === 1) return "Waiting 1 min";
