@@ -2,7 +2,7 @@ import { NativeModules, Platform } from "react-native";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
 
-export interface NativeDeviceInfo {
+export interface DeviceInfo {
   appVersion: string | null;
   platform: string | null;
   osVersion: string | null;
@@ -123,7 +123,7 @@ export function isHermesEnabled(): boolean {
 
 const readPlatformString = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
 
-export function getNativeDeviceInfo({ appVersion = null, scriptUrl = getReactNativeScriptUrl() }: { appVersion?: string | null; scriptUrl?: string | null } = {}): NativeDeviceInfo {
+export function getDeviceInfo({ appVersion = null, scriptUrl = getReactNativeScriptUrl() }: { appVersion?: string | null; scriptUrl?: string | null } = {}): DeviceInfo {
   const constants = (Platform.constants ?? {}) as Record<string, unknown>;
 
   return {

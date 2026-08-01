@@ -1,5 +1,5 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachment, type ChalkSessionStore } from "@q9labsai/chalk-client";
-import { uploadNativeChatAttachment } from "@q9labsai/chalk-react-native";
+import { uploadChatAttachment } from "@q9labsai/chalk-react-native";
 import { CryptoDigestAlgorithm, digest, randomUUID } from "expo-crypto";
 import { getDocumentAsync } from "expo-document-picker";
 import { File } from "expo-file-system";
@@ -22,7 +22,7 @@ export async function pickAndUploadChatAttachments(chatFiles: ChatFiles): Promis
     const file = new File(asset.uri);
     const bytes = await file.arrayBuffer();
     attachments.push(
-      await uploadNativeChatAttachment(
+      await uploadChatAttachment(
         {
           bytes,
           fileName: asset.name,

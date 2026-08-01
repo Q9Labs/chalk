@@ -1,8 +1,8 @@
-export { NativeEndScreenMacos as NativeEndScreen } from "./components/NativeEndScreen.macos";
-export type { NativeEndScreenProps, NativeMeetingEndData } from "./components/NativeEndScreen";
-export { NativeJoiningLoadingScreenMacos as NativeJoiningLoadingScreen } from "./components/NativeJoiningLoadingScreen.macos";
-export type { NativeJoiningLoadingScreenProps } from "./components/NativeJoiningLoadingScreen";
-export { NativeMeetingRoomMacos as NativeMeetingRoom } from "./components/NativeMeetingRoom.macos";
-export type { NativeMeetingRoomDiagnosticsSnapshot, NativeMeetingRoomFeatures, NativeMeetingRoomProps } from "./components/NativeMeetingRoom";
-export { NativePreJoinLobbyMacos as NativePreJoinLobby } from "./components/NativePreJoinLobby.macos";
-export type { NativeJoinSettings, NativePreJoinLobbyProps } from "./components/NativePreJoinLobby";
+export { EndScreenMacos as EndScreen } from "./components/EndScreen.macos";
+export type { EndScreenProps, MeetingEndData } from "./components/EndScreen";
+export { JoiningLoadingScreenMacos as JoiningLoadingScreen } from "./components/JoiningLoadingScreen.macos";
+export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScreen";
+export { MeetingRoomMacos as MeetingRoom } from "./components/MeetingRoom.macos";
+export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
+export { PreJoinLobbyMacos as PreJoinLobby } from "./components/PreJoinLobby.macos";
+export type { JoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";

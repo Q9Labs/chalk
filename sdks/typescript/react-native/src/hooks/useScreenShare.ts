@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 
-import { useChalkSession } from "../context/chalk-native-provider";
-import { useChalkSnapshot } from "./useChalkRoomActions";
+import { useChalkSession } from "../context/chalk-provider";
+import { useChalkSnapshot } from "./useChalkSnapshot";
 
 export interface UseScreenShareReturn {
   readonly isActive: boolean;

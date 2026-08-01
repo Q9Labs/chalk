@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { useChalkSnapshot } from "./useChalkRoomActions";
+import { useChalkSnapshot } from "./useChalkSnapshot";
 
 export interface UseRoomReturn {
   readonly roomId: string | null;

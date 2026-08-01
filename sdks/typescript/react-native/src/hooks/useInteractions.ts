@@ -1,9 +1,9 @@
 import type { ChalkReaction } from "@q9labsai/chalk-client";
 import { useCallback, useMemo } from "react";
-import { useChalkSession } from "../context/chalk-native-provider";
+import { useChalkSession } from "../context/chalk-provider";
 import { createNativeRoomActionCommands, projectNativeRoomActions } from "../room-actions/native-room-actions";
 import type { NativeReaction } from "../ui/native-types";
-import { useChalkSnapshot } from "./useChalkRoomActions";
+import { useChalkSnapshot } from "./useChalkSnapshot";
 
 export interface UseInteractionsReturn {
   isHandRaised: boolean;

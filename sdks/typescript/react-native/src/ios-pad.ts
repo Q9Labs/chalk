@@ -1,8 +1,8 @@
-export { NativeEndScreenIosPad as NativeEndScreen } from "./components/NativeEndScreen.ios-pad";
-export type { NativeEndScreenProps, NativeMeetingEndData } from "./components/NativeEndScreen";
-export { NativeJoiningLoadingScreenIosPad as NativeJoiningLoadingScreen } from "./components/NativeJoiningLoadingScreen.ios-pad";
-export type { NativeJoiningLoadingScreenProps } from "./components/NativeJoiningLoadingScreen";
-export { NativeMeetingRoomIosPad as NativeMeetingRoom } from "./components/NativeMeetingRoom.ios-pad";
-export type { NativeMeetingRoomDiagnosticsSnapshot, NativeMeetingRoomFeatures, NativeMeetingRoomProps } from "./components/NativeMeetingRoom";
-export { NativePreJoinLobbyIosPad as NativePreJoinLobby } from "./components/NativePreJoinLobby.ios-pad";
-export type { NativeJoinSettings, NativePreJoinLobbyProps } from "./components/NativePreJoinLobby";
+export { EndScreenIosPad as EndScreen } from "./components/EndScreen.ios-pad";
+export type { EndScreenProps, MeetingEndData } from "./components/EndScreen";
+export { JoiningLoadingScreenIosPad as JoiningLoadingScreen } from "./components/JoiningLoadingScreen.ios-pad";
+export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScreen";
+export { MeetingRoomIosPad as MeetingRoom } from "./components/MeetingRoom.ios-pad";
+export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
+export { PreJoinLobbyIosPad as PreJoinLobby } from "./components/PreJoinLobby.ios-pad";
+export type { JoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";

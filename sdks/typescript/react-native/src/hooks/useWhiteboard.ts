@@ -1,8 +1,8 @@
 import type { ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useState } from "react";
 
-import { useChalkSession } from "../context/chalk-native-provider";
-import { useChalkSnapshot } from "./useChalkRoomActions";
+import { useChalkSession } from "../context/chalk-provider";
+import { useChalkSnapshot } from "./useChalkSnapshot";
 
 export interface UseWhiteboardReturn {
   readonly transport: ChalkWhiteboardV1Transport | null;

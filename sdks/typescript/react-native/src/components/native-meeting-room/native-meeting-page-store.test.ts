@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNativeMeetingPageStore } from "./native-meeting-page-store";
+import { createMeetingPageStore } from "./native-meeting-page-store";
 
-describe("createNativeMeetingPageStore", () => {
+describe("createMeetingPageStore", () => {
   it("keeps a non-negative page and notifies subscribers when it changes", () => {
-    const store = createNativeMeetingPageStore();
+    const store = createMeetingPageStore();
     const listener = vi.fn();
     const unsubscribe = store.subscribe(listener);
 

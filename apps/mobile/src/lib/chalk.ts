@@ -2,8 +2,8 @@ import mobilePackageJson from "../../package.json";
 import * as SecureStore from "expo-secure-store";
 import { maskSecret } from "@q9labsai/chalk-react-native/diagnostics";
 import { extractJoinTokenFromInviteLink } from "@q9labsai/chalk-react-native/invites";
-import { getNativeDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
-import type { ChalkClientSession, ChalkClientSessionCredential } from "@q9labsai/chalk-react-native";
+import { getDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
+import type { ClientSession, ClientSessionCredential } from "@q9labsai/chalk-react-native";
 
 const CLIENT_SESSION_PREFIX = "chalk_mobile_client_session_v2.";
 const LAST_INVITE_KEY = "chalk_mobile_last_invite_v2";
@@ -11,7 +11,7 @@ const PRODUCTION_BROKER_URL = "https://chalkmeet.com/local-chalk";
 
 export interface MobileDebugContext {
   inviteTokenPreview: string | null;
-  device: ReturnType<typeof getNativeDeviceInfo>;
+  device: ReturnType<typeof getDeviceInfo>;
 }
 
 type BaseMeetingRoute = {
@@ -78,11 +78,11 @@ export function parseUrlLike(url: string): LobbyRoute | null {
     : null;
 }
 
-export async function loadClientSessionCredential(inviteToken: string): Promise<ChalkClientSessionCredential | undefined> {
+export async function loadClientSessionCredential(inviteToken: string): Promise<ClientSessionCredential | undefined> {
   const value = await SecureStore.getItemAsync(credentialKey(inviteToken));
   if (!value) return undefined;
   try {
-    const parsed = JSON.parse(value) as Partial<ChalkClientSessionCredential>;
+    const parsed = JSON.parse(value) as Partial<ClientSessionCredential>;
     if (parsed.inviteToken === inviteToken && isCapability(parsed.clientSessionId)) {
       return { clientSessionId: parsed.clientSessionId, inviteToken };
     }
@@ -93,7 +93,7 @@ export async function loadClientSessionCredential(inviteToken: string): Promise<
   return undefined;
 }
 
-export async function saveClientSessionCredential(credential: ChalkClientSessionCredential): Promise<void> {
+export async function saveClientSessionCredential(credential: ClientSessionCredential): Promise<void> {
   await Promise.all([SecureStore.setItemAsync(credentialKey(credential.inviteToken), JSON.stringify(credential)), SecureStore.setItemAsync(LAST_INVITE_KEY, credential.inviteToken)]);
 }
 
@@ -102,7 +102,7 @@ export async function clearClientSessionCredential(inviteToken: string): Promise
   await Promise.all([SecureStore.deleteItemAsync(credentialKey(inviteToken)), ...(lastInviteToken === inviteToken ? [SecureStore.deleteItemAsync(LAST_INVITE_KEY)] : [])]);
 }
 
-export async function cleanupClientSession(clientSession: ChalkClientSession): Promise<void> {
+export async function cleanupClientSession(clientSession: ClientSession): Promise<void> {
   try {
     await clientSession.cleanup();
   } finally {
@@ -119,7 +119,7 @@ export async function getMobileDebugContext(): Promise<MobileDebugContext> {
   const inviteToken = await SecureStore.getItemAsync(LAST_INVITE_KEY);
   return {
     inviteTokenPreview: maskSecret(inviteToken),
-    device: getNativeDeviceInfo({
+    device: getDeviceInfo({
       appVersion: typeof (mobilePackageJson as { version?: string }).version === "string" ? (mobilePackageJson as { version?: string }).version : null,
     }),
   };

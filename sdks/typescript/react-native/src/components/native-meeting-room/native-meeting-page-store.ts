@@ -1,11 +1,11 @@
-export interface NativeMeetingPageStore {
+export interface MeetingPageStore {
   getSnapshot(): number;
   subscribe(listener: () => void): () => void;
   setPage(page: number): void;
   clampToPageCount(pageCount: number): void;
 }
 
-export function createNativeMeetingPageStore(): NativeMeetingPageStore {
+export function createMeetingPageStore(): MeetingPageStore {
   let page = 0;
   const listeners = new Set<() => void>();
 

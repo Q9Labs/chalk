@@ -1,4 +1,4 @@
-export interface NativeMeetingRoomFeatureFlags {
+export interface MeetingRoomFeatureFlags {
   readonly chat: boolean;
   readonly participants: boolean;
   readonly screenShare: boolean;
@@ -7,37 +7,37 @@ export interface NativeMeetingRoomFeatureFlags {
   readonly whiteboard: boolean;
 }
 
-export interface NativeMeetingRoomActionAvailability {
+export interface MeetingRoomActionAvailability {
   readonly enabled: boolean;
   readonly reason: string | null;
   readonly detail: string | null;
 }
 
-export interface NativeMeetingRoomDiagnosticsSnapshot {
+export interface MeetingRoomDiagnosticsSnapshot {
   readonly isHost: boolean;
   readonly participantCount: number;
   readonly raisedHandCount: number;
   readonly unreadChatCount: number;
-  readonly featureFlags: NativeMeetingRoomFeatureFlags;
+  readonly featureFlags: MeetingRoomFeatureFlags;
   readonly actionAvailability: {
-    readonly screenShare: NativeMeetingRoomActionAvailability & {
+    readonly screenShare: MeetingRoomActionAvailability & {
       readonly isActive: boolean;
       readonly isLocalSharing: boolean;
       readonly sharerParticipantId: string | null;
       readonly visibleInBottomDock: boolean;
       readonly enabledInActionsSheet: boolean;
     };
-    readonly reactions: NativeMeetingRoomActionAvailability;
-    readonly handRaise: NativeMeetingRoomActionAvailability;
-    readonly chat: NativeMeetingRoomActionAvailability;
-    readonly participants: NativeMeetingRoomActionAvailability;
-    readonly whiteboard: NativeMeetingRoomActionAvailability;
-    readonly moderation: NativeMeetingRoomActionAvailability;
+    readonly reactions: MeetingRoomActionAvailability;
+    readonly handRaise: MeetingRoomActionAvailability;
+    readonly chat: MeetingRoomActionAvailability;
+    readonly participants: MeetingRoomActionAvailability;
+    readonly whiteboard: MeetingRoomActionAvailability;
+    readonly moderation: MeetingRoomActionAvailability;
   };
 }
 
-export function buildNativeMeetingRoomDiagnosticsSnapshot(input: {
-  readonly featureFlags: NativeMeetingRoomFeatureFlags;
+export function buildMeetingRoomDiagnosticsSnapshot(input: {
+  readonly featureFlags: MeetingRoomFeatureFlags;
   readonly isHost: boolean;
   readonly participantCount: number;
   readonly raisedHandCount: number;
@@ -46,9 +46,9 @@ export function buildNativeMeetingRoomDiagnosticsSnapshot(input: {
   readonly isLocalScreenSharing: boolean;
   readonly screenShareSharerParticipantId: string | null;
   readonly canModerate: boolean;
-  readonly screenShareAvailability?: NativeMeetingRoomActionAvailability;
-}): NativeMeetingRoomDiagnosticsSnapshot {
-  const availability = (enabled: boolean, feature: keyof NativeMeetingRoomFeatureFlags) => (enabled ? enabledAction() : disabledAction(`features.${feature}=false`));
+  readonly screenShareAvailability?: MeetingRoomActionAvailability;
+}): MeetingRoomDiagnosticsSnapshot {
+  const availability = (enabled: boolean, feature: keyof MeetingRoomFeatureFlags) => (enabled ? enabledAction() : disabledAction(`features.${feature}=false`));
   const screenShare = input.screenShareAvailability ?? availability(input.featureFlags.screenShare, "screenShare");
   return {
     isHost: input.isHost,
@@ -75,10 +75,10 @@ export function buildNativeMeetingRoomDiagnosticsSnapshot(input: {
   };
 }
 
-function enabledAction(): NativeMeetingRoomActionAvailability {
+function enabledAction(): MeetingRoomActionAvailability {
   return { enabled: true, reason: null, detail: null };
 }
 
-function disabledAction(detail: string): NativeMeetingRoomActionAvailability {
+function disabledAction(detail: string): MeetingRoomActionAvailability {
   return { enabled: false, reason: "feature-disabled", detail };
 }

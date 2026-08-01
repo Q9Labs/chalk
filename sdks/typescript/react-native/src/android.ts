@@ -1,8 +1,8 @@
-export { NativeEndScreenAndroid as NativeEndScreen } from "./components/NativeEndScreen.android";
-export type { NativeEndScreenProps, NativeMeetingEndData } from "./components/NativeEndScreen";
-export { NativeJoiningLoadingScreenAndroid as NativeJoiningLoadingScreen } from "./components/NativeJoiningLoadingScreen.android";
-export type { NativeJoiningLoadingScreenProps } from "./components/NativeJoiningLoadingScreen";
-export { NativeMeetingRoomAndroid as NativeMeetingRoom } from "./components/NativeMeetingRoom.android";
-export type { NativeMeetingRoomDiagnosticsSnapshot, NativeMeetingRoomFeatures, NativeMeetingRoomProps } from "./components/NativeMeetingRoom";
-export { NativePreJoinLobbyAndroid as NativePreJoinLobby } from "./components/NativePreJoinLobby.android";
-export type { NativeJoinSettings, NativePreJoinLobbyProps } from "./components/NativePreJoinLobby";
+export { EndScreenAndroid as EndScreen } from "./components/EndScreen.android";
+export type { EndScreenProps, MeetingEndData } from "./components/EndScreen";
+export { JoiningLoadingScreenAndroid as JoiningLoadingScreen } from "./components/JoiningLoadingScreen.android";
+export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScreen";
+export { MeetingRoomAndroid as MeetingRoom } from "./components/MeetingRoom.android";
+export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
+export { PreJoinLobbyAndroid as PreJoinLobby } from "./components/PreJoinLobby.android";
+export type { JoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";

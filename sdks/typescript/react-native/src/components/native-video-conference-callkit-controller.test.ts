@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { NativeVideoConferenceCallKitController, type NativeVideoConferenceCallKitPort, type NativeVideoConferenceCallKitSyncInput } from "./native-video-conference-callkit-controller";
+import { VideoConferenceCallKitController, type VideoConferenceCallKitPort, type VideoConferenceCallKitSyncInput } from "./native-video-conference-callkit-controller";
 
 vi.mock("react-native", () => ({
   NativeModules: {},
   Platform: { OS: "ios" },
 }));
 
-function createInput(overrides: Partial<NativeVideoConferenceCallKitSyncInput> = {}): NativeVideoConferenceCallKitSyncInput {
+function createInput(overrides: Partial<VideoConferenceCallKitSyncInput> = {}): VideoConferenceCallKitSyncInput {
   return {
     callKit: true,
     hasVideo: true,
@@ -21,11 +21,11 @@ function createInput(overrides: Partial<NativeVideoConferenceCallKitSyncInput> =
   };
 }
 
-describe("NativeVideoConferenceCallKitController", () => {
+describe("VideoConferenceCallKitController", () => {
   it("configures, starts, reports, handles mute actions, and ends the native call", async () => {
-    let eventListener: Parameters<NativeVideoConferenceCallKitPort["addListener"]>[0] | undefined;
+    let eventListener: Parameters<VideoConferenceCallKitPort["addListener"]>[0] | undefined;
     const removeListener = vi.fn();
-    const port: NativeVideoConferenceCallKitPort = {
+    const port: VideoConferenceCallKitPort = {
       isSupported: true,
       addListener: vi.fn((listener) => {
         eventListener = listener;
@@ -36,7 +36,7 @@ describe("NativeVideoConferenceCallKitController", () => {
       reportConnected: vi.fn(async () => {}),
       startCall: vi.fn(async () => ({ callUUID: "call-1" })),
     };
-    const controller = new NativeVideoConferenceCallKitController(port);
+    const controller = new VideoConferenceCallKitController(port);
     const input = createInput();
 
     controller.start();

@@ -1,4 +1,4 @@
-export interface NativePreJoinLobbyControllerSnapshot {
+export interface PreJoinLobbyControllerSnapshot {
   readonly displayName: string;
   readonly audioEnabled: boolean;
   readonly videoEnabled: boolean;
@@ -6,30 +6,30 @@ export interface NativePreJoinLobbyControllerSnapshot {
   readonly isInputFocused: boolean;
 }
 
-export interface NativePreJoinLobbyControllerStoreOptions {
+export interface PreJoinLobbyControllerStoreOptions {
   readonly displayName: string;
   readonly initialAudioEnabled: boolean;
   readonly initialVideoEnabled: boolean;
   readonly simulatorMediaDisabled: boolean;
   readonly joinDisabled: boolean;
-  readonly onJoin: (settings: NativeJoinSettings) => void;
+  readonly onJoin: (settings: JoinSettings) => void;
 }
 
-export interface NativePreJoinLobbyControllerStoreUpdate {
+export interface PreJoinLobbyControllerStoreUpdate {
   readonly simulatorMediaDisabled: boolean;
   readonly joinDisabled: boolean;
-  readonly onJoin: (settings: NativeJoinSettings) => void;
+  readonly onJoin: (settings: JoinSettings) => void;
 }
 
-export class NativePreJoinLobbyControllerStore {
-  #snapshot: NativePreJoinLobbyControllerSnapshot;
+export class PreJoinLobbyControllerStore {
+  #snapshot: PreJoinLobbyControllerSnapshot;
   #listeners = new Set<() => void>();
   #simulatorMediaDisabled: boolean;
   #joinDisabled: boolean;
   #submitLatch = false;
-  #onJoin: NativePreJoinLobbyControllerStoreOptions["onJoin"];
+  #onJoin: PreJoinLobbyControllerStoreOptions["onJoin"];
 
-  constructor({ displayName, initialAudioEnabled, initialVideoEnabled, simulatorMediaDisabled, joinDisabled, onJoin }: NativePreJoinLobbyControllerStoreOptions) {
+  constructor({ displayName, initialAudioEnabled, initialVideoEnabled, simulatorMediaDisabled, joinDisabled, onJoin }: PreJoinLobbyControllerStoreOptions) {
     this.#simulatorMediaDisabled = simulatorMediaDisabled;
     this.#joinDisabled = joinDisabled;
     this.#onJoin = onJoin;
@@ -42,7 +42,7 @@ export class NativePreJoinLobbyControllerStore {
     };
   }
 
-  readonly getSnapshot = (): NativePreJoinLobbyControllerSnapshot => this.#snapshot;
+  readonly getSnapshot = (): PreJoinLobbyControllerSnapshot => this.#snapshot;
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
@@ -51,7 +51,7 @@ export class NativePreJoinLobbyControllerStore {
     };
   };
 
-  readonly update = ({ simulatorMediaDisabled, joinDisabled, onJoin }: NativePreJoinLobbyControllerStoreUpdate): void => {
+  readonly update = ({ simulatorMediaDisabled, joinDisabled, onJoin }: PreJoinLobbyControllerStoreUpdate): void => {
     this.#onJoin = onJoin;
 
     if (!this.#simulatorMediaDisabled && simulatorMediaDisabled) {
@@ -97,7 +97,7 @@ export class NativePreJoinLobbyControllerStore {
     });
   };
 
-  #update(next: Partial<NativePreJoinLobbyControllerSnapshot>): void {
+  #update(next: Partial<PreJoinLobbyControllerSnapshot>): void {
     const snapshot = { ...this.#snapshot, ...next };
     if (snapshot.displayName === this.#snapshot.displayName && snapshot.audioEnabled === this.#snapshot.audioEnabled && snapshot.videoEnabled === this.#snapshot.videoEnabled && snapshot.isSubmitting === this.#snapshot.isSubmitting && snapshot.isInputFocused === this.#snapshot.isInputFocused) {
       return;
@@ -107,4 +107,4 @@ export class NativePreJoinLobbyControllerStore {
     for (const listener of this.#listeners) listener();
   }
 }
-import type { NativeJoinSettings } from "../NativePreJoinLobby";
+import type { JoinSettings } from "../PreJoinLobby";

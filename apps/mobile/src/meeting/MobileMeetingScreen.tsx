@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ChalkSessionAccessProvider, ChalkSessionStore } from "@q9labsai/chalk-client";
-import { NativeVideoConference, ChalkClientSessionError, createChalkClientSession, createChalkNativeSession, type ChalkClientSession, type NativeJoinSettings, type NativeVideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
+import { VideoConference, ClientSessionError, createClientSession, createChalkSession, type ClientSession, type JoinSettings, type VideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -14,7 +14,7 @@ export interface MeetingScreenProps {
   readonly route: LobbyRoute;
   readonly onClose: () => Promise<void>;
   readonly brokerUrl: string;
-  readonly onDiagnosticsChange?: (snapshot: NativeVideoConferenceDiagnosticsSnapshot) => void;
+  readonly onDiagnosticsChange?: (snapshot: VideoConferenceDiagnosticsSnapshot) => void;
   readonly onDiagnosticsError?: (error: { message: string }) => void;
   readonly onSessionChange?: (session: ChalkSessionStore | null) => void;
 }
@@ -22,7 +22,7 @@ export interface MeetingScreenProps {
 export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsChange, onDiagnosticsError, onSessionChange }: MeetingScreenProps): React.JSX.Element {
   const telemetry = useMemo(() => createMobileTelemetry({ enabled: true }), []);
   const journeyRef = useRef<TelemetryJourney | undefined>(undefined);
-  const clientSessionRef = useRef<ChalkClientSession | null>(null);
+  const clientSessionRef = useRef<ClientSession | null>(null);
   const [journey, setJourney] = useState<TelemetryJourney | undefined>(undefined);
   const [meetingLink, setMeetingLink] = useState<string | undefined>(undefined);
 
@@ -50,21 +50,21 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
   );
 
   const createSession = useCallback(
-    async (settings: NativeJoinSettings): Promise<ChalkSessionStore> => {
+    async (settings: JoinSettings): Promise<ChalkSessionStore> => {
       const storedCredential = !clientSessionRef.current && route.joinToken ? await loadClientSessionCredential(route.joinToken) : undefined;
       const create = (credential = storedCredential) =>
-        createChalkClientSession({
+        createClientSession({
           brokerBaseURL: brokerUrl,
           displayName: settings.displayName,
           meetingBaseURL: "https://chalkmeet.com",
           telemetry: journey,
           ...(clientSessionRef.current ? { credential: clientSessionRef.current } : credential ? { credential } : route.joinToken ? { inviteToken: route.joinToken } : {}),
         });
-      let clientSession: ChalkClientSession;
+      let clientSession: ClientSession;
       try {
         clientSession = await create();
       } catch (error) {
-        if (!storedCredential || !(error instanceof ChalkClientSessionError) || ![401, 404, 410].includes(error.status)) {
+        if (!storedCredential || !(error instanceof ClientSessionError) || ![401, 404, 410].includes(error.status)) {
           throw error;
         }
         await clearClientSessionCredential(storedCredential.inviteToken);
@@ -74,7 +74,7 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
       setMeetingLink(clientSession.meetingLink);
       await saveClientSessionCredential(clientSession);
       const access: ChalkSessionAccessProvider = (request) => clientSession.access(request);
-      return createChalkNativeSession({
+      return createChalkSession({
         access,
         apiBaseURL: clientSession.apiBaseURL,
         syncURL: clientSession.syncURL,
@@ -131,7 +131,7 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
   if (!journey) return <></>;
 
   return (
-    <NativeVideoConference
+    <VideoConference
       autoJoin={false}
       createSession={createSession}
       features={MOBILE_MEETING_FEATURES}
