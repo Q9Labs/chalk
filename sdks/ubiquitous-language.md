@@ -460,8 +460,39 @@ conference experience. It coordinates lifecycle screens, the active conference
 view, panels, dialogs, overlays, and the end state.
 
 `VideoConference` is the only component exported from the React package root.
-Its future props will be designed from the new runtime contract. Historical
-props and types are discarded.
+Its public surface is lifecycle-oriented and owns the session created by the
+application's `createSession` function. Historical props and types are
+discarded.
+
+The finalized React props are:
+
+- `roomId` and `createSession` identify the Room and provide the application
+  credential/session boundary.
+- `roomName`, `logoUrl`, `meetingLink`, `userName`, `role`, `autoJoin`, and
+  `initialJoinSettings` configure identity and entry behavior.
+- `phase`/`onPhaseChange` and `layout`/`onLayoutChange` are controlled
+  observability and presentation state.
+- `<feature>Enabled` props expose availability, including `chatEnabled`,
+  `participantsEnabled`, `admissionEnabled`, `screenShareEnabled`,
+  `whiteboardEnabled`, `reactionsEnabled`, `handRaiseEnabled`, `infoEnabled`,
+  and `settingsEnabled`.
+- `can<Action>` props pass through capability policy, including
+  `canShareScreen`, `canSendChat`, `canManageParticipants`, `canAdmit`,
+  `canReact`, `canRaiseHand`, `canUseWhiteboard`, `canInvite`, and `canLeave`.
+- Domain callbacks are emitted only for facts observable from the current
+  runtime: `onParticipantJoined`, `onParticipantLeft`,
+  `onScreenShareStarted`, `onScreenShareStopped`, and `onSessionEnded`.
+  `onLeave`, `onClose`, and `onError` remain action or lifecycle callbacks.
+
+`ConferenceView` receives the active data and callbacks as props. It does not
+create a provider, subscribe to a session, or own lifecycle effects; turnkey
+session wiring belongs to `VideoConference`.
+
+The current client snapshot does not expose a joiner-facing admission-wait
+status. The `waiting` phase remains part of the public contract for a future
+runtime signal and controlled observation, while the current React turnkey
+rendering uses `JoiningScreen` for that phase. Host admission is represented by
+`AdmissionPanel` inside the active composition.
 
 `Conference` is UI-composition language. It does not introduce a parallel
 runtime entity such as `ConferenceId` or `ConferenceSession`.

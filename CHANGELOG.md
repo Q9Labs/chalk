@@ -137,6 +137,19 @@ aliases are retained.
 | `@q9labsai/chalk-react-native` | diagnostics field `meetingRoom`      | `conferenceView`                            |
 | `@q9labsai/chalk-react-native` | `layout: speaker` / `sidebar`        | `layout: focus` plus Filmstrip              |
 
+Phase 6 makes the React package's turnkey surface and active composition
+concrete. `VideoConference` now owns the embedded lifecycle and exports from
+the package root with `ChalkProvider` and the canonical session hooks. The
+props-driven `ConferenceView` and all composable visuals are available from
+`@q9labsai/chalk-react/components`; the old root component exports and
+provider-wired active view are removed.
+
+The client snapshot still does not expose an admission-wait status. React
+therefore observes the canonical `waiting` phase for controlled/runtime input
+but renders `JoiningScreen` until the client can distinguish waiting from an
+ordinary join attempt. Host admission remains available through
+`AdmissionPanel` in the active composition.
+
 ### Added
 
 - A shared client `ConferencePhase` derivation primitive and tested internal lifecycle hooks for React and React Native, preserving the existing UI phase surfaces and public component APIs.
