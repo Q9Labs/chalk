@@ -265,18 +265,19 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
   // Presentation layout: content fills main area, participants in right filmstrip
   if (layout === "presentation") {
     const screenSharer = visibleParticipants.find((p) => p.isScreenSharing);
-    const otherParticipants = visibleParticipants.filter((p) => p.id !== screenSharer?.id);
+    const primaryParticipant = screenSharer ?? getPrimaryParticipant(visibleParticipants);
+    const otherParticipants = visibleParticipants.filter((p) => p.id !== primaryParticipant?.id);
 
     return (
       <div className={cn("flex h-full gap-2", className)} data-tour="video-grid">
         <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[#eeede8]">
           {screenShareContent ??
-            (screenSharer && (
+            (primaryParticipant && (
               <ParticipantTile
-                participant={mapToVideoTileParticipant(screenSharer)}
-                videoTrack={screenSharer.screenShareTrack || screenSharer.videoTrack}
-                onClick={() => onParticipantClick?.(screenSharer.id)}
-                onDoubleClick={() => onParticipantDoubleClick?.(screenSharer.id)}
+                participant={mapToVideoTileParticipant(primaryParticipant)}
+                videoTrack={primaryParticipant.screenShareTrack || primaryParticipant.videoTrack}
+                onClick={() => onParticipantClick?.(primaryParticipant.id)}
+                onDoubleClick={() => onParticipantDoubleClick?.(primaryParticipant.id)}
                 className="w-full h-full"
                 aspectRatio="16:9"
               />

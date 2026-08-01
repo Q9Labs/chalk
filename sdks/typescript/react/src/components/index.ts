@@ -19,12 +19,14 @@ export {
   Spinner,
   StatusBadge,
   Textarea,
+  Toast,
   Toggle,
   Tooltip,
   TourHighlight,
   TourTooltip,
   TranscriptLine,
   VolumeSlider,
+  Waveform,
   WhatsNewTrigger,
 } from "./atomic";
 export type {
@@ -45,10 +47,12 @@ export type {
   SpinnerProps,
   StatusBadgeProps,
   TextareaProps,
+  ToastProps,
   TourHighlightProps,
   TourTooltipProps,
   TranscriptLineProps,
   VolumeSliderProps,
+  WaveformProps,
   WhatsNewTriggerProps,
 } from "./atomic";
 
