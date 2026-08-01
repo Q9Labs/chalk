@@ -9,7 +9,7 @@ describe("public SDK room", () => {
     expect(source.match(/new ChalkSession\(/gu)).toHaveLength(1);
     expect(source).toContain("<ChalkProvider");
     expect(source).toContain("<PreJoinLobby");
-    expect(source).toContain("<SessionMeetingRoom");
+    expect(source).toContain("<MeetingRoom");
     expect(source).toContain("initialMicrophoneEnabled: settings.microphoneEnabled");
     expect(source).toContain("initialCameraEnabled: settings.cameraEnabled");
   });

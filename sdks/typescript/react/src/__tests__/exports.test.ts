@@ -11,7 +11,7 @@ describe("React SDK public UI exports", () => {
     expect(composite.ReactionPicker).toBeDefined();
     expect(full.LoadingScreen).toBeDefined();
     expect(full.PreJoinLobby).toBeDefined();
-    expect(full.SessionMeetingRoom).toBeDefined();
+    expect(full.MeetingRoom).toBeDefined();
   });
 
   it("exports the UI layers and managed-session React bindings from the package root", () => {

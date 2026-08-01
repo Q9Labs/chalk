@@ -15,7 +15,7 @@ import { WhiteboardPanel } from "./WhiteboardPanel";
 
 const ROOM_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const satisfies readonly ChalkReaction[];
 
-export interface SessionMeetingRoomProps {
+export interface MeetingRoomProps {
   readonly roomName: string;
   readonly displayName: string;
   readonly meetingLink?: string;
@@ -23,7 +23,7 @@ export interface SessionMeetingRoomProps {
   readonly className?: string;
 }
 
-export function SessionMeetingRoom({ roomName, displayName, meetingLink, onLeave, className }: SessionMeetingRoomProps): React.JSX.Element {
+export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, className }: MeetingRoomProps): React.JSX.Element {
   const snapshot = useChalkSnapshot();
   const participants = useParticipants();
   const localMedia = useLocalMedia();

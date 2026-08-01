@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChalkProvider } from "../../session";
-import { SessionMeetingRoom } from "./SessionMeetingRoom";
+import { MeetingRoom } from "./MeetingRoom";
 
 const audioRendererSpy = vi.hoisted(() => vi.fn((_props: unknown) => null));
 const videoGridSpy = vi.hoisted(() => vi.fn((_props: unknown) => null));
@@ -26,14 +26,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("SessionMeetingRoom", () => {
+describe("MeetingRoom", () => {
   it("connects the restored meeting controls to Chalk session actions", () => {
     const join = vi.fn(() => Promise.resolve());
     const setMicrophoneEnabled = vi.fn(() => Promise.resolve());
     const store = createStore({ join, setMicrophoneEnabled });
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -63,7 +63,7 @@ describe("SessionMeetingRoom", () => {
 
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -85,7 +85,7 @@ describe("SessionMeetingRoom", () => {
 
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -124,7 +124,7 @@ describe("SessionMeetingRoom", () => {
 
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -177,7 +177,7 @@ describe("SessionMeetingRoom", () => {
 
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -214,7 +214,7 @@ describe("SessionMeetingRoom", () => {
     );
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -241,7 +241,7 @@ describe("SessionMeetingRoom", () => {
 
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -264,7 +264,7 @@ describe("SessionMeetingRoom", () => {
 
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -299,7 +299,7 @@ describe("SessionMeetingRoom", () => {
 
     render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
@@ -330,7 +330,7 @@ describe("SessionMeetingRoom", () => {
     );
     const { unmount } = render(
       <ChalkProvider session={store}>
-        <SessionMeetingRoom roomName="Design review" displayName="Ada" />
+        <MeetingRoom roomName="Design review" displayName="Ada" />
       </ChalkProvider>,
     );
 
