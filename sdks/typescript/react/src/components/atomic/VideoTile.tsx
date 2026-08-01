@@ -149,7 +149,7 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border-2 border-transparent outline-none transition-all duration-300",
+        "relative overflow-hidden rounded-[8px] border border-transparent outline-none transition-all duration-300",
         aspectRatioClasses[aspectRatio],
         pinned && "ring-2",
         participant.isSpeaking && !prefersReducedMotion && "chalk-animate-harmonic-pulse",
@@ -180,7 +180,7 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
       {/* Avatar background when video is off or loading */}
       {!showVideo && showAvatar && (
         <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 bg-[var(--chalk-bg-tile)]" style={{ backgroundImage: participantGradient }}>
-          <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" className="opacity-90" gradientPreference={gradientPreference} />
+          <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={Boolean(participant.avatarUrl)} className="opacity-90" gradientPreference={gradientPreference} />
         </div>
       )}
 
@@ -195,16 +195,16 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
 
       {/* Compact bottom-left info chip */}
       {(showName || showStatus) && (
-        <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
-          <div className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-full bg-zinc-950/80 border border-white/5">
+        <div className="pointer-events-none absolute right-2 bottom-2 left-2">
+          <div className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/10 bg-zinc-950/80 px-2 py-1">
             {/* Small avatar when video is off */}
-            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" gradientPreference={gradientPreference} />}
+            {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={Boolean(participant.avatarUrl)} gradientPreference={gradientPreference} />}
 
             {/* Name */}
             {showName && (
-              <span className="text-xs font-medium text-white truncate max-w-[100px]" title={participant.displayName}>
+              <span className="max-w-[120px] truncate text-xs font-medium !text-[#fff]" title={participant.displayName}>
                 {participant.displayName}
-                {participant.isLocal && participant.displayName !== "You" && <span className="text-white/60"> (You)</span>}
+                {participant.isLocal && participant.displayName !== "You" && <span className="!text-white/60"> (You)</span>}
               </span>
             )}
 

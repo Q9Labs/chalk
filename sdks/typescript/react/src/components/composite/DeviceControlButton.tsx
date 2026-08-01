@@ -30,9 +30,26 @@ export interface DeviceControlButtonProps {
   disabled?: boolean;
   haptic?: ChalkHapticInput | false;
   size?: "sm" | "md" | "lg";
+  appearance?: "default" | "dock";
 }
 
-export const DeviceControlButton = ({ type, isActive, onToggle, devices, selectedDeviceId, onDeviceChange, secondaryDevices, selectedSecondaryDeviceId, onSecondaryDeviceChange, orientation = "up", className, disabled = false, haptic = "soft", size = "md" }: DeviceControlButtonProps) => {
+export const DeviceControlButton = ({
+  type,
+  isActive,
+  onToggle,
+  devices,
+  selectedDeviceId,
+  onDeviceChange,
+  secondaryDevices,
+  selectedSecondaryDeviceId,
+  onSecondaryDeviceChange,
+  orientation = "up",
+  className,
+  disabled = false,
+  haptic = "soft",
+  size = "md",
+  appearance = "default",
+}: DeviceControlButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { trigger } = useHaptics({
@@ -85,11 +102,22 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
 
   const label = isMic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   const dropdownLabel = isMic ? "Microphone" : "Camera";
+  const dock = appearance === "dock";
 
   return (
-    <div className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
+    <div className={cn("relative z-10 flex items-center pointer-events-auto", dock && "border-l border-[#deddd7] first:border-l-0", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
-      <ControlButton icon={icon} label={label} onClick={onToggle} active={isActive} disabled={disabled} haptic={haptic} size={size} className={cn("rounded-r-none border-r border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/10", isOpen && "brightness-110")} />
+      <ControlButton
+        icon={icon}
+        label={label}
+        inlineLabel={dock ? (isMic ? (isActive ? "Mute" : "Unmute") : "Camera") : undefined}
+        onClick={onToggle}
+        active={isActive}
+        disabled={disabled}
+        haptic={haptic}
+        size={size}
+        className={cn(dock ? "h-[58px] !w-auto rounded-none bg-white px-4 shadow-none hover:bg-[#f7f6f2] max-sm:px-3" : "rounded-r-none border-r border-black/5 bg-black/5 dark:border-white/5 dark:bg-white/10", isOpen && "brightness-110")}
+      />
 
       {/* Chevron Trigger */}
       <Tooltip content={`Select ${dropdownLabel}`} position={orientation === "up" ? "top" : "bottom"}>
@@ -100,10 +128,10 @@ export const DeviceControlButton = ({ type, isActive, onToggle, devices, selecte
           title={`Select ${dropdownLabel.toLowerCase()}`}
           aria-label={`Select ${dropdownLabel.toLowerCase()}`}
           className={cn(
-            "chalk-button-tactile flex items-center justify-center rounded-r-full transition-all duration-300 ease-out",
-            "bg-black/5 dark:bg-white/10 shadow-lg hover:brightness-110 border-l border-black/5 dark:border-white/5",
+            "chalk-button-tactile flex items-center justify-center transition-all duration-300 ease-out",
+            dock ? "h-[58px] rounded-none border-l border-[#deddd7] bg-white px-2.5 shadow-none hover:bg-[#f7f6f2] max-sm:hidden" : "rounded-r-full border-l border-black/5 bg-black/5 shadow-lg hover:brightness-110 dark:border-white/5 dark:bg-white/10",
             "text-foreground",
-            chevronSizeClass,
+            !dock && chevronSizeClass,
             isOpen && "brightness-110",
             disabled && "cursor-not-allowed opacity-50",
           )}

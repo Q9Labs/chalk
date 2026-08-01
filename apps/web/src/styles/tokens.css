@@ -1,52 +1,45 @@
 :root {
   color-scheme: light;
 
-  /* surfaces */
-  --paper: #e9e4d8; /* oklch(92% 4% 88deg) — warm greige base */
-  --paper-2: #efeade; /* a hair lighter, for alternating bands */
-  --surface: #fbfaf6; /* warm white cards that float on the greige */
-  --surface-bright: #ffffff;
-  --board: #26382f;
-  --board-deep: #1e2d26;
+  --paper: #f7f6f2;
+  --paper-2: #f1f0eb;
+  --surface: #ffffff;
+  --surface-muted: #fbfaf7;
 
-  /* ink */
-  --ink: #20281f;
-  --ink-2: #5a6355;
-  --ink-3: #8b9184;
+  --ink: #0c0e12;
+  --ink-2: #555b65;
+  --ink-3: #858a92;
 
-  /* lines */
-  --line: #d7d1c1;
-  --line-strong: #c6bfab;
+  --line: #deddd7;
+  --line-strong: #c9c8c2;
 
-  /* brand accent (chalk green, deepened for contrast) */
-  --accent: #3e7647;
-  --accent-strong: #335f3b;
-  --accent-wash: #ecf3e7;
+  --chalk-green-light: #c5e5c0;
+  --chalk-green: #80b879;
+  --chalk-yellow-light: #fceab3;
+  --chalk-yellow: #d9b641;
+  --chalk-blue-light: #b2e0f0;
+  --chalk-blue: #55aac9;
+  --chalk-pink-light: #f8caca;
+  --chalk-pink: #d67b7b;
 
-  /* the four chalk sticks */
-  --chalk-green: #8fbf87;
-  --chalk-yellow: #e2c25f;
-  --chalk-blue: #7fc0d8;
-  --chalk-pink: #dc9a9a;
+  --wash-green: #edf6eb;
+  --wash-yellow: #fff8e5;
+  --wash-blue: #eaf7fb;
+  --wash-pink: #fdf0f0;
 
-  --danger: #c05151;
+  --success: #4f8c4a;
+  --danger: #b94c4c;
 
-  /* type */
   --font-display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
   --font-body: "Figtree", system-ui, sans-serif;
   --font-mono: "Spline Sans Mono", ui-monospace, "SF Mono", monospace;
 
-  /* shape */
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 22px;
-  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
 
-  /* depth (warm-tinted) */
-  --shadow-sm: 0 1px 2px rgba(46, 52, 38, 0.06), 0 2px 8px rgba(46, 52, 38, 0.05);
-  --shadow-md: 0 2px 6px rgba(46, 52, 38, 0.06), 0 12px 28px rgba(46, 52, 38, 0.09);
-  --shadow-lg: 0 4px 10px rgba(46, 52, 38, 0.07), 0 28px 60px rgba(46, 52, 38, 0.14);
+  --shadow-sm: 0 1px 2px rgba(12, 14, 18, 0.04), 0 6px 18px rgba(12, 14, 18, 0.05);
+  --shadow-md: 0 2px 4px rgba(12, 14, 18, 0.05), 0 20px 50px rgba(12, 14, 18, 0.09);
 
-  /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }

@@ -64,7 +64,7 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
           <GeneratedFacehash name={name || "guest"} size={pxSize} variant="gradient" interactive intensity3d="dramatic" enableBlink colors={[...avatarRecipe.facehashColors]} />
         </div>
       ) : (
-        <div className="flex h-full w-full items-center justify-center rounded-full text-white font-medium" style={{ fontSize, background: gradient }}>
+        <div className="flex h-full w-full items-center justify-center rounded-full font-medium !text-[#fff]" style={{ fontSize, background: gradient }}>
           {avatarRecipe.initials}
         </div>
       )}

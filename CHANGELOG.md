@@ -147,6 +147,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Redesigned the public marketing site, reusable React prejoin lobby, and live
+  meeting room around Chalk's light brand palette, a speaker-first stage,
+  responsive setup and call controls, and an honest local SDK preview without
+  decorative eyebrow labels.
 - Replaced the mobile app's placeholder native meeting adapter with the
   RealtimeKit admission and media runtime; features that require canonical
   Chalk session authority remain explicitly unavailable instead of silently
