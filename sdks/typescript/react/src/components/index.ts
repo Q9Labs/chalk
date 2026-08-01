@@ -1,3 +1,7 @@
+import type { Toast as ToastData } from "./toast-stack/ToastStack";
+
+export interface Toast extends ToastData {}
+
 export {
   AudioIndicator,
   AudioOutput,

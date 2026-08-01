@@ -72,10 +72,10 @@ export const ConferenceHeader = React.memo<ConferenceHeaderProps>(({ roomName, l
             </button>
             <button
               type="button"
-              onClick={() => onLayoutChange("presentation")}
-              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[#6d727b] transition", layout === "presentation" ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.08)]" : "hover:text-[#202329]")}
+              onClick={() => onLayoutChange("focus")}
+              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[#6d727b] transition", layout === "focus" ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.08)]" : "hover:text-[#202329]")}
               aria-label="Sidebar layout"
-              aria-pressed={layout === "presentation"}
+              aria-pressed={layout === "focus"}
             >
               <ColumnIcon size={15} />
             </button>

@@ -22,7 +22,7 @@ export const LayoutPicker = React.memo(({ layout, onChange, disabled, className 
       </Tooltip>
 
       <Tooltip content="Sidebar View" position="top">
-        <IconButton icon={<LayoutTableIcon size={20} />} variant={layout === "presentation" ? "default" : "ghost"} size="sm" onClick={() => onChange("presentation")} disabled={disabled} aria-label="Switch to sidebar layout" />
+        <IconButton icon={<LayoutTableIcon size={20} />} variant={layout === "focus" ? "default" : "ghost"} size="sm" onClick={() => onChange("focus")} disabled={disabled} aria-label="Switch to sidebar layout" />
       </Tooltip>
     </div>
   );

@@ -493,7 +493,7 @@ export const SettingsDialog = React.memo(
                     [
                       ["grid", LayoutGridIcon, "Grid"],
                       ["focus", LayoutTableIcon, "Spotlight"],
-                      ["presentation", ColumnIcon, "Sidebar"],
+                      ["focus", ColumnIcon, "Sidebar"],
                     ] as const
                   ).map(([value, Icon, label]) => (
                     <button
