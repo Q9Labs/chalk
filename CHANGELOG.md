@@ -135,7 +135,7 @@ aliases are retained.
 | `@q9labsai/chalk-react-native` | `MeetingRoomFeatures`                | `ConferenceViewFeatures`                    |
 | `@q9labsai/chalk-react-native` | `MeetingRoomProps`                   | `ConferenceViewProps`                       |
 | `@q9labsai/chalk-react-native` | diagnostics field `meetingRoom`      | `conferenceView`                            |
-| `@q9labsai/chalk-react-native` | `layout: speaker` / `sidebar`        | `layout: focus` / `presentation`            |
+| `@q9labsai/chalk-react-native` | `layout: speaker` / `sidebar`        | `layout: focus` plus Filmstrip              |
 
 ### Added
 
