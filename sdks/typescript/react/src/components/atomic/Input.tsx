@@ -31,14 +31,14 @@ export const Input = React.memo(
             ref={ref}
             className={cn(
               "rounded-[8px] border border-[#c9c8c2] bg-[#fbfaf7] text-[#0c0e12] transition-colors",
-              "focus:border-[#9dcfe1] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dff2f7]",
+              "focus:border-[#74b7cf] focus:bg-white focus:outline-none",
               "placeholder:text-[#858a92]",
               "disabled:cursor-not-allowed disabled:opacity-50",
               sizeClasses[size],
               fullWidth ? "w-full" : "w-auto",
               icon && iconPosition === "left" && iconPadding,
               icon && iconPosition === "right" && iconPaddingRight,
-              error && "border-destructive focus:ring-destructive",
+              error && "border-destructive focus:border-destructive",
               className,
             )}
             {...props}

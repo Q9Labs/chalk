@@ -81,7 +81,7 @@ export function ParticipantRow({
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="relative">
           <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={Boolean(participant.avatarUrl)} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
-          {participant.isHandRaised && <HandRaiseIndicator raised={true} size="sm" className="-top-1 -right-1" />}
+          {participant.isHandRaised && <HandRaiseIndicator raised={true} size="sm" className="-right-0.5 -top-0.5" />}
         </div>
 
         <div className="flex flex-col min-w-0 flex-1">
@@ -127,15 +127,7 @@ export function ParticipantRow({
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        {variant === "sidebar" ? (
-          participant.isMuted ? (
-            <div className="rounded-full border border-[#deddd7] bg-[#f7f6f2] p-1.5">
-              <MicrophoneOff01Icon className="h-3.5 w-3.5 text-[#b94c4c]" />
-            </div>
-          ) : null
-        ) : (
-          <AudioIndicator muted={participant.isMuted} level={participant.isMuted ? 0 : 0.5} className={cn(participant.isMuted && "text-chalk-error-main")} />
-        )}
+        {variant === "sidebar" ? participant.isMuted ? <MicrophoneOff01Icon className="mr-1 h-4 w-4 text-[#b94c4c]" aria-label="Muted" /> : null : <AudioIndicator muted={participant.isMuted} level={participant.isMuted ? 0 : 0.5} className={cn(participant.isMuted && "text-chalk-error-main")} />}
 
         {showMenuButton && !isEditing && (
           <div className="relative">
@@ -144,7 +136,7 @@ export function ParticipantRow({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className={cn("absolute right-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-[10px] py-2 shadow-[0_18px_44px_rgba(12,14,18,0.16)]", variant === "sidebar" ? "border border-[#c9c8c2] bg-white" : "border border-chalk-border-subtle bg-chalk-bg-surface")}>
+                <div className={cn("absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] p-1.5 shadow-[0_20px_50px_rgba(12,14,18,0.14)]", variant === "sidebar" ? "border border-[#c9c8c2] bg-[#fbfaf7]" : "border border-chalk-border-subtle bg-chalk-bg-surface")}>
                   <ParticipantOptionsMenu
                     participant={participant}
                     variant={variant}

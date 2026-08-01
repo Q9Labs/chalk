@@ -30,9 +30,11 @@ export interface VideoGridProps {
   maxVisibleParticipants?: number;
   className?: string;
   showScreenShareIndicator?: boolean;
+  /** Optional preview or app-owned surface when no real screen-share track is available. */
+  screenShareContent?: React.ReactNode;
 }
 
-export const VideoGrid = React.memo(({ participants, layout = "grid", variant, pinnedParticipantId, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants = 25, className, showScreenShareIndicator: _showScreenShareIndicator = true }: VideoGridProps) => {
+export const VideoGrid = React.memo(({ participants, layout = "grid", variant, pinnedParticipantId, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants = 25, className, showScreenShareIndicator: _showScreenShareIndicator = true, screenShareContent }: VideoGridProps) => {
   const isMobile = useIsMobile();
   const effectiveVariant = variant ?? (isMobile ? "mobile" : "desktop");
   // Carousel state for mobile 5+ participants
@@ -291,17 +293,18 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant, p
 
     return (
       <div className={cn("flex h-full gap-2", className)} data-tour="video-grid">
-        <div className="flex-1 min-w-0 relative">
-          {screenSharer && (
-            <VideoTile
-              participant={mapToVideoTileParticipant(screenSharer)}
-              videoTrack={screenSharer.screenShareTrack || screenSharer.videoTrack}
-              onClick={() => onParticipantClick?.(screenSharer.id)}
-              onDoubleClick={() => onParticipantDoubleClick?.(screenSharer.id)}
-              className="w-full h-full"
-              aspectRatio="16:9"
-            />
-          )}
+        <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[#eeede8]">
+          {screenShareContent ??
+            (screenSharer && (
+              <VideoTile
+                participant={mapToVideoTileParticipant(screenSharer)}
+                videoTrack={screenSharer.screenShareTrack || screenSharer.videoTrack}
+                onClick={() => onParticipantClick?.(screenSharer.id)}
+                onDoubleClick={() => onParticipantDoubleClick?.(screenSharer.id)}
+                className="w-full h-full"
+                aspectRatio="16:9"
+              />
+            ))}
         </div>
 
         {otherParticipants.length > 0 && (

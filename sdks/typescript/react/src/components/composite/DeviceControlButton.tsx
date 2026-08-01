@@ -145,14 +145,17 @@ export const DeviceControlButton = ({
       {isOpen && (
         <div
           className={cn(
-            "pointer-events-auto absolute z-[70] max-h-[360px] min-w-[260px] max-w-[300px] overflow-y-auto rounded-[10px] border border-[#c9c8c2] bg-white py-2 text-[#0c0e12] shadow-[0_18px_44px_rgba(12,14,18,0.16)] animate-in fade-in zoom-in-95 duration-150",
+            "pointer-events-auto absolute z-[70] max-h-[420px] w-[min(340px,calc(100vw-24px))] overflow-y-auto rounded-[14px] border border-[#c9c8c2] bg-[#fbfaf7] p-2 text-[#0c0e12] shadow-[0_22px_60px_rgba(12,14,18,0.16)] animate-in fade-in zoom-in-95 duration-150",
             orientation === "up" ? "bottom-full mb-3" : "top-full mt-3",
             "left-0",
           )}
         >
-          <div className="mb-1 border-b border-[#e5e4df] px-4 pb-3 pt-1 text-sm font-semibold">{dropdownLabel}</div>
+          <div className="flex items-center justify-between px-2 pb-2 pt-1.5">
+            <span className="text-sm font-semibold">{dropdownLabel}</span>
+            <span className="text-[11px] text-[#858a92]">Choose a device</span>
+          </div>
 
-          <div className="max-h-[220px] overflow-y-auto py-1">
+          <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[10px] border border-[#e5e4df] bg-white p-1">
             {devices.length === 0 ? (
               <div className="px-4 py-3 text-sm text-[#858a92]">No devices found</div>
             ) : (
@@ -163,13 +166,14 @@ export const DeviceControlButton = ({
                     key={device.deviceId}
                     type="button"
                     onClick={() => handleSelectDevice(device.deviceId)}
-                    className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
+                    className={cn("flex w-full items-center justify-between rounded-[7px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
                   >
-                    <div className="flex items-center gap-3 truncate pr-2">
-                      <span className={cn("h-2 w-2 shrink-0 rounded-full", isSelected ? "bg-[#55aac9]" : "bg-[#c9c8c2]")} />
+                    <div className="flex min-w-0 items-center gap-3 pr-2">
+                      <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full", isSelected ? "bg-[#55aac9] text-white" : "bg-[#f0efeb] text-transparent")}>
+                        <Tick01Icon size={12} />
+                      </span>
                       <span className="truncate">{device.label || `${dropdownLabel} ${device.deviceId.slice(0, 4)}`}</span>
                     </div>
-                    {isSelected && <Tick01Icon size={14} className="shrink-0" />}
                   </button>
                 );
               })
@@ -178,8 +182,11 @@ export const DeviceControlButton = ({
 
           {secondaryDevices && secondaryDevices.length > 0 && (
             <>
-              <div className="my-1 border-y border-[#e5e4df] bg-[#fbfaf7] px-4 py-2.5 text-sm font-semibold">Speakers</div>
-              <div className="max-h-[180px] overflow-y-auto py-1">
+              <div className="flex items-center justify-between px-2 pb-2 pt-4">
+                <span className="text-sm font-semibold">Speakers</span>
+                <span className="text-[11px] text-[#858a92]">Audio output</span>
+              </div>
+              <div className="max-h-[180px] space-y-1 overflow-y-auto rounded-[10px] border border-[#e5e4df] bg-white p-1">
                 {secondaryDevices.map((device) => {
                   const isSelected = selectedSecondaryDeviceId === device.deviceId;
                   return (
@@ -187,13 +194,12 @@ export const DeviceControlButton = ({
                       key={device.deviceId}
                       type="button"
                       onClick={() => handleSelectSecondaryDevice(device.deviceId)}
-                      className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
+                      className={cn("flex w-full items-center justify-between rounded-[7px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
                     >
                       <div className="flex items-center gap-3 truncate pr-2">
-                        <VolumeHighIcon size={14} className={cn("shrink-0", isSelected ? "text-[#315f72]" : "text-[#858a92]")} />
+                        <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full", isSelected ? "bg-[#55aac9] text-white" : "bg-[#f0efeb] text-[#858a92]")}>{isSelected ? <Tick01Icon size={12} /> : <VolumeHighIcon size={12} />}</span>
                         <span className="truncate">{device.label || `Speaker ${device.deviceId.slice(0, 4)}`}</span>
                       </div>
-                      {isSelected && <Tick01Icon size={14} className="shrink-0" />}
                     </button>
                   );
                 })}

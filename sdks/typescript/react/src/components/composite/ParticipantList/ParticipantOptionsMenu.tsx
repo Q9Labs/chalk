@@ -43,9 +43,9 @@ export function ParticipantOptionsMenu({
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
 
-  const menuItemClassName = cn("flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors", variant === "sidebar" ? "text-[#202329] hover:bg-[#f7f6f2]" : "text-chalk-text-primary hover:bg-chalk-bg-subtle");
+  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm font-medium transition-colors", variant === "sidebar" ? "text-[#202329] hover:bg-white" : "text-chalk-text-primary hover:bg-chalk-bg-subtle");
 
-  const dividerClassName = cn("my-1 h-px", variant === "sidebar" ? "bg-[#e5e4df]" : "bg-chalk-border-subtle");
+  const dividerClassName = cn("my-1.5 h-px", variant === "sidebar" ? "bg-[#e5e4df]" : "bg-chalk-border-subtle");
 
   return (
     <>

@@ -50,6 +50,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   including a device-aware prejoin lobby, responsive live meeting shell, layout
   controls, participant list, invitations, remote audio playback, camera-independent
   screen sharing, configurable branding, and leave flows.
+- Polished React meeting interaction surfaces with compact device and participant
+  menus, reserved in-call controls, meeting information and settings dialogs,
+  realistic screen-share preview, Chalk-themed Excalidraw, notification previews,
+  simplified prejoin media state, and quieter participant indicators.
 - Managed web SDK launch surface with scoped tenant API-key lifecycle, distinct
   short-lived Sync and media credentials, a server-only Promise client, the
   framework-neutral `ChalkSession` runtime, and React provider and hooks.

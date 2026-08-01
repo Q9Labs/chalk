@@ -4,7 +4,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { Avatar } from "../atomic";
-import { CheckmarkCircle02Icon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
+import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 
 export type PreJoinSettings = {
@@ -84,7 +84,6 @@ export function PreJoinLobby({ roomName = "Chalk room", logoUrl, defaultDisplayN
 
   const canJoin = displayName.trim().length > 0 && !isJoining;
   const hasVideoPreview = cameraEnabled && Boolean(previewStream?.getVideoTracks().length);
-  const cameraStatus = !cameraEnabled ? "Camera off" : hasVideoPreview ? "Video looks good" : "Camera on";
   const submit = () => {
     if (!canJoin) return;
     void onJoin({ displayName: displayName.trim(), microphoneEnabled, cameraEnabled });
@@ -94,7 +93,7 @@ export function PreJoinLobby({ roomName = "Chalk room", logoUrl, defaultDisplayN
     <main data-chalk data-chalk-theme="light" className={cn("chalk-root min-h-screen bg-[#f7f6f2] text-[#0c0e12]", className)}>
       <div className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col border-x border-[#deddd7] bg-[#fbfaf7]">
         <header className="flex h-[72px] shrink-0 items-center justify-between gap-5 border-b border-[#deddd7] px-5 sm:px-8 lg:px-10">
-          <div className="flex min-w-0 items-center gap-5">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             {logoUrl ? <img src={logoUrl} alt="Chalk" className="h-auto w-32 shrink-0 sm:w-36" draggable={false} /> : <span className="text-2xl font-bold tracking-tight">Chalk</span>}
             <span className="hidden h-7 w-px bg-[#deddd7] sm:block" />
             <span className="hidden max-w-72 truncate text-sm font-medium text-[#555b65] sm:block">{roomName}</span>
@@ -158,27 +157,10 @@ export function PreJoinLobby({ roomName = "Chalk room", logoUrl, defaultDisplayN
                     if (event.key === "Enter") submit();
                   }}
                   disabled={isJoining}
-                  className="mt-2 h-12 w-full rounded-[8px] border border-[#c9c8c2] bg-[#fbfaf7] px-4 text-sm outline-none transition placeholder:text-[#858a92] focus-visible:border-[#9dcfe1] focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[#dff2f7] disabled:opacity-50"
+                  className="mt-2 h-12 w-full rounded-[8px] border border-[#c9c8c2] bg-[#fbfaf7] px-4 text-sm outline-none transition placeholder:text-[#858a92] focus-visible:border-[#74b7cf] focus-visible:bg-white disabled:opacity-50"
                   placeholder="Enter your name"
                 />
               </div>
-
-              <dl className="mt-6 divide-y divide-[#deddd7] border-y border-[#deddd7]">
-                <div className="flex items-center justify-between gap-4 py-3.5">
-                  <dt className="text-sm text-[#555b65]">Microphone</dt>
-                  <dd className={cn("flex items-center gap-2 text-xs font-medium", microphoneEnabled ? "text-[#4f8c4a]" : "text-[#b94c4c]")}>
-                    {microphoneEnabled && <CheckmarkCircle02Icon size={16} />}
-                    {microphoneEnabled ? "Ready" : "Off"}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-4 py-3.5">
-                  <dt className="text-sm text-[#555b65]">Camera</dt>
-                  <dd className={cn("flex items-center gap-2 text-xs font-medium", cameraEnabled ? "text-[#4f8c4a]" : "text-[#b94c4c]")}>
-                    {cameraEnabled && <CheckmarkCircle02Icon size={16} />}
-                    {cameraStatus}
-                  </dd>
-                </div>
-              </dl>
 
               {(error || previewError) && (
                 <p role="alert" className="mt-5 rounded-[7px] border border-[#d67b7b] bg-[#fdf0f0] px-4 py-3 text-sm text-[#9f3f3f]">

@@ -284,7 +284,7 @@ export const ChatPanel = React.memo(
             placeholder={placeholder}
             disabled={disabled || sending}
             aria-label="Message"
-            className="min-h-11 max-h-[120px] flex-1 resize-none rounded-[8px] border border-[#deddd7] bg-[#fbfaf7] px-3.5 py-3 text-sm outline-none transition focus:border-[#9dcfe1] focus:bg-white focus:ring-2 focus:ring-[#dff2f7]"
+            className="min-h-11 max-h-[120px] flex-1 resize-none rounded-[8px] border border-[#deddd7] bg-[#fbfaf7] px-3.5 py-3 text-sm outline-none transition focus:border-[#74b7cf] focus:bg-white"
             rows={1}
           />
           <Button type="button" size="icon" className="h-11 w-11 shrink-0 rounded-[8px] bg-[#202329] !text-white hover:bg-[#343840]" disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending} onClick={() => void send()} aria-label="Send message">
