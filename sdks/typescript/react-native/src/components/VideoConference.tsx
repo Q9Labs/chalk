@@ -1,10 +1,15 @@
-import type { ChalkChatAttachment, ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChalkChatAttachment, ChalkSessionSnapshot, ChalkSessionStore, ConferencePhase } from "@q9labsai/chalk-client";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import type { TelemetryJourney } from "../telemetry";
 import { ChalkProvider, useChalkSession } from "../context/chalk-provider";
 import { useChalkSnapshot } from "../hooks/useChalkSnapshot";
 import { useMeetingParticipants } from "../hooks/useMeetingParticipants";
+import { useAutoJoin } from "../session/use-auto-join";
+import { useConferencePhase } from "../session/use-conference-phase";
+import { useJoinSession } from "../session/use-join-session";
+import { useLeaveOnUnmount } from "../session/use-leave-on-unmount";
+import { useVideoConferenceDiagnostics } from "../session/use-video-conference-diagnostics";
 import { isIosSimulator } from "../utils/ios-simulator";
 import { EndScreen, type MeetingEndData } from "./EndScreen";
 import { JoinFailedScreen } from "./JoinFailedScreen";
@@ -71,12 +76,12 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
   );
   const [session, setSession] = useState<ChalkSessionStore | null>(null);
   const [settings, setSettings] = useState(defaultSettings);
-  const [phase, setPhase] = useState<VideoConferencePhase>(props.initialPhase ?? (props.autoJoin ? "joining" : "lobby"));
+  const [hasAskedToJoin, setHasAskedToJoin] = useState(props.autoJoin || props.initialPhase === "joining");
+  const [hasAskedToLeave, setHasAskedToLeave] = useState(props.initialPhase === "end");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [endData, setEndData] = useState<MeetingEndData | null>(null);
   const creationAttempt = useRef(0);
-  const sessionRef = useRef<ChalkSessionStore | null>(null);
-  sessionRef.current = session;
+  const phase = toVideoConferencePhase(useConferencePhase(session, { hasAskedToJoin, hasAskedToLeave }, creationAttempt.current === 0 ? props.initialPhase : undefined));
   const begin = useCallback(
     async (nextSettings: PreJoinSettings) => {
       const normalized = {
@@ -86,10 +91,11 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
         cameraEnabled: simulatorMediaDisabled ? false : nextSettings.cameraEnabled,
       };
       const attempt = ++creationAttempt.current;
+      setHasAskedToJoin(true);
+      setHasAskedToLeave(false);
       setSettings(normalized);
       setJoinError(null);
       setEndData(null);
-      setPhase("joining");
       try {
         const nextSession = await props.createSession(normalized);
         if (attempt !== creationAttempt.current) {
@@ -102,27 +108,16 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
         if (attempt !== creationAttempt.current) return;
         const error = cause instanceof Error ? cause : new Error(String(cause));
         setJoinError(error.message);
-        setPhase("lobby");
+        setHasAskedToJoin(false);
         props.onError?.(error);
       }
     },
     [defaultSettings.displayName, props.createSession, props.onError, props.onSessionChange, simulatorMediaDisabled],
   );
-  const startedAutomatically = useRef(false);
-
-  useEffect(
-    () => () => {
-      creationAttempt.current += 1;
-      void sessionRef.current?.leave().catch(() => undefined);
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if ((!props.autoJoin && props.initialPhase !== "joining") || startedAutomatically.current || session) return;
-    startedAutomatically.current = true;
-    void begin(defaultSettings);
-  }, [begin, defaultSettings, props.autoJoin, props.initialPhase, session]);
+  useLeaveOnUnmount(session, () => {
+    creationAttempt.current += 1;
+  });
+  useAutoJoin((props.autoJoin || props.initialPhase === "joining") && !session, () => begin(defaultSettings));
 
   const handleJoinFailure = useCallback(
     (error: Error) => {
@@ -130,7 +125,8 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
       setSession((current) => (current === session ? null : current));
       props.onSessionChange?.(null);
       setJoinError(error.message);
-      setPhase("lobby");
+      setHasAskedToJoin(false);
+      setHasAskedToLeave(false);
       props.onError?.(error);
     },
     [props.onError, props.onSessionChange, session],
@@ -163,7 +159,8 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
         onRejoin={() => {
           setSession(null);
           props.onSessionChange?.(null);
-          setPhase("lobby");
+          setHasAskedToJoin(false);
+          setHasAskedToLeave(false);
         }}
       />
     );
@@ -173,7 +170,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
 
   return (
     <ChalkProvider session={session} telemetry={props.telemetry}>
-      <ActiveVideoConference {...props} joinError={joinError} phase={phase} settings={settings} setEndData={setEndData} setJoinError={setJoinError} setPhase={setPhase} onJoinFailure={handleJoinFailure} />
+      <ActiveVideoConference {...props} joinError={joinError} phase={phase} settings={settings} setEndData={setEndData} setHasAskedToLeave={setHasAskedToLeave} setJoinError={setJoinError} onJoinFailure={handleJoinFailure} />
     </ChalkProvider>
   );
 }
@@ -182,7 +179,7 @@ type ActiveVideoConferenceProps = VideoConferenceProps & {
   readonly settings: PreJoinSettings;
   readonly phase: VideoConferencePhase;
   readonly joinError: string | null;
-  readonly setPhase: (phase: VideoConferencePhase) => void;
+  readonly setHasAskedToLeave: (asked: boolean) => void;
   readonly setJoinError: (message: string | null) => void;
   readonly setEndData: (data: MeetingEndData) => void;
   readonly onJoinFailure: (error: Error) => void;
@@ -192,44 +189,31 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   const session = useChalkSession();
   const snapshot = useChalkSnapshot();
   const participants = useMeetingParticipants();
-  const joinedAt = useRef<Date | null>(null);
-  const joined = useRef(false);
   const [meetingRoomDiagnostics, setMeetingRoomDiagnostics] = useState<MeetingRoomDiagnosticsSnapshot | null>(null);
 
-  useEffect(() => {
-    void session.join().catch((cause: unknown) => {
-      const error = cause instanceof Error ? cause : new Error(String(cause));
-      props.onJoinFailure(error);
-    });
-  }, [props.onJoinFailure, session]);
-
-  useEffect(() => {
-    if (snapshot.state !== "live" || joined.current) return;
-    joined.current = true;
-    joinedAt.current = new Date();
-    props.setJoinError(null);
-    props.setPhase("meeting");
-    props.onJoin?.({
-      roomId: props.roomId,
-      displayName: props.settings.displayName,
-      role: props.role ?? "participant",
-      joinedAt: joinedAt.current,
-    });
-  }, [props.onJoin, props.role, props.roomId, props.setJoinError, props.setPhase, props.settings.displayName, snapshot.state]);
-
-  useEffect(() => {
-    props.onDiagnosticsChange?.({
-      phase: props.phase,
-      roomId: props.roomId,
-      roomName: props.roomName || props.roomId,
-      lastJoinError: props.joinError,
-      connectionStatus: snapshot.state,
-      isConnected: snapshot.state === "live",
-      isJoining: snapshot.state === "joining",
-      session: { state: snapshot.state, failure: snapshot.failure },
-      meetingRoom: meetingRoomDiagnostics,
-    });
-  }, [meetingRoomDiagnostics, props.joinError, props.onDiagnosticsChange, props.phase, props.roomId, props.roomName, snapshot.failure, snapshot.state]);
+  const joinedAt = useJoinSession({
+    session,
+    state: snapshot.state,
+    onFailure: props.onJoinFailure,
+    onJoined: (date) => {
+      props.setJoinError(null);
+      props.onJoin?.({
+        roomId: props.roomId,
+        displayName: props.settings.displayName,
+        role: props.role ?? "participant",
+        joinedAt: date,
+      });
+    },
+  });
+  useVideoConferenceDiagnostics({
+    session,
+    phase: props.phase,
+    roomId: props.roomId,
+    roomName: props.roomName,
+    joinError: props.joinError,
+    meetingRoom: meetingRoomDiagnostics,
+    onChange: props.onDiagnosticsChange,
+  });
 
   const finish = useCallback(async () => {
     try {
@@ -237,12 +221,12 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
     } finally {
       const data = meetingEndData(props, joinedAt.current, participants.participantCount, snapshot.chat.messages.length);
       props.setEndData(data);
-      props.setPhase("end");
+      props.setHasAskedToLeave(true);
       props.onSessionChange?.(null);
       props.onLeave?.();
       props.onEnd?.(data);
     }
-  }, [participants.participantCount, props.onEnd, props.onLeave, props.onSessionChange, props.roomId, props.roomName, props.setEndData, props.setPhase, session, snapshot.chat.messages.length]);
+  }, [participants.participantCount, props.onEnd, props.onLeave, props.onSessionChange, props.roomId, props.roomName, props.setEndData, props.setHasAskedToLeave, session, snapshot.chat.messages.length]);
   const endForAll = useCallback(async () => {
     await session.endSession();
     await finish();
@@ -257,6 +241,21 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   }
 
   return <MeetingRoom features={props.features} meetingLink={props.meetingLink} onDiagnosticsChange={setMeetingRoomDiagnostics} onEndForAll={props.role === "host" ? endForAll : undefined} onLeave={finish} pickChatAttachments={props.pickChatAttachments} roomName={props.roomName || props.roomId} />;
+}
+
+function toVideoConferencePhase(phase: ConferencePhase): VideoConferencePhase {
+  switch (phase) {
+    case "prejoin":
+      return "lobby";
+    case "joining":
+    case "waiting":
+      return "joining";
+    case "active":
+    case "reconnecting":
+      return "meeting";
+    case "ended":
+      return "end";
+  }
 }
 
 function meetingEndData(props: VideoConferenceProps, joinedAt: Date | null, participantCount: number, chatCount: number): MeetingEndData {
