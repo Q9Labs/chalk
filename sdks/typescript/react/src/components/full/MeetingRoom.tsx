@@ -1,15 +1,15 @@
 "use client";
 
-import type { ChalkParticipant, ChalkReaction, ChalkRemoteMedia, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event } from "@q9labsai/chalk-client";
-import type { WhiteboardCollaborationEvent, WhiteboardWireElement } from "@q9labsai/chalk-whiteboard";
+import type { ChalkReaction } from "@q9labsai/chalk-client";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useChalkActions, useChalkSession, useChalkSnapshot, useLocalMedia, useParticipants, useRemoteMedia } from "../../session";
+import { toAudioParticipants, toListParticipants, toParticipantNames, toVideoParticipants } from "../../selectors/meeting-room-selectors";
 import { cn } from "../../utils/cn";
+import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { AudioRenderer } from "../atomic";
 import { ChatPanel, ConnectionLostOverlay, ControlBar, InviteModal, LeaveConfirmationDialog, MeetingHeader, ParticipantList, ReactionPicker, VideoGrid } from "../composite";
-import type { Participant } from "../composite";
 import { uploadChatAttachment } from "../composite/chat-file-upload";
 import { WhiteboardPanel } from "./WhiteboardPanel";
 
@@ -71,26 +71,8 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
   const localId = snapshot.subject?.participantSessionId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participants, remoteMedia, localId, displayName, localMedia), [displayName, localId, localMedia, participants, remoteMedia]);
   const audioParticipants = useMemo(() => toAudioParticipants(remoteMedia), [remoteMedia]);
-  const participantNames = useMemo(
-    () => Object.fromEntries([...participants.map((participant) => [participant.participantSessionId, participant.displayName] as const), [localId, participants.find((participant) => participant.participantSessionId === localId)?.displayName ?? displayName]]),
-    [displayName, localId, participants],
-  );
-  const listParticipants = useMemo(
-    () =>
-      tiles.map((participant) => {
-        const media = snapshot.participantMedia[participant.id];
-        return {
-          id: participant.id,
-          displayName: participant.displayName,
-          isLocal: participant.isLocal,
-          isMuted: media?.microphone === "active" ? false : media?.microphone === "inactive" ? true : participant.isMuted,
-          isVideoEnabled: media?.camera === "active" ? true : media?.camera === "inactive" ? false : participant.isVideoEnabled,
-          isHandRaised: participant.isHandRaised,
-          role: toListRole(participants.find((candidate) => candidate.participantSessionId === participant.id)?.role),
-        };
-      }),
-    [participants, snapshot.participantMedia, tiles],
-  );
+  const participantNames = useMemo(() => toParticipantNames(participants, localId, displayName), [displayName, localId, participants]);
+  const listParticipants = useMemo(() => toListParticipants(tiles, participants, snapshot.participantMedia), [participants, snapshot.participantMedia, tiles]);
   const microphoneEnabled = localMedia.microphone.state === "enabled" || localMedia.microphone.state === "requesting";
   const cameraEnabled = localMedia.camera.state === "enabled" || localMedia.camera.state === "requesting";
   const screenSharing = localMedia.screen.state === "enabled" || localMedia.screen.state === "requesting";
@@ -314,99 +296,4 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
       <LeaveConfirmationDialog isOpen={leaveOpen} onClose={() => setLeaveOpen(false)} onConfirm={() => void confirmLeave()} />
     </main>
   );
-}
-
-function toVideoParticipants(participants: readonly ChalkParticipant[], remoteMedia: readonly ChalkRemoteMedia[], localId: string, displayName: string, localMedia: ReturnType<typeof useLocalMedia>): Participant[] {
-  const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>>>();
-  for (const publication of remoteMedia) {
-    if (publication.source === "microphone") continue;
-    const media = remoteByParticipant.get(publication.participantSessionId) ?? {};
-    media[publication.source] = publication.track;
-    remoteByParticipant.set(publication.participantSessionId, media);
-  }
-  const localFromSync = participants.find((participant) => participant.participantSessionId === localId);
-  const result: Participant[] = [
-    {
-      id: localId,
-      displayName: localFromSync?.displayName || displayName,
-      isLocal: true,
-      isMuted: localMedia.microphone.state !== "enabled",
-      isVideoEnabled: localMedia.camera.state === "enabled" || localMedia.screen.state === "enabled",
-      isScreenSharing: localMedia.screen.state === "enabled",
-      isHandRaised: localFromSync?.handRaised,
-      videoTrack: localMedia.camera.track,
-      screenShareTrack: localMedia.screen.track,
-    },
-  ];
-  for (const participant of participants) {
-    if (participant.participantSessionId === localId) continue;
-    const media = remoteByParticipant.get(participant.participantSessionId);
-    result.push({
-      id: participant.participantSessionId,
-      displayName: participant.displayName,
-      isMuted: !remoteMedia.some((publication) => publication.participantSessionId === participant.participantSessionId && publication.source === "microphone"),
-      isVideoEnabled: Boolean(media?.camera || media?.screen),
-      isScreenSharing: Boolean(media?.screen),
-      isHandRaised: participant.handRaised,
-      videoTrack: media?.camera,
-      screenShareTrack: media?.screen,
-    });
-  }
-  return result;
-}
-
-function toAudioParticipants(remoteMedia: readonly ChalkRemoteMedia[]) {
-  const byParticipant = new Map<string, { id: string; audioTrack?: MediaStreamTrack; screenShareAudioTrack?: MediaStreamTrack }>();
-  for (const publication of remoteMedia) {
-    if (publication.track.kind !== "audio") continue;
-    const participant = byParticipant.get(publication.participantSessionId) ?? { id: publication.participantSessionId };
-    if (publication.source === "microphone") participant.audioTrack = publication.track;
-    if (publication.source === "screen") participant.screenShareAudioTrack = publication.track;
-    byParticipant.set(publication.participantSessionId, participant);
-  }
-  return [...byParticipant.values()];
-}
-
-function toListRole(role: ChalkParticipant["role"] | undefined): "host" | "co-host" | "participant" {
-  return role === "cohost" ? "co-host" : (role ?? "participant");
-}
-
-function fromWhiteboardWireElement(element: { readonly id: string; readonly type: string; readonly version: number; readonly version_nonce: number; readonly index: string; readonly is_deleted: boolean; readonly payload: ChalkWhiteboardV1Element["payload"] }): ChalkWhiteboardV1Element {
-  return {
-    id: element.id,
-    type: element.type,
-    version: element.version,
-    versionNonce: element.version_nonce,
-    index: element.index,
-    isDeleted: element.is_deleted,
-    payload: element.payload,
-  };
-}
-
-function toWhiteboardWireElement(element: ChalkWhiteboardV1Element): WhiteboardWireElement {
-  return {
-    id: element.id,
-    type: element.type,
-    version: element.version,
-    version_nonce: element.versionNonce,
-    index: element.index,
-    is_deleted: element.isDeleted,
-    payload: element.payload,
-  };
-}
-
-function toWhiteboardCollaborationEvent(event: ChalkWhiteboardV1Event): WhiteboardCollaborationEvent {
-  if (event.type === "snapshot") {
-    return {
-      ...event,
-      elements: event.elements.map(toWhiteboardWireElement),
-    };
-  }
-  if (event.type === "update") {
-    return {
-      ...event,
-      elements: event.elements.map(toWhiteboardWireElement),
-    };
-  }
-  return event;
 }
