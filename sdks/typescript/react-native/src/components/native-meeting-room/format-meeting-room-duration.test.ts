@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatMeetingRoomDuration } from "./format-meeting-room-duration";
+import { formatConferenceViewDuration } from "./format-meeting-room-duration";
 
-describe("formatMeetingRoomDuration", () => {
+describe("formatConferenceViewDuration", () => {
   it.each([
     [0, "0:00"],
     [59, "0:59"],
     [125, "2:05"],
   ])("formats %s elapsed seconds", (secondsElapsed, expected) => {
-    expect(formatMeetingRoomDuration(secondsElapsed)).toBe(expected);
+    expect(formatConferenceViewDuration(secondsElapsed)).toBe(expected);
   });
 });

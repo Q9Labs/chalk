@@ -1,8 +1,8 @@
 export { EndScreenIosPhone as EndScreen } from "./components/EndScreen.ios-phone";
 export type { EndScreenProps, MeetingEndData } from "./components/EndScreen";
-export { JoiningLoadingScreenIosPhone as JoiningLoadingScreen } from "./components/JoiningLoadingScreen.ios-phone";
-export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScreen";
-export { MeetingRoomIosPhone as MeetingRoom } from "./components/MeetingRoom.ios-phone";
-export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
-export { PreJoinLobbyIosPhone as PreJoinLobby } from "./components/PreJoinLobby.ios-phone";
-export type { PreJoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";
+export { JoiningScreenIosPhone as JoiningScreen } from "./components/JoiningScreen.ios-phone";
+export type { JoiningScreenProps } from "./components/JoiningScreen";
+export { ConferenceViewIosPhone as ConferenceView } from "./components/ConferenceView.ios-phone";
+export type { ConferenceViewDiagnosticsSnapshot, ConferenceViewFeatures, ConferenceViewProps } from "./components/ConferenceView";
+export { PreJoinScreenIosPhone as PreJoinScreen } from "./components/PreJoinScreen.ios-phone";
+export type { PreJoinSettings, PreJoinScreenProps } from "./components/PreJoinScreen";

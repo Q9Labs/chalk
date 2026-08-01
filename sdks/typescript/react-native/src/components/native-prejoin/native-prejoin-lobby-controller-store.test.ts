@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { PreJoinLobbyControllerStore } from "./native-prejoin-lobby-controller-store";
+import { PreJoinScreenControllerStore } from "./native-prejoin-lobby-controller-store";
 
-function createStore(options: Partial<ConstructorParameters<typeof PreJoinLobbyControllerStore>[0]> = {}) {
-  return new PreJoinLobbyControllerStore({
+function createStore(options: Partial<ConstructorParameters<typeof PreJoinScreenControllerStore>[0]> = {}) {
+  return new PreJoinScreenControllerStore({
     displayName: "Guest",
     initialAudioEnabled: false,
     initialVideoEnabled: false,
@@ -13,7 +13,7 @@ function createStore(options: Partial<ConstructorParameters<typeof PreJoinLobbyC
   });
 }
 
-describe("PreJoinLobbyControllerStore", () => {
+describe("PreJoinScreenControllerStore", () => {
   it("toggles media, edits the name, and latches join", () => {
     const onJoin = vi.fn();
     const store = createStore({ onJoin });

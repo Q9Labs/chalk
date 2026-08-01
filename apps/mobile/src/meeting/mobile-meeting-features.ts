@@ -1,6 +1,6 @@
-import type { MeetingRoomFeatures } from "@q9labsai/chalk-react-native";
+import type { ConferenceViewFeatures } from "@q9labsai/chalk-react-native";
 
-export const MOBILE_MEETING_FEATURES: Readonly<MeetingRoomFeatures> = {
+export const MOBILE_MEETING_FEATURES: Readonly<ConferenceViewFeatures> = {
   chat: true,
   participants: true,
   screenShare: true,

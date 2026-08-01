@@ -1,8 +1,8 @@
 export { EndScreenIosPad as EndScreen } from "./components/EndScreen.ios-pad";
 export type { EndScreenProps, MeetingEndData } from "./components/EndScreen";
-export { JoiningLoadingScreenIosPad as JoiningLoadingScreen } from "./components/JoiningLoadingScreen.ios-pad";
-export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScreen";
-export { MeetingRoomIosPad as MeetingRoom } from "./components/MeetingRoom.ios-pad";
-export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
-export { PreJoinLobbyIosPad as PreJoinLobby } from "./components/PreJoinLobby.ios-pad";
-export type { PreJoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";
+export { JoiningScreenIosPad as JoiningScreen } from "./components/JoiningScreen.ios-pad";
+export type { JoiningScreenProps } from "./components/JoiningScreen";
+export { ConferenceViewIosPad as ConferenceView } from "./components/ConferenceView.ios-pad";
+export type { ConferenceViewDiagnosticsSnapshot, ConferenceViewFeatures, ConferenceViewProps } from "./components/ConferenceView";
+export { PreJoinScreenIosPad as PreJoinScreen } from "./components/PreJoinScreen.ios-pad";
+export type { PreJoinSettings, PreJoinScreenProps } from "./components/PreJoinScreen";

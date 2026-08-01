@@ -2,9 +2,9 @@ import type { ChalkAssignableParticipantRole, ChalkReaction } from "@q9labsai/ch
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Theme } from "../../ui/theme";
-import type { useMeetingRoomController } from "./useMeetingRoomController";
+import type { useConferenceViewController } from "./useConferenceViewController";
 
-type Controller = ReturnType<typeof useMeetingRoomController>;
+type Controller = ReturnType<typeof useConferenceViewController>;
 
 export function MeetingActionMenu({ controller }: { readonly controller: Controller }): React.JSX.Element {
   const actions = [

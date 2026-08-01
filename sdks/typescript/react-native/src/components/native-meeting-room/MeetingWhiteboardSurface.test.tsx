@@ -7,7 +7,7 @@ vi.mock("../ChalkEmbeddedWhiteboard", () => ({
   ChalkEmbeddedWhiteboard: "ChalkEmbeddedWhiteboard",
 }));
 
-import type { MeetingWhiteboardState } from "./useMeetingRoomPanels";
+import type { MeetingWhiteboardState } from "./useConferenceViewPanels";
 import { forwardNativeMeetingWhiteboardMetric, shouldRenderNativeMeetingWhiteboard } from "./MeetingWhiteboardSurface";
 
 describe("MeetingWhiteboardSurface", () => {

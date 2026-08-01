@@ -3,7 +3,7 @@ import { StyleSheet } from "react-native";
 
 import { ChalkEmbeddedWhiteboard } from "../ChalkEmbeddedWhiteboard";
 import type { WhiteboardMetric } from "../../telemetry";
-import type { MeetingWhiteboardState } from "./useMeetingRoomPanels";
+import type { MeetingWhiteboardState } from "./useConferenceViewPanels";
 
 export interface MeetingWhiteboardSurfaceProps {
   readonly whiteboard: MeetingWhiteboardState;

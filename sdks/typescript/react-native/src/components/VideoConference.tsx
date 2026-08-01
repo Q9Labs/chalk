@@ -13,10 +13,10 @@ import { useVideoConferenceDiagnostics } from "../session/use-video-conference-d
 import { isIosSimulator } from "../utils/ios-simulator";
 import { EndScreen, type MeetingEndData } from "./EndScreen";
 import { JoinFailedScreen } from "./JoinFailedScreen";
-import { JoiningLoadingScreen } from "./JoiningLoadingScreen";
-import { MeetingRoom, type MeetingRoomFeatures } from "./MeetingRoom";
-import { PreJoinLobby, type PreJoinSettings } from "./PreJoinLobby";
-import type { MeetingRoomDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
+import { JoiningScreen } from "./JoiningScreen";
+import { ConferenceView, type ConferenceViewFeatures } from "./ConferenceView";
+import { PreJoinScreen, type PreJoinSettings } from "./PreJoinScreen";
+import type { ConferenceViewDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
 
 export type VideoConferencePhase = "lobby" | "joining" | "meeting" | "end";
 
@@ -39,7 +39,7 @@ export interface VideoConferenceDiagnosticsSnapshot {
     readonly state: ChalkSessionSnapshot["state"];
     readonly failure: ChalkSessionSnapshot["failure"];
   };
-  readonly meetingRoom: MeetingRoomDiagnosticsSnapshot | null;
+  readonly conferenceView: ConferenceViewDiagnosticsSnapshot | null;
 }
 
 export interface VideoConferenceProps {
@@ -51,7 +51,7 @@ export interface VideoConferenceProps {
   readonly autoJoin?: boolean;
   readonly initialPhase?: VideoConferencePhase;
   readonly initialJoinSettings?: Partial<PreJoinSettings>;
-  readonly features?: MeetingRoomFeatures;
+  readonly features?: ConferenceViewFeatures;
   readonly telemetry?: TelemetryJourney;
   readonly createSession: (settings: PreJoinSettings) => ChalkSessionStore | Promise<ChalkSessionStore>;
   readonly pickChatAttachments?: (chatFiles: NonNullable<ChalkSessionStore["chatFiles"]>) => Promise<readonly ChalkChatAttachment[]>;
@@ -134,7 +134,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
 
   if (phase === "lobby") {
     return (
-      <PreJoinLobby
+      <PreJoinScreen
         error={joinError}
         initialAudioEnabled={settings.microphoneEnabled}
         initialVideoEnabled={settings.cameraEnabled}
@@ -148,7 +148,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
   }
 
   if (phase === "joining" && !session) {
-    return <JoiningLoadingScreen displayName={settings.displayName} message={`Preparing ${props.roomName || props.roomId}`} supportingMessages={["Opening the meeting...", "Preparing participant access...", "Connecting to Chalk..."]} />;
+    return <JoiningScreen displayName={settings.displayName} message={`Preparing ${props.roomName || props.roomId}`} supportingMessages={["Opening the meeting...", "Preparing participant access...", "Connecting to Chalk..."]} />;
   }
 
   if (phase === "end" && endData) {
@@ -189,7 +189,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   const session = useChalkSession();
   const snapshot = useChalkSnapshot();
   const participants = useMeetingParticipants();
-  const [meetingRoomDiagnostics, setMeetingRoomDiagnostics] = useState<MeetingRoomDiagnosticsSnapshot | null>(null);
+  const [conferenceViewDiagnostics, setConferenceViewDiagnostics] = useState<ConferenceViewDiagnosticsSnapshot | null>(null);
 
   const joinedAt = useJoinSession({
     session,
@@ -211,7 +211,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
     roomId: props.roomId,
     roomName: props.roomName,
     joinError: props.joinError,
-    meetingRoom: meetingRoomDiagnostics,
+    conferenceView: conferenceViewDiagnostics,
     onChange: props.onDiagnosticsChange,
   });
 
@@ -233,14 +233,16 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   }, [finish, session]);
 
   if (props.phase === "joining") {
-    return <JoiningLoadingScreen displayName={props.settings.displayName} message={`Joining ${props.roomName || props.roomId}`} supportingMessages={["Preparing your media...", "Syncing room settings...", "Picking the fastest route...", "Opening the room..."]} />;
+    return <JoiningScreen displayName={props.settings.displayName} message={`Joining ${props.roomName || props.roomId}`} supportingMessages={["Preparing your media...", "Syncing room settings...", "Picking the fastest route...", "Opening the room..."]} />;
   }
 
   if (snapshot.state === "failed") {
     return <JoinFailedScreen roomName={props.roomName || props.roomId} message={snapshot.failure?.message ?? props.joinError ?? "Unable to join the meeting."} onRetry={() => void session.join().catch(props.onJoinFailure)} onHome={() => void session.leave().finally(() => props.onClose?.())} />;
   }
 
-  return <MeetingRoom features={props.features} meetingLink={props.meetingLink} onDiagnosticsChange={setMeetingRoomDiagnostics} onEndForAll={props.role === "host" ? endForAll : undefined} onLeave={finish} pickChatAttachments={props.pickChatAttachments} roomName={props.roomName || props.roomId} />;
+  return (
+    <ConferenceView features={props.features} meetingLink={props.meetingLink} onDiagnosticsChange={setConferenceViewDiagnostics} onEndForAll={props.role === "host" ? endForAll : undefined} onLeave={finish} pickChatAttachments={props.pickChatAttachments} roomName={props.roomName || props.roomId} />
+  );
 }
 
 function toVideoConferencePhase(phase: ConferencePhase): VideoConferencePhase {

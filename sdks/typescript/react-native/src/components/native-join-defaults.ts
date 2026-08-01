@@ -1,4 +1,4 @@
-import type { PreJoinSettings } from "./PreJoinLobby";
+import type { PreJoinSettings } from "./PreJoinScreen";
 
 export function resolveNativeJoinDefaults({ initialJoinSettings, simulatorMediaDisabled, userName }: { initialJoinSettings?: Partial<PreJoinSettings>; simulatorMediaDisabled: boolean; userName?: string }): PreJoinSettings {
   return {

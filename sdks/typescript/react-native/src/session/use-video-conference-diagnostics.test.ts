@@ -32,7 +32,7 @@ describe("useVideoConferenceDiagnostics", () => {
   it("publishes after the subscribed snapshot changes and cleans up on unmount", async () => {
     const session = createSession({ state: "joining", failure: null, connection: { sync: "connecting", media: "connecting" } });
     const onChange = vi.fn();
-    const { unmount } = renderHook(() => useVideoConferenceDiagnostics({ session: session.session, phase: "joining", roomId: "room-1", joinError: null, meetingRoom: null, onChange }));
+    const { unmount } = renderHook(() => useVideoConferenceDiagnostics({ session: session.session, phase: "joining", roomId: "room-1", joinError: null, conferenceView: null, onChange }));
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ phase: "joining", connectionStatus: "joining", isJoining: true }));
     act(() => session.update({ state: "live", failure: null, connection: { sync: "healthy", media: "healthy" } }));

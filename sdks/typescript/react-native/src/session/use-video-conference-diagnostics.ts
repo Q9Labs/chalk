@@ -2,7 +2,7 @@ import type { ChalkSessionStore } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import type { VideoConferenceDiagnosticsSnapshot, VideoConferencePhase } from "../components/VideoConference";
-import type { MeetingRoomDiagnosticsSnapshot } from "../components/native-meeting-room/diagnostics";
+import type { ConferenceViewDiagnosticsSnapshot } from "../components/native-meeting-room/diagnostics";
 
 export type VideoConferenceDiagnosticsOptions = {
   readonly session: Pick<ChalkSessionStore, "subscribe" | "getSnapshot">;
@@ -10,7 +10,7 @@ export type VideoConferenceDiagnosticsOptions = {
   readonly roomId: string;
   readonly roomName?: string;
   readonly joinError: string | null;
-  readonly meetingRoom: MeetingRoomDiagnosticsSnapshot | null;
+  readonly conferenceView: ConferenceViewDiagnosticsSnapshot | null;
   readonly onChange?: (snapshot: VideoConferenceDiagnosticsSnapshot) => void;
 };
 
@@ -29,7 +29,7 @@ export function useVideoConferenceDiagnostics(options: VideoConferenceDiagnostic
       isConnected: snapshot.state === "live",
       isJoining: snapshot.state === "joining",
       session: { state: snapshot.state, failure: snapshot.failure },
-      meetingRoom: options.meetingRoom,
+      conferenceView: options.conferenceView,
     });
-  }, [options.joinError, options.meetingRoom, options.onChange, options.phase, options.roomId, options.roomName, snapshot.failure, snapshot.state]);
+  }, [options.conferenceView, options.joinError, options.onChange, options.phase, options.roomId, options.roomName, snapshot.failure, snapshot.state]);
 }

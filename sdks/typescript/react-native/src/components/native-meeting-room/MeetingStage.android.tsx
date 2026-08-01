@@ -1,4 +1,4 @@
-import type { NativeLayout } from "../../ui/native-types";
+import type { Layout } from "../../ui/native-types";
 import ComputerScreenShareIcon from "@hugeicons/core-free-icons/dist/esm/ComputerScreenShareIcon";
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
 import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation01Icon";
@@ -12,7 +12,7 @@ import { MediaView } from "../MediaView";
 import type { RoomParticipant } from "./types";
 
 export interface MeetingStageProps {
-  layoutMode: NativeLayout;
+  layoutMode: Layout;
   isCompactViewport: boolean;
   primaryContent: MeetingPrimaryContent;
   screenSharer: RoomParticipant | null;
@@ -104,7 +104,7 @@ function NativeParticipantStrip({ participants, vertical }: { participants: read
 }
 
 export function MeetingStageAndroid({ layoutMode, isCompactViewport, primaryContent, screenSharer, screenShareTrack, stripParticipants, isHost, selfName, isMuted, handRaised, raisedHandCount, activeReactions, whiteboard }: MeetingStageProps): React.JSX.Element {
-  const verticalStrip = !isCompactViewport && layoutMode === "speaker";
+  const verticalStrip = !isCompactViewport && layoutMode === "focus";
 
   let primaryStage: React.JSX.Element;
   if (primaryContent === "whiteboard") {
