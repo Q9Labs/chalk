@@ -28,12 +28,38 @@ vi.mock("../full/EndScreen", () => ({
 }));
 
 vi.mock("../conference-view/ConferenceView", () => ({
-  ConferenceView: ({ reconnecting, onLeave }: { readonly reconnecting?: { readonly isVisible: boolean }; readonly onLeave?: () => void | Promise<void> }) => (
-    <div data-testid="conference-view">
+  ConferenceView: ({
+    reconnecting,
+    onLeave,
+    layout,
+    panels,
+    controls,
+    settingsDialog,
+  }: {
+    readonly reconnecting?: { readonly isVisible: boolean };
+    readonly onLeave?: () => void | Promise<void>;
+    readonly layout?: string;
+    readonly panels?: { readonly active: string | null; readonly onChange: (panel: string | null) => void };
+    readonly controls?: { readonly buttons?: readonly string[] };
+    readonly settingsDialog?: {
+      readonly onOpenChange: (open: boolean) => void;
+      readonly onUpdateIdentity: (updates: { readonly displayName: string }) => void;
+    };
+  }) => (
+    <div data-testid="conference-view" data-layout={layout} data-active-panel={panels?.active ?? ""} data-buttons={controls?.buttons?.join(",")}>
       Active conference
       {reconnecting?.isVisible ? <div data-testid="reconnecting-overlay">Reconnecting</div> : null}
       <button type="button" onClick={() => void onLeave?.()}>
         Leave active conference
+      </button>
+      <button type="button" onClick={() => panels?.onChange(null)}>
+        Close panel
+      </button>
+      <button type="button" onClick={() => settingsDialog?.onUpdateIdentity({ displayName: "Grace" })}>
+        Update display name
+      </button>
+      <button type="button" onClick={() => settingsDialog?.onOpenChange(false)}>
+        Close settings
       </button>
     </div>
   ),
@@ -106,7 +132,65 @@ describe("VideoConference", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Joining room-1");
     expect(screen.queryByTestId("waiting-screen")).not.toBeInTheDocument();
   });
+
+  it("switches the stage to presentation while screen sharing is active", async () => {
+    const testSession = createLiveTestSession();
+
+    render(<VideoConference roomId="room-1" userName="Ada" autoJoin createSession={() => testSession} />);
+    await waitFor(() => expect(screen.getByTestId("conference-view")).toHaveAttribute("data-layout", "focus"));
+
+    testSession.setSnapshot({
+      ...testSession.getSnapshot(),
+      localMedia: { ...testSession.getSnapshot().localMedia, screen: { source: "screen", state: "enabled", track: null } },
+    });
+    await waitFor(() => expect(screen.getByTestId("conference-view")).toHaveAttribute("data-layout", "presentation"));
+  });
+
+  it("opens the admission panel for hosts when requests arrive and honors dismissal", async () => {
+    const testSession = createLiveTestSession();
+
+    render(<VideoConference roomId="room-1" userName="Ada" autoJoin canAdmit createSession={() => testSession} />);
+    await waitFor(() => expect(screen.getByTestId("conference-view")).toHaveAttribute("data-active-panel", ""));
+
+    testSession.setSnapshot({
+      ...testSession.getSnapshot(),
+      admissionRequests: [{ admissionRequestId: "request-1", participantSessionId: "guest-1", displayName: "Nia", initialRole: "participant", eligibleRoles: ["participant"], expiresAt: "2026-08-02T00:00:00.000Z" }],
+    });
+    await waitFor(() => expect(screen.getByTestId("conference-view")).toHaveAttribute("data-active-panel", "admission"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
+    await waitFor(() => expect(screen.getByTestId("conference-view")).toHaveAttribute("data-active-panel", ""));
+  });
+
+  it("omits the participants and settings controls when those features are disabled", async () => {
+    render(<VideoConference roomId="room-1" userName="Ada" autoJoin participantsEnabled={false} settingsEnabled={false} createSession={() => createLiveTestSession()} />);
+
+    await waitFor(() => expect(screen.getByTestId("conference-view")).toBeInTheDocument());
+    const buttons = screen.getByTestId("conference-view").getAttribute("data-buttons") ?? "";
+    expect(buttons).not.toContain("participants");
+    expect(buttons).not.toContain("more");
+    expect(buttons).toContain("mic");
+  });
+
+  it("applies the display name from settings when the dialog closes", async () => {
+    const testSession = createLiveTestSession();
+    const setDisplayName = vi.fn(async () => undefined);
+    Object.assign(testSession, { setDisplayName });
+
+    render(<VideoConference roomId="room-1" userName="Ada" autoJoin createSession={() => testSession} />);
+    await waitFor(() => expect(screen.getByTestId("conference-view")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Update display name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    await waitFor(() => expect(setDisplayName).toHaveBeenCalledWith("Grace"));
+  });
 });
+
+function createLiveTestSession() {
+  const testSession = createTestSession();
+  testSession.setSnapshot({ ...testSession.getSnapshot(), state: "live", connection: { sync: "healthy", media: "healthy" } });
+  return testSession;
+}
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;

@@ -77,6 +77,7 @@ type ActiveVideoConferenceProps = VideoConferenceProps & {
   readonly onJoinFailure: (error: Error) => void;
   readonly onRejoin: () => void;
   readonly onFinished: (data: { readonly duration: number; readonly participantCount: number }) => void;
+  readonly onSettingsChange: (updates: Partial<PreJoinSettings>) => void;
 };
 
 export function VideoConference(props: VideoConferenceProps): React.JSX.Element {
@@ -201,6 +202,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
         onLayoutChange={handleLayoutChange}
         onJoinFailure={handleJoinFailure}
         onRejoin={handleRejoin}
+        onSettingsChange={(updates) => setSettings((current) => ({ ...current, ...updates }))}
         onFinished={(data) => {
           setEndData(data);
           setHasAskedToLeave(true);
@@ -298,6 +300,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   const canUseWhiteboard = props.whiteboardEnabled !== false && (props.canUseWhiteboard ?? session.whiteboard !== null);
   const canInvite = props.canInvite ?? Boolean(props.meetingLink);
   const canLeave = props.canLeave !== false;
+  const canAdmit = props.admissionEnabled !== false && (props.canAdmit ?? localCapabilities.includes("manageAdmission"));
   const chatFiles = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.version === 2 ? session.chatFiles : null;
   const incomingRequest = snapshot.incomingMediaRequests[0];
   const remoteScreenShare = tiles.find((participant) => participant.isScreenSharing && participant.screenShareTrack);
@@ -307,6 +310,11 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
         sharedByName: remoteScreenShare.displayName,
       }
     : undefined;
+  const effectiveLayout = screenSharing || tiles.some((participant) => participant.isScreenSharing) ? "presentation" : props.layout;
+
+  const admissionKey = snapshot.admissionRequests.map((request) => request.admissionRequestId).join(",");
+  const [dismissedAdmissionKey, setDismissedAdmissionKey] = useState("");
+  const activePanel = layoutPanel ?? (canAdmit && admissionKey && dismissedAdmissionKey !== admissionKey ? "admission" : null);
 
   const runCommand = useCallback(async (operation: () => Promise<unknown>, fallback: string) => {
     try {
@@ -353,6 +361,8 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
         microphoneEnabled,
         screenSharing,
         canLeave,
+        participantsEnabled: props.participantsEnabled !== false,
+        settingsEnabled: props.settingsEnabled !== false,
         onToggleChat: () => togglePanel("chat"),
         onToggleHandRaise: () => void runCommand(() => actions.setHandRaised(!handRaised), "Hand raise failed"),
         onToggleMute: () => void runCommand(() => actions.setMicrophoneEnabled(!microphoneEnabled), "Microphone update failed"),
@@ -363,13 +373,20 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
         onOpenMore: () => setSettingsOpen(true),
         unreadChatCount: snapshot.chat.unreadCount,
       }),
-    [actions, canChat, canLeave, canRaiseHand, canReact, canShareScreen, canUseWhiteboard, cameraEnabled, handRaised, isWhiteboardOpen, layoutPanel, microphoneEnabled, runCommand, screenSharing, snapshot.chat.unreadCount, togglePanel],
+    [actions, canChat, canLeave, canRaiseHand, canReact, canShareScreen, canUseWhiteboard, cameraEnabled, handRaised, isWhiteboardOpen, layoutPanel, microphoneEnabled, props.participantsEnabled, props.settingsEnabled, runCommand, screenSharing, snapshot.chat.unreadCount, togglePanel],
   );
 
+  const closePanel = useCallback(
+    (panel: ConferencePanel | null) => {
+      if (panel === null && layoutPanel === null && activePanel === "admission") setDismissedAdmissionKey(admissionKey);
+      setLayoutPanel(panel);
+    },
+    [activePanel, admissionKey, layoutPanel],
+  );
   const panels = useMemo<ConferenceViewProps["panels"]>(
     () => ({
-      active: layoutPanel,
-      onChange: setLayoutPanel,
+      active: activePanel,
+      onChange: closePanel,
       chat: canChat
         ? {
             messages: snapshot.chat.messages,
@@ -408,55 +425,48 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
               onMakeCoHost: localCapabilities.includes("promoteDemote") ? (id) => void runCommand(() => actions.setParticipantRole(id, "cohost"), "Role update failed") : undefined,
             }
           : undefined,
-      admission:
-        props.admissionEnabled !== false && (props.canAdmit ?? localCapabilities.includes("manageAdmission"))
-          ? {
-              participants: snapshot.admissionRequests.map((request): WaitingParticipant => ({ id: request.admissionRequestId, displayName: request.displayName })),
-              onAdmit: (id) => void runCommand(() => actions.admitParticipant(id), "Admission failed"),
-              onDeny: (id) => void runCommand(() => actions.denyAdmission(id), "Admission denial failed"),
-            }
-          : undefined,
+      admission: canAdmit
+        ? {
+            participants: snapshot.admissionRequests.map((request): WaitingParticipant => ({ id: request.admissionRequestId, displayName: request.displayName })),
+            onAdmit: (id) => void runCommand(() => actions.admitParticipant(id), "Admission failed"),
+            onDeny: (id) => void runCommand(() => actions.denyAdmission(id), "Admission denial failed"),
+          }
+        : undefined,
       settings: undefined,
     }),
-    [
-      actions,
-      canChat,
-      canManageParticipants,
-      canRequestMedia,
-      chatFiles,
-      layoutPanel,
-      listParticipants,
-      loadOlderChat,
-      localCapabilities,
-      localId,
-      loadingOlderChat,
-      participantNames,
-      props.admissionEnabled,
-      props.canAdmit,
-      props.participantsEnabled,
-      runCommand,
-      snapshot.admissionRequests,
-      snapshot.chat,
-      setLayoutPanel,
-    ],
+    [actions, activePanel, canAdmit, canChat, canManageParticipants, canRequestMedia, chatFiles, closePanel, listParticipants, loadOlderChat, localCapabilities, localId, loadingOlderChat, participantNames, props.participantsEnabled, runCommand, snapshot.admissionRequests, snapshot.chat],
   );
 
+  const commitDialogSettings = useCallback(() => {
+    const displayName = dialogSettings.identity.displayName.trim();
+    if (displayName && displayName !== props.settings.displayName) {
+      void runCommand(() => actions.setDisplayName(displayName), "Display name update failed");
+      props.onSettingsChange({ displayName });
+    }
+    props.onSettingsChange({ microphoneEnabled: dialogSettings.join.audioEnabled, cameraEnabled: dialogSettings.join.videoEnabled });
+  }, [actions, dialogSettings.identity.displayName, dialogSettings.join.audioEnabled, dialogSettings.join.videoEnabled, props.onSettingsChange, props.settings.displayName, runCommand]);
   const settingsDialog = useMemo(() => {
     if (props.settingsEnabled === false) return undefined;
     return {
       isOpen: isSettingsOpen,
-      onOpenChange: setSettingsOpen,
+      onOpenChange: (open: boolean) => {
+        setSettingsOpen(open);
+        if (!open) commitDialogSettings();
+      },
       settings: dialogSettings,
       onUpdateIdentity: (updates: Partial<SettingsDialogValue["identity"]>) => setDialogSettings((current) => ({ ...current, identity: { ...current.identity, ...updates } })),
       onUpdateJoin: (updates: Partial<SettingsDialogValue["join"]>) => setDialogSettings((current) => ({ ...current, join: { ...current.join, ...updates } })),
       onUpdateAudio: (updates: Partial<SettingsDialogValue["audio"]>) => setDialogSettings((current) => ({ ...current, audio: { ...current.audio, ...updates } })),
       onUpdateVideo: (updates: Partial<SettingsDialogValue["video"]>) => setDialogSettings((current) => ({ ...current, video: { ...current.video, ...updates } })),
-      onUpdateAppearance: (updates: Partial<SettingsDialogValue["appearance"]>) => setDialogSettings((current) => ({ ...current, appearance: { ...current.appearance, ...updates } })),
+      onUpdateAppearance: (updates: Partial<SettingsDialogValue["appearance"]>) => {
+        setDialogSettings((current) => ({ ...current, appearance: { ...current.appearance, ...updates } }));
+        if ((updates.layout === "grid" || updates.layout === "focus" || updates.layout === "presentation") && updates.layout !== props.layout) props.onLayoutChange(updates.layout);
+      },
       onUpdateExperience: (updates: Partial<SettingsDialogValue["experience"]>) => setDialogSettings((current) => ({ ...current, experience: { ...current.experience, ...updates } })),
       videoTrack: localMedia.camera.track,
       participantColorSeed: props.settings.displayName,
     } satisfies ConferenceViewProps["settingsDialog"];
-  }, [dialogSettings, isSettingsOpen, localMedia.camera.track, props.settings.displayName, props.settingsEnabled]);
+  }, [commitDialogSettings, dialogSettings, isSettingsOpen, localMedia.camera.track, props.layout, props.onLayoutChange, props.settings.displayName, props.settingsEnabled]);
 
   if (props.phase === "joining" || props.phase === "waiting") return <JoiningScreen message={`Joining ${props.roomName ?? props.roomId}`} displayName={props.settings.displayName} />;
   if (props.phase === "ended") return <EndScreen roomName={props.roomName ?? props.roomId} duration={duration} participantCount={participants.length} onRejoin={props.onRejoin} onGoHome={props.onClose} />;
@@ -468,7 +478,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
       logoUrl={props.logoUrl}
       meetingLink={props.meetingLink}
       duration={duration}
-      layout={props.layout}
+      layout={effectiveLayout}
       onLayoutChange={props.onLayoutChange}
       participants={tiles}
       audioParticipants={audioParticipants}
@@ -508,6 +518,8 @@ function createControls(input: {
   readonly microphoneEnabled: boolean;
   readonly screenSharing: boolean;
   readonly canLeave: boolean;
+  readonly participantsEnabled: boolean;
+  readonly settingsEnabled: boolean;
   readonly unreadChatCount: number;
   readonly onToggleChat: () => void;
   readonly onToggleHandRaise: () => void;
@@ -523,10 +535,10 @@ function createControls(input: {
   if (input.canUseWhiteboard) buttons.push("whiteboard");
   if (input.canRaiseHand) buttons.push("handraise");
   if (input.canLeave) buttons.push("leave");
-  buttons.push("participants");
+  if (input.participantsEnabled) buttons.push("participants");
   if (input.canChat) buttons.push("chat");
   if (input.canReact) buttons.push("reactions");
-  buttons.push("more");
+  if (input.settingsEnabled) buttons.push("more");
 
   return {
     buttons,
