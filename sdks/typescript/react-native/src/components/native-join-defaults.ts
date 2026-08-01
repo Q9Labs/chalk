@@ -1,9 +1,9 @@
-import type { JoinSettings } from "./PreJoinLobby";
+import type { PreJoinSettings } from "./PreJoinLobby";
 
-export function resolveNativeJoinDefaults({ initialJoinSettings, simulatorMediaDisabled, userName }: { initialJoinSettings?: Partial<JoinSettings>; simulatorMediaDisabled: boolean; userName?: string }): JoinSettings {
+export function resolveNativeJoinDefaults({ initialJoinSettings, simulatorMediaDisabled, userName }: { initialJoinSettings?: Partial<PreJoinSettings>; simulatorMediaDisabled: boolean; userName?: string }): PreJoinSettings {
   return {
     displayName: initialJoinSettings?.displayName?.trim() || userName || "Chalker",
-    audioEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.audioEnabled ?? false),
-    videoEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.videoEnabled ?? false),
+    microphoneEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.microphoneEnabled ?? false),
+    cameraEnabled: simulatorMediaDisabled ? false : (initialJoinSettings?.cameraEnabled ?? false),
   };
 }

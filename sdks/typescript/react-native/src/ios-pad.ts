@@ -5,4 +5,4 @@ export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScree
 export { MeetingRoomIosPad as MeetingRoom } from "./components/MeetingRoom.ios-pad";
 export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
 export { PreJoinLobbyIosPad as PreJoinLobby } from "./components/PreJoinLobby.ios-pad";
-export type { JoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";
+export type { PreJoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";

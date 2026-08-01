@@ -7,10 +7,10 @@ The public surface uses the same session vocabulary as `@q9labsai/chalk-client`:
 session hooks. Platform implementations stay behind the React Native package
 namespace, so shared exports do not carry a `Native` prefix.
 
-The React Native lobby intentionally exposes `JoinSettings`, whose
-`audioEnabled` and `videoEnabled` fields match its native preview contract.
-React uses the separate `PreJoinSettings` contract with
-`microphoneEnabled` and `cameraEnabled`, so those types are not aliases.
+The React Native lobby exposes the same `PreJoinSettings` contract as React,
+with `microphoneEnabled` and `cameraEnabled` fields. Native platform preview
+components keep their internal audio/video state names behind this public
+settings boundary.
 
 ## Embedded whiteboard
 

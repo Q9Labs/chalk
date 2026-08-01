@@ -10,7 +10,7 @@ import { EndScreen, type MeetingEndData } from "./EndScreen";
 import { JoinFailedScreen } from "./JoinFailedScreen";
 import { JoiningLoadingScreen } from "./JoiningLoadingScreen";
 import { MeetingRoom, type MeetingRoomFeatures } from "./MeetingRoom";
-import { PreJoinLobby, type JoinSettings } from "./PreJoinLobby";
+import { PreJoinLobby, type PreJoinSettings } from "./PreJoinLobby";
 import type { MeetingRoomDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
 
 export type VideoConferencePhase = "lobby" | "joining" | "meeting" | "end";
@@ -45,10 +45,10 @@ export interface VideoConferenceProps {
   readonly role?: "host" | "participant";
   readonly autoJoin?: boolean;
   readonly initialPhase?: VideoConferencePhase;
-  readonly initialJoinSettings?: Partial<JoinSettings>;
+  readonly initialJoinSettings?: Partial<PreJoinSettings>;
   readonly features?: MeetingRoomFeatures;
   readonly telemetry?: TelemetryJourney;
-  readonly createSession: (settings: JoinSettings) => ChalkSessionStore | Promise<ChalkSessionStore>;
+  readonly createSession: (settings: PreJoinSettings) => ChalkSessionStore | Promise<ChalkSessionStore>;
   readonly pickChatAttachments?: (chatFiles: NonNullable<ChalkSessionStore["chatFiles"]>) => Promise<readonly ChalkChatAttachment[]>;
   readonly onSessionChange?: (session: ChalkSessionStore | null) => void;
   readonly onJoin?: (data: MeetingJoinedData) => void;
@@ -62,10 +62,10 @@ export interface VideoConferenceProps {
 export function VideoConference(props: VideoConferenceProps): React.JSX.Element {
   const simulatorMediaDisabled = isIosSimulator();
   const defaultSettings = useMemo(
-    (): JoinSettings => ({
+    (): PreJoinSettings => ({
       displayName: props.initialJoinSettings?.displayName?.trim() || props.userName?.trim() || (props.role === "host" ? "Host" : "Guest"),
-      audioEnabled: simulatorMediaDisabled ? false : (props.initialJoinSettings?.audioEnabled ?? false),
-      videoEnabled: simulatorMediaDisabled ? false : (props.initialJoinSettings?.videoEnabled ?? false),
+      microphoneEnabled: simulatorMediaDisabled ? false : (props.initialJoinSettings?.microphoneEnabled ?? false),
+      cameraEnabled: simulatorMediaDisabled ? false : (props.initialJoinSettings?.cameraEnabled ?? false),
     }),
     [props.initialJoinSettings, props.role, props.userName, simulatorMediaDisabled],
   );
@@ -78,12 +78,12 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
   const sessionRef = useRef<ChalkSessionStore | null>(null);
   sessionRef.current = session;
   const begin = useCallback(
-    async (nextSettings: JoinSettings) => {
+    async (nextSettings: PreJoinSettings) => {
       const normalized = {
         ...nextSettings,
         displayName: nextSettings.displayName.trim() || defaultSettings.displayName,
-        audioEnabled: simulatorMediaDisabled ? false : nextSettings.audioEnabled,
-        videoEnabled: simulatorMediaDisabled ? false : nextSettings.videoEnabled,
+        microphoneEnabled: simulatorMediaDisabled ? false : nextSettings.microphoneEnabled,
+        cameraEnabled: simulatorMediaDisabled ? false : nextSettings.cameraEnabled,
       };
       const attempt = ++creationAttempt.current;
       setSettings(normalized);
@@ -138,7 +138,16 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
 
   if (phase === "lobby") {
     return (
-      <PreJoinLobby error={joinError} initialAudioEnabled={settings.audioEnabled} initialVideoEnabled={settings.videoEnabled} onCancel={props.onClose} onJoin={(nextSettings) => void begin(nextSettings)} role={props.role} roomName={props.roomName || props.roomId} userName={settings.displayName} />
+      <PreJoinLobby
+        error={joinError}
+        initialAudioEnabled={settings.microphoneEnabled}
+        initialVideoEnabled={settings.cameraEnabled}
+        onCancel={props.onClose}
+        onJoin={(nextSettings) => void begin(nextSettings)}
+        role={props.role}
+        roomName={props.roomName || props.roomId}
+        userName={settings.displayName}
+      />
     );
   }
 
@@ -170,7 +179,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
 }
 
 type ActiveVideoConferenceProps = VideoConferenceProps & {
-  readonly settings: JoinSettings;
+  readonly settings: PreJoinSettings;
   readonly phase: VideoConferencePhase;
   readonly joinError: string | null;
   readonly setPhase: (phase: VideoConferencePhase) => void;

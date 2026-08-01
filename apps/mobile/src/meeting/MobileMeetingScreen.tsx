@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ChalkSessionAccessProvider, ChalkSessionStore } from "@q9labsai/chalk-client";
-import { VideoConference, ClientSessionError, createClientSession, createChalkSession, type ClientSession, type JoinSettings, type VideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
+import { VideoConference, ClientSessionError, createClientSession, createChalkSession, type ClientSession, type PreJoinSettings, type VideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -50,7 +50,7 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
   );
 
   const createSession = useCallback(
-    async (settings: JoinSettings): Promise<ChalkSessionStore> => {
+    async (settings: PreJoinSettings): Promise<ChalkSessionStore> => {
       const storedCredential = !clientSessionRef.current && route.joinToken ? await loadClientSessionCredential(route.joinToken) : undefined;
       const create = (credential = storedCredential) =>
         createClientSession({
@@ -78,8 +78,8 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
         access,
         apiBaseURL: clientSession.apiBaseURL,
         syncURL: clientSession.syncURL,
-        initialMicrophoneEnabled: settings.audioEnabled,
-        initialCameraEnabled: settings.videoEnabled,
+        initialMicrophoneEnabled: settings.microphoneEnabled,
+        initialCameraEnabled: settings.cameraEnabled,
         storage: AsyncStorage,
         telemetry: journey,
       });

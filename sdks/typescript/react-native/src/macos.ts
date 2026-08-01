@@ -5,4 +5,4 @@ export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScree
 export { MeetingRoomMacos as MeetingRoom } from "./components/MeetingRoom.macos";
 export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
 export { PreJoinLobbyMacos as PreJoinLobby } from "./components/PreJoinLobby.macos";
-export type { JoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";
+export type { PreJoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";

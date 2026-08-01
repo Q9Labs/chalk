@@ -35,7 +35,7 @@ describe("PreJoinLobbyControllerStore", () => {
       isSubmitting: true,
     });
     expect(onJoin).toHaveBeenCalledTimes(1);
-    expect(onJoin).toHaveBeenCalledWith({ displayName: "Host", audioEnabled: true, videoEnabled: true });
+    expect(onJoin).toHaveBeenCalledWith({ displayName: "Host", microphoneEnabled: true, cameraEnabled: true });
     expect(listener).toHaveBeenCalled();
 
     unsubscribe();

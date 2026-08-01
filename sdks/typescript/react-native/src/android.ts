@@ -5,4 +5,4 @@ export type { JoiningLoadingScreenProps } from "./components/JoiningLoadingScree
 export { MeetingRoomAndroid as MeetingRoom } from "./components/MeetingRoom.android";
 export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
 export { PreJoinLobbyAndroid as PreJoinLobby } from "./components/PreJoinLobby.android";
-export type { JoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";
+export type { PreJoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";

@@ -10,8 +10,8 @@ describe("resolveNativeJoinDefaults", () => {
       }),
     ).toEqual({
       displayName: "Hasan",
-      audioEnabled: false,
-      videoEnabled: false,
+      microphoneEnabled: false,
+      cameraEnabled: false,
     });
   });
 
@@ -19,16 +19,16 @@ describe("resolveNativeJoinDefaults", () => {
     expect(
       resolveNativeJoinDefaults({
         initialJoinSettings: {
-          audioEnabled: true,
-          videoEnabled: true,
+          microphoneEnabled: true,
+          cameraEnabled: true,
         },
         simulatorMediaDisabled: true,
         userName: "Hasan",
       }),
     ).toEqual({
       displayName: "Hasan",
-      audioEnabled: false,
-      videoEnabled: false,
+      microphoneEnabled: false,
+      cameraEnabled: false,
     });
   });
 
@@ -37,16 +37,16 @@ describe("resolveNativeJoinDefaults", () => {
       resolveNativeJoinDefaults({
         initialJoinSettings: {
           displayName: "Guest",
-          audioEnabled: true,
-          videoEnabled: true,
+          microphoneEnabled: true,
+          cameraEnabled: true,
         },
         simulatorMediaDisabled: false,
         userName: "Hasan",
       }),
     ).toEqual({
       displayName: "Guest",
-      audioEnabled: true,
-      videoEnabled: true,
+      microphoneEnabled: true,
+      cameraEnabled: true,
     });
   });
 });

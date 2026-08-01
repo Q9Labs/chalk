@@ -84,6 +84,16 @@ and adds `useChalkSnapshot`, `useChalkSelector`, `useChalkActions`,
 `useParticipants`, `useLocalMedia`, `useRemoteMedia`, and
 `useChalkWhiteboardTransport` with the React package's store semantics.
 
+Phase 2 completes the join-settings vocabulary across the React and React
+Native packages. The exported settings type and media fields now use the same
+names in both packages.
+
+| Package                        | Old export or field         | New export or field                 |
+| ------------------------------ | --------------------------- | ----------------------------------- |
+| `@q9labsai/chalk-react-native` | `JoinSettings`              | `PreJoinSettings`                   |
+| `@q9labsai/chalk-react-native` | `JoinSettings.audioEnabled` | `PreJoinSettings.microphoneEnabled` |
+| `@q9labsai/chalk-react-native` | `JoinSettings.videoEnabled` | `PreJoinSettings.cameraEnabled`     |
+
 ### Added
 
 - React Native and mobile parity with Chalk v2: canonical `ChalkSession` and

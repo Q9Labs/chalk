@@ -12,13 +12,13 @@ export interface PreJoinLobbyControllerStoreOptions {
   readonly initialVideoEnabled: boolean;
   readonly simulatorMediaDisabled: boolean;
   readonly joinDisabled: boolean;
-  readonly onJoin: (settings: JoinSettings) => void;
+  readonly onJoin: (settings: PreJoinSettings) => void;
 }
 
 export interface PreJoinLobbyControllerStoreUpdate {
   readonly simulatorMediaDisabled: boolean;
   readonly joinDisabled: boolean;
-  readonly onJoin: (settings: JoinSettings) => void;
+  readonly onJoin: (settings: PreJoinSettings) => void;
 }
 
 export class PreJoinLobbyControllerStore {
@@ -92,8 +92,8 @@ export class PreJoinLobbyControllerStore {
     this.#update({ isSubmitting: true });
     this.#onJoin({
       displayName: this.#snapshot.displayName,
-      audioEnabled: this.#snapshot.audioEnabled,
-      videoEnabled: this.#snapshot.videoEnabled,
+      microphoneEnabled: this.#snapshot.audioEnabled,
+      cameraEnabled: this.#snapshot.videoEnabled,
     });
   };
 
@@ -107,4 +107,4 @@ export class PreJoinLobbyControllerStore {
     for (const listener of this.#listeners) listener();
   }
 }
-import type { JoinSettings } from "../PreJoinLobby";
+import type { PreJoinSettings } from "../PreJoinLobby";

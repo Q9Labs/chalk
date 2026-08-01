@@ -31,7 +31,7 @@ export type { MediaViewProps } from "./components/MediaView";
 export { MeetingRoom } from "./components/MeetingRoom";
 export type { MeetingRoomDiagnosticsSnapshot, MeetingRoomFeatures, MeetingRoomProps } from "./components/MeetingRoom";
 export { PreJoinLobby } from "./components/PreJoinLobby";
-export type { JoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";
+export type { PreJoinSettings, PreJoinLobbyProps } from "./components/PreJoinLobby";
 export { ReactionPicker } from "./components/ReactionPicker";
 export type { ReactionPickerProps } from "./components/ReactionPicker";
 export { RtcVideoView } from "./components/RtcVideoView";

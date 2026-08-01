@@ -4,11 +4,11 @@ import { PreJoinLobbyIosPad } from "./PreJoinLobby.ios-pad";
 import { PreJoinLobbyIosPhone } from "./PreJoinLobby.ios-phone";
 import { PreJoinLobbyMacos } from "./PreJoinLobby.macos";
 
-export interface JoinSettings {
-  displayName: string;
-  audioEnabled: boolean;
-  videoEnabled: boolean;
-}
+export type PreJoinSettings = {
+  readonly displayName: string;
+  readonly microphoneEnabled: boolean;
+  readonly cameraEnabled: boolean;
+};
 
 export interface PreJoinLobbyProps {
   roomName: string;
@@ -19,7 +19,7 @@ export interface PreJoinLobbyProps {
   error?: string | null;
   logo?: React.ReactNode;
   joinDisabled?: boolean;
-  onJoin: (settings: JoinSettings) => void;
+  onJoin: (settings: PreJoinSettings) => void;
   onCancel?: () => void;
 }
 
