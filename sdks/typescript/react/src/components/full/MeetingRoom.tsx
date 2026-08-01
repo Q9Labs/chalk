@@ -2,9 +2,12 @@
 
 import type { ChalkReaction } from "@q9labsai/chalk-client";
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
+import { useAutoJoin } from "../../session/use-auto-join";
+import { useConferenceDuration } from "../../session/use-conference-duration";
 import { useChalkActions, useChalkSession, useChalkSnapshot, useLocalMedia, useParticipants, useRemoteMedia } from "../../session";
+import { useWhiteboardScene } from "../../session/use-whiteboard-scene";
 import { toAudioParticipants, toListParticipants, toParticipantNames, toVideoParticipants } from "../../selectors/meeting-room-selectors";
 import { cn } from "../../utils/cn";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -31,8 +34,6 @@ export function MeetingRoom({ roomName, displayName, logoUrl, meetingLink, onLea
   const remoteMedia = useRemoteMedia();
   const actions = useChalkActions();
   const session = useChalkSession();
-  const started = useRef(false);
-  const [duration, setDuration] = useState(0);
   const [layout, setLayout] = useState<"grid" | "spotlight" | "sidebar">("spotlight");
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -43,31 +44,9 @@ export function MeetingRoom({ roomName, displayName, logoUrl, meetingLink, onLea
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [commandError, setCommandError] = useState("");
 
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    void actions.join().catch(() => undefined);
-  }, [actions]);
-
-  useEffect(() => {
-    if (snapshot.state !== "live") return;
-    const interval = window.setInterval(() => setDuration((value) => value + 1), 1_000);
-    return () => window.clearInterval(interval);
-  }, [snapshot.state]);
-
-  useEffect(() => {
-    const whiteboard = session.whiteboard;
-    if (!whiteboardOpen || !whiteboard) return;
-
-    let active = true;
-    void whiteboard.startSceneSubscription().catch((cause: unknown) => {
-      if (active) setCommandError(cause instanceof Error ? cause.message : "Whiteboard connection failed");
-    });
-    return () => {
-      active = false;
-      whiteboard.stopSceneSubscription();
-    };
-  }, [session.whiteboard, whiteboardOpen]);
+  useAutoJoin(actions.join);
+  const duration = useConferenceDuration(snapshot.state);
+  useWhiteboardScene(session.whiteboard, whiteboardOpen, setCommandError);
 
   const localId = snapshot.subject?.participantSessionId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participants, remoteMedia, localId, displayName, localMedia), [displayName, localId, localMedia, participants, remoteMedia]);
