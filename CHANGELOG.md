@@ -96,6 +96,9 @@ names in both packages.
 
 ### Added
 
+- A single light-first Chalk design system for marketing, lobby, meeting, SDK,
+  and mobile surfaces, with normative tokens, component and layout rules,
+  accessibility guidance, and a high-fidelity visual reference board.
 - React Native and mobile parity with Chalk v2: canonical `ChalkSession` and
   SyncEngine v3 ownership, native client-session broker routes, Cloudflare
   WebRTC media, moderation, reactions, hand raising, protected chat files,
@@ -132,6 +135,10 @@ names in both packages.
   including a device-aware prejoin lobby, responsive live meeting shell, layout
   controls, participant list, invitations, remote audio playback, camera-independent
   screen sharing, configurable branding, and leave flows.
+- Polished React meeting interaction surfaces with compact device and participant
+  menus, reserved in-call controls, meeting information and settings dialogs,
+  realistic screen-share preview, Chalk-themed Excalidraw, notification previews,
+  simplified prejoin media state, and quieter participant indicators.
 - Managed web SDK launch surface with scoped tenant API-key lifecycle, distinct
   short-lived Sync and media credentials, a server-only Promise client, the
   framework-neutral `ChalkSession` runtime, and React provider and hooks.
@@ -229,6 +236,11 @@ names in both packages.
 
 ### Changed
 
+- Redesigned the public marketing site, reusable React prejoin lobby, and live
+  meeting room around Chalk's light brand palette, a speaker-first stage,
+  responsive setup and non-overlapping call controls, flat participant colors,
+  refined People and Chat panels, and consistent light menus, dialogs, and
+  fields without decorative eyebrow labels.
 - Replaced the mobile app's placeholder native meeting adapter with the
   RealtimeKit admission and media runtime; features that require canonical
   Chalk session authority remain explicitly unavailable instead of silently

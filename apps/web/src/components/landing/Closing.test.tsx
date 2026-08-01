@@ -4,13 +4,15 @@ import { describe, expect, it } from "vitest";
 import { Closing, FeatureGrid } from "./Closing";
 
 describe("FeatureGrid", () => {
-  it("renders the included meeting capabilities", () => {
+  it("renders capabilities without progress badges", () => {
     const markup = renderToStaticMarkup(<FeatureGrid />);
 
     expect(markup).toContain("Meeting core");
     expect(markup).toContain("Recording");
     expect(markup).toContain("Whiteboard");
     expect(markup).toContain("Webhooks");
+    expect(markup).not.toContain(">Implemented<");
+    expect(markup).not.toContain(">In progress<");
   });
 });
 

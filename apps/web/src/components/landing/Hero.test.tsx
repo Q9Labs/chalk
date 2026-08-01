@@ -14,12 +14,19 @@ describe("SiteNav", () => {
 });
 
 describe("Hero", () => {
-  it("renders the product screenshot with accessible alt text", () => {
+  it("renders the approved straight-on product direction with accessible copy", () => {
     const markup = renderToStaticMarkup(<Hero />);
 
-    expect(markup).toContain("/images/marketing/hero-2.png");
-    expect(markup).toContain("Chalk meeting interface concept");
+    expect(markup).toContain("/images/marketing/chalk-speaker-view-20260801.webp");
+    expect(markup).toContain("Chalk speaker-view meeting interface");
+    expect(markup).toContain("Video calls.");
+    expect(markup).toContain("Your call.");
+    expect(markup).not.toContain("eyebrow");
     expect(markup).toContain("View SDK preview");
+    expect(markup).toContain('aria-label="TypeScript"');
+    expect(markup).toContain('aria-label="React Native"');
+    expect(markup).not.toContain("Supported product surfaces");
+    expect(markup).not.toContain("The hosted product remains under active development");
     expect(markup).not.toContain('href="/new"');
   });
 });

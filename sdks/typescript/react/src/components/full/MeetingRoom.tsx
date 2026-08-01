@@ -18,12 +18,13 @@ const ROOM_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as con
 export interface MeetingRoomProps {
   readonly roomName: string;
   readonly displayName: string;
+  readonly logoUrl?: string;
   readonly meetingLink?: string;
   readonly onLeave?: () => void | Promise<void>;
   readonly className?: string;
 }
 
-export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, className }: MeetingRoomProps): React.JSX.Element {
+export function MeetingRoom({ roomName, displayName, logoUrl, meetingLink, onLeave, className }: MeetingRoomProps): React.JSX.Element {
   const snapshot = useChalkSnapshot();
   const participants = useParticipants();
   const localMedia = useLocalMedia();
@@ -32,7 +33,7 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
   const session = useChalkSession();
   const started = useRef(false);
   const [duration, setDuration] = useState(0);
-  const [layout, setLayout] = useState<"grid" | "spotlight" | "sidebar">("grid");
+  const [layout, setLayout] = useState<"grid" | "spotlight" | "sidebar">("spotlight");
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
@@ -123,11 +124,11 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
   };
 
   return (
-    <main data-chalk data-chalk-theme="dark" className={cn("chalk-root dark relative flex h-dvh min-h-[620px] flex-col overflow-hidden bg-background text-foreground", className)}>
+    <main data-chalk data-chalk-theme="light" className={cn("chalk-root relative flex h-dvh min-h-[620px] flex-col overflow-hidden bg-[#f7f6f2] text-[#0c0e12]", className)}>
       <AudioRenderer participants={audioParticipants} />
-      <MeetingHeader roomName={roomName} duration={duration} layout={layout} onLayoutChange={setLayout} onInvite={() => setInviteOpen(true)} className="relative z-20 shrink-0" />
-      <div className="flex min-h-0 flex-1 gap-3 px-3 pb-28 sm:px-5">
-        <section className="min-w-0 flex-1 overflow-hidden rounded-[1.75rem] bg-[var(--chalk-bg-stage)] p-2 shadow-inner sm:p-3" aria-label="Meeting stage">
+      <MeetingHeader roomName={roomName} logoUrl={logoUrl} duration={duration} layout={layout} onLayoutChange={setLayout} className="relative z-20" />
+      <div className="mx-auto flex min-h-0 w-full max-w-[1320px] flex-1 gap-3 px-3 pt-5 pb-3 sm:px-5 sm:pt-6 lg:px-8">
+        <section className="min-w-0 flex-1 overflow-hidden rounded-[10px]" aria-label="Meeting stage">
           {whiteboardOpen && session.whiteboard ? (
             <WhiteboardPanel
               canDraw={snapshot.whiteboard.canDraw}
@@ -153,7 +154,7 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
           )}
         </section>
         {participantsOpen && (
-          <aside className="absolute inset-x-3 top-20 bottom-24 z-40 overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-2xl md:static md:block md:w-[340px] md:shrink-0">
+          <aside className="absolute inset-x-3 top-20 bottom-24 z-40 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-2xl md:static md:block md:w-[340px] md:shrink-0">
             <ParticipantList
               participants={listParticipants}
               variant="sidebar"
@@ -171,7 +172,7 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
           </aside>
         )}
         {chatOpen && canChat ? (
-          <aside className="absolute inset-x-3 top-20 bottom-24 z-40 overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-2xl md:static md:block md:w-[360px] md:shrink-0">
+          <aside className="absolute inset-x-3 top-20 bottom-24 z-40 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-2xl md:static md:block md:w-[360px] md:shrink-0">
             <ChatPanel
               messages={snapshot.chat.messages}
               pendingMessages={snapshot.chat.pending}
@@ -202,7 +203,7 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
 
       <ReactionsOverlay reactions={snapshot.reactions.slice(-6)} />
 
-      <div className="absolute inset-x-0 bottom-0 z-30 hidden px-5 md:block">
+      <div className="z-30 hidden shrink-0 px-5 md:block">
         <ControlBar
           variant="dock"
           meetingDuration={duration}
@@ -227,7 +228,7 @@ export function MeetingRoom({ roomName, displayName, meetingLink, onLeave, class
           participantColorSeed={displayName}
         />
       </div>
-      <div className="absolute inset-x-0 bottom-0 z-30 md:hidden">
+      <div className="z-30 shrink-0 md:hidden">
         <ControlBar
           variant="mobile"
           buttons={["mic", "video", ...(canUseWhiteboard ? (["whiteboard"] as const) : []), "handraise", "leave", "participants", ...(canChat ? (["chat"] as const) : []), ...(canReact ? (["reactions"] as const) : [])]}

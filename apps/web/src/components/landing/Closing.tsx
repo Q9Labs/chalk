@@ -1,33 +1,30 @@
-import { Chalked } from "./Chalked";
-
 const FEATURES = [
-  { title: "Meeting core", body: "Room, session, admission, role, and lifecycle boundaries are implemented.", stick: "var(--chalk-green)" },
-  { title: "Realtime sync", body: "Sync v3 provides durable control state, bounded recovery, and reconnect semantics.", stick: "var(--chalk-yellow)" },
-  { title: "Media adapters", body: "Cloudflare web and React Native RealtimeKit adapters are implemented.", stick: "var(--chalk-blue)" },
-  { title: "Whiteboard", body: "The React collaboration package ships today; web-app and native rendering remain open.", stick: "var(--chalk-pink)" },
-  { title: "Recording", body: "Control-plane contracts exist; real capture and render pools are not yet qualified.", stick: "var(--chalk-blue)" },
-  { title: "Transcription", body: "Dispatcher and artifact flows exist; complete managed-path proof remains open.", stick: "var(--chalk-pink)" },
-  { title: "Webhooks", body: "Versioned events, signatures, retries, fixtures, and consumer helpers are implemented.", stick: "var(--chalk-green)" },
-  { title: "Operations", body: "Local telemetry and health contracts exist; managed operations are not yet qualified.", stick: "var(--chalk-yellow)" },
+  { title: "Meeting core", body: "Room, session, admission, roles, and lifecycle boundaries.", tone: "green" },
+  { title: "Realtime sync", body: "Durable control state, bounded recovery, and reconnect semantics.", tone: "yellow" },
+  { title: "Media adapters", body: "Cloudflare web and React Native RealtimeKit adapters.", tone: "blue" },
+  { title: "Whiteboard", body: "A shared React collaboration package with app rendering still in progress.", tone: "pink" },
+  { title: "Recording", body: "Control-plane contracts with capture qualification still open.", tone: "blue" },
+  { title: "Transcription", body: "Dispatcher and artifact flows with managed-path proof still open.", tone: "pink" },
+  { title: "Webhooks", body: "Versioned events, signatures, retries, fixtures, and consumer helpers.", tone: "green" },
+  { title: "Operations", body: "Local telemetry and health contracts with managed operations still open.", tone: "yellow" },
 ];
 
 export function FeatureGrid() {
   return (
     <section className="section features" id="features">
-      <div className="container">
-        <div className="section-head">
-          <p className="eyebrow">Implementation status</p>
-          <h2>
-            Built foundations. <Chalked>Open product work.</Chalked>
-          </h2>
-          <p className="lede">Chalk has substantial infrastructure and SDK coverage, but a component or API boundary does not imply a complete hosted flow.</p>
-        </div>
-        <div className="features-grid">
-          {FEATURES.map((f) => (
-            <div className="feature" key={f.title} style={{ "--f-stick": f.stick } as React.CSSProperties}>
-              <h3>{f.title}</h3>
-              <p>{f.body}</p>
-            </div>
+      <div className="container features-layout">
+        <header className="section-head">
+          <h2>The parts that make a call product.</h2>
+          <p>Chalk has substantial SDK and infrastructure coverage. Hosted-product completeness is tracked separately from the existence of a component or API.</p>
+        </header>
+        <div className="feature-list">
+          {FEATURES.map((feature) => (
+            <article className={`feature feature-${feature.tone}`} key={feature.title}>
+              <div>
+                <h3>{feature.title}</h3>
+                <p>{feature.body}</p>
+              </div>
+            </article>
           ))}
         </div>
       </div>
@@ -38,29 +35,31 @@ export function FeatureGrid() {
 export function Closing() {
   return (
     <>
-      <section className="close">
-        <div className="container">
-          <div className="close-panel">
-            <h2>
-              Pick up <Chalked>Chalk</Chalked>.
-            </h2>
-            <p>Explore the current React component surface and the architecture being assembled around it.</p>
-            <div className="close-ctas">
-              <a href="/sdk-preview" className="btn btn-light">
-                View SDK preview
-              </a>
-              <a href="#sdk" className="btn btn-ghost" style={{ color: "#eef2ea", borderColor: "rgba(255,255,255,0.28)" }}>
-                Explore the SDKs
-              </a>
-            </div>
+      <section className="closing">
+        <div className="container closing-inner">
+          <div>
+            <h2>Build the room your product needs.</h2>
+            <p>Explore the current React surface and the architecture around it.</p>
+          </div>
+          <div className="closing-actions">
+            <a href="/sdk-preview" className="btn btn-primary">
+              View SDK preview
+            </a>
+            <a href="#sdk" className="btn btn-secondary">
+              Explore the SDKs
+            </a>
           </div>
         </div>
       </section>
       <footer className="footer">
         <div className="container footer-inner">
           <img src="/brand/chalk/chalk-logo.svg" alt="Chalk" />
-          <span>© 2026 Q9 Labs</span>
-          <span>Under active development</span>
+          <nav className="footer-links" aria-label="Footer navigation">
+            <a href="#sdk">SDK</a>
+            <a href="#performance">Performance</a>
+            <a href="#self-host">Self-host</a>
+          </nav>
+          <span>© 2026 Q9 Labs · Under active development</span>
         </div>
       </footer>
     </>

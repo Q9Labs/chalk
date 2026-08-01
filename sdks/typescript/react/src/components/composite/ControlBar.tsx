@@ -32,6 +32,28 @@ interface MediaDevice {
   groupId?: string;
 }
 
+const EMPTY_DETECTED_DEVICES = {
+  audioinput: [] as MediaDevice[],
+  audiooutput: [] as MediaDevice[],
+  videoinput: [] as MediaDevice[],
+};
+
+function mergeDevices(...deviceGroups: ReadonlyArray<readonly MediaDevice[] | undefined>): MediaDevice[] {
+  const devicesById = new Map<string, MediaDevice>();
+  for (const deviceGroup of deviceGroups) {
+    for (const device of deviceGroup ?? []) {
+      const existing = devicesById.get(device.deviceId);
+      if (!existing || (!existing.label && device.label)) devicesById.set(device.deviceId, device);
+    }
+  }
+  return [...devicesById.values()];
+}
+
+function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined, selectedDeviceId: string | undefined, fallbackLabel: string, kind: MediaDevice["kind"]): MediaDevice[] {
+  if (devices?.length) return [...devices];
+  return selectedDeviceId ? [{ deviceId: selectedDeviceId, label: fallbackLabel, kind }] : [];
+}
+
 export type ControlBarButton = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "more" | "info" | "thumbsup" | "leave";
 
 export interface ControlBarProps {
@@ -84,49 +106,6 @@ export interface ControlBarProps {
   className?: string;
 }
 
-const EMPTY_DETECTED_DEVICES = {
-  audioinput: [] as MediaDevice[],
-  audiooutput: [] as MediaDevice[],
-  videoinput: [] as MediaDevice[],
-};
-
-function mergeDevices(...deviceGroups: ReadonlyArray<readonly MediaDevice[] | undefined>) {
-  const devicesById = new Map<string, MediaDevice>();
-
-  for (const deviceGroup of deviceGroups) {
-    if (!deviceGroup) {
-      continue;
-    }
-
-    for (const device of deviceGroup) {
-      const existingDevice = devicesById.get(device.deviceId);
-      if (!existingDevice || (!existingDevice.label && device.label)) {
-        devicesById.set(device.deviceId, device);
-      }
-    }
-  }
-
-  return Array.from(devicesById.values());
-}
-
-function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined, selectedDeviceId: string | undefined, fallbackLabel: string, kind: MediaDevice["kind"]) {
-  if (devices && devices.length > 0) {
-    return devices;
-  }
-
-  if (!selectedDeviceId) {
-    return [];
-  }
-
-  return [
-    {
-      deviceId: selectedDeviceId,
-      label: fallbackLabel,
-      kind,
-    },
-  ];
-}
-
 const DEFAULT_BUTTONS: ControlBarButton[] = ["mic", "video", "screenshare", "whiteboard", "handraise", "leave", "participants", "chat", "transcription", "thumbsup", "pip", "settings"];
 
 const formatDuration = (seconds: number) => {
@@ -139,6 +118,26 @@ const formatDuration = (seconds: number) => {
   }
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 };
+
+function MeetingDockButton({ icon, label, onClick, active = false, danger = false, badge }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick?: () => void; readonly active?: boolean; readonly danger?: boolean; readonly badge?: number }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[#d4d3cd] bg-white text-[#202329] shadow-[0_5px_16px_rgba(12,14,18,0.1)] transition hover:-translate-y-0.5 hover:border-[#aeadA6] hover:bg-[#f7f6f2]",
+        active && "border-[#9dcfe1] bg-[#dff2f7]",
+        danger && "ml-2 border-[#d04f4f] bg-[#c94343] !text-white hover:border-[#b33b3b] hover:bg-[#b33b3b]",
+      )}
+    >
+      {icon}
+      {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[#b94c4c] px-1 text-[10px] !text-[#fff]">{badge > 99 ? "99+" : badge}</span> : null}
+    </button>
+  );
+}
 
 export const ControlBar = React.memo(
   ({
@@ -190,45 +189,30 @@ export const ControlBar = React.memo(
   }: ControlBarProps) => {
     const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
     const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
-
     const buttonsToRender = buttons ?? DEFAULT_BUTTONS;
+
     useEffect(() => {
-      if (variant !== "dock") {
-        return;
-      }
-
-      const mediaDevices = navigator.mediaDevices;
-      if (!mediaDevices?.enumerateDevices) {
-        return;
-      }
-
-      let isCancelled = false;
-
+      if (variant !== "dock" || !navigator.mediaDevices?.enumerateDevices) return;
+      let cancelled = false;
       const syncDevices = async () => {
         try {
-          const devices = (await mediaDevices.enumerateDevices()) as MediaDevice[];
-          if (isCancelled) {
-            return;
+          const devices = (await navigator.mediaDevices.enumerateDevices()) as MediaDevice[];
+          if (!cancelled) {
+            setDetectedDevices({
+              audioinput: devices.filter((device) => device.kind === "audioinput"),
+              audiooutput: devices.filter((device) => device.kind === "audiooutput"),
+              videoinput: devices.filter((device) => device.kind === "videoinput"),
+            });
           }
-
-          setDetectedDevices({
-            audioinput: devices.filter((device) => device.kind === "audioinput"),
-            audiooutput: devices.filter((device) => device.kind === "audiooutput"),
-            videoinput: devices.filter((device) => device.kind === "videoinput"),
-          });
         } catch {
-          if (!isCancelled) {
-            setDetectedDevices(EMPTY_DETECTED_DEVICES);
-          }
+          if (!cancelled) setDetectedDevices(EMPTY_DETECTED_DEVICES);
         }
       };
-
       void syncDevices();
-      mediaDevices.addEventListener?.("devicechange", syncDevices);
-
+      navigator.mediaDevices.addEventListener?.("devicechange", syncDevices);
       return () => {
-        isCancelled = true;
-        mediaDevices.removeEventListener?.("devicechange", syncDevices);
+        cancelled = true;
+        navigator.mediaDevices.removeEventListener?.("devicechange", syncDevices);
       };
     }, [variant]);
 
@@ -323,7 +307,7 @@ export const ControlBar = React.memo(
     if (variant === "mobile") {
       return (
         <div
-          className={cn("flex flex-nowrap overflow-x-auto scrollbar-none items-center gap-2 w-full px-2 sm:px-4 py-3 bg-[#09090b]", className)}
+          className={cn("flex w-full flex-nowrap items-center gap-2 overflow-x-auto bg-transparent px-2 py-3 sm:px-4", className)}
           style={{
             ...(themeVariables as React.CSSProperties),
             paddingBottom: "max(12px, env(safe-area-inset-bottom))",
@@ -333,11 +317,11 @@ export const ControlBar = React.memo(
         >
           <div className="flex items-center justify-center gap-1.5 min-w-min mx-auto">
             {/* Group 1: Media Controls */}
-            <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
+            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#202329] bg-[#202329] p-1 shadow-[0_5px_16px_rgba(12,14,18,0.18)]">
               <button
                 type="button"
                 onClick={onToggleMute}
-                className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95", !isMuted ? "text-white" : "text-[#ef4444]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-white" : "!text-[#f3a0a0]")}
                 aria-label={isMuted ? "Unmute" : "Mute"}
                 aria-pressed={!isMuted}
               >
@@ -347,7 +331,7 @@ export const ControlBar = React.memo(
               <button
                 type="button"
                 onClick={onToggleVideo}
-                className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95", isVideoEnabled ? "text-white" : "text-[#ef4444]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-white" : "!text-[#f3a0a0]")}
                 aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
                 aria-pressed={isVideoEnabled}
               >
@@ -356,20 +340,20 @@ export const ControlBar = React.memo(
             </div>
 
             {/* Group 2: Interactions */}
-            <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
-              {onToggleHandRaise && (
+            <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#deddd7] bg-white p-1 shadow-sm">
+              {buttonsToRender.includes("handraise") && onToggleHandRaise && (
                 <button
                   type="button"
                   onClick={onToggleHandRaise}
-                  className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isHandRaised ? "bg-primary text-primary-foreground" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[#fceab3]" : "")}
                   aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
                   aria-pressed={isHandRaised}
                 >
                   <HandIcon className="w-5 h-5" />
                 </button>
               )}
-              {onOpenReactions && (
-                <button type="button" onClick={onOpenReactions} className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-[#FFD700]")} aria-label="Reactions">
+              {buttonsToRender.includes("reactions") && onOpenReactions && (
+                <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#b18f22] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
                   <ThumbsUpIcon className="w-5 h-5" />
                 </button>
               )}
@@ -377,7 +361,7 @@ export const ControlBar = React.memo(
                 <button
                   type="button"
                   onClick={onToggleWhiteboard}
-                  className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isWhiteboardOpen ? "bg-primary text-primary-foreground" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isWhiteboardOpen ? "bg-[#eaf7fb]" : "")}
                   aria-label="Whiteboard"
                   aria-pressed={isWhiteboardOpen}
                 >
@@ -388,7 +372,7 @@ export const ControlBar = React.memo(
                 <button
                   type="button"
                   onClick={onToggleParticipants}
-                  className={cn("flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isParticipantsOpen ? "bg-primary text-primary-foreground" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isParticipantsOpen ? "bg-[#eaf7fb]" : "")}
                   aria-label="People"
                   aria-pressed={isParticipantsOpen}
                 >
@@ -396,13 +380,7 @@ export const ControlBar = React.memo(
                 </button>
               )}
               {buttonsToRender.includes("chat") && onToggleChat && (
-                <button
-                  type="button"
-                  onClick={onToggleChat}
-                  className={cn("relative flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white", isChatOpen ? "bg-primary text-primary-foreground" : "")}
-                  aria-label="Chat"
-                  aria-pressed={isChatOpen}
-                >
+                <button type="button" onClick={onToggleChat} className={cn("relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isChatOpen ? "bg-[#eaf7fb]" : "")} aria-label="Chat" aria-pressed={isChatOpen}>
                   <Message01Icon className="w-5 h-5" />
                   {unreadChatCount > 0 && !isChatOpen ? <span className="absolute -top-1 -right-1 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span> : null}
                 </button>
@@ -410,11 +388,13 @@ export const ControlBar = React.memo(
             </div>
 
             {/* Group 3: More & Leave */}
-            <div className="flex items-center shrink-0 gap-1 p-1 bg-[#18181b] rounded-full">
-              <button type="button" onClick={onOpenMore} className="flex items-center justify-center w-[44px] h-[44px] sm:w-[46px] sm:h-[46px] rounded-full transition-all active:scale-95 text-white" aria-label="More options">
-                <MoreHorizontalIcon className="w-5 h-5" />
-              </button>
-              <button type="button" onClick={onLeave} className="flex items-center justify-center px-4 h-[44px] sm:h-[46px] rounded-full bg-[#ef4444] hover:bg-[#dc2626] transition-all active:scale-95 text-white shadow-lg" aria-label="Leave meeting">
+            <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#deddd7] bg-white p-1 shadow-sm">
+              {buttonsToRender.includes("more") && (
+                <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
+                  <MoreHorizontalIcon className="w-5 h-5" />
+                </button>
+              )}
+              <button type="button" onClick={onLeave} className="flex h-[44px] items-center justify-center rounded-[6px] border border-[#ef9b9b] bg-[#fdf0f0] px-4 !text-[#b94c4c] transition active:scale-95 sm:h-[46px]" aria-label="Leave meeting">
                 <CallEnd01Icon className="w-5 h-5" />
               </button>
             </div>
@@ -424,65 +404,68 @@ export const ControlBar = React.memo(
     }
 
     if (variant === "dock") {
+      const dockButton = (type: ControlBarButton): React.ReactNode => {
+        switch (type) {
+          case "mic":
+            return <MeetingDockButton key={type} icon={isMuted ? <MicrophoneOff01Icon /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} />;
+          case "video":
+            return <MeetingDockButton key={type} icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon />} label="Camera" onClick={onToggleVideo} active={isVideoEnabled} />;
+          case "screenshare":
+            return <MeetingDockButton key={type} icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />} label={isScreenSharing ? "Stop share" : "Share"} onClick={onToggleScreenShare} active={isScreenSharing} />;
+          case "whiteboard":
+            return <MeetingDockButton key={type} icon={<Edit02Icon />} label="Board" onClick={onToggleWhiteboard} active={isWhiteboardOpen} />;
+          case "handraise":
+            return <MeetingDockButton key={type} icon={<HandIcon />} label={isHandRaised ? "Lower" : "Raise"} onClick={onToggleHandRaise} active={isHandRaised} />;
+          case "participants":
+            return <MeetingDockButton key={type} icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} />;
+          case "chat":
+            return <MeetingDockButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} />;
+          case "reactions":
+          case "thumbsup":
+            return <MeetingDockButton key={type} icon={<SmileIcon />} label="React" onClick={onOpenReactions} />;
+          case "record":
+            return <MeetingDockButton key={type} icon={<CircleIcon className={isRecording ? "fill-current" : ""} />} label={isRecording ? "Stop" : "Record"} onClick={onToggleRecording} active={isRecording} />;
+          case "transcription":
+            return <MeetingDockButton key={type} icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} />;
+          case "pip":
+            return onTogglePictureInPicture ? <MeetingDockButton key={type} icon={<PictureInPictureIcon />} label="Picture in picture" onClick={() => void onTogglePictureInPicture()} active={isPictureInPictureActive} /> : null;
+          case "settings":
+            return <MeetingDockButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} />;
+          case "diagnostics":
+            return onOpenDiagnostics ? <MeetingDockButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} /> : null;
+          case "more":
+            return <MeetingDockButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} />;
+          case "info":
+            return <MeetingDockButton key={type} icon={<InformationCircleIcon />} label="Info" onClick={onOpenInfo} />;
+          default:
+            return null;
+        }
+      };
+
       return (
-        <div className="relative flex items-end justify-center w-full pointer-events-none">
-          {/* Left: Timer section - Absolute positioned */}
-          <div className="absolute left-6 bottom-3 flex items-center rounded-full px-3 py-1.5 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-lg pointer-events-auto">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse motion-reduce:animate-none" aria-hidden="true" />
-              <span className="text-xs font-medium tracking-wide tabular-nums text-zinc-900 dark:text-white/90">{formatDuration(meetingDuration)}</span>
-            </div>
-          </div>
-
-          {/* Center: Main Dock */}
-          <div
-            className={cn(
-              "flex items-center justify-between gap-4 px-6 pt-2 pb-2 rounded-t-[2.5rem] rounded-b-none backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.2)] dark:shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.5)] pointer-events-auto",
-              "bg-white/90 dark:bg-zinc-950/90",
-              className,
-            )}
-            style={themeVariables as React.CSSProperties}
-            role="toolbar"
-            aria-label="Meeting controls"
-          >
-            {/* Middle: Media controls */}
-            <div className="flex items-center gap-1.5">
-              {buttonsToRender.includes("mic") && (
-                <DeviceControlButton
-                  type="mic"
-                  isActive={!isMuted}
-                  onToggle={onToggleMute ?? (() => {})}
-                  devices={effectiveAudioInputDevices}
-                  selectedDeviceId={selectedAudioInput}
-                  onDeviceChange={onAudioInputChange ?? (() => {})}
-                  secondaryDevices={effectiveAudioOutputDevices}
-                  selectedSecondaryDeviceId={selectedAudioOutput}
-                  onSecondaryDeviceChange={onAudioOutputChange}
-                  orientation="up"
-                  haptic="medium"
-                />
-              )}
-
-              {buttonsToRender.includes("video") && (
-                <DeviceControlButton type="video" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
-              )}
-
-              {mediaButtons.some((button) => button !== "mic" && button !== "video") && (
-                <div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">{mediaButtons.filter((button) => button !== "mic" && button !== "video").map(renderButton)}</div>
-              )}
-
-              {showLeave && (
-                <div className="ml-1">
-                  <ControlButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeave} danger className="h-10 w-auto px-5 rounded-full hover:scale-105 transition-transform shadow-lg" data-tour="controls-leave" />
-                </div>
-              )}
-            </div>
-
-            {/* Divider */}
-            {interactionButtons.length > 0 && <div className="w-px h-8 bg-black/10 dark:bg-white/10" />}
-
-            {/* Right: Interaction controls */}
-            {interactionButtons.length > 0 && <div className="flex items-center gap-1 px-2 py-1.5 bg-black/5 dark:bg-white/5 rounded-full border border-black/5 dark:border-white/5">{interactionButtons.map(renderButton)}</div>}
+        <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
+          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
+            {buttonsToRender.includes("mic") ? (
+              <DeviceControlButton
+                type="mic"
+                appearance="dock"
+                isActive={!isMuted}
+                onToggle={onToggleMute ?? (() => {})}
+                devices={effectiveAudioInputDevices}
+                selectedDeviceId={selectedAudioInput}
+                onDeviceChange={onAudioInputChange ?? (() => {})}
+                secondaryDevices={effectiveAudioOutputDevices}
+                selectedSecondaryDeviceId={selectedAudioOutput}
+                onSecondaryDeviceChange={onAudioOutputChange}
+                orientation="up"
+                haptic="medium"
+              />
+            ) : null}
+            {buttonsToRender.includes("video") ? (
+              <DeviceControlButton type="video" appearance="dock" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
+            ) : null}
+            {buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(dockButton)}
+            {showLeave ? <MeetingDockButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeave} danger /> : null}
           </div>
         </div>
       );

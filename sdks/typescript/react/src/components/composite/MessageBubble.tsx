@@ -204,10 +204,10 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
 
     return (
       <div className={cn("flex items-end gap-3 w-full px-4", isLastInGroup ? "mb-4" : "mb-1", isLocal ? "justify-end" : "justify-start", className)} style={{ "--primary": senderColors.primary } as React.CSSProperties}>
-        {!isLocal && <div className="shrink-0 w-10">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" className="!w-10 !h-10" />}</div>}
+        {!isLocal && <div className="w-10 shrink-0">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={Boolean(senderAvatar)} className="!h-10 !w-10" />}</div>}
 
         <div className={cn("flex flex-col max-w-[70%]", isLocal ? "items-end" : "items-start")}>
-          <div className={cn("px-4 py-3", isLocal ? "bg-primary text-primary-foreground rounded-[20px_4px_20px_20px]" : "bg-card text-card-foreground rounded-[4px_20px_20px_20px]")}>
+          <div className={cn("px-4 py-3", isLocal ? "rounded-[16px_4px_16px_16px] bg-[#202329] !text-white" : "rounded-[4px_16px_16px_16px] border border-[#e5e4df] bg-[#f3f2ee] text-[#202329]")}>
             <p className="text-sm leading-relaxed break-words">{renderContent(content)}</p>
             {renderAttachments()}
           </div>
@@ -220,7 +220,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
           )}
         </div>
 
-        {isLocal && <div className="shrink-0 w-10">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" className="!w-10 !h-10" />}</div>}
+        {isLocal && <div className="w-10 shrink-0">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={Boolean(senderAvatar)} className="!h-10 !w-10" />}</div>}
       </div>
     );
   },

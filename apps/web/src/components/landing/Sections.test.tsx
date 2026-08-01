@@ -7,19 +7,21 @@ describe("FrontDoors", () => {
   it("renders app and SDK entry points", () => {
     const markup = renderToStaticMarkup(<FrontDoors />);
 
-    expect(markup).toContain("The app");
-    expect(markup).toContain("The SDK");
+    expect(markup).toContain("Start with the SDKs");
+    expect(markup).toContain("Shape the whole room");
     expect(markup).toContain("@q9labsai/chalk-react");
+    expect(markup).not.toContain("eyebrow");
   });
 });
 
 describe("PerfBudget", () => {
-  it("renders the performance targets and latency visual", () => {
+  it("renders the performance targets without presenting them as guarantees", () => {
     const markup = renderToStaticMarkup(<PerfBudget />);
 
-    expect(markup).toContain("Click to media target");
-    expect(markup).toContain("sync");
-    expect(markup).toContain("glass-to-glass");
+    expect(markup).toContain("Click to media");
+    expect(markup).toContain("Control signal");
+    expect(markup).toContain("Glass to glass");
+    expect(markup).toContain("not published production guarantees");
   });
 });
 
@@ -27,8 +29,9 @@ describe("SelfHost", () => {
   it("renders the stack ownership points", () => {
     const markup = renderToStaticMarkup(<SelfHost />);
 
-    expect(markup).toContain("App-tier self-host source");
-    expect(markup).toContain("Swappable media plane");
-    expect(markup).toContain("Your identity, your tokens");
+    expect(markup).toContain("Meeting surfaces");
+    expect(markup).toContain("Portable core");
+    expect(markup).toContain("Your infrastructure");
+    expect(markup).toContain("future SFU adapter");
   });
 });

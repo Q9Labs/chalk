@@ -19,9 +19,15 @@ const positionMap = {
 };
 
 const sizeMap = {
-  sm: 20,
-  md: 24,
-  lg: 32,
+  sm: 10,
+  md: 18,
+  lg: 24,
+};
+
+const wrapperSizeMap = {
+  sm: "p-0.5 ring-1",
+  md: "p-1 ring-2",
+  lg: "p-1.5 ring-2",
 };
 
 export const HandRaiseIndicator = React.memo(({ raised, animated = true, position = "top-right", size = "md", className }: HandRaiseIndicatorProps) => {
@@ -31,7 +37,14 @@ export const HandRaiseIndicator = React.memo(({ raised, animated = true, positio
 
   return (
     <div
-      className={cn("absolute z-10 flex items-center justify-center rounded-full bg-warning p-1.5 text-white shadow-md", positionMap[position], !prefersReducedMotion && "chalk-animate-scale-in", animated && !prefersReducedMotion && "chalk-animate-hand-bounce", className)}
+      className={cn(
+        "absolute z-10 flex items-center justify-center rounded-full bg-[#e7a818] text-white shadow-sm ring-white",
+        wrapperSizeMap[size],
+        positionMap[position],
+        !prefersReducedMotion && "chalk-animate-scale-in",
+        animated && !prefersReducedMotion && "chalk-animate-hand-bounce",
+        className,
+      )}
       role="status"
       aria-label="Hand raised"
     >

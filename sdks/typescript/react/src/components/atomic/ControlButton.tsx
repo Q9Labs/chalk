@@ -12,6 +12,7 @@ interface ControlButtonProps {
   disabled?: boolean;
   size?: "sm" | "md" | "lg";
   showLabel?: boolean;
+  inlineLabel?: string;
   hideTooltip?: boolean;
   noBorder?: boolean;
   onClick?: () => void;
@@ -23,71 +24,75 @@ interface ControlButtonProps {
   ref?: React.Ref<HTMLButtonElement>;
 }
 
-export const ControlButton = React.memo(({ icon, label, active = false, danger = false, disabled = false, size = "md", showLabel = false, hideTooltip = false, noBorder = false, onClick, className, haptic = "selection", activeClassName, "data-tour": dataTour, ref }: ControlButtonProps) => {
-  const { trigger } = useHaptics({
-    enabled: !disabled && haptic !== false,
-  });
+export const ControlButton = React.memo(
+  ({ icon, label, active = false, danger = false, disabled = false, size = "md", showLabel = false, inlineLabel, hideTooltip = false, noBorder = false, onClick, className, haptic = "selection", activeClassName, "data-tour": dataTour, ref }: ControlButtonProps) => {
+    const { trigger } = useHaptics({
+      enabled: !disabled && haptic !== false,
+    });
 
-  const handleClick = React.useCallback(() => {
-    if (haptic !== false) {
-      void trigger(haptic);
+    const handleClick = React.useCallback(() => {
+      if (haptic !== false) {
+        void trigger(haptic);
+      }
+
+      onClick?.();
+    }, [haptic, onClick, trigger]);
+
+    const button = (
+      <button
+        ref={ref}
+        type="button"
+        onClick={handleClick}
+        disabled={disabled}
+        data-tour={dataTour}
+        className={cn(
+          "chalk-button-tactile group relative flex items-center justify-center transition-all duration-300 ease-out",
+          inlineLabel && "gap-2.5",
+          "text-[var(--foreground)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+          size === "sm" && "h-9 w-9 rounded-full",
+          size === "md" && "h-11 w-11 rounded-full",
+          size === "lg" && "h-14 w-14 rounded-full",
+          disabled && "cursor-not-allowed opacity-50",
+          // Default state
+          !disabled && !active && !danger && !noBorder && "bg-[var(--secondary)] shadow-lg hover:brightness-110",
+          // No Border state (Ghost)
+          !disabled && !active && !danger && noBorder && "bg-[var(--secondary)]",
+          // Active state
+          !disabled && active && !activeClassName && "bg-[var(--secondary)] border-transparent hover:bg-[var(--accent)]",
+          // Custom active state
+          !disabled && active && activeClassName && activeClassName,
+          // Danger state - vibrant red for visibility
+          danger && "bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]",
+          className,
+        )}
+        aria-label={label}
+        aria-pressed={active}
+      >
+        {icon}
+        {inlineLabel ? <span className="max-sm:hidden">{inlineLabel}</span> : null}
+      </button>
+    );
+
+    if (showLabel) {
+      return (
+        <div className="flex flex-col items-center gap-1">
+          {button}
+          <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
+        </div>
+      );
     }
 
-    onClick?.();
-  }, [haptic, onClick, trigger]);
+    if (hideTooltip) {
+      return button;
+    }
 
-  const button = (
-    <button
-      ref={ref}
-      type="button"
-      onClick={handleClick}
-      disabled={disabled}
-      data-tour={dataTour}
-      className={cn(
-        "chalk-button-tactile group relative flex items-center justify-center transition-all duration-300 ease-out",
-        "text-[var(--foreground)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
-        size === "sm" && "h-9 w-9 rounded-full",
-        size === "md" && "h-11 w-11 rounded-full",
-        size === "lg" && "h-14 w-14 rounded-full",
-        disabled && "cursor-not-allowed opacity-50",
-        // Default state
-        !disabled && !active && !danger && !noBorder && "bg-[var(--secondary)] shadow-lg hover:brightness-110",
-        // No Border state (Ghost)
-        !disabled && !active && !danger && noBorder && "bg-[var(--secondary)]",
-        // Active state
-        !disabled && active && !activeClassName && "bg-[var(--secondary)] border-transparent hover:bg-[var(--accent)]",
-        // Custom active state
-        !disabled && active && activeClassName && activeClassName,
-        // Danger state - vibrant red for visibility
-        danger && "bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]",
-        className,
-      )}
-      aria-label={label}
-      aria-pressed={active}
-    >
-      {icon}
-    </button>
-  );
-
-  if (showLabel) {
     return (
-      <div className="flex flex-col items-center gap-1">
+      <Tooltip content={label} position="top">
         {button}
-        <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
-      </div>
+      </Tooltip>
     );
-  }
-
-  if (hideTooltip) {
-    return button;
-  }
-
-  return (
-    <Tooltip content={label} position="top">
-      {button}
-    </Tooltip>
-  );
-});
+  },
+);
 
 ControlButton.displayName = "ControlButton";

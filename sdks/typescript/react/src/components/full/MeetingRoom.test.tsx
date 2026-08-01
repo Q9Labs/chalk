@@ -39,13 +39,15 @@ describe("MeetingRoom", () => {
 
     expect(screen.getByRole("heading", { name: "Design review" })).toBeInTheDocument();
     expect(screen.getByLabelText("Meeting stage")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-theme", "light");
+    expect(videoGridSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ layout: "spotlight" }));
     fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
     fireEvent.click(screen.getAllByRole("button", { name: "People" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Leave" }));
 
     expect(join).toHaveBeenCalledOnce();
     expect(setMicrophoneEnabled).toHaveBeenCalledWith(false);
-    expect(screen.getByRole("dialog", { name: "Leave Meeting?" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Leave meeting?" })).toBeInTheDocument();
   });
 
   it("routes remote microphone and screen-share audio to the audio renderer", () => {

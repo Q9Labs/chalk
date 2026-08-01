@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { VideoTile } from "../atomic";
+import { useIsMobile } from "../../internal/useMediaQuery";
 
 export interface Participant {
   id: string;
@@ -29,9 +30,13 @@ export interface VideoGridProps {
   maxVisibleParticipants?: number;
   className?: string;
   showScreenShareIndicator?: boolean;
+  /** Optional preview or app-owned surface when no real screen-share track is available. */
+  screenShareContent?: React.ReactNode;
 }
 
-export const VideoGrid = React.memo(({ participants, layout = "grid", variant = "desktop", pinnedParticipantId, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants = 25, className, showScreenShareIndicator: _showScreenShareIndicator = true }: VideoGridProps) => {
+export const VideoGrid = React.memo(({ participants, layout = "grid", variant, pinnedParticipantId, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants = 25, className, showScreenShareIndicator: _showScreenShareIndicator = true, screenShareContent }: VideoGridProps) => {
+  const isMobile = useIsMobile();
+  const effectiveVariant = variant ?? (isMobile ? "mobile" : "desktop");
   // Carousel state for mobile 5+ participants
   const [carouselIndex, setCarouselIndex] = useState(0);
   const touchStartRef = useRef<{ x: number; scrollLeft: number } | null>(null);
@@ -51,7 +56,7 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant = 
   }, [participants, pinnedParticipantId]);
 
   // Mobile limits visible participants more aggressively
-  const mobileMaxVisible = variant === "mobile" ? Math.min(maxVisibleParticipants, 6) : maxVisibleParticipants;
+  const mobileMaxVisible = effectiveVariant === "mobile" ? Math.min(maxVisibleParticipants, 6) : maxVisibleParticipants;
   const visibleParticipants = sortedParticipants.slice(0, mobileMaxVisible);
   const overflowCount = participants.length - visibleParticipants.length;
 
@@ -154,7 +159,7 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant = 
   // ============================================
   // MOBILE LAYOUTS
   // ============================================
-  if (variant === "mobile") {
+  if (effectiveVariant === "mobile") {
     const count = visibleParticipants.length;
 
     // Mobile: 1 participant - Full bleed
@@ -238,13 +243,13 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant = 
     const otherParticipants = visibleParticipants.filter((participant) => participant.id !== mainParticipant?.id);
 
     return (
-      <div className={cn("flex flex-col h-full gap-2", className)} data-tour="video-grid">
+      <div className={cn("flex h-full flex-col gap-3", className)} data-tour="video-grid">
         <div className="flex-1 min-h-0 relative">
           {mainParticipant && <VideoTile participant={mapToVideoTileParticipant(mainParticipant)} videoTrack={mainParticipant.videoTrack} onClick={() => onParticipantClick?.(mainParticipant.id)} onDoubleClick={() => onParticipantDoubleClick?.(mainParticipant.id)} className="w-full h-full" />}
         </div>
 
         {otherParticipants.length > 0 && (
-          <div className="h-40 flex gap-2 overflow-x-auto py-1">
+          <div className="flex h-[clamp(120px,20vh,168px)] gap-3 overflow-x-auto">
             {otherParticipants.map((p) => (
               <div key={p.id} className="h-full aspect-video flex-shrink-0">
                 <VideoTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" showName={true} />
@@ -288,17 +293,18 @@ export const VideoGrid = React.memo(({ participants, layout = "grid", variant = 
 
     return (
       <div className={cn("flex h-full gap-2", className)} data-tour="video-grid">
-        <div className="flex-1 min-w-0 relative">
-          {screenSharer && (
-            <VideoTile
-              participant={mapToVideoTileParticipant(screenSharer)}
-              videoTrack={screenSharer.screenShareTrack || screenSharer.videoTrack}
-              onClick={() => onParticipantClick?.(screenSharer.id)}
-              onDoubleClick={() => onParticipantDoubleClick?.(screenSharer.id)}
-              className="w-full h-full"
-              aspectRatio="16:9"
-            />
-          )}
+        <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[#eeede8]">
+          {screenShareContent ??
+            (screenSharer && (
+              <VideoTile
+                participant={mapToVideoTileParticipant(screenSharer)}
+                videoTrack={screenSharer.screenShareTrack || screenSharer.videoTrack}
+                onClick={() => onParticipantClick?.(screenSharer.id)}
+                onDoubleClick={() => onParticipantDoubleClick?.(screenSharer.id)}
+                className="w-full h-full"
+                aspectRatio="16:9"
+              />
+            ))}
         </div>
 
         {otherParticipants.length > 0 && (

@@ -34,4 +34,17 @@ describe("PreJoinLobby", () => {
     rerender(<PreJoinLobby logoUrl="/chalk.svg" defaultDisplayName="Ada" onJoin={vi.fn()} />);
     expect(screen.getByRole("img", { name: "Chalk" })).toHaveAttribute("src", "/chalk.svg");
   });
+
+  it("uses the light editorial lobby without duplicating device status", () => {
+    const { container } = render(<PreJoinLobby roomName="Design review" defaultDisplayName="Ada" initialMicrophoneEnabled initialCameraEnabled onJoin={vi.fn()} />);
+
+    expect(container.querySelector("main")).toHaveAttribute("data-chalk-theme", "light");
+    expect(screen.getByText("Ready to join?")).toBeInTheDocument();
+    expect(screen.getByText("Design review")).toBeInTheDocument();
+    expect(screen.getAllByText("Microphone")).toHaveLength(1);
+    expect(screen.getAllByText("Camera")).toHaveLength(1);
+    expect(screen.getAllByText("On")).toHaveLength(2);
+    expect(screen.queryByText("Ready")).not.toBeInTheDocument();
+    expect(screen.queryByText("Everything looks good")).not.toBeInTheDocument();
+  });
 });
