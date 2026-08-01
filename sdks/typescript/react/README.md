@@ -58,7 +58,7 @@ Use the narrowest import that matches the UI layer you need:
 ```tsx
 import { Avatar, VideoTile } from "@q9labsai/chalk-react/atomic";
 import { ChatPanel, ControlBar } from "@q9labsai/chalk-react/composite";
-import { EndScreen, LoadingScreen } from "@q9labsai/chalk-react/full";
+import { EndScreen, LoadingScreen, MeetingRoom } from "@q9labsai/chalk-react/full";
 ```
 
 The root import is kept for convenience, but bundle-sensitive apps should prefer

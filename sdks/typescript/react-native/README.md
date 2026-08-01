@@ -2,6 +2,16 @@
 
 React Native components and native platform adapters for Chalk.
 
+The public surface uses the same session vocabulary as `@q9labsai/chalk-client`:
+`VideoConference`, `MeetingRoom`, `PreJoinLobby`, `EndScreen`, and the canonical
+session hooks. Platform implementations stay behind the React Native package
+namespace, so shared exports do not carry a `Native` prefix.
+
+The React Native lobby intentionally exposes `JoinSettings`, whose
+`audioEnabled` and `videoEnabled` fields match its native preview contract.
+React uses the separate `PreJoinSettings` contract with
+`microphoneEnabled` and `cameraEnabled`, so those types are not aliases.
+
 ## Embedded whiteboard
 
 `ChalkEmbeddedWhiteboard` hosts Chalk's pinned Excalidraw renderer in

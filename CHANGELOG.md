@@ -12,6 +12,78 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Breaking
+
+Phase 1 unifies the published TypeScript SDK vocabulary. Historical names are
+removed without compatibility aliases.
+
+| Package                        | Old export                                 | New export                           |
+| ------------------------------ | ------------------------------------------ | ------------------------------------ |
+| `@q9labsai/chalk-react`        | `SessionMeetingRoom`                       | `MeetingRoom`                        |
+| `@q9labsai/chalk-react`        | `SessionMeetingRoomProps`                  | `MeetingRoomProps`                   |
+| `@q9labsai/chalk-react-native` | `ChalkNativeProvider`                      | `ChalkProvider`                      |
+| `@q9labsai/chalk-react-native` | `ChalkNativeProviderProps`                 | `ChalkProviderProps`                 |
+| `@q9labsai/chalk-react-native` | `createChalkNativeSession`                 | `createChalkSession`                 |
+| `@q9labsai/chalk-react-native` | `ChalkNativeSessionOptions`                | `ChalkSessionOptions`                |
+| `@q9labsai/chalk-react-native` | `createChalkClientSession`                 | `createClientSession`                |
+| `@q9labsai/chalk-react-native` | `ChalkClientSession`                       | `ClientSession`                      |
+| `@q9labsai/chalk-react-native` | `ChalkClientSessionCredential`             | `ClientSessionCredential`            |
+| `@q9labsai/chalk-react-native` | `CreateChalkClientSessionOptions`          | `CreateClientSessionOptions`         |
+| `@q9labsai/chalk-react-native` | `ChalkClientSessionError`                  | `ClientSessionError`                 |
+| `@q9labsai/chalk-react-native` | `uploadNativeChatAttachment`               | `uploadChatAttachment`               |
+| `@q9labsai/chalk-react-native` | `NativeChatAttachmentFile`                 | `ChatAttachmentFile`                 |
+| `@q9labsai/chalk-react-native` | `UploadNativeChatAttachmentOptions`        | `UploadChatAttachmentOptions`        |
+| `@q9labsai/chalk-react-native` | `createNativeTelemetry`                    | `createTelemetry`                    |
+| `@q9labsai/chalk-react-native` | `NativeTelemetryJourney`                   | `TelemetryJourney`                   |
+| `@q9labsai/chalk-react-native` | `NativeWhiteboardMetric`                   | `WhiteboardMetric`                   |
+| `@q9labsai/chalk-react-native` | `NativeSessionTelemetry`                   | `SessionTelemetry`                   |
+| `@q9labsai/chalk-react-native` | `NativeRtcPeerConnection`                  | `RtcPeerConnection`                  |
+| `@q9labsai/chalk-react-native` | `NativeTelemetry`                          | `Telemetry`                          |
+| `@q9labsai/chalk-react-native` | `nativeCallKit`                            | `callKit`                            |
+| `@q9labsai/chalk-react-native` | `NativeCallKitCallOptions`                 | `CallKitCallOptions`                 |
+| `@q9labsai/chalk-react-native` | `NativeCallKitConfiguration`               | `CallKitConfiguration`               |
+| `@q9labsai/chalk-react-native` | `NativeCallKitEndCallOptions`              | `CallKitEndCallOptions`              |
+| `@q9labsai/chalk-react-native` | `NativeCallKitEndReason`                   | `CallKitEndReason`                   |
+| `@q9labsai/chalk-react-native` | `NativeCallKitEvent`                       | `CallKitEvent`                       |
+| `@q9labsai/chalk-react-native` | `NativeCallKitHandleType`                  | `CallKitHandleType`                  |
+| `@q9labsai/chalk-react-native` | `NativeVideoConferenceCallKitOptions`      | `VideoConferenceCallKitOptions`      |
+| `@q9labsai/chalk-react-native` | `NativeEndScreen`                          | `EndScreen`                          |
+| `@q9labsai/chalk-react-native` | `NativeEndScreenProps`                     | `EndScreenProps`                     |
+| `@q9labsai/chalk-react-native` | `NativeMeetingEndData`                     | `MeetingEndData`                     |
+| `@q9labsai/chalk-react-native` | `NativeJoiningLoadingScreen`               | `JoiningLoadingScreen`               |
+| `@q9labsai/chalk-react-native` | `NativeJoiningLoadingScreenProps`          | `JoiningLoadingScreenProps`          |
+| `@q9labsai/chalk-react-native` | `NativeMediaView`                          | `MediaView`                          |
+| `@q9labsai/chalk-react-native` | `NativeMeetingRoom`                        | `MeetingRoom`                        |
+| `@q9labsai/chalk-react-native` | `NativeMeetingRoomDiagnosticsSnapshot`     | `MeetingRoomDiagnosticsSnapshot`     |
+| `@q9labsai/chalk-react-native` | `NativeMeetingRoomFeatures`                | `MeetingRoomFeatures`                |
+| `@q9labsai/chalk-react-native` | `NativeMeetingRoomProps`                   | `MeetingRoomProps`                   |
+| `@q9labsai/chalk-react-native` | `NativePreJoinLobby`                       | `PreJoinLobby`                       |
+| `@q9labsai/chalk-react-native` | `NativePreJoinLobbyProps`                  | `PreJoinLobbyProps`                  |
+| `@q9labsai/chalk-react-native` | `NativeJoinSettings`                       | `JoinSettings`                       |
+| `@q9labsai/chalk-react-native` | `NativeVideoConference`                    | `VideoConference`                    |
+| `@q9labsai/chalk-react-native` | `NativeMeetingJoinedData`                  | `MeetingJoinedData`                  |
+| `@q9labsai/chalk-react-native` | `NativeVideoConferenceDiagnosticsSnapshot` | `VideoConferenceDiagnosticsSnapshot` |
+| `@q9labsai/chalk-react-native` | `NativeVideoConferencePhase`               | `VideoConferencePhase`               |
+| `@q9labsai/chalk-react-native` | `NativeVideoConferenceProps`               | `VideoConferenceProps`               |
+| `@q9labsai/chalk-react-native` | `NativeReactionPicker`                     | `ReactionPicker`                     |
+| `@q9labsai/chalk-react-native` | `NativeFaceAvatar`                         | `FaceAvatar`                         |
+| `@q9labsai/chalk-react-native` | `NativeGradientSurface`                    | `GradientSurface`                    |
+| `@q9labsai/chalk-react-native` | `NativeRtcVideoView`                       | `RtcVideoView`                       |
+| `@q9labsai/chalk-react-native` | `NativeChatMessageList`                    | `ChatMessageList`                    |
+| `@q9labsai/chalk-react-native` | `NativePlatformVariant`                    | `PlatformVariant`                    |
+| `@q9labsai/chalk-react-native` | `resolveNativePlatformVariant`             | `resolvePlatformVariant`             |
+| `@q9labsai/chalk-react-native` | `NativeDeviceInfo`                         | `DeviceInfo`                         |
+| `@q9labsai/chalk-react-native` | `getNativeDeviceInfo`                      | `getDeviceInfo`                      |
+| `@q9labsai/chalk-react-native` | `NativeClipboardReader`                    | `ClipboardReader`                    |
+
+The React Native root no longer exports `useNativeTelemetry`, `useChat`,
+`useConnection`, `useInteractions`, `useLayout`, `useMedia`, `usePanels`,
+`useRoom`, `useScreenShare`, or `useWhiteboard`, nor their `UseXReturn` types.
+Those feature hooks remain internal. The root now exposes the canonical hook set
+and adds `useChalkSnapshot`, `useChalkSelector`, `useChalkActions`,
+`useParticipants`, `useLocalMedia`, `useRemoteMedia`, and
+`useChalkWhiteboardTransport` with the React package's store semantics.
+
 ### Added
 
 - React Native and mobile parity with Chalk v2: canonical `ChalkSession` and
