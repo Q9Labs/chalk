@@ -1,434 +1,377 @@
 # Chalk Design System
 
-Canonical design direction for Chalk UI work across `sdks/typescript/react`, `apps/web`, and `apps/mobile`. Current implementation gaps are tracked in [`product.yaml`](../product.yaml).
-
-## Purpose
-
-This document defines Chalk's current design system and the normalized model we should converge toward.
-
-Use it for:
-
-- working inside `sdks/typescript/react`
-- working inside `apps/web`
-- designing or implementing the mobile theme
-- resolving ownership questions before adding new tokens, surfaces, or component styling
-
-This doc is normative. It also records known drift where code does not yet cleanly match the intended system.
-
-## System Model
-
-Chalk currently has two visual layers:
-
-| Layer                  | Owns                                                                                                 | Why                                                                             |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `sdk-react core`       | lobby, meeting room, controls, panels, overlays, PiP, embedded conferencing UI                       | needs to stay neutral, professional, and white-label friendly for consumer apps |
-| `apps/web brand layer` | first-party product shell, dashboards, landing pages, marketing-like surfaces, typography expression | can evolve faster while Chalk brand identity is still forming                   |
-
-Working rule:
-
-- if the UI is part of the embedded meeting experience, start from `sdk-react core`
-- if the UI is part of Chalk's first-party product shell, start from `apps/web brand layer`
-
-Future flexibility is intentional:
-
-- a stronger Chalk brand may later flow into both layers
-- or remain primarily first-party
-- the system shape should support both outcomes without rework
-
-## Canonical Sources
-
-| Source                                                                | Role                                                                                           |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `sdks/typescript/react/src/styles/styles.css`                         | core design tokens, semantic colors, meeting-specific surfaces, radii, shadows, motion         |
-| `sdks/typescript/react/src/utils/theme.ts`                            | theme mode detection and propagation via `data-chalk-theme`, `data-theme`, and root classes    |
-| `sdks/typescript/react/src/utils/colorGenerator.ts`                   | dynamic participant accent palettes and runtime `--primary` / `--primary-foreground` overrides |
-| `sdks/typescript/react/src/components/full/video-conference/types.ts` | current public theme API contract                                                              |
-| `apps/web/src/styles.css`                                             | first-party brand overlay, app/display typography, app-level theme variants like `nord`        |
-| `apps/mobile/src/screens/*.tsx`                                       | current native implementation snapshot; not canonical yet                                      |
-
-## Current Design System
-
-### 1. `sdk-react core`: semantic color system
-
-Core meeting UI is driven by semantic tokens scoped to `[data-chalk]`.
-
-| Token                      | Light                        | Dark                         |
-| -------------------------- | ---------------------------- | ---------------------------- |
-| `--background`             | `oklch(1 0 0)`               | `oklch(0.13 0.028 261.692)`  |
-| `--foreground`             | `oklch(0.13 0.028 261.692)`  | `oklch(0.985 0.002 247.839)` |
-| `--card`                   | `oklch(1 0 0)`               | `oklch(0.21 0.034 264.665)`  |
-| `--card-foreground`        | `oklch(0.13 0.028 261.692)`  | `oklch(0.985 0.002 247.839)` |
-| `--popover`                | `oklch(1 0 0)`               | `oklch(0.21 0.034 264.665)`  |
-| `--popover-foreground`     | `oklch(0.13 0.028 261.692)`  | `oklch(0.985 0.002 247.839)` |
-| `--primary`                | `oklch(0.6 0.1 185)`         | `oklch(0.7 0.12 183)`        |
-| `--primary-foreground`     | `oklch(0.98 0.01 181)`       | `oklch(0.28 0.04 193)`       |
-| `--secondary`              | `oklch(0.967 0.001 286.375)` | `oklch(0.274 0.006 286.033)` |
-| `--secondary-foreground`   | `oklch(0.21 0.006 285.885)`  | `oklch(0.985 0 0)`           |
-| `--muted`                  | `oklch(0.967 0.003 264.542)` | `oklch(0.278 0.033 256.848)` |
-| `--muted-foreground`       | `oklch(0.551 0.027 264.364)` | `oklch(0.707 0.022 261.325)` |
-| `--accent`                 | `oklch(0.967 0.003 264.542)` | `oklch(0.278 0.033 256.848)` |
-| `--accent-foreground`      | `oklch(0.21 0.034 264.665)`  | `oklch(0.985 0.002 247.839)` |
-| `--destructive`            | `oklch(0.577 0.245 27.325)`  | `oklch(0.704 0.191 22.216)`  |
-| `--destructive-foreground` | `oklch(0.98 0.01 0)`         | `oklch(0.985 0 0)`           |
-| `--success`                | `oklch(0.72 0.17 162)`       | `oklch(0.72 0.17 162)`       |
-| `--warning`                | `oklch(0.8 0.15 85)`         | `oklch(0.8 0.15 85)`         |
-| `--border`                 | `oklch(0.928 0.006 264.531)` | `oklch(1 0 0 / 10%)`         |
-| `--input`                  | `oklch(0.928 0.006 264.531)` | `oklch(1 0 0 / 15%)`         |
-| `--ring`                   | `oklch(0.6 0.1 185)`         | `oklch(0.551 0.027 264.364)` |
-
-Interpretation:
-
-- default core palette is teal/cyan-centered
-- semantic roles matter more than raw values
-- embedded UI should reference these roles instead of inventing ad hoc colors
-
-### 2. `sdk-react core`: meeting-specific tokens
-
-These define the conferencing feel, beyond generic semantic roles.
-
-| Token group         | Light                       | Dark                        | Notes                            |
-| ------------------- | --------------------------- | --------------------------- | -------------------------------- |
-| stage background    | `#0f172a`                   | `#0a0a0c`                   | immersive stage base             |
-| tile background     | `#111827`                   | `#141418`                   | fallback tile surface            |
-| controls background | `rgba(255, 255, 255, 0.92)` | `rgba(26, 26, 26, 0.92)`    | floating control chrome          |
-| speaking accent     | `#22c55e` + glow            | same                        | always high-signal               |
-| glass surface       | `rgba(255, 255, 255, 0.72)` | `rgba(18, 18, 26, 0.72)`    | overlays / floating panes        |
-| tile gradient end   | `#e0f5f3`                   | `#000000`                   | clean fade, no muddy middle stop |
-| pill base           | translucent slate           | translucent white-on-dark   | dock / chip controls             |
-| lobby gradient      | soft teal-blue blend        | dark teal-blue-violet blend | pre-join identity surface        |
-| lobby glass         | light frosted white         | dark frosted black          | pre-join floating chrome         |
-
-Component patterns repeatedly seen in core:
-
-- rounded floating pills
-- frosted-glass panels
-- radial primary glows for focus moments
-- high-contrast stage surfaces
-- animated speaking emphasis
-- local participant accent injection through runtime `--primary`
-
-### 3. `sdk-react core`: shape, elevation, motion
-
-| Category         | Values                                                                     |
-| ---------------- | -------------------------------------------------------------------------- |
-| base radius      | `--radius: 0.625rem`                                                       |
-| semantic radii   | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-2xl` |
-| Chalk radii      | `0.25rem`, `0.5rem`, `0.75rem`, `1rem`, `9999px`                           |
-| shadows light    | `--chalk-shadow-sm/md/lg/xl` from subtle to large slate-tinted elevation   |
-| shadows dark     | `--chalk-shadow-sm/md/lg/xl` from subtle to deep black elevation           |
-| motion durations | `150ms`, `200ms`, `300ms`                                                  |
-| motion curves    | `--chalk-ease-out-expo`, `--chalk-ease-out-back`                           |
-
-Recurring motion families:
+This document is the source of truth for Chalk's visual language across marketing, web, meetings, SDK surfaces, and mobile. It defines one light-first system built around calm paper surfaces, precise structure, direct controls, and the four colors in the Chalk mark.
+
+![Chalk design system board](./redesign/chalk-design-system-board.png)
+
+The board is an illustrative companion. The written tokens and rules in this document are authoritative when generated labels or values differ.
+
+## Character
 
-- scale / fade entrance
-- dock slide
-- panel slide
-- reaction float / bounce / wiggle
-- speaking pulse / glow
-- highlight pulse
-- shimmer / pulse loading
+Chalk should feel clear, warm, and quietly confident. It is a realtime work surface, so the design must help people understand the room at a glance and act without hesitation.
 
-Motion rule:
+Five principles govern the system:
 
-- use motion to communicate energy and status
-- keep reduced-motion support intact
-- avoid decorative motion that obscures legibility in meeting UI
-
-### 4. `sdk-react core`: tactile & auditory feedback
-
-Chalk is a high-latency-sensitive application where interaction feedback is critical to perceived performance.
-
-| Preset      | Context                                           | Feedback Type              |
-| ----------- | ------------------------------------------------- | -------------------------- |
-| `selection` | toggle mic/camera, open panel, switch tab         | light tap                  |
-| `impact`    | reaction burst, hand raise, join meeting          | medium impact              |
-| `success`   | meeting joined, invite copied, recording started  | double-tap / rising tone   |
-| `error`     | connection lost, hardware error, recording failed | stutter-tap / falling tone |
-
-Rule:
-
-- haptics should respect `prefers-reduced-motion`
-- auditory feedback should be tied to the `useSoundEffects` hook
-- tactile feedback should be tied to the `useHaptics` hook
-
-### 5. `sdk-react core`: layering & z-index
-
-To prevent "z-index wars", Chalk uses a semantic layering strategy.
+1. **The content owns the room.** Video, shared screens, whiteboards, and conversation take the available space. Controls sit in reserved chrome and never cover participant content.
+2. **Structure comes from spacing and lines.** Use a consistent grid, generous whitespace, and crisp one-pixel borders. Shadows explain elevation only when one surface truly floats above another.
+3. **Black means decisive.** Primary calls to action and live microphone or camera controls use near-black. The result is direct, stable, and easy to find.
+4. **Chalk color carries meaning.** Green, yellow, blue, and pink identify states, participants, sections, or gentle background washes. They do not become decorative gradients or compete with content.
+5. **Every state stays legible.** Active, muted, selected, loading, error, and focus states must remain clear without relying on color alone.
 
-| Layer     | Z-Index | Usage                                                  |
-| --------- | ------- | ------------------------------------------------------ |
-| `base`    | `0`     | background, stage base                                 |
-| `tiled`   | `10`    | video tiles, content share                             |
-| `overlay` | `20`    | name tags, connection quality, tile-relative chrome    |
-| `dock`    | `30`    | floating ControlBar, reaction picker                   |
-| `panel`   | `40`    | slide-out sidebars (Chat, Participants, Transcription) |
-| `dialog`  | `50`    | settings, invite modal, hardware selector              |
-| `popover` | `60`    | tooltips, context menus, dropdowns                     |
-| `toast`   | `70`    | notifications, error banners                           |
+## Foundations
 
-### 6. `sdk-react core`: structural layout (The "Chalk Shell")
+### Color
 
-The conferencing UI is organized into four main structural zones.
+The product uses warm neutrals as its base. Pure white is reserved for contained surfaces, while the page and application shell remain slightly warm.
 
-- **Stage**: The primary immersive area for video tiles and shared content.
-- **Dock**: The bottom-centered floating control bar for primary meeting actions.
-- **Header**: The top-aligned meeting information and participant count.
-- **Chrome**: Identity-linked overlays that persist across layout shifts (PiP, meeting status).
+| Token             | Value     | Use                                     |
+| ----------------- | --------- | --------------------------------------- |
+| `--paper`         | `#F7F6F2` | Page canvas, meeting shell background   |
+| `--paper-2`       | `#F1F0EB` | Recessed or grouped control background  |
+| `--surface`       | `#FFFFFF` | Cards, inputs, panels, dialogs          |
+| `--surface-muted` | `#FBFAF7` | Headers, soft panels, app chrome        |
+| `--ink`           | `#0C0E12` | Primary text, primary actions           |
+| `--ink-2`         | `#555B65` | Supporting text and icons               |
+| `--ink-3`         | `#858A92` | Metadata, placeholders, inactive labels |
+| `--line`          | `#DEDDD7` | Default dividers and borders            |
+| `--line-strong`   | `#C9C8C2` | Outer frames and emphasized boundaries  |
 
-### 7. `sdk-react core`: typography
+The Chalk colors retain the light character of the logo.
 
-| Role                | Intent                             | Style                                       |
-| ------------------- | ---------------------------------- | ------------------------------------------- |
-| `label-participant` | Identity on video tiles            | `text-xs font-medium tracking-tight`        |
-| `text-transcript`   | High-readability conversation text | `text-base leading-relaxed tracking-normal` |
-| `heading-display`   | Large meeting or room titles       | `text-2xl font-bold tracking-tight`         |
-| `mono-system`       | Technical/debug indicators         | `font-mono text-[10px] uppercase`           |
+| Token            | Value     | Soft companion           | Use                                           |
+| ---------------- | --------- | ------------------------ | --------------------------------------------- |
+| `--chalk-green`  | `#80B879` | `--wash-green: #EDF6EB`  | Success, connected, available                 |
+| `--chalk-yellow` | `#D9B641` | `--wash-yellow: #FFF8E5` | Attention, hand raise, pending                |
+| `--chalk-blue`   | `#55AAC9` | `--wash-blue: #EAF7FB`   | Selection, information, active tools          |
+| `--chalk-pink`   | `#D67B7B` | `--wash-pink: #FDF0F0`   | Destructive context, recording, leave support |
 
-Drift Note: `sdk-react` currently uses `font-app` and `font-display` from the brand layer in some places. These should be aliased to the semantic roles above within the core package.
+Semantic colors use darker values where text or icons need contrast:
 
-### 8. `sdk-react core`: status palette
+| State       | Foreground | Background |
+| ----------- | ---------- | ---------- |
+| Success     | `#4F8C4A`  | `#E8F1E4`  |
+| Information | `#315F72`  | `#E6F3F8`  |
+| Warning     | `#9A7314`  | `#FDF2CF`  |
+| Danger      | `#B94C4C`  | `#F8E4E4`  |
 
-| State         | Signal               | Style                                         |
-| ------------- | -------------------- | --------------------------------------------- |
-| `active`      | online / joined      | `--success`                                   |
-| `speaking`    | high-signal activity | `--chalk-accent-speaking` + pulse animation   |
-| `hand-raised` | attention request    | `--warning` + bounce animation                |
-| `recording`   | persistent activity  | `oklch(0.577 0.245 27.325)` + recording pulse |
-| `muted`       | disabled / offline   | `--muted-foreground`                          |
+Color rules:
 
-### 9. `sdk-react core`: glass & surfaces
+- Keep large page regions neutral. A tinted wash may identify one bounded section, tile, or status surface.
+- Do not put two bright Chalk colors in competition inside one component.
+- Do not use color as the only status cue. Pair it with an icon, label, shape, or position.
+- Do not use gradients on avatars, controls, cards, or panels. Soft cross-color washes are allowed only as quiet environmental backgrounds, such as an empty camera preview.
+- Dark mode is not part of this system yet. Do not auto-invert the palette or introduce a separate dark visual language without designing it as a complete mode.
 
-| Surface          | Transparency | Usage                                     |
-| ---------------- | ------------ | ----------------------------------------- |
-| `glass-surface`  | `0.72`       | Panels, tooltips, floating bars           |
-| `glass-elevated` | `0.92`       | ControlBar, active popovers               |
-| `glass-stage`    | `0.40`       | Chrome sitting directly over active video |
+### Typography
 
-### 10. `sdk-react core`: theme behavior
+Chalk uses three type families, each with a narrow job.
 
-Theme mode rules:
+| Role      | Family                | Weight         | Use                                                     |
+| --------- | --------------------- | -------------- | ------------------------------------------------------- |
+| Display   | `Bricolage Grotesque` | `660` to `680` | Marketing headlines and major product moments           |
+| Interface | `Figtree`             | `400` to `650` | Product headings, body text, buttons, inputs, labels    |
+| Mono      | `Spline Sans Mono`    | `400` to `600` | Time, sequence, performance numbers, technical metadata |
 
-- reads from `data-chalk-theme`
-- also supports `data-theme`
-- also supports root `light` / `dark` classes
-- can fall back to system preference
-- propagates to extra surfaces like Picture-in-Picture
+Type scale:
 
-Implementation rule:
+| Style         | Desktop                   | Mobile           | Line height | Typical use                    |
+| ------------- | ------------------------- | ---------------- | ----------- | ------------------------------ |
+| Display XL    | `clamp(58px, 7vw, 100px)` | `50px` to `72px` | `1.02`      | Marketing hero                 |
+| Display L     | `38px` to `68px`          | `36px` to `50px` | `1.02`      | Marketing section title        |
+| Product title | `28px` to `40px`          | `28px` to `36px` | `1.08`      | Lobby and empty-state title    |
+| Panel title   | `20px` to `24px`          | `20px`           | `1.2`       | Dialog and side-panel title    |
+| UI heading    | `16px`                    | `16px`           | `1.35`      | Room and card headings         |
+| Body          | `15px` to `16px`          | `15px` to `16px` | `1.5`       | Product and marketing copy     |
+| Label         | `13px` to `14px`          | `13px` to `14px` | `1.35`      | Form and control labels        |
+| Meta          | `11px` to `12px`          | `11px` to `12px` | `1.4`       | Time, counts, secondary status |
 
-- new embedded UI should stay inside this theme behavior model
-- do not create separate mode logic for lobby / meeting / PiP unless the core system itself changes
+Display text uses tight tracking between `-0.035em` and `-0.055em`. Interface text uses normal tracking. Sentence case is the default. Uppercase is limited to short external conventions or a rare visual specimen, never routine navigation.
 
-### 6. Dynamic participant accent system
+### Spacing
 
-Participant color is not the global brand theme. It is a local accent system layered onto core UI.
+Use a four-pixel base grid. Product UI favors the smaller steps; marketing compositions may use the larger steps.
 
-Current palette families include:
+| Token      | Value  | Typical use                            |
+| ---------- | ------ | -------------------------------------- |
+| `space-1`  | `4px`  | Icon adjustment, tight group           |
+| `space-2`  | `8px`  | Related controls                       |
+| `space-3`  | `12px` | Control clusters, compact card padding |
+| `space-4`  | `16px` | Default component gap                  |
+| `space-5`  | `20px` | Panel padding                          |
+| `space-6`  | `24px` | Section inside a card                  |
+| `space-8`  | `32px` | Desktop panel and card padding         |
+| `space-10` | `40px` | Page-level breathing room              |
+| `space-14` | `56px` | Desktop container edge                 |
+| `space-22` | `88px` | Minimum marketing section space        |
 
-- brand teal
-- deep teal
-- cyan
-- emerald
-- sky
-- blue
-- indigo
-- violet
-- mint
-- green
-- rose
-- orange
-- amber
-- fuchsia
-- slate
+Spacing describes relationships. Use less space inside a component, more space between component groups, and the most space between page sections.
 
-Runtime effect:
+### Shape
 
-- local participant identity can override `--primary`, `--primary-foreground`, and `--ring`
-- gradients are used for avatars, tiles, and some loading/joining contexts
+Corners are restrained so the interface feels precise rather than toy-like.
 
-Rule:
+| Token         | Value   | Use                                     |
+| ------------- | ------- | --------------------------------------- |
+| `--radius-sm` | `6px`   | Buttons, tags, tabs                     |
+| `--radius-md` | `10px`  | Cards, panels, media tiles              |
+| `--radius-lg` | `16px`  | Large dialogs and special containers    |
+| Circle        | `999px` | Avatars and round meeting controls only |
 
-- treat participant accent as contextual personalization
-- not as the base Chalk brand color system
+Use one-pixel borders. A component should not combine a heavy border, large shadow, and tinted background unless it represents a critical state.
 
-### 7. Public theme API vs actual internal system
+### Elevation
 
-Current public API on `VideoConference`:
+Chalk has two standard shadows:
 
-| Prop                 | Type                   |
-| -------------------- | ---------------------- |
-| `theme.accentColor`  | `string`               |
-| `theme.borderRadius` | `"rounded" \| "sharp"` |
+```css
+--shadow-sm: 0 1px 2px rgba(12, 14, 18, 0.04), 0 6px 18px rgba(12, 14, 18, 0.05);
 
-Reality:
+--shadow-md: 0 2px 4px rgba(12, 14, 18, 0.05), 0 20px 50px rgba(12, 14, 18, 0.09);
+```
 
-- internal visual system is much richer than the public API
-- the public API currently under-describes the true styling surface
-- implementation wiring for those public props appears limited compared with the internal token system
+Use no shadow for elements that remain in normal document flow. Use `shadow-sm` for a compact floating control or card. Use `shadow-md` for a modal, lobby frame, or hero product image. Full-screen dialogs may use `0 28px 80px rgba(12, 14, 18, 0.20)` because the dimmed backdrop establishes a separate layer.
 
-Contributor rule:
+### Icons
 
-- when changing embedded UI, follow the internal semantic system first
-- do not assume the public `Theme` type fully represents Chalk's actual design system
+Icons use a simple rounded-outline family with consistent optical weight. Standard sizes are `15px`, `18px`, and `20px`; large meeting controls may use `22px` to `24px`.
 
-## `apps/web` Brand Layer
+- Use icons to reinforce clear labels, not replace unfamiliar concepts.
+- Keep decorative icons out of headings and marketing copy.
+- Use filled status dots only for small persistent state, such as online or unread.
+- Destructive icons use danger red. Muted state icons appear without a surrounding border inside participant lists.
 
-This layer owns Chalk's first-party expression.
+### Logo
 
-### Brand tokens currently owned by `apps/web`
+Use the full-color Chalk mark on paper, muted surface, or white. Preserve its proportions and clear space. The divider after the logo sits `12px` to `16px` away, followed by the room name at the same interval. Do not stretch the mark, recolor individual chalk sticks, put it inside a pill, or add a glow.
 
-| Token            | Value                            |
-| ---------------- | -------------------------------- |
-| `--font-app`     | `"Figtree Variable", sans-serif` |
-| `--font-display` | `"Sora", sans-serif`             |
-| `--primary`      | `#1bb6a6` in default web theme   |
-| `nord` theme     | blue-grey alternate app theme    |
+## Components
 
-Brand-layer traits seen in `apps/web`:
+### Buttons
 
-- stronger typographic personality
-- product-shell polish beyond embedded meeting UI
-- route-level themes like `nord`
-- dashboard and landing-page expression
+All buttons have a clear hierarchy.
 
-Examples of surfaces this layer should influence:
+| Variant     | Appearance                                        | Use                                        |
+| ----------- | ------------------------------------------------- | ------------------------------------------ |
+| Primary     | Ink background, white text, `6px` to `8px` radius | Join, save, confirm, main marketing action |
+| Secondary   | White background, strong line border, ink text    | Alternate action                           |
+| Ghost       | Transparent background, ink or secondary ink      | Toolbar, panel, row action                 |
+| Active      | Pale blue surface, blue border or ink icon        | Selected tool or panel                     |
+| Destructive | `#C94343` background, white text                  | Leave, remove, irreversible action         |
 
-- dashboards
-- authenticated product shell
-- landing pages
-- marketing-like sections
-- first-party navigation chrome
+Standard product buttons are `40px` to `44px` high. Marketing buttons are `50px` high. Icon-only buttons must have at least a `36px` target on desktop and `44px` on touch surfaces.
 
-Important boundary:
+Primary controls may lift by one pixel on hover. Active press returns them to their resting position. Do not animate controls with bounce, elastic scale, or glow.
 
-- this layer is not the source of truth for embedded meeting UI
-- if `sdk-react` references `font-app`, `font-display`, or app-only token names, document that as drift and prefer moving toward cleaner ownership
+### Meeting media controls
 
-## Current Mobile Snapshot
+Microphone and camera are the visual anchors of the dock. When available, both use circular ink buttons with white icons. A small adjacent chevron opens the related device menu. Off state keeps the dark control but uses a clear crossed icon and danger cue.
 
-`apps/mobile` is not on the design system yet. It is a hardcoded React Native snapshot.
+Other meeting actions use circular white buttons with a line border. Selected actions use a pale blue surface. Leave is always separated from the rest of the cluster and uses a red circle.
 
-Current facts:
+The dock sits in a reserved footer row. It may float visually, but it must never overlap a video tile, participant label, or side panel.
 
-- uses `StyleSheet.create`
-- no shared token package
-- no theme provider
-- no import from `@q9labsai/chalk-react`
-- depends on `@q9labsai/chalk-react-native` runtime only
+### Inputs and text areas
 
-Repeated native values today:
+Inputs use a white or muted surface, `1px` strong-line border, `8px` radius, and a minimum height of `40px`.
 
-| Category         | Current values                                                          |
-| ---------------- | ----------------------------------------------------------------------- |
-| base backgrounds | `#07111d`, `#09111f`                                                    |
-| cards            | `#102038`, `#0c1829`, `#0f1c2d`, `#16304d`, `#091521`                   |
-| primary CTA      | `#2d7ff9`                                                               |
-| accent text      | `#77b7ff`, `#8dbcf5`                                                    |
-| primary text     | `#f5fbff`, `#f7fbff`                                                    |
-| secondary text   | `#b6c9df`, `#b3c8e0`, `#c6d6ea`, `#dce9f8`                              |
-| error            | `#ff9d97`, `#ffd8df`, `#521a24`                                         |
-| radii            | `16`, `18`, `22`, `24`, `28`, `999`                                     |
-| type scale       | eyebrow `13/700`, body `14-16`, title `28-34/800-900`, CTA `15/700-800` |
+| State    | Treatment                                                      |
+| -------- | -------------------------------------------------------------- |
+| Rest     | `#C9C8C2` border, ink text                                     |
+| Hover    | Slightly darker border                                         |
+| Focus    | Single `#74B7CF` border or a two-pixel ink outline with offset |
+| Error    | Danger border and concise error copy                           |
+| Disabled | Reduced opacity with disabled cursor                           |
 
-Interpretation:
+Never stack a browser outline, colored ring, and box shadow. A focused field gets one crisp focus treatment, not a double blue glow.
 
-- mobile currently reflects a dark, join-first shell
-- it feels adjacent to Chalk, but is not yet sourced from canonical tokens
-- none of these hardcoded values should be treated as system truth
+Labels sit above fields and remain visible after input. Placeholders provide examples, not labels. Chat composition uses the same field treatment, with the send button remaining disabled until content is valid.
 
-## Target Design System Model
+### Selects and device menus
 
-This is the normalized structure future work should align to. It is not a redesign brief.
+Select triggers follow input dimensions and show one down chevron. Custom menus open as white panels with a strong-line border, `10px` to `12px` radius, and a medium shadow.
 
-### 1. Foundation layers
+- Put the menu near its trigger without covering the control that opened it.
+- Use a section title only when it resolves ambiguity, such as “Camera” or “Microphone.”
+- Show the selected item with a check or blue-tinted row, not a colored radio dot alone.
+- Truncate long device names after preserving the distinctive part.
+- Keep menu rows at least `44px` high on touch devices.
 
-The design system should converge on these token families:
+### Tabs and segmented controls
 
-- color
-- typography
-- spacing
-- radius
-- elevation
-- motion
+Tabs use text with a two-pixel ink underline. Segmented controls sit on `--paper-2` with `4px` inner padding. The selected segment uses white plus a tiny shadow; unselected segments remain ghost controls.
 
-### 2. Semantic roles
+Layout controls in the meeting header use the segmented pattern at `32px` square per option. They remain visually quiet because layout is a secondary action.
 
-Across web and mobile, the same role model should exist:
+### Avatars and identity
 
-- app background
-- stage background
-- panel / card
-- floating glass
-- interactive control
-- muted / secondary text
-- focus / ring
-- success
-- warning
-- destructive
+Chalk avatars are flat circles. Use an uploaded image when available; otherwise show one or two initials on a deterministic, muted solid color. Approved identity colors come from this set:
 
-### 3. Ownership model
+`#315F72`, `#5C6650`, `#6B5B4F`, `#64576B`, `#49645D`, `#665D42`, `#4D5D73`, `#6D5158`.
 
-- `core` tokens should be platform-neutral and safe for embedded UI
-- `brand` tokens should layer on top of the same shape, not reinvent it
-- component aliases should exist only when semantic roles are not enough
+Do not use gradients, artificial faces, 3D lighting, glows, or decorative rings. A speaking state may add a thin green boundary around the media tile, not the avatar itself.
 
-### 4. Portability model
+Name tags sit at the lower-left of media tiles on `rgba(12, 14, 18, 0.80)`. They use white text, a `5px` radius, and optional compact state icons. Tags must never grow tall enough to cover meaningful video content.
 
-Target mapping:
+### Media tiles
 
-- web uses CSS variables and semantic classes
-- mobile maps the same semantic roles into native tokens
-- both platforms should speak the same design vocabulary
+Tiles use a `8px` to `10px` radius and no shadow. Camera-off tiles use pale Chalk washes with a flat avatar centered inside. Alternate the wash by participant so adjacent tiles remain distinct without becoming colorful noise.
 
-## Drift And Gaps
+The active speaker receives space, not spectacle. In spotlight layout, the speaker occupies the large stage and the remaining participants form a stable filmstrip. Poor connection, muted, and raised-hand indicators stay compact and attach to a corner or name tag.
 
-Known issues to keep visible:
+The raised-hand circle must remain smaller than the avatar and clear of the identity label. In side panels it becomes a compact yellow icon, not an overlay.
 
-- public theme API is much thinner than the real internal system
-- `sdk-react` typography ownership is incomplete
-- `sdk-react` contains references to `apps/web` brand classes and token names
-- spacing is not formalized as a first-class token scale
-- mobile still hardcodes colors, type, and radii
+### Panels
 
-Classification:
+People, chat, and other meeting panels use a shared shell:
 
-| Type                   | Items                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| intentional separation | neutral embedded core vs first-party brand layer                                                  |
-| accidental drift       | app-owned font/token usage leaking into `sdk-react`; incomplete package-owned type/spacing system |
+- `340px` desktop width
+- white surface
+- `10px` radius
+- line border
+- title row with count or secondary action
+- close button in the top-right
+- fixed header and footer when the center content scrolls
 
-## Mobile Translation Rules
+Opening a panel reduces the stage width on desktop. It overlays the stage only at narrow breakpoints, where it keeps safe space above the control dock.
 
-When mobile implementation begins:
+Participant rows are calm list items with `56px` to `72px` height. Role labels and “You” remain secondary. Row menus open next to the triggering button and contain only actions available for that participant.
 
-- start from `sdk-react core` roles for meeting, lobby, and related conferencing UI
-- selectively apply `apps/web` brand overlay only where product-shell branding is intended
-- map semantic roles, not web class names
-- create mobile token families that mirror system ownership:
-  - `core`
-  - `brand`
-  - `component aliases` only where necessary
+### Chat
 
-Do not:
+Chat messages prioritize readable conversation over decorative bubbles. Local messages may use ink with white text; remote messages use a neutral surface with a line border. Avatars are optional when sequential messages come from the same person. Time and delivery status use meta type.
 
-- freeze current RN hardcoded values as canonical
-- copy Tailwind class names into native architecture
-- collapse embedded meeting UI and first-party app chrome into one undifferentiated token set
+The composer stays pinned to the panel bottom. It uses a single clean focus treatment and a send button with a clear enabled state. Empty chat and file states use direct product language without illustration clutter.
 
-## Working Rules
+### Popovers and dialogs
 
-- if a role already exists semantically, use it instead of adding a raw color
-- if a needed role is missing, update this doc before or alongside code
-- if ownership is unclear, resolve it here first: `core` or `brand`
-- treat participant accent as contextual personalization, not brand foundation
-- keep embedded meeting UI neutral unless a conscious system-level change says otherwise
+Popovers anchor to their trigger, use a white surface, strong-line border, `10px` to `12px` radius, and one medium shadow. Their content should be scannable without a second card nested inside.
 
-## Summary
+Dialogs center on a dimmed `rgba(12, 14, 18, 0.20)` backdrop. Use `14px` to `16px` radius and a maximum width based on the task:
 
-Chalk's current design system is one system with two layers:
+| Dialog          | Width              |
+| --------------- | ------------------ |
+| Confirmation    | `420px` to `500px` |
+| Meeting details | `560px` to `640px` |
+| Settings        | Up to `720px`      |
 
-- `sdk-react core` for neutral embedded conferencing UI
-- `apps/web brand layer` for first-party Chalk expression
+Meeting details contains the room name, time, join link, security note, and connection information. Settings uses a left navigation on desktop and horizontal tabs on mobile. Close actions remain in the top-right, and the initial focus moves inside the dialog.
 
-This document is the normalized design model future work should follow. It does not override the evidence-backed current status in [`product.yaml`](../product.yaml).
+### Notifications
+
+Notifications appear in the top-right on desktop and below the safe header on mobile. They use a muted surface, strong-line border, `12px` radius, and a single elevated shadow.
+
+Each notification has a `36px` tinted icon tile, one concise sentence, an optional action, and a close control. Default duration is five seconds, but errors and actions that require a decision remain until dismissed. Announce non-critical updates with `aria-live="polite"` and errors with `aria-live="assertive"`.
+
+### Whiteboard and shared screens
+
+Whiteboard and screen share replace the main stage. They do not appear as small floating cards over video.
+
+The Excalidraw surface inherits Chalk's paper, ink, blue selection, restrained radii, and line colors. Preserve its familiar drawing behavior and accessibility while restyling its shell and tool islands.
+
+A screen-share placeholder should resemble real working software. Include recognizable browser or document chrome, realistic hierarchy, and a small “shared by” label. Do not use abstract rectangles or fake dashboards that cannot plausibly exist.
+
+## Layouts
+
+### Marketing
+
+Marketing pages use a centered container up to `1320px`, with responsive side padding from `22px` to `56px`. The navigation is `74px` high. Major sections use at least `88px` vertical space and one clear boundary.
+
+The hero pairs a large display headline with a realistic product surface. Use the blue chalk stroke as a single highlight behind one phrase. Technology proof uses logos alone. Supporting sections use rows, ruled grids, and gentle washes rather than stacks of generic floating cards.
+
+### Lobby
+
+The lobby has three levels:
+
+1. A `72px` header with the Chalk logo, compact divider, room name, and “Device setup” metadata.
+2. A centered preparation frame up to `1260px` wide.
+3. A media preview on the left and a focused join form on the right.
+
+On desktop, the join form is `400px` wide. Microphone and camera toggles sit directly below the preview and appear only once. The name field and join action stay together. On mobile, the preview stacks above the form and all touch controls meet the `44px` minimum.
+
+### Meeting room
+
+The meeting shell uses a centered maximum width of `1440px` with quiet side borders. Its vertical structure is fixed:
+
+1. Meeting header, `76px`
+2. Flexible stage and optional panel
+3. Reserved control row with safe-area padding
+
+The stage has `12px` tile gaps and outer padding from `12px` on mobile to `32px` on desktop. Opening People or Chat creates a `340px` second column at desktop sizes. The header shows the room name, duration, information action, and subtle layout selector.
+
+Grid layout gives peers equal weight. Spotlight layout gives the active or pinned participant the large stage and keeps others in a stable filmstrip. Sidebar layout reserves a narrow participant column. Screen share and whiteboard take the full main stage while participant access remains available.
+
+### Mobile
+
+Mobile preserves the same hierarchy rather than shrinking desktop UI.
+
+- The marketing home moves to one column and uses full-width actions where needed.
+- The lobby stacks preview, media toggles, and join form in that order.
+- The meeting room keeps the header compact, uses one dominant tile or a two-column grid, and opens People and Chat as sheets or full-height panels.
+- The meeting dock may scroll horizontally only when every visible control retains a `44px` target. Primary mic, camera, and leave controls remain immediately reachable.
+- Safe-area insets apply to headers, docks, composers, and sheets.
+
+## Interaction and motion
+
+Motion confirms state changes and spatial relationships. It should never perform decoration by itself.
+
+| Motion            | Duration           | Curve                           |
+| ----------------- | ------------------ | ------------------------------- |
+| Hover and press   | `120ms` to `160ms` | ease-out                        |
+| Popover and toast | `160ms` to `200ms` | `cubic-bezier(0.16, 1, 0.3, 1)` |
+| Panel and dialog  | `200ms` to `240ms` | `cubic-bezier(0.16, 1, 0.3, 1)` |
+| Layout change     | up to `300ms`      | ease-out                        |
+
+Animate opacity and transform. Avoid layout-janking height animation, continuous floating, shimmer on loaded content, elastic overshoot, and repeated status pulsing. Recording may use one restrained pulse. Respect `prefers-reduced-motion` by reducing all non-essential movement to an immediate state change.
+
+## Accessibility
+
+Chalk targets WCAG 2.2 AA.
+
+- Body text and essential icons need at least `4.5:1` contrast; large text and non-text boundaries need at least `3:1`.
+- Every icon-only control has an accessible name and visible tooltip where the meaning is not universal.
+- Focus order follows the visible layout. Opening a menu, panel, or dialog moves focus predictably and returns it to the trigger on close.
+- Keyboard users can operate all meeting controls, device menus, tabs, participant actions, and the chat composer.
+- Touch targets are at least `44px` square. Closely grouped controls still keep enough separation to prevent accidental activation.
+- Live captions, notification announcements, recording status, hand raises, and connection problems expose semantic status text.
+- Video tiles identify participants and state to assistive technology without reading the same name twice.
+- Do not communicate camera, microphone, connection, or recording state through color alone.
+
+## Product language
+
+Copy is calm, direct, and role-neutral. Use familiar meeting terms: “People,” “Chat,” “Share,” “Board,” “Settings,” and “Leave.” Labels state the result of an action when state changes, such as “Mute microphone” and “Turn off camera.”
+
+Avoid technical provider names, implementation status, or SDK language inside the meeting experience. Error messages state what happened, whether the meeting can continue, and the next available action.
+
+## Implementation contract
+
+The first-party CSS tokens live in `apps/web/src/styles/tokens.css`. Product components should consume these semantic values instead of adding nearby hex values. Shared React components must expose state and composition without forcing a separate visual language.
+
+Use these layers consistently:
+
+| Layer       | Z-index | Content                           |
+| ----------- | ------- | --------------------------------- |
+| Base        | `0`     | Canvas and normal content         |
+| Tile        | `10`    | Video, whiteboard, shared content |
+| Tile chrome | `20`    | Name tags and tile status         |
+| Dock        | `30`    | Meeting controls                  |
+| Panel       | `40`    | People, chat, transcript          |
+| Dialog      | `70`    | Meeting details and settings      |
+| Popover     | `80`    | Device and participant menus      |
+| Toast       | `90`    | Notifications and urgent feedback |
+
+New components should reuse the existing color, type, space, radius, elevation, and motion scales. If a design requires a new token, add a semantic token here and in the shared implementation before using it in a component.
+
+## Release checklist
+
+A Chalk interface is ready when all of the following are true:
+
+- The primary task is obvious without a decorative label or onboarding sentence.
+- Content has more space than chrome.
+- Controls do not obscure video, avatars, labels, whiteboard tools, or shared content.
+- Every interactive state is visible with keyboard, pointer, and touch input.
+- Inputs have one focus treatment and no glow stack.
+- Avatars are flat and deterministic.
+- Popovers are anchored, dialogs are centered, and side panels preserve the stage where space allows.
+- Chalk colors serve meaning and remain secondary to ink and paper.
+- Mobile composition is intentional and respects safe areas.
+- Reduced motion, empty, loading, error, disconnected, permission-denied, and long-content states have been checked in a real browser or device.

@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- A single light-first Chalk design system for marketing, lobby, meeting, SDK,
+  and mobile surfaces, with normative tokens, component and layout rules,
+  accessibility guidance, and a high-fidelity visual reference board.
 - React Native and mobile parity with Chalk v2: canonical `ChalkSession` and
   SyncEngine v3 ownership, native client-session broker routes, Cloudflare
   WebRTC media, moderation, reactions, hand raising, protected chat files,
