@@ -77,10 +77,10 @@ export function ParticipantRow({
   const optionsButtonClassName = variant === "mobile" ? "text-muted-foreground hover:text-foreground" : variant === "sidebar" ? "opacity-70 hover:opacity-100 text-muted-foreground hover:text-foreground" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
 
   return (
-    <div className={cn("group flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors relative", variant === "sidebar" && "hover:bg-muted/50")}>
+    <div className={cn("group relative flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-muted/50", variant === "sidebar" && "rounded-none px-1 py-3.5 hover:bg-[#f7f6f2]")}>
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="relative">
-          <Avatar name={participant.displayName} size="sm" className={cn(variant === "sidebar" && "w-9 h-9")} gradientPreference={participantGradientPreference} />
+          <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={Boolean(participant.avatarUrl)} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
           {participant.isHandRaised && <HandRaiseIndicator raised={true} size="sm" className="-top-1 -right-1" />}
         </div>
 
@@ -100,7 +100,7 @@ export function ParticipantRow({
               </div>
             ) : (
               <span
-                className={cn("text-sm font-normal truncate max-w-[140px]", variant === "sidebar" ? "text-card-foreground" : "text-chalk-text-primary")}
+                className={cn("max-w-[140px] truncate text-sm", variant === "sidebar" ? "font-semibold text-[#202329]" : "font-normal text-chalk-text-primary")}
                 onClick={() => participant.isLocal && onUpdateDisplayName && setIsEditing(true)}
                 title={participant.isLocal && onUpdateDisplayName ? "Click to edit" : undefined}
               >
@@ -108,8 +108,8 @@ export function ParticipantRow({
               </span>
             )}
             {participant.isLocal && !isEditing && (
-              <span className={cn("text-xs flex items-center gap-1 shrink-0", variant === "sidebar" ? "text-muted-foreground" : "text-chalk-text-muted")}>
-                (you)
+              <span className={cn("flex shrink-0 items-center gap-1 text-xs", variant === "sidebar" ? "text-[#858a92]" : "text-chalk-text-muted")}>
+                You
                 {onUpdateDisplayName && (
                   <button type="button" onClick={() => setIsEditing(true)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-primary">
                     <Edit02Icon className="w-3 h-3" />
@@ -120,7 +120,7 @@ export function ParticipantRow({
           </div>
           <div className="flex items-center gap-1.5">
             {participant.role && participant.role !== "participant" && (
-              <span className={cn("text-[11px] tracking-normal font-normal", variant === "sidebar" ? "text-muted-foreground" : "text-chalk-text-secondary bg-chalk-bg-subtle px-1.5 py-0.5 rounded")}>{variant === "sidebar" && participant.role === "host" ? "Meeting Host" : participant.role}</span>
+              <span className={cn("text-[11px] font-normal tracking-normal", variant === "sidebar" ? "text-[#858a92]" : "rounded bg-chalk-bg-subtle px-1.5 py-0.5 text-chalk-text-secondary")}>{variant === "sidebar" ? (participant.role === "host" ? "Host" : "Co-host") : participant.role}</span>
             )}
           </div>
         </div>
@@ -129,8 +129,8 @@ export function ParticipantRow({
       <div className="flex items-center gap-1 shrink-0">
         {variant === "sidebar" ? (
           participant.isMuted ? (
-            <div className="bg-[#dc2626]/20 p-1.5 rounded-full">
-              <MicrophoneOff01Icon className="w-3.5 h-3.5 text-[#dc2626]" />
+            <div className="rounded-full border border-[#deddd7] bg-[#f7f6f2] p-1.5">
+              <MicrophoneOff01Icon className="h-3.5 w-3.5 text-[#b94c4c]" />
             </div>
           ) : null
         ) : (
@@ -144,7 +144,7 @@ export function ParticipantRow({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className={cn("absolute right-0 top-full mt-1 w-64 rounded-lg shadow-xl z-20 overflow-hidden py-1", variant === "sidebar" ? "bg-popover border border-border/50" : "bg-chalk-bg-surface border border-chalk-border-subtle")}>
+                <div className={cn("absolute right-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-[10px] py-2 shadow-[0_18px_44px_rgba(12,14,18,0.16)]", variant === "sidebar" ? "border border-[#c9c8c2] bg-white" : "border border-chalk-border-subtle bg-chalk-bg-surface")}>
                   <ParticipantOptionsMenu
                     participant={participant}
                     variant={variant}

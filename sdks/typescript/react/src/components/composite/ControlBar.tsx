@@ -124,16 +124,16 @@ function MeetingDockButton({ icon, label, onClick, active = false, danger = fals
     <button
       type="button"
       onClick={onClick}
+      title={label}
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "relative flex h-[58px] shrink-0 items-center justify-center gap-2.5 border-l border-[#deddd7] px-4 text-sm font-semibold transition first:border-l-0 hover:bg-[#f7f6f2] max-sm:px-3 lg:px-5",
-        active && "bg-[#eaf7fb]",
-        danger && "ml-3 rounded-[7px] border border-[#ef9b9b] bg-[#fdf0f0] !text-[#b94c4c] hover:bg-[#f8dede]",
+        "relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[#d4d3cd] bg-white text-[#202329] shadow-[0_5px_16px_rgba(12,14,18,0.1)] transition hover:-translate-y-0.5 hover:border-[#aeadA6] hover:bg-[#f7f6f2]",
+        active && "border-[#9dcfe1] bg-[#dff2f7]",
+        danger && "ml-2 border-[#d04f4f] bg-[#c94343] !text-white hover:border-[#b33b3b] hover:bg-[#b33b3b]",
       )}
     >
       {icon}
-      <span className="max-sm:hidden">{label}</span>
       {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[#b94c4c] px-1 text-[10px] !text-[#fff]">{badge > 99 ? "99+" : badge}</span> : null}
     </button>
   );
@@ -307,7 +307,7 @@ export const ControlBar = React.memo(
     if (variant === "mobile") {
       return (
         <div
-          className={cn("flex w-full flex-nowrap items-center gap-2 overflow-x-auto border-t border-[#deddd7] bg-[#fbfaf7] px-2 py-3 sm:px-4", className)}
+          className={cn("flex w-full flex-nowrap items-center gap-2 overflow-x-auto bg-transparent px-2 py-3 sm:px-4", className)}
           style={{
             ...(themeVariables as React.CSSProperties),
             paddingBottom: "max(12px, env(safe-area-inset-bottom))",
@@ -317,11 +317,11 @@ export const ControlBar = React.memo(
         >
           <div className="flex items-center justify-center gap-1.5 min-w-min mx-auto">
             {/* Group 1: Media Controls */}
-            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#deddd7] bg-white p-1 shadow-sm">
+            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#202329] bg-[#202329] p-1 shadow-[0_5px_16px_rgba(12,14,18,0.18)]">
               <button
                 type="button"
                 onClick={onToggleMute}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-[#0c0e12]" : "!text-[#b94c4c]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-white" : "!text-[#f3a0a0]")}
                 aria-label={isMuted ? "Unmute" : "Mute"}
                 aria-pressed={!isMuted}
               >
@@ -331,7 +331,7 @@ export const ControlBar = React.memo(
               <button
                 type="button"
                 onClick={onToggleVideo}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-[#0c0e12]" : "!text-[#b94c4c]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-white" : "!text-[#f3a0a0]")}
                 aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
                 aria-pressed={isVideoEnabled}
               >
@@ -443,8 +443,8 @@ export const ControlBar = React.memo(
       };
 
       return (
-        <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-4">
-          <div className={cn("pointer-events-auto flex max-w-full items-center overflow-x-auto rounded-[8px] border border-[#deddd7] bg-white shadow-[0_12px_28px_rgba(12,14,18,0.1)]", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
+        <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
+          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
             {buttonsToRender.includes("mic") ? (
               <DeviceControlButton
                 type="mic"

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { Input } from "../atomic/Input";
-import { IconButton } from "../atomic/IconButton";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
 export interface InviteModalProps {
@@ -57,24 +56,26 @@ export const InviteModal = React.memo<InviteModalProps>(({ isOpen, onClose, meet
   if (!isOpen) return null;
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center p-4", "bg-background/80", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
-      <div ref={modalRef} className={cn("w-full max-w-md overflow-hidden rounded-lg shadow-lg", "bg-card", "border border-border", !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200")}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 id="invite-modal-title" className="text-lg font-semibold text-card-foreground">
-            Invite Participants
+    <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-[#0c0e12]/35 p-4 backdrop-blur-[2px]", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
+      <div ref={modalRef} className={cn("w-full max-w-md overflow-hidden rounded-[12px] border border-[#c9c8c2] bg-white shadow-[0_24px_64px_rgba(12,14,18,0.2)]", !prefersReducedMotion && "animate-in fade-in zoom-in-[0.97] duration-200")}>
+        <div className="flex items-center justify-between border-b border-[#deddd7] px-5 py-4">
+          <h2 id="invite-modal-title" className="text-xl font-semibold tracking-[-0.025em] text-[#0c0e12]">
+            Invite people
           </h2>
-          <IconButton icon={<Cancel01Icon size={20} />} variant="ghost" onClick={onClose} aria-label="Close" />
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[#deddd7] text-[#555b65] transition hover:bg-[#f7f6f2] hover:text-[#0c0e12]" aria-label="Close invite dialog">
+            <Cancel01Icon size={19} />
+          </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="space-y-5 p-5">
           <div className="space-y-4">
-            <Input label="Meeting Link" value={meetingLink} readOnly fullWidth icon={<Link01Icon size={16} />} iconPosition="left" onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <Input label="Meeting link" value={meetingLink} readOnly fullWidth icon={<Link01Icon size={16} />} iconPosition="left" onClick={(e) => (e.target as HTMLInputElement).select()} />
             {onCopyLink && (
               <button
                 type="button"
                 onClick={handleCopyLink}
                 disabled={isCopyFeedbackVisible}
-                className={cn("w-full flex items-center justify-center gap-2 py-2.5 rounded-md font-medium transition-colors", "bg-primary text-primary-foreground", "hover:opacity-90", isCopyFeedbackVisible && "opacity-90 cursor-default")}
+                className={cn("flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-[#202329] text-sm font-semibold text-white transition-colors hover:bg-[#343840]", isCopyFeedbackVisible && "cursor-default bg-[#49645d]")}
               >
                 <Copy01Icon size={18} />
                 {isCopyFeedbackVisible ? "Copied" : "Copy Link"}
@@ -86,21 +87,21 @@ export const InviteModal = React.memo<InviteModalProps>(({ isOpen, onClose, meet
           </div>
 
           {meetingId && (
-            <div className={cn("flex items-center justify-between p-3 rounded-md", "bg-muted", "border border-border")}>
-              <span className="text-sm text-muted-foreground">Meeting ID</span>
-              <span className="font-mono font-medium text-card-foreground select-all">{meetingId}</span>
+            <div className="flex items-center justify-between rounded-[8px] border border-[#deddd7] bg-[#fbfaf7] p-3">
+              <span className="text-sm text-[#555b65]">Meeting ID</span>
+              <span className="select-all font-mono text-sm font-medium text-[#202329]">{meetingId}</span>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             {onShareEmail && (
-              <button type="button" onClick={onShareEmail} className={cn("flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors", "bg-secondary text-secondary-foreground", "hover:bg-accent", "border border-border")}>
+              <button type="button" onClick={onShareEmail} className="flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#c9c8c2] bg-white px-4 text-sm font-semibold text-[#202329] transition hover:bg-[#f7f6f2]">
                 <Mail01Icon size={16} />
                 Email
               </button>
             )}
             {onShareCalendar && (
-              <button type="button" onClick={onShareCalendar} className={cn("flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors", "bg-secondary text-secondary-foreground", "hover:bg-accent", "border border-border")}>
+              <button type="button" onClick={onShareCalendar} className="flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#c9c8c2] bg-white px-4 text-sm font-semibold text-[#202329] transition hover:bg-[#f7f6f2]">
                 <Calendar01Icon size={16} />
                 Calendar
               </button>

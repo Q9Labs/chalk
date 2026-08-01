@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
+import type { ChalkChatMessage } from "../../../../sdks/typescript/client/src/room-actions/types";
+import { ChatPanel } from "../../../../sdks/typescript/react/src/components/composite/ChatPanel";
 import { ControlBar } from "../../../../sdks/typescript/react/src/components/composite/ControlBar";
 import { MeetingHeader } from "../../../../sdks/typescript/react/src/components/composite/MeetingHeader";
 import { MeetingHub } from "../../../../sdks/typescript/react/src/components/composite/MeetingHub";
@@ -62,6 +64,39 @@ const roomParticipants: GridParticipant[] = [
   } as GridParticipant & { role: "participant" },
 ];
 
+const INITIAL_CHAT_MESSAGES: ChalkChatMessage[] = [
+  {
+    messageId: "preview-message-1",
+    clientMessageId: "preview-client-1",
+    sequence: "1",
+    participantSessionId: "nora",
+    displayName: "Nora Williams",
+    text: "The new room direction feels much calmer.",
+    createdAt: "2026-08-01T10:12:00.000Z",
+    attachments: [],
+  },
+  {
+    messageId: "preview-message-2",
+    clientMessageId: "preview-client-2",
+    sequence: "2",
+    participantSessionId: "you",
+    displayName: "Hasan",
+    text: "Agreed. Let’s keep the controls out of the stage.",
+    createdAt: "2026-08-01T10:13:00.000Z",
+    attachments: [],
+  },
+  {
+    messageId: "preview-message-3",
+    clientMessageId: "preview-client-3",
+    sequence: "3",
+    participantSessionId: "sofia",
+    displayName: "Sofia Chen",
+    text: "I’ll share the revised agenda here after the call.",
+    createdAt: "2026-08-01T10:14:00.000Z",
+    attachments: [],
+  },
+];
+
 function SdkPreviewPage() {
   const isMobile = useIsMobile();
   const [surface, setSurface] = useState<PreviewSurface>("lobby");
@@ -76,6 +111,7 @@ function SdkPreviewPage() {
   const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
   const [layout, setLayout] = useState<MeetingLayout>("spotlight");
   const [isHubOpen, setIsHubOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
   const previewUrl = typeof window === "undefined" ? "http://localhost:3070/sdk-preview" : `${window.location.origin}/sdk-preview`;
 
   const participants = useMemo(() => {
@@ -117,17 +153,45 @@ function SdkPreviewPage() {
       <section className="relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[#deddd7] bg-[#fbfaf7]">
         <MeetingHeader roomName="Design review" logoUrl="/brand/chalk/chalk-logo.svg" duration={18 * 60 + 42} isRecording={isRecording} isTranscribing={isTranscribing} layout={layout === "screen-share" ? "grid" : layout} onLayoutChange={setLayout} />
 
-        <div className={`mx-auto grid min-h-0 w-full max-w-[1320px] flex-1 grid-cols-1 gap-0 overflow-hidden px-3 pt-5 lg:px-8 lg:pt-6 ${isParticipantsOpen ? "lg:grid-cols-[minmax(0,1fr)_320px]" : ""}`}>
+        <div className={`mx-auto grid min-h-0 w-full max-w-[1320px] flex-1 grid-cols-1 gap-3 overflow-hidden px-3 pt-5 lg:px-8 lg:pt-6 ${isParticipantsOpen || isChatOpen ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
           <div className="min-h-0 bg-[#fbfaf7]">
             <VideoGrid participants={participants} layout={layout} pinnedParticipantId="nora" maxVisibleParticipants={9} className="h-full" />
           </div>
 
           {isParticipantsOpen && (
-            <ParticipantList participants={participantList} variant="sidebar" canManageParticipants onClose={() => setIsParticipantsOpen(false)} onAddPeople={() => setIsHubOpen(true)} onUpdateDisplayName={setDisplayName} onMuteParticipant={() => undefined} onRemoveParticipant={() => undefined} />
+            <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-[0_8px_30px_rgba(12,14,18,0.06)] lg:static">
+              <ParticipantList participants={participantList} variant="sidebar" canManageParticipants onClose={() => setIsParticipantsOpen(false)} onAddPeople={() => setIsHubOpen(true)} onUpdateDisplayName={setDisplayName} onMuteParticipant={() => undefined} onRemoveParticipant={() => undefined} />
+            </aside>
+          )}
+
+          {isChatOpen && (
+            <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-[0_8px_30px_rgba(12,14,18,0.06)] lg:static">
+              <ChatPanel
+                messages={chatMessages}
+                localParticipantId="you"
+                participantNames={Object.fromEntries(participants.map((participant) => [participant.id, participant.displayName]))}
+                onClose={() => setIsChatOpen(false)}
+                onSendMessage={async ({ text, attachments }) => {
+                  setChatMessages((current) => [
+                    ...current,
+                    {
+                      messageId: `preview-message-${current.length + 1}`,
+                      clientMessageId: `preview-client-${current.length + 1}`,
+                      sequence: String(current.length + 1),
+                      participantSessionId: "you",
+                      displayName,
+                      text,
+                      createdAt: new Date().toISOString(),
+                      attachments: attachments ?? [],
+                    },
+                  ]);
+                }}
+              />
+            </aside>
           )}
         </div>
 
-        <div className="bg-[#fbfaf7] pt-3">
+        <div className="z-30 shrink-0">
           <ControlBar
             variant={isMobile ? "mobile" : "dock"}
             buttons={["mic", "video", "screenshare", "participants", "chat", "more", "leave"]}
@@ -148,8 +212,14 @@ function SdkPreviewPage() {
             onToggleVideo={() => setIsVideoEnabled((value) => !value)}
             onToggleScreenShare={() => setLayout((value) => (value === "screen-share" ? "grid" : "screen-share"))}
             onToggleRecording={() => setIsRecording((value) => !value)}
-            onToggleChat={() => setIsChatOpen((value) => !value)}
-            onToggleParticipants={() => setIsParticipantsOpen((value) => !value)}
+            onToggleChat={() => {
+              setIsParticipantsOpen(false);
+              setIsChatOpen((value) => !value);
+            }}
+            onToggleParticipants={() => {
+              setIsChatOpen(false);
+              setIsParticipantsOpen((value) => !value);
+            }}
             onToggleTranscription={() => setIsTranscribing((value) => !value)}
             onToggleHandRaise={() => setIsHandRaised((value) => !value)}
             onToggleWhiteboard={() => setIsWhiteboardOpen((value) => !value)}

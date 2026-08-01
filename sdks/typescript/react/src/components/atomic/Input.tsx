@@ -23,16 +23,16 @@ export const Input = React.memo(
 
     return (
       <div className={cn("flex flex-col gap-1.5", fullWidth && "w-full")}>
-        {label && <label className="text-sm font-medium text-muted-foreground">{label}</label>}
+        {label && <label className="text-sm font-medium text-[#555b65]">{label}</label>}
         <div className="relative">
           {icon && iconPosition === "left" && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">{icon}</div>}
 
           <input
             ref={ref}
             className={cn(
-              "rounded-md border border-input bg-card text-foreground transition-colors",
-              "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
-              "placeholder:text-muted-foreground",
+              "rounded-[8px] border border-[#c9c8c2] bg-[#fbfaf7] text-[#0c0e12] transition-colors",
+              "focus:border-[#9dcfe1] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dff2f7]",
+              "placeholder:text-[#858a92]",
               "disabled:cursor-not-allowed disabled:opacity-50",
               sizeClasses[size],
               fullWidth ? "w-full" : "w-auto",

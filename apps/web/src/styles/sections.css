@@ -210,10 +210,6 @@
 
 .feature {
   position: relative;
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 32px;
   min-height: 126px;
   padding: 24px 18px 24px 34px;
   border-bottom: 1px solid var(--line-strong);
@@ -252,16 +248,6 @@
   margin-top: 7px;
   color: var(--ink-2);
   font-size: 14px;
-}
-
-.feature > span {
-  flex: none;
-  padding: 6px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 10px;
 }
 
 .closing {
@@ -401,10 +387,5 @@
   .entry-row a {
     grid-column: 1;
     overflow-x: auto;
-  }
-
-  .feature {
-    flex-direction: column;
-    gap: 18px;
   }
 }

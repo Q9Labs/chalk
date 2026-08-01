@@ -99,7 +99,7 @@ export const ParticipantList = React.memo(
       return sorted;
     }, [participants, searchQuery]);
 
-    const listSpacingClassName = variant === "sidebar" ? "space-y-0.5" : "space-y-1";
+    const listSpacingClassName = variant === "sidebar" ? "divide-y divide-[#ecebe6]" : "space-y-1";
     const emptyTextClassName = variant === "default" ? "text-chalk-text-muted" : "text-muted-foreground";
 
     const rows = (
@@ -159,29 +159,22 @@ export const ParticipantList = React.memo(
 
     if (variant === "sidebar") {
       return (
-        <div
-          className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative bg-transparent", !prefersReducedMotion && "chalk-animate-slide-right", className)}
-          style={themeVariables as React.CSSProperties}
-          data-tour="participants-panel"
-          role="complementary"
-          aria-label="Participants list"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-5">
+        <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-white font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
+          <div className="flex items-center justify-between border-b border-[#deddd7] px-5 py-[18px]">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-card-foreground tracking-tight">{title === "Participants" ? "People" : title}</h2>
-              <span className="text-muted-foreground text-sm font-medium">({participants.length})</span>
+              <h2 className="text-xl font-semibold tracking-[-0.025em] text-[#0c0e12]">{title === "Participants" ? "People" : title}</h2>
+              <span className="grid min-w-6 place-items-center rounded-full bg-[#eeede8] px-1.5 py-0.5 text-xs font-semibold text-[#555b65]">{participants.length}</span>
             </div>
 
             <div className="flex items-center gap-2">
               {onAddPeople && (
-                <Button onClick={onAddPeople} className="h-8 px-3 text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary border-0 gap-1.5 rounded-md transition-colors">
+                <Button onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] border-0 bg-[#202329] px-3 text-sm font-semibold !text-white transition-colors hover:bg-[#343840]">
                   <UserGroupIcon className="w-4 h-4" />
-                  <span>Add</span>
+                  <span>Invite</span>
                 </Button>
               )}
               {onClose && (
-                <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted/50" aria-label="Close">
+                <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[#deddd7] text-[#555b65] transition-colors hover:bg-[#f7f6f2] hover:text-[#0c0e12]" aria-label="Close">
                   <Cancel01Icon className="w-5 h-5" />
                 </button>
               )}
@@ -189,27 +182,19 @@ export const ParticipantList = React.memo(
           </div>
 
           {searchable && (
-            <div className="px-6 pb-2">
+            <div className="px-5 py-4">
               <Input
-                placeholder="Search for people..."
+                placeholder="Search people"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search01Icon className="w-4 h-4 text-muted-foreground" />}
+                icon={<Search01Icon className="w-4 h-4 text-[#858a92]" />}
                 iconPosition="left"
-                className="w-full bg-muted/30 border-transparent focus:bg-background focus:border-primary/20 transition-all placeholder:text-muted-foreground/70"
+                className="w-full rounded-[7px] border-[#deddd7] bg-[#fbfaf7] transition-all placeholder:text-[#858a92] focus:border-[#9dcfe1] focus:bg-white"
               />
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto px-4 pb-6 mt-2">
-            {/* Section Label */}
-            <div className="mb-2 px-3">
-              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">In Meeting</p>
-            </div>
-
-            {/* Participants List */}
-            {rows}
-          </div>
+          <div className="flex-1 overflow-y-auto px-5 pb-5">{rows}</div>
         </div>
       );
     }

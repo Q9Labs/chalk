@@ -158,7 +158,7 @@ export function PreJoinLobby({ roomName = "Chalk room", logoUrl, defaultDisplayN
                     if (event.key === "Enter") submit();
                   }}
                   disabled={isJoining}
-                  className="mt-2 h-12 w-full rounded-[7px] border border-[#c9c8c2] bg-white px-4 text-sm outline-none transition placeholder:text-[#858a92] focus-visible:border-[#0c0e12] focus-visible:ring-2 focus-visible:ring-[#b2e0f0] disabled:opacity-50"
+                  className="mt-2 h-12 w-full rounded-[8px] border border-[#c9c8c2] bg-[#fbfaf7] px-4 text-sm outline-none transition placeholder:text-[#858a92] focus-visible:border-[#9dcfe1] focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[#dff2f7] disabled:opacity-50"
                   placeholder="Enter your name"
                 />
               </div>
@@ -194,7 +194,6 @@ export function PreJoinLobby({ roomName = "Chalk room", logoUrl, defaultDisplayN
               >
                 {isJoining ? "Joining…" : "Join meeting"}
               </button>
-              <p className="mt-4 text-center text-xs leading-5 text-[#858a92]">Camera and microphone controls stay available in the meeting.</p>
             </aside>
           </div>
         </section>

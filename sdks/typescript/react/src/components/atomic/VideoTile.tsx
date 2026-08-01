@@ -3,7 +3,7 @@ import { cn } from "../../utils/cn";
 import { MicrophoneOff01Icon, Monitor01Icon, HandIcon, WifiOffIcon } from "../../utils/icons";
 import { Avatar } from "./Avatar";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
-import { getParticipantGradient, getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface VideoTileProps {
   participant: {
@@ -131,7 +131,6 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
   const showVideo = participant.isVideoEnabled && videoTrack && isTrackValid && !trackError && isLoaded;
 
   const participantColors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
-  const participantGradient = useMemo(() => getParticipantGradient(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
 
   const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality <= 2;
 
@@ -179,7 +178,7 @@ export const VideoTile = React.memo(({ participant, videoTrack, mirror, showName
 
       {/* Avatar background when video is off or loading */}
       {!showVideo && showAvatar && (
-        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 bg-[var(--chalk-bg-tile)]" style={{ backgroundImage: participantGradient }}>
+        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300" style={{ backgroundColor: participantColors.secondary }}>
           <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={Boolean(participant.avatarUrl)} className="opacity-90" gradientPreference={gradientPreference} />
         </div>
       )}

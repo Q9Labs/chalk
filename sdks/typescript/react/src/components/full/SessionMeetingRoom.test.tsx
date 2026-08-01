@@ -47,7 +47,7 @@ describe("SessionMeetingRoom", () => {
 
     expect(join).toHaveBeenCalledOnce();
     expect(setMicrophoneEnabled).toHaveBeenCalledWith(false);
-    expect(screen.getByRole("dialog", { name: "Leave Meeting?" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Leave meeting?" })).toBeInTheDocument();
   });
 
   it("routes remote microphone and screen-share audio to the audio renderer", () => {

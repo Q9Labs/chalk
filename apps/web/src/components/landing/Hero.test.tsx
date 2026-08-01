@@ -23,6 +23,10 @@ describe("Hero", () => {
     expect(markup).toContain("Your call.");
     expect(markup).not.toContain("eyebrow");
     expect(markup).toContain("View SDK preview");
+    expect(markup).toContain('aria-label="TypeScript"');
+    expect(markup).toContain('aria-label="React Native"');
+    expect(markup).not.toContain("Supported product surfaces");
+    expect(markup).not.toContain("The hosted product remains under active development");
     expect(markup).not.toContain('href="/new"');
   });
 });

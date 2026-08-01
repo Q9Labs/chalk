@@ -100,13 +100,6 @@
   margin-top: 34px;
 }
 
-.hero-note {
-  max-width: 530px;
-  margin-top: 24px;
-  color: var(--ink-3);
-  font-size: 13px;
-}
-
 .hero-product {
   position: relative;
   z-index: 0;
@@ -131,22 +124,71 @@
 }
 
 .hero-proof {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(38px, 7vw, 92px);
+  min-height: 94px;
+  padding-inline: 32px;
   border-top: 1px solid var(--line);
 }
 
-.hero-proof span {
-  padding: 20px 24px;
-  border-left: 1px solid var(--line);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  text-align: center;
+.hero-tech-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
 }
 
-.hero-proof span:last-child {
-  border-right: 1px solid var(--line);
+.hero-tech-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.hero-tech-typescript rect {
+  fill: #3178c6;
+}
+
+.hero-tech-typescript path {
+  fill: #fff;
+}
+
+.hero-tech-react {
+  width: 48px;
+  height: 48px;
+}
+
+.hero-tech-react svg {
+  fill: none;
+  stroke: #149eca;
+  stroke-width: 2.5;
+}
+
+.hero-tech-react-core {
+  fill: #149eca;
+  stroke: none;
+}
+
+.hero-tech-react-native {
+  width: 42px;
+  height: 42px;
+}
+
+.hero-tech-device {
+  stroke: #0c0e12;
+  stroke-width: 2.2;
+}
+
+.hero-tech-cloudflare {
+  width: 58px;
+}
+
+.hero-tech-cloudflare path:first-child {
+  fill: #f38020;
+}
+
+.hero-tech-cloudflare path:last-child {
+  fill: #faae40;
 }
 
 @media (max-width: 1040px) {
@@ -184,16 +226,9 @@
   }
 
   .hero-proof {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .hero-proof span:nth-child(3) {
-    border-top: 1px solid var(--line);
-  }
-
-  .hero-proof span:nth-child(4) {
-    border-top: 1px solid var(--line);
-    border-right: 1px solid var(--line);
+    gap: clamp(26px, 9vw, 54px);
+    min-height: 82px;
+    padding-inline: 20px;
   }
 }
 

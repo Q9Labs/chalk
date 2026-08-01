@@ -23,14 +23,14 @@ export const PARTICIPANT_GRADIENT_PRESETS = [
 ] as const;
 
 const AUTO_PALETTE: readonly [string, string][] = [
-  ["#0ea5e9", "#22c55e"],
-  ["#f97316", "#ef4444"],
-  ["#a855f7", "#ec4899"],
-  ["#2563eb", "#14b8a6"],
-  ["#eab308", "#f97316"],
-  ["#06b6d4", "#6366f1"],
-  ["#84cc16", "#14b8a6"],
-  ["#f43f5e", "#8b5cf6"],
+  ["#315f72", "#dcebef"],
+  ["#5c6650", "#e3eadf"],
+  ["#6b5b4f", "#ece3dc"],
+  ["#64576b", "#e8e0ea"],
+  ["#49645d", "#dfeae6"],
+  ["#665d42", "#ebe6d6"],
+  ["#4d5d73", "#e1e6ec"],
+  ["#6d5158", "#eee0e3"],
 ];
 
 function hashIdentity(identity: string): number {

@@ -1,12 +1,12 @@
 const FEATURES = [
-  { title: "Meeting core", body: "Room, session, admission, roles, and lifecycle boundaries.", status: "Implemented", tone: "green" },
-  { title: "Realtime sync", body: "Durable control state, bounded recovery, and reconnect semantics.", status: "Implemented", tone: "yellow" },
-  { title: "Media adapters", body: "Cloudflare web and React Native RealtimeKit adapters.", status: "Implemented", tone: "blue" },
-  { title: "Whiteboard", body: "A shared React collaboration package with app rendering still in progress.", status: "In progress", tone: "pink" },
-  { title: "Recording", body: "Control-plane contracts with capture qualification still open.", status: "In progress", tone: "blue" },
-  { title: "Transcription", body: "Dispatcher and artifact flows with managed-path proof still open.", status: "In progress", tone: "pink" },
-  { title: "Webhooks", body: "Versioned events, signatures, retries, fixtures, and consumer helpers.", status: "Implemented", tone: "green" },
-  { title: "Operations", body: "Local telemetry and health contracts with managed operations still open.", status: "In progress", tone: "yellow" },
+  { title: "Meeting core", body: "Room, session, admission, roles, and lifecycle boundaries.", tone: "green" },
+  { title: "Realtime sync", body: "Durable control state, bounded recovery, and reconnect semantics.", tone: "yellow" },
+  { title: "Media adapters", body: "Cloudflare web and React Native RealtimeKit adapters.", tone: "blue" },
+  { title: "Whiteboard", body: "A shared React collaboration package with app rendering still in progress.", tone: "pink" },
+  { title: "Recording", body: "Control-plane contracts with capture qualification still open.", tone: "blue" },
+  { title: "Transcription", body: "Dispatcher and artifact flows with managed-path proof still open.", tone: "pink" },
+  { title: "Webhooks", body: "Versioned events, signatures, retries, fixtures, and consumer helpers.", tone: "green" },
+  { title: "Operations", body: "Local telemetry and health contracts with managed operations still open.", tone: "yellow" },
 ];
 
 export function FeatureGrid() {
@@ -24,7 +24,6 @@ export function FeatureGrid() {
                 <h3>{feature.title}</h3>
                 <p>{feature.body}</p>
               </div>
-              <span>{feature.status}</span>
             </article>
           ))}
         </div>

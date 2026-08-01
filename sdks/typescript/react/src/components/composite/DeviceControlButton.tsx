@@ -105,18 +105,17 @@ export const DeviceControlButton = ({
   const dock = appearance === "dock";
 
   return (
-    <div className={cn("relative z-10 flex items-center pointer-events-auto", dock && "border-l border-[#deddd7] first:border-l-0", isOpen && "z-[60]", className)} ref={containerRef}>
+    <div className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
       <ControlButton
         icon={icon}
         label={label}
-        inlineLabel={dock ? (isMic ? (isActive ? "Mute" : "Unmute") : "Camera") : undefined}
         onClick={onToggle}
         active={isActive}
         disabled={disabled}
         haptic={haptic}
         size={size}
-        className={cn(dock ? "h-[58px] !w-auto rounded-none bg-white px-4 shadow-none hover:bg-[#f7f6f2] max-sm:px-3" : "rounded-r-none border-r border-black/5 bg-black/5 dark:border-white/5 dark:bg-white/10", isOpen && "brightness-110")}
+        className={cn(dock ? "h-[52px] w-[52px] !rounded-full !bg-[#202329] !text-white shadow-[0_5px_16px_rgba(12,14,18,0.18)] hover:-translate-y-0.5 hover:!bg-[#343840]" : "rounded-r-none border-r border-black/5 bg-black/5 dark:border-white/5 dark:bg-white/10", isOpen && "brightness-110")}
       />
 
       {/* Chevron Trigger */}
@@ -129,8 +128,8 @@ export const DeviceControlButton = ({
           aria-label={`Select ${dropdownLabel.toLowerCase()}`}
           className={cn(
             "chalk-button-tactile flex items-center justify-center transition-all duration-300 ease-out",
-            dock ? "h-[58px] rounded-none border-l border-[#deddd7] bg-white px-2.5 shadow-none hover:bg-[#f7f6f2] max-sm:hidden" : "rounded-r-full border-l border-black/5 bg-black/5 shadow-lg hover:brightness-110 dark:border-white/5 dark:bg-white/10",
-            "text-foreground",
+            dock ? "absolute -right-1.5 -bottom-1.5 h-7 w-7 rounded-full border-2 border-[#fbfaf7] bg-[#343840] p-0 !text-white shadow-sm hover:bg-[#4a4f59]" : "rounded-r-full border-l border-black/5 bg-black/5 shadow-lg hover:brightness-110 dark:border-white/5 dark:bg-white/10",
+            !dock && "text-foreground",
             !dock && chevronSizeClass,
             isOpen && "brightness-110",
             disabled && "cursor-not-allowed opacity-50",
@@ -146,16 +145,16 @@ export const DeviceControlButton = ({
       {isOpen && (
         <div
           className={cn(
-            "absolute z-[70] min-w-[240px] max-w-[280px] rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 pointer-events-auto",
+            "pointer-events-auto absolute z-[70] max-h-[360px] min-w-[260px] max-w-[300px] overflow-y-auto rounded-[10px] border border-[#c9c8c2] bg-white py-2 text-[#0c0e12] shadow-[0_18px_44px_rgba(12,14,18,0.16)] animate-in fade-in zoom-in-95 duration-150",
             orientation === "up" ? "bottom-full mb-3" : "top-full mt-3",
             "left-0",
           )}
         >
-          <div className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground border-b border-border mb-1">{dropdownLabel}</div>
+          <div className="mb-1 border-b border-[#e5e4df] px-4 pb-3 pt-1 text-sm font-semibold">{dropdownLabel}</div>
 
           <div className="max-h-[220px] overflow-y-auto py-1">
             {devices.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-muted-foreground italic">No devices found</div>
+              <div className="px-4 py-3 text-sm text-[#858a92]">No devices found</div>
             ) : (
               devices.map((device) => {
                 const isSelected = selectedDeviceId === device.deviceId;
@@ -164,10 +163,10 @@ export const DeviceControlButton = ({
                     key={device.deviceId}
                     type="button"
                     onClick={() => handleSelectDevice(device.deviceId)}
-                    className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors", "hover:bg-muted", isSelected ? "bg-primary/10 text-primary font-medium" : "text-foreground/80")}
+                    className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
                   >
                     <div className="flex items-center gap-3 truncate pr-2">
-                      <span className={cn("h-2 w-2 shrink-0 rounded-full", isSelected ? "bg-primary" : "bg-border")} />
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", isSelected ? "bg-[#55aac9]" : "bg-[#c9c8c2]")} />
                       <span className="truncate">{device.label || `${dropdownLabel} ${device.deviceId.slice(0, 4)}`}</span>
                     </div>
                     {isSelected && <Tick01Icon size={14} className="shrink-0" />}
@@ -179,7 +178,7 @@ export const DeviceControlButton = ({
 
           {secondaryDevices && secondaryDevices.length > 0 && (
             <>
-              <div className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground border-y border-border my-1 bg-muted/50">Speakers</div>
+              <div className="my-1 border-y border-[#e5e4df] bg-[#fbfaf7] px-4 py-2.5 text-sm font-semibold">Speakers</div>
               <div className="max-h-[180px] overflow-y-auto py-1">
                 {secondaryDevices.map((device) => {
                   const isSelected = selectedSecondaryDeviceId === device.deviceId;
@@ -188,10 +187,10 @@ export const DeviceControlButton = ({
                       key={device.deviceId}
                       type="button"
                       onClick={() => handleSelectSecondaryDevice(device.deviceId)}
-                      className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors", "hover:bg-muted", isSelected ? "bg-primary/10 text-primary font-medium" : "text-foreground/80")}
+                      className={cn("flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
                     >
                       <div className="flex items-center gap-3 truncate pr-2">
-                        <VolumeHighIcon size={14} className={cn("shrink-0", isSelected ? "text-primary" : "opacity-50")} />
+                        <VolumeHighIcon size={14} className={cn("shrink-0", isSelected ? "text-[#315f72]" : "text-[#858a92]")} />
                         <span className="truncate">{device.label || `Speaker ${device.deviceId.slice(0, 4)}`}</span>
                       </div>
                       {isSelected && <Tick01Icon size={14} className="shrink-0" />}
