@@ -1,0 +1,9 @@
+# Phase 4 V4 lifecycle extraction session log
+
+2026-08-01 21:35 Asia/Karachi: Installed the existing workspace dependencies with `pnpm install`. Read the root repository instructions, SDK TypeScript code standards, ubiquitous language lifecycle sections, and local writing/code-review guidance. The current client snapshot exposes `state`, `failure`, and `connection.sync`/`connection.media`; it has no runtime `JoinStatus` or admission-waiting status.
+
+2026-08-01 21:46 Asia/Karachi: Added and exported the pure client `ConferencePhase` mapper with direct transition tests. Extracted React auto-join, conference-duration, and whiteboard-scene hooks with renderHook tests. Refactored React Native VideoConference to derive its legacy visual phase from the client phase plus local join/leave intent, and extracted unmount leave, auto-join, join, phase, and diagnostics hooks. Client build, focused client/React/RN tests, and RN typecheck passed.
+
+2026-08-01 21:54 Asia/Karachi: Committed the React extraction as `fee14f72`. The affected pre-commit gate passed formatting, hygiene, secret scanning, static analysis, typechecks, covered tests, web and React builds, publint, and attw. The gate also exercised the SDK web consumer E2E test command.
+
+2026-08-01 22:02 Asia/Karachi: Committed the React Native lifecycle refactor as `970922ce`. The first two commit attempts were blocked by Fallow for the test-only workspace React harness import and then by test-presence for its helper filename; the final local renderHook bridge and paired test module resolved both without dependency changes. The final affected gate passed RN and mobile typechecks, 62 RN test files with 131 tests, builds, publication checks, formatting, security, hygiene, and static analysis. Generated RN embedded assets were moved to Trash after verification.
