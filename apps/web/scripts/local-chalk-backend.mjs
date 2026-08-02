@@ -139,12 +139,26 @@ export function createLocalChalkHandler(options) {
 
   async function rotateSharedRoom(staleRoom) {
     if (!sharedRoomRotationPromise) {
+      options.log?.("stale_session_rotation_attempt", { staleSessionId: staleRoom.sessionId });
       sharedRoomRotationPromise = (async () => {
-        const currentRoom = sharedRoomPromise ? await sharedRoomPromise : undefined;
-        if (!currentRoom || currentRoom.sessionId !== staleRoom.sessionId) return;
-        sharedRoomPromise = undefined;
-        hostParticipantSessionId = undefined;
-        await ensureSharedRoom();
+        try {
+          const currentRoom = sharedRoomPromise ? await sharedRoomPromise : undefined;
+          if (!currentRoom || currentRoom.sessionId !== staleRoom.sessionId) {
+            options.log?.("stale_session_rotation_skipped", { staleSessionId: staleRoom.sessionId, currentSessionId: currentRoom?.sessionId });
+            return;
+          }
+          sharedRoomPromise = undefined;
+          hostParticipantSessionId = undefined;
+          const replacementRoom = await ensureSharedRoom();
+          options.log?.("stale_session_rotation_succeeded", { staleSessionId: staleRoom.sessionId, replacementSessionId: replacementRoom.sessionId });
+        } catch (error) {
+          options.log?.("stale_session_rotation_failed", {
+            staleSessionId: staleRoom.sessionId,
+            errorCode: error && typeof error === "object" && "code" in error ? error.code : undefined,
+            status: error && typeof error === "object" && "status" in error ? error.status : undefined,
+          });
+          throw error;
+        }
       })().finally(() => {
         sharedRoomRotationPromise = undefined;
       });
@@ -153,7 +167,7 @@ export function createLocalChalkHandler(options) {
   }
 
   function isStaleSharedRoomError(error) {
-    return error && typeof error === "object" && error.status === 409;
+    return error && typeof error === "object" && error.status === 409 && error.code === "session_not_active";
   }
 
   function refreshBrowserSession(browserSession, input) {

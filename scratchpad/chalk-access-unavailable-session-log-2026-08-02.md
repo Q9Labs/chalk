@@ -11,3 +11,7 @@ The backend now treats one HTTP 409 admission failure as a stale shared session,
 ## 2026-08-02 22:09 Asia/Karachi — verification
 
 The focused web route tests passed: 10 tests. The real local browser join exercised the expired-session path, rotated from the stale session to a new 24-hour session, and reached `live` with 8 successful join spans.
+
+## 2026-08-02 22:22 Asia/Karachi — review hardening
+
+The rotation predicate now requires the API error code `session_not_active` in addition to HTTP 409, so capacity and idempotency conflicts remain visible instead of moving participants into a different session. Rotation emits structured attempt, skipped, success, and failure events with session IDs and safe error status/code fields. The focused web route tests passed: 12 tests, including non-stale conflict and failed-rotation telemetry cases.
