@@ -10,11 +10,14 @@ import {
   createReactNativeWebSocketFactory,
   createV3SyncClient,
   type ChalkSessionChatFileFactoryInput,
+  type ChalkSessionDiagnostic,
+  type ChalkSessionJoinTraceEvent,
   type ChalkSessionDependencies,
   type ChalkSessionMediaFactoryInput,
   type ChalkSessionOptions as ClientChalkSessionOptions,
   type ChalkSessionSyncFactoryInput,
   type ChalkSessionWhiteboardFactoryInput,
+  type DiagnosticObservation,
   type ReactNativeWebSocket,
   type ReactNativeWebSocketConstructor,
   type ReactNativeAsyncStorage,
@@ -60,16 +63,50 @@ export function createChalkSession(options: ChalkSessionOptions): ChalkSession {
       ...options.diagnostics,
       onEvent: (event) => {
         options.diagnostics?.onEvent?.(event);
-        options.telemetry?.recordDiagnostic({
-          category: "session",
-          code: event.event,
-          phase: event.state === "joining" ? "signaling" : event.state === "leaving" || event.state === "left" ? "terminal" : "recovery",
-          state: event.event.endsWith("_failed") || event.event.endsWith("_exhausted") ? "failed" : "observed",
-        });
+        options.telemetry?.recordDiagnostic(sessionDiagnostic(event));
       },
     },
     dependencies,
   });
+}
+
+function sessionDiagnostic(event: ChalkSessionDiagnostic): DiagnosticObservation {
+  if (event.event === "join_span") {
+    const joinEvent = event as ChalkSessionJoinTraceEvent;
+    return {
+      category: "session",
+      code: `join.${joinEvent.step}.${joinEvent.outcome}`,
+      phase: joinTracePhase(joinEvent.step),
+      state: joinEvent.outcome === "succeeded" ? "succeeded" : joinEvent.outcome === "failed" ? "failed" : "observed",
+      ...(joinEvent.durationMs === undefined ? {} : { metricValue: joinEvent.durationMs }),
+      attributes: {
+        span_id: joinEvent.spanId,
+        ...(joinEvent.parentSpanId ? { parent_span_id: joinEvent.parentSpanId } : {}),
+        step: joinEvent.step,
+        outcome: joinEvent.outcome,
+        epoch: joinEvent.epoch,
+        ...(joinEvent.code ? { failure_code: joinEvent.code } : {}),
+      },
+    };
+  }
+
+  return {
+    category: "session",
+    code: event.event,
+    phase: event.state === "joining" ? "signaling" : event.state === "leaving" || event.state === "left" ? "terminal" : "recovery",
+    state: event.event.endsWith("_failed") || event.event.endsWith("_exhausted") ? "failed" : "observed",
+  };
+}
+
+function joinTracePhase(step: NonNullable<ChalkSessionDiagnostic["step"]>): "authentication" | "signaling" | "media" | "recovery" {
+  switch (step) {
+    case "acquire_initial_media":
+    case "create_media_client":
+    case "start_media":
+      return "media";
+    default:
+      return "signaling";
+  }
 }
 
 function createMediaClient(apiBaseURL: string, input: ChalkSessionMediaFactoryInput, fetch: typeof globalThis.fetch, observePeerConnection: ((peerConnection: RtcPeerConnection) => () => void) | undefined) {

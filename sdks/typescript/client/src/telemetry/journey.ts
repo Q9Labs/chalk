@@ -28,6 +28,7 @@ export type SyncFrameObservation = {
 export type DiagnosticObservation = {
   readonly category: "device" | "network" | "permission" | "recovery" | "session" | "whiteboard_renderer";
   readonly code: string;
+  readonly attributes?: TelemetryAttributes;
   readonly metricValue?: number;
   readonly phase?: JourneyPhase;
   readonly state?: Extract<JourneyState, "failed" | "observed" | "succeeded">;
@@ -101,6 +102,7 @@ export class TelemetryJourney {
       state: observation.state ?? "observed",
       origin_kind: "diagnostic",
       attributes: {
+        ...observation.attributes,
         category: observation.category,
         code: observation.code,
         ...(observation.metricValue !== undefined ? { metric_value: observation.metricValue } : {}),

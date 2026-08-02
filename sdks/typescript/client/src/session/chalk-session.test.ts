@@ -31,6 +31,22 @@ describe("ChalkSession", () => {
     });
     expect(Object.isFrozen(harness.session.getSnapshot())).toBe(true);
     expect(Object.isFrozen(harness.session.getSnapshot().participants)).toBe(true);
+    const trace = harness.session.getJoinTrace();
+    const rootSpan = trace.find((event) => event.step === "join" && event.outcome === "started");
+    expect(rootSpan).toEqual(expect.objectContaining({ event: "join_span", step: "join", outcome: "started" }));
+    expect(trace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ step: "acquire_initial_media", outcome: "succeeded" }),
+        expect.objectContaining({ step: "access_initialize", outcome: "succeeded" }),
+        expect.objectContaining({ step: "create_media_client", outcome: "succeeded" }),
+        expect.objectContaining({ step: "create_sync_client", outcome: "succeeded" }),
+        expect.objectContaining({ step: "start_media", outcome: "succeeded" }),
+        expect.objectContaining({ step: "start_sync", outcome: "succeeded" }),
+        expect.objectContaining({ step: "wait_for_sync_live", outcome: "succeeded" }),
+        expect.objectContaining({ step: "join", outcome: "succeeded" }),
+      ]),
+    );
+    expect(trace.filter((event) => event.step !== "join").every((event) => event.parentSpanId === rootSpan?.spanId)).toBe(true);
     await harness.session.leave();
   });
 
@@ -311,6 +327,9 @@ describe("ChalkSession", () => {
       await vi.advanceTimersByTimeAsync(10_000);
 
       await rejection;
+      expect(harness.session.getJoinTrace()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ step: "start_sync", outcome: "succeeded" }), expect.objectContaining({ step: "wait_for_sync_live", outcome: "failed" }), expect.objectContaining({ step: "join", outcome: "failed", code: "sync_start_failed" })]),
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -334,6 +353,22 @@ describe("ChalkSession", () => {
 
       await vi.advanceTimersByTimeAsync(20_000);
       await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the Sync-live deadline running while media startup is pending", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness({ syncStartupSnapshot: syncSnapshot("connecting") });
+      harness.media.start.mockImplementationOnce(() => new Promise<void>(() => undefined));
+      const join = harness.session.join();
+      const rejection = expect(join).rejects.toMatchObject({ code: "sync_start_failed", message: "The Sync transport could not establish a connection" });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await rejection;
+      expect(harness.session.getJoinTrace()).toEqual(expect.arrayContaining([expect.objectContaining({ step: "start_sync", outcome: "succeeded" }), expect.objectContaining({ step: "wait_for_sync_live", outcome: "failed" })]));
     } finally {
       vi.useRealTimers();
     }
@@ -727,6 +762,7 @@ function createHarness(
 async function expectMediaStartupFailure(harness: ReturnType<typeof createHarness>): Promise<void> {
   await expect(harness.session.join()).rejects.toMatchObject({ code: "media_start_failed" });
   expect(harness.sync.leave).toHaveBeenCalledTimes(1);
+  expect(harness.session.getJoinTrace()).toEqual(expect.arrayContaining([expect.objectContaining({ step: "start_media", outcome: "failed" }), expect.objectContaining({ step: "join", outcome: "failed", code: "media_start_failed" })]));
 }
 
 async function joinedRecoveryHarness() {

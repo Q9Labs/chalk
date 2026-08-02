@@ -218,6 +218,7 @@ describe("TelemetryClient", () => {
       code: "whiteboard.renderer.ready",
       metricValue: 27,
       phase: "media",
+      attributes: { span_id: "join-span-1", outcome: "succeeded", failure_code: "media_start_failed" },
     });
     journey.terminal("succeeded");
 
@@ -228,6 +229,9 @@ describe("TelemetryClient", () => {
         category: "whiteboard_renderer",
         code: "whiteboard.renderer.ready",
         metric_value: 27,
+        span_id: "join-span-1",
+        outcome: "succeeded",
+        failure_code: "media_start_failed",
       },
     });
     expect(

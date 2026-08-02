@@ -46,6 +46,46 @@ describe("createChalkSession", () => {
 
     expect(chalkSession).toHaveBeenCalledWith(expect.objectContaining({ syncStartupTimeoutMs: 45_000 }));
   });
+
+  it("forwards join spans into the correlated diagnostic timeline", () => {
+    const journey = {
+      context: { journeyId: "journey", rootJourneyId: "journey", traceparent: "00-11111111111111111111111111111111-2222222222222222-01" },
+      headers: {},
+      recordDiagnostic: vi.fn(),
+      recordRtcSummary: vi.fn(),
+      recordSyncFrame: vi.fn(),
+    };
+
+    createChalkSession({ ...options(), telemetry: journey });
+    const sessionOptions = chalkSession.mock.calls[0]?.[0] as { readonly diagnostics: { readonly onEvent: (event: unknown) => void } };
+    sessionOptions.diagnostics.onEvent({
+      event: "join_span",
+      state: "live",
+      epoch: 2,
+      step: "start_media",
+      spanId: "join-span-2",
+      parentSpanId: "join-span-1",
+      outcome: "succeeded",
+      durationMs: 12,
+      code: "media_start_failed",
+    });
+
+    expect(journey.recordDiagnostic).toHaveBeenCalledWith({
+      category: "session",
+      code: "join.start_media.succeeded",
+      phase: "media",
+      state: "succeeded",
+      metricValue: 12,
+      attributes: {
+        span_id: "join-span-2",
+        parent_span_id: "join-span-1",
+        step: "start_media",
+        outcome: "succeeded",
+        epoch: 2,
+        failure_code: "media_start_failed",
+      },
+    });
+  });
 });
 
 function options() {

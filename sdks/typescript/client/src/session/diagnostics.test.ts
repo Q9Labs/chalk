@@ -20,4 +20,23 @@ describe("ChalkSessionDiagnostics", () => {
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(onEvent).toHaveBeenCalledTimes(3);
   });
+
+  it("records idempotent parent-linked join spans with bounded durations", () => {
+    let now = 100;
+    const diagnostics = new ChalkSessionDiagnostics({ now: () => now });
+    const root = diagnostics.startSpan({ step: "join", state: "joining", epoch: 4 });
+    const media = diagnostics.startSpan({ step: "start_media", state: "joining", epoch: 4, parentSpanId: root.spanId });
+
+    now = 125;
+    media.end({ state: "live", epoch: 4, outcome: "succeeded" });
+    media.end({ state: "failed", epoch: 4, outcome: "failed", code: "media_start_failed" });
+    root.end({ state: "live", epoch: 4, outcome: "succeeded" });
+
+    expect(diagnostics.joinTrace()).toEqual([
+      expect.objectContaining({ event: "join_span", step: "join", spanId: root.spanId, outcome: "started" }),
+      expect.objectContaining({ event: "join_span", step: "start_media", spanId: media.spanId, parentSpanId: root.spanId, outcome: "started" }),
+      expect.objectContaining({ event: "join_span", step: "start_media", spanId: media.spanId, parentSpanId: root.spanId, outcome: "succeeded", durationMs: 25 }),
+      expect.objectContaining({ event: "join_span", step: "join", spanId: root.spanId, outcome: "succeeded", durationMs: 25 }),
+    ]);
+  });
 });

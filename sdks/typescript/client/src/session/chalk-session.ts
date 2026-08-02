@@ -5,7 +5,7 @@ import type { V3DirectedRequest, V3RoomActionClientEvent, V3RoomActionsExtension
 import { ParticipantAccessError } from "./access";
 import type { ParticipantAccessSubject } from "./access";
 import { ChalkSessionAccessManager } from "./access-manager";
-import type { ChalkSessionDiagnostic } from "./diagnostics";
+import type { ChalkSessionDiagnostic, ChalkSessionJoinTraceEvent, ChalkSessionJoinTraceStep } from "./diagnostics";
 import { ChalkSessionDiagnostics } from "./diagnostics";
 import type { ChalkSessionAccessProvider, ChalkSessionDependencies, ChalkSessionMediaClient, ChalkSessionSyncClient } from "./dependencies";
 import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "./media-devices";
@@ -174,6 +174,10 @@ export class ChalkSession implements ChalkSessionStore {
 
   getDiagnostics(): readonly ChalkSessionDiagnostic[] {
     return this.#diagnostics.snapshot();
+  }
+
+  getJoinTrace(): readonly ChalkSessionJoinTraceEvent[] {
+    return this.#diagnostics.joinTrace();
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -385,56 +389,94 @@ export class ChalkSession implements ChalkSessionStore {
 
   async #performJoin(epoch: number): Promise<void> {
     let stream: MediaStream | null = null;
+    const joinSpan = this.#diagnostics.startSpan({ step: "join", state: this.#state, epoch });
     try {
-      stream = await this.#acquireInitialMedia();
+      stream = await this.#runJoinTraceStep(epoch, joinSpan.spanId, "acquire_initial_media", () => this.#acquireInitialMedia());
       this.#assertEpoch(epoch);
-      const access = await this.#access.initialize();
+      const access = await this.#runJoinTraceStep(epoch, joinSpan.spanId, "access_initialize", () => this.#access.initialize());
       this.#assertEpoch(epoch);
       try {
-        this.#media = this.#dependencies.createMediaClient({
-          access,
-          credential: () => this.#access.getMediaToken(),
-          onFailure: () => this.#handleMediaFailure(),
-          onScreenEnded: () => this.#handleScreenEnded(),
-        });
+        this.#media = await this.#runJoinTraceStep(epoch, joinSpan.spanId, "create_media_client", () =>
+          this.#dependencies.createMediaClient({
+            access,
+            credential: () => this.#access.getMediaToken(),
+            onFailure: () => this.#handleMediaFailure(),
+            onScreenEnded: () => this.#handleScreenEnded(),
+          }),
+        );
       } catch (cause) {
         throw new StartupFailure("media", cause);
       }
       try {
-        this.#sync = this.#dependencies.createSyncClient({ access, token: () => this.#access.getSyncToken(), media: this.#media });
+        this.#sync = await this.#runJoinTraceStep(epoch, joinSpan.spanId, "create_sync_client", () => this.#dependencies.createSyncClient({ access, token: () => this.#access.getSyncToken(), media: this.#media! }));
       } catch (cause) {
         throw new StartupFailure("sync", cause);
       }
       this.#subscribeLowerLayers();
       const media = this.#media;
       const sync = this.#sync;
-      await Promise.all([
-        media.start(stream).catch((cause) => {
-          throw new StartupFailure("media", cause);
-        }),
-        sync
-          .start()
-          .then(() => this.#waitForSyncLive(sync, this.#syncStartupTimeoutMs))
-          .catch((cause) => {
+      const syncStartup = this.#runJoinTraceStep(epoch, joinSpan.spanId, "start_sync", async () => {
+        try {
+          await sync.start();
+        } catch (cause) {
+          throw new StartupFailure("sync", cause);
+        }
+      });
+      const syncReady = syncStartup.then(() =>
+        this.#runJoinTraceStep(epoch, joinSpan.spanId, "wait_for_sync_live", async () => {
+          try {
+            await this.#waitForSyncLive(sync, this.#syncStartupTimeoutMs);
+          } catch (cause) {
             throw new StartupFailure("sync", cause);
+          }
+        }),
+      );
+      await Promise.all([
+        this.#runJoinTraceStep(epoch, joinSpan.spanId, "start_media", () =>
+          media.start(stream!).catch((cause) => {
+            throw new StartupFailure("media", cause);
           }),
+        ),
+        syncReady,
       ]);
       this.#assertEpoch(epoch);
       this.#failure = null;
       this.#transition("live");
       this.#scheduleAccessRefresh();
+      joinSpan.end({ state: this.#state, epoch: this.#epoch, outcome: "succeeded" });
     } catch (cause) {
       if (!this.#media) stopStream(stream);
       const cancelled = cause instanceof StaleEpoch;
       const confirmed = await this.#teardown(this.#access.current !== null);
       this.#joinCleanupConfirmed = confirmed;
       if (!confirmed) this.#diagnostics.record({ event: "cleanup_unconfirmed", state: this.#state, epoch: this.#epoch, code: "join_cleanup_unconfirmed" });
-      if (cancelled && this.#state === "leaving") throw this.#error("invalid_state", "join", false, "Join was cancelled by Leave", cause);
+      if (cancelled && this.#state === "leaving") {
+        const error = this.#error("invalid_state", "join", false, "Join was cancelled by Leave", cause);
+        joinSpan.end({ state: this.#state, epoch: this.#epoch, outcome: "cancelled", code: error.code });
+        throw error;
+      }
       const error = this.#joinError(cause);
       this.#failure = failureFrom(error);
       this.#transition("failed");
+      joinSpan.end({ state: this.#state, epoch: this.#epoch, outcome: "failed", code: error.code });
       throw error;
     }
+  }
+
+  #runJoinTraceStep<T>(epoch: number, parentSpanId: string, step: Exclude<ChalkSessionJoinTraceStep, "join">, operation: () => T | PromiseLike<T>): Promise<T> {
+    const span = this.#diagnostics.startSpan({ step, state: this.#state, epoch, parentSpanId });
+    return Promise.resolve()
+      .then(operation)
+      .then(
+        (value) => {
+          span.end({ state: this.#state, epoch: this.#epoch, outcome: "succeeded" });
+          return value;
+        },
+        (cause: unknown) => {
+          span.end({ state: this.#state, epoch: this.#epoch, outcome: cause instanceof StaleEpoch ? "cancelled" : "failed", ...(cause instanceof ChalkSessionError ? { code: cause.code } : {}) });
+          throw cause;
+        },
+      );
   }
 
   async #acquireInitialMedia(): Promise<MediaStream> {

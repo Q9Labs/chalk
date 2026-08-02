@@ -152,6 +152,10 @@ ordinary join attempt. Host admission remains available through
 
 ### Added
 
+- Added bounded, parent-linked Chalk join traces covering media permission,
+  participant access, media and Sync startup, the Sync-live wait, and terminal
+  outcomes without recording media, tokens, SDP, or room identity.
+
 - A shared client `ConferencePhase` derivation primitive and tested internal lifecycle hooks for React and React Native, preserving the existing UI phase surfaces and public component APIs.
 - A single light-first Chalk design system for marketing, lobby, meeting, SDK,
   and mobile surfaces, with normative tokens, component and layout rules,
