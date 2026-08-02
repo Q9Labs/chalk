@@ -1,5 +1,7 @@
 # Composio Catalog Maintenance
 
+> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+
 Use this when adding or changing an integration service or action. Composio
 toolkit/tool names can drift, so treat this doc as workflow guidance, not as a
 permanent copy of Composio's catalog.
@@ -19,7 +21,7 @@ Last source check: 2026-07-06.
 1. Verify the current Composio toolkit slug from the source references or live
    API.
 2. Add a `ServiceEntry` in `internal/integrations/catalog.go`.
-3. Keep Chalk IDs provider-neutral: `IntegrationProvider` is `composio`; Slack,
+3. Keep Chalk IDs provider-neutral: `ProviderName` is `composio`; Slack,
    Gmail, Linear, etc. are services.
 4. For Google/Microsoft suites, prefer separate Chalk services so users grant
    access granularly.

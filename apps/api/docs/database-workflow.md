@@ -1,5 +1,7 @@
 # Database Workflow
 
+> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+
 Owner/operator notes for Chalk API database work.
 
 ## Current Decision
@@ -91,7 +93,7 @@ apps/api/scripts/db-migrate.sh describe
 ```
 
 The script defaults to the local database URL from `dev-postgres.sh url`.
-For PlanetScale, set `CHALK_DATABASE_URL` to the direct Postgres connection URL
+For managed Postgres, set `CHALK_DATABASE_URL` to the direct Postgres connection URL
 before running migrations. Do not use the pooled runtime/PgBouncer URL for
 migrations.
 

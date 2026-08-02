@@ -1,5 +1,7 @@
 # Chalk web SDK quickstart
 
+> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+
 This flow keeps the tenant API key on your server and gives each browser a short-lived participant access bundle. It uses the framework-free `ChalkSession` runtime, while the React package subscribes to that same session instead of opening its own network connections.
 
 ## Install
@@ -19,7 +21,7 @@ import { createChalkServerClient } from "@q9labsai/chalk-client/server";
 export const chalk = createChalkServerClient({
   apiKey: process.env.CHALK_API_KEY!,
   tenantId: process.env.CHALK_TENANT_ID!,
-  apiBaseURL: "https://api.chalk.video",
+  apiBaseURL: "https://api.chalkmeet.com",
 });
 ```
 
@@ -127,8 +129,8 @@ export const chalkSession = new ChalkSession({
 
     return requireParticipantAccess(response);
   },
-  syncURL: "wss://sync.chalk.video/v3",
-  apiBaseURL: "https://api.chalk.video",
+  syncURL: "wss://sync.chalkmeet.com/v3/sync",
+  apiBaseURL: "https://api.chalkmeet.com",
 });
 ```
 

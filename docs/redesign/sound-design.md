@@ -1,6 +1,8 @@
 # Chalk — Sound Design (ElevenLabs edition)
 
-Status: aspirational design reference. Chalk currently ships one sound asset set;
+> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+
+Status: aspirational design reference. Chalk currently ships no sound asset set;
 the ten interchangeable sets and full prompt catalog below are exploration, not
 a description of the implemented product contract.
 

@@ -1,10 +1,12 @@
 # Chalk Design System
 
-This document is the source of truth for Chalk's visual language across marketing, web, meetings, SDK surfaces, and mobile. It defines one light-first system built around calm paper surfaces, precise structure, direct controls, and the four colors in the Chalk mark.
+> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+
+This document describes Chalk's visual language across marketing, web, meetings, SDK surfaces, and mobile. It defines one light-first system built around calm paper surfaces, precise structure, direct controls, and the four colors in the Chalk mark.
 
 ![Chalk design system board](./redesign/chalk-design-system-board.png)
 
-The board is an illustrative companion. The written tokens and rules in this document are authoritative when generated labels or values differ.
+The 2026-08-01 board is the current visual canon. The written tokens and rules here are reference guidance and must not override the board when they differ.
 
 ## Character
 

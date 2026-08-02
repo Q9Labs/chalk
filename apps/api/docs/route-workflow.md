@@ -1,5 +1,7 @@
 # Route Workflow
 
+> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+
 Use this when adding or changing API routes. The route definition is the source
 of truth for both runtime behavior and generated contract previews, so keep the
 transport shape explicit and close to the code that serves it.
@@ -111,12 +113,10 @@ scratchpad OpenAPI proof generator.
   the wire shape, not Go internals.
 - Update `internal/httpapi/route_contracts_test.go` when the intentional route
   inventory changes.
-- Generate the proof contract with:
-
-```bash
-cd apps/api
-go run ./scratchpad/sdk-generator-proof/contractopenapi
-```
+- The proof generator source currently lives at
+  `scratchpad/sdk-generator-proof/contractopenapi` after the API scratchpad
+  consolidation, outside the `apps/api` Go module. The old `go run` command is
+  not currently runnable until that module boundary is repaired.
 
 The generated preview should include the expected path, method, operation ID,
 auth metadata, parameters, request schema, success responses, response headers,

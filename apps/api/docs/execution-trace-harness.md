@@ -1,5 +1,7 @@
 # Execution Trace Harness
 
+> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+
 Use this when Hasan wants to review a finished Go API change by watching it run as a readable story, not by reading code and tests alone.
 
 ## What It Is
@@ -94,6 +96,7 @@ go run ./cmd/trace -scenario <name> -color always
 Registered scenarios:
 
 - `tenant-create`
+- `integration-execute-action`
 - `route:auth-register`
 - `route:auth-login`
 - `route:auth-logout`
@@ -116,6 +119,8 @@ Registered scenarios:
 - `route:session-end-member`
 - `route:recording-transcribe`
 - `route:telemetry-journey-event-intake`
+- `route:chat-attachment-upload`
+- `route:whiteboard-file-upload`
 - `route:api-key-customer-flow`
 - `edge:api-key-rejected-scope`
 - `route:participant-media-sfu-auth`
@@ -135,6 +140,7 @@ Registered scenarios:
 - `edge:unauthenticated-route`
 - `edge:forbidden-tenant-route`
 - `edge:invalid-route-id`
+- `webhook:delivery-attempt`
 
 ## Web Launch Authentication Proof
 
