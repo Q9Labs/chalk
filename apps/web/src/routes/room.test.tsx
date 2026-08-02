@@ -48,6 +48,13 @@ describe("public SDK room", () => {
     expect(source).toMatch(/await cleanupLocalBrowserSession\(\);\s*clearMeetingInviteToken\(\);/u);
   });
 
+  it("keeps the live join trace behind an explicit local query flag", () => {
+    const source = roomSource();
+    expect(source).toContain('new URLSearchParams(globalThis.location?.search ?? "").get("trace") === "1"');
+    expect(source).toContain("diagnostics: showTrace");
+    expect(source).toContain("<JoinTracePanel");
+  });
+
   it("proxies the narrow local backend without injecting authorization", () => {
     const source = readFileSync(joinPath(process.cwd(), "vite.config.ts"), "utf8");
     expect(source).toContain('"/local-chalk"');
