@@ -1,11 +1,14 @@
 // Overlays & Feedback
-export * from "./NotificationStack";
-export * from "./ConnectionLostOverlay";
-export * from "./LeaveConfirmationDialog";
+export * from "../toast-stack/ToastStack";
+export * from "../reconnecting-overlay/ReconnectingOverlay";
+export * from "./CommandErrorAlert";
+export * from "../leave-dialog/LeaveDialog";
+export * from "../media-request-dialog/MediaRequestDialog";
 
 // Headers & Info
-export * from "./MeetingHeader";
-export * from "./InviteModal";
+export * from "../conference-header/ConferenceHeader";
+export * from "../conference-info-dialog/ConferenceInfoDialog";
+export * from "../invite-dialog/InviteDialog";
 export * from "./InviteToast";
 
 // Chat Components
@@ -19,32 +22,31 @@ export * from "./chat-file-upload";
 export * from "./TourOverlay";
 
 // Panels - export components but handle Participant name collision
-export { ParticipantList } from "./ParticipantList";
-export type { ParticipantListParticipant, ParticipantListProps } from "./ParticipantList";
+export { ParticipantsPanel } from "../participants-panel";
+export type { ParticipantListParticipant, ParticipantListVariant, ParticipantsPanelProps } from "../participants-panel";
 export * from "./ChatPanel";
-export * from "./TranscriptionPanel";
+export * from "../transcript-panel/TranscriptPanel";
 export * from "./SettingsPanel";
 // SidePanelsWrapper removed - file does not exist
-export * from "./WaitingRoom";
+export * from "../admission-panel/AdmissionPanel";
 
 // Device & Media
-export * from "./DeviceControlButton";
+export * from "../device-popover/DevicePopover";
 export * from "./DeviceSelector";
 export * from "./BackgroundEffectsPicker";
 export * from "./NoiseSuppressionToggle";
 export * from "./SettingsDialog";
 
 // Video & Layout - export with Participant as canonical type
-export { VideoGrid } from "./VideoGrid";
-export type { VideoGridProps, Participant } from "./VideoGrid";
+export { ParticipantGrid } from "../participant-grid/ParticipantGrid";
+export type { ParticipantGridProps, Participant } from "../participant-grid/ParticipantGrid";
 export * from "./ScreenShareView";
-export * from "./LayoutSwitcher";
+export * from "../layout-picker/LayoutPicker";
 export * from "./MediaPreview";
 
 // Controls
-export * from "./ControlBar";
-export * from "./MobileControlSheet";
-export * from "./MobilePanel";
+export * from "../control-bar/ControlBar";
 export * from "./ReactionPicker";
+export * from "./ReactionsOverlay";
 export * from "./RecordingControls";
 export * from "./WhatsNewDialog";

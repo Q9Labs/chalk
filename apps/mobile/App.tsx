@@ -1,5 +1,5 @@
 import type { ChalkSessionStore } from "@q9labsai/chalk-client";
-import type { NativeVideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
+import type { VideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
 import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsClientSession, setDevDiagnosticsEnvironment, setDevDiagnosticsSession } from "@q9labsai/chalk-react-native/diagnostics";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
 import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
@@ -90,7 +90,7 @@ export default function App(): React.JSX.Element {
   }, []);
 
   const handleConferenceDiagnostics = useCallback(
-    (snapshot: NativeVideoConferenceDiagnosticsSnapshot) => {
+    (snapshot: VideoConferenceDiagnosticsSnapshot) => {
       if (!diagnosticsEnabled) return;
       setDevDiagnosticsSession(snapshot);
       if (snapshot.lastJoinError && snapshot.lastJoinError !== lastJoinErrorRef.current) {
@@ -178,7 +178,7 @@ function renderContent({
   route,
 }: {
   readonly brokerUrl: string;
-  readonly handleConferenceDiagnostics: (snapshot: NativeVideoConferenceDiagnosticsSnapshot) => void;
+  readonly handleConferenceDiagnostics: (snapshot: VideoConferenceDiagnosticsSnapshot) => void;
   readonly isBooting: boolean;
   readonly onClose: () => Promise<void>;
   readonly onDiagnosticsFailure: (source: string, message: string) => void;

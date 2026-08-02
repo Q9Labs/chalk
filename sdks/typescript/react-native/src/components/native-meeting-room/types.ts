@@ -1,9 +1,11 @@
 import type { NativeParticipantState } from "../../ui/native-types";
 
 export type RoomParticipant = NativeParticipantState["participants"][number];
-export type NativeMeetingPanelName = "chat" | "participants" | "whiteboard";
+export type MeetingPanelName = "chat" | "participants" | "whiteboard";
+export type ConferenceViewAction = () => unknown | Promise<unknown>;
+export type ConferenceViewActionRunner = (action: ConferenceViewAction) => Promise<void>;
 
-export interface NativeMeetingBottomDockProps {
+export interface MeetingBottomDockProps {
   simulatorMediaDisabled: boolean;
   isMuted: boolean;
   isCameraOff: boolean;

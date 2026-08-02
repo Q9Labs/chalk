@@ -5,7 +5,7 @@ type RoomParticipant = NativeParticipantState["participants"][number];
 export const NATIVE_COMPACT_VIEWPORT_MAX_WIDTH = 768;
 export const NATIVE_COMPACT_GRID_PAGE_SIZE = 4;
 
-export type NativeMeetingPrimaryContent = "grid" | "screen-share" | "screen-share-placeholder" | "whiteboard" | "split";
+export type MeetingPrimaryContent = "grid" | "screen-share" | "screen-share-placeholder" | "whiteboard" | "split";
 
 export interface NativeScreenShareStateLike {
   isActive: boolean;
@@ -25,7 +25,7 @@ export interface ResolveNativeMeetingLayoutOptions {
 export interface ResolvedNativeMeetingLayout {
   allParticipants: readonly RoomParticipant[];
   gridPages: readonly (readonly RoomParticipant[])[];
-  primaryContent: NativeMeetingPrimaryContent;
+  primaryContent: MeetingPrimaryContent;
   isStageMode: boolean;
   isSplit: boolean;
   showScreenShare: boolean;
@@ -111,7 +111,7 @@ export function resolveNativeMeetingLayout({ participants, localParticipant, scr
   const { screenSharer, screenShareTrack, isLocalScreenShare, showScreenShare } = resolveScreenShareSource(participants, localParticipant, screenShare);
   const isSplit = !isCompactViewport && isWhiteboardOpen && showScreenShare;
 
-  let primaryContent: NativeMeetingPrimaryContent = "grid";
+  let primaryContent: MeetingPrimaryContent = "grid";
   if (isSplit) {
     primaryContent = "split";
   } else if (isWhiteboardOpen) {

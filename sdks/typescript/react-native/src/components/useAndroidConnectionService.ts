@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import { addAndroidConnectionServiceListener, endAndroidConnectionServiceCall, ensureAndroidConnectionServiceRegistered, setAndroidConnectionServiceActive, startAndroidConnectionServiceCall } from "../android/connection-service";
 import { AndroidConnectionServiceController } from "./android-connection-service-controller";
-import type { NativeVideoConferencePhase } from "./NativeVideoConference";
+import type { VideoConferencePhase } from "./VideoConference";
 
 interface UseAndroidConnectionServiceOptions {
   displayName: string;
@@ -10,7 +10,7 @@ interface UseAndroidConnectionServiceOptions {
   hasVideo: boolean;
   joinNonce: number;
   onDisconnectRequest: () => void;
-  phase: NativeVideoConferencePhase;
+  phase: VideoConferencePhase;
   roomId: string;
   roomName: string;
 }

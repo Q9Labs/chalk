@@ -1,38 +1,38 @@
-import { nativeCallKit as defaultNativeCallKit, type NativeCallKitEndCallOptions, type NativeCallKitEvent, type NativeCallKitCallOptions } from "../callkit/native-callkit";
-import { resolveNativeVideoConferenceCallKitOptions, type NativeVideoConferenceCallKitOptions, type ResolvedNativeVideoConferenceCallKitOptions } from "../callkit/resolve-native-video-conference-callkit-options";
-import type { NativeVideoConferencePhase } from "./NativeVideoConference";
+import { callKit as defaultCallKit, type CallKitEndCallOptions, type CallKitEvent, type CallKitCallOptions } from "../callkit/callkit";
+import { resolveVideoConferenceCallKitOptions, type VideoConferenceCallKitOptions, type ResolvedVideoConferenceCallKitOptions } from "../callkit/resolve-video-conference-callkit-options";
+import type { VideoConferencePhase } from "./VideoConference";
 
-export interface NativeVideoConferenceCallKitPort {
+export interface VideoConferenceCallKitPort {
   readonly isSupported: boolean;
-  addListener(listener: (event: NativeCallKitEvent) => void): { remove(): void };
-  configure(options: ResolvedNativeVideoConferenceCallKitOptions): Promise<{ isSupported: boolean }>;
-  endCall(options: NativeCallKitEndCallOptions): Promise<void>;
-  reportConnected(options: Pick<NativeCallKitCallOptions, "callUUID">): Promise<void>;
-  startCall(options: NativeCallKitCallOptions): Promise<{ callUUID: string } | null>;
+  addListener(listener: (event: CallKitEvent) => void): { remove(): void };
+  configure(options: ResolvedVideoConferenceCallKitOptions): Promise<{ isSupported: boolean }>;
+  endCall(options: CallKitEndCallOptions): Promise<void>;
+  reportConnected(options: Pick<CallKitCallOptions, "callUUID">): Promise<void>;
+  startCall(options: CallKitCallOptions): Promise<{ callUUID: string } | null>;
 }
 
-export interface NativeVideoConferenceCallKitSyncInput {
-  readonly callKit?: NativeVideoConferenceCallKitOptions | boolean;
+export interface VideoConferenceCallKitSyncInput {
+  readonly callKit?: VideoConferenceCallKitOptions | boolean;
   readonly hasVideo: boolean;
   readonly isAudioEnabled: boolean;
   readonly joinNonce: number;
   readonly onEndCall: (options?: { closeAfterLeave?: boolean }) => void;
   readonly onToggleAudio: () => Promise<boolean>;
-  readonly phase: NativeVideoConferencePhase;
+  readonly phase: VideoConferencePhase;
   readonly roomId: string;
   readonly roomName?: string;
 }
 
-export class NativeVideoConferenceCallKitController {
-  readonly #port: NativeVideoConferenceCallKitPort;
-  #input: NativeVideoConferenceCallKitSyncInput | undefined;
+export class VideoConferenceCallKitController {
+  readonly #port: VideoConferenceCallKitPort;
+  #input: VideoConferenceCallKitSyncInput | undefined;
   #subscription: { remove(): void } | undefined;
   #activeCallId: string | null = null;
   #reportedConnectedCallId: string | null = null;
   #startedJoinNonce: number | null = null;
   #lastConfigurationSignature: string | null = null;
 
-  constructor(port: NativeVideoConferenceCallKitPort = defaultNativeCallKit) {
+  constructor(port: VideoConferenceCallKitPort = defaultCallKit) {
     this.#port = port;
   }
 
@@ -56,7 +56,7 @@ export class NativeVideoConferenceCallKitController {
     });
   };
 
-  readonly sync = (input: NativeVideoConferenceCallKitSyncInput): void => {
+  readonly sync = (input: VideoConferenceCallKitSyncInput): void => {
     this.#input = input;
     const callKitOptions = this.#callKitOptions(input);
     if (!callKitOptions || !this.#port.isSupported) {
@@ -120,8 +120,8 @@ export class NativeVideoConferenceCallKitController {
     void this.endCall();
   };
 
-  #callKitOptions(input: NativeVideoConferenceCallKitSyncInput): ResolvedNativeVideoConferenceCallKitOptions | null {
-    return resolveNativeVideoConferenceCallKitOptions({
+  #callKitOptions(input: VideoConferenceCallKitSyncInput): ResolvedVideoConferenceCallKitOptions | null {
+    return resolveVideoConferenceCallKitOptions({
       callKit: input.callKit,
       hasVideo: input.hasVideo,
       roomId: input.roomId,

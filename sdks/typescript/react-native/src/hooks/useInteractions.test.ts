@@ -11,14 +11,14 @@ vi.mock("react", () => ({
   useMemo: <T>(factory: () => T) => factory(),
 }));
 
-vi.mock("../context/chalk-native-provider", () => ({
+vi.mock("../context/chalk-provider", () => ({
   useChalkSession: () => {
     if (!state.store) throw new Error("useChalkSession must be used within ChalkProvider");
     return state.store;
   },
 }));
 
-vi.mock("./useChalkRoomActions", () => ({
+vi.mock("./useChalkSnapshot", () => ({
   useChalkSnapshot: () => {
     if (!state.snapshot) throw new Error("useChalkSession must be used within ChalkProvider");
     return state.snapshot;

@@ -3,7 +3,9 @@
 This fixture packs `@q9labsai/chalk-client` and `@q9labsai/chalk-react`, installs
 the tarballs in a temporary consumer outside the pnpm workspace, and bundles a
 browser application using package imports only. It never imports from the Chalk
-source tree.
+source tree. The fixture imports the root `VideoConference` and supplies its
+protocol-faithful session fixture through `createSession`; it does not recreate
+the conference chrome in the consumer.
 
 The browser proof uses a localhost, protocol-faithful Sync and WebRTC signaling
 mock. It proves SDK lifecycle and browser media behavior without claiming that

@@ -460,8 +460,39 @@ conference experience. It coordinates lifecycle screens, the active conference
 view, panels, dialogs, overlays, and the end state.
 
 `VideoConference` is the only component exported from the React package root.
-Its future props will be designed from the new runtime contract. Historical
-props and types are discarded.
+Its public surface is lifecycle-oriented and owns the session created by the
+application's `createSession` function. Historical props and types are
+discarded.
+
+The finalized React props are:
+
+- `roomId` and `createSession` identify the Room and provide the application
+  credential/session boundary.
+- `roomName`, `logoUrl`, `meetingLink`, `userName`, `role`, `autoJoin`, and
+  `initialJoinSettings` configure identity and entry behavior.
+- `phase`/`onPhaseChange` and `layout`/`onLayoutChange` are controlled
+  observability and presentation state.
+- `<feature>Enabled` props expose availability, including `chatEnabled`,
+  `participantsEnabled`, `admissionEnabled`, `screenShareEnabled`,
+  `whiteboardEnabled`, `reactionsEnabled`, `handRaiseEnabled`, `infoEnabled`,
+  and `settingsEnabled`.
+- `can<Action>` props pass through capability policy, including
+  `canShareScreen`, `canSendChat`, `canManageParticipants`, `canAdmit`,
+  `canReact`, `canRaiseHand`, `canUseWhiteboard`, `canInvite`, and `canLeave`.
+- Domain callbacks are emitted only for facts observable from the current
+  runtime: `onParticipantJoined`, `onParticipantLeft`,
+  `onScreenShareStarted`, `onScreenShareStopped`, and `onSessionEnded`.
+  `onLeave`, `onClose`, and `onError` remain action or lifecycle callbacks.
+
+`ConferenceView` receives the active data and callbacks as props. It does not
+create a provider, subscribe to a session, or own lifecycle effects; turnkey
+session wiring belongs to `VideoConference`.
+
+The current client snapshot does not expose a joiner-facing admission-wait
+status. The `waiting` phase remains part of the public contract for a future
+runtime signal and controlled observation, while the current React turnkey
+rendering uses `JoiningScreen` for that phase. Host admission is represented by
+`AdmissionPanel` inside the active composition.
 
 `Conference` is UI-composition language. It does not introduce a parallel
 runtime entity such as `ConferenceId` or `ConferenceSession`.
@@ -719,6 +750,23 @@ Canonical examples include CameraPreview and AudioLevelPreview.
 retired because Output describes its purpose and Renderer exposes an
 implementation detail.
 
+## Feature surfaces
+
+These feature components follow the same shape vocabulary and are public
+because they are independently composable through `/components`:
+
+- **DevicePopover** is the anchored device-selection surface for microphone,
+  camera, and related output choices. `DeviceControlButton` is retired because
+  the component owns a popover as well as its trigger.
+- **MediaRequestDialog** is the decision surface for an incoming request to
+  start or stop participant media. `IncomingMediaRequestDialog` is retired.
+- **ReactionsOverlay** presents transient participant reactions over the
+  ConferenceView or Stage.
+- **PinnedMessageBanner** presents an ongoing pinned chat message in the
+  conference chrome.
+- **GuidedTour** owns the stateful guided-tour presentation built from tour
+  steps and highlights.
+
 ## Component naming map
 
 | Current name                                  | Canonical name                          |
@@ -739,6 +787,7 @@ implementation detail.
 | `ParticipantList` used as a full panel        | `ParticipantsPanel`                     |
 | `TranscriptionPanel`                          | `TranscriptPanel`                       |
 | `ControlButton`                               | `ControlBarButton`                      |
+| `DeviceControlButton`                         | `DevicePopover`                         |
 | `MobilePanel`                                 | responsive Panel presentation           |
 | `MobileControlSheet`                          | responsive ControlBar presentation      |
 | `InviteModal`                                 | `InviteDialog`                          |
@@ -747,6 +796,7 @@ implementation detail.
 | `NotificationStack`                           | `ToastStack`                            |
 | `AudioRenderer`                               | `AudioOutput`                           |
 | `LayoutSwitcher`                              | `LayoutPicker`                          |
+| `IncomingMediaRequestDialog`                  | `MediaRequestDialog`                    |
 
 ## Cross-platform public symbols
 

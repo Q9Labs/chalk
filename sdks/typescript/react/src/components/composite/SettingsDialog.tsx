@@ -150,10 +150,10 @@ const SECTIONS = [
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border border-border/50 bg-background/70 p-4 shadow-sm sm:p-5">
+    <section className="rounded-[10px] border border-[#deddd7] bg-white p-4 shadow-none sm:p-5">
       <div className="mb-4">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        <h3 className="text-sm font-semibold text-[#202329]">{title}</h3>
+        <p className="mt-1 text-xs text-[#6d727b]">{description}</p>
       </div>
       <div className="space-y-4">{children}</div>
     </section>
@@ -164,12 +164,12 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
   const titleId = React.useId();
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/50 bg-card/60 p-4">
+    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[#deddd7] bg-white p-4">
       <div className="min-w-0 flex-1">
-        <div id={titleId} className="text-sm font-medium text-foreground">
+        <div id={titleId} className="text-sm font-medium text-[#202329]">
           {title}
         </div>
-        <div className="text-xs text-muted-foreground">{description}</div>
+        <div className="text-xs text-[#6d727b]">{description}</div>
       </div>
       <Toggle checked={checked} onChange={onChange} ariaLabelledby={titleId} />
     </div>
@@ -492,8 +492,8 @@ export const SettingsDialog = React.memo(
                   {(
                     [
                       ["grid", LayoutGridIcon, "Grid"],
-                      ["spotlight", LayoutTableIcon, "Spotlight"],
-                      ["sidebar", ColumnIcon, "Sidebar"],
+                      ["focus", LayoutTableIcon, "Spotlight"],
+                      ["focus", ColumnIcon, "Sidebar"],
                     ] as const
                   ).map(([value, Icon, label]) => (
                     <button
@@ -612,13 +612,13 @@ export const SettingsDialog = React.memo(
         }}
       >
         <Dialog.Portal>
-          <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-background/80", !disableMotion && "animate-in fade-in duration-200")} />
+          <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-[#0c0e12]/20 backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
           <Dialog.Popup
             data-chalk
             data-chalk-theme={portalTheme}
             className={cn(
               "chalk-root",
-              "fixed inset-0 z-[101] flex flex-col overflow-hidden bg-card text-card-foreground shadow-2xl md:inset-x-4 md:top-1/2 md:h-[min(720px,calc(100vh-2rem))] md:-translate-y-1/2 md:rounded-[28px] md:border md:border-border md:left-1/2 md:right-auto md:w-[min(960px,calc(100vw-3rem))] md:-translate-x-1/2",
+              "fixed inset-4 z-[101] m-auto flex max-h-[min(680px,calc(100dvh-32px))] w-auto max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-[#c9c8c2] bg-[#fbfaf7] text-[#202329] shadow-[0_28px_80px_rgba(12,14,18,0.2)] md:inset-0",
               !disableMotion && "animate-in fade-in duration-300 ease-out",
               !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
             )}
@@ -626,21 +626,21 @@ export const SettingsDialog = React.memo(
           >
             <Dialog.Title className="sr-only">Meeting settings</Dialog.Title>
             <div className="flex h-full flex-col md:flex-row">
-              <aside className={cn("flex w-full shrink-0 flex-col border-border/50 bg-muted/30 md:w-[280px] md:border-r", !showSidebar && "hidden")}>
-                <div className="p-5 pb-4 md:p-6">
+              <aside className={cn("flex w-full shrink-0 flex-col border-[#deddd7] bg-[#f4f3ef] md:w-44 md:border-r", !showSidebar && "hidden")}>
+                <div className="p-3 pb-2">
                   <div className="mb-5 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Settings01Icon className="h-5 w-5 text-primary" />
+                      <Settings01Icon className="h-5 w-5 text-[#6d727b]" />
                       <div>
                         <div className="text-base font-semibold">Settings</div>
-                        <div className="text-xs text-muted-foreground">Local to this browser</div>
+                        <div className="text-xs text-[#6d727b]">Local to this browser</div>
                       </div>
                     </div>
                     <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" className="md:hidden" />
                   </div>
-                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" icon={<Search01Icon className="h-4 w-4" />} fullWidth className="rounded-2xl border-border/50 bg-muted/50" aria-label="Search settings" />
+                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" icon={<Search01Icon className="h-4 w-4" />} fullWidth className="rounded-[8px] border-[#c9c8c2] bg-white" aria-label="Search settings" />
                 </div>
-                <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6 md:px-4">
+                <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
                   {filteredSections.map((section) => {
                     const Icon = section.icon;
                     return (
@@ -651,7 +651,7 @@ export const SettingsDialog = React.memo(
                           setActiveSection(section.id);
                           setIsNavOpen(false);
                         }}
-                        className={cn("flex w-full items-start gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors md:py-3", activeSection === section.id ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+                        className={cn("flex w-full items-start gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors", activeSection === section.id ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.06)]" : "text-[#6d727b] hover:text-[#202329]")}
                       >
                         <Icon className="mt-0.5 h-4 w-4 shrink-0" />
                         <span className="min-w-0">
@@ -661,22 +661,22 @@ export const SettingsDialog = React.memo(
                       </button>
                     );
                   })}
-                  {filteredSections.length === 0 && <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">No matching settings.</div>}
+                  {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[#deddd7] px-4 py-8 text-center text-sm text-[#6d727b]">No matching settings.</div>}
                 </nav>
               </aside>
 
               <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
-                <div className="flex items-start justify-between border-b border-border/50 px-5 py-4 md:px-7 md:py-6">
+                <div className="flex items-start justify-between border-b border-[#deddd7] bg-[#fbfaf7] px-5 py-4 md:px-6">
                   <div className="flex items-center gap-3">
                     <IconButton icon={<ArrowLeft02Icon className="h-5 w-5" />} variant="ghost" onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections" />
                     <div>
-                      <h2 className="text-lg font-semibold text-foreground md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
-                      <p className="mt-0.5 text-xs text-muted-foreground md:mt-1 md:text-sm">{SECTIONS.find((section) => section.id === activeSection)?.description}</p>
+                      <h2 className="text-lg font-semibold text-[#202329] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                      <p className="mt-0.5 text-xs text-[#6d727b] md:mt-1 md:text-sm">Changes apply to this device.</p>
                     </div>
                   </div>
                   <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-7">
+                <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbfaf7] px-5 py-5 md:px-6">
                   <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                 </div>
               </div>

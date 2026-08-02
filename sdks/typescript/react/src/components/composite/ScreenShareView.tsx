@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
-import { Spinner, VideoTile } from "../atomic";
-import type { Participant } from "./VideoGrid";
+import { Spinner, ParticipantTile } from "../atomic";
+import type { Participant } from "../participant-grid/ParticipantGrid";
 
 export interface ScreenShareViewProps {
   screenShareTrack: MediaStreamTrack;
@@ -310,7 +310,7 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
         >
           {participants.map((p) => (
             <div key={p.id} className={cn("shrink-0 rounded-xl overflow-hidden relative transition-all duration-500", thumbnailPosition === "bottom" ? "aspect-video h-full" : "aspect-video w-full", !isThumbnailsOpen && "scale-0 opacity-0")}>
-              <VideoTile
+              <ParticipantTile
                 participant={{
                   id: p.id,
                   displayName: p.displayName,

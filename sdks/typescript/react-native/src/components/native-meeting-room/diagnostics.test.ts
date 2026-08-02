@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildNativeMeetingRoomDiagnosticsSnapshot } from "./diagnostics";
+import { buildConferenceViewDiagnosticsSnapshot } from "./diagnostics";
 
-describe("buildNativeMeetingRoomDiagnosticsSnapshot", () => {
+describe("buildConferenceViewDiagnosticsSnapshot", () => {
   it("surfaces canonical feature and moderation availability", () => {
-    const snapshot = buildNativeMeetingRoomDiagnosticsSnapshot({
+    const snapshot = buildConferenceViewDiagnosticsSnapshot({
       featureFlags: {
         chat: true,
         participants: true,

@@ -2,7 +2,7 @@ import React from "react";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
-interface WaveformProps {
+export interface WaveformProps {
   levels: number[];
   color?: string;
   animated?: boolean;

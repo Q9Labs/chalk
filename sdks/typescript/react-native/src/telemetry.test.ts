@@ -1,21 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNativeTelemetry, nativeSyncTransportCloseDiagnostic, type NativeRtcPeerConnection, type NativeTelemetryJourney } from "./telemetry";
+import { createTelemetry, syncTransportCloseDiagnostic, type RtcPeerConnection, type TelemetryJourney } from "./telemetry";
 
-describe("createNativeTelemetry", () => {
+describe("createTelemetry", () => {
   it("bounds Sync transport close diagnostics without recording raw reasons", () => {
-    expect(nativeSyncTransportCloseDiagnostic({ code: 1008, reason: "invalid token" })).toEqual({
+    expect(syncTransportCloseDiagnostic({ code: 1008, reason: "invalid token" })).toEqual({
       category: "network",
       code: "sync_websocket_closed_1008_invalid_token",
       phase: "signaling",
       state: "failed",
     });
-    expect(nativeSyncTransportCloseDiagnostic({ code: 1008, reason: "secret detail" }).code).toBe("sync_websocket_closed_1008_other");
-    expect(nativeSyncTransportCloseDiagnostic({ code: 1000, reason: "" }).state).toBe("observed");
+    expect(syncTransportCloseDiagnostic({ code: 1008, reason: "secret detail" }).code).toBe("sync_websocket_closed_1008_other");
+    expect(syncTransportCloseDiagnostic({ code: 1000, reason: "" }).state).toBe("observed");
   });
 
   it("propagates one journey through API and sync transport configuration", () => {
     const journey = createJourney();
-    const telemetry = createNativeTelemetry(journey);
+    const telemetry = createTelemetry(journey);
 
     expect(telemetry.session).toEqual({
       apiHeaders: journey.headers,
@@ -33,7 +33,7 @@ describe("createNativeTelemetry", () => {
 
   it("records production whiteboard metrics without forwarding renderer attributes", () => {
     const journey = createJourney();
-    const telemetry = createNativeTelemetry(journey);
+    const telemetry = createTelemetry(journey);
 
     telemetry.recordWhiteboardMetric({
       name: "whiteboard.renderer.termination",
@@ -52,7 +52,7 @@ describe("createNativeTelemetry", () => {
 
   it("records aggregate RTC summaries from native peer-connection stats", async () => {
     const journey = createJourney();
-    const telemetry = createNativeTelemetry(journey);
+    const telemetry = createTelemetry(journey);
     const peerConnection = createPeerConnection();
     const stop = telemetry.observePeerConnection(peerConnection);
 
@@ -71,7 +71,7 @@ describe("createNativeTelemetry", () => {
   });
 });
 
-function createJourney(): NativeTelemetryJourney & {
+function createJourney(): TelemetryJourney & {
   recordDiagnostic: ReturnType<typeof vi.fn>;
   recordRtcSummary: ReturnType<typeof vi.fn>;
   recordSyncFrame: ReturnType<typeof vi.fn>;
@@ -93,7 +93,7 @@ function createJourney(): NativeTelemetryJourney & {
   };
 }
 
-function createPeerConnection(): NativeRtcPeerConnection & { emit(event: "connectionstatechange" | "iceconnectionstatechange" | "signalingstatechange"): void; connectionState: string } {
+function createPeerConnection(): RtcPeerConnection & { emit(event: "connectionstatechange" | "iceconnectionstatechange" | "signalingstatechange"): void; connectionState: string } {
   const listeners = new Map<string, Set<() => void>>();
 
   return {

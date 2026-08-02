@@ -1,10 +1,11 @@
 # @q9labsai/chalk-react
 
-React bindings and UI components for Chalk meeting surfaces.
+Turnkey React conference experience and composable UI components for Chalk.
 
-The provider and hooks project an existing `ChalkSessionStore` from
-`@q9labsai/chalk-client` into React. They never join a room or open network
-connections on their own; the application creates and owns the session store.
+`VideoConference` owns the embedded lifecycle from pre-join through the active
+conference and end state. Applications provide credentials and a
+`createSession` function; the component owns the session store after the user
+joins.
 
 ## Installation
 
@@ -12,7 +13,29 @@ connections on their own; the application creates and owns the session store.
 pnpm add @q9labsai/chalk-client @q9labsai/chalk-react @q9labsai/chalk-ui
 ```
 
-## Setup
+## Turnkey conference
+
+```tsx
+import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { PreJoinSettings } from "@q9labsai/chalk-react";
+import { VideoConference } from "@q9labsai/chalk-react";
+
+export function App({ createSession }: { createSession: (settings: PreJoinSettings) => Promise<ChalkSessionStore> }) {
+  return <VideoConference roomId="design-review" roomName="Design review" createSession={createSession} chatEnabled participantsEnabled screenShareEnabled />;
+}
+```
+
+`createSession` is called with the settings selected in `PreJoinScreen`. Set
+`autoJoin` when the application has already collected identity and device
+settings. Use `phase`/`onPhaseChange` and `layout`/`onLayoutChange` for
+controlled observability. Feature availability uses props such as
+`chatEnabled`; capability overrides use props such as `canShareScreen`.
+
+## Composable session bindings
+
+The provider and hooks project an existing `ChalkSessionStore` from
+`@q9labsai/chalk-client` into React. They never join a room or open network
+connections on their own; the application creates and owns the session store.
 
 ```tsx
 import "@q9labsai/chalk-ui/styles.css";
@@ -56,18 +79,17 @@ returns each command's original promise.
 Use the narrowest import that matches the UI layer you need:
 
 ```tsx
-import { Avatar, VideoTile } from "@q9labsai/chalk-react/atomic";
-import { ChatPanel, ControlBar } from "@q9labsai/chalk-react/composite";
-import { EndScreen, LoadingScreen } from "@q9labsai/chalk-react/full";
+import { Avatar, ParticipantTile, ChatPanel, ControlBar, EndScreen, JoiningScreen, ConferenceView } from "@q9labsai/chalk-react/components";
 ```
 
-The root import is kept for convenience, but bundle-sensitive apps should prefer
-the layer subpaths.
+The package root exports `VideoConference`, `ChalkProvider`, and the canonical
+session hooks. Active composition components such as `ConferenceView` are
+available only from `/components`.
 
 ## Ownership Boundary
 
 The hooks own React subscriptions only. Joining, transport, permissions,
 diagnostics, and recovery stay in `@q9labsai/chalk-client`. Recording and
-transcription are not part of this launch surface. The styled `WhiteboardPanel`
+transcription are not part of this launch surface. The styled `WhiteboardView`
 is backed by `@q9labsai/chalk-whiteboard`; callers still own its room state and
 transport wiring.

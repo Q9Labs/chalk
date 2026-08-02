@@ -1,17 +1,17 @@
-import type { NativeClipboardReader } from "./clipboard";
+import type { ClipboardReader } from "./clipboard";
 
 export interface ClipboardAppStateSubscription {
   remove(): void;
 }
 
 export interface ClipboardTextStoreOptions {
-  clipboard: NativeClipboardReader;
+  clipboard: ClipboardReader;
   shouldReadClipboard: boolean;
   subscribeToAppState(listener: (nextState: string) => void): ClipboardAppStateSubscription;
 }
 
 export interface ClipboardTextStore {
-  readonly clipboard: NativeClipboardReader;
+  readonly clipboard: ClipboardReader;
   readonly shouldReadClipboard: boolean;
   getSnapshot(): string | null;
   subscribe(listener: () => void): () => void;

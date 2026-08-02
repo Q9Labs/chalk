@@ -1,7 +1,7 @@
 import React from "react";
 import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { VideoTile, AudioIndicator, ControlButton } from "../atomic";
+import { ParticipantTile, AudioIndicator, ControlBarButton } from "../atomic";
 
 export interface MediaPreviewProps {
   videoTrack?: MediaStreamTrack | null;
@@ -19,7 +19,7 @@ export const MediaPreview = React.memo(({ videoTrack, audioLevel = 0, isVideoEna
   return (
     <div className={cn("flex flex-col gap-4 w-full max-w-md", className)}>
       <div className="relative aspect-video rounded-xl overflow-hidden bg-background-secondary border border-border shadow-sm">
-        <VideoTile
+        <ParticipantTile
           participant={{
             id: "local-preview",
             displayName: userName || "You",
@@ -54,8 +54,8 @@ export const MediaPreview = React.memo(({ videoTrack, audioLevel = 0, isVideoEna
       </div>
 
       <div className="flex justify-center gap-4">
-        <ControlButton icon={isAudioEnabled ? <Microphone01Icon /> : <MicrophoneOff01Icon />} label={isAudioEnabled ? "Mute" : "Unmute"} danger={!isAudioEnabled} onClick={onToggleAudio} className="w-32" />
-        <ControlButton icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon />} label={isVideoEnabled ? "Stop Video" : "Start Video"} danger={!isVideoEnabled} onClick={onToggleVideo} className="w-32" />
+        <ControlBarButton icon={isAudioEnabled ? <Microphone01Icon /> : <MicrophoneOff01Icon />} label={isAudioEnabled ? "Mute" : "Unmute"} danger={!isAudioEnabled} onClick={onToggleAudio} className="w-32" />
+        <ControlBarButton icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon />} label={isVideoEnabled ? "Stop Video" : "Start Video"} danger={!isVideoEnabled} onClick={onToggleVideo} className="w-32" />
       </div>
     </div>
   );

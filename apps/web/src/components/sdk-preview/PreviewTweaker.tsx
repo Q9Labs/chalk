@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 import { Cancel01Icon, Settings01Icon } from "../../../../../sdks/typescript/react/src/utils/icons";
-import type { Notification } from "../../../../../sdks/typescript/react/src/components/composite/NotificationStack";
+import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
 
 interface PreviewTweakerProps {
-  readonly onNotify: (type: NonNullable<Notification["type"]>) => void;
+  readonly onNotify: (type: NonNullable<Toast["type"]>) => void;
   readonly onShowPeople: () => void;
   readonly onShowChat: () => void;
   readonly onShowScreenShare: () => void;

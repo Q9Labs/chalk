@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { VolumeHighIcon } from "../../utils/icons";
-import { Select, AudioIndicator, Thumbnail, IconButton } from "../atomic";
+import { Select, AudioIndicator, IconButton } from "../atomic";
+import { Thumbnail } from "../../internal/thumbnail";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";

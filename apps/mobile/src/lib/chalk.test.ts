@@ -10,7 +10,7 @@ vi.mock("expo-secure-store", () => secureStore);
 vi.mock("@q9labsai/chalk-react-native/diagnostics", () => ({ maskSecret: vi.fn() }));
 vi.mock("@q9labsai/chalk-react-native/invites", () => ({ extractJoinTokenFromInviteLink: vi.fn() }));
 vi.mock("@q9labsai/chalk-react-native/runtime", () => ({
-  getNativeDeviceInfo: vi.fn(),
+  getDeviceInfo: vi.fn(),
   getReactNativeScriptUrl: vi.fn(),
   resolveAppRuntimeUrl: vi.fn(),
 }));

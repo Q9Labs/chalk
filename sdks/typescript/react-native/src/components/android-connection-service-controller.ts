@@ -1,5 +1,5 @@
 import type { AndroidConnectionServiceCall, AndroidConnectionServiceDisconnectReason } from "../android/connection-service";
-import type { NativeVideoConferencePhase } from "./NativeVideoConference";
+import type { VideoConferencePhase } from "./VideoConference";
 
 export interface AndroidConnectionServiceControllerInput {
   readonly displayName: string;
@@ -7,7 +7,7 @@ export interface AndroidConnectionServiceControllerInput {
   readonly hasVideo: boolean;
   readonly joinNonce: number;
   readonly onDisconnectRequest: () => void;
-  readonly phase: NativeVideoConferencePhase;
+  readonly phase: VideoConferencePhase;
   readonly roomId: string;
   readonly roomName: string;
 }

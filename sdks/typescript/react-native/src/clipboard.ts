@@ -3,13 +3,13 @@ import { AppState, NativeModules, Platform } from "react-native";
 import { shouldAutoReadClipboard } from "./runtime";
 import { createClipboardTextStore, type ClipboardTextStore } from "./clipboard-store";
 
-export interface NativeClipboardReader {
+export interface ClipboardReader {
   hasStringAsync(): Promise<boolean>;
   getStringAsync(): Promise<string>;
 }
 
 export interface UseClipboardInviteSuggestionOptions {
-  clipboard: NativeClipboardReader;
+  clipboard: ClipboardReader;
   getSuggestion: (clipboardText: string | null | undefined, currentInput: string) => string | null;
 }
 

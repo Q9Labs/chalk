@@ -1,4 +1,4 @@
-import { resolveNativePlatformVariant } from "@q9labsai/chalk-react-native";
+import { resolvePlatformVariant } from "@q9labsai/chalk-react-native";
 import { HomeScreenIosPad } from "./HomeScreen.ios-pad";
 import { HomeScreenMacos } from "./HomeScreen.macos";
 import { HomeScreenShared, type HomeScreenProps } from "./HomeScreen.shared";
@@ -6,7 +6,7 @@ import { HomeScreenShared, type HomeScreenProps } from "./HomeScreen.shared";
 export type { HomeScreenProps } from "./HomeScreen.shared";
 
 export function HomeScreen(props: HomeScreenProps): React.JSX.Element {
-  switch (resolveNativePlatformVariant()) {
+  switch (resolvePlatformVariant()) {
     case "ios-pad":
       return <HomeScreenIosPad {...props} />;
     case "macos":

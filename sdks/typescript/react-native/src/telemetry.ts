@@ -1,6 +1,6 @@
 import { syncTelemetryCorrelation, type DiagnosticObservation, type JourneyTelemetryContext, type RtcConnectionStateSnapshot, type RtcStatsLike, type SyncFrameObservation } from "@q9labsai/chalk-client/telemetry";
 
-export interface NativeTelemetryJourney {
+export interface TelemetryJourney {
   readonly context: JourneyTelemetryContext;
   readonly headers: Readonly<Record<string, string>>;
   recordDiagnostic(observation: DiagnosticObservation): unknown;
@@ -8,19 +8,19 @@ export interface NativeTelemetryJourney {
   recordSyncFrame(observation: SyncFrameObservation): unknown;
 }
 
-export interface NativeWhiteboardMetric {
+export interface WhiteboardMetric {
   readonly name: string;
   readonly value: number;
   readonly attributes?: Readonly<Record<string, string | number | boolean>>;
 }
 
-export interface NativeSessionTelemetry {
+export interface SessionTelemetry {
   readonly apiHeaders: Readonly<Record<string, string>>;
   readonly context: JourneyTelemetryContext;
   readonly syncCorrelation: ReturnType<typeof syncTelemetryCorrelation>;
 }
 
-export interface NativeRtcPeerConnection {
+export interface RtcPeerConnection {
   readonly connectionState?: string;
   readonly iceConnectionState?: string;
   readonly signalingState?: string;
@@ -33,16 +33,16 @@ type NativeRtcStateEvent = "connectionstatechange" | "iceconnectionstatechange" 
 
 const rtcStateEvents: readonly NativeRtcStateEvent[] = ["connectionstatechange", "iceconnectionstatechange", "signalingstatechange"];
 
-export interface NativeTelemetry {
-  readonly session: NativeSessionTelemetry;
-  observePeerConnection(peerConnection: NativeRtcPeerConnection): () => void;
+export interface Telemetry {
+  readonly session: SessionTelemetry;
+  observePeerConnection(peerConnection: RtcPeerConnection): () => void;
   recordSyncFrame(observation: SyncFrameObservation): void;
-  recordWhiteboardMetric(metric: NativeWhiteboardMetric): void;
+  recordWhiteboardMetric(metric: WhiteboardMetric): void;
 }
 
 /** Connects a typed journey to native API, WebSocket, and WebRTC boundaries without collecting raw media or network data. */
-export function createNativeTelemetry(journey: NativeTelemetryJourney): NativeTelemetry {
-  const session: NativeSessionTelemetry = {
+export function createTelemetry(journey: TelemetryJourney): Telemetry {
+  const session: SessionTelemetry = {
     apiHeaders: journey.headers,
     context: journey.context,
     syncCorrelation: syncTelemetryCorrelation(journey.context),
@@ -68,7 +68,7 @@ export function createNativeTelemetry(journey: NativeTelemetryJourney): NativeTe
   };
 }
 
-export function nativeSyncTransportCloseDiagnostic(event: { readonly code?: unknown; readonly reason?: unknown }): DiagnosticObservation {
+export function syncTransportCloseDiagnostic(event: { readonly code?: unknown; readonly reason?: unknown }): DiagnosticObservation {
   const code = typeof event.code === "number" ? event.code : null;
   const reason = typeof event.reason === "string" ? event.reason : "";
   return {
@@ -99,7 +99,7 @@ function isFailedWhiteboardMetric(name: string): boolean {
   return name.endsWith(".failure") || name.endsWith(".termination");
 }
 
-function observeNativeRtc(peerConnection: NativeRtcPeerConnection, journey: NativeTelemetryJourney): () => void {
+function observeNativeRtc(peerConnection: RtcPeerConnection, journey: TelemetryJourney): () => void {
   let disposed = false;
   const dispose = () => {
     if (disposed) return;
@@ -120,7 +120,7 @@ function observeNativeRtc(peerConnection: NativeRtcPeerConnection, journey: Nati
   return dispose;
 }
 
-function rtcConnectionState(peerConnection: NativeRtcPeerConnection): RtcConnectionStateSnapshot {
+function rtcConnectionState(peerConnection: RtcPeerConnection): RtcConnectionStateSnapshot {
   return {
     connectionState: peerConnection.connectionState,
     iceConnectionState: peerConnection.iceConnectionState,

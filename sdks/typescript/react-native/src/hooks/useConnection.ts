@@ -1,5 +1,5 @@
-import { useChalkSession } from "../context/chalk-native-provider";
-import { useChalkSnapshot } from "./useChalkRoomActions";
+import { useChalkSession } from "../context/chalk-provider";
+import { useChalkSnapshot } from "./useChalkSnapshot";
 
 export interface UseConnectionReturn {
   readonly status: "connecting" | "connected" | "disconnected" | "failed" | "reconnecting";

@@ -1,5 +1,5 @@
-import type { NativeVideoConferenceDiagnosticsSnapshot } from "./components/NativeVideoConference";
-import type { NativeDeviceInfo } from "./runtime";
+import type { VideoConferenceDiagnosticsSnapshot } from "./components/VideoConference";
+import type { DeviceInfo } from "./runtime";
 
 export type DevDiagnosticsOutcome = "error" | "observed" | "success";
 
@@ -25,8 +25,8 @@ export interface DevDiagnosticsState {
   readonly clientSession: {
     readonly inviteTokenPreview: string | null;
   };
-  readonly device: NativeDeviceInfo | null;
-  readonly session: NativeVideoConferenceDiagnosticsSnapshot | null;
+  readonly device: DeviceInfo | null;
+  readonly session: VideoConferenceDiagnosticsSnapshot | null;
   readonly lastFailure: {
     readonly source: string;
     readonly message: string;
@@ -89,7 +89,7 @@ export function setDevDiagnosticsEnvironment(next: Partial<DevDiagnosticsState["
   }));
 }
 
-export function setDevDiagnosticsClientSession(next: { readonly inviteTokenPreview?: string | null; readonly device?: NativeDeviceInfo | null }): void {
+export function setDevDiagnosticsClientSession(next: { readonly inviteTokenPreview?: string | null; readonly device?: DeviceInfo | null }): void {
   update((current) => ({
     ...current,
     clientSession: {
@@ -99,7 +99,7 @@ export function setDevDiagnosticsClientSession(next: { readonly inviteTokenPrevi
   }));
 }
 
-export function setDevDiagnosticsSession(snapshot: NativeVideoConferenceDiagnosticsSnapshot | null): void {
+export function setDevDiagnosticsSession(snapshot: VideoConferenceDiagnosticsSnapshot | null): void {
   const previous = state.session;
   update((current) => ({ ...current, session: snapshot }));
   if (snapshot && (snapshot.phase !== previous?.phase || snapshot.connectionStatus !== previous?.connectionStatus)) {

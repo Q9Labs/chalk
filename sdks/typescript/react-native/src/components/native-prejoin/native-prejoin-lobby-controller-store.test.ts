@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { NativePreJoinLobbyControllerStore } from "./native-prejoin-lobby-controller-store";
+import { PreJoinScreenControllerStore } from "./native-prejoin-lobby-controller-store";
 
-function createStore(options: Partial<ConstructorParameters<typeof NativePreJoinLobbyControllerStore>[0]> = {}) {
-  return new NativePreJoinLobbyControllerStore({
+function createStore(options: Partial<ConstructorParameters<typeof PreJoinScreenControllerStore>[0]> = {}) {
+  return new PreJoinScreenControllerStore({
     displayName: "Guest",
     initialAudioEnabled: false,
     initialVideoEnabled: false,
@@ -13,7 +13,7 @@ function createStore(options: Partial<ConstructorParameters<typeof NativePreJoin
   });
 }
 
-describe("NativePreJoinLobbyControllerStore", () => {
+describe("PreJoinScreenControllerStore", () => {
   it("toggles media, edits the name, and latches join", () => {
     const onJoin = vi.fn();
     const store = createStore({ onJoin });
@@ -35,7 +35,7 @@ describe("NativePreJoinLobbyControllerStore", () => {
       isSubmitting: true,
     });
     expect(onJoin).toHaveBeenCalledTimes(1);
-    expect(onJoin).toHaveBeenCalledWith({ displayName: "Host", audioEnabled: true, videoEnabled: true });
+    expect(onJoin).toHaveBeenCalledWith({ displayName: "Host", microphoneEnabled: true, cameraEnabled: true });
     expect(listener).toHaveBeenCalled();
 
     unsubscribe();
