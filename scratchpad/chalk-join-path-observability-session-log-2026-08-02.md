@@ -22,3 +22,9 @@
 
 - Independent re-review found that moving the readiness wait after the media `Promise.all` could remove the Sync deadline while media startup remained pending, and that `attributes.code` was overwritten by the canonical telemetry code.
 - Kept the readiness span in the parallel Sync branch after `start_sync` ends, renamed the bounded terminal reason to `failure_code`, and added regression coverage for a pending media start and final telemetry attribute preservation.
+
+## 2026-08-02 19:30 PKT
+
+- The clean M4 verification passed with serialized workspace concurrency: API, Sync, security, contracts, affected workspace type checks, coverage tests, builds, recorder infrastructure, publication layout, and TypeScript resolution all completed successfully. The SDK consumer browser check reported Chromium skipped because its local Playwright binary was unavailable; the gate still passed.
+- The recorder check used a task-scoped OpenTofu 1.12.3 binary because the M4 host had Terraform but no `tofu` executable. Running from the canonical `/private/tmp` path avoided the host's `/tmp` symlink mismatch in the recorder Vitest invocation.
+- Removed the three disposable remote checkouts, the copied verifier binary, and the local gate bundle; verified no task processes or temporary paths remained.
