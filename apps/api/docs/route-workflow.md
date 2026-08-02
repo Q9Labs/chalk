@@ -100,27 +100,17 @@ logic unless it belongs in a `WriteWith` writer.
 
 ## 4. Keep Contracts Generator-Friendly
 
-The endpoint contract is consumed by `PreviewRouteContracts()` and the
-scratchpad OpenAPI proof generator.
+The endpoint contract is consumed by `PreviewRouteContracts()`.
 
 - Add every domain's endpoint list to `PreviewRouteContracts()` in
   `internal/httpapi/contracts.go`.
 - Reuse shared parameter helpers from `internal/httpapi/query.go`.
 - Reuse shared error constants from `internal/httpapi/errors.go`; add new
   constants when a route exposes a stable new API error.
-- Reuse shared optional/nullable transport helpers. If a new request wrapper
-  type is needed, update the OpenAPI proof generator so schema output describes
+- Reuse shared optional/nullable transport helpers so schema output describes
   the wire shape, not Go internals.
 - Update `internal/httpapi/route_contracts_test.go` when the intentional route
   inventory changes.
-- The proof generator source currently lives at
-  `scratchpad/sdk-generator-proof/contractopenapi` after the API scratchpad
-  consolidation, outside the `apps/api` Go module. The old `go run` command is
-  not currently runnable until that module boundary is repaired.
-
-The generated preview should include the expected path, method, operation ID,
-auth metadata, parameters, request schema, success responses, response headers,
-and `x-chalk-error-codes`.
 
 ## 5. Verify The Change
 
