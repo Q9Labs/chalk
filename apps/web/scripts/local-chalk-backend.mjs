@@ -9,6 +9,7 @@ export function createLocalChalkHandler(options) {
   const browserSessions = new Map();
   const allowedOrigins = new Set(options.allowedOrigins);
   let sharedRoomPromise;
+  let sharedRoomRotationPromise;
   let hostParticipantSessionId;
 
   return async function localChalkHandler(request, response) {
@@ -95,32 +96,64 @@ export function createLocalChalkHandler(options) {
 
   function admitBrowserSession(browserSession) {
     if (browserSession.admissionPromise) return browserSession.admissionPromise;
-    browserSession.admissionPromise = (async () => {
-      const sharedRoom = await ensureSharedRoom();
-      const participantSessionId = browserSession.participantSessionId ?? options.randomUUID();
-      browserSession.roomId = sharedRoom.roomId;
-      browserSession.sessionId = sharedRoom.sessionId;
-      browserSession.participantSessionId = participantSessionId;
-      if (!hostParticipantSessionId) hostParticipantSessionId = participantSessionId;
-      const isHost = hostParticipantSessionId === participantSessionId;
-      const admission = await options.chalk.participants.admit(
-        sharedRoom.roomId,
-        sharedRoom.sessionId,
-        {
-          participant_session_id: participantSessionId,
-          name: browserSession.displayName,
-          initial_role: isHost ? "host" : "participant",
-          eligible_roles: isHost ? ["host", "cohost", "participant"] : ["host", "cohost", "participant"],
-        },
-        { idempotencyKey: `local-browser-${participantSessionId}` },
-      );
-      browserSession.participantSessionGeneration = admission.participant.generation;
-      if (admission.access) return admission.access;
-      return refreshBrowserSession(browserSession, { replaceMediaConnection: false });
-    })().finally(() => {
+    browserSession.admissionPromise = admitBrowserSessionWithRotation(browserSession).finally(() => {
       browserSession.admissionPromise = undefined;
     });
     return browserSession.admissionPromise;
+  }
+
+  async function admitBrowserSessionWithRotation(browserSession) {
+    for (let attempt = 0; ; attempt++) {
+      const sharedRoom = await ensureSharedRoom();
+      try {
+        return await admitBrowserSessionInRoom(browserSession, sharedRoom);
+      } catch (error) {
+        if (attempt > 0 || !isStaleSharedRoomError(error)) throw error;
+        await rotateSharedRoom(sharedRoom);
+      }
+    }
+  }
+
+  async function admitBrowserSessionInRoom(browserSession, sharedRoom) {
+    const participantSessionId = browserSession.participantSessionId ?? options.randomUUID();
+    browserSession.roomId = sharedRoom.roomId;
+    browserSession.sessionId = sharedRoom.sessionId;
+    browserSession.participantSessionId = participantSessionId;
+    if (!hostParticipantSessionId) hostParticipantSessionId = participantSessionId;
+    const isHost = hostParticipantSessionId === participantSessionId;
+    const admission = await options.chalk.participants.admit(
+      sharedRoom.roomId,
+      sharedRoom.sessionId,
+      {
+        participant_session_id: participantSessionId,
+        name: browserSession.displayName,
+        initial_role: isHost ? "host" : "participant",
+        eligible_roles: isHost ? ["host", "cohost", "participant"] : ["host", "cohost", "participant"],
+      },
+      { idempotencyKey: `local-browser-${participantSessionId}` },
+    );
+    browserSession.participantSessionGeneration = admission.participant.generation;
+    if (admission.access) return admission.access;
+    return refreshBrowserSession(browserSession, { replaceMediaConnection: false });
+  }
+
+  async function rotateSharedRoom(staleRoom) {
+    if (!sharedRoomRotationPromise) {
+      sharedRoomRotationPromise = (async () => {
+        const currentRoom = sharedRoomPromise ? await sharedRoomPromise : undefined;
+        if (!currentRoom || currentRoom.sessionId !== staleRoom.sessionId) return;
+        sharedRoomPromise = undefined;
+        hostParticipantSessionId = undefined;
+        await ensureSharedRoom();
+      })().finally(() => {
+        sharedRoomRotationPromise = undefined;
+      });
+    }
+    return sharedRoomRotationPromise;
+  }
+
+  function isStaleSharedRoomError(error) {
+    return error && typeof error === "object" && error.status === 409;
   }
 
   function refreshBrowserSession(browserSession, input) {
@@ -176,7 +209,7 @@ async function createSharedRoom(chalk, randomUUID, configuredRoomId) {
     {
       admission_policy: "open",
       host_exit_policy: "require_transfer",
-      maximum_duration_seconds: 3_600,
+      maximum_duration_seconds: 86_400,
       role_capabilities: {
         host: allCapabilities,
         cohost: participantCapabilities,

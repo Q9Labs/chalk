@@ -127,6 +127,68 @@ describe("localhost Chalk backend trust boundary", () => {
     }
   });
 
+  it("rotates the local session when its admission window has ended", async () => {
+    const { createLocalChalkHandler } = await import("../../scripts/local-chalk-backend.mjs");
+    const calls: { readonly operation: string; readonly arguments: readonly unknown[] }[] = [];
+    let sessionNumber = 0;
+    let admissionNumber = 0;
+    const chalk = {
+      sessions: {
+        create: async (...arguments_: unknown[]) => {
+          calls.push({ operation: "sessions.create", arguments: arguments_ });
+          sessionNumber += 1;
+          return { id: `session-${sessionNumber}` };
+        },
+      },
+      participants: {
+        admit: async (...arguments_: unknown[]) => {
+          calls.push({ operation: "participants.admit", arguments: arguments_ });
+          admissionNumber += 1;
+          if (admissionNumber === 1) throw Object.assign(new Error("session is ending"), { status: 409 });
+          return { participant: { generation: 1 }, access: { source: "rotated-session" } };
+        },
+      },
+    };
+    const ids = ["browser-session", "participant-session"];
+    const handler = createLocalChalkHandler({
+      chalk,
+      apiBaseURL: "http://127.0.0.1:8080",
+      syncURL: "ws://127.0.0.1:4100/v3/sync",
+      roomId: "configured-room",
+      allowedOrigins: ["http://127.0.0.1:3070"],
+      randomUUID: () => ids.shift() ?? "unexpected-id",
+    });
+    const server = createServer((request, response) => void handler(request, response));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Expected an ephemeral TCP address");
+    const url = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const created = await fetch(`${url}/local-chalk/browser-session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070" },
+        body: JSON.stringify({ displayName: "Ada" }),
+      });
+      const cookie = (created.headers.get("set-cookie") ?? "").split(";", 1)[0] ?? "";
+      const admitted = await fetch(`${url}/local-chalk/access`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://127.0.0.1:3070", cookie },
+        body: JSON.stringify({}),
+      });
+
+      expect(admitted.status).toBe(201);
+      expect(await admitted.json()).toEqual({ source: "rotated-session" });
+      expect(calls.filter((call) => call.operation === "sessions.create")).toHaveLength(2);
+      expect(calls.filter((call) => call.operation === "participants.admit").map((call) => call.arguments.slice(0, 2))).toEqual([
+        ["configured-room", "session-1"],
+        ["configured-room", "session-2"],
+      ]);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
   it("keeps identity server-side and rejects non-local hosts and unapproved origins", async () => {
     const { createLocalChalkHandler } = await import("../../scripts/local-chalk-backend.mjs");
     const calls: { readonly operation: string; readonly arguments: readonly unknown[] }[] = [];
