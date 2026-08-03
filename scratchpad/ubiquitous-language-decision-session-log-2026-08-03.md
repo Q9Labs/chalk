@@ -92,12 +92,12 @@ valid problems; the _fixes_ below are locked only where he explicitly
 endorsed one. The ChalkSession split is Claude's recommended fix and is
 **NOT yet ruled**.
 
-- **ChalkSession is a god object (diagnosis agreed)**: ~6 fused concerns
-  (connection/access lifecycle, media session, sync replica, room-control
-  facade, chat/reaction state machine, snapshot store + diagnostics).
-  Proposed fix (OPEN, awaiting ruling): split into a narrow connection
-  coordinator plus feature controllers (chat, room actions, whiteboard)
-  composed into one UI-facing store; name the pieces, not the fusion.
+- **ChalkSession split: LOCKED (Hasan: "Without a question, option A")** —
+  the god object (~6 fused concerns: connection/access lifecycle, media
+  session, sync replica, room-control facade, chat/reaction state machine,
+  snapshot store + diagnostics) is split into a narrow connection coordinator
+  plus feature controllers (chat, room actions, whiteboard) composed into one
+  UI-facing store. Name the pieces, not the fusion. Part of the SDK wave.
 - **The five "session" concepts get true names**: Go `sessionlifecycle`
   (→ Episode), broker `MeetingSession` (edge lease), RN `ClientSession`
   (pre-join credential client), Elixir `Live.Session` (media/presence
@@ -122,7 +122,7 @@ endorsed one. The ChalkSession split is Claude's recommended fix and is
 - **Method consequence**: rename waves and boundary redraws are the same
   waves — never touch the system twice.
 
-## Space durability decision sheet (open — D1–D5, recs on the table)
+## Space durability decision sheet
 
 Context: schema audit shows the durable shell exists but is empty. `rooms` has
 id/slug/status/metadata/recurring_policy; ALL policy (role capability grids,
@@ -130,34 +130,45 @@ host-exit, durations) lives per-`room_sessions` (immutable via trigger); chat
 streams and whiteboard scenes are keyed per session and die with it;
 `memberships` are tenant-level only; participants are per-session seats.
 
-- **D1 Config home** (rec: Roles/Capabilities/admission defined on Space;
-  Episode snapshots them immutably at start; edits take effect next Episode).
-- **D2 Membership** (rec: un-park Member — durable User/Agent assignment to a
-  Space with a Role; guests stay Episode-scoped; durability is the forcing
-  function).
-- **D3 Content** (rec: whiteboard → Space scope; chat stream keyed by Space
-  with Episode boundary markers so meeting-chat vs continuous-chat stays a
-  presentation choice, not an architecture fork).
-- **D4 Emergent Episodes** (rec: first join starts the Episode, last leave or
-  explicit end closes it; kills "create meeting → join" provisioning and most
-  of the broker's MeetingSession lease machinery).
-- **D5 Presence without Episode** (rec: not now; that is the parked Pulse).
+- **D1 Config home: LOCKED** — Roles/Capabilities/admission defined on the
+  Space; each Episode snapshots them immutably at start; edits take effect
+  next Episode.
+- **D2 Membership: LOCKED — Member un-parked.** Durable User/Agent assignment
+  to a Space with a Role; guests stay Episode-scoped.
+- **D3 Content: LOCKED — whiteboard AND chat are Space-scoped** and survive
+  between Episodes (Hasan went further than the rec). Optional explicit
+  "clear Space state" action for resetting content; clearing is a choice,
+  never automatic. Open corollary (minor, decide during design): whether
+  _posting_ chat requires a live Episode (rec: initially yes — read anytime,
+  write while joined — to stay out of async-messaging scope for now).
+- **D4 Episode start model: OPEN — under active discussion.** Hasan pushed
+  back on pure emergent join-starts-episode: products may want to create the
+  room ahead of time (warm start, "created five minutes before"), possibly
+  via scheduled rooms. Claude's refined proposal on the table: emergent
+  _semantics_ (join always works; starts an Episode if none is live) PLUS an
+  optional explicit start/warm API and rrule-driven scheduled starts — since
+  invite links target the durable Space slug, distribution never needs a
+  pre-provisioned Episode; only infra warm-up does.
+- **D5 Presence without Episode: OPEN** — awaiting ruling now that it has
+  been explained (can someone be visibly "in" a Space when no Episode is
+  live; rec: no for now, that is the parked Pulse).
 
 Trunk sentence v2: **Space = identity + config + members + persistent
 content; Episode = an immutable-policy run that emerges on join and leaves
 artifacts.**
 
+**§10 Grammar: LOCKED with one amendment** — closed command-verb set,
+past-tense `<Subject><Verb>Event`, `<Noun>Snapshot`, UI shape suffixes all
+ratified. Error codes are `noun.condition` with **underscores in the
+condition**: `episode.not_found`, `space.access_denied` (Hasan: no dashes).
+
 ## Open decisions (sheet items not yet ruled)
 
-- **D1–D5** above (Space durability).
-- **ChalkSession fix**: split into coordinator + feature controllers (rec) vs
-  keep whole and rename only — awaiting Hasan's ruling.
-- **§10 Grammar ratification**: closed command-verb set, past-tense
-  `<Subject><Verb>Event`, `<Noun>Snapshot`, `noun.condition` error codes,
-  UI shape suffixes — ratify the v4 doc's grammar half on its merits.
-- **SDK runtime handle name**: depends on the ChalkSession fix ruling. If
-  split: name the pieces; coordinator candidates `SpaceConnection` /
-  `SpaceClient`. If kept whole: same candidates for the whole object.
+- **D4** (Episode start model) — under discussion, see sheet above.
+- **D5** (presence without Episode) — awaiting ruling.
+- **SDK piece names** from the ChalkSession split: coordinator candidates
+  `SpaceConnection` / `SpaceClient` + controller names — decided during SDK
+  wave design under §9 (no Chalk prefix).
 - Host/guest words in UI copy of the `<Chalk />` turnkey: turnkey defines its
   own product copy; specifics undecided.
 
