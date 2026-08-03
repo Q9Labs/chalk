@@ -2,19 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArguments, preflight, resolveDevConfig } from "./config.mjs";
 import { acquireMachineLease, readManifest, writeManifest, writeOwner } from "./ownership.mjs";
-import { stopCommand } from "./commands.mjs";
+import { confirmReset, stopCommand, runCommand } from "./commands.mjs";
+import { runCli } from "./cli.mjs";
 import { createLogMux, tailLog, waitForFileReady, waitForHTTPReady } from "./process.mjs";
 import { createReloadCoordinator, createSourcePoller, dependencyOrder } from "./reload.mjs";
 import { createSupervisor } from "./supervisor.mjs";
 import { createResourceManager } from "./chalk-resources.mjs";
 import { resolveLocalSfuCredentials } from "./secrets.mjs";
 import { generateSigningIdentity, identityPaths } from "./identity.mjs";
-import { FailureKind, RuntimeState } from "./model.mjs";
+import { failure, FailureKind, RuntimeState } from "./model.mjs";
 
 async function tempConfig() {
   const root = await mkdtemp(join(tmpdir(), "chalk-dev-test-"));
@@ -26,6 +28,55 @@ test("CLI parser keeps command, profile, and logs service separate", () => {
   assert.deepEqual(parseArguments(["start", "--profile=mobile", "--fresh"]), { command: "start", profile: "mobile", service: undefined, fresh: true, yes: false });
   assert.deepEqual(parseArguments(["logs", "--", "api"]), { command: "logs", profile: "core", service: "api", fresh: false, yes: false });
   assert.throws(() => parseArguments(["--profile", "tablet"]), { kind: FailureKind.CONFIG });
+});
+
+test("CLI installs signal cleanup before startup awaits", async () => {
+  const { root } = await tempConfig();
+  const signalSource = new EventEmitter();
+  let releaseStart;
+  let started;
+  const startEntered = new Promise((resolveStart) => {
+    started = resolveStart;
+  });
+  const startGate = new Promise((resolveStart) => {
+    releaseStart = resolveStart;
+  });
+  let stops = 0;
+  let startSettled = false;
+  const supervisor = {
+    async start() {
+      started();
+      await startGate;
+      startSettled = true;
+      return { state: RuntimeState.READY };
+    },
+    async stop() {
+      stops += 1;
+      assert.equal(startSettled, true);
+      return { state: RuntimeState.STOPPED };
+    },
+  };
+  try {
+    const running = runCli(["start"], {
+      cwd: root,
+      root,
+      env: { XDG_STATE_HOME: root },
+      create: () => supervisor,
+      keepAlive: false,
+      signalSource,
+      errorOutput: () => {},
+    });
+    await startEntered;
+    assert.equal(signalSource.listenerCount("SIGINT"), 1);
+    signalSource.emit("SIGINT");
+    assert.equal(stops, 0);
+    releaseStart();
+    assert.equal((await running).code, 0);
+    assert.equal(stops, 1);
+  } finally {
+    releaseStart?.();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("service readiness defaults to a bounded two-minute cold-start window", async () => {
@@ -304,6 +355,7 @@ test("external stop waits for the whole supervisor shutdown budget", async () =>
       checkout: config.root,
       profile: config.profile,
       supervisorPid: child.pid,
+      supervisorExpectedCommand: process.execPath,
       state: RuntimeState.READY,
       manifestPath: config.manifestPath,
       services: {},
@@ -315,6 +367,81 @@ test("external stop waits for the whole supervisor shutdown budget", async () =>
     if (!child.killed) child.kill("SIGKILL");
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("external stop refuses a live PID whose command no longer matches", async () => {
+  const { root, config } = await tempConfig();
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  let killed = false;
+  try {
+    await writeOwner(config, {
+      runtimeId: "identity-check",
+      checkout: config.root,
+      profile: config.profile,
+      supervisorPid: child.pid,
+      supervisorExpectedCommand: "not-the-recorded-supervisor",
+      state: RuntimeState.READY,
+      manifestPath: config.manifestPath,
+      services: {},
+    });
+    await assert.rejects(stopCommand(config, { hooks: { kill: () => (killed = true) } }), { kind: FailureKind.OWNERSHIP_CONFLICT });
+    assert.equal(killed, false);
+  } finally {
+    if (!child.killed) child.kill("SIGKILL");
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("reset reads the owner manifest and refuses another checkout", async () => {
+  const { root, config } = await tempConfig();
+  const ownerManifestPath = join(root, "owner-runtime", "manifest.json");
+  const currentManifestService = { pid: 999, expectedCommand: "current-manifest" };
+  const ownerManifestService = { pid: 888, expectedCommand: "owner-manifest" };
+  const seen = [];
+  try {
+    await writeManifest(config, { services: [["current", currentManifestService]] });
+    await writeManifest({ ...config, manifestPath: ownerManifestPath }, { services: [["owner", ownerManifestService]] });
+    await writeOwner(config, {
+      runtimeId: "cross-checkout",
+      checkout: "/another/chalk-checkout",
+      profile: config.profile,
+      supervisorPid: 777,
+      supervisorExpectedCommand: "not-live",
+      state: RuntimeState.READY,
+      manifestPath: ownerManifestPath,
+      services: {},
+    });
+    await assert.rejects(
+      runCommand("reset", config, {
+        yes: true,
+        hooks: {
+          validatePid: async (pid, options) => {
+            seen.push({ pid, options });
+            return pid === ownerManifestService.pid;
+          },
+          resetResources: async () => {
+            throw new Error("must not reset another checkout");
+          },
+        },
+      }),
+      { kind: FailureKind.OWNERSHIP_CONFLICT },
+    );
+    assert.deepEqual(
+      seen.map(({ pid }) => pid),
+      [777, ownerManifestService.pid],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("reset confirmation reads an explicit yes/no answer from stdin", async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const answer = confirmReset("Reset?", { input, output });
+  setImmediate(() => input.end("yes\n"));
+  assert.equal(await answer, true);
+  await assert.rejects(confirmReset("Reset?", { input: null, output }), { kind: FailureKind.CONFIG, message: /requires --yes/ });
 });
 
 test("reload persists reloading state before child restart begins", async () => {
@@ -351,6 +478,75 @@ test("reload persists reloading state before child restart begins", async () => 
     await supervisor.stop();
   } finally {
     releaseStop?.();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("reload keeps an optional restart failure degraded while core services recover", async () => {
+  const { root, config } = await tempConfig();
+  let failMobile = false;
+  try {
+    const supervisor = createSupervisor(config, {
+      serviceSpecs: [{ id: "api" }, { id: "mobile", dependsOn: ["api"], optional: true }],
+      preflightFn: async () => {},
+      hooks: {
+        watch: false,
+        startService: async (spec) => ({ id: spec.id, pid: process.pid + 1, exited: false, logPath: `${spec.id}.log` }),
+        waitReady: async (spec) => {
+          if (spec.id === "mobile" && failMobile) throw failure(FailureKind.READINESS_TIMEOUT, "mobile did not become ready", { stage: "readiness", service: spec.id });
+        },
+        stopService: async () => {},
+      },
+    });
+    await supervisor.start();
+    failMobile = true;
+    const degraded = await supervisor.reload(["api"]);
+    assert.equal(degraded.state, RuntimeState.DEGRADED);
+    assert.equal(degraded.failure, undefined);
+    assert.equal(degraded.optionalFailures.mobile.message, "mobile did not become ready");
+    assert.equal((await readManifest(config)).state, RuntimeState.DEGRADED);
+    failMobile = false;
+    const recovered = await supervisor.reload(["mobile"]);
+    assert.equal(recovered.state, RuntimeState.READY);
+    assert.deepEqual(recovered.optionalFailures, {});
+    assert.equal(recovered.failure, undefined);
+    assert.equal((await readManifest(config)).state, RuntimeState.READY);
+    await supervisor.stop();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("reload clears the root failure after the required service recovers", async () => {
+  const { root, config } = await tempConfig();
+  let failApi = false;
+  try {
+    const supervisor = createSupervisor(config, {
+      serviceSpecs: [{ id: "api" }],
+      preflightFn: async () => {},
+      hooks: {
+        watch: false,
+        startService: async () => ({ id: "api", pid: process.pid + 1, exited: false, logPath: "api.log" }),
+        waitReady: async (spec) => {
+          if (failApi) throw failure(FailureKind.READINESS_TIMEOUT, "api did not become ready", { stage: "readiness", service: spec.id });
+        },
+        stopService: async () => {},
+      },
+    });
+    await supervisor.start();
+    failApi = true;
+    await assert.rejects(supervisor.reload(["api"]), { kind: FailureKind.READINESS_TIMEOUT });
+    assert.equal(supervisor.state, RuntimeState.RELOAD_FAILED);
+    assert.equal((await readManifest(config)).failure.service, "api");
+    failApi = false;
+    const recovered = await supervisor.reload(["api"]);
+    assert.equal(recovered.state, RuntimeState.READY);
+    assert.equal(recovered.failure, undefined);
+    const manifest = await readManifest(config);
+    assert.equal(manifest.state, RuntimeState.READY);
+    assert.equal(manifest.failure, undefined);
+    await supervisor.stop();
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });

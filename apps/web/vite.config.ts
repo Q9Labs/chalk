@@ -9,7 +9,9 @@ import sdkReactPkg from "../../sdks/typescript/react/package.json";
 
 const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
 const buildTime = new Date().toISOString();
-const localWebOrigin = "http://127.0.0.1:3070";
+const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
+const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
+const localWebOrigin = `http://127.0.0.1:${localWebPort}`;
 const localBrokerPort = process.env.CHALK_DEV_BROKER_PORT?.trim();
 const localBrokerTarget = process.env.CHALK_DEV_BROKER_ORIGIN?.trim() || (localBrokerPort ? `http://127.0.0.1:${localBrokerPort}` : "http://127.0.0.1:3071");
 
@@ -25,7 +27,7 @@ const config = defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: 3070,
+    port: localWebPort,
     proxy: {
       "/local-chalk": {
         target: localBrokerTarget,

@@ -109,7 +109,7 @@ export async function acquireMachineLease(config, { runtimeId = randomUUID(), is
   return lease;
 }
 
-export function ownerRecord({ lease, config, state, revision = "unknown", supervisorPid = process.pid, manifestPath = config.manifestPath, services = {}, resources = [] }) {
+export function ownerRecord({ lease, config, state, revision = "unknown", supervisorPid = process.pid, supervisorExpectedCommand = process.argv[1] || process.execPath, manifestPath = config.manifestPath, services = {}, resources = [] }) {
   return {
     schemaVersion: 1,
     runtimeId: lease.runtimeId,
@@ -117,6 +117,7 @@ export function ownerRecord({ lease, config, state, revision = "unknown", superv
     revision,
     fresh: Boolean(config.fresh),
     supervisorPid,
+    supervisorExpectedCommand,
     profile: config.profile,
     state,
     ports: config.ports,

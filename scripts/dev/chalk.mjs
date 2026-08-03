@@ -91,6 +91,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     const base = {
       CHALK_API_URL: config.urls.api,
       CHALK_SYNC_URL: `ws://127.0.0.1:${config.ports.sync}/v3/sync`,
+      CHALK_DEV_WEB_PORT: String(config.ports.web),
       CHALK_DEV_BROKER_PORT: String(config.ports.broker),
       CHALK_DEV_BROKER_ORIGIN: `http://127.0.0.1:${config.ports.broker}`,
     };
@@ -155,6 +156,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         [config.brokerRuntime.spaceBindingName]: bindings?.spaceId || "",
       };
     if (serviceId === "web") return base;
+    if (serviceId === "mobile") return { ...base, EXPO_PUBLIC_CHALK_BROKER_URL: config.urls.broker };
     return {};
   }
 }
@@ -194,7 +196,7 @@ export function defaultServiceSpecs(config) {
     { id: "sdk-client", command: "pnpm", args: ["--filter", "@q9labsai/chalk-client", "dev"], cwd: config.root },
     { id: "sdk-whiteboard", command: "pnpm", args: ["--filter", "@q9labsai/chalk-whiteboard", "dev"], cwd: config.root, readiness: { filePath: join(config.root, "packages/whiteboard/dist/react/index.js") } },
     { id: "sdk-react", command: "pnpm", args: ["--filter", "@q9labsai/chalk-react", "dev"], cwd: config.root, dependsOn: ["sdk-whiteboard"] },
-    { id: "web", command: "pnpm", args: ["--filter", "web", "run", "dev:vite"], cwd: config.root, dependsOn: ["broker", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
+    { id: "web", command: "pnpm", args: ["--filter", "web", "exec", "vite", "dev", "--host", "127.0.0.1", "--port", String(config.ports.web)], cwd: config.root, dependsOn: ["broker", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
   ];
   if (config.profile === "mobile")
     specs.push({

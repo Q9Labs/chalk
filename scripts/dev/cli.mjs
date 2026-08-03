@@ -5,7 +5,8 @@ import { createChalkSupervisor } from "./chalk.mjs";
 import { DevFailure, FailureKind } from "./model.mjs";
 import { readManifest, readOwner, validateOwnedPid } from "./ownership.mjs";
 
-export async function runCli(argv = process.argv.slice(2), { cwd = process.cwd(), env = process.env, root = cwd, create = createChalkSupervisor, keepAlive = true, output = console.log, errorOutput = console.error, supervisorOptions } = {}) {
+export async function runCli(argv = process.argv.slice(2), { cwd = process.cwd(), env = process.env, root = cwd, create = createChalkSupervisor, keepAlive = true, output = console.log, errorOutput = console.error, signalSource = process, supervisorOptions } = {}) {
+  let shutdown;
   try {
     const args = parseArguments(argv);
     const config = resolveDevConfig({ cwd, root, env, profile: args.profile, fresh: args.fresh });
@@ -18,20 +19,27 @@ export async function runCli(argv = process.argv.slice(2), { cwd = process.cwd()
       }
     }
     const supervisor = ["start", "reset"].includes(args.command) ? create(config, supervisorOptions) : undefined;
+    if (args.command === "start") shutdown = installSignalShutdown(supervisor, signalSource);
     const commandHooks = { ...(supervisor?.commandHooks || {}), ...(supervisorOptions?.hooks || {}) };
-    const result = await runCommand(args.command, config, { supervisor: args.command === "start" ? supervisor : undefined, service: args.service, yes: args.yes, output, hooks: commandHooks });
+    const startup = runCommand(args.command, config, { supervisor: args.command === "start" ? supervisor : undefined, service: args.service, yes: args.yes, output, hooks: commandHooks });
+    shutdown?.attachStartup(startup);
+    const result = await startup;
     if (args.command === "status" && (result.stale || ["degraded", "reload-failed", "failed"].includes(result.state || result.status))) {
       return { code: 1, result, config };
     }
     if (args.command === "start" && keepAlive) {
-      const terminal = await waitForSignal(supervisor);
+      const terminal = await shutdown.waitForStop();
       if (terminal?.state === "failed" || terminal?.state === "reload-failed") return { code: 1, result: terminal, config };
     }
+    await shutdown?.drain();
     return { code: 0, result, config };
   } catch (error) {
+    await shutdown?.drain().catch(() => {});
     const failure = error instanceof DevFailure ? error : new DevFailure({ kind: FailureKind.STARTUP, stage: "cli", message: error.message || String(error), cause: error });
     errorOutput(formatFailure(failure));
     return { code: exitCode(failure), error: failure };
+  } finally {
+    shutdown?.close();
   }
 }
 
@@ -56,27 +64,54 @@ function exitCode(error) {
   return [FailureKind.CONFIG, FailureKind.MISSING_TOOL, FailureKind.BUSY_PORT, FailureKind.OWNERSHIP_CONFLICT].includes(error.kind) ? 2 : 1;
 }
 
-async function waitForSignal(supervisor) {
-  return new Promise((resolveWait) => {
-    let settled = false;
-    const stop = async () => {
-      if (settled) return;
-      settled = true;
-      process.off("SIGINT", stop);
-      process.off("SIGTERM", stop);
-      resolveWait(await supervisor.stop());
-    };
-    const stopPromise = supervisor.waitForStop?.();
-    stopPromise?.then((result) => {
-      if (settled) return;
-      settled = true;
-      process.off("SIGINT", stop);
-      process.off("SIGTERM", stop);
-      resolveWait(result);
-    });
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
+function installSignalShutdown(supervisor, source = process) {
+  let requested = false;
+  let stopPromise;
+  let startup;
+  let resolveSignal;
+  const signal = new Promise((resolveSignalRequest) => {
+    resolveSignal = resolveSignalRequest;
   });
+  const onSignal = () => {
+    if (requested) return;
+    requested = true;
+    resolveSignal();
+    scheduleStop();
+  };
+  source.once("SIGINT", onSignal);
+  source.once("SIGTERM", onSignal);
+  return {
+    async waitForStop() {
+      const naturalStop = supervisor.waitForStop?.();
+      if (!naturalStop) return signal.then(() => stopPromise);
+      const result = await Promise.race([naturalStop, signal.then(() => stopPromise)]);
+      return requested ? stopPromise : result;
+    },
+    async drain() {
+      if (requested) {
+        await startup?.catch(() => {});
+        scheduleStop();
+      }
+      if (stopPromise) await stopPromise;
+    },
+    attachStartup(startupPromise) {
+      startup = Promise.resolve(startupPromise);
+      if (requested) scheduleStop();
+    },
+    close() {
+      source.off("SIGINT", onSignal);
+      source.off("SIGTERM", onSignal);
+    },
+  };
+
+  function scheduleStop() {
+    if (!requested || !startup || stopPromise) return;
+    stopPromise = startup.then(
+      () => supervisor.stop(),
+      () => supervisor.stop(),
+    );
+    void stopPromise.catch(() => {});
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

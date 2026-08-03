@@ -126,22 +126,38 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
       state = transition(state, RuntimeState.RELOADING);
       const affected = new Set(ids);
       for (const id of ids) for (const dependant of dependantIds(ordered, id)) affected.add(dependant);
+      const requiredRecovery = [...affected].some((id) => {
+        const spec = ordered.find((entry) => entry.id === id);
+        return spec && !spec.optional;
+      });
+      const previousRootFailure = rootFailure;
       try {
         await persist();
         for (const spec of [...ordered].reverse().filter((entry) => affected.has(entry.id))) await stopOne(spec);
-        for (const spec of ordered.filter((entry) => affected.has(entry.id))) await startService(spec);
-        state = transition(state, optionalFailures.size > 0 ? RuntimeState.DEGRADED : RuntimeState.READY);
-        await persist();
-      } catch (error) {
-        const optional = [...affected].every((id) => ordered.find((spec) => spec.id === id)?.optional);
-        const reloadFailure = asFailure(error, "reload");
-        if (optional) {
-          for (const id of affected) optionalFailures.set(id, reloadFailure);
+        for (const spec of ordered.filter((entry) => affected.has(entry.id))) {
+          try {
+            await startService(spec);
+            optionalFailures.delete(spec.id);
+          } catch (error) {
+            if (!spec.optional) throw error;
+            optionalFailures.set(spec.id, asFailure(error, "reload", spec.id));
+            await stopOne(spec).catch(() => {});
+          }
+        }
+        if (requiredRecovery && (!previousRootFailure?.service || affected.has(previousRootFailure.service))) rootFailure = undefined;
+        const nextState = rootFailure ? RuntimeState.RELOAD_FAILED : optionalFailures.size > 0 ? RuntimeState.DEGRADED : RuntimeState.READY;
+        if (nextState === RuntimeState.DEGRADED) {
+          state = transition(state, RuntimeState.READY);
           state = transition(state, RuntimeState.DEGRADED);
         } else {
-          rootFailure = reloadFailure;
-          state = transition(state, RuntimeState.RELOAD_FAILED);
+          state = transition(state, nextState);
         }
+        await persist();
+      } catch (error) {
+        const reloadFailure = asFailure(error, "reload");
+        rootFailure = reloadFailure;
+        if (state !== RuntimeState.RELOADING) state = transition(state, RuntimeState.RELOADING);
+        state = transition(state, RuntimeState.RELOAD_FAILED);
         await persist();
         throw reloadFailure;
       }

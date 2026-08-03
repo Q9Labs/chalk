@@ -75,7 +75,7 @@ test("default Chalk service graph keeps mobile optional and core dependencies or
   const config = {
     root: "/tmp/chalk",
     profile: "mobile",
-    ports: { api: 8080, sync: 4100, broker: 8787 },
+    ports: { api: 8080, sync: 4100, web: 3070, broker: 8787 },
     urls: { api: "http://127.0.0.1:8080", sync: "http://127.0.0.1:4100", broker: "http://127.0.0.1:8787/local-chalk", web: "http://127.0.0.1:3070" },
     runtimeRoot: "/tmp/chalk-runtime",
     brokerRuntime: { configName: "wrangler.toml", directory: "/tmp/chalk/broker", spaceBindingName: "CHALK_SPACE_ID" },
@@ -96,6 +96,7 @@ test("default Chalk service graph keeps mobile optional and core dependencies or
   assert.equal(whiteboard.readiness.filePath, "/tmp/chalk/packages/whiteboard/dist/react/index.js");
   assert.deepEqual(react.dependsOn, ["sdk-whiteboard"]);
   assert.equal(web.dependsOn.includes("sdk-whiteboard"), true);
+  assert.deepEqual(web.args, ["--filter", "web", "exec", "vite", "dev", "--host", "127.0.0.1", "--port", "3070"]);
   assert.equal(specs.at(-1).id, "mobile");
   assert.equal(specs.at(-1).optional, true);
   assert.deepEqual(specs.at(-1).dependsOn, ["web"]);
@@ -118,6 +119,41 @@ test("local adapter discovery finds the broker binding and web join route", asyn
     await writeFile(join(routesDirectory, "space.tsx"), 'import { SpaceView } from "@q9labsai/chalk-react";\nexport const Route = createFileRoute("/local")({ component: SpaceView });\n');
     assert.deepEqual(discoverBrokerRuntime(root), { configPath: join(brokerDirectory, "wrangler.toml"), configName: "wrangler.toml", directory: brokerDirectory, spaceBindingName: "CHALK_SPACE_ID" });
     assert.equal(discoverWebJoinPath(root), "/local");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("mobile service receives the local broker URL and configured web port", async () => {
+  const root = await mkdtemp(join(tmpdir(), "chalk-mobile-env-test-"));
+  const config = resolveDevConfig({ root, cwd: root, home: root, profile: "mobile", requiredTools: [], allowBusyPorts: ["web", "broker"] });
+  config.brokerRuntime = { configName: "wrangler.toml", directory: root, spaceBindingName: "CHALK_SPACE_ID" };
+  config.webJoinPath = "/local";
+  await mkdir(join(root, "apps/mobile/scripts"), { recursive: true });
+  await writeFile(join(root, "apps/mobile/scripts/prepare-local-bridge.mjs"), "");
+  const childEnvironments = new Map();
+  const resources = {
+    state: { identity: { signing: { kid: "local-dev", rawPrivateKey: "private", publicKeyring: { "local-dev": "public" } } } },
+    async preflight() {},
+    async start() {},
+    async stop() {},
+  };
+  try {
+    const supervisor = createChalkSupervisor(config, {
+      adapters: { resources, resolveSecrets: async () => undefined, acquireLease: async () => ({ runtimeId: "mobile-test", release: async () => {} }) },
+      serviceSpecs: [{ id: "mobile", command: "node" }],
+      hooks: {
+        startService: async (spec, context) => {
+          childEnvironments.set(spec.id, context.childEnv);
+          return { id: spec.id, pid: process.pid + 1, exited: false, logPath: `${spec.id}.log` };
+        },
+        stopService: async () => {},
+      },
+    });
+    await supervisor.start();
+    assert.equal(childEnvironments.get("mobile").EXPO_PUBLIC_CHALK_BROKER_URL, config.urls.broker);
+    assert.equal(childEnvironments.get("mobile").CHALK_DEV_WEB_PORT, String(config.ports.web));
+    await supervisor.stop();
   } finally {
     await rm(root, { recursive: true, force: true });
   }

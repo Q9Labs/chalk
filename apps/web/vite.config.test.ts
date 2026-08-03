@@ -3,6 +3,7 @@ import type { ProxyOptions, UserConfig } from "vite";
 
 const brokerOriginEnv = "CHALK_DEV_BROKER_ORIGIN";
 const brokerPortEnv = "CHALK_DEV_BROKER_PORT";
+const webPortEnv = "CHALK_DEV_WEB_PORT";
 
 describe("local broker Vite proxy", () => {
   it.each([
@@ -19,7 +20,7 @@ describe("local broker Vite proxy", () => {
   });
 
   it("sets the browser origin on local broker requests", async () => {
-    const config = await loadViteConfig({});
+    const config = await loadViteConfig({ [webPortEnv]: "3123" });
     const proxy = localProxy(config);
     const on = vi.fn();
 
@@ -31,7 +32,14 @@ describe("local broker Vite proxy", () => {
 
     proxyRequestListener({ setHeader });
 
-    expect(setHeader).toHaveBeenCalledWith("origin", "http://127.0.0.1:3070");
+    expect(setHeader).toHaveBeenCalledWith("origin", "http://127.0.0.1:3123");
+    expect(config.server?.port).toBe(3123);
+  });
+
+  it("keeps the production default web port when no local port is configured", async () => {
+    const config = await loadViteConfig({});
+
+    expect(config.server?.port).toBe(3070);
   });
 });
 
@@ -39,6 +47,7 @@ async function loadViteConfig(environment: Record<string, string>): Promise<User
   vi.resetModules();
   vi.stubEnv(brokerOriginEnv, environment[brokerOriginEnv] ?? "");
   vi.stubEnv(brokerPortEnv, environment[brokerPortEnv] ?? "");
+  vi.stubEnv(webPortEnv, environment[webPortEnv] ?? "");
 
   try {
     return (await import("./vite.config")).default;

@@ -1,3 +1,5 @@
+import { createInterface } from "node:readline/promises";
+import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { readManifest, readOwner, removeRuntimeFiles, validateOwnedPid } from "./ownership.mjs";
 import { stopProcessGroup, tailLog } from "./process.mjs";
 import { DevCommand } from "./config.mjs";
@@ -8,7 +10,7 @@ const helpText = `Usage: pnpm dev [command] [options]
 Commands: start, status, logs [service], smoke, stop, reset
 Options: --profile core|mobile, --fresh, --yes`;
 
-export async function runCommand(command, config, { supervisor, service, yes = false, confirm = async () => false, hooks = {}, output = console.log } = {}) {
+export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
   switch (command) {
     case DevCommand.START:
       if (!supervisor) throw failure(FailureKind.CONFIG, "start requires a supervisor", { stage: "command" });
@@ -85,10 +87,19 @@ export async function stopCommand(config, { supervisor, hooks = {}, output } = {
   }
   const owner = await readOwner(config);
   if (!owner) return { state: RuntimeState.STOPPED, stopped: false };
-  if (await validateOwnedPid(owner.supervisorPid)) {
+  const validatePid = hooks.validatePid || validateOwnedPid;
+  const supervisorAlive = await validatePid(owner.supervisorPid);
+  const supervisorExpectedCommand = owner.supervisorExpectedCommand || owner.supervisor?.expectedCommand;
+  if (supervisorAlive) {
+    if (!supervisorExpectedCommand) {
+      throw failure(FailureKind.OWNERSHIP_CONFLICT, `cannot verify supervisor ${owner.supervisorPid}; its recorded command is missing`, { stage: "ownership" });
+    }
+    if (!(await validatePid(owner.supervisorPid, { expectedCommand: supervisorExpectedCommand }))) {
+      throw failure(FailureKind.OWNERSHIP_CONFLICT, `recorded supervisor ${owner.supervisorPid} no longer matches its expected command`, { stage: "ownership" });
+    }
     if (owner.supervisorPid === process.pid) throw failure(FailureKind.CLEANUP, "refusing to stop the current supervisor process", { stage: "cleanup" });
-    process.kill(owner.supervisorPid, "SIGTERM");
-    await waitForPidExit(owner.supervisorPid, config.timeouts.stopTimeoutMs ?? 120000);
+    (hooks.kill || process.kill.bind(process))(owner.supervisorPid, "SIGTERM");
+    await waitForPidExit(owner.supervisorPid, config.timeouts.stopTimeoutMs ?? 120000, { expectedCommand: supervisorExpectedCommand, validate: validatePid });
   } else {
     await stopManifestProcesses(owner.manifestPath, { hooks, config });
   }
@@ -97,10 +108,15 @@ export async function stopCommand(config, { supervisor, hooks = {}, output } = {
   return result;
 }
 
-async function resetCommand(config, { yes = false, confirm = async () => false, hooks = {}, output } = {}) {
+async function resetCommand(config, { yes = false, confirm = confirmReset, hooks = {}, output } = {}) {
   const owner = await readOwner(config);
-  const manifest = await readManifest(config);
-  const live = await liveOwnedProcesses(owner, manifest);
+  const manifest = owner?.manifestPath ? await readManifest(owner.manifestPath) : owner ? undefined : await readManifest(config);
+  const live = await liveOwnedProcesses(owner, manifest, { validate: hooks.validatePid || validateOwnedPid });
+  const crossCheckout = owner?.checkout && owner.checkout !== config.root;
+  if (crossCheckout) {
+    const detail = live[0] ? `; live owned process ${live[0].label} (pid ${live[0].pid})` : "";
+    throw failure(FailureKind.OWNERSHIP_CONFLICT, `runtime belongs to another checkout (${owner.checkout}, runtime ${owner.runtimeId || "unknown"})${detail}; run dev:reset from the owning checkout`, { stage: "ownership" });
+  }
   if (live.length > 0) throw failure(FailureKind.RESET, `runtime still has live owned process ${live[0].label} (pid ${live[0].pid}); stop it with dev:stop first`, { stage: "reset" });
   const targets = resetTargets(config);
   output?.(JSON.stringify({ resetTargets: targets }, null, 2));
@@ -124,20 +140,20 @@ function resetTargets(config) {
   };
 }
 
-async function liveOwnedProcesses(owner, manifest) {
+async function liveOwnedProcesses(owner, manifest, { validate = validateOwnedPid } = {}) {
   const records = [];
-  if (owner?.supervisorPid) records.push({ label: "supervisor", pid: owner.supervisorPid, expectedCommand: undefined });
+  if (owner?.supervisorPid) records.push({ label: "supervisor", pid: owner.supervisorPid, expectedCommand: owner.supervisorExpectedCommand || owner.supervisor?.expectedCommand });
   const services = Array.isArray(manifest?.services) ? manifest.services.map((entry) => (Array.isArray(entry) ? entry[1] : entry)) : Object.values(manifest?.services || {});
   for (const service of services) if (service?.pid) records.push({ ...service, label: service.id || service.name || "service" });
   const live = [];
   for (const record of records) {
-    if (await validateOwnedPid(record.pid, { expectedCommand: record.expectedCommand, expectedProcessGroup: record.label !== "supervisor" && process.platform !== "win32" })) live.push(record);
+    if (await validate(record.pid, { expectedCommand: record.expectedCommand, expectedProcessGroup: record.label !== "supervisor" && process.platform !== "win32" })) live.push(record);
   }
   return live;
 }
 
 async function stopManifestProcesses(manifestPath, { hooks, config }) {
-  const manifest = await readManifest(manifestPath);
+  const manifest = manifestPath ? await readManifest(manifestPath) : undefined;
   const entries = serviceEntries(manifest?.services).reverse();
   for (const [id, descriptor] of entries) {
     if (!descriptor?.pid) continue;
@@ -151,10 +167,21 @@ function serviceEntries(services) {
   return Object.entries(services || {});
 }
 
-async function waitForPidExit(pid, timeoutMs) {
+async function waitForPidExit(pid, timeoutMs, { expectedCommand, validate = validateOwnedPid } = {}) {
   const deadline = Date.now() + timeoutMs;
-  while (await validateOwnedPid(pid)) {
+  while (await validate(pid, { expectedCommand })) {
     if (Date.now() >= deadline) throw failure(FailureKind.CLEANUP, `supervisor ${pid} did not stop`, { stage: "cleanup" });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+  }
+}
+
+export async function confirmReset(prompt, { input = processStdin, output = processStdout } = {}) {
+  if (!input || typeof input.on !== "function") throw failure(FailureKind.CONFIG, "dev:reset requires --yes when interactive stdin is unavailable", { stage: "reset" });
+  const readline = createInterface({ input, output });
+  try {
+    const answer = await readline.question(`${prompt} [y/N] `);
+    return /^(?:y|yes)$/i.test(answer.trim());
+  } finally {
+    readline.close();
   }
 }

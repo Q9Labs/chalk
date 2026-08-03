@@ -72,6 +72,7 @@ export function createSourcePoller({ rootsByService, intervalMs = 250, debounceM
   const initialized = new Set();
   let timer;
   let debounce;
+  const pendingChanges = new Map();
   let closed = false;
 
   const poll = async () => {
@@ -91,9 +92,14 @@ export function createSourcePoller({ rootsByService, intervalMs = 250, debounceM
       snapshots.set(serviceId, next);
     }
     if (changes.length > 0) {
+      for (const change of changes) pendingChanges.set(`${change.serviceId}\u0000${change.path}`, change);
       clearTimeout(debounce);
       debounce = setTimeout(() => {
-        if (!closed) void onChange(changes);
+        debounce = undefined;
+        if (closed || pendingChanges.size === 0) return;
+        const pending = [...pendingChanges.values()];
+        pendingChanges.clear();
+        void onChange(pending);
       }, debounceMs);
     }
     if (!closed) timer = setTimeout(() => void poll(), intervalMs);
@@ -104,6 +110,7 @@ export function createSourcePoller({ rootsByService, intervalMs = 250, debounceM
       closed = true;
       clearTimeout(timer);
       clearTimeout(debounce);
+      pendingChanges.clear();
     },
     async flush() {
       await poll();
