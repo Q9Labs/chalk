@@ -191,7 +191,12 @@ condition**: `episode.not_found`, `space.access_denied` (Hasan: no dashes).
 
 - **Member/guest identity direction** (discussed, mechanics clarified, not
   yet explicitly locked): Chalk never owns end-user identity; embedding app
-  is the identity authority. Two integration depths: ephemeral guest grant
+  is the identity authority. What a Member gets over a guest (enumerated for
+  the glossary): standing access (link just works), durable Role across
+  Episodes, roster presence while dormant, continuous identity in history
+  ("attended all 12 classes"), addressability (assign/pre-authorize/mention).
+  A guest gets exactly one thing: admittance to the current Episode with a
+  role that expires with it. Two integration depths: ephemeral guest grant
   (drop-in path) vs registered identity keyed by the customer's external id
   (Stripe-customer pattern; external_id is a unique reference per tenant,
   NEVER the primary key — Chalk mints its own ids). Members then attach
