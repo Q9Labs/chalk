@@ -1,0 +1,717 @@
+<rr-doc title="Live Episode Debugger" register="spec" project="Chalk" verdict="ready" risk="major" summary="Build an internal, real-time Episode debugger with complete semantic action tracing, live issue detection, post-Episode epilogue links, and one agent-resolvable diagnostic reference.">
+  <rr-deck id="live-episode-debugger">
+    <rr-slide spine="Outcome">
+      <h1>One live record for everything Chalk does</h1>
+      <p class="lede">Every Episode gets a durable internal diagnostic that follows Participants, media, Sync, chat, reactions, screen sharing, moderation, failures, cleanup, artifacts, and webhooks in real time.</p>
+      <rr-tiles>
+        <rr-tile icon="pulse" label="Live latency" value="≤ 2s p95" caption="Observed Event to debugger view" tone="green" />
+        <rr-tile icon="users" label="Design target" value="100 Participants" caption="8 hours and about one million Events" />
+        <rr-tile icon="clock" label="Retention" value="7 days" caption="After end and bounded epilogue completion" />
+        <rr-tile icon="shield" label="Environments" value="3" caption="Local, development, staging; never production" />
+      </rr-tiles>
+      <p><a href="live-episode-debugger-spec-2026-08-03.md">Open the detailed execution specification</a></p>
+    </rr-slide>
+
+    <rr-slide spine="Gap" title="Today, the evidence is split by tool and identifier">
+      <rr-panes>
+        <rr-before label="Current state">
+          <p>The SDK keeps eight join steps in a bounded memory timeline.</p>
+          <p>Journey Events, traces, logs, RTC summaries, and Sync development Events live in separate stores.</p>
+          <p>A silent missing confirmation has no owner and no single reference.</p>
+        </rr-before>
+        <rr-after label="Desired state">
+          <p>One Episode Diagnostic links every bounded operation and its evidence.</p>
+          <p>Expectation contracts turn rejection, lateness, silence, and telemetry gaps into visible Issues.</p>
+          <p>One <code>chalkdiag:</code> reference gives an agent the focused Event and full Episode context.</p>
+        </rr-after>
+      </rr-panes>
+      <rr-beat><rr-callout tone="amber">A green product state and a complete diagnostic are separate claims. The debugger must show when Chalk works but evidence is missing.</rr-callout></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="System" title="A semantic ledger sits beside normal observability">
+      <rr-stage id="episode-debugger-system" crumb="LIVE EPISODE DIAGNOSTIC">
+        <rr-legend><rr-key kind="new">new diagnostic path</rr-key><rr-key kind="green">existing detailed signals</rr-key></rr-legend>
+        <rr-stage-body>
+          <rr-band label="Observed behavior">
+            <rr-block icon="globe" title="Web and mobile" caption="Intent, render, device, media" />
+            <rr-block icon="layers" title="Client package" caption="Every Episode action and recovery" />
+            <rr-block icon="branch" title="API and Sync" caption="Authority, commit, fanout, workers" />
+            <rr-block icon="signal" title="Provider edges" caption="SFU requests and endpoint symptoms" />
+          </rr-band>
+          <rr-band label="Complete semantic record">
+            <rr-block icon="route" title="After-commit observer" caption="Idempotent ensure and reconciliation" tone="is-new" />
+            <rr-block icon="db" title="Event ledger" caption="Safe, append-only, Episode-owned" tone="is-new" />
+            <rr-block icon="gear" title="Expectation projector" caption="Operations, checkpoints, branches, Issues" tone="is-new" />
+            <rr-block icon="route" title="Snapshot and resume stream" caption="Commit-ordered cursor, paging, SSE" tone="is-new" />
+          </rr-band>
+          <rr-band label="Existing detail">
+            <rr-block icon="pulse" title="Tempo, Loki, Prometheus" caption="Bounded traces, logs, metrics" />
+            <rr-block icon="branch" title="Journey and W3C links" caption="Related request evidence" />
+          </rr-band>
+          <rr-band label="Internal use">
+            <rr-block icon="globe" title="Episode Debugger" caption="Run, Graph, Trace, Flame" tone="is-new" />
+            <rr-block icon="chip" title="Agent resolver" caption="Brief, async JSON export, source revision" tone="is-new" />
+          </rr-band>
+        </rr-stage-body>
+      </rr-stage>
+    </rr-slide>
+
+    <rr-slide spine="Behavior" title="A chat send explains each boundary or names the first missing one">
+      <rr-journey>
+        <rr-stop tone="new">UI intent</rr-stop><rr-sep /> <rr-stop tone="new">SDK validation</rr-stop><rr-sep /> <rr-stop tone="new">Frame queued</rr-stop><rr-sep /> <rr-stop tone="new">Sync authorized</rr-stop><rr-sep /> <rr-stop tone="new">Durable commit</rr-stop><rr-sep />
+        <rr-stop tone="new">Sender receipt</rr-stop><rr-sep />
+        <rr-stop>Recipient projection</rr-stop>
+      </rr-journey>
+      <rr-beat>
+        <rr-cols2>
+          <rr-card
+            ><h3>Required proof</h3>
+            <p>Validation, authorization, commit, and sender receipt determine whether sending succeeded.</p></rr-card>
+          <rr-card
+            ><h3>Conditional proof</h3>
+            <p>Connected recipients add projection evidence, but a disconnected client does not turn a committed send into failure.</p></rr-card>
+        </rr-cols2>
+      </rr-beat>
+      <rr-beat><rr-callout tone="amber">If commit does not arrive by its contract deadline, the operation becomes stalled. A later commit resolves the Issue but keeps the missed deadline in history.</rr-callout></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Debugger" title="The internal debugger stays useful from first join through epilogue">
+      <rr-mockup app="Chalk" id="episode-debugger-preview" url="localhost:3070/dev/episodes/chalkdiag:v1:local:01K..." label="Interactive Live Episode Debugger preview">
+        <style>
+          :host {
+            display: block;
+            color: #e5e7eb;
+            font-family: Inter, "Avenir Next", sans-serif;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          button {
+            font: inherit;
+          }
+          .shell {
+            min-height: 590px;
+            background: #080d16;
+            color: #e5e7eb;
+            display: grid;
+            grid-template-rows: 54px 1fr;
+          }
+          .top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 16px;
+            border-bottom: 1px solid #263142;
+            background: #0d1420;
+          }
+          .brand {
+            font-weight: 720;
+            letter-spacing: -0.02em;
+            color: #fff;
+          }
+          .ref {
+            color: #8f9bad;
+            font:
+              11px "SFMono-Regular",
+              Consolas,
+              monospace;
+            padding: 6px 8px;
+            border: 1px solid #2a3648;
+            border-radius: 6px;
+            background: #111a28;
+          }
+          .live {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #5eead4;
+            font-size: 12px;
+            font-weight: 650;
+          }
+          .live:before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #2dd4bf;
+          }
+          .spacer {
+            flex: 1;
+          }
+          .copy {
+            border: 1px solid #2dd4bf;
+            color: #ccfbf1;
+            background: #0f3b3a;
+            border-radius: 7px;
+            padding: 8px 11px;
+            cursor: pointer;
+            font-weight: 650;
+          }
+          .copy.secondary {
+            color: #cbd5e1;
+            border-color: #334155;
+            background: #111827;
+          }
+          .body {
+            display: grid;
+            grid-template-columns: 154px minmax(0, 1fr) 292px;
+            min-height: 0;
+          }
+          .rail {
+            border-right: 1px solid #263142;
+            padding: 14px 10px;
+            background: #0b111b;
+          }
+          .rail small {
+            display: block;
+            margin: 8px 9px 7px;
+            color: #64748b;
+            font:
+              10px "SFMono-Regular",
+              monospace;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+          }
+          .tab {
+            width: 100%;
+            border: 0;
+            color: #94a3b8;
+            background: transparent;
+            text-align: left;
+            padding: 9px 10px;
+            border-radius: 7px;
+            cursor: pointer;
+          }
+          .tab.active {
+            color: #ecfeff;
+            background: #123332;
+          }
+          .count {
+            float: right;
+            min-width: 19px;
+            padding: 1px 5px;
+            border-radius: 999px;
+            background: #7f1d1d;
+            color: #fecaca;
+            text-align: center;
+            font-size: 10px;
+          }
+          .main {
+            min-width: 0;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            background: #0a1019;
+          }
+          .summary {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            padding: 13px 16px;
+            border-bottom: 1px solid #202b3b;
+          }
+          .stat {
+            display: grid;
+            gap: 2px;
+          }
+          .stat b {
+            font-size: 14px;
+            color: #fff;
+          }
+          .stat span {
+            color: #718096;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+          .health {
+            margin-left: auto;
+            color: #fbbf24;
+            font-size: 12px;
+          }
+          .canvas {
+            overflow: hidden;
+            padding: 14px 16px;
+          }
+          .view {
+            display: none;
+            height: 100%;
+          }
+          .view.active {
+            display: block;
+          }
+          .viewhead {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            margin-bottom: 13px;
+          }
+          .viewhead h3 {
+            margin: 0;
+            font-size: 17px;
+            color: #fff;
+          }
+          .viewhead span {
+            color: #64748b;
+            font-size: 11px;
+          }
+          .lane {
+            display: grid;
+            grid-template-columns: 100px 1fr;
+            min-height: 58px;
+            border-top: 1px solid #1d2837;
+          }
+          .lane:last-child {
+            border-bottom: 1px solid #1d2837;
+          }
+          .lane-name {
+            padding: 12px 8px;
+            color: #94a3b8;
+            font-size: 11px;
+          }
+          .track {
+            position: relative;
+            margin: 10px 0;
+            border-left: 1px solid #263244;
+            background: repeating-linear-gradient(90deg, transparent 0, transparent 119px, #172131 120px);
+          }
+          .bar {
+            position: absolute;
+            height: 18px;
+            top: 8px;
+            border-radius: 4px;
+            background: #164e63;
+            border: 1px solid #22d3ee;
+            color: #cffafe;
+            padding: 2px 6px;
+            font-size: 9px;
+            white-space: nowrap;
+            overflow: hidden;
+          }
+          .bar.green {
+            background: #14532d;
+            border-color: #4ade80;
+            color: #dcfce7;
+          }
+          .bar.amber {
+            background: #713f12;
+            border-color: #fbbf24;
+            color: #fef3c7;
+          }
+          .bar.red {
+            background: #7f1d1d;
+            border-color: #f87171;
+            color: #fee2e2;
+          }
+          .issue-list {
+            display: grid;
+            gap: 8px;
+          }
+          .issue {
+            border: 1px solid #3b2730;
+            border-left: 3px solid #f87171;
+            background: #15121a;
+            border-radius: 7px;
+            padding: 10px 12px;
+            cursor: pointer;
+          }
+          .issue b {
+            display: block;
+            color: #fecaca;
+            font-size: 12px;
+          }
+          .issue span {
+            color: #9ca3af;
+            font-size: 10px;
+          }
+          .graph {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            align-items: center;
+            padding: 42px 10px;
+          }
+          .node {
+            position: relative;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 13px;
+            background: #111827;
+            color: #dbeafe;
+            text-align: center;
+            font-size: 11px;
+          }
+          .node:after {
+            content: "→";
+            position: absolute;
+            right: -17px;
+            color: #475569;
+          }
+          .node:last-child:after {
+            content: "";
+          }
+          .node.bad {
+            border-color: #f87171;
+            color: #fecaca;
+          }
+          .trace-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+          }
+          .trace-table th,
+          .trace-table td {
+            padding: 8px;
+            border-bottom: 1px solid #1f2937;
+            text-align: left;
+          }
+          .trace-table th {
+            color: #64748b;
+            font-weight: 500;
+          }
+          .trace-table td {
+            color: #cbd5e1;
+          }
+          .details {
+            border-left: 1px solid #263142;
+            padding: 15px;
+            background: #0d1420;
+            overflow: auto;
+          }
+          .details h3 {
+            margin: 0 0 5px;
+            color: #fff;
+            font-size: 15px;
+          }
+          .details .kind {
+            color: #f87171;
+            font:
+              10px "SFMono-Regular",
+              monospace;
+            text-transform: uppercase;
+          }
+          .details p {
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.5;
+          }
+          .checkpoint {
+            margin: 13px 0;
+            padding: 10px;
+            border-radius: 7px;
+            background: #111a28;
+            border: 1px solid #263244;
+          }
+          .checkpoint b {
+            display: block;
+            color: #fbbf24;
+            font-size: 11px;
+          }
+          .checkpoint span {
+            color: #cbd5e1;
+            font-size: 10px;
+          }
+          dl {
+            display: grid;
+            gap: 8px;
+            margin: 14px 0;
+          }
+          dl div {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+          }
+          dt {
+            color: #64748b;
+            font-size: 10px;
+          }
+          dd {
+            margin: 0;
+            color: #cbd5e1;
+            font:
+              10px "SFMono-Regular",
+              monospace;
+            text-align: right;
+          }
+          .minor {
+            width: 100%;
+            border: 1px solid #334155;
+            background: #111827;
+            color: #cbd5e1;
+            border-radius: 6px;
+            padding: 8px;
+            margin-top: 7px;
+            cursor: pointer;
+            font-size: 10px;
+          }
+        </style>
+        <div class="shell">
+          <div class="top">
+            <div class="brand">Episode Debugger</div>
+            <div class="ref">chalkdiag:v1:local:01K…</div>
+            <div class="live">LIVE · cursor 1,842</div>
+            <div class="spacer"></div>
+            <button class="copy secondary" data-copy="all">Copy all</button><button class="copy" data-copy="agent">Copy for agent</button>
+          </div>
+          <div class="body">
+            <nav class="rail">
+              <small>Views</small><button class="tab active" data-view="run">Run</button><button class="tab" data-view="graph">Graph</button><button class="tab" data-view="trace">Trace</button><button class="tab" data-view="flame">Flame</button><small>Episode</small
+              ><button class="tab" data-view="issues">Issues <span class="count">1</span></button><button class="tab">Participants</button><button class="tab">Epilogue</button>
+            </nav>
+            <main class="main">
+              <div class="summary">
+                <div class="stat"><b>38m 12s</b><span>Elapsed</span></div>
+                <div class="stat"><b>4</b><span>Participants</span></div>
+                <div class="stat"><b>326</b><span>Operations</span></div>
+                <div class="stat"><b>1 open</b><span>Issues</span></div>
+                <div class="health">Telemetry gap: none</div>
+              </div>
+              <div class="canvas">
+                <section class="view active" data-panel="run">
+                  <div class="viewhead">
+                    <h3>Run · live operation lanes</h3>
+                    <span>last 90 seconds</span>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-name">Hasan</div>
+                    <div class="track">
+                      <div class="bar green" style="left: 2%; width: 20%">chat.send · 42ms</div>
+                      <div class="bar amber" style="left: 49%; width: 37%">screen.start · waiting remote frame</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-name">Participant 2</div>
+                    <div class="track">
+                      <div class="bar green" style="left: 8%; width: 16%">reaction.send</div>
+                      <div class="bar red" style="left: 51%; width: 21%">screen.subscribe · stalled</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-name">Sync</div>
+                    <div class="track">
+                      <div class="bar green" style="left: 3%; width: 23%">chat.commit</div>
+                      <div class="bar green" style="left: 48%; width: 25%">screen.commit</div>
+                    </div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-name">SFU</div>
+                    <div class="track"><div class="bar green" style="left: 50%; width: 19%">track.publish</div></div>
+                  </div>
+                </section>
+                <section class="view" data-panel="graph">
+                  <div class="viewhead">
+                    <h3>Graph · first broken edge</h3>
+                    <span>screen.start focus</span>
+                  </div>
+                  <div class="graph">
+                    <div class="node">UI intent</div>
+                    <div class="node">SDK + Sync</div>
+                    <div class="node">SFU publish</div>
+                    <div class="node bad">Remote first frame missing</div>
+                  </div>
+                </section>
+                <section class="view" data-panel="trace">
+                  <div class="viewhead">
+                    <h3>Trace · operation tree</h3>
+                    <span>326 operations · server paged</span>
+                  </div>
+                  <table class="trace-table">
+                    <thead>
+                      <tr>
+                        <th>Operation</th>
+                        <th>Source</th>
+                        <th>State</th>
+                        <th>Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>episode.run</td>
+                        <td>api</td>
+                        <td>running</td>
+                        <td>38m</td>
+                      </tr>
+                      <tr>
+                        <td>↳ screen.start</td>
+                        <td>sdk</td>
+                        <td>stalled</td>
+                        <td>4.2s</td>
+                      </tr>
+                      <tr>
+                        <td>　↳ screen.publish</td>
+                        <td>sfu</td>
+                        <td>succeeded</td>
+                        <td>281ms</td>
+                      </tr>
+                      <tr>
+                        <td>　↳ screen.remote_first_frame</td>
+                        <td>rtc</td>
+                        <td>missing</td>
+                        <td>deadline</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </section>
+                <section class="view" data-panel="flame">
+                  <div class="viewhead">
+                    <h3>Flame · zoomable waterfall</h3>
+                    <span>linked attempts, not one Episode span</span>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-name">screen.start</div>
+                    <div class="track"><div class="bar amber" style="left: 4%; width: 82%">4.2s · stalled</div></div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-name">publish</div>
+                    <div class="track"><div class="bar green" style="left: 16%; width: 22%">281ms</div></div>
+                  </div>
+                  <div class="lane">
+                    <div class="lane-name">remote frame</div>
+                    <div class="track"><div class="bar red" style="left: 41%; width: 44%">required checkpoint missing</div></div>
+                  </div>
+                </section>
+                <section class="view" data-panel="issues">
+                  <div class="viewhead">
+                    <h3>Issues · live and resolved</h3>
+                    <span>one open</span>
+                  </div>
+                  <div class="issue-list">
+                    <div class="issue"><b>Remote screen frame did not arrive</b><span>Last confirmed: SFU publication · Missing: remote first frame · 4.2s</span></div>
+                  </div>
+                </section>
+              </div>
+            </main>
+            <aside class="details">
+              <div class="kind">Open issue</div>
+              <h3>Remote screen frame missing</h3>
+              <p>The local track published and Sync committed screen sharing. Participant 2 has not observed its first remote frame.</p>
+              <div class="checkpoint"><b>First missing boundary</b><span>rtc.remote_track.first_frame</span></div>
+              <dl>
+                <div>
+                  <dt>Operation</dt>
+                  <dd>op_01K…9V</dd>
+                </div>
+                <div>
+                  <dt>Journey</dt>
+                  <dd>7b2f…91aa</dd>
+                </div>
+                <div>
+                  <dt>Trace</dt>
+                  <dd>4bf92f…4736</dd>
+                </div>
+                <div>
+                  <dt>Attempt</dt>
+                  <dd>1 / 3</dd>
+                </div>
+                <div>
+                  <dt>Release</dt>
+                  <dd>web@4c81f9</dd>
+                </div>
+              </dl>
+              <button class="minor">Copy diagnostic reference</button><button class="minor">Copy focused context</button><button class="minor">Open related trace</button>
+            </aside>
+          </div>
+        </div>
+      </rr-mockup>
+      <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          const root = document.getElementById("episode-debugger-preview")?.shadowRoot;
+          if (!root) return;
+          const tabs = root.querySelectorAll("[data-view]");
+          const panels = root.querySelectorAll("[data-panel]");
+          tabs.forEach((tab) =>
+            tab.addEventListener("click", () => {
+              const view = tab.getAttribute("data-view");
+              tabs.forEach((candidate) => candidate.classList.toggle("active", candidate === tab));
+              panels.forEach((panel) => panel.classList.toggle("active", panel.getAttribute("data-panel") === view));
+            }),
+          );
+          root.querySelectorAll("[data-copy]").forEach((button) =>
+            button.addEventListener("click", () => {
+              const original = button.textContent;
+              button.textContent = button.getAttribute("data-copy") === "agent" ? "Agent reference copied" : "Agent brief copied";
+              window.setTimeout(() => {
+                button.textContent = original;
+              }, 1200);
+            }),
+          );
+        });
+      </script>
+    </rr-slide>
+
+    <rr-slide spine="Handoff" title="One umbrella reference gives the agent the whole Episode">
+      <rr-types label="Handoff shapes">
+        <rr-sig name="copyForAgent" tone="new">(Episode Diagnostic, focus?, cursor) → short reference + observed symptom</rr-sig>
+        <rr-sig name="buildAgentBrief" tone="new">(reference, cursor) → AgentBrief/v1 shared by UI and CLI</rr-sig>
+        <rr-sig name="createDiagnosticExportJob" tone="new">(reference, cursor range) → leased async JSON export</rr-sig>
+        <rr-sig name="inspectDiagnostic" tone="new">(reference, query) → bounded overview + follow-up queries</rr-sig>
+      </rr-types>
+      <rr-beat><p>The umbrella ID stays current. The capture cursor preserves what the developer saw, and the resolver can show what happened afterward.</p></rr-beat>
+      <rr-beat
+        ><rr-callout tone="green"><code>pnpm trace:inspect chalkdiag:v1:development:… --format agent</code> returns the smallest useful evidence first, then lets the agent request wider windows or branches.</rr-callout></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Model" title="The Journey ledger remains a Journey ledger">
+      <rr-panes>
+        <rr-before label="Existing store">
+          <p><b>Journey Events:</b> ordered lifecycle evidence for one bounded Journey.</p>
+          <p>No tenant, Space, Episode, Participant, retention, live projection, or alternate-reference ownership.</p>
+        </rr-before>
+        <rr-after label="Episode Diagnostic store">
+          <p><b>Diagnostics:</b> one row per Episode, explicit environment and seven-day expiry.</p>
+          <p><b>Events:</b> append-only evidence with a contiguous, commit-ordered cursor per Diagnostic.</p>
+          <p><b>Operations, checkpoints, branches, and Issues:</b> replayable projections with leases and offsets.</p>
+          <p><b>References:</b> approved raw or HMAC ID classes resolve safely to a focus.</p>
+        </rr-after>
+      </rr-panes>
+      <rr-beat><p>Normal traces stay bounded in Tempo, logs stay in Loki, and metrics stay in Prometheus. The Episode store links them without copying every raw signal.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Safety" title="Complete means complete state transitions, not captured content">
+      <rr-cols2>
+        <rr-card
+          ><h3>Always recorded</h3>
+          <p>Action kind, safe state, timing, attempts, checkpoints, bounded error class, source, release, visibility, and approved identifiers.</p></rr-card>
+        <rr-card
+          ><h3>Never recorded</h3>
+          <p>Chat text, attachment bodies, display names, tokens, raw SDP or ICE data, media, whiteboard content, webhook bodies, or arbitrary exceptions.</p></rr-card>
+      </rr-cols2>
+      <rr-beat><rr-callout tone="amber">Diagnostic failure cannot block a product action. Queue overflow, exporter loss, storage failure, and stream lag become telemetry gaps instead.</rr-callout></rr-beat>
+      <rr-beat><p>Production starts no route, append credential, observer, exporter, projector, export job, retention worker, resolver, or operator UI. This spec authorizes no production change.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Lifecycle" title="Episode end freezes the run, then the epilogue finishes">
+      <rr-phases>
+        <rr-phase label="Live Episode" caption="Participants, actions, media, Sync, Issues, and recovery stream continuously" state="now" />
+        <rr-phase label="Episode ended" caption="The main run becomes immutable" />
+        <rr-phase label="Epilogue" caption="Pre-authorized branches stay live without mutating the ended Episode or committed artifacts" />
+        <rr-phase label="Complete" caption="Every branch succeeds, fails, cancels, or times out within 24 hours; retention begins" />
+        <rr-phase label="Expired" caption="Bounded cleanup deletes the complete diagnostic and records safe health signals" />
+      </rr-phases>
+    </rr-slide>
+
+    <rr-slide spine="Execution" title="Five gated phases keep shared contracts ahead of parallel lanes">
+      <rr-phases>
+        <rr-phase label="P0 · Contract freeze" caption="One shared package: schemas, action set, ID registry, redaction, fixtures" state="now" />
+        <rr-phase label="P1 · Foundations" caption="API schema, SDK runtime, UI fixture shell in separate ownership lanes" />
+        <rr-phase label="P2 · Complete lanes" caption="Projection and stream, Sync and SDK checkpoints, debugger, agent resolver" />
+        <rr-phase label="P3 · Integration" caption="Authoritative Episode identity, correlations, every action, epilogue" />
+        <rr-phase label="P4 · Proof" caption="Browser, silent stall, failure isolation, security, 8h/100/1M capacity" />
+        <rr-phase label="P5 · Handoff" caption="Docs, gates, bounded review, scoped commit; no push or deploy" />
+      </rr-phases>
+      <rr-beat><p>The orchestrator owns every contract gate and integration seam. Parallel lanes do not discover or redefine shared shapes independently.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Done" title="Done means the UI and agent resolve the same forced failure">
+      <rr-checklist label="Release evidence">
+        <rr-todo>Every closed v1 action and linked epilogue predicate has success and negative proof</rr-todo>
+        <rr-todo>Run, Graph, Trace, Flame, and Issues stay live and resume by cursor</rr-todo>
+        <rr-todo>Explicit failure, silent stall, exporter loss, and unauthorized read proofs pass</rr-todo>
+        <rr-todo>Copy for agent, Copy all, async JSON export, and CLI resolve the same focus</rr-todo>
+        <rr-todo>Eight-hour, 100-Participant, one-million-Event proof meets the two-second p95 target</rr-todo>
+        <rr-todo>Seven-day expiry deletes only complete diagnostics and leaves no task process behind</rr-todo>
+      </rr-checklist>
+      <rr-progress label="Product decisions closed" pct="100" n="all" tone="green" />
+      <rr-beat><rr-callout tone="green">Scope is settled. Whiteboard remains the one explicit extension seam; production, customer access, content capture, and automatic code edits remain out.</rr-callout></rr-beat>
+    </rr-slide>
+  </rr-deck>
+</rr-doc>
