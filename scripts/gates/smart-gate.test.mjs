@@ -41,7 +41,7 @@ test("meeting broker changes select its type check and coverage tests", () => {
   const typeTask = plan.tasks.find((task) => task.id === "types");
   const testTask = plan.tasks.find((task) => task.id === "tests");
   assert.equal(plan.full, false);
-  assert.deepEqual(typeTask.command, ["pnpm", "--filter", "@chalk/meeting-broker", "run", "check-types"]);
+  assert.deepEqual(typeTask.command, ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "@chalk/meeting-broker", "run", "check-types"]);
   assert.deepEqual(testTask.command, ["pnpm", "--filter", "@chalk/meeting-broker", "run", "test", "--coverage"]);
 });
 
@@ -73,6 +73,11 @@ test("lockfile changes select all JavaScript workspaces and dependency checks", 
   assert.equal(selected(plan, "osv"), true);
   assert.equal(selected(plan, "syncpack"), true);
   assert.match(plan.tasks.find((task) => task.id === "build").reason, /web/);
+});
+
+test("workspace type checks run one at a time in dependency order", () => {
+  const typeTask = createGatePlan(["pnpm-lock.yaml"], { workspaces }).tasks.find((task) => task.id === "types");
+  assert.deepEqual(typeTask.command, ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "@q9labsai/chalk-client", "--filter", "@q9labsai/chalk-react", "--filter", workspaces[3].name, "run", "check-types"]);
 });
 
 test("workspace builds run one at a time in dependency order", () => {

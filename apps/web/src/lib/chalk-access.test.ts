@@ -11,9 +11,9 @@ const access = {
     participantSessionId: "participant-1",
     participantGeneration: 3,
   },
-  sync: { token: "sync-token", expiresAt: "2026-07-21T14:30:00Z" },
+  sync: { token: credential("chalk-sync"), expiresAt: "2026-07-21T14:30:00Z" },
   media: {
-    token: "media-token",
+    token: credential("chalk-media"),
     expiresAt: "2026-07-21T14:30:00Z",
     provider: "cloudflare_sfu",
     clientPayload: { connectionId: "connection-1", stunServer: "stun:example.test" },
@@ -102,6 +102,11 @@ describe("local Chalk access client", () => {
     expect((body as Blob).type).toBe("application/json");
   });
 });
+
+function credential(audience: "chalk-sync" | "chalk-media"): string {
+  const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+  return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.signature`;
+}
 
 function stubFetch(response: Response) {
   const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response);

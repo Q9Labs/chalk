@@ -25,13 +25,17 @@ native_root=""
 native_pg_bin=""
 
 docker_binary() {
+  local candidate
   if command -v docker >/dev/null 2>&1; then
-    command -v docker
+    candidate="$(command -v docker)"
   elif [[ -x /Users/macmini/.orbstack/bin/docker ]]; then
-    printf '%s\n' "/Users/macmini/.orbstack/bin/docker"
+    candidate="/Users/macmini/.orbstack/bin/docker"
   else
     return 1
   fi
+
+  "${candidate}" info >/dev/null 2>&1 || return 1
+  printf '%s\n' "${candidate}"
 }
 
 native_pg18_bin() {
