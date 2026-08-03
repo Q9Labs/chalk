@@ -299,7 +299,7 @@ Merge order when reports land: ratchet → wave zero (tighten baseline at
 merge) → UI primitives. Then launch the contract/schema wave from the
 ratified design doc (Luna at max), then client SDK wave (ChalkSession
 split), React/RN `<Chalk />`, apps, infra, observability, marketing, DB
-last. Reports land at /tmp/codex-*.md. Nothing awaits a Hasan decision.
+last. Reports land at /tmp/codex-\*.md. Nothing awaits a Hasan decision.
 
 **Update (post-compaction pickup, same day):** ratchet and UI-primitives
 workers finished with green gates but could NOT commit — the codex sandbox
@@ -312,6 +312,27 @@ Ratchet realities: baseline counts are large (session ~5.5k in api alone);
 noisy terms call/host/peer/bot/ai deliberately excluded from v1. The
 sync-renumber worker (max) is still running; expect to commit for it too
 when its report lands at /tmp/codex-sync-renumber.md.
+
+**Corrections + rulings (Hasan, 2026-08-03 late evening):**
+
+- Model roles corrected: **Sol high is the MOST capable Codex model; Luna
+  max is the mechanical workhorse** (Claude had it backwards). ALL
+  mechanical execution → Luna max, with Codex's own auto-review pass (by
+  Luna) as the quality gate; a few Sol-high workers only where capability
+  is genuinely needed. **Relay agents are Haiku** now, not Sonnet. Every
+  worker prompt carries a STRICT SCOPE clause — no changing DB fields or
+  anything outside the stated scope.
+- **Schema walkthrough held and closed**: all five scrutiny points
+  confirmed (single `config_snapshot` jsonb; guests rowless; live-Episode-
+  only content writes — emphatic, there is no Space-direct media/sync
+  connection path at all; console as separate context + Chalk-as-tenant;
+  the 23-capability set). Recorded in the design doc. The contract wave is
+  now gated only on wave zero merging.
+- Endgame division of labor: Claude finishes execution orchestration;
+  Hasan takes UI, product QA, reliability, bug fixing. Hasan asked to be
+  kept accountable; his UI work is sequenced after the React/RN wave.
+- Client SDK split co-design started live:
+  `scratchpad/client-sdk-split-design-2026-08-03.md` (six DECIDE items).
 
 **Design-sheet rule (Hasan raised, 2026-08-03, pre-compaction): abstractions
 are designed, never just renamed — and designed WITH Hasan.** Every wave

@@ -154,6 +154,17 @@ room_sessions into one capability list per role — not transports), 4 = yes
 hands"), locked as the bundles proposed under space_roles. The design is
 fully ratified; the contract wave can launch once wave zero merges.
 
+**LIVE WALKTHROUGH HELD (Hasan, 2026-08-03 evening) — gate satisfied.**
+Five scrutiny points confirmed: (1) `config_snapshot` as one jsonb document
+with a single immutability trigger — yes; (2) guests have no identity row,
+promotion creates it — yes; (3) chat/whiteboard writes require a live
+Episode — emphatic yes: there is no path to connect to a Space's media or
+sync without joining (which starts an Episode), so dormant-Space writes are
+structurally impossible and no capability for them is wanted; (4) Chalk's
+console stays a separate bounded context and Chalk's own app consumes the
+platform as a tenant with `identities` rows — yes; (5) the 23-capability
+closed set as listed — yes. Nothing in this design awaits a decision.
+
 1. **Migration shape: squash to a clean baseline (my rec) or additive rename
    migrations.** No users exist. A clean baseline (rewrite schema.sql plus
    the embedded startup migrations, recreate deployed databases) is honest
