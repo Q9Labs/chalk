@@ -20,14 +20,19 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
 
     Enum.each(1..300, fn index ->
       rejected =
-        command("filler_command_#{String.pad_leading(to_string(index), 4, "0")}", :raise_hand)
+        command_with_payload(
+          "filler_command_#{String.pad_leading(to_string(index), 4, "0")}",
+          :transfer_host,
+          %{"participantSessionId" => "55555555-5555-4555-8555-555555555555"}
+        )
 
-      assert {:ok, %{result: :rejected, reason: :invalid_state}} =
+      assert {:ok, %{result: :rejected, reason: :invalid_target}} =
                Memory.decide_command(identity, rejected)
     end)
 
     assert {:ok, duplicate} = Memory.decide_command(identity, command)
-    assert duplicate.result == :duplicate
+    assert duplicate.result == :committed
+    assert duplicate.delivery == :duplicate
     assert duplicate.revision == committed.revision
     assert duplicate.event_id == committed.event_id
 
@@ -45,7 +50,8 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
     assert {:ok, %{result: :command_id_conflict, reason: :command_id_conflict}} =
              Memory.decide_command(identity, changed)
 
-    assert {:ok, %{result: :duplicate}} = Memory.resolve_receipt(identity, original)
+    assert {:ok, %{result: :committed, delivery: :duplicate}} =
+             Memory.resolve_receipt(identity, original)
   end
 
   test "receipt lookup precedes current generation validation" do
@@ -55,7 +61,9 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
     assert {:ok, %{result: :committed, revision: 2}} = Memory.decide_command(identity, command)
 
     rotated = %{identity | participant_session_generation: 2}
-    assert {:ok, %{result: :duplicate, revision: 2}} = Memory.decide_command(rotated, command)
+
+    assert {:ok, %{result: :committed, delivery: :duplicate, revision: 2}} =
+             Memory.decide_command(rotated, command)
 
     assert {:ok, %{result: :rejected, reason: :stale_participant_generation}} =
              Memory.decide_command(rotated, command("rotation_new_id1", :lower_hand))
@@ -110,7 +118,7 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
              })
   end
 
-  test "persists satisfied v3 targets without changing the head and duplicates their semantic outcome" do
+  test "persists satisfied v1 targets without changing the head and duplicates their semantic outcome" do
     {session, identity} = seed_identity("session-a")
     assert {:ok, before} = Memory.recover(session, nil)
 
@@ -216,7 +224,9 @@ defmodule ChalkSync.Stateholder.MemorySemanticTest do
   defp session_uuid("session-b"), do: "44444444-4444-4444-8444-444444444444"
 
   defp command(id, name) do
-    {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), name, %{})
+    payload = if name == :raise_hand, do: %{"raised" => true}, else: %{"raised" => false}
+    normalized_name = if name in [:raise_hand, :lower_hand], do: :set_hand_raised, else: name
+    {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), normalized_name, payload)
     command
   end
 

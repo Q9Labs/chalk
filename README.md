@@ -2,7 +2,7 @@
 
 Chalk is an open-source monorepo for low-latency video conferencing on Cloudflare RealtimeKit. It contains the Go control-plane API, Elixir SyncEngine, TypeScript/React/React Native SDKs, first-party web and mobile surfaces, reusable whiteboard/UI packages, and supporting infrastructure.
 
-The core room, session, admission, media-adapter, Sync v3, webhook, and telemetry boundaries are implemented. Chalk is still under active development: the hosted web product, public docs app, durable chat, native whiteboard, production recorder/transcription qualification, and managed operations are not complete.
+The core room, session, admission, media-adapter, Sync v1, webhook, and telemetry boundaries are implemented. Chalk is still under active development: the hosted web product, public docs app, durable chat, native whiteboard, production recorder/transcription qualification, and managed operations are not complete.
 
 Use these files instead of inferring product readiness from a component or route name:
 
@@ -54,7 +54,7 @@ The ready summary uses these localhost endpoints:
 | Web     | `http://127.0.0.1:3070`                                              |
 | Broker  | `http://127.0.0.1:8787/local-chalk`                                  |
 | API     | `http://127.0.0.1:8080`                                              |
-| Sync    | `ws://127.0.0.1:4100/v3/sync`                                        |
+| Sync    | `ws://127.0.0.1:4100/v1/sync`                                        |
 | Grafana | `http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability` |
 | Logs    | `.logs/dev-server.log`                                               |
 

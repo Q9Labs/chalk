@@ -3,7 +3,7 @@ import { createReactNativeSyncLifecycle, createReactNativeWebSocketFactory } fro
 
 describe("React Native sync boundaries", () => {
   it("adapts property-based WebSocket callbacks and preserves close codes", () => {
-    const socket = createReactNativeWebSocketFactory(TestReactNativeWebSocket).connect("wss://sync.test/v3/sync");
+    const socket = createReactNativeWebSocketFactory(TestReactNativeWebSocket).connect("wss://sync.test/v1/sync");
     const events: string[] = [];
     socket.onopen = () => events.push("open");
     socket.onmessage = (event) => events.push(`message:${String(event.data)}`);

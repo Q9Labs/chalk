@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { CloudflareSFUSnapshot } from "../media";
-import type { V3MediaPlaneResult, V3SessionSnapshot } from "../sync";
-import type { V3DirectedRequest, V3RoomActionClientEvent } from "../sync/v3-types";
+import type { V1MediaPlaneResult, V1SessionSnapshot } from "../sync";
+import type { V1DirectedRequest, V1RoomActionClientEvent } from "../sync/v1-types";
 import type { ParticipantAccess } from "./access";
 import { ChalkSession } from "./chalk-session";
 import type { ChalkSessionAccessRequest, ChalkSessionClock, ChalkSessionDependencies, ChalkSessionMediaFactoryInput, ChalkSessionSyncClient } from "./dependencies";
@@ -526,7 +526,7 @@ describe("ChalkSession", () => {
     }
   });
 
-  it("routes browser-ended screen sharing through the Sync v3 target before clearing the track", async () => {
+  it("routes browser-ended screen sharing through the Sync v1 target before clearing the track", async () => {
     const harness = createHarness();
     await harness.session.join();
     const screen = new FakeTrack("screen", "video");
@@ -707,7 +707,7 @@ function createHarness(
     readonly failLeave?: boolean;
     readonly failMediaCreate?: boolean;
     readonly failSyncCreate?: boolean;
-    readonly syncStartupSnapshot?: V3SessionSnapshot;
+    readonly syncStartupSnapshot?: V1SessionSnapshot;
     readonly syncStartupTimeoutMs?: number;
     readonly access?: readonly ParticipantAccess[];
     readonly initialMicrophoneEnabled?: boolean;
@@ -748,7 +748,7 @@ function createHarness(
   const session = new ChalkSession({
     access,
     apiBaseURL: "http://localhost:8080",
-    syncURL: "ws://localhost:4000/v3",
+    syncURL: "ws://localhost:4000/v1",
     syncStartupTimeoutMs: options.syncStartupTimeoutMs,
     initialMicrophoneEnabled: options.initialMicrophoneEnabled,
     initialCameraEnabled: options.initialCameraEnabled,
@@ -804,7 +804,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function chatMessageEvent(sequence: string): V3RoomActionClientEvent {
+function chatMessageEvent(sequence: string): V1RoomActionClientEvent {
   return {
     type: "chat_message",
     message: {
@@ -860,7 +860,7 @@ class FakeMedia {
     this.snapshot = mediaSnapshot("live", this.localTracks);
     this.emit();
   });
-  setLocalPublicationTarget = vi.fn(async (target: { readonly source: string; readonly enabled: boolean }): Promise<V3MediaPlaneResult> => {
+  setLocalPublicationTarget = vi.fn(async (target: { readonly source: string; readonly enabled: boolean }): Promise<V1MediaPlaneResult> => {
     this.snapshot = mediaSnapshot("live", this.localTracks, target.source, target.enabled);
     this.emit();
     return { outcome: "confirmed", errorCode: null };
@@ -891,14 +891,14 @@ class FakeMedia {
 }
 
 class FakeSync implements ChalkSessionSyncClient {
-  readonly listeners = new Set<(snapshot: V3SessionSnapshot) => void>();
-  readonly requestListeners = new Set<(request: V3DirectedRequest) => void>();
-  readonly roomActionListeners = new Set<(event: V3RoomActionClientEvent) => void>();
+  readonly listeners = new Set<(snapshot: V1SessionSnapshot) => void>();
+  readonly requestListeners = new Set<(request: V1DirectedRequest) => void>();
+  readonly roomActionListeners = new Set<(event: V1RoomActionClientEvent) => void>();
   snapshot = syncSnapshot("idle");
   chatHeadSequence: string | null = null;
   constructor(
     readonly failLeave: boolean,
-    readonly startupSnapshot?: V3SessionSnapshot,
+    readonly startupSnapshot?: V1SessionSnapshot,
   ) {}
   start = vi.fn(async () => {
     this.snapshot = this.startupSnapshot ?? syncSnapshot("live");
@@ -908,7 +908,7 @@ class FakeSync implements ChalkSessionSyncClient {
     this.snapshot = syncSnapshot("stopped");
   });
   getSnapshot = () => this.snapshot;
-  subscribe = (listener: (snapshot: V3SessionSnapshot) => void) => {
+  subscribe = (listener: (snapshot: V1SessionSnapshot) => void) => {
     this.listeners.add(listener);
     listener(this.snapshot);
     return () => this.listeners.delete(listener);
@@ -924,7 +924,7 @@ class FakeSync implements ChalkSessionSyncClient {
   getParticipantRoomActionCapabilities = () => ({
     "participant-1": ["sendReaction", "sendChat"] as const,
   });
-  subscribeRoomActions = (listener: (event: V3RoomActionClientEvent) => void) => {
+  subscribeRoomActions = (listener: (event: V1RoomActionClientEvent) => void) => {
     this.roomActionListeners.add(listener);
     return () => this.roomActionListeners.delete(listener);
   };
@@ -953,16 +953,16 @@ class FakeSync implements ChalkSessionSyncClient {
     readAt: new Date().toISOString(),
   }));
   readChatPage = vi.fn(async () => ({ status: "loaded" as const, count: 0, hasOlder: false }));
-  onDirectedRequest = (listener: (request: V3DirectedRequest) => void) => {
+  onDirectedRequest = (listener: (request: V1DirectedRequest) => void) => {
     this.requestListeners.add(listener);
     return () => this.requestListeners.delete(listener);
   };
   requestUnmute = vi.fn(async () => ({ type: "directed_request_result" as const, request_id: "request-1", result: "delivered" as const }));
   requestStartCamera = vi.fn(async () => ({ type: "directed_request_result" as const, request_id: "request-1", result: "delivered" as const }));
-  emitRequest(request: V3DirectedRequest) {
+  emitRequest(request: V1DirectedRequest) {
     for (const listener of this.requestListeners) listener(request);
   }
-  emitRoomAction(event: V3RoomActionClientEvent) {
+  emitRoomAction(event: V1RoomActionClientEvent) {
     for (const listener of this.roomActionListeners) listener(event);
   }
   leave = vi.fn(async () => {
@@ -1028,7 +1028,7 @@ function token(audience: "chalk-sync" | "chalk-media", suffix: string) {
   return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.${suffix}` as ParticipantAccess["sync"]["token"] & ParticipantAccess["media"]["token"];
 }
 
-function syncSnapshot(phase: V3SessionSnapshot["connection"]["phase"]): V3SessionSnapshot {
+function syncSnapshot(phase: V1SessionSnapshot["connection"]["phase"]): V1SessionSnapshot {
   return {
     connection: { phase },
     participantSessionId: phase === "live" ? "participant-1" : null,

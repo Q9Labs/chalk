@@ -32,7 +32,7 @@ pnpm exec wrangler secret put CHALK_ROOM_ID
 pnpm exec wrangler deploy
 ```
 
-`CHALK_ROOM_ID` must identify an active `cf_sfu` room owned by `CHALK_TENANT_ID`. The production API and Sync endpoints are committed as `https://api.chalkmeet.com` and `wss://sync.chalkmeet.com/v3/sync`. The committed route disables `workers.dev` and preview URLs, so production is reachable only through the narrow `chalkmeet.com/local-chalk/*` route. Verify `GET https://chalkmeet.com/local-chalk/health` after deployment. Browser routes require an exact `Origin: https://chalkmeet.com`; native routes accept the platform's normal no-`Origin` request. Every state-changing route requires JSON `POST`.
+`CHALK_ROOM_ID` must identify an active `cf_sfu` room owned by `CHALK_TENANT_ID`. The production API and Sync endpoints are committed as `https://api.chalkmeet.com` and `wss://sync.chalkmeet.com/v1/sync`. The committed route disables `workers.dev` and preview URLs, so production is reachable only through the narrow `chalkmeet.com/local-chalk/*` route. Verify `GET https://chalkmeet.com/local-chalk/health` after deployment. Browser routes require an exact `Origin: https://chalkmeet.com`; native routes accept the platform's normal no-`Origin` request. Every state-changing route requires JSON `POST`.
 
 The shared client contract is:
 
@@ -61,6 +61,6 @@ pnpm exec wrangler dev --local \
   --var CHALK_TENANT_ID:local-test-tenant \
   --var CHALK_ROOM_ID:local-test-room \
   --var CHALK_API_URL:http://127.0.0.1:8790 \
-  --var CHALK_SYNC_URL:ws://127.0.0.1:8791/v3/sync \
+  --var CHALK_SYNC_URL:ws://127.0.0.1:8791/v1/sync \
   --port 8787
 ```

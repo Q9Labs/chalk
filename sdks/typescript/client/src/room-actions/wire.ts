@@ -1,9 +1,9 @@
-import type { SyncV3ServerFrame } from "../generated/sync-v3";
+import type { SyncV1ServerFrame } from "../generated/sync";
 import type { ChalkChatMessage, ChalkChatReadReceipt, ChalkRoomReaction } from "./types";
 
-type RoomReactionFrame = Extract<SyncV3ServerFrame, { readonly type: "room_reaction" }>;
-type ChatMessageFrame = Extract<SyncV3ServerFrame, { readonly type: "chat_message" }>;
-type ChatReadReceiptFrame = Extract<SyncV3ServerFrame, { readonly type: "chat_read_receipt" }> | Extract<SyncV3ServerFrame, { readonly type: "chat_read_result"; readonly outcome: "accepted" }>;
+type RoomReactionFrame = Extract<SyncV1ServerFrame, { readonly type: "room_reaction" }>;
+type ChatMessageFrame = Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>;
+type ChatReadReceiptFrame = Extract<SyncV1ServerFrame, { readonly type: "chat_read_receipt" }> | Extract<SyncV1ServerFrame, { readonly type: "chat_read_result"; readonly outcome: "accepted" }>;
 
 export function roomReactionFromFrame(frame: RoomReactionFrame): ChalkRoomReaction {
   return {

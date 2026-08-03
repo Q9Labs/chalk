@@ -1,5 +1,5 @@
 import type { CloudflareSFUSnapshot } from "../media";
-import type { V3Capability, V3SessionSnapshot } from "../sync";
+import type { V1Capability, V1SessionSnapshot } from "../sync";
 import type { ParticipantAccessSubject } from "./access";
 import type {
   ChalkChatState,
@@ -43,7 +43,7 @@ export function initialChalkSessionSnapshot(): ChalkSessionSnapshot {
 export function projectChalkSessionSnapshot(input: {
   readonly state: ChalkSessionState;
   readonly subject: ParticipantAccessSubject | null;
-  readonly sync: V3SessionSnapshot | null;
+  readonly sync: V1SessionSnapshot | null;
   readonly media: CloudflareSFUSnapshot | null;
   readonly localTracks: ReadonlyMap<ChalkMediaSource, MediaStreamTrack>;
   readonly localIntent: Readonly<Record<"microphone" | "camera", boolean>>;
@@ -101,7 +101,7 @@ export function projectChalkSessionSnapshot(input: {
   });
 }
 
-function projectParticipantMedia(sync: V3SessionSnapshot | null): Readonly<Record<string, ChalkParticipantMediaState>> {
+function projectParticipantMedia(sync: V1SessionSnapshot | null): Readonly<Record<string, ChalkParticipantMediaState>> {
   const participants = sync?.optimisticControl?.participants ?? sync?.control?.participants ?? [];
   const media = sync?.media;
   if (!media) {
@@ -191,7 +191,7 @@ function emptyWhiteboard(): ChalkWhiteboardSummary {
   };
 }
 
-function mapSyncPhase(phase: V3SessionSnapshot["connection"]["phase"] | undefined): ChalkSessionConnectionPhase {
+function mapSyncPhase(phase: V1SessionSnapshot["connection"]["phase"] | undefined): ChalkSessionConnectionPhase {
   switch (phase) {
     case "connecting":
       return "connecting";
@@ -225,7 +225,7 @@ function mapMediaPhase(phase: CloudflareSFUSnapshot["connection"]["phase"] | und
   }
 }
 
-function isPublicCapability(capability: V3Capability): capability is ChalkSessionCapability {
+function isPublicCapability(capability: V1Capability): capability is ChalkSessionCapability {
   return capability !== "manageRecording";
 }
 

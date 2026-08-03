@@ -90,7 +90,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     const identity = resources.state.identity?.signing;
     const base = {
       CHALK_API_URL: config.urls.api,
-      CHALK_SYNC_URL: `ws://127.0.0.1:${config.ports.sync}/v3/sync`,
+      CHALK_SYNC_URL: `ws://127.0.0.1:${config.ports.sync}/v1/sync`,
       CHALK_DEV_WEB_PORT: String(config.ports.web),
       CHALK_DEV_BROKER_PORT: String(config.ports.broker),
       CHALK_DEV_BROKER_ORIGIN: `http://127.0.0.1:${config.ports.broker}`,
@@ -187,7 +187,7 @@ export function defaultServiceSpecs(config) {
         "--var",
         `CHALK_API_URL:${config.urls.api}`,
         "--var",
-        `CHALK_SYNC_URL:ws://127.0.0.1:${config.ports.sync}/v3/sync`,
+        `CHALK_SYNC_URL:ws://127.0.0.1:${config.ports.sync}/v1/sync`,
       ],
       cwd: brokerRuntime.directory,
       dependsOn: ["sync"],
@@ -217,7 +217,7 @@ function formatReadySummary(config, bindings) {
     `Web       ${config.urls.web}`,
     `Broker    ${config.urls.broker || `http://127.0.0.1:${config.ports.broker}/local-chalk`}`,
     `API       ${config.urls.api}`,
-    `Sync      ws://127.0.0.1:${config.ports.sync}/v3/sync`,
+    `Sync      ws://127.0.0.1:${config.ports.sync}/v1/sync`,
     "Grafana   http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability",
     "Media     Cloudflare SFU, real provider path",
     `Logs      ${config.aggregateLog}`,

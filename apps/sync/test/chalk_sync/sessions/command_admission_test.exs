@@ -153,7 +153,7 @@ defmodule ChalkSync.Sessions.CommandAdmissionTest do
              CommandAdmission.stats(admission_name)
   end
 
-  test "v3 role transitions observe publications before deciding and retry observation failure" do
+  test "v1 role transitions observe publications before deciding and retry observation failure" do
     previous = Application.get_env(:chalk_sync, :media_plane)
 
     {:ok, adapter} =
@@ -177,7 +177,7 @@ defmodule ChalkSync.Sessions.CommandAdmissionTest do
       id: admission_name
     )
 
-    identity = %{identity(6) | protocol_version: 3}
+    identity = %{identity(6) | protocol_version: 1}
 
     {:ok, command} =
       Command.new("role-observation-001", :set_participant_role, %{
@@ -212,7 +212,7 @@ defmodule ChalkSync.Sessions.CommandAdmissionTest do
       id: admission_name
     )
 
-    identity = %{identity(7) | protocol_version: 3}
+    identity = %{identity(7) | protocol_version: 1}
 
     for {module, id} <- [
           {BlockingObservation, "role-blocking-observe1"},
@@ -251,7 +251,7 @@ defmodule ChalkSync.Sessions.CommandAdmissionTest do
   end
 
   defp command(id) do
-    {:ok, command} = Command.new(id, :raise_hand, %{})
+    {:ok, command} = Command.new(id, :set_hand_raised, %{"raised" => true})
     command
   end
 

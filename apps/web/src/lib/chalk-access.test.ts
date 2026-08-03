@@ -26,15 +26,15 @@ afterEach(() => {
 
 describe("local Chalk access client", () => {
   it("creates only the opaque browser session with same-origin credentials", async () => {
-    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "http://127.0.0.1:8080", syncURL: "ws://127.0.0.1:4100/v3/sync" }, 201));
+    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "http://127.0.0.1:8080", syncURL: "ws://127.0.0.1:4100/v1/sync" }, 201));
 
-    await expect(createLocalBrowserSession("Ada")).resolves.toEqual({ apiBaseURL: "http://127.0.0.1:8080", syncURL: "ws://127.0.0.1:4100/v3/sync" });
+    await expect(createLocalBrowserSession("Ada")).resolves.toEqual({ apiBaseURL: "http://127.0.0.1:8080", syncURL: "ws://127.0.0.1:4100/v1/sync" });
     expectRequest(fetchMock, "/local-chalk/browser-session", { displayName: "Ada" });
   });
 
   it("forwards the URL-fragment invite to the production same-origin broker", async () => {
     vi.stubGlobal("location", { hostname: "chalkmeet.com" });
-    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", inviteToken: "i".repeat(43), syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
+    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", inviteToken: "i".repeat(43), syncURL: "wss://sync.chalkmeet.com/v1/sync" }, 201));
 
     await createLocalBrowserSession("Grace", "i".repeat(43));
 
@@ -43,7 +43,7 @@ describe("local Chalk access client", () => {
 
   it("forwards the URL-fragment invite through the local Wrangler proxy", async () => {
     vi.stubGlobal("location", { hostname: "127.0.0.1" });
-    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "http://127.0.0.1:8080", inviteToken: "i".repeat(43), syncURL: "ws://127.0.0.1:4100/v3/sync" }, 201));
+    const fetchMock = stubFetch(jsonResponse({ apiBaseURL: "http://127.0.0.1:8080", inviteToken: "i".repeat(43), syncURL: "ws://127.0.0.1:4100/v1/sync" }, 201));
 
     await createLocalBrowserSession("Ada", "i".repeat(43));
 

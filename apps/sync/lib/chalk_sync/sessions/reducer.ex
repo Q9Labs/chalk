@@ -3,8 +3,8 @@ defmodule ChalkSync.Sessions.Reducer do
 
   alias ChalkSync.CanonicalJSON
 
-  @state_schema_version 3
-  @digest_prefix "chalk-sync-state-v3"
+  @state_schema_version 1
+  @digest_prefix "chalk-sync-state-v1"
   @max_display_name_bytes 256
   @max_participants 500
   @roles ["host", "cohost", "participant"]
@@ -223,25 +223,7 @@ defmodule ChalkSync.Sessions.Reducer do
     }
   end
 
-  def snapshot(%__MODULE__{} = state, 2) do
-    %{
-      "control_revision" => state.revision,
-      "state_schema_version" => @state_schema_version,
-      "status" => state.status,
-      "participants" =>
-        state.participants
-        |> Enum.sort_by(&elem(&1, 0))
-        |> Enum.map(fn {participant_id, participant} ->
-          %{
-            "participant_session_id" => participant_id,
-            "display_name" => participant.display_name,
-            "hand_raised" => participant.hand_raised
-          }
-        end)
-    }
-  end
-
-  def snapshot(%__MODULE__{} = state, 3), do: snapshot(state)
+  def snapshot(%__MODULE__{} = state, 1), do: snapshot(state)
 
   def digest(%__MODULE__{} = state) do
     canonical = state |> snapshot() |> CanonicalJSON.encode!()
@@ -354,22 +336,6 @@ defmodule ChalkSync.Sessions.Reducer do
       false -> {:error, :invalid_target}
       {:error, :not_joined} -> {:error, :invalid_target}
       _ -> {:error, :invalid_target}
-    end
-  end
-
-  # The disabled v1 compatibility socket still uses operation-shaped hand commands.
-  defp command_target(state, actor_id, name, payload) when name in [:raise_hand, :lower_hand] do
-    with :ok <- exact_keys(payload, []),
-         {:ok, participant} <- participant(state, actor_id),
-         target = name == :raise_hand,
-         false <- participant.hand_raised == target do
-      {:ok, if(target, do: "hand_raised", else: "hand_lowered"),
-       %{
-         "participant_session_id" => actor_id
-       }}
-    else
-      true -> {:error, :no_change}
-      error -> error
     end
   end
 

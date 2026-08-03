@@ -10,9 +10,7 @@ defmodule ChalkSync.Stateholder.Command do
     "set_display_name" => :set_display_name,
     "set_admission_policy" => :set_admission_policy,
     "set_participant_role" => :set_participant_role,
-    "transfer_host" => :transfer_host,
-    "raise_hand" => :raise_hand,
-    "lower_hand" => :lower_hand
+    "transfer_host" => :transfer_host
   }
 
   @enforce_keys [:id, :name, :payload, :fingerprint, :normalized_bytes]
@@ -25,9 +23,7 @@ defmodule ChalkSync.Stateholder.Command do
             | :set_display_name
             | :set_admission_policy
             | :set_participant_role
-            | :transfer_host
-            | :raise_hand
-            | :lower_hand,
+            | :transfer_host,
           payload: map(),
           fingerprint: binary(),
           normalized_bytes: pos_integer()
@@ -75,10 +71,6 @@ defmodule ChalkSync.Stateholder.Command do
   end
 
   defp normalize_name(_name), do: {:error, :unknown_command}
-
-  defp validate_payload(name, payload) when name in [:raise_hand, :lower_hand] do
-    if map_size(payload) == 0, do: :ok, else: {:error, :invalid_payload}
-  end
 
   defp validate_payload(:set_hand_raised, %{"raised" => raised} = payload)
        when map_size(payload) == 1 and is_boolean(raised),

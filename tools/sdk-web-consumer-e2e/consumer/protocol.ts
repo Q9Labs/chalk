@@ -1,11 +1,11 @@
-import type { ChalkChatMessage, ChalkRoomReaction, V3Capability, V3DirectedRequest, V3DirectedRequestResult, V3MediaPublication, V3MediaSource, V3Participant, V3SessionSnapshot } from "@q9labsai/chalk-client";
+import type { ChalkChatMessage, ChalkRoomReaction, V1Capability, V1DirectedRequest, V1DirectedRequestResult, V1MediaPublication, V1MediaSource, V1Participant, V1SessionSnapshot } from "@q9labsai/chalk-client";
 
-const capabilities: readonly V3Capability[] = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "removeParticipant"];
+const capabilities: readonly V1Capability[] = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "removeParticipant"];
 
 export type MeetingState = {
   readonly revision: number;
-  readonly participants: readonly V3Participant[];
-  readonly publications: readonly V3MediaPublication[];
+  readonly participants: readonly V1Participant[];
+  readonly publications: readonly V1MediaPublication[];
 };
 
 export type ServerMessage =
@@ -13,13 +13,13 @@ export type ServerMessage =
   | { readonly type: "ack"; readonly id: string }
   | { readonly type: "room_action_event"; readonly event: { readonly type: "reaction"; readonly reaction: ChalkRoomReaction } | { readonly type: "chat_message"; readonly message: ChalkChatMessage } }
   | { readonly type: "room_action_result"; readonly id: string; readonly reaction?: ChalkRoomReaction; readonly message?: ChalkChatMessage; readonly messages?: readonly ChalkChatMessage[] }
-  | { readonly type: "directed_request"; readonly request: V3DirectedRequest }
-  | { readonly type: "directed_request_result"; readonly id: string; readonly result: V3DirectedRequestResult }
+  | { readonly type: "directed_request"; readonly request: V1DirectedRequest }
+  | { readonly type: "directed_request_result"; readonly id: string; readonly result: V1DirectedRequestResult }
   | { readonly type: "peers"; readonly participants: readonly string[] }
-  | { readonly type: "signal"; readonly from: string; readonly description?: RTCSessionDescriptionInit; readonly candidate?: RTCIceCandidateInit | null; readonly mids?: Readonly<Record<string, V3MediaSource>> }
+  | { readonly type: "signal"; readonly from: string; readonly description?: RTCSessionDescriptionInit; readonly candidate?: RTCIceCandidateInit | null; readonly mids?: Readonly<Record<string, V1MediaSource>> }
   | { readonly type: "force_failure" };
 
-export function initialSyncSnapshot(participantSessionId: string, generation: number): V3SessionSnapshot {
+export function initialSyncSnapshot(participantSessionId: string, generation: number): V1SessionSnapshot {
   return {
     connection: { phase: "idle" },
     participantSessionId,
@@ -34,7 +34,7 @@ export function initialSyncSnapshot(participantSessionId: string, generation: nu
   };
 }
 
-export function syncSnapshot(previous: V3SessionSnapshot, state: MeetingState): V3SessionSnapshot {
+export function syncSnapshot(previous: V1SessionSnapshot, state: MeetingState): V1SessionSnapshot {
   const control = {
     revision: state.revision,
     stateSchemaVersion: 1,
@@ -72,6 +72,6 @@ export function syncSnapshot(previous: V3SessionSnapshot, state: MeetingState): 
   };
 }
 
-function publicationState(publications: readonly V3MediaPublication[], source: V3MediaSource) {
+function publicationState(publications: readonly V1MediaPublication[], source: V1MediaSource) {
   return publications.some((item) => item.source === source && item.enabled) ? ("enabled" as const) : ("disabled" as const);
 }

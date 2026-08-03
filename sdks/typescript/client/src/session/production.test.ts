@@ -8,7 +8,7 @@ describe("default ChalkSession production dependencies", () => {
   it("provides the real clock and browser factory seams", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-21T12:00:00.000Z"));
-    const dependencies = createDefaultChalkSessionDependencies({ apiBaseURL: "https://api.chalk.video", syncURL: "wss://sync.chalk.video/v3" });
+    const dependencies = createDefaultChalkSessionDependencies({ apiBaseURL: "https://api.chalk.video", syncURL: "wss://sync.chalk.video/v1" });
     const callback = vi.fn();
     const timer = dependencies.clock.setTimeout(callback, 25);
 
@@ -25,7 +25,7 @@ describe("default ChalkSession production dependencies", () => {
   it("keeps native or custom runtimes free of a browser whiteboard client when disabled", () => {
     const dependencies = createDefaultChalkSessionDependencies({
       apiBaseURL: "https://api.chalk.video",
-      syncURL: "wss://sync.chalk.video/v3/sync",
+      syncURL: "wss://sync.chalk.video/v1/sync",
       whiteboardURL: null,
     });
 

@@ -7,7 +7,6 @@ defmodule ChalkSync.Stateholder do
   writes. Memory exists only for deterministic conformance and model tests.
   """
 
-  alias ChalkSync.Rooms.Room
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Decision
   alias ChalkSync.Stateholder.ExternalOperation
@@ -63,22 +62,6 @@ defmodule ChalkSync.Stateholder do
               {:ok, map()} | {:error, atom()} | {:retryable, atom()}
   @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
               {:ok, Decision.t()} | {:retryable, atom()}
-
-  # Temporary v1 compatibility callbacks. They are removed with RoomServer in
-  # the coordinator migration; production adapters do not implement them.
-  @callback load(room_id :: String.t()) :: {:ok, Room.t()} | :not_found
-  @callback commit(
-              room_id :: String.t(),
-              expected_revision :: non_neg_integer(),
-              event :: Room.event(),
-              state :: Room.t()
-            ) :: :ok | {:error, {:revision_conflict, non_neg_integer()}}
-  @callback events_since(room_id :: String.t(), cursor :: non_neg_integer()) ::
-              {:ok, [Room.event()]} | {:error, :cursor_unavailable}
-
-  @optional_callbacks load: 1,
-                      commit: 4,
-                      events_since: 2
 
   @spec impl() :: module()
   def impl, do: Application.fetch_env!(:chalk_sync, :stateholder)
@@ -205,48 +188,6 @@ defmodule ChalkSync.Stateholder do
   def begin_role_transition(%Identity{} = identity, %Command{} = command, publications)
       when is_list(publications),
       do: impl().begin_role_transition(identity, command, publications)
-
-  @spec load(String.t()) :: {:ok, Room.t()} | :not_found
-  def load(room_id, observability \\ nil) do
-    result = impl().load(room_id)
-
-    ChalkSync.Observability.linked_phase(observability, "sync.stateholder.load", %{
-      result: load_result(result)
-    })
-
-    result
-  end
-
-  @spec commit(String.t(), non_neg_integer(), Room.event(), Room.t()) ::
-          :ok | {:error, {:revision_conflict, non_neg_integer()}}
-  def commit(room_id, expected_revision, event, state, observability \\ nil) do
-    result = impl().commit(room_id, expected_revision, event, state)
-
-    ChalkSync.Observability.linked_phase(observability, "sync.stateholder.commit", %{
-      result: commit_result(result)
-    })
-
-    result
-  end
-
-  @spec events_since(String.t(), non_neg_integer()) ::
-          {:ok, [Room.event()]} | {:error, :cursor_unavailable}
-  def events_since(room_id, cursor, observability \\ nil) do
-    result = impl().events_since(room_id, cursor)
-
-    ChalkSync.Observability.linked_phase(observability, "sync.stateholder.replay", %{
-      result: replay_result(result)
-    })
-
-    result
-  end
-
-  defp load_result({:ok, _room}), do: "found"
-  defp load_result(:not_found), do: "not_found"
-  defp commit_result(:ok), do: "committed"
-  defp commit_result({:error, {:revision_conflict, _current}}), do: "revision_conflict"
-  defp replay_result({:ok, _events}), do: "available"
-  defp replay_result({:error, :cursor_unavailable}), do: "cursor_unavailable"
 
   defp timed_recovery(operation) do
     started_at = System.monotonic_time(:microsecond)

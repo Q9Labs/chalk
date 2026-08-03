@@ -1,6 +1,6 @@
 defmodule ChalkSync.RoomActions.OutboundQueue do
   @moduledoc """
-  Bounded logical queue for room-action frames on a Sync v3 socket.
+  Bounded logical queue for room-action frames on a Sync v1 socket.
 
   The owning socket process calls this queue directly. `take/2` enforces the
   frozen room-action burst before yielding back to pending control traffic.

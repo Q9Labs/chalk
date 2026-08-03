@@ -337,7 +337,7 @@ defmodule ChalkSync.Sessions.Coordinator do
   def handle_call({:publish_pending, socket, event}, _from, state) do
     previous_revision =
       case Map.get(state.sockets, socket) do
-        %{mode: :live, identity: %{protocol_version: 3}, enqueued_revision: revision} -> revision
+        %{mode: :live, identity: %{protocol_version: 1}, enqueued_revision: revision} -> revision
         _subscriber -> nil
       end
 
@@ -1284,7 +1284,7 @@ defmodule ChalkSync.Sessions.Coordinator do
     {live, deliveries} = LiveSession.expire_requests(state.live, now_ms)
 
     Enum.each(deliveries, fn {socket, frame} ->
-      deliver(socket, :live_frame, {:sync_v3_live_frame, self(), frame}, %{
+      deliver(socket, :live_frame, {:sync_v1_live_frame, self(), frame}, %{
         frame_type: field(frame, :type),
         stream: field(frame, :stream)
       })
@@ -1385,7 +1385,7 @@ defmodule ChalkSync.Sessions.Coordinator do
 
   defp send_live_frames(socket, frames) do
     Enum.each(frames, fn frame ->
-      deliver(socket, :live_frame, {:sync_v3_live_frame, self(), frame}, %{
+      deliver(socket, :live_frame, {:sync_v1_live_frame, self(), frame}, %{
         frame_type: field(frame, :type),
         stream: field(frame, :stream)
       })
@@ -1425,7 +1425,7 @@ defmodule ChalkSync.Sessions.Coordinator do
     end
   end
 
-  defp protocol(_subscriber), do: ChalkSync.ProtocolV3
+  defp protocol(_subscriber), do: ChalkSync.ProtocolV1
 
   defp compatible_head?(nil, _head), do: true
 

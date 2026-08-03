@@ -1,4 +1,4 @@
-import type { V3ClientMediaPlane, V3MediaPlaneResult, V3MediaPlaneTarget, V3MediaPublication, V3MediaSource } from "../sync/v3-types";
+import type { V1ClientMediaPlane, V1MediaPlaneResult, V1MediaPlaneTarget, V1MediaPublication, V1MediaSource } from "../sync/v1-types";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { CloudflareSFUError } from "./types";
 import type {
@@ -18,7 +18,7 @@ import type {
 import type { PublicationCursor } from "./tracks";
 
 type LocalTrackState = {
-  readonly source: V3MediaSource;
+  readonly source: V1MediaSource;
   readonly track: MediaStreamTrack;
   transceiver: RTCRtpTransceiver | null;
   providerPublicationId: string | null;
@@ -40,18 +40,18 @@ const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const CONNECTION_TIMEOUT_MS = 8_000;
 
-export class CloudflareSFUClient implements V3ClientMediaPlane {
-  readonly #localListeners = new Set<(publications: readonly V3MediaPublication[]) => void>();
+export class CloudflareSFUClient implements V1ClientMediaPlane {
+  readonly #localListeners = new Set<(publications: readonly V1MediaPublication[]) => void>();
   readonly #onError: ((error: unknown) => void) | undefined;
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantSessionId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
   readonly #pollIntervalMs: number;
-  readonly #remoteListeners = new Set<(publications: readonly V3MediaPublication[]) => void>();
+  readonly #remoteListeners = new Set<(publications: readonly V1MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
-  readonly #localTracks = new Map<V3MediaSource, LocalTrackState>();
-  readonly #reusableLocalTransceivers = new Map<V3MediaSource, RTCRtpTransceiver>();
+  readonly #localTracks = new Map<V1MediaSource, LocalTrackState>();
+  readonly #reusableLocalTransceivers = new Map<V1MediaSource, RTCRtpTransceiver>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -95,7 +95,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     return () => this.#snapshotListeners.delete(listener);
   }
 
-  prepareLocalTrack(source: V3MediaSource, track: MediaStreamTrack): void {
+  prepareLocalTrack(source: V1MediaSource, track: MediaStreamTrack): void {
     this.#requireActive();
     validateTrackSource(source, track);
     if (this.#localTracks.has(source)) throw new CloudflareSFUError(`A ${source} track is already prepared`, "media_failed");
@@ -122,7 +122,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     this.#emitLocal();
   }
 
-  async clearPreparedLocalTrack(source: V3MediaSource): Promise<void> {
+  async clearPreparedLocalTrack(source: V1MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
@@ -164,7 +164,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     }
   }
 
-  async setLocalPublicationTarget(target: V3MediaPlaneTarget): Promise<V3MediaPlaneResult> {
+  async setLocalPublicationTarget(target: V1MediaPlaneTarget): Promise<V1MediaPlaneResult> {
     if (target.participantSessionId !== this.#participantSessionId) return { outcome: "terminal_failure", errorCode: "invalid_participant" };
     if (this.#stopped) return { outcome: "terminal_failure", errorCode: "media_stopped" };
     const state = this.#localTracks.get(target.source);
@@ -179,13 +179,13 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     }
   }
 
-  observeLocalPublications(listener: (publications: readonly V3MediaPublication[]) => void): () => void {
+  observeLocalPublications(listener: (publications: readonly V1MediaPublication[]) => void): () => void {
     this.#localListeners.add(listener);
     this.#invokeListener(() => listener(this.#projectLocalPublications()));
     return () => this.#localListeners.delete(listener);
   }
 
-  observeRemotePublications(listener: (publications: readonly V3MediaPublication[]) => void): () => void {
+  observeRemotePublications(listener: (publications: readonly V1MediaPublication[]) => void): () => void {
     this.#remoteListeners.add(listener);
     this.#invokeListener(() => listener(this.#projectRemotePublications()));
     return () => this.#remoteListeners.delete(listener);
@@ -545,7 +545,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     this.#pollTimer = undefined;
   }
 
-  #projectLocalPublications(): readonly V3MediaPublication[] {
+  #projectLocalPublications(): readonly V1MediaPublication[] {
     return [...this.#localTracks.values()].map((state) => ({
       participantSessionId: this.#participantSessionId,
       source: state.source,
@@ -554,7 +554,7 @@ export class CloudflareSFUClient implements V3ClientMediaPlane {
     }));
   }
 
-  #projectRemotePublications(): readonly V3MediaPublication[] {
+  #projectRemotePublications(): readonly V1MediaPublication[] {
     return [...this.#remoteTracks.values()].map(({ participantSessionId, source, publicationId }) => ({ participantSessionId, source, publicationId, enabled: true }));
   }
 
@@ -646,7 +646,7 @@ function validateBootstrap(bootstrap: CloudflareSFUBootstrap): void {
   if (!bootstrap.connectionId.trim() || !bootstrap.stunServer.trim()) throw new CloudflareSFUError("Cloudflare SFU bootstrap is incomplete", "invalid_bootstrap");
 }
 
-function validateTrackSource(source: V3MediaSource, track: MediaStreamTrack): void {
+function validateTrackSource(source: V1MediaSource, track: MediaStreamTrack): void {
   const valid = source === "microphone" ? track.kind === "audio" : track.kind === "video";
   if (!valid) throw new CloudflareSFUError(`The prepared ${source} track has an incompatible kind`, "media_failed");
 }

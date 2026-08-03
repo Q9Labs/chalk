@@ -166,7 +166,7 @@ ordinary join attempt. Host admission remains available through
   and mobile surfaces, with normative tokens, component and layout rules,
   accessibility guidance, and a high-fidelity visual reference board.
 - React Native and mobile parity with Chalk v2: canonical `ChalkSession` and
-  SyncEngine v3 ownership, native client-session broker routes, Cloudflare
+  SyncEngine v1 ownership, native client-session broker routes, Cloudflare
   WebRTC media, moderation, reactions, hand raising, protected chat files,
   whiteboard, screen sharing, durable telemetry, resumable mobile sessions,
   and production Android and iOS release surfaces without the legacy
@@ -174,7 +174,7 @@ ordinary join attempt. Host admission remains available through
 - A shared, fail-closed Sync reliability harness with pull-request correctness,
   nightly multi-node/network/PostgreSQL failover, and release soak, restart, and
   real-browser profiles; every run emits replayable commit-bound evidence.
-- Chalk room actions across Sync v3 and the public TypeScript/React SDKs:
+- Chalk room actions across Sync v1 and the public TypeScript/React SDKs:
   transient reactions, durable paged Postgres chat with read receipts and
   protected file attachments, host moderation and ask-to-unmute/start-camera
   flows, plus a separate `whiteboard-v1` Excalidraw transport with staged
@@ -242,15 +242,15 @@ ordinary join attempt. Host admission remains available through
   Participant lifecycle events, with durable signed retries and redelivery,
   generated management clients, server-only TypeScript receiver processing,
   and linked journey observability.
-- Declarative SyncEngine v3 TypeScript client support for exact four-stream
+- Declarative SyncEngine v1 TypeScript client support for exact four-stream
   recovery, role-derived capabilities, durable target commands, conference
   operations, live media targets, directed consent requests, and isolated web
   and React Native pending-target persistence.
-- Declarative SyncEngine v3 server authority for immutable Session policy,
+- Declarative SyncEngine v1 server authority for immutable Session policy,
   roles and admission, generation-fenced deadlines, confirmed moderation and
   Recording operations, single-share leases, exact-next live projections, and
   bounded terminal retention on PostgreSQL 18.
-- A checksummed four-phase SyncEngine v3 breaker that executes 37 seeded
+- A checksummed four-phase SyncEngine v1 breaker that executes 37 seeded
   durable, provider, delivery, recovery, wire, and production-SDK schedules and
   reproduces the complete semantic artifact twice.
 - API-issued five-minute Ed25519 sync participant tokens with fail-closed
@@ -424,8 +424,8 @@ ordinary join attempt. Host admission remains available through
 
 ### Removed
 
-- Unpublished SyncEngine v2 routes, generated contracts, server transport,
-  breaker harness, tests, and TypeScript client and persistence surfaces after
-  the strict v3 replacement passed its local proofs.
+- An unpublished earlier SyncEngine implementation and its generated
+  contracts, server transport, breaker harness, tests, and TypeScript client
+  and persistence surfaces were removed before the current v1 surface.
 - Raw scratchpad session logs, local upload artifacts, private agent skills, and
   internal release archaeology from the tracked tree.

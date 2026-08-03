@@ -1,5 +1,5 @@
 import {
-  AsyncStorageV3PendingTargetStore,
+  AsyncStorageV1PendingTargetStore,
   ChalkSession,
   CloudflareSFUClient,
   createChalkChatFileHttpTransport,
@@ -8,7 +8,7 @@ import {
   createCloudflareSFUHTTPTransport,
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
-  createV3SyncClient,
+  createV1SyncClient,
   type ChalkSessionChatFileFactoryInput,
   type ChalkSessionDiagnostic,
   type ChalkSessionJoinTraceEvent,
@@ -136,13 +136,13 @@ function createMediaClient(apiBaseURL: string, input: ChalkSessionMediaFactoryIn
 function createSyncClient(syncURL: string, input: ChalkSessionSyncFactoryInput, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>, storage: ReactNativeAsyncStorage | undefined) {
   const subject = input.access.subject;
   const scope = `${subject.tenantId}:${subject.sessionId}:${subject.participantSessionId}`;
-  return createV3SyncClient({
+  return createV1SyncClient({
     url: syncURL,
     token: input.token,
     mediaPlane: input.media,
     lifecycle,
     webSocket,
-    ...(storage ? { pendingStore: new AsyncStorageV3PendingTargetStore({ scope, storage }) } : {}),
+    ...(storage ? { pendingStore: new AsyncStorageV1PendingTargetStore({ scope, storage }) } : {}),
   });
 }
 

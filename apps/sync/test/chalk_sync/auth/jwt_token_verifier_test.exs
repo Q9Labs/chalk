@@ -34,7 +34,7 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
     assert {:ok, verified} = JWTTokenVerifier.verify(token)
     assert verified.tenant_id == "11111111-1111-4111-8111-111111111111"
     assert verified.participant_session_generation == 1
-    assert verified.capabilities == ["control:hand"]
+    assert verified.initial_role == "participant"
   end
 
   test "accepts only the exact Sync audience", %{private_key: private_key} do
@@ -51,27 +51,10 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
     end
   end
 
-  test "verifies a v3 role envelope without authorizing capabilities", %{
-    private_key: private_key
-  } do
-    claims =
-      claims()
-      |> Map.delete("capabilities")
-      |> Map.merge(%{
-        "initial_role" => "participant",
-        "eligible_roles" => ["participant", "cohost"]
-      })
-
-    assert {:ok, verified} = private_key |> token(claims) |> JWTTokenVerifier.verify()
-    assert verified.initial_role == "participant"
-    assert verified.eligible_roles == ["participant", "cohost"]
-    assert verified.capabilities == []
-  end
-
   test "rejects mixed, unknown, duplicate, ineligible, and unsafe host role envelopes", %{
     private_key: private_key
   } do
-    base = Map.delete(claims(), "capabilities")
+    base = claims()
 
     invalid = [
       Map.merge(base, %{
@@ -87,10 +70,7 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
         "eligible_roles" => ["participant"]
       }),
       Map.merge(base, %{"initial_role" => "host", "eligible_roles" => ["host"]}),
-      Map.merge(claims(), %{
-        "initial_role" => "participant",
-        "eligible_roles" => ["participant"]
-      })
+      Map.put(claims(), "capabilities", ["control:hand"])
     ]
 
     Enum.each(invalid, fn candidate ->
@@ -139,7 +119,8 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
       "participant_session_generation" => 1,
       "admission_lifecycle_intent_id" => "55555555-5555-4555-8555-555555555555",
       "display_name" => "Ada",
-      "capabilities" => ["control:hand"]
+      "initial_role" => "participant",
+      "eligible_roles" => ["participant", "cohost"]
     }
   end
 

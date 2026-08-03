@@ -136,7 +136,7 @@ describe("public session contract", () => {
 function assertRoomActionTypes(): void {
   expectTypeOf<ChalkSessionSnapshot["roomActions"]>().toEqualTypeOf<{
     readonly phase: "disabled" | "negotiating" | "healthy" | "recovering" | "failed" | "stopped";
-    readonly version: 1 | 2 | null;
+    readonly version: 2 | null;
     readonly capabilities: readonly ("sendReaction" | "sendChat")[];
     readonly error: {
       readonly code: ChalkSessionErrorCode;

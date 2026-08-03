@@ -1,4 +1,4 @@
-import type { V3MediaSource } from "../sync/v3-types";
+import type { V1MediaSource } from "../sync/v1-types";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUPublication, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription } from "./types";
 
@@ -102,7 +102,7 @@ export function comparePublicationCursor(current: PublicationCursor | null, next
   return "same";
 }
 
-export function publicationKey(publication: { readonly participantSessionId: string; readonly source: V3MediaSource }): string {
+export function publicationKey(publication: { readonly participantSessionId: string; readonly source: V1MediaSource }): string {
   return `${publication.participantSessionId}\u0000${publication.source}`;
 }
 

@@ -10,8 +10,6 @@ defmodule ChalkSync.Application do
     children =
       [
         %{id: :pg, start: {:pg, :start_link, []}},
-        {Registry, keys: :unique, name: ChalkSync.Rooms.Registry},
-        {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Rooms.Supervisor},
         {Registry, keys: :unique, name: ChalkSync.Sessions.Registry},
         {DynamicSupervisor, strategy: :one_for_one, name: ChalkSync.Sessions.Supervisor},
         {ChalkSync.Operations.Metrics, []},
@@ -30,7 +28,6 @@ defmodule ChalkSync.Application do
         retention_scheduler_child(),
         boot_check_child(),
         {ChalkSync.Operations.Readiness, []},
-        dev_tools_child(),
         listener_child()
       ]
       |> Enum.reject(&is_nil/1)
@@ -149,11 +146,6 @@ defmodule ChalkSync.Application do
   defp boot_check_child do
     if Application.fetch_env!(:chalk_sync, :enforce_production_boot_checks),
       do: {ChalkSync.Operations.BootCheck, []}
-  end
-
-  defp dev_tools_child do
-    if Application.fetch_env!(:chalk_sync, :dev_tools),
-      do: {ChalkSync.DevTools.TraceHub, []}
   end
 
   defp observability_child do

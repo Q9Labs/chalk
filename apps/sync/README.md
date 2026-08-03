@@ -18,9 +18,8 @@ iex -S mix
 scripts/gate.sh
 ```
 
-Development listens on `http://localhost:4100`. The interactive lab at
-`/dev/lab` exercises the legacy development surface. Production disables that
-surface and protocol v1.
+Development listens on `http://localhost:4100`. The development server
+exposes the same v1 WebSocket transport used by the production service.
 
 ## Local parity
 
@@ -37,7 +36,7 @@ provider-bridge dependencies before the root command reports ready.
 
 ## Durable architecture
 
-The v3 command path is:
+The v1 command path is:
 
 ```text
 WebSocket
@@ -70,10 +69,10 @@ control lock, execute provider effects outside the transaction, and finalize
 durable facts only after confirmation. Opening or losing a socket never creates
 a durable join or leave.
 
-## Protocol v3
+## Protocol v1
 
-The language-neutral source is `contract/schema/sync-v3.json`; generated
-Elixir and TypeScript bindings are checked by the root codegen gate. V3 has
+The language-neutral source is `contract/schema/sync-v1.json`; generated
+Elixir and TypeScript bindings are checked by the root codegen gate. V1 has
 strict frame bounds, tenant/Session-scoped identity, stable command IDs,
 digest-checked control cursors, snapshot/replay/up-to-date recovery, bounded
 replay pages, retryable dependency outcomes, and explicit terminal lifecycle
@@ -85,10 +84,6 @@ bounded projection snapshots, then change through exact-next events; disabled
 publications and disconnected presence are explicit tombstones. MediaPlane
 observations carry monotonic incarnation/sequence cursors so stale provider
 snapshots cannot overwrite newer truth.
-
-V1 remains only as a local compatibility surface while callers migrate. It is
-disabled by production configuration and is outside the production durability
-claim.
 
 ## Operations
 
@@ -104,7 +99,7 @@ Production boot refuses Memory, the development verifier, an incompatible
 migration, a non-writable database, and a missing required synchronous standby.
 The exact launch topology and WAL-lag ceiling remain deployment inputs.
 
-Production protocol-v3 admission verifies API-issued Ed25519 JWTs locally. Set
+Production protocol-v1 admission verifies API-issued Ed25519 JWTs locally. Set
 `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`, and
 `CHALK_SYNC_TOKEN_PUBLIC_KEYS`; the last value is a JSON object mapping each
 accepted `kid` to an unpadded base64url 32-byte Ed25519 public key. Rotation
@@ -120,10 +115,10 @@ PEM file is missing or malformed, and readiness actively verifies the mTLS-only
 bridge endpoint. The seven-second bridge request budget remains shorter than the
 eight-second durable-operation consumer budget.
 
-## Observability v1 compatibility
+## Observability
 
-`ChalkSync.Observability` provides the legacy v1 compatibility observability
-boundary. It emits stable `:telemetry` events, correlated Logger metadata, and
+`ChalkSync.Observability` provides the observability boundary. It emits stable
+`:telemetry` events, correlated Logger metadata, and
 short OpenTelemetry spans. It does not retain a connection-long span. Socket
 work uses root, phase, and terminal events; room-writer work links back to the
 originating socket span after crossing the OTP process boundary.
@@ -144,8 +139,8 @@ run-queue measurements. Logger events include the journey and, when tracing is
 enabled, the trace and span identifiers. Tokens, room ids, participant ids,
 command ids, and raw revisions are never observability dimensions.
 
-Legacy v1 client and server protocol frames may carry these optional top-level
-fields without changing frame semantics:
+Client and server protocol frames may carry these optional top-level fields
+without changing frame semantics:
 
 ```json
 {
@@ -164,14 +159,13 @@ its response frames and creates a journey at v1 sync ingress when one is absent.
 
 The shared [`reliability harness`](./docs/reliability-harness.md) maps pull
 requests, nightly schedules, and release candidates to increasing profiles. It
-covers PostgreSQL-backed semantics, Sync v3 and whiteboard transports,
+covers PostgreSQL-backed semantics, Sync v1 and whiteboard transports,
 multi-node partitions and process loss, PostgreSQL failover, sustained load,
 Node restart recovery, and a real browser. Each run saves replayable,
 commit-bound evidence and fails closed.
 
 The external
 [`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md)
-still controls staging provider drills. The replayable v3 matrix is documented
-in [`sync-breaker-v3.md`](./docs/sync-breaker-v3.md); the complete acceptance
-contract is in
-[`declarative-sync-engine-v3-spec-2026-07-12.md`](../../scratchpad/declarative-sync-engine-v3-spec-2026-07-12.md).
+still controls staging provider drills. The replayable v1 matrix is documented
+in [`sync-breaker-v1.md`](./docs/sync-breaker-v1.md); the complete acceptance
+contract is covered by the checked-in Sync tests and reliability profiles.

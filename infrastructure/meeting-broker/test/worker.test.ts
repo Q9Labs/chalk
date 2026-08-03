@@ -28,7 +28,7 @@ describe("meeting broker Worker boundary", () => {
   });
 
   it("creates an unguessable meeting capability and a secure host cookie without logging either", async () => {
-    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
+    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v1/sync" }, 201));
     const response = await harness.post("/local-chalk/browser-session", { displayName: "Ada" });
     expect(response.status).toBe(201);
     const body = (await response.json()) as { readonly inviteToken: string };
@@ -47,7 +47,7 @@ describe("meeting broker Worker boundary", () => {
   });
 
   it("routes invite joins and access refreshes to the named meeting without browser-supplied identity", async () => {
-    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
+    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v1/sync" }, 201));
     const joined = await harness.post("/local-chalk/browser-session", { displayName: "Grace", inviteToken });
     expect(joined.status).toBe(201);
     expect(harness.namespace.idFromName).toHaveBeenCalledWith(inviteToken);
@@ -63,7 +63,7 @@ describe("meeting broker Worker boundary", () => {
   });
 
   it("resumes an invite only when its secure browser credential matches", async () => {
-    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
+    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v1/sync" }, 201));
     const resumed = await harness.post("/local-chalk/browser-session", { displayName: "Ada", inviteToken }, { cookie: `__Secure-chalk_session=${inviteToken}.${browserSessionId}` });
     expect(resumed.status).toBe(201);
     expect(await internalBody(harness.stub)).toMatchObject({ action: "resume", clientSessionId: browserSessionId, displayName: "Ada" });
@@ -94,7 +94,7 @@ describe("meeting broker Worker boundary", () => {
   });
 
   it("issues opaque client credentials and participant access without relying on browser cookies", async () => {
-    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v3/sync" }, 201));
+    const harness = workerHarness(jsonResponse({ apiBaseURL: "https://api.chalkmeet.com", syncURL: "wss://sync.chalkmeet.com/v1/sync" }, 201));
     const created = await harness.nativePost("/local-chalk/client-session", { displayName: "Ada" });
     expect(created.status).toBe(201);
     const session = (await created.json()) as { readonly clientSessionId: string; readonly inviteToken: string };
@@ -137,7 +137,7 @@ function workerHarness(stubResponse: Response = jsonResponse({}, 201)) {
     CHALK_APP_ORIGIN: "https://chalkmeet.com",
     CHALK_MEETING_LIFETIME_SECONDS: "3600",
     CHALK_ROOM_ID: "test-room",
-    CHALK_SYNC_URL: "wss://sync.chalkmeet.com/v3/sync",
+    CHALK_SYNC_URL: "wss://sync.chalkmeet.com/v1/sync",
     CHALK_TENANT_ID: "test-tenant",
     CREATE_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
     SESSION_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },

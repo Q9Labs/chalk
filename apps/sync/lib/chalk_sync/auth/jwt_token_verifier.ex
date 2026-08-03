@@ -112,8 +112,7 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
          expires_at: expires_at,
          display_name: display_name,
          initial_role: authorization.initial_role,
-         eligible_roles: authorization.eligible_roles,
-         capabilities: authorization.capabilities
+         eligible_roles: authorization.eligible_roles
        }}
     else
       _ -> {:error, :invalid_claims}
@@ -126,34 +125,12 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
 
   defp valid_uuids?(values), do: Enum.all?(values, &match?({:ok, _uuid}, UUID.dump(&1)))
 
-  defp valid_capabilities?(capabilities) do
-    is_list(capabilities) and length(capabilities) <= 32 and
-      Enum.all?(capabilities, &(is_binary(&1) and byte_size(&1) in 1..64))
-  end
-
   defp authorization_envelope(claims) do
-    role_claims? = Map.has_key?(claims, "initial_role") or Map.has_key?(claims, "eligible_roles")
-    capabilities? = Map.has_key?(claims, "capabilities")
-
-    cond do
-      capabilities? and not role_claims? ->
-        capabilities = claims["capabilities"]
-
-        if valid_capabilities?(capabilities),
-          do: {:ok, %{initial_role: nil, eligible_roles: [], capabilities: capabilities}},
-          else: {:error, :invalid_capabilities}
-
-      not capabilities? and role_claims? ->
-        initial_role = claims["initial_role"]
-        eligible_roles = claims["eligible_roles"]
-
-        if Claims.valid_role_envelope?(initial_role, eligible_roles),
-          do:
-            {:ok, %{initial_role: initial_role, eligible_roles: eligible_roles, capabilities: []}},
-          else: {:error, :invalid_role_envelope}
-
-      true ->
-        {:error, :invalid_authorization_envelope}
+    if not Map.has_key?(claims, "capabilities") and
+         Claims.valid_role_envelope?(claims["initial_role"], claims["eligible_roles"]) do
+      {:ok, %{initial_role: claims["initial_role"], eligible_roles: claims["eligible_roles"]}}
+    else
+      {:error, :invalid_role_envelope}
     end
   end
 

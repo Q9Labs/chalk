@@ -6,25 +6,25 @@ defmodule ChalkSync.Reliability.Wire do
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.TestWSClient, as: Client
 
-  def connect_v3(port, identity) do
-    case connect_v3_result(port, identity) do
+  def connect_v1(port, identity) do
+    case connect_v1_result(port, identity) do
       {:ok, client, welcome} ->
         {client, welcome}
 
       {:closed, code, reason, _client} ->
-        flunk("v3 socket closed during recovery: #{code} #{reason}")
+        flunk("v1 socket closed during recovery: #{code} #{reason}")
 
       {:error, reason} ->
-        flunk("v3 socket failed to connect: #{inspect(reason)}")
+        flunk("v1 socket failed to connect: #{inspect(reason)}")
 
       {:error, reason, _client} ->
-        flunk("v3 socket recovery failed: #{inspect(reason)}")
+        flunk("v1 socket recovery failed: #{inspect(reason)}")
     end
   end
 
-  def connect_v3_result(port, identity) do
-    with {:ok, client} <- Client.connect(port, "/v3/sync"),
-         client <- Client.send_json(client, v3_hello(identity)),
+  def connect_v1_result(port, identity) do
+    with {:ok, client} <- Client.connect(port, "/v1/sync"),
+         client <- Client.send_json(client, v1_hello(identity)),
          {:ok, client, welcome} <- receive_json_type_result(client, "welcome", 5_000),
          client <- Client.acknowledge_recovery(client, welcome),
          {:ok, client, _complete} <-
@@ -192,10 +192,10 @@ defmodule ChalkSync.Reliability.Wire do
     end
   end
 
-  defp v3_hello(identity) do
+  defp v1_hello(identity) do
     %{
       "type" => "hello",
-      "protocol" => 3,
+      "protocol" => 1,
       "token" => token(identity),
       "streams" => %{
         "control" => %{"cursor" => nil},

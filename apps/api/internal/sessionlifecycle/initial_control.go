@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	controlStateDigestPrefix = "chalk-sync-state-v3"
-	controlStateSchemaV3     = int32(3)
+	controlStateDigestPrefix = "chalk-sync-state-v1"
+	controlStateSchemaV1     = int32(1)
 )
 
 type InitialControlPolicy struct {
@@ -23,7 +23,7 @@ type InitialControlPolicy struct {
 }
 
 // NewInitialControlState validates immutable Session policy and encodes the
-// empty, pre-admission v3 authority projection.
+// empty, pre-admission v1 authority projection.
 func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, error) {
 	policy, err := validateInitialControlPolicy(policy)
 	if err != nil {
@@ -41,7 +41,7 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 		"participants":                []any{},
 		"recording":                   nil,
 		"role_capabilities":           policy.RoleCapabilities,
-		"state_schema_version":        controlStateSchemaV3,
+		"state_schema_version":        controlStateSchemaV1,
 		"status":                      SessionStatusActive,
 	}
 	projection, _ := json.Marshal(durableProjection)
@@ -50,7 +50,7 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 	digestInput := make([]byte, 0, len(controlStateDigestPrefix)+4+len(projection))
 	digestInput = append(digestInput, controlStateDigestPrefix...)
 	version := make([]byte, 4)
-	binary.BigEndian.PutUint32(version, uint32(controlStateSchemaV3))
+	binary.BigEndian.PutUint32(version, uint32(controlStateSchemaV1))
 	digestInput = append(digestInput, version...)
 	digestInput = append(digestInput, projection...)
 	digest := sha256.Sum256(digestInput)
@@ -61,7 +61,7 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 	return InitialControlState{
 		FoldedState:   projection,
 		Digest:        digest,
-		SchemaVersion: controlStateSchemaV3,
+		SchemaVersion: controlStateSchemaV1,
 		SnapshotBytes: int64(len(wireSnapshot)),
 	}, nil
 }

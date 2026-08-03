@@ -343,7 +343,7 @@ func TestServiceRejectsInvalidLifecycleRequestKeysBeforeRepository(t *testing.T)
 	}
 }
 
-func TestNewInitialControlStateEncodesExactEmptyV3Projection(t *testing.T) {
+func TestNewInitialControlStateEncodesExactEmptyV1Projection(t *testing.T) {
 	input := sessionlifecycle.CreateSessionInput{}
 	setValidPolicy(&input)
 	state, err := sessionlifecycle.NewInitialControlState(sessionlifecycle.InitialControlPolicy{
@@ -354,14 +354,14 @@ func TestNewInitialControlStateEncodesExactEmptyV3Projection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantProjection := `{"admission_policy":"open","admission_requests":[],"control_revision":0,"deadline_at_ms":1783944000000,"deadline_generation":1,"host_exit_policy":"require_transfer","host_participant_session_id":null,"participants":[],"recording":null,"role_capabilities":{"cohost":["publishAudio","subscribe"],"host":["publishAudio","subscribe","transferHost","endMeeting"],"participant":["subscribe"]},"state_schema_version":3,"status":"active"}`
+	wantProjection := `{"admission_policy":"open","admission_requests":[],"control_revision":0,"deadline_at_ms":1783944000000,"deadline_generation":1,"host_exit_policy":"require_transfer","host_participant_session_id":null,"participants":[],"recording":null,"role_capabilities":{"cohost":["publishAudio","subscribe"],"host":["publishAudio","subscribe","transferHost","endMeeting"],"participant":["subscribe"]},"state_schema_version":1,"status":"active"}`
 	if string(state.FoldedState) != wantProjection {
 		t.Fatalf("folded state = %s", state.FoldedState)
 	}
-	if state.SchemaVersion != 3 {
-		t.Fatalf("schema version = %d, want 3", state.SchemaVersion)
+	if state.SchemaVersion != 1 {
+		t.Fatalf("schema version = %d, want 1", state.SchemaVersion)
 	}
-	if got := hex.EncodeToString(state.Digest[:]); got != "cff2faec6a97d9f9064cf2995d7d003e3430f39c12f72afddc4b1644fc78dd0d" {
+	if got := hex.EncodeToString(state.Digest[:]); got != "dce5c1e054bf8d19df18a768bd48181f6653040b9cd86518961ca29b4a7cdee4" {
 		t.Fatalf("digest = %s", got)
 	}
 	if state.SnapshotBytes != int64(len(wantProjection)+82) {

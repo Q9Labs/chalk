@@ -1,110 +1,124 @@
-defmodule ChalkSync.ProtocolTest do
+defmodule ChalkSync.ProtocolV1Test do
   use ExUnit.Case, async: true
 
-  alias ChalkSync.Protocol
+  alias ChalkSync.ProtocolV1
+  alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.Recovery
+  alias ChalkSync.Stateholder.SessionKey
 
-  describe "decode/1" do
-    test "hello with and without a cursor" do
-      assert {:ok, {:hello, %{token: "t", cursor: nil}}} =
-               Protocol.decode(~s({"type":"hello","protocol":1,"token":"t"}))
+  test "decodes the control stream on a strict delivery acknowledgement" do
+    digest = String.duplicate("a", 64)
 
-      assert {:ok, {:hello, %{token: "t", cursor: 41}}} =
-               Protocol.decode(
-                 ~s({"type":"hello","protocol":1,"token":"t","streams":{"control":{"cursor":41}}})
-               )
-    end
-
-    test "hello with a wrong protocol version or bad cursor is rejected" do
-      assert {:error, :unsupported_protocol} =
-               Protocol.decode(~s({"type":"hello","protocol":2,"token":"t"}))
-
-      assert {:error, :invalid_cursor} =
-               Protocol.decode(
-                 ~s({"type":"hello","protocol":1,"token":"t","streams":{"control":{"cursor":-1}}})
-               )
-
-      assert {:error, :invalid_cursor} =
-               Protocol.decode(~s({"type":"hello","protocol":1,"token":"t","streams":"bad"}))
-    end
-
-    test "commands map to the whitelist only" do
-      assert {:ok, {:command, %{command_id: "c-1", name: :raise_hand, payload: %{}}}} =
-               Protocol.decode(~s({"type":"command","command_id":"c-1","name":"raise_hand"}))
-
-      assert {:error, :unknown_command} =
-               Protocol.decode(~s({"type":"command","command_id":"c-1","name":"join"}))
-    end
-
-    test "malformed frames fail closed" do
-      assert {:error, :malformed_json} = Protocol.decode("{nope")
-      assert {:error, :missing_type} = Protocol.decode(~s({"a":1}))
-      assert {:error, :unknown_type} = Protocol.decode(~s({"type":"mystery"}))
-      assert {:error, :invalid_command} = Protocol.decode(~s({"type":"command","name":"x"}))
-    end
-
-    test "ping decodes with normalized correlation fields" do
-      assert {:ok, {:ping, %{}}} = Protocol.decode(~s({"type":"ping"}))
-
-      assert {:ok, {:ping, %{journey_id: "00000000-0000-4000-8000-000000000001"}}} =
-               Protocol.decode(
-                 ~s({"type":"ping","journey_id":"00000000-0000-4000-8000-000000000001"})
-               )
-    end
+    assert {:ok, {:delivery_ack, %{stream: :control, revision: 2, state_digest: ^digest}}} =
+             ProtocolV1.decode(
+               JSON.encode!(%{
+                 "type" => "delivery_ack",
+                 "stream" => "control",
+                 "revision" => 2,
+                 "state_digest" => digest
+               })
+             )
   end
 
-  describe "encode" do
-    test "acks carry command outcome" do
-      assert JSON.decode!(Protocol.encode_ack("c-1", {:committed, 42})) ==
-               %{
-                 "type" => "ack",
-                 "command_id" => "c-1",
-                 "result" => "committed",
-                 "revision" => 42
+  test "decodes the exact room-actions extension" do
+    streams = %{
+      "control" => %{"cursor" => nil},
+      "media" => %{"cursor" => nil},
+      "presence" => %{"cursor" => nil},
+      "requests" => %{"cursor" => nil}
+    }
+
+    assert {:ok, {:hello, %{token: "token", cursor: nil}}} =
+             ProtocolV1.decode(
+               JSON.encode!(%{
+                 "type" => "hello",
+                 "protocol" => 1,
+                 "token" => "token",
+                 "streams" => streams
+               })
+             )
+
+    assert {:ok,
+            {:hello,
+             %{
+               token: "token",
+               cursor: nil,
+               room_actions: %{
+                 after_sequence: "12",
+                 retained_floor_sequence: "4"
                }
+             }}} =
+             ProtocolV1.decode(
+               JSON.encode!(%{
+                 "type" => "hello",
+                 "protocol" => 1,
+                 "token" => "token",
+                 "streams" => streams,
+                 "extensions" => [
+                   %{
+                     "name" => "room_actions_v2",
+                     "chat_cursor" => %{
+                       "after_sequence" => "12",
+                       "retained_floor_sequence" => "4"
+                     }
+                   }
+                 ]
+               })
+             )
+  end
 
-      assert JSON.decode!(Protocol.encode_ack("c-1", {:duplicate, 42})) ==
-               %{
-                 "type" => "ack",
-                 "command_id" => "c-1",
-                 "result" => "duplicate",
-                 "revision" => 42
-               }
+  test "adds the negotiated room-actions policy only to an extended welcome" do
+    identity = %Identity{
+      session: %SessionKey{
+        tenant_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c20",
+        room_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22"
+      },
+      participant_session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      participant_session_generation: 1
+    }
 
-      assert JSON.decode!(Protocol.encode_ack("c-1", {:rejected, :no_change})) ==
-               %{
-                 "type" => "ack",
-                 "command_id" => "c-1",
-                 "result" => "rejected",
-                 "reason" => "no_change"
-               }
-    end
+    recovery = %Recovery{
+      mode: :up_to_date,
+      head: %{
+        revision: 0,
+        state_schema_version: 1,
+        digest: :binary.copy(<<0>>, 32)
+      },
+      snapshot: nil,
+      events: []
+    }
 
-    test "events carry the exact revision chain" do
-      event = %{name: "hand_raised", base_revision: 41, revision: 42, payload: %{"a" => 1}}
+    legacy =
+      identity
+      |> ProtocolV1.recovery_welcome(
+        recovery,
+        "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24"
+      )
+      |> JSON.decode!()
 
-      assert JSON.decode!(Protocol.encode_event(event)) == %{
-               "type" => "event",
-               "stream" => "control",
-               "name" => "hand_raised",
-               "base_revision" => 41,
-               "revision" => 42,
-               "payload" => %{"a" => 1}
-             }
-    end
+    refute Map.has_key?(legacy, "extensions")
 
-    test "welcome encodes snapshot and replay modes" do
-      snapshot =
-        JSON.decode!(Protocol.encode_welcome("p1", %{snapshot: %{"control_revision" => 1}}))
+    extension = %{
+      "name" => "room_actions_v2",
+      "capabilities" => ["sendReaction", "sendChat"],
+      "participant_capabilities" => %{
+        identity.participant_session_id => ["sendReaction", "sendChat"]
+      },
+      "chat_head_sequence" => "8",
+      "retained_floor_sequence" => "2",
+      "read_receipts" => []
+    }
 
-      assert %{"type" => "welcome", "mode" => "snapshot", "participant_id" => "p1"} = snapshot
+    extended =
+      identity
+      |> ProtocolV1.recovery_welcome(
+        recovery,
+        "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24",
+        %{room_actions_extension: extension}
+      )
+      |> JSON.decode!()
 
-      event = %{name: "hand_raised", base_revision: 1, revision: 2, payload: %{}}
-
-      replay =
-        JSON.decode!(Protocol.encode_welcome("p1", %{replay: [event], control_revision: 2}))
-
-      assert %{"mode" => "replay", "control_revision" => 2, "events" => [%{"revision" => 2}]} =
-               replay
-    end
+    assert extended["extensions"] == [extension]
   end
 end

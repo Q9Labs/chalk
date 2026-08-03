@@ -2,18 +2,12 @@ defmodule ChalkSync.ObservabilityTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Observability
-  alias ChalkSync.Protocol
-  alias ChalkSync.Rooms.Room
-  alias ChalkSync.Rooms.RoomServer
-  alias ChalkSync.Stateholder
-  alias ChalkSync.Transport.Socket
 
   @observability_event [:chalk_sync, :observability, :event]
   @runtime_event [:chalk_sync, :runtime, :health]
   @journey_id "10000000-0000-4000-8000-000000000001"
   @connection_journey_id "10000000-0000-4000-8000-000000000002"
   @exporter_journey_id "10000000-0000-4000-8000-000000000003"
-  @revision_journey_id "10000000-0000-4000-8000-000000000004"
 
   setup do
     handler_id = "observability-test-#{System.unique_integer([:positive])}"
@@ -31,24 +25,6 @@ defmodule ChalkSync.ObservabilityTest do
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
     :ok
-  end
-
-  test "preserves W3C context and journey ids in protocol frames" do
-    traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-
-    assert {:ok,
-            {:ping, %{journey_id: @journey_id, traceparent: ^traceparent, tracestate: "acme=1"}},
-            context} =
-             Protocol.decode_with_context(
-               ~s({"type":"ping","journey_id":"#{@journey_id}","traceparent":"#{traceparent}","tracestate":"acme=1"})
-             )
-
-    assert context.journey_id == @journey_id
-
-    encoded = context |> Protocol.encode_pong() |> JSON.decode!()
-    assert encoded["journey_id"] == @journey_id
-    assert encoded["traceparent"] == traceparent
-    assert encoded["tracestate"] == "acme=1"
   end
 
   test "a partially correlated frame preserves the connection journey" do
@@ -174,98 +150,6 @@ defmodule ChalkSync.ObservabilityTest do
              Observability.phase(context, "sync.test.export", %{})
 
     assert_event("sync.test.export", @exporter_journey_id, "phase")
-  end
-
-  test "a malformed frame emits a rejected phase and a terminal event" do
-    {:ok, state} = Socket.init(%{})
-    Process.cancel_timer(state.hello_timer)
-
-    assert {:push, {:text, error}, state} =
-             Socket.handle_in({"{not-json", [opcode: :text]}, state)
-
-    assert %{"type" => "error", "code" => "protocol_error"} = JSON.decode!(error)
-
-    journey_id = state.observability.journey_id
-    assert_event("sync.websocket.handshake", journey_id, "root")
-    assert_event("sync.protocol.rejected", journey_id, "phase")
-
-    assert :ok = Socket.terminate(:normal, state)
-    assert_event("sync.connection.closed", journey_id, "terminal")
-  end
-
-  test "a hello timeout emits its phase before the terminal close" do
-    {:ok, state} = Socket.init(%{})
-    Process.cancel_timer(state.hello_timer)
-
-    assert {:stop, :normal, {1002, "hello timeout"}, state} =
-             Socket.handle_info(:hello_timeout, state)
-
-    journey_id = state.observability.journey_id
-    assert_event("sync.hello.timeout", journey_id, "phase")
-
-    assert :ok = Socket.terminate(:normal, state)
-    assert_event("sync.connection.closed", journey_id, "terminal")
-  end
-
-  test "subscriber disconnect keeps the joining journey and trace context" do
-    room_id = "room-observability-#{System.unique_integer([:positive])}"
-    traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-
-    context =
-      Observability.context(%{
-        "journey_id" => @connection_journey_id,
-        "traceparent" => traceparent,
-        "tracestate" => "acme=1"
-      })
-
-    assert {:ok, _room_pid, _reply} = RoomServer.join(room_id, "p1", "Ada", self())
-
-    subscriber =
-      spawn(fn ->
-        receive do
-          :disconnect -> :ok
-        end
-      end)
-
-    assert {:ok, _room_pid, _reply} =
-             RoomServer.join(room_id, "p2", "Bo", subscriber, nil, context)
-
-    assert_receive {:sync_event, %{name: "participant_joined"}, _context}
-
-    send(subscriber, :disconnect)
-
-    assert_receive {:sync_event, %{name: "participant_left"}, leave_context}
-
-    assert Observability.frame_fields(leave_context) == %{
-             "journey_id" => @connection_journey_id,
-             "traceparent" => traceparent,
-             "tracestate" => "acme=1"
-           }
-
-    assert %{attributes: %{event_name: "participant_left"}} =
-             assert_event("sync.room.broadcast", @connection_journey_id, "phase",
-               event_name: "participant_left"
-             )
-
-    assert %{attributes: %{event_name: "participant_left"}} =
-             assert_event("sync.room.event.committed", @connection_journey_id, "phase",
-               event_name: "participant_left"
-             )
-  end
-
-  test "a stateholder revision conflict emits a linked recovery phase" do
-    room_id = "room-observability-#{System.unique_integer([:positive])}"
-    context = Observability.context(%{"journey_id" => @revision_journey_id})
-
-    assert {:ok, _room_pid, _reply} = RoomServer.join(room_id, "p1", "Ada", self(), nil, context)
-    assert {:ok, room} = Stateholder.load(room_id)
-    assert {:ok, event, advanced_room} = Room.apply_command(room, "p1", :raise_hand, %{})
-    assert :ok = Stateholder.commit(room_id, event.base_revision, event, advanced_room)
-
-    assert {:rejected, :retry} =
-             RoomServer.command(room_id, "p1", "c-1", :raise_hand, %{}, context)
-
-    assert_event("sync.room.revision_conflict", @revision_journey_id, "phase")
   end
 
   defp assert_event(event_name, journey_id, stage, options \\ []) do

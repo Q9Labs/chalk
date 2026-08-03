@@ -51,7 +51,7 @@ describe("client-session credential storage", () => {
       cleanupClientSession({
         ...credential,
         apiBaseURL: "https://api.chalkmeet.com",
-        syncURL: "wss://sync.chalkmeet.com/v3/sync",
+        syncURL: "wss://sync.chalkmeet.com/v1/sync",
         meetingLink: `https://chalkmeet.com/#meeting=${inviteToken}`,
         access: vi.fn(),
         cleanup,

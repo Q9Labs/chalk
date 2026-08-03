@@ -10,12 +10,9 @@ defmodule ChalkSync.Stateholder.Memory do
 
   use GenServer
 
-  @rooms __MODULE__.Rooms
-  @events __MODULE__.Events
   @sessions __MODULE__.Sessions
-  @retained_events 500
 
-  alias ChalkSync.ProtocolV3
+  alias ChalkSync.ProtocolV1
   alias ChalkSync.Sessions.Reducer
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Decision
@@ -30,39 +27,6 @@ defmodule ChalkSync.Stateholder.Memory do
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @impl ChalkSync.Stateholder
-  def load(room_id) do
-    case :ets.lookup(@rooms, room_id) do
-      [{^room_id, state}] -> {:ok, state}
-      [] -> :not_found
-    end
-  end
-
-  @impl ChalkSync.Stateholder
-  def commit(room_id, expected_revision, event, state) do
-    GenServer.call(__MODULE__, {:commit, room_id, expected_revision, event, state})
-  end
-
-  @impl ChalkSync.Stateholder
-  def events_since(room_id, cursor) do
-    case :ets.lookup(@events, room_id) do
-      [] when cursor == 0 ->
-        {:ok, []}
-
-      [] ->
-        {:error, :cursor_unavailable}
-
-      [{^room_id, newest_first}] ->
-        oldest_retained = List.last(newest_first).base_revision
-
-        if cursor < oldest_retained do
-          {:error, :cursor_unavailable}
-        else
-          {:ok, newest_first |> Enum.take_while(&(&1.revision > cursor)) |> Enum.reverse()}
-        end
-    end
   end
 
   @impl ChalkSync.Stateholder
@@ -157,39 +121,19 @@ defmodule ChalkSync.Stateholder.Memory do
   def seed_admission_request(%SessionKey{} = session, payload),
     do: GenServer.call(__MODULE__, {:seed_admission_request, session, payload})
 
-  @doc "Test helper: drops all rooms and events."
+  @doc "Test helper: drops all in-memory session state."
   def reset do
     GenServer.call(__MODULE__, :reset)
   end
 
   @impl GenServer
   def init(_opts) do
-    :ets.new(@rooms, [:named_table, :protected, read_concurrency: true])
-    :ets.new(@events, [:named_table, :protected, read_concurrency: true])
     :ets.new(@sessions, [:named_table, :protected, read_concurrency: true])
     {:ok, %{}}
   end
 
   @impl GenServer
-  def handle_call({:commit, room_id, expected_revision, event, state}, _from, s) do
-    current_revision =
-      case :ets.lookup(@rooms, room_id) do
-        [{^room_id, current}] -> current.revision
-        [] -> 0
-      end
-
-    if current_revision == expected_revision do
-      :ets.insert(@rooms, {room_id, state})
-      append_event(room_id, event)
-      {:reply, :ok, s}
-    else
-      {:reply, {:error, {:revision_conflict, current_revision}}, s}
-    end
-  end
-
   def handle_call(:reset, _from, s) do
-    :ets.delete_all_objects(@rooms)
-    :ets.delete_all_objects(@events)
     :ets.delete_all_objects(@sessions)
     {:reply, :ok, s}
   end
@@ -482,16 +426,6 @@ defmodule ChalkSync.Stateholder.Memory do
       participant.admission_lifecycle_intent_id == lifecycle_intent_id and
         participant.status == :active
     end)
-  end
-
-  defp append_event(room_id, event) do
-    newest_first =
-      case :ets.lookup(@events, room_id) do
-        [{^room_id, events}] -> events
-        [] -> []
-      end
-
-    :ets.insert(@events, {room_id, Enum.take([event | newest_first], @retained_events)})
   end
 
   defp seeded_session(session_key, participants) do
@@ -1087,7 +1021,7 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp required_capability(name) when name in [:raise_hand, :lower_hand, :set_hand_raised],
+  defp required_capability(:set_hand_raised),
     do: "raiseHand"
 
   defp required_capability(:set_display_name), do: "renameSelf"
@@ -1150,7 +1084,7 @@ defmodule ChalkSync.Stateholder.Memory do
     oldest_revision = if match?([_ | _], retained), do: hd(retained).base_revision, else: 0
 
     if revision >= oldest_revision and length(events) <= 2_048 and
-         Enum.sum(Enum.map(events, &(ProtocolV3.event(&1) |> byte_size()))) <= 2 * 1024 * 1024 do
+         Enum.sum(Enum.map(events, &(ProtocolV1.event(&1) |> byte_size()))) <= 2 * 1024 * 1024 do
       %Recovery{
         mode: :replay,
         head: head,
@@ -1166,7 +1100,7 @@ defmodule ChalkSync.Stateholder.Memory do
   defp bounded_recovery_page(events) do
     events
     |> Enum.reduce_while({[], 0}, fn event, {accepted, bytes} ->
-      event_bytes = event |> ProtocolV3.event() |> byte_size()
+      event_bytes = event |> ProtocolV1.event() |> byte_size()
 
       if length(accepted) < 128 and bytes + event_bytes <= 255 * 1024,
         do: {:cont, {[event | accepted], bytes + event_bytes}},
@@ -1183,7 +1117,7 @@ defmodule ChalkSync.Stateholder.Memory do
     end
   end
 
-  defp recovery(session, cursor), do: recovery(session, cursor, 3)
+  defp recovery(session, cursor), do: recovery(session, cursor, 1)
 
   defp recovery(session, nil, protocol_version),
     do: snapshot_recovery(session, protocol_version)
@@ -1262,9 +1196,6 @@ defmodule ChalkSync.Stateholder.Memory do
       {id, if(folded, do: %{participant | role: folded.role}, else: participant)}
     end)
   end
-
-  defp duplicate_result(%{name: name}, _outcome) when name in [:raise_hand, :lower_hand],
-    do: :duplicate
 
   defp duplicate_result(_command, outcome), do: outcome
 

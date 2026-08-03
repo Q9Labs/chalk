@@ -1,4 +1,4 @@
-import type { V3MediaSource } from "../sync/v3-types";
+import type { V1MediaSource } from "../sync/v1-types";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
 
@@ -52,7 +52,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       const response = await request<{
         incarnation: number;
         sequence: number;
-        publications: readonly { participant_session_id: string; source: V3MediaSource; publication_id: string }[];
+        publications: readonly { participant_session_id: string; source: V1MediaSource; publication_id: string }[];
       }>("publications");
       return {
         incarnation: response.incarnation,

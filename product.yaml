@@ -40,7 +40,7 @@ domains:
     - capability: "Lobby, admission, role, host-succession, and screen-share control semantics"
       done: true
       evidence: ["apps/sync", "sdks/typescript/client/src/sync"]
-    - capability: "Local web room proof with camera, microphone, SFU media, and Sync v3"
+    - capability: "Local web room proof with camera, microphone, SFU media, and Sync v1"
       done: true
       evidence: ["apps/web/src/routes/room.tsx"]
     - capability: "Public web create-room flow"
@@ -109,10 +109,10 @@ domains:
       evidence: ["docs/redesign/north-star.md", "architecture.html"]
 
   realtime_sync:
-    - capability: "SyncEngine v3 client, codec, reducer, and persistence"
+    - capability: "SyncEngine v1 client, codec, reducer, and persistence"
       done: true
       evidence: ["sdks/typescript/client/src/sync"]
-    - capability: "Elixir Sync v3 runtime with Postgres durability"
+    - capability: "Elixir Sync v1 runtime with Postgres durability"
       done: true
       evidence: ["apps/sync/lib", "apps/sync/test"]
     - capability: "Bounded recovery, replay, receipts, and backpressure behavior"

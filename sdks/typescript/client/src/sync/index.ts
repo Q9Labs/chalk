@@ -14,39 +14,39 @@ export {
   type ReactNativeWebSocketCloseEvent,
   type ReactNativeWebSocketConstructor,
 } from "./react-native";
-export { V3SyncClient, V3SyncError } from "./v3-client";
-export { createV3SyncClient, type CreateV3SyncClientOptions } from "./v3-create";
-export { decodeV3ClientFrame, decodeV3ServerFrame, encodeV3ClientFrame } from "./v3-codec";
-export type { V3ChatCursor, V3RoomActionClientEvent, V3RoomActionsClient, V3RoomActionsExtensionRequest, V3RoomActionsExtensionState } from "./v3-room-actions";
-export { InMemoryV3PendingTargetStore } from "./v3-persistence";
-export { AsyncStorageV3PendingTargetStore, IndexedDbV3PendingTargetStore, type AsyncStorageV3PendingTargetStoreOptions, type IndexedDbV3PendingTargetStoreOptions } from "./v3-platform-persistence";
-export { applyV3Event, assertV3ControlSemantics, computeV3StateDigest, optimisticV3Control, restoreV3Snapshot, V3ReplicaError } from "./v3-reducer";
+export { V1SyncClient, V1SyncError } from "./v1-client";
+export { createV1SyncClient, type CreateV1SyncClientOptions } from "./v1-create";
+export { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
+export type { V1ChatCursor, V1RoomActionClientEvent, V1RoomActionsClient, V1RoomActionsExtensionRequest, V1RoomActionsExtensionState } from "./v1-room-actions";
+export { InMemoryV1PendingTargetStore } from "./v1-persistence";
+export { AsyncStorageV1PendingTargetStore, IndexedDbV1PendingTargetStore, type AsyncStorageV1PendingTargetStoreOptions, type IndexedDbV1PendingTargetStoreOptions } from "./v1-platform-persistence";
+export { applyV1Event, assertV1ControlSemantics, computeV1StateDigest, optimisticV1Control, restoreV1Snapshot, V1ReplicaError } from "./v1-reducer";
 export type {
-  V3AdmissionPolicy,
-  V3AdmissionRequest,
-  V3AssignableRole,
-  V3Capability,
-  V3ClientMediaPlane,
-  V3CommandResult,
-  V3ConnectionPhase,
-  V3ControlState,
-  V3DirectedRequest,
-  V3DirectedRequestResult,
-  V3LiveTargetResult,
-  V3MediaPlaneOutcome,
-  V3MediaPlaneResult,
-  V3MediaPlaneTarget,
-  V3MediaPublication,
-  V3MediaSource,
-  V3Participant,
-  V3PendingTarget,
-  V3PendingTargetStore,
-  V3Presence,
-  V3Projection,
-  V3Recording,
-  V3Role,
-  V3SelfMediaTargetResult,
-  V3SessionSnapshot,
-  V3SyncClientOptions,
-  V3TargetCommand,
-} from "./v3-types";
+  V1AdmissionPolicy,
+  V1AdmissionRequest,
+  V1AssignableRole,
+  V1Capability,
+  V1ClientMediaPlane,
+  V1CommandResult,
+  V1ConnectionPhase,
+  V1ControlState,
+  V1DirectedRequest,
+  V1DirectedRequestResult,
+  V1LiveTargetResult,
+  V1MediaPlaneOutcome,
+  V1MediaPlaneResult,
+  V1MediaPlaneTarget,
+  V1MediaPublication,
+  V1MediaSource,
+  V1Participant,
+  V1PendingTarget,
+  V1PendingTargetStore,
+  V1Presence,
+  V1Projection,
+  V1Recording,
+  V1Role,
+  V1SelfMediaTargetResult,
+  V1SessionSnapshot,
+  V1SyncClientOptions,
+  V1TargetCommand,
+} from "./v1-types";

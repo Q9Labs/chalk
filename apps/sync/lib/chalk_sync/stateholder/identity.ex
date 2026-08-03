@@ -10,7 +10,7 @@ defmodule ChalkSync.Stateholder.Identity do
     :participant_session_generation,
     :admission_lifecycle_intent_id,
     :role,
-    protocol_version: 3,
+    protocol_version: 1,
     eligible_roles: [],
     capabilities: []
   ]
@@ -21,7 +21,7 @@ defmodule ChalkSync.Stateholder.Identity do
           participant_session_generation: pos_integer(),
           admission_lifecycle_intent_id: String.t() | nil,
           role: String.t() | nil,
-          protocol_version: 3,
+          protocol_version: 1,
           eligible_roles: [String.t()],
           capabilities: [String.t()]
         }

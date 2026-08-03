@@ -19,7 +19,7 @@ describe("public SDK room", () => {
     const source = roomSource();
     expect(source).not.toContain("VITE_CHALK_LOCAL_API_TOKEN");
     expect(source).not.toContain("VITE_CHALK_TENANT_ID");
-    expect(source).not.toContain("createV3SyncClient");
+    expect(source).not.toContain("createV1SyncClient");
     expect(source).not.toContain("CloudflareSFUClient");
     expect(source).not.toContain("createCloudflareSFUHTTPTransport");
   });
@@ -87,7 +87,7 @@ describe("localhost Chalk backend trust boundary", () => {
     const handler = createLocalChalkHandler({
       chalk,
       apiBaseURL: "http://127.0.0.1:8080",
-      syncURL: "ws://127.0.0.1:4100/v3/sync",
+      syncURL: "ws://127.0.0.1:4100/v1/sync",
       roomId: "configured-room",
       allowedOrigins: ["http://127.0.0.1:3070"],
       randomUUID: () => ids.shift() ?? "unexpected-id",
@@ -162,7 +162,7 @@ describe("localhost Chalk backend trust boundary", () => {
     const handler = createLocalChalkHandler({
       chalk,
       apiBaseURL: "http://127.0.0.1:8080",
-      syncURL: "ws://127.0.0.1:4100/v3/sync",
+      syncURL: "ws://127.0.0.1:4100/v1/sync",
       allowedOrigins: ["http://127.0.0.1:3070"],
       randomUUID: () => ids.shift() ?? "unexpected-id",
     });
@@ -201,7 +201,7 @@ describe("localhost Chalk backend trust boundary", () => {
       expect(setCookie).toContain("chalk_local_session=cookie-server");
       expect(setCookie).toContain("HttpOnly");
       expect(setCookie).toContain("SameSite=Strict");
-      expect(await created.json()).toEqual({ apiBaseURL: "http://127.0.0.1:8080", syncURL: "ws://127.0.0.1:4100/v3/sync" });
+      expect(await created.json()).toEqual({ apiBaseURL: "http://127.0.0.1:8080", syncURL: "ws://127.0.0.1:4100/v1/sync" });
       expect(calls).toEqual([]);
 
       const cookie = setCookie.split(";", 1)[0] ?? "";

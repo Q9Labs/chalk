@@ -756,8 +756,8 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     leave_context = observed_context(1)
     end_context = observed_context(2)
 
-    leave_identity = %{leave_fixture.identity | protocol_version: 3}
-    end_identity = %{end_fixture.identity | protocol_version: 3}
+    leave_identity = %{leave_fixture.identity | protocol_version: 1}
+    end_identity = %{end_fixture.identity | protocol_version: 1}
 
     leave_operation =
       observed_operation("observed_leave_0001", :participant_leave, %{}, leave_context)

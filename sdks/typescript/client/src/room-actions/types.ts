@@ -1,8 +1,8 @@
 export type ChalkRoomActionsPhase = "disabled" | "negotiating" | "healthy" | "recovering" | "failed" | "stopped";
 
-export type ChalkSyncV3RoomActionCapability = "sendReaction" | "sendChat";
+export type ChalkSyncV1RoomActionCapability = "sendReaction" | "sendChat";
 export type ChalkWhiteboardV1Capability = "drawWhiteboard" | "manageWhiteboard";
-export type ChalkRoomActionCapability = ChalkSyncV3RoomActionCapability | ChalkWhiteboardV1Capability;
+export type ChalkRoomActionCapability = ChalkSyncV1RoomActionCapability | ChalkWhiteboardV1Capability;
 
 export type ChalkParticipantMediaState = {
   readonly microphone: "active" | "inactive" | "unknown";

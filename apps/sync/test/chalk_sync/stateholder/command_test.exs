@@ -4,17 +4,21 @@ defmodule ChalkSync.Stateholder.CommandTest do
   alias ChalkSync.Stateholder.Command
 
   test "normalizes supported command names and fingerprints intent" do
-    assert {:ok, first} = Command.new("command_id_00001", "raise_hand", %{})
-    assert {:ok, second} = Command.new("command_id_00001", :raise_hand, %{})
+    payload = %{"raised" => true}
+    assert {:ok, first} = Command.new("command_id_00001", "set_hand_raised", payload)
+    assert {:ok, second} = Command.new("command_id_00001", :set_hand_raised, payload)
     assert first.fingerprint == second.fingerprint
-    assert first.name == :raise_hand
+    assert first.name == :set_hand_raised
   end
 
   test "rejects malformed IDs, unknown commands, and loose payloads" do
-    assert Command.new("short", :raise_hand, %{}) == {:error, :invalid_command_id}
-    assert Command.new("command_id_00001", :invented, %{}) == {:error, :unknown_command}
+    assert Command.new("short", :set_hand_raised, %{"raised" => true}) ==
+             {:error, :invalid_command_id}
 
-    assert Command.new("command_id_00001", :raise_hand, %{"extra" => true}) ==
+    assert Command.new("command_id_00001", :invented, %{}) == {:error, :unknown_command}
+    assert Command.new("command_id_00001", :raise_hand, %{}) == {:error, :unknown_command}
+
+    assert Command.new("command_id_00001", :set_hand_raised, %{"extra" => true}) ==
              {:error, :invalid_payload}
   end
 

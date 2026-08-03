@@ -129,7 +129,7 @@ export const chalkSession = new ChalkSession({
 
     return requireParticipantAccess(response);
   },
-  syncURL: "wss://sync.chalkmeet.com/v3/sync",
+  syncURL: "wss://sync.chalkmeet.com/v1/sync",
   apiBaseURL: "https://api.chalkmeet.com",
 });
 ```

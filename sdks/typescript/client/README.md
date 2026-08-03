@@ -140,12 +140,12 @@ There should be no placeholder logic kept as a reminder of what core might do
 later. The reminder belongs here, in this spec. The code should either be real
 owned behavior in the right package or no behavior at all.
 
-## SyncEngine v3
+## SyncEngine v1
 
-`V3SyncClient` is the provider-neutral conference state client. Point it at the
-exact `/v3/sync` websocket endpoint and supply a participant token plus a
+`V1SyncClient` is the provider-neutral conference state client. Point it at the
+exact `/v1/sync` websocket endpoint and supply a participant token plus a
 platform websocket factory. Applications that use self-media setters must also
-install a `V3ClientMediaPlane` adapter. The server result authorizes the live
+install a `V1ClientMediaPlane` adapter. The server result authorizes the live
 target, then the same stable operation ID is passed to
 `setLocalPublicationTarget`; the Promise resolves only after both halves report
 `confirmed` or `satisfied`, so wire permission never masquerades as a real

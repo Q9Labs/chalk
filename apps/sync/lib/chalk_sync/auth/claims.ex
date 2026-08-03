@@ -2,9 +2,8 @@ defmodule ChalkSync.Auth.Claims do
   @moduledoc """
   Verified participant claims — the token-asserted admission identity primitive.
 
-  Protocol v1 carries its legacy capability list. Protocol v3 carries only a
-  bounded initial-role envelope; current authorization always comes from the
-  Stateholder rather than either token shape.
+  The token carries a bounded initial-role envelope. Current authorization
+  always comes from the Stateholder rather than the token.
   """
 
   @enforce_keys [:tenant_id, :room_id]
@@ -20,8 +19,7 @@ defmodule ChalkSync.Auth.Claims do
     :expires_at,
     :initial_role,
     display_name: "Guest",
-    eligible_roles: [],
-    capabilities: []
+    eligible_roles: []
   ]
 
   @type t :: %__MODULE__{
@@ -36,8 +34,7 @@ defmodule ChalkSync.Auth.Claims do
           expires_at: integer() | nil,
           initial_role: String.t() | nil,
           display_name: String.t(),
-          eligible_roles: [String.t()],
-          capabilities: [String.t()]
+          eligible_roles: [String.t()]
         }
 
   @roles ["host", "cohost", "participant"]

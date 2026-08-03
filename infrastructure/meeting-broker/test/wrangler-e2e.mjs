@@ -41,7 +41,7 @@ const broker = wranglerProcess([
   "--var",
   "CHALK_API_URL:https://fake-api.internal",
   "--var",
-  "CHALK_SYNC_URL:ws://127.0.0.1:8791/v3/sync",
+  "CHALK_SYNC_URL:ws://127.0.0.1:8791/v1/sync",
 ]);
 let brokerOutput = capture(broker);
 

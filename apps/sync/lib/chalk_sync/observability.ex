@@ -211,7 +211,7 @@ defmodule ChalkSync.Observability do
   @doc "Returns whether the dependencies that make sync state authoritative are running."
   @spec ready?() :: boolean()
   def ready? do
-    room_services_ready?() and stateholder_ready?()
+    stateholder_ready?()
   end
 
   @impl true
@@ -403,13 +403,6 @@ defmodule ChalkSync.Observability do
       %{event_sink: sink} when is_function(sink, 1) -> sink.(metadata)
       _ -> :ok
     end
-  end
-
-  defp room_services_ready? do
-    Enum.all?(
-      [ChalkSync.Rooms.Registry, ChalkSync.Rooms.Supervisor],
-      &is_pid(Process.whereis(&1))
-    )
   end
 
   defp stateholder_ready? do

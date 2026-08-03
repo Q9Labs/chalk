@@ -26,7 +26,7 @@ async function run() {
     await stageAndKillWorker(config, pendingStorePath);
     const staged = await readPendingCommands(pendingStorePath);
     if (staged.length !== 1 || staged[0]?.command?.name !== "set_hand_raised" || staged[0]?.command?.payload?.raised !== true || staged[0]?.bytes <= 0) {
-      throw new Error("first Node process did not durably stage exactly one v3 set_hand_raised target");
+      throw new Error("first Node process did not durably stage exactly one v1 set_hand_raised target");
     }
 
     const resumed = await runWorker("resume", config, pendingStorePath);
@@ -58,8 +58,8 @@ function assertLocalhostWebSocketUrl(value) {
   const url = new URL(value);
   const localhost = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
-  if (url.protocol !== "ws:" || !localhost.has(url.hostname) || url.pathname !== "/v3/sync") {
-    throw new Error("node-restart sync proof only connects to an explicit ws://localhost/v3/sync URL");
+  if (url.protocol !== "ws:" || !localhost.has(url.hostname) || url.pathname !== "/v1/sync") {
+    throw new Error("node-restart sync proof only connects to an explicit ws://localhost/v1/sync URL");
   }
 }
 

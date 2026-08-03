@@ -23,20 +23,15 @@ export function codegenPath(environmentVariable, fallback) {
  * @param {string | undefined} value
  */
 export function syncProtocolVersion(value = process.env.CODEGEN_SYNC_PROTOCOL_VERSION) {
-  if (value === undefined || value === "1") {
-    return 1;
-  }
-  if (value === "3") {
-    return 3;
-  }
-  throw new Error(`Unsupported sync protocol version ${JSON.stringify(value)}; expected "1" or "3"`);
+  if (value === undefined || value === "1") return 1;
+  throw new Error(`Unsupported sync protocol version ${JSON.stringify(value)}; expected "1"`);
 }
 
 /**
- * @param {number} version
+ * @param {number} _version
  */
-export function syncContractPath(version) {
-  return codegenPath("CODEGEN_SYNC_CONTRACT_PATH", `contract/schema/sync-v${version}.json`);
+export function syncContractPath(_version = 1) {
+  return codegenPath("CODEGEN_SYNC_CONTRACT_PATH", "contract/schema/sync-v1.json");
 }
 
 /**
@@ -121,53 +116,17 @@ function validateField(value) {
 /**
  * @param {unknown} value
  */
-function validateNestedFieldDefinitions(value) {
-  if (Array.isArray(value)) {
-    value.forEach(validateNestedFieldDefinitions);
-    return;
-  }
-  if (typeof value !== "object" || value === null) {
-    return;
-  }
-
-  const object = /** @type {JsonObject} */ (value);
-  if (Object.hasOwn(object, "kind")) {
-    validateField(object);
-  }
-  Object.values(object).forEach(validateNestedFieldDefinitions);
-}
-
-/**
- * @param {unknown} value
- */
-function validateNamedFrames(value) {
-  assertArray(value, "commands, events, and acknowledgements must be arrays");
-  value.forEach((frame) => {
-    assertObject(frame, "frames must be objects");
-    assertString(frame.type, "frames require a type");
-  });
-}
-
 /**
  * @param {unknown} value
  * @param {string} message
  */
 function validateFieldMap(value, message) {
   assertObject(value, message);
-  Object.values(value).forEach(validateField);
-}
-
-/**
- * @param {unknown} value
- * @param {string} message
- */
-function validateV3FieldMap(value, message) {
-  assertObject(value, message);
   Object.values(value).forEach((field) => {
     if (field === "uuid") return;
     if (Array.isArray(field)) {
       if (field.length === 0 || !field.every((item) => typeof item === "string") || new Set(field).size !== field.length) {
-        throw new Error("Invalid sync v3 contract: enum shorthand fields must contain unique strings");
+        throw new Error("Invalid sync v1 contract: enum shorthand fields must contain unique strings");
       }
       return;
     }
@@ -177,108 +136,11 @@ function validateV3FieldMap(value, message) {
 
 /**
  * @param {unknown} value
- */
-function validateWelcomeModes(value) {
-  assertArray(value, "welcome modes are required");
-  value.forEach((mode) => {
-    assertObject(mode, "welcome modes must be objects");
-    assertString(mode.id, "welcome modes require an id");
-    if (mode.id === "snapshot") {
-      assertObject(mode.snapshot, "snapshot welcome mode requires a snapshot");
-      validateField(mode.snapshot.controlRevision);
-      validateField(mode.snapshot.participants);
-      assertObject(mode.snapshot.participants, "snapshot participants must be a field definition");
-      validateFieldMap(mode.snapshot.participants.items, "snapshot participant fields are required");
-      return;
-    }
-    if (mode.id === "replay") {
-      validateField(mode.controlRevision);
-      validateField(mode.events);
-      return;
-    }
-    throw new Error(`Invalid sync v1 contract: unsupported welcome mode ${JSON.stringify(mode.id)}`);
-  });
-}
-
-/**
- * @param {unknown} value
  * @param {number} version
  */
 function validateSyncContract(value, version) {
-  if (version === 1) {
-    validateV1SyncContract(value);
-    return;
-  }
-  if (version === 3) {
-    validateV3SyncContract(value);
-    return;
-  }
-  throw new Error(`Unsupported sync protocol version ${JSON.stringify(version)}`);
-}
-
-/**
- * @param {unknown} value
- */
-function validateV1SyncContract(value) {
-  assertObject(value, "the root must be an object");
-  if (value.$schema !== "chalk.sync.v1" || value.version !== 1) {
-    throw new Error("Invalid sync v1 contract: expected chalk.sync.v1 version 1");
-  }
-  validateNestedFieldDefinitions(value);
-
-  assertObject(value.protocol, "protocol is required");
-  if (value.protocol.value !== 1 || value.protocol.transport !== "websocket-json-text") {
-    throw new Error("Invalid sync v1 contract: protocol must describe version 1 JSON text frames");
-  }
-
-  assertObject(value.correlation, "correlation is required");
-  validateFieldMap(value.correlation.optionalTopLevelFields, "optional correlation fields are required");
-
-  assertArray(value.phases, "phases are required");
-  assertObject(value.hello, "hello is required");
-  validateField(value.hello.token);
-  validateField(value.hello.cursor);
-  assertObject(value.welcome, "welcome is required");
-  validateField(value.welcome.participantId);
-  validateWelcomeModes(value.welcome.modes);
-  const commands = value.commands;
-  assertArray(commands, "commands must be an array");
-  validateNamedFrames(commands);
-  commands.forEach((command) => {
-    assertObject(command, "commands must be objects");
-    validateField(command.commandId);
-    validateField(command.payload);
-  });
-  const events = value.events;
-  assertArray(events, "events must be an array");
-  validateNamedFrames(events);
-  events.forEach((event) => {
-    assertObject(event, "events must be objects");
-    validateField(event.baseRevision);
-    validateField(event.revision);
-    validateFieldMap(event.payload, "event payloads must be objects");
-  });
-  const acknowledgements = value.acks;
-  assertArray(acknowledgements, "acknowledgements must be an array");
-  validateNamedFrames(acknowledgements);
-  acknowledgements.forEach((ack) => {
-    assertObject(ack, "acknowledgements must be objects");
-    validateField(ack.commandId);
-    if (ack.revision !== undefined) {
-      validateField(ack.revision);
-    }
-    if (ack.reason !== undefined) {
-      validateField(ack.reason);
-    }
-  });
-  assertObject(value.error, "error is required");
-  validateField(value.error.code);
-  validateField(value.error.message);
-  assertObject(value.ping, "ping is required");
-  assertObject(value.pong, "pong is required");
-  assertObject(value.continuity, "continuity is required");
-  assertObject(value.idempotency, "idempotency is required");
-  assertArray(value.closeCodes, "close codes are required");
+  if (version !== 1) throw new Error(`Unsupported sync protocol version ${JSON.stringify(version)}`);
+  validateSyncContractDocument(value);
 }
 
 /**
@@ -314,15 +176,15 @@ function requireStringProperty(value, property, message) {
 /**
  * @param {unknown} value
  */
-function validateV3SyncContract(value) {
+function validateSyncContractDocument(value) {
   assertObject(value, "the root must be an object");
-  if (value.$schema !== "chalk.sync.v3" || value.version !== 3) {
-    throw new Error("Invalid sync v3 contract: expected chalk.sync.v3 version 3");
+  if (value.$schema !== "chalk.sync.v1" || value.version !== 1) {
+    throw new Error("Invalid sync v1 contract: expected chalk.sync.v1 version 1");
   }
 
   const protocol = requireObjectProperty(value, "protocol", "protocol is required");
-  if (protocol.value !== 3 || protocol.transport !== "websocket-json-text" || protocol.route !== "/v3/sync") {
-    throw new Error("Invalid sync v3 contract: protocol must describe version 3 JSON text frames at /v3/sync");
+  if (protocol.value !== 1 || protocol.transport !== "websocket-json-text" || protocol.route !== "/v1/sync") {
+    throw new Error("Invalid sync v1 contract: protocol must describe version 1 JSON text frames at /v1/sync");
   }
 
   const limits = requireObjectProperty(value, "limits", "limits are required");
@@ -362,24 +224,24 @@ function validateV3SyncContract(value) {
   for (const [property, expected] of Object.entries(expectedLimits)) {
     const actual = limits[property];
     if (typeof actual !== "number" || !Number.isInteger(actual) || actual !== expected) {
-      throw new Error(`Invalid sync v3 contract: limits.${property} must equal ${expected}`);
+      throw new Error(`Invalid sync v1 contract: limits.${property} must equal ${expected}`);
     }
   }
 
   const digest = requireObjectProperty(value, "stateDigest", "state digest is required");
-  if (digest.algorithm !== "sha256" || digest.prefix !== "chalk-sync-state-v3" || digest.versionEncoding !== "uint32-big-endian" || digest.projectionEncoding !== "rfc8785-json" || digest.wireEncoding !== "hex-lowercase") {
-    throw new Error("Invalid sync v3 contract: state digest must declare the approved v3 SHA-256 encoding");
+  if (digest.algorithm !== "sha256" || digest.prefix !== "chalk-sync-state-v1" || digest.versionEncoding !== "uint32-big-endian" || digest.projectionEncoding !== "rfc8785-json" || digest.wireEncoding !== "hex-lowercase") {
+    throw new Error("Invalid sync v1 contract: state digest must declare the approved v1 SHA-256 encoding");
   }
 
   const streams = requireObjectProperty(value, "streams", "streams are required");
   if (JSON.stringify(Object.keys(streams)) !== JSON.stringify(["control", "media", "presence", "requests"])) {
-    throw new Error("Invalid sync v3 contract: streams must declare control, media, presence, and requests");
+    throw new Error("Invalid sync v1 contract: streams must declare control, media, presence, and requests");
   }
 
   const hello = requireObjectProperty(value, "hello", "hello is required");
   const helloStreams = requireObjectProperty(hello, "streams", "hello streams are required");
   if (hello.type !== "hello" || JSON.stringify(Object.keys(helloStreams)) !== JSON.stringify(Object.keys(streams))) {
-    throw new Error("Invalid sync v3 contract: hello must declare exactly the four protocol streams");
+    throw new Error("Invalid sync v1 contract: hello must declare exactly the four protocol streams");
   }
   validateField(hello.token);
 
@@ -388,13 +250,13 @@ function validateV3SyncContract(value) {
     assertObject(command, "commands must be objects");
     const name = requireStringProperty(command, "name", "commands require a name");
     if (command.type !== "command") {
-      throw new Error("Invalid sync v3 contract: command type must equal command");
+      throw new Error("Invalid sync v1 contract: command type must equal command");
     }
-    validateV3FieldMap(command.payload, `command ${name} payload is required`);
+    validateFieldMap(command.payload, `command ${name} payload is required`);
     return name;
   });
   if (JSON.stringify(commandNames) !== JSON.stringify(["set_hand_raised", "set_display_name", "set_admission_policy", "set_participant_role", "transfer_host"])) {
-    throw new Error("Invalid sync v3 contract: durable target command set must be exhaustive");
+    throw new Error("Invalid sync v1 contract: durable target command set must be exhaustive");
   }
 
   const operations = requireArrayProperty(value, "operations", "operations are required");
@@ -402,14 +264,14 @@ function validateV3SyncContract(value) {
     assertObject(operation, "operations must be objects");
     const name = requireStringProperty(operation, "name", "operations require a name");
     if (operation.type !== "operation") {
-      throw new Error("Invalid sync v3 contract: operation type must equal operation");
+      throw new Error("Invalid sync v1 contract: operation type must equal operation");
     }
-    validateV3FieldMap(operation.payload, `operation ${name} payload is required`);
+    validateFieldMap(operation.payload, `operation ${name} payload is required`);
     return name;
   });
   const expectedOperations = ["admit_participant", "deny_admission", "mute_participant", "stop_participant_camera", "stop_participant_screen_share", "remove_participant", "start_recording", "stop_recording", "participant_leave", "end_session"];
   if (JSON.stringify(operationNames) !== JSON.stringify(expectedOperations)) {
-    throw new Error("Invalid sync v3 contract: durable operation set must be exhaustive");
+    throw new Error("Invalid sync v1 contract: durable operation set must be exhaustive");
   }
 
   const expectedEvents = [
@@ -438,13 +300,13 @@ function validateV3SyncContract(value) {
     const name = requireStringProperty(event, "name", "events require a name");
     const origin = requireStringProperty(event, "origin", "events require an origin");
     if (!["command", "lifecycle", "external", "command_or_external"].includes(origin)) {
-      throw new Error("Invalid sync v3 contract: event origin is invalid");
+      throw new Error("Invalid sync v1 contract: event origin is invalid");
     }
-    validateV3FieldMap(event.payload, `event ${name} payload is required`);
+    validateFieldMap(event.payload, `event ${name} payload is required`);
     return [name, origin];
   });
   if (JSON.stringify(eventDefinitions) !== JSON.stringify(expectedEvents)) {
-    throw new Error("Invalid sync v3 contract: durable event set and origins must be exhaustive");
+    throw new Error("Invalid sync v1 contract: durable event set and origins must be exhaustive");
   }
 
   const externalIntents = requireArrayProperty(value, "externalIntents", "external intents are required");
@@ -466,7 +328,7 @@ function validateV3SyncContract(value) {
     "maximum_duration_expired",
   ];
   if (JSON.stringify(externalIntents) !== JSON.stringify(expectedExternalIntents)) {
-    throw new Error("Invalid sync v3 contract: external intent set must be exhaustive");
+    throw new Error("Invalid sync v1 contract: external intent set must be exhaustive");
   }
 
   const eventFrame = requireObjectProperty(value, "eventFrame", "event frame is required");
@@ -480,7 +342,7 @@ function validateV3SyncContract(value) {
     eventFrame.externalOriginField !== "external_operation_id" ||
     eventFrame.originInvariant !== "exactly_one_origin_field"
   ) {
-    throw new Error("Invalid sync v3 contract: event frame exact fields and origin fields must be exhaustive");
+    throw new Error("Invalid sync v1 contract: event frame exact fields and origin fields must be exhaustive");
   }
 
   for (const property of ["capabilities", "liveTargets", "directedRequests", "rejectionReasons", "closeCodes"]) {
@@ -520,31 +382,29 @@ function validateV3SyncContract(value) {
     requireArrayProperty(frame, "exactFields", `directedRequestFrames.${property}.exactFields are required`);
   }
   const roomActions = requireObjectProperty(value, "roomActions", "roomActions are required");
-  if (roomActions.extension !== "room_actions_v2" || roomActions.fallbackExtension !== "room_actions_v1" || JSON.stringify(roomActions.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) || JSON.stringify(roomActions.reactions) !== JSON.stringify(["👍", "❤️", "😂", "😮", "😢", "🎉"])) {
-    throw new Error("Invalid sync v3 contract: roomActions negotiation, capabilities, and reactions must be exhaustive");
+  if (roomActions.extension !== "room_actions_v2" || JSON.stringify(roomActions.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) || JSON.stringify(roomActions.reactions) !== JSON.stringify(["👍", "❤️", "😂", "😮", "😢", "🎉"])) {
+    throw new Error("Invalid sync v1 contract: roomActions negotiation, capabilities, and reactions must be exhaustive");
   }
   const attachmentMimeTypes = requireArrayProperty(roomActions, "attachmentMimeTypes", "roomActions.attachmentMimeTypes are required");
   if (attachmentMimeTypes.length === 0 || !attachmentMimeTypes.every((value) => typeof value === "string") || new Set(attachmentMimeTypes).size !== attachmentMimeTypes.length) {
-    throw new Error("Invalid sync v3 contract: roomActions attachment MIME types must be unique strings");
+    throw new Error("Invalid sync v1 contract: roomActions attachment MIME types must be unique strings");
   }
   const chatCursor = requireObjectProperty(roomActions, "chatCursor", "roomActions.chatCursor is required");
   if (JSON.stringify(chatCursor.exactFields) !== JSON.stringify(["after_sequence", "retained_floor_sequence"])) {
-    throw new Error("Invalid sync v3 contract: roomActions chat cursor fields must be exact");
+    throw new Error("Invalid sync v1 contract: roomActions chat cursor fields must be exact");
   }
   const helloExtension = requireObjectProperty(roomActions, "helloExtension", "roomActions.helloExtension is required");
   const welcomeExtension = requireObjectProperty(roomActions, "welcomeExtension", "roomActions.welcomeExtension is required");
-  const fallbackWelcomeExtension = requireObjectProperty(roomActions, "fallbackWelcomeExtension", "roomActions.fallbackWelcomeExtension is required");
   requireArrayProperty(helloExtension, "exactFields", "roomActions.helloExtension exact fields are required");
   requireArrayProperty(welcomeExtension, "exactFields", "roomActions.welcomeExtension exact fields are required");
-  requireArrayProperty(fallbackWelcomeExtension, "exactFields", "roomActions.fallbackWelcomeExtension exact fields are required");
   const roomActionClientFrames = requireObjectProperty(roomActions, "clientFrames", "roomActions.clientFrames are required");
-  for (const property of ["sendReaction", "sendChat", "fallbackSendChat", "readChatPage", "setChatRead"]) {
+  for (const property of ["sendReaction", "sendChat", "readChatPage", "setChatRead"]) {
     const frame = requireObjectProperty(roomActionClientFrames, property, `roomActions.clientFrames.${property} is required`);
     requireStringProperty(frame, "type", `roomActions.clientFrames.${property}.type is required`);
     requireArrayProperty(frame, "exactFields", `roomActions.clientFrames.${property}.exactFields are required`);
   }
   const roomActionServerFrames = requireObjectProperty(roomActions, "serverFrames", "roomActions.serverFrames are required");
-  for (const property of ["reaction", "reactionResult", "chatMessage", "fallbackChatMessage", "chatSendResult", "chatPage", "chatHead", "chatReadReceipt", "chatReadResult"]) {
+  for (const property of ["reaction", "reactionResult", "chatMessage", "chatSendResult", "chatPage", "chatHead", "chatReadReceipt", "chatReadResult"]) {
     const frame = requireObjectProperty(roomActionServerFrames, property, `roomActions.serverFrames.${property} is required`);
     requireStringProperty(frame, "type", `roomActions.serverFrames.${property}.type is required`);
   }
@@ -557,16 +417,16 @@ function validateV3SyncContract(value) {
 
   const acknowledgements = /** @type {JsonObject} */ (value.acks);
   if (JSON.stringify(acknowledgements.delivery) !== JSON.stringify(["original", "duplicate"]) || JSON.stringify(acknowledgements.outcomes) !== JSON.stringify(["committed", "satisfied", "rejected", "command_id_conflict"])) {
-    throw new Error("Invalid sync v3 contract: acknowledgement delivery and outcomes must be exhaustive");
+    throw new Error("Invalid sync v1 contract: acknowledgement delivery and outcomes must be exhaustive");
   }
   const retryableError = /** @type {JsonObject} */ (value.retryableError);
   const retryableCodes = requireArrayProperty(retryableError, "codes", "retryable error codes are required");
   if (JSON.stringify(retryableCodes) !== JSON.stringify(["overloaded", "server_draining", "dependency_unavailable", "decision_unavailable", "external_operation_pending"])) {
-    throw new Error("Invalid sync v3 contract: retryable error codes must be exhaustive");
+    throw new Error("Invalid sync v1 contract: retryable error codes must be exhaustive");
   }
   const error = /** @type {JsonObject} */ (value.error);
   if (JSON.stringify(error.code) !== JSON.stringify(["protocol_error", "invalid_frame", "unsupported_protocol"])) {
-    throw new Error("Invalid sync v3 contract: protocol error codes must be exhaustive");
+    throw new Error("Invalid sync v1 contract: protocol error codes must be exhaustive");
   }
   validateField(error.detail);
 }
