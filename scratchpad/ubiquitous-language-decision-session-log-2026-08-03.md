@@ -77,19 +77,27 @@ of activity is an Episode, and Episodes leave artifacts.**
   service still ships the whole legacy V1 architecture (`rooms/room.ex`,
   `rooms/room_server.ex`, `transport/socket.ex`) alongside V3; disabled in
   production, pure clutter. Remove it and any client remnants outright.
-  Renumbering current v3 → v1 (or dropping version segments) is directionally
-  approved by Hasan; exact form awaits the version-archaeology report.
+  **Renumbering LOCKED: current v3 becomes v1** ("we will go from V1 to V3,
+  but it doesn't make sense to keep calling it V3"). The version-archaeology
+  report is execution inventory only, not a pending decision.
+- **§9 `Chalk` prefix in symbols: LOCKED — nowhere.** The package provides
+  the namespace; pragmatic case-by-case exception for Go/Elixir internals
+  with real collisions. `<Chalk />` is a full name, not a prefix.
 
-### Boundary rulings (Hasan ratified the Codex boundary-survey findings)
+### Boundary findings (Hasan agreed the diagnoses are valid)
 
-Hasan reviewed the full boundary audit and agreed with all findings. Locked:
+CORRECTION 2026-08-03: an earlier revision of this section over-recorded the
+ChalkSession split as ratified. Hasan agreed the survey's _findings_ are
+valid problems; the _fixes_ below are locked only where he explicitly
+endorsed one. The ChalkSession split is Claude's recommended fix and is
+**NOT yet ruled**.
 
-- **ChalkSession split**: it is a god object fusing ~6 concerns (connection/
-  access lifecycle, media session, sync replica, room-control facade,
-  chat/reaction state machine, snapshot store + diagnostics). Split into a
-  narrow connection coordinator plus feature controllers (chat, room actions,
-  whiteboard) composed into one UI-facing store. Name the pieces, not the
-  fusion. Part of the SDK rename wave.
+- **ChalkSession is a god object (diagnosis agreed)**: ~6 fused concerns
+  (connection/access lifecycle, media session, sync replica, room-control
+  facade, chat/reaction state machine, snapshot store + diagnostics).
+  Proposed fix (OPEN, awaiting ruling): split into a narrow connection
+  coordinator plus feature controllers (chat, room actions, whiteboard)
+  composed into one UI-facing store; name the pieces, not the fusion.
 - **The five "session" concepts get true names**: Go `sessionlifecycle`
   (→ Episode), broker `MeetingSession` (edge lease), RN `ClientSession`
   (pre-join credential client), Elixir `Live.Session` (media/presence
@@ -109,8 +117,8 @@ Hasan reviewed the full boundary audit and agreed with all findings. Locked:
   checked-in JSON schemas). Folded into the SDK rename wave.
 - Remaining survey suspects (httpapi composition god package,
   ParticipantAccess envelope fusion, room-actions four-owner split, whiteboard
-  vocabulary overlap) ratified as valid; fix order decided during execution
-  planning.
+  vocabulary overlap) agreed valid as diagnoses; fixes and their order decided
+  during execution planning.
 - **Method consequence**: rename waves and boundary redraws are the same
   waves — never touch the system twice.
 
@@ -142,17 +150,14 @@ artifacts.**
 ## Open decisions (sheet items not yet ruled)
 
 - **D1–D5** above (Space durability).
-- **§9 `Chalk` prefix in symbols** (`ChalkSession`, `createChalkServerClient`):
-  rec: nowhere (package provides namespace), pragmatic exception for Go/Elixir
-  internals where collisions are real. Note `<Chalk />` is a full name, not a
-  prefix — consistent with the ban.
+- **ChalkSession fix**: split into coordinator + feature controllers (rec) vs
+  keep whole and rename only — awaiting Hasan's ruling.
 - **§10 Grammar ratification**: closed command-verb set, past-tense
   `<Subject><Verb>Event`, `<Noun>Snapshot`, `noun.condition` error codes,
   UI shape suffixes — ratify the v4 doc's grammar half on its merits.
-- **SDK runtime handle name**: superseded by the ChalkSession split ruling —
-  the pieces get named (connection coordinator + feature controllers), not
-  the fusion. Coordinator candidates: `SpaceConnection` / `SpaceClient`;
-  final names decided with §9 during the SDK wave design.
+- **SDK runtime handle name**: depends on the ChalkSession fix ruling. If
+  split: name the pieces; coordinator candidates `SpaceConnection` /
+  `SpaceClient`. If kept whole: same candidates for the whole object.
 - Host/guest words in UI copy of the `<Chalk />` turnkey: turnkey defines its
   own product copy; specifics undecided.
 
