@@ -21,8 +21,10 @@ React and React Native only ever see through one snapshot store.
 
 - Wave 1 merged (this wave consumes the renamed contract; the wire
   already says AccessGrant, space, episode).
-- Hasan's version/publish decision for the `@q9labsai/*` packages —
-  needed before this wave MERGES, not before it starts.
+
+Version is ruled: bump every `@q9labsai/*` package to `4.0.0` in this
+wave. Do NOT publish to npm — publishing is a separate manual step after
+wave 4 and Hasan's verification pass.
 
 ## Scope
 

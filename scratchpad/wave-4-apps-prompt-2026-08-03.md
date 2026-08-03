@@ -32,9 +32,10 @@ the last places where room/meeting language survives in product code.
   glossary.
 - Local dev tooling that fronts the apps (`scripts/dev/chalk.mjs`,
   local access broker paths) follows the same vocabulary.
-- Turnkey copy: finalize button labels, empty states, and Entrance copy
-  with Hasan — flag strings you are unsure about rather than inventing
-  product voice.
+- Turnkey copy (ruled): draft button labels, empty states, and Entrance
+  copy yourself in glossary vocabulary, neutral in tone, and list EVERY
+  user-visible string you wrote in your final report for Hasan's morning
+  review. Do not invent product voice and do not wait on him overnight.
 
 ## Definition of done
 

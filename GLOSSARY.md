@@ -162,6 +162,53 @@ participant identity, expirations. Replaces ParticipantAccess. Customers
 never construct or inspect it; the client's `getAccess` callback returns
 it and Connection manages its refresh.
 
+### EpisodeLease
+
+The broker's Durable Object: a bounded, expiring edge claim embodying
+one live Episode — it mints AccessGrants, creates client sessions with
+the media plane, and expires the run by alarm. Replaces the broker's
+MeetingSession. A lease is not an Episode; it is the edge's claim on
+media infrastructure for one. `MeetingStore` → `LeaseStore`,
+`meetingLifetimeSeconds` → `episodeDeadlineSeconds`, and the package is
+`infrastructure/episode-broker` (worker/stack/env names follow).
+
+### React bindings
+
+`@q9labsai/chalk-react` and `@q9labsai/chalk-react-native` expose an
+**identical public surface**: same component names, props, hooks,
+events, vocabulary. Both bind to the one SpaceSnapshot store, so parity
+is structural. Divergence is allowed in exactly two documented places —
+implementation seams (CallKit/OS permissions; CSS custom properties on
+web vs mapped style values on RN, same token names) and a small platform
+delta inside `features` where a capability genuinely doesn't exist —
+and is never a shape difference.
+
+The public hooks are a closed set: `useSpaceClient()` (the client, for
+commands); one hook per snapshot slice — `useConnection()`, `useSelf()`,
+`useParticipants()`, `useMedia()`, `useChat()`, `useReactions()`,
+`useWhiteboard()`; and `useCan(capability)` as sugar over the self
+slice's `can()`. No `Chalk` prefix (the package is the namespace), and
+no other public hooks: anything a component needs comes from these.
+
+## The five "sessions", resolved
+
+The five internal abstractions that shared the banned word each have a
+ruled true name:
+
+| Old name                      | True name                                                                  |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| Go `sessionlifecycle`         | Episode-named lifecycle package                                            |
+| Broker `MeetingSession` (DO)  | `EpisodeLease` (see entry)                                                 |
+| RN `ClientSession`            | Dies, no successor — its duties are Connection's access loop + AccessGrant |
+| Elixir `Live.Session`         | `Live.Episode`                                                             |
+| Elixir `Sessions.Coordinator` | `Episodes.Coordinator`                                                     |
+
+The Elixir rename is Episode-rooted throughout: `Sessions.Reducer` →
+`Episodes.Reducer`, `Sessions.CommandAdmission` → `Episodes.CommandIntake`
+(ending the collision with participant admission), `Stateholder.SessionKey`
+→ `Stateholder.EpisodeKey`. The control stream is per-Episode: fresh each
+run, continued across a blip-rejoin within the linger window.
+
 ## Laws
 
 1. **Join targets the Space.** Always, everywhere: links, APIs, SDK calls,
@@ -204,20 +251,20 @@ Every name is a domain root crossed with a layer shape:
 
 ## Banned terms
 
-| Term                        | Status                                                                             |
-| --------------------------- | ---------------------------------------------------------------------------------- |
-| meeting                     | Dead everywhere: code, infra, docs, and marketing copy                             |
-| room                        | Replaced by Space                                                                  |
-| session                     | Replaced by Episode; the five internal "session" abstractions each get a true name |
-| call, conference            | Banned as domain nouns; the platform speaks Space/Episode                          |
-| host, admin                 | Banned as built-in roles; fine as customer-defined role names                      |
-| bot, assistant, AI          | Banned as domain nouns; the identity kind is Agent                                 |
-| attendee, peer, actor       | Banned roster nouns; the word is Participant                                       |
-| signal (for availability)   | Banned; the word is Presence                                                       |
-| VideoConference             | Replaced by `<Chalk />`                                                            |
-| pre-join, lobby, green room | Banned; the place is the Entrance                                                  |
-| ParticipantAccess           | Replaced by AccessGrant                                                            |
-| ChalkSession                | Replaced by SpaceClient                                                            |
+| Term                        | Status                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| meeting                     | Dead everywhere: code, infra, docs, and marketing copy                           |
+| room                        | Replaced by Space                                                                |
+| session                     | Replaced by Episode; the five internal "session" abstractions are resolved above |
+| call, conference            | Banned as domain nouns; the platform speaks Space/Episode                        |
+| host, admin                 | Banned as built-in roles; fine as customer-defined role names                    |
+| bot, assistant, AI          | Banned as domain nouns; the identity kind is Agent                               |
+| attendee, peer, actor       | Banned roster nouns; the word is Participant                                     |
+| signal (for availability)   | Banned; the word is Presence                                                     |
+| VideoConference             | Replaced by `<Chalk />`                                                          |
+| pre-join, lobby, green room | Banned; the place is the Entrance                                                |
+| ParticipantAccess           | Replaced by AccessGrant                                                          |
+| ChalkSession                | Replaced by SpaceClient                                                          |
 
 Product-layer names built on top of the platform (a future floor-control
 feature, a future activity aggregate) may carry their own names, but the

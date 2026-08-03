@@ -21,8 +21,14 @@ prop, mirror, and name on the way.
 ## Blocked on (verify before starting)
 
 - Wave 2 merged (SpaceClient + SpaceSnapshot store exist).
-- Hasan's rulings recorded in `GLOSSARY.md` for: final React hook names,
-  and the RN ClientSession true name.
+
+The hook names and RN ClientSession fate are ruled and recorded in
+`GLOSSARY.md` ("React bindings" + "The five sessions, resolved"): the
+closed hook set is `useSpaceClient`, `useConnection`, `useSelf`,
+`useParticipants`, `useMedia`, `useChat`, `useReactions`,
+`useWhiteboard`, `useCan(capability)`; RN ClientSession dies with no
+successor. React and RN expose an identical public surface — never a
+shape difference.
 
 ## Scope
 

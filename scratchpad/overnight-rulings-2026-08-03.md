@@ -6,6 +6,9 @@ his ruling. When ruled, Claude writes the results into `GLOSSARY.md`,
 strips the corresponding blockers from the wave prompts, and commits —
 only then is the overnight run unblocked.
 
+**ALL SEVEN RULED 2026-08-03 night. GLOSSARY.md updated, prompt blockers
+stripped. The overnight run is unblocked.**
+
 ## D1 — Elixir "session" true names (blocks wave 1)
 
 Ground truth: `Sessions.Reducer` state is participants/roles/admission
@@ -27,7 +30,7 @@ RECOMMENDED (Scheme A, Episode-rooted):
   function-rooted): `Delivery.Coordinator`, `Delivery.CommandIntake`,
   `Control.Reducer`, `Live.Presence`.
 
-RULING: **\_\_**
+RULING: **Scheme A** — "Agreed with Elixir renaming; option A."
 
 ## D2 — React / React Native platform parity (waves 3–4)
 
@@ -39,7 +42,7 @@ permissions; CSS custom properties on web vs mapped style values on RN
 — same token names) and a small platform delta in `features` where a
 capability genuinely doesn't exist. Never a shape difference.
 
-RULING: **\_\_**
+RULING: **As recommended** — identical public surface.
 
 ## D3 — React hook names (blocks wave 3)
 
@@ -52,7 +55,7 @@ package is the namespace):
 - `useCan(capability)` — sugar over the self slice's `can()`
   No other public hooks; anything else a component needs comes from these.
 
-RULING: **\_\_**
+RULING: **As recommended** — the slice-hook set above, nothing else.
 
 ## D4 — RN ClientSession true name (blocks wave 3)
 
@@ -60,7 +63,7 @@ RECOMMENDED: it dies with no successor. Its duties (pre-join
 credentials) are exactly Connection's access loop + AccessGrant in the
 shared core; RN keeps no platform-specific credential holder.
 
-RULING: **\_\_**
+RULING: **As recommended** — ClientSession dies, no successor.
 
 ## D5 — Broker "MeetingSession" true name (blocks wave 5)
 
@@ -80,7 +83,8 @@ RECOMMENDED:
   Alternative flavors if Lease reads wrong: `SpaceGate` (admission-flavored)
   or `access-broker` (function-flavored package name).
 
-RULING: **\_\_**
+RULING: **As recommended** — `EpisodeLease` / `LeaseStore` /
+`episodeDeadlineSeconds` / `infrastructure/episode-broker`.
 
 ## D6 — Version and publish (blocks wave 2 merge)
 
@@ -89,7 +93,7 @@ version, one breaking change, matches the V4 restructure); npm publish
 is a separate manual step after wave 4 lands and Hasan's verification
 pass — nothing publishes overnight.
 
-RULING: **\_\_**
+RULING: **As recommended** — 4.0.0 in wave 2; publish manual, later.
 
 ## D7 — Turnkey copy overnight rule (wave 4)
 
@@ -97,7 +101,8 @@ RECOMMENDED: the wave-4 agent drafts copy in glossary vocabulary,
 neutral in tone, and lists every string it wrote in its report for
 Hasan's morning review — no invented product voice ships unreviewed.
 
-RULING: **\_\_**
+RULING: **As recommended** (applied as the default after clarification —
+it is a reporting rule on the wave-4 agent, not a design decision).
 
 ## Confirmed defaults (already described, restated for the record)
 

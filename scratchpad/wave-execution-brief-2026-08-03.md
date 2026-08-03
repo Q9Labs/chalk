@@ -33,15 +33,15 @@ Wave 7 (marketing/docs) is Claude's, running alongside: root README,
 belong to their code waves. Docs written from the ratified sheets are
 acceptance canon — waves make the documented code real.
 
-## Needs Hasan personally (each ruling lands in GLOSSARY.md first)
+## Rulings: all closed (2026-08-03 night)
 
-- Before wave 1's sync renames: true names for Elixir `Live.Session`
-  (media/presence) and `Sessions.Coordinator` (socket delivery) — never
-  ruled; only the Go "session" (→ Episode) was.
-- Before wave 2 merges: the `@q9labsai/*` version/publish decision —
-  every public surface breaks.
-- Before wave 3: final React hook names + the RN ClientSession true name.
-- Before wave 5: the broker "MeetingSession" true name (edge lease).
-- During wave 4: turnkey copy (product voice).
-- Waves 5/6 reports will list deploy-time cutovers (renamed secrets,
-  stacks, hosted dashboards/alerts) for Hasan to apply in step.
+Every decision the prompts defer to Hasan is ruled and recorded in
+`GLOSSARY.md`; the full sheet with reasoning is
+`scratchpad/overnight-rulings-2026-08-03.md`. No wave waits on a human
+overnight. The only follow-ups land in wave reports for the morning:
+
+- Wave 4 lists every user-visible string it wrote (copy review).
+- Waves 5/6 list deploy-time cutovers (renamed secrets, stacks, hosted
+  dashboards/alerts) for Hasan to apply in step.
+- npm publish of the 4.0.0 packages is manual, after wave 4 and Hasan's
+  verification pass — nothing publishes overnight.

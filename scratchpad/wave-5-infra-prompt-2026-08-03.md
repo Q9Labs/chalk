@@ -20,10 +20,13 @@ stop speaking the old language.
 ## Blocked on (verify before starting)
 
 - Wave 2 merged (the SDK the broker fronts speaks AccessGrant).
-- Hasan's ruling, recorded in `GLOSSARY.md`, for the broker
-  "MeetingSession" true name. It is an edge lease — a short-lived
-  brokered claim on media infrastructure — NOT an Episode; do not
-  collapse the two.
+
+The broker name is ruled and recorded in `GLOSSARY.md` (EpisodeLease
+entry): DO `MeetingSession` → `EpisodeLease`, `MeetingStore` →
+`LeaseStore`, `meetingLifetimeSeconds` → `episodeDeadlineSeconds`,
+package → `infrastructure/episode-broker`. A lease is a short-lived
+brokered claim on media infrastructure — NOT an Episode; do not
+collapse the two.
 
 ## Scope
 

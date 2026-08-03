@@ -19,9 +19,12 @@ adoption — one wave, so the system is never touched twice.
 
 ## Blocked on (verify before starting)
 
-- Hasan's ruling for the true names of Elixir `Live.Session` and
-  `Sessions.Coordinator`, recorded in `GLOSSARY.md`. Everything else in
-  this wave can proceed; those two module renames wait for the ruling.
+- Nothing. The Elixir true names are ruled and recorded in `GLOSSARY.md`
+  ("The five sessions, resolved"): `Live.Session` → `Live.Episode`,
+  `Sessions.Coordinator` → `Episodes.Coordinator`, `Sessions.Reducer` →
+  `Episodes.Reducer`, `Sessions.CommandAdmission` →
+  `Episodes.CommandIntake`, `Stateholder.SessionKey` →
+  `Stateholder.EpisodeKey`.
 
 ## Scope
 
