@@ -9,9 +9,9 @@ seams.
 
 Provenance: the rulings behind every entry, with reasoning and rejected
 candidates, live in
-`scratchpad/ubiquitous-language-decision-session-log-2026-08-03.md`. This
-glossary supersedes the vocabulary half of `sdks/ubiquitous-language.md`; that
-document's UI shape catalog remains input for the SDK rename wave. A CI
+`scratchpad/ubiquitous-language-decision-session-log-2026-08-03.md`. The
+superseded `sdks/ubiquitous-language.md` is deleted; its UI shape catalog
+remains in git history as input for the React-wave design sheet. A CI
 ratchet (per-surface banned-term counts that may only decrease) enforces this
 glossary. Until a count reaches zero the glossary states the target, not the
 present.
@@ -133,8 +133,34 @@ Space content is never derived by merging per-episode copies.
 
 The turnkey UI component: the complete embedded experience dropped into a
 customer's app. Replaces VideoConference. It is a full name, not a prefix;
-its interior tree is platform-named (SpaceView, Stage, panels) with no
-`Chalk*` symbols.
+its interior tree is platform-named (SpaceView, Stage, Entrance, panels)
+with no `Chalk*` symbols.
+
+### Entrance
+
+Where a visitor prepares before joining a Space: name, devices,
+self-preview — and where knock-admission waiting happens. One place for
+both pre-live states, so the lobby/pre-join split other products have
+does not exist. Replaces PreJoinScreen; a place-noun like Stage, no shape
+suffix. `entrance: false` on `<Chalk />` means walk straight in.
+
+### SpaceClient
+
+The public client SDK entry: flat lifecycle (`join`/`leave`/`subscribe`/
+`getSnapshot`, `endEpisode`/`extendEpisode`) plus namespaced controllers
+`media`, `chat`, `participants`, `reactions`, `whiteboard` (chat files
+under `chat.files`). Replaces ChalkSession. Internally a `Connection`
+coordinator owns the state machine, recovery, and access refresh; one
+`SpaceSnapshot` store feeds every UI layer. Framework-agnostic; React and
+React Native bind to the store, never to Effect internals.
+
+### AccessGrant
+
+The opaque signed envelope the customer's backend receives from the
+server SDK and forwards to the client verbatim: sync token, media token,
+participant identity, expirations. Replaces ParticipantAccess. Customers
+never construct or inspect it; the client's `getAccess` callback returns
+it and Connection manages its refresh.
 
 ## Laws
 
@@ -178,17 +204,20 @@ Every name is a domain root crossed with a layer shape:
 
 ## Banned terms
 
-| Term                      | Status                                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| meeting                   | Dead everywhere: code, infra, docs, and marketing copy                             |
-| room                      | Replaced by Space                                                                  |
-| session                   | Replaced by Episode; the five internal "session" abstractions each get a true name |
-| call, conference          | Banned as domain nouns; the platform speaks Space/Episode                          |
-| host, admin               | Banned as built-in roles; fine as customer-defined role names                      |
-| bot, assistant, AI        | Banned as domain nouns; the identity kind is Agent                                 |
-| attendee, peer, actor     | Banned roster nouns; the word is Participant                                       |
-| signal (for availability) | Banned; the word is Presence                                                       |
-| VideoConference           | Replaced by `<Chalk />`                                                            |
+| Term                        | Status                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------------- |
+| meeting                     | Dead everywhere: code, infra, docs, and marketing copy                             |
+| room                        | Replaced by Space                                                                  |
+| session                     | Replaced by Episode; the five internal "session" abstractions each get a true name |
+| call, conference            | Banned as domain nouns; the platform speaks Space/Episode                          |
+| host, admin                 | Banned as built-in roles; fine as customer-defined role names                      |
+| bot, assistant, AI          | Banned as domain nouns; the identity kind is Agent                                 |
+| attendee, peer, actor       | Banned roster nouns; the word is Participant                                       |
+| signal (for availability)   | Banned; the word is Presence                                                       |
+| VideoConference             | Replaced by `<Chalk />`                                                            |
+| pre-join, lobby, green room | Banned; the place is the Entrance                                                  |
+| ParticipantAccess           | Replaced by AccessGrant                                                            |
+| ChalkSession                | Replaced by SpaceClient                                                            |
 
 Product-layer names built on top of the platform (a future floor-control
 feature, a future activity aggregate) may carry their own names, but the
