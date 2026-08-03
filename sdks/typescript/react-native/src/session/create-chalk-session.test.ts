@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const chalkSession = vi.hoisted(() => vi.fn(function ChalkSession() {}));
+const cloudflareSFUClient = vi.hoisted(() => vi.fn());
 
 vi.mock("@q9labsai/chalk-client", () => ({
   AsyncStorageV3PendingTargetStore: vi.fn(),
   ChalkSession: chalkSession,
-  CloudflareSFUClient: vi.fn(),
+  CloudflareSFUClient: cloudflareSFUClient,
   createChalkChatFileHttpTransport: vi.fn(),
   createChalkWhiteboardV1Client: vi.fn(),
   createChalkWhiteboardV1FileHttpTransport: vi.fn(),
@@ -85,6 +86,38 @@ describe("createChalkSession", () => {
         failure_code: "media_start_failed",
       },
     });
+  });
+
+  it("forwards dormant-connection replacement into the native SFU client", () => {
+    createChalkSession(options());
+    const sessionOptions = chalkSession.mock.calls[0]?.[0] as {
+      readonly dependencies: {
+        readonly createMediaClient: (input: {
+          readonly access: {
+            readonly media: { readonly clientPayload: { readonly connectionId: string; readonly stunServer: string } };
+            readonly subject: { readonly participantSessionId: string; readonly tenantId: string; readonly roomId: string; readonly sessionId: string };
+          };
+          readonly credential: () => Promise<string>;
+          readonly replaceDormantConnection: () => Promise<{ readonly connectionId: string; readonly stunServer: string }>;
+          readonly onFailure: (error: unknown) => void;
+          readonly onScreenEnded: () => void;
+        }) => unknown;
+      };
+    };
+    const replaceDormantConnection = vi.fn(async () => ({ connectionId: "replacement", stunServer: "stun:replacement" }));
+
+    sessionOptions.dependencies.createMediaClient({
+      access: {
+        media: { clientPayload: { connectionId: "initial", stunServer: "stun:initial" } },
+        subject: { participantSessionId: "participant", tenantId: "tenant", roomId: "room", sessionId: "session" },
+      },
+      credential: async () => "token",
+      replaceDormantConnection,
+      onFailure: () => undefined,
+      onScreenEnded: () => undefined,
+    });
+
+    expect(cloudflareSFUClient).toHaveBeenCalledWith(expect.objectContaining({ replaceDormantConnection }));
   });
 });
 

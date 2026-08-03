@@ -70,10 +70,75 @@ describe("Cloudflare SFU HTTP signaling", () => {
 
 describe("Cloudflare SFU client", () => {
   it("starts without local tracks so receive-only sessions do not need getUserMedia", async () => {
-    const harness = createHarness();
+    const replaceDormantConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceDormantConnection });
     await harness.client.start(fakeStream());
     expect(harness.transport.addInputs).toEqual([]);
+    expect(replaceDormantConnection).not.toHaveBeenCalled();
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, localTracks: [] });
+    harness.client.stop();
+  });
+
+  it("replaces a dormant zero-media connection before the first later screen publication", async () => {
+    const replaceDormantConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceDormantConnection });
+    await harness.client.start(fakeStream());
+    const dormantPeer = harness.peers[0];
+
+    harness.client.prepareLocalTrack("screen", new FakeTrack("screen-track", "video") as unknown as MediaStreamTrack);
+    await expect(setScreenTarget(harness.client, "screen-start", true)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+    expect(replaceDormantConnection).toHaveBeenCalledOnce();
+    expect(harness.peers).toHaveLength(2);
+    expect(dormantPeer?.closed).toBe(true);
+    expect(harness.transport.addInputs).toHaveLength(1);
+    expect(harness.transport.addInputs[0]).toMatchObject({
+      connectionId: "connection-2",
+      tracks: [{ location: "local", source: "screen", mid: "0", trackName: "screen-screen-start" }],
+    });
+    expect(harness.client.getSnapshot()).toMatchObject({
+      connection: { phase: "live", peerConnectionState: "connected", iceConnectionState: "connected" },
+      localTracks: [{ source: "screen", enabled: true }],
+    });
+    harness.client.stop();
+  });
+
+  it("keeps an already-negotiated connection for a later screen publication", async () => {
+    const replaceDormantConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceDormantConnection });
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+
+    harness.client.prepareLocalTrack("screen", new FakeTrack("screen-track", "video") as unknown as MediaStreamTrack);
+    await expect(setScreenTarget(harness.client, "screen-start", true)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+    expect(replaceDormantConnection).not.toHaveBeenCalled();
+    expect(harness.peers).toHaveLength(1);
+    expect(harness.transport.addInputs.at(-1)?.connectionId).toBe("connection-1");
+    harness.client.stop();
+  });
+
+  it("replaces the dormant connection again when its first publication attempt fails", async () => {
+    const replacements = [bootstrap("connection-2"), bootstrap("connection-3")];
+    const replaceDormantConnection = vi.fn(async () => replacements.shift() ?? bootstrap("unexpected"));
+    const harness = createHarness({ replaceDormantConnection });
+    await harness.client.start(fakeStream());
+    harness.client.prepareLocalTrack("screen", new FakeTrack("screen-track", "video") as unknown as MediaStreamTrack);
+    harness.transport.failNextLocalPublish = true;
+
+    await expect(setScreenTarget(harness.client, "screen-start", true)).resolves.toEqual({
+      outcome: "retryable_failure",
+      errorCode: "signaling_failed",
+    });
+    const firstAttempt = harness.transport.addInputs.at(-1);
+    expect(firstAttempt?.connectionId).toBe("connection-2");
+    expect(harness.client.getSnapshot().connection.phase).toBe("live");
+
+    await expect(setScreenTarget(harness.client, "screen-start", true)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    const secondAttempt = harness.transport.addInputs.at(-1);
+    expect(replaceDormantConnection).toHaveBeenCalledTimes(2);
+    expect(secondAttempt?.connectionId).toBe("connection-3");
+    expect(secondAttempt?.tracks[0]?.trackName).toBe(firstAttempt?.tracks[0]?.trackName);
+    expect(secondAttempt?.tracks[0]?.mid).toBe("0");
     harness.client.stop();
   });
 
@@ -230,7 +295,7 @@ describe("Cloudflare SFU client", () => {
 
   it("pulls a real versioned Chalk publication through its embedded provider reference", async () => {
     const harness = createHarness();
-    await harness.client.start(fakeStream());
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
     const publicationId = versionedPublicationID("remote-connection", "remote-mid", "remote-camera-track");
     harness.transport.snapshot = publicationSnapshot(1, 1, publicationId);
 
@@ -238,6 +303,38 @@ describe("Cloudflare SFU client", () => {
 
     expect(harness.transport.addInputs.at(-1)?.tracks).toEqual([{ location: "remote", sessionId: "remote-connection", trackName: "remote-camera-track" }]);
     expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId);
+    harness.client.stop();
+  });
+
+  it("defers the first remote pull until a local publication establishes the connection", async () => {
+    const replacement = deferred<CloudflareSFUBootstrap>();
+    const replaceDormantConnection = vi.fn(() => replacement.promise);
+    const harness = createHarness({ replaceDormantConnection });
+    await harness.client.start(fakeStream());
+    const dormantPeer = harness.peers[0];
+    harness.transport.snapshot = publicationSnapshot(1, 1, versionedPublicationID("remote-connection", "remote-mid", "remote-camera-track"));
+
+    const remotePull = harness.client.refreshRemotePublications();
+    await expect(remotePull).resolves.toBeUndefined();
+    expect(replaceDormantConnection).not.toHaveBeenCalled();
+    harness.client.prepareLocalTrack("screen", new FakeTrack("screen-track", "video") as unknown as MediaStreamTrack);
+    const screenPublish = setScreenTarget(harness.client, "screen-start", true);
+    await vi.waitFor(() => expect(replaceDormantConnection).toHaveBeenCalledOnce());
+    replacement.resolve(bootstrap("connection-2"));
+
+    await expect(screenPublish).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    expect(replaceDormantConnection).toHaveBeenCalledOnce();
+    expect(dormantPeer?.closed).toBe(true);
+    expect(harness.transport.addInputs[0]?.connectionId).toBe("connection-2");
+    expect(harness.transport.addInputs[0]?.tracks[0]?.location).toBe("local");
+    expect(harness.client.getSnapshot()).toMatchObject({
+      connection: { phase: "live" },
+      localTracks: [{ source: "screen", enabled: true }],
+    });
+
+    await harness.client.refreshRemotePublications();
+    expect(harness.transport.addInputs.at(-1)?.tracks).toEqual([{ location: "remote", sessionId: "remote-connection", trackName: "remote-camera-track" }]);
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(versionedPublicationID("remote-connection", "remote-mid", "remote-camera-track"));
     harness.client.stop();
   });
 
@@ -255,7 +352,7 @@ describe("Cloudflare SFU client", () => {
 
   it("reports a failed immediate renegotiation without failing the current media connection", async () => {
     const harness = createHarness();
-    await harness.client.start(fakeStream());
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
     harness.transport.snapshot = publicationSnapshot(1, 1, "remote-session|camera-a");
     harness.transport.immediateRenegotiation = true;
     harness.transport.failRenegotiation = true;
@@ -452,13 +549,27 @@ function setScreenTarget(client: CloudflareSFUClient, operationId: string, enabl
   return client.setLocalPublicationTarget({ operationId, participantSessionId: "participant-1", source: "screen", enabled });
 }
 
-function createHarness(options: { readonly autoConnect?: boolean; readonly onError?: (error: unknown) => void; readonly onScreenEnded?: () => void } = {}) {
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((complete) => (resolve = complete));
+  return { promise, resolve };
+}
+
+function createHarness(
+  options: {
+    readonly autoConnect?: boolean;
+    readonly onError?: (error: unknown) => void;
+    readonly onScreenEnded?: () => void;
+    readonly replaceDormantConnection?: () => Promise<CloudflareSFUBootstrap>;
+  } = {},
+) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
   const client = new CloudflareSFUClient({
     bootstrap: bootstrap("connection-1"),
     participantSessionId: "participant-1",
     transport,
+    replaceDormantConnection: options.replaceDormantConnection,
     pollIntervalMs: 60_000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
@@ -613,7 +724,7 @@ class FakePeerConnection extends EventTarget {
     } as RTCRtpSender;
     let transceiver: RTCRtpTransceiver;
     transceiver = {
-      mid: String(this.#transceivers.length),
+      mid: null,
       sender,
       stop: () => {
         if (this.throwOnCleanup) throw new Error("transceiver stop failed");
@@ -642,6 +753,11 @@ class FakePeerConnection extends EventTarget {
       this.rollbackCalls++;
       this.signalingState = "stable";
     } else if (description?.type === "offer") {
+      for (const [index, transceiver] of this.#transceivers.entries()) {
+        if (transceiver.mid === null && this.#activeTransceivers.has(transceiver)) {
+          Object.defineProperty(transceiver, "mid", { configurable: true, value: String(index) });
+        }
+      }
       this.signalingState = "have-local-offer";
     } else if (description?.type === "answer") {
       this.signalingState = "stable";

@@ -82,6 +82,7 @@ export type CloudflareSFUClientOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;
   readonly participantSessionId: string;
   readonly transport: CloudflareSFUSignalingTransport;
+  readonly replaceDormantConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
   readonly onError?: (error: unknown) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;

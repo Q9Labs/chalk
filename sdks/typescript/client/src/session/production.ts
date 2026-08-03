@@ -32,6 +32,7 @@ function createMediaClient(apiBaseURL: string, input: ChalkSessionMediaFactoryIn
   return new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
     participantSessionId: subject.participantSessionId,
+    replaceDormantConnection: input.replaceDormantConnection,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
