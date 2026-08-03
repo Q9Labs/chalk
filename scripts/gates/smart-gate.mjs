@@ -124,6 +124,7 @@ export function createGatePlan(files, options = {}) {
 
   const tasks = [
     task("self-test", "Gate routing tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
+    task("language-ratchet", "Language vocabulary ratchet", true, "always required", ["pnpm", "run", "language:ratchet"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
     task("architecture", "Architecture Worker", architecture, architecture ? "architecture inputs changed" : "no architecture inputs changed", ["pnpm", "run", "architecture:test"]),

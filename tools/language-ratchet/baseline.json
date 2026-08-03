@@ -1,0 +1,145 @@
+{
+  "apps/api": {
+    "meeting": 142,
+    "conference": 0,
+    "videoconference": 0,
+    "room": 3090,
+    "session": 5574,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "apps/sync": {
+    "meeting": 6,
+    "conference": 0,
+    "videoconference": 0,
+    "room": 1496,
+    "session": 4731,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "apps/web": {
+    "meeting": 58,
+    "conference": 14,
+    "videoconference": 5,
+    "room": 120,
+    "session": 200,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "apps/mobile": {
+    "meeting": 155,
+    "conference": 15,
+    "videoconference": 7,
+    "room": 56,
+    "session": 126,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "apps/docs": {
+    "meeting": 0,
+    "conference": 0,
+    "videoconference": 0,
+    "room": 0,
+    "session": 0,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "sdks/typescript/client": {
+    "meeting": 42,
+    "conference": 16,
+    "videoconference": 0,
+    "room": 462,
+    "session": 1191,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "sdks/typescript/react": {
+    "meeting": 103,
+    "conference": 244,
+    "videoconference": 40,
+    "room": 98,
+    "session": 480,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "sdks/typescript/react-native": {
+    "meeting": 260,
+    "conference": 455,
+    "videoconference": 86,
+    "room": 429,
+    "session": 716,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "packages": {
+    "meeting": 2,
+    "conference": 0,
+    "videoconference": 0,
+    "room": 0,
+    "session": 4,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "infrastructure": {
+    "meeting": 183,
+    "conference": 0,
+    "videoconference": 0,
+    "room": 82,
+    "session": 463,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "tools": {
+    "meeting": 7,
+    "conference": 7,
+    "videoconference": 7,
+    "room": 262,
+    "session": 258,
+    "attendee": 1,
+    "waitingroom": 3,
+    "waiting_room": 3,
+    "waiting-room": 3
+  },
+  "docs": {
+    "meeting": 43,
+    "conference": 8,
+    "videoconference": 4,
+    "room": 43,
+    "session": 69,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 0
+  },
+  "root": {
+    "meeting": 159,
+    "conference": 7,
+    "videoconference": 0,
+    "room": 167,
+    "session": 259,
+    "attendee": 0,
+    "waitingroom": 0,
+    "waiting_room": 0,
+    "waiting-room": 1
+  }
+}

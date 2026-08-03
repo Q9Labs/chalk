@@ -16,6 +16,10 @@ of every gate.
 ## Selection Rules
 
 - Repository hygiene and diff-scoped secret scanning always run.
+- The language vocabulary ratchet always runs. It compares case-insensitive,
+  identifier-aware banned-term counts per surface with the committed baseline;
+  decreases require `pnpm run language:ratchet:update` so each migration wave
+  becomes the next locked baseline.
 - Formatting, Fallow, Semgrep, test-presence, workspace type checks, coverage
   tests, and builds follow affected source files and workspace dependents.
 - Tests run once with coverage; lint aliases do not repeat formatting or type
