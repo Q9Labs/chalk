@@ -154,8 +154,6 @@ export type {
   ConferenceViewScreenShare,
   ConferenceViewSettingsDialogProps,
   ConferenceViewWhiteboard,
-  ThemePalette,
-  ThemeTexture,
   EndScreenProps,
   GuidedTourProps,
   JoiningScreenProps,
@@ -166,3 +164,5 @@ export type {
 } from "./full";
 export { VideoConference } from "./video-conference/VideoConference";
 export type { VideoConferenceProps, VideoConferenceRole } from "./video-conference/VideoConference";
+export { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_TEXTURES } from "./theme";
+export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./theme";

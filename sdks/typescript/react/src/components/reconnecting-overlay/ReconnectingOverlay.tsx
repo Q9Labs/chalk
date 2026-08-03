@@ -23,10 +23,16 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
   };
 
   return (
-    <div className={cn("absolute inset-0 z-50 flex items-center justify-center bg-[#fbfaf7]/90 p-4 backdrop-blur-[2px] transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
-      <div className="flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[#deddd7] bg-[#fbfaf7] p-8 text-[#0c0e12] shadow-[0_24px_70px_rgba(12,14,18,0.16)]">
+    <div
+      className={cn("absolute inset-0 z-50 flex items-center justify-center bg-[var(--chalk-app-canvas)]/90 p-4 backdrop-blur-[2px] transition-opacity duration-300", className)}
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="connection-status-title"
+      aria-describedby="connection-status-desc"
+    >
+      <div className="chalk-textured-surface flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-8 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
         {status === "failed" ? (
-          <div className="mb-6 rounded-full bg-[#f8e4e4] p-4 text-[#9f3f3f]">
+          <div className="mb-6 rounded-full bg-[var(--chalk-app-danger)]/10 p-4 text-[var(--chalk-app-danger)]">
             <WifiOffIcon size={48} strokeWidth={1.5} />
           </div>
         ) : (
@@ -35,25 +41,29 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
           </div>
         )}
 
-        <h2 id="connection-status-title" className="mb-2 text-center text-xl font-semibold text-[#0c0e12]">
+        <h2 id="connection-status-title" className="mb-2 text-center text-xl font-semibold text-[var(--chalk-app-text)]">
           {status === "failed" ? "Connection Failed" : "Connecting"}
         </h2>
 
-        <p id="connection-status-desc" className="mb-8 text-center text-[#6d727b]">
+        <p id="connection-status-desc" className="mb-8 text-center text-[var(--chalk-app-text-muted)]">
           {message || defaultMessages[status]}
         </p>
 
         {supportCode && (
-          <div className="mb-6 w-full rounded-[8px] border border-[#deddd7] bg-white p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6d727b]">Support Code</p>
-            <p className="mt-1 break-all font-mono text-xs text-[#0c0e12]">{supportCode}</p>
+          <div className="mb-6 w-full rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--chalk-app-text-muted)]">Support Code</p>
+            <p className="mt-1 break-all font-mono text-xs text-[var(--chalk-app-text)]">{supportCode}</p>
           </div>
         )}
 
         {status === "failed" && (
           <div className="flex w-full flex-col gap-3">
             {onRetry && (
-              <button type="button" onClick={onRetry} className="w-full rounded-[8px] bg-[#202329] px-4 py-2.5 font-medium text-white transition-colors hover:bg-[#343840] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#74b7cf] focus-visible:ring-offset-2">
+              <button
+                type="button"
+                onClick={onRetry}
+                className="w-full rounded-[8px] bg-[var(--chalk-app-control-primary)] px-4 py-2.5 font-medium text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2"
+              >
                 Try Again
               </button>
             )}
@@ -61,7 +71,7 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVis
               <button
                 type="button"
                 onClick={onLeave}
-                className="w-full rounded-[8px] border border-[#deddd7] bg-white px-4 py-2.5 font-medium text-[#202329] transition-colors hover:bg-[#f7f6f2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#74b7cf] focus-visible:ring-offset-2"
+                className="w-full rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] px-4 py-2.5 font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] focus-visible:ring-offset-2"
               >
                 Leave Meeting
               </button>

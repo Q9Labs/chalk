@@ -3,6 +3,7 @@ import { Toaster, toast } from "sonner";
 import { cn } from "../../utils/cn";
 import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon } from "../../utils/icons";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 
 export interface Toast {
   id: string;
@@ -22,6 +23,8 @@ export interface ToastStackProps {
   maxVisible?: number;
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
+  palette?: ThemePalette;
+  texture?: ThemeTexture;
   className?: string;
 }
 
@@ -32,7 +35,7 @@ const positionMap = {
   "bottom-left": "bottom-left" as const,
 };
 
-export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, participantGradientPreference, className }) => {
+export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, position = "top-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }) => {
   const activeIds = useRef(new Set<string>());
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
@@ -41,6 +44,7 @@ export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, posi
     return "light";
   });
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
+  const resolvedTheme = palette ? getThemeMode(palette) : theme;
 
   useEffect(() => {
     const handleThemeChange = () => {
@@ -100,7 +104,11 @@ export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, posi
 
   return (
     <Toaster
-      theme={theme}
+      theme={resolvedTheme}
+      data-chalk
+      data-chalk-theme={resolvedTheme}
+      data-chalk-palette={palette}
+      data-chalk-texture={texture}
       position={positionMap[position]}
       visibleToasts={maxVisible}
       closeButton
@@ -129,14 +137,14 @@ export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, posi
       toastOptions={{
         unstyled: true,
         classNames: {
-          toast: cn("group flex min-w-[300px] max-w-[360px] items-center gap-3 rounded-[12px] border border-[#c9c8c2] bg-[#fbfaf7] p-2.5 pr-3 text-[#0c0e12] shadow-[0_18px_48px_rgba(12,14,18,0.14)]", "chalk-animate-toast-in"),
+          toast: cn("chalk-textured-surface group flex min-w-[300px] max-w-[360px] items-center gap-3 rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-2.5 pr-3 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]", "chalk-animate-toast-in"),
           title: "text-sm font-medium leading-5",
-          description: "text-[11px] text-muted-foreground leading-tight",
-          actionButton: "ml-auto rounded-[7px] bg-[#202329] px-2.5 py-1.5 text-[11px] font-semibold !text-white transition hover:bg-[#343840]",
-          closeButton: "!static !transform-none !bg-transparent !border-none !p-1 !m-0 !text-muted-foreground hover:!text-foreground transition-colors",
+          description: "text-[11px] leading-tight text-[var(--chalk-app-text-muted)]",
+          actionButton: "ml-auto rounded-[7px] bg-[var(--chalk-app-control-primary)] px-2.5 py-1.5 text-[11px] font-semibold !text-white transition hover:bg-[var(--chalk-app-control-primary-hover)]",
+          closeButton: "!static !m-0 !transform-none !border-none !bg-transparent !p-1 !text-[var(--chalk-app-text-muted)] transition-colors hover:!text-[var(--chalk-app-text)]",
         },
       }}
-      className={cn(className)}
+      className={cn("chalk-root", className)}
       style={themeVariables as React.CSSProperties}
     />
   );

@@ -22,13 +22,13 @@ import { ScreenShareView, type ScreenShareViewProps } from "../composite/ScreenS
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { TranscriptPanel, type TranscriptPanelProps } from "../transcript-panel/TranscriptPanel";
 import { WhiteboardView, type WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import { cn } from "../../utils/cn";
+
+export type { ThemePalette, ThemeTexture } from "../theme";
 
 export type ConferenceLayout = NonNullable<ParticipantGridProps["layout"]>;
 export type ConferencePanel = "chat" | "participants" | "transcript" | "admission" | "settings";
-export type ThemePalette = "light" | "warm-charcoal" | "cool-graphite" | "high-contrast-ink" | "espresso-night" | "chalkboard-atelier" | "prism-nocturne" | "oled-signal";
-export type ThemeTexture = "none" | "paper" | "slate";
-
 export type ConferenceViewPanelProps = {
   readonly active: ConferencePanel | null;
   readonly onChange: (panel: ConferencePanel | null) => void;
@@ -73,6 +73,7 @@ export interface ConferenceViewProps {
   readonly roomName: string;
   readonly displayName: string;
   readonly logoUrl?: string;
+  readonly logoUrlOnDark?: string;
   readonly meetingLink?: string;
   readonly duration?: number;
   readonly layout?: ConferenceLayout;
@@ -106,6 +107,7 @@ export function ConferenceView({
   roomName,
   displayName,
   logoUrl,
+  logoUrlOnDark,
   meetingLink,
   duration = 0,
   layout = "focus",
@@ -132,6 +134,7 @@ export function ConferenceView({
 }: ConferenceViewProps): React.JSX.Element {
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [isLeaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const themeMode = getThemeMode(palette);
 
   const panelContent = panels ? renderPanel(panels) : null;
   const desktopButtons = controls.buttons;
@@ -155,18 +158,12 @@ export function ConferenceView({
   };
 
   return (
-    <main
-      data-chalk
-      data-chalk-theme={palette === "light" ? "light" : "dark"}
-      data-chalk-palette={palette}
-      data-chalk-texture={texture}
-      className={cn("chalk-root chalk-textured-surface relative h-dvh min-h-[620px] overflow-hidden bg-[var(--chalk-app-canvas)] text-[var(--chalk-app-text)]", className)}
-    >
+    <main data-chalk data-chalk-theme={themeMode} data-chalk-palette={palette} data-chalk-texture={texture} className={cn("chalk-root chalk-textured-surface relative h-dvh min-h-[620px] overflow-hidden bg-[var(--chalk-app-canvas)] text-[var(--chalk-app-text)]", className)}>
       <section className="chalk-textured-surface relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)]">
         <AudioOutput participants={[...audioParticipants]} />
         <ConferenceHeader
           roomName={roomName}
-          logoUrl={logoUrl}
+          logoUrl={themeMode === "dark" ? (logoUrlOnDark ?? logoUrl) : logoUrl}
           duration={duration}
           layout={layout}
           onLayoutChange={onLayoutChange}
@@ -225,8 +222,8 @@ export function ConferenceView({
         {infoDialog ? <ConferenceInfoDialog {...infoDialog} isOpen={infoDialog.isOpen} onClose={() => infoDialog.onOpenChange(false)} /> : null}
         {settingsDialog ? <SettingsDialog {...settingsDialog} isOpen={settingsDialog.isOpen} onClose={() => settingsDialog.onOpenChange(false)} /> : null}
         {inviteDialog ? <InviteDialog {...inviteDialog} meetingLink={inviteDialog.meetingLink || meetingLink || ""} isOpen={inviteDialog.isOpen} onClose={() => inviteDialog.onOpenChange(false)} /> : null}
-        {onLeave ? <LeaveDialog isOpen={isLeaveDialogOpen} onClose={() => setLeaveDialogOpen(false)} onConfirm={confirmLeave} /> : null}
-        {onDismissToast ? <ToastStack toasts={[...toasts]} onDismiss={onDismissToast} /> : null}
+        {onLeave ? <LeaveDialog isOpen={isLeaveDialogOpen} onClose={() => setLeaveDialogOpen(false)} onConfirm={confirmLeave} palette={palette} texture={texture} /> : null}
+        {onDismissToast ? <ToastStack toasts={[...toasts]} onDismiss={onDismissToast} palette={palette} texture={texture} /> : null}
       </section>
     </main>
   );

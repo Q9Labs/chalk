@@ -1,0 +1,16 @@
+import { describe, expect, it } from "vitest";
+
+import { getThemeMode, THEME_PALETTES, THEME_TEXTURES } from "./theme";
+
+describe("appearance metadata", () => {
+  it("defines unique palette values and classifies every color family", () => {
+    const values = THEME_PALETTES.map((palette) => palette.value);
+
+    expect(new Set(values).size).toBe(values.length);
+    expect(getThemeMode("warm-porcelain")).toBe("light");
+    expect(getThemeMode("oled-signal")).toBe("dark");
+    expect(THEME_PALETTES.filter((palette) => palette.mode === "light")).toHaveLength(8);
+    expect(THEME_PALETTES.filter((palette) => palette.mode === "dark")).toHaveLength(7);
+    expect(THEME_TEXTURES.map((texture) => texture.value)).toEqual(["none", "paper", "slate"]);
+  });
+});

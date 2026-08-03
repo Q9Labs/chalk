@@ -82,7 +82,7 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
   const isMic = type === "mic";
   const chevronSizeClass = size === "sm" ? "h-9 px-1.5" : size === "lg" ? "h-14 px-2.5" : "h-11 px-1.5";
 
-  const icon = isMic ? isActive ? <Microphone01Icon /> : <MicrophoneOff01Icon className="text-[#dc2626]" /> : isActive ? <Video01Icon /> : <VideoOffIcon className="text-[#dc2626]" />;
+  const icon = isMic ? isActive ? <Microphone01Icon /> : <MicrophoneOff01Icon className="text-[var(--chalk-app-danger)]" /> : isActive ? <Video01Icon /> : <VideoOffIcon className="text-[var(--chalk-app-danger)]" />;
 
   const label = isMic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   const dropdownLabel = isMic ? "Microphone" : "Camera";
@@ -102,7 +102,7 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
         className={cn(
           floating
             ? "chalk-textured-surface h-[52px] w-[52px] !rounded-full !bg-[var(--chalk-app-control-primary)] !text-white shadow-[var(--chalk-app-shadow-control)] hover:-translate-y-0.5 hover:!bg-[var(--chalk-app-control-primary-hover)]"
-            : "rounded-r-none border-r border-black/5 bg-black/5 dark:border-white/5 dark:bg-white/10",
+            : "rounded-r-none border-r border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)]",
           isOpen && "brightness-110",
         )}
       />
@@ -119,8 +119,8 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
             "chalk-button-tactile flex items-center justify-center transition-all duration-300 ease-out",
             floating
               ? "chalk-textured-surface absolute -right-1.5 -bottom-1.5 h-7 w-7 rounded-full border-2 border-[var(--chalk-app-chrome)] bg-[var(--chalk-app-control-primary-hover)] p-0 !text-white shadow-sm hover:bg-[var(--chalk-app-line-strong)]"
-              : "rounded-r-full border-l border-black/5 bg-black/5 shadow-lg hover:brightness-110 dark:border-white/5 dark:bg-white/10",
-            !floating && "text-foreground",
+              : "rounded-r-full border-l border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] shadow-[var(--chalk-app-shadow-control)] hover:bg-[var(--chalk-app-control-hover)]",
+            !floating && "text-[var(--chalk-app-text)]",
             !floating && chevronSizeClass,
             isOpen && "brightness-110",
             disabled && "cursor-not-allowed opacity-50",
@@ -143,12 +143,12 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
         >
           <div className="flex items-center justify-between px-2 pb-2 pt-1.5">
             <span className="text-sm font-semibold">{dropdownLabel}</span>
-            <span className="text-[11px] text-[#858a92]">Choose a device</span>
+            <span className="text-[11px] text-[var(--chalk-app-text-muted)]">Choose a device</span>
           </div>
 
-          <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[10px] border border-[#e5e4df] bg-white p-1">
+          <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1">
             {devices.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-[#858a92]">No devices found</div>
+              <div className="px-4 py-3 text-sm text-[var(--chalk-app-text-muted)]">No devices found</div>
             ) : (
               devices.map((device) => {
                 const isSelected = selectedDeviceId === device.deviceId;
@@ -157,10 +157,13 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
                     key={device.deviceId}
                     type="button"
                     onClick={() => handleSelectDevice(device.deviceId)}
-                    className={cn("flex w-full items-center justify-between rounded-[7px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-[7px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-[var(--chalk-app-control-hover)]",
+                      isSelected ? "bg-[var(--chalk-app-control-active)] font-semibold text-[var(--chalk-app-control-active-text)]" : "text-[var(--chalk-app-text)]",
+                    )}
                   >
                     <div className="flex min-w-0 items-center gap-3 pr-2">
-                      <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full", isSelected ? "bg-[#55aac9] text-white" : "bg-[#f0efeb] text-transparent")}>
+                      <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full", isSelected ? "bg-[var(--chalk-app-control-active-line)] text-[var(--chalk-app-control-active-text)]" : "bg-[var(--chalk-app-control-group)] text-transparent")}>
                         <Tick01Icon size={12} />
                       </span>
                       <span className="truncate">{device.label || `${dropdownLabel} ${device.deviceId.slice(0, 4)}`}</span>
@@ -175,9 +178,9 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
             <>
               <div className="flex items-center justify-between px-2 pb-2 pt-4">
                 <span className="text-sm font-semibold">Speakers</span>
-                <span className="text-[11px] text-[#858a92]">Audio output</span>
+                <span className="text-[11px] text-[var(--chalk-app-text-muted)]">Audio output</span>
               </div>
-              <div className="max-h-[180px] space-y-1 overflow-y-auto rounded-[10px] border border-[#e5e4df] bg-white p-1">
+              <div className="max-h-[180px] space-y-1 overflow-y-auto rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1">
                 {secondaryDevices.map((device) => {
                   const isSelected = selectedSecondaryDeviceId === device.deviceId;
                   return (
@@ -185,10 +188,15 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
                       key={device.deviceId}
                       type="button"
                       onClick={() => handleSelectSecondaryDevice(device.deviceId)}
-                      className={cn("flex w-full items-center justify-between rounded-[7px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#f7f6f2]", isSelected ? "bg-[#edf7fa] font-semibold text-[#315f72]" : "text-[#555b65]")}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-[7px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-[var(--chalk-app-control-hover)]",
+                        isSelected ? "bg-[var(--chalk-app-control-active)] font-semibold text-[var(--chalk-app-control-active-text)]" : "text-[var(--chalk-app-text)]",
+                      )}
                     >
                       <div className="flex items-center gap-3 truncate pr-2">
-                        <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full", isSelected ? "bg-[#55aac9] text-white" : "bg-[#f0efeb] text-[#858a92]")}>{isSelected ? <Tick01Icon size={12} /> : <VolumeHighIcon size={12} />}</span>
+                        <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full", isSelected ? "bg-[var(--chalk-app-control-active-line)] text-[var(--chalk-app-control-active-text)]" : "bg-[var(--chalk-app-control-group)] text-[var(--chalk-app-text-muted)]")}>
+                          {isSelected ? <Tick01Icon size={12} /> : <VolumeHighIcon size={12} />}
+                        </span>
                         <span className="truncate">{device.label || `Speaker ${device.deviceId.slice(0, 4)}`}</span>
                       </div>
                     </button>

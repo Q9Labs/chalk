@@ -2,7 +2,7 @@ import type { ChalkChatMessage, ChalkRoomReaction } from "@q9labsai/chalk-client
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { ConferenceView, PreJoinScreen, type ConferenceLayout, type ConferencePanel, type Participant, type ParticipantListParticipant, type SettingsDialogValue, type ThemePalette, type ThemeTexture, type Toast } from "@q9labsai/chalk-react/components";
+import { ConferenceView, getThemeMode, PreJoinScreen, type ConferenceLayout, type ConferencePanel, type Participant, type ParticipantListParticipant, type SettingsDialogValue, type ThemePalette, type ThemeTexture, type Toast } from "@q9labsai/chalk-react/components";
 import { PreviewTweaker } from "../components/sdk-preview/PreviewTweaker";
 import { ScreenShareMock } from "../components/sdk-preview/ScreenShareMock";
 import "../styles/chalk-excalidraw.css";
@@ -98,7 +98,7 @@ const INITIAL_SETTINGS: SettingsDialogValue = {
   join: { videoEnabled: true, audioEnabled: true },
   audio: { selectedInput: "default-mic", selectedOutput: "default-speaker", outputVolume: 68, noiseSuppression: true, echoCancellation: true, autoGainControl: true },
   video: { selectedInput: "default-camera", quality: "auto" },
-  appearance: { layout: "focus", theme: "light", gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
+  appearance: { layout: "focus", theme: "dark", palette: "warm-charcoal", texture: "paper", gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
   experience: { captions: false, compactMode: false, showInviteToast: false, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
 };
 
@@ -118,8 +118,8 @@ function SdkPreviewPage() {
   const [notifications, setNotifications] = useState<Toast[]>([]);
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
   const [settings, setSettings] = useState(INITIAL_SETTINGS);
-  const [palette, setPalette] = useState<ThemePalette>("warm-charcoal");
-  const [texture, setTexture] = useState<ThemeTexture>("paper");
+  const palette: ThemePalette = settings.appearance.palette ?? "warm-charcoal";
+  const texture: ThemeTexture = settings.appearance.texture ?? "paper";
   const previewUrl = typeof window === "undefined" ? "http://localhost:3070/sdk-preview" : `${window.location.origin}/sdk-preview`;
 
   const participants = useMemo<PreviewParticipant[]>(
@@ -201,7 +201,8 @@ function SdkPreviewPage() {
       <ConferenceView
         roomName="Design review"
         displayName={displayName}
-        logoUrl={palette === "light" ? "/brand/chalk/chalk-logo.svg" : "/brand/chalk/chalk-logo-on-dark.svg"}
+        logoUrl="/brand/chalk/chalk-logo.svg"
+        logoUrlOnDark="/brand/chalk/chalk-logo-on-dark.svg"
         palette={palette}
         texture={texture}
         meetingLink={previewUrl}
@@ -213,7 +214,7 @@ function SdkPreviewPage() {
         }}
         participants={participants}
         screenShare={layout === "presentation" ? { screenShareTrack: previewTrack, sharedByName: "Nora Williams", content: <ScreenShareMock /> } : undefined}
-        whiteboard={isWhiteboardOpen ? { isOpen: true, props: { canDraw: true, theme: "light", localParticipantColor: "#55aac9", excalidrawCssPath: "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css", className: "h-full min-h-0" } } : undefined}
+        whiteboard={isWhiteboardOpen ? { isOpen: true, props: { canDraw: true, theme: getThemeMode(palette), localParticipantColor: "#55aac9", excalidrawCssPath: "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css", className: "h-full min-h-0" } } : undefined}
         controls={{
           buttons: ["mic", "video", "screenshare", "whiteboard", "participants", "chat", "reactions", "more", "leave"],
           isMuted,
@@ -302,8 +303,8 @@ function SdkPreviewPage() {
       <PreviewTweaker
         palette={palette}
         texture={texture}
-        onPaletteChange={setPalette}
-        onTextureChange={setTexture}
+        onPaletteChange={(nextPalette) => updateSettings("appearance", { palette: nextPalette, theme: getThemeMode(nextPalette) })}
+        onTextureChange={(nextTexture) => updateSettings("appearance", { texture: nextTexture })}
         onNotify={showNotification}
         onShowPeople={() => setActivePanel("participants")}
         onShowChat={() => setActivePanel("chat")}

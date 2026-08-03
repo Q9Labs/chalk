@@ -31,13 +31,13 @@ describe("PreviewTweaker", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
-    fireEvent.change(screen.getByLabelText("Palette"), { target: { value: "oled-signal" } });
+    fireEvent.change(screen.getByLabelText("Palette"), { target: { value: "warm-porcelain" } });
     fireEvent.change(screen.getByLabelText("Texture"), { target: { value: "slate" } });
     fireEvent.click(screen.getByRole("button", { name: "Raised hand" }));
     fireEvent.click(screen.getByRole("button", { name: "warning" }));
 
     expect(onToggleHand).toHaveBeenCalledOnce();
-    expect(onPaletteChange).toHaveBeenCalledWith("oled-signal");
+    expect(onPaletteChange).toHaveBeenCalledWith("warm-porcelain");
     expect(onTextureChange).toHaveBeenCalledWith("slate");
     expect(onNotify).toHaveBeenCalledWith("warning");
   });

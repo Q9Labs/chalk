@@ -2,11 +2,11 @@
 
 > Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
 
-This document describes Chalk's visual language across marketing, web, meetings, SDK surfaces, and mobile. It defines one light-first system built around calm paper surfaces, precise structure, direct controls, and the four colors in the Chalk mark.
+This document describes Chalk's visual language across marketing, web, meetings, SDK surfaces, and mobile. It defines a composable appearance system built around calm surfaces, precise structure, direct controls, and the four colors in the Chalk mark.
 
 ![Chalk design system board](./redesign/chalk-design-system-board.png)
 
-The 2026-08-01 board is the current visual canon. The written tokens and rules here are reference guidance and must not override the board when they differ.
+The 2026-08-01 board remains the base-light visual reference. The paired appearance families documented below extend that foundation; written tokens and rules remain reference guidance rather than implementation source code.
 
 ## Character
 
@@ -62,7 +62,28 @@ Color rules:
 - Do not put two bright Chalk colors in competition inside one component.
 - Do not use color as the only status cue. Pair it with an icon, label, shape, or position.
 - Do not use gradients on avatars, controls, cards, or panels. Soft cross-color washes are allowed only as quiet environmental backgrounds, such as an empty camera preview.
-- Dark mode is not part of this system yet. Do not auto-invert the palette or introduce a separate dark visual language without designing it as a complete mode.
+- Light and dark palettes are designed counterparts, never automatic inversions. Preserve each family’s temperature, contrast philosophy, accent relationships, and functional state colors in both modes.
+
+#### Appearance composition
+
+Appearance has two independent axes:
+
+1. **Palette** defines color, contrast, and the visual identity of a family.
+2. **Texture** adds a material layer without changing the underlying color tokens.
+
+The default `Chalk Light` palette remains the baseline. Seven designed families pair an intentional light and dark expression:
+
+| Family   | Light palette  | Dark palette       |
+| -------- | -------------- | ------------------ |
+| Warm     | Warm Porcelain | Warm Charcoal      |
+| Graphite | Cool Mist      | Cool Graphite      |
+| Ink      | Paper & Ink    | High-contrast Ink  |
+| Espresso | Cream & Clay   | Espresso Night     |
+| Atelier  | Studio Canvas  | Chalkboard Atelier |
+| Prism    | Prism Daylight | Prism Nocturne     |
+| Signal   | Signal White   | OLED Signal        |
+
+Every palette supports `Clean`, `Paper Grain`, and `Slate`. Texture remains optional and must not encode selection, availability, error, or other product state. The Appearance settings apply palette and texture independently to the active surface, including panels, dialogs, controls, messages, and participant fields.
 
 ### Typography
 

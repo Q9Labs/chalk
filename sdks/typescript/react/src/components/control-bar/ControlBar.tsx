@@ -135,7 +135,7 @@ function FloatingControlBarButton({ icon, label, onClick, active = false, danger
       )}
     >
       {icon}
-      {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[#b94c4c] px-1 text-[10px] !text-[#fff]">{badge > 99 ? "99+" : badge}</span> : null}
+      {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] !text-white">{badge > 99 ? "99+" : badge}</span> : null}
     </button>
   );
 }
@@ -229,9 +229,11 @@ export const ControlBar = React.memo(
     const renderButton = (type: ControlBarButtonName) => {
       switch (type) {
         case "mic":
-          return <ControlBarButton key="mic" icon={isMuted ? <MicrophoneOff01Icon className="text-[#dc2626]" /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} showLabel={showLabels} data-tour="controls-mic" />;
+          return <ControlBarButton key="mic" icon={isMuted ? <MicrophoneOff01Icon className="text-[var(--chalk-app-danger)]" /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} showLabel={showLabels} data-tour="controls-mic" />;
         case "video":
-          return <ControlBarButton key="video" icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[#dc2626]" />} label={isVideoEnabled ? "Stop Video" : "Start Video"} onClick={onToggleVideo} active={isVideoEnabled} showLabel={showLabels} data-tour="controls-video" />;
+          return (
+            <ControlBarButton key="video" icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[var(--chalk-app-danger)]" />} label={isVideoEnabled ? "Stop Video" : "Start Video"} onClick={onToggleVideo} active={isVideoEnabled} showLabel={showLabels} data-tour="controls-video" />
+          );
         case "screenshare":
           return (
             <ControlBarButton
@@ -240,7 +242,7 @@ export const ControlBar = React.memo(
               label={isScreenSharing ? "Stop Share" : "Share Screen"}
               onClick={onToggleScreenShare}
               active={isScreenSharing}
-              activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
               data-tour="controls-screenshare"
             />
@@ -250,20 +252,71 @@ export const ControlBar = React.memo(
         case "chat":
           return (
             <div key="chat" className="relative">
-              <ControlBarButton icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} data-tour="controls-chat" />
-              {unreadChatCount > 0 && !isChatOpen && <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold text-white bg-[#dc2626] rounded-full shadow-sm">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>}
+              <ControlBarButton
+                icon={<Message01Icon />}
+                label="Chat"
+                onClick={onToggleChat}
+                active={isChatOpen}
+                activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+                showLabel={showLabels}
+                data-tour="controls-chat"
+              />
+              {unreadChatCount > 0 && !isChatOpen && (
+                <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] font-semibold text-white shadow-sm">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
+              )}
             </div>
           );
         case "participants":
-          return <ControlBarButton key="participants" icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} data-tour="controls-participants" />;
+          return (
+            <ControlBarButton
+              key="participants"
+              icon={<UserGroupIcon />}
+              label="People"
+              onClick={onToggleParticipants}
+              active={isParticipantsOpen}
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              showLabel={showLabels}
+              data-tour="controls-participants"
+            />
+          );
         case "transcription":
-          return <ControlBarButton key="transcription" icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} />;
+          return (
+            <ControlBarButton
+              key="transcription"
+              icon={<FileTextIcon />}
+              label="Transcript"
+              onClick={onToggleTranscription}
+              active={isTranscriptionEnabled}
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              showLabel={showLabels}
+            />
+          );
         case "handraise":
-          return <ControlBarButton key="handraise" icon={<HandIcon />} label={isHandRaised ? "Lower Hand" : "Raise Hand"} onClick={onToggleHandRaise} active={isHandRaised} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} />;
+          return (
+            <ControlBarButton
+              key="handraise"
+              icon={<HandIcon />}
+              label={isHandRaised ? "Lower Hand" : "Raise Hand"}
+              onClick={onToggleHandRaise}
+              active={isHandRaised}
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              showLabel={showLabels}
+            />
+          );
         case "reactions":
           return <ControlBarButton key="reactions" icon={<SmileIcon />} label="Reactions" onClick={onOpenReactions} showLabel={showLabels} />;
         case "whiteboard":
-          return <ControlBarButton key="whiteboard" icon={<Edit02Icon />} label="Whiteboard" onClick={onToggleWhiteboard} active={isWhiteboardOpen} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} />;
+          return (
+            <ControlBarButton
+              key="whiteboard"
+              icon={<Edit02Icon />}
+              label="Whiteboard"
+              onClick={onToggleWhiteboard}
+              active={isWhiteboardOpen}
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
+              showLabel={showLabels}
+            />
+          );
         case "pip":
           if (!onTogglePictureInPicture) {
             return null;
@@ -281,7 +334,7 @@ export const ControlBar = React.memo(
                   : undefined
               }
               active={isPictureInPictureActive}
-              activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] hover:bg-[var(--chalk-app-control-hover)]"
               showLabel={showLabels}
             />
           );
@@ -319,7 +372,7 @@ export const ControlBar = React.memo(
         >
           <div className="flex items-center justify-center gap-1.5 min-w-min mx-auto">
             {/* Group 1: Media Controls */}
-            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#202329] bg-[#202329] p-1 shadow-[0_5px_16px_rgba(12,14,18,0.18)]">
+            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-control-primary)] bg-[var(--chalk-app-control-primary)] p-1 shadow-[var(--chalk-app-shadow-control)]">
               <button
                 type="button"
                 onClick={onToggleMute}
@@ -342,12 +395,12 @@ export const ControlBar = React.memo(
             </div>
 
             {/* Group 2: Interactions */}
-            <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#deddd7] bg-white p-1 shadow-sm">
+            <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
               {buttonsToRender.includes("handraise") && onToggleHandRaise && (
                 <button
                   type="button"
                   onClick={onToggleHandRaise}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[#fceab3]" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[#fceab3]" : "")}
                   aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
                   aria-pressed={isHandRaised}
                 >
@@ -363,7 +416,7 @@ export const ControlBar = React.memo(
                 <button
                   type="button"
                   onClick={onToggleWhiteboard}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isWhiteboardOpen ? "bg-[#eaf7fb]" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isWhiteboardOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
                   aria-label="Whiteboard"
                   aria-pressed={isWhiteboardOpen}
                 >
@@ -374,7 +427,7 @@ export const ControlBar = React.memo(
                 <button
                   type="button"
                   onClick={onToggleParticipants}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isParticipantsOpen ? "bg-[#eaf7fb]" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isParticipantsOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
                   aria-label="People"
                   aria-pressed={isParticipantsOpen}
                 >
@@ -382,21 +435,34 @@ export const ControlBar = React.memo(
                 </button>
               )}
               {buttonsToRender.includes("chat") && onToggleChat && (
-                <button type="button" onClick={onToggleChat} className={cn("relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isChatOpen ? "bg-[#eaf7fb]" : "")} aria-label="Chat" aria-pressed={isChatOpen}>
+                <button
+                  type="button"
+                  onClick={onToggleChat}
+                  className={cn("relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isChatOpen ? "bg-[var(--chalk-app-control-active)]" : "")}
+                  aria-label="Chat"
+                  aria-pressed={isChatOpen}
+                >
                   <Message01Icon className="w-5 h-5" />
-                  {unreadChatCount > 0 && !isChatOpen ? <span className="absolute -top-1 -right-1 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span> : null}
+                  {unreadChatCount > 0 && !isChatOpen ? (
+                    <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
+                  ) : null}
                 </button>
               )}
             </div>
 
             {/* Group 3: More & Leave */}
-            <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#deddd7] bg-white p-1 shadow-sm">
+            <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
               {buttonsToRender.includes("more") && (
-                <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
+                <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
                   <MoreHorizontalIcon className="w-5 h-5" />
                 </button>
               )}
-              <button type="button" onClick={onLeave} className="flex h-[44px] items-center justify-center rounded-[6px] border border-[#ef9b9b] bg-[#fdf0f0] px-4 !text-[#b94c4c] transition active:scale-95 sm:h-[46px]" aria-label="Leave meeting">
+              <button
+                type="button"
+                onClick={onLeave}
+                className="flex h-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] px-4 text-white transition active:scale-95 hover:bg-[var(--chalk-app-danger-hover)] sm:h-[46px]"
+                aria-label="Leave meeting"
+              >
                 <CallEnd01Icon className="w-5 h-5" />
               </button>
             </div>
@@ -476,10 +542,10 @@ export const ControlBar = React.memo(
     return (
       <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
         {/* Left: Timer section */}
-        <div className="flex items-center rounded-full px-5 py-2.5 bg-card border border-border shadow-md">
+        <div className="flex items-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-2.5 shadow-[var(--chalk-app-shadow-xs)]">
           <div className="flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.4)]" />
-            <span className="text-[14px] font-semibold tracking-wide tabular-nums text-foreground">{formatDuration(meetingDuration)}</span>
+            <span className="text-[var(--chalk-app-text)] text-[14px] font-semibold tracking-wide tabular-nums">{formatDuration(meetingDuration)}</span>
           </div>
         </div>
 

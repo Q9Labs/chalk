@@ -213,7 +213,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
                   <ParticipantTile key={p.id} participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} aspectRatio="fill" className="w-full h-full" />
                 ))}
                 {/* Fill empty slots in last page */}
-                {pageIndex === pages.length - 1 && page.length < 4 && Array.from({ length: 4 - page.length }).map((_, i) => <div key={`empty-${i}`} className="rounded-lg bg-[var(--chalk-bg-tile)]" />)}
+                {pageIndex === pages.length - 1 && page.length < 4 && Array.from({ length: 4 - page.length }).map((_, i) => <div key={`empty-${i}`} className="rounded-lg bg-[var(--chalk-app-tile-base)]" />)}
               </div>
             ))}
           </div>
@@ -255,7 +255,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
                 <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" showName={true} />
               </div>
             ))}
-            {overflowCount > 0 && <div className="h-full aspect-video flex-shrink-0 rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center text-muted-foreground">+{overflowCount} more</div>}
+            {overflowCount > 0 && <div className="flex h-full aspect-video flex-shrink-0 items-center justify-center rounded-2xl bg-[var(--chalk-app-tile-base)] text-[var(--chalk-app-text-muted)]">+{overflowCount} more</div>}
           </div>
         )}
       </div>
@@ -270,7 +270,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
 
     return (
       <div className={cn("flex h-full gap-2", className)} data-tour="video-grid">
-        <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[#eeede8]">
+        <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[var(--chalk-app-tile-base)]">
           {screenShareContent ??
             (primaryParticipant && (
               <ParticipantTile
@@ -291,7 +291,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
                 <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" showName={true} />
               </div>
             ))}
-            {overflowCount > 0 && <div className="w-full aspect-video rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center text-muted-foreground flex-shrink-0">+{overflowCount} more</div>}
+            {overflowCount > 0 && <div className="flex w-full aspect-video flex-shrink-0 items-center justify-center rounded-2xl bg-[var(--chalk-app-tile-base)] text-[var(--chalk-app-text-muted)]">+{overflowCount} more</div>}
           </div>
         )}
       </div>
@@ -328,8 +328,8 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
         />
       ))}
       {overflowCount > 0 && (
-        <div className={cn("rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center w-full h-full chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: getTileDelay(visibleParticipants.length) }}>
-          <span className="text-xl font-medium text-muted-foreground">+{overflowCount} more</span>
+        <div className={cn("flex h-full w-full items-center justify-center rounded-2xl bg-[var(--chalk-app-tile-base)] chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: getTileDelay(visibleParticipants.length) }}>
+          <span className="text-[var(--chalk-app-text-muted)] text-xl font-medium">+{overflowCount} more</span>
         </div>
       )}
     </div>

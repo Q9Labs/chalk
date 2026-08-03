@@ -74,10 +74,11 @@ export function ParticipantRow({
     }
   };
 
-  const optionsButtonClassName = variant === "mobile" ? "text-muted-foreground hover:text-foreground" : variant === "sidebar" ? "opacity-70 hover:opacity-100 text-muted-foreground hover:text-foreground" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
+  const optionsButtonClassName =
+    variant === "mobile" ? "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]" : variant === "sidebar" ? "opacity-70 text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)] hover:opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
 
   return (
-    <div className={cn("group relative flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-muted/50", variant === "sidebar" && "rounded-none px-1 py-3.5 hover:bg-[#f7f6f2]")}>
+    <div className={cn("group relative flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-[var(--chalk-app-control-hover)]", variant === "sidebar" && "rounded-none px-1 py-3.5 hover:bg-[var(--chalk-app-control-hover)]")}>
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="relative">
           <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={Boolean(participant.avatarUrl)} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
@@ -95,12 +96,12 @@ export function ParticipantRow({
                   onChange={(e) => setEditName(e.target.value)}
                   onKeyDown={handleKeyDown}
                   onBlur={handleSave}
-                  className={cn("text-sm font-normal bg-background border border-primary/30 rounded px-1.5 py-0.5 outline-none w-full min-w-0 focus:border-primary", variant === "sidebar" ? "text-card-foreground" : "text-chalk-text-primary")}
+                  className="w-full min-w-0 rounded border border-[var(--chalk-app-control-active-line)]/30 bg-[var(--chalk-app-input)] px-1.5 py-0.5 text-sm font-normal text-[var(--chalk-app-text)] outline-none focus:border-[var(--chalk-app-control-active-line)]"
                 />
               </div>
             ) : (
               <span
-                className={cn("max-w-[140px] truncate text-sm", variant === "sidebar" ? "font-semibold text-[#202329]" : "font-normal text-chalk-text-primary")}
+                className={cn("max-w-[140px] truncate text-sm", variant === "sidebar" ? "font-semibold text-[var(--chalk-app-text)]" : "font-normal text-[var(--chalk-app-text)]")}
                 onClick={() => participant.isLocal && onUpdateDisplayName && setIsEditing(true)}
                 title={participant.isLocal && onUpdateDisplayName ? "Click to edit" : undefined}
               >
@@ -108,7 +109,7 @@ export function ParticipantRow({
               </span>
             )}
             {participant.isLocal && !isEditing && (
-              <span className={cn("flex shrink-0 items-center gap-1 text-xs", variant === "sidebar" ? "text-[#858a92]" : "text-chalk-text-muted")}>
+              <span className={cn("flex shrink-0 items-center gap-1 text-xs", "text-[var(--chalk-app-text-muted)]")}>
                 You
                 {onUpdateDisplayName && (
                   <button type="button" onClick={() => setIsEditing(true)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-primary">
@@ -120,14 +121,22 @@ export function ParticipantRow({
           </div>
           <div className="flex items-center gap-1.5">
             {participant.role && participant.role !== "participant" && (
-              <span className={cn("text-[11px] font-normal tracking-normal", variant === "sidebar" ? "text-[#858a92]" : "rounded bg-chalk-bg-subtle px-1.5 py-0.5 text-chalk-text-secondary")}>{variant === "sidebar" ? (participant.role === "host" ? "Host" : "Co-host") : participant.role}</span>
+              <span className={cn("text-[11px] font-normal tracking-normal", variant === "sidebar" ? "text-[var(--chalk-app-text-muted)]" : "rounded bg-[var(--chalk-app-control-group)] px-1.5 py-0.5 text-[var(--chalk-app-text-muted)]")}>
+                {variant === "sidebar" ? (participant.role === "host" ? "Host" : "Co-host") : participant.role}
+              </span>
             )}
           </div>
         </div>
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        {variant === "sidebar" ? participant.isMuted ? <MicrophoneOff01Icon className="mr-1 h-4 w-4 text-[#b94c4c]" aria-label="Muted" /> : null : <AudioIndicator muted={participant.isMuted} level={participant.isMuted ? 0 : 0.5} className={cn(participant.isMuted && "text-chalk-error-main")} />}
+        {variant === "sidebar" ? (
+          participant.isMuted ? (
+            <MicrophoneOff01Icon className="mr-1 h-4 w-4 text-[var(--chalk-app-danger)]" aria-label="Muted" />
+          ) : null
+        ) : (
+          <AudioIndicator muted={participant.isMuted} level={participant.isMuted ? 0 : 0.5} className={cn(participant.isMuted && "text-[var(--chalk-app-danger)]")} />
+        )}
 
         {showMenuButton && !isEditing && (
           <div className="relative">
@@ -136,7 +145,7 @@ export function ParticipantRow({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className={cn("absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] p-1.5 shadow-[0_20px_50px_rgba(12,14,18,0.14)]", variant === "sidebar" ? "border border-[#c9c8c2] bg-[#fbfaf7]" : "border border-chalk-border-subtle bg-chalk-bg-surface")}>
+                <div className={cn("chalk-textured-surface absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]")}>
                   <ParticipantOptionsMenu
                     participant={participant}
                     variant={variant}

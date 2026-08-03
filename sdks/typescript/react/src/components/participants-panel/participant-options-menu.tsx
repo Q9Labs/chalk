@@ -43,9 +43,9 @@ export function ParticipantOptionsMenu({
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
 
-  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm font-medium transition-colors", variant === "sidebar" ? "text-[#202329] hover:bg-white" : "text-chalk-text-primary hover:bg-chalk-bg-subtle");
+  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)]");
 
-  const dividerClassName = cn("my-1.5 h-px", variant === "sidebar" ? "bg-[#e5e4df]" : "bg-chalk-border-subtle");
+  const dividerClassName = cn("my-1.5 h-px bg-[var(--chalk-app-line)]");
 
   return (
     <>
@@ -59,15 +59,10 @@ export function ParticipantOptionsMenu({
       {hasLocalActions && (hasVolumeControl || hasManageActions) ? <div className={dividerClassName} /> : null}
 
       {hasVolumeControl ? (
-        <div className={cn("px-3.5 py-2.5", variant === "sidebar" ? "text-[#202329]" : "text-chalk-text-primary")}>
+        <div className="px-3.5 py-2.5 text-[var(--chalk-app-text)]">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-[#555b65]">Volume</span>
-            <button
-              type="button"
-              onClick={() => onParticipantVolumeChange?.(participant.id, 100)}
-              className={cn("text-xs", variant === "sidebar" ? "text-[#858a92] hover:text-[#202329]" : "text-chalk-text-muted hover:text-chalk-text-primary")}
-              aria-label={`Reset volume for ${participant.displayName}`}
-            >
+            <span className="text-[var(--chalk-app-text-muted)] text-sm font-medium">Volume</span>
+            <button type="button" onClick={() => onParticipantVolumeChange?.(participant.id, 100)} className="text-[var(--chalk-app-text-muted)] text-xs hover:text-[var(--chalk-app-text)]" aria-label={`Reset volume for ${participant.displayName}`}>
               Reset
             </button>
           </div>
@@ -178,7 +173,7 @@ export function ParticipantOptionsMenu({
                 onRemoveParticipant(participant.id);
                 onClose();
               }}
-              className={cn("flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors", variant === "sidebar" ? "text-[#b94c4c] hover:bg-[#fdf0f0]" : "text-chalk-error-main hover:bg-chalk-error-subtle")}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-[var(--chalk-app-danger)] transition-colors hover:bg-[var(--chalk-app-danger)]/10"
             >
               <UserRemove01Icon className="h-4 w-4" />
               Remove

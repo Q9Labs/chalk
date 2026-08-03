@@ -15,9 +15,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Changed
 
 - Added independently composable palette and texture options to the React
-  `ConferenceView`, including seven dark palettes plus clean, paper, and slate
-  materials, and made the SDK preview open the active collaboration surface
-  directly for visual comparison.
+  `ConferenceView` and `VideoConference`, including seven paired light and dark
+  color families plus clean, paper, and slate materials. Appearance settings now
+  switch the active surface immediately, and the SDK preview opens directly to
+  that surface for visual comparison.
 - Consolidated the React UI primitives under `@q9labsai/chalk-ui`, preserving the
   public SDK subpath while aligning shared styling with the paper, cool-neutral,
   watercolor, and chalk-stick design language.

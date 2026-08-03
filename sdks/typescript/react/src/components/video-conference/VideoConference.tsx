@@ -18,6 +18,7 @@ import { toAudioParticipants, toListParticipants, toParticipantNames, toVideoPar
 import { cn } from "../../utils/cn";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { uploadChatAttachment } from "../composite/chat-file-upload";
+import { getThemeMode, type ThemeAppearance, type ThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 
 export type VideoConferenceRole = "host" | "participant";
 
@@ -25,6 +26,7 @@ export interface VideoConferenceProps {
   readonly roomId: string;
   readonly roomName?: string;
   readonly logoUrl?: string;
+  readonly logoUrlOnDark?: string;
   readonly meetingLink?: string;
   readonly userName?: string;
   readonly role?: VideoConferenceRole;
@@ -33,7 +35,10 @@ export interface VideoConferenceProps {
   readonly initialJoinSettings?: Partial<PreJoinSettings>;
   readonly phase?: ConferencePhase;
   readonly layout?: ConferenceLayout;
+  readonly initialPalette?: ThemePalette;
+  readonly initialTexture?: ThemeTexture;
   readonly onLayoutChange?: (layout: ConferenceLayout) => void;
+  readonly onAppearanceChange?: (appearance: ThemeAppearance) => void;
   readonly onPhaseChange?: (phase: ConferencePhase) => void;
   readonly createSession: (settings: PreJoinSettings) => ChalkSessionStore | Promise<ChalkSessionStore>;
   readonly chatEnabled?: boolean;
@@ -265,7 +270,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   const [isWhiteboardOpen, setWhiteboardOpen] = useState(false);
   const [loadingOlderChat, setLoadingOlderChat] = useState(false);
   const [commandError, setCommandError] = useState("");
-  const [dialogSettings, setDialogSettings] = useState<SettingsDialogValue>(() => defaultDialogSettings(props.settings, props.layout ?? "focus"));
+  const [dialogSettings, setDialogSettings] = useState<SettingsDialogValue>(() => defaultDialogSettings(props.settings, props.layout ?? "focus", props.initialPalette ?? "light", props.initialTexture ?? "none"));
 
   const handleJoinError = useCallback((error: Error) => props.onJoinFailure(error), [props.onJoinFailure]);
   useAutoJoin(true, actions.join, handleJoinError);
@@ -344,7 +349,8 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
       setLoadingOlderChat(false);
     }
   }, [actions]);
-  const whiteboard = useMemo(() => createWhiteboardView(props, session, snapshot, isWhiteboardOpen), [isWhiteboardOpen, props, session, snapshot]);
+  const whiteboardTheme = getThemeMode(dialogSettings.appearance.palette ?? props.initialPalette ?? "light");
+  const whiteboard = useMemo(() => createWhiteboardView(props, session, snapshot, isWhiteboardOpen, whiteboardTheme), [isWhiteboardOpen, props, session, snapshot, whiteboardTheme]);
   const controls = useMemo(
     () =>
       createControls({
@@ -461,12 +467,18 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
       onUpdateAppearance: (updates: Partial<SettingsDialogValue["appearance"]>) => {
         setDialogSettings((current) => ({ ...current, appearance: { ...current.appearance, ...updates } }));
         if ((updates.layout === "grid" || updates.layout === "focus" || updates.layout === "presentation") && updates.layout !== props.layout) props.onLayoutChange(updates.layout);
+        if (updates.palette || updates.texture) {
+          props.onAppearanceChange?.({
+            palette: updates.palette ?? dialogSettings.appearance.palette ?? props.initialPalette ?? "light",
+            texture: updates.texture ?? dialogSettings.appearance.texture ?? props.initialTexture ?? "none",
+          });
+        }
       },
       onUpdateExperience: (updates: Partial<SettingsDialogValue["experience"]>) => setDialogSettings((current) => ({ ...current, experience: { ...current.experience, ...updates } })),
       videoTrack: localMedia.camera.track,
       participantColorSeed: props.settings.displayName,
     } satisfies ConferenceViewProps["settingsDialog"];
-  }, [commitDialogSettings, dialogSettings, isSettingsOpen, localMedia.camera.track, props.layout, props.onLayoutChange, props.settings.displayName, props.settingsEnabled]);
+  }, [commitDialogSettings, dialogSettings, isSettingsOpen, localMedia.camera.track, props.initialPalette, props.initialTexture, props.layout, props.onAppearanceChange, props.onLayoutChange, props.settings.displayName, props.settingsEnabled]);
 
   if (props.phase === "joining" || props.phase === "waiting") return <JoiningScreen message={`Joining ${props.roomName ?? props.roomId}`} displayName={props.settings.displayName} />;
   if (props.phase === "ended") return <EndScreen roomName={props.roomName ?? props.roomId} duration={duration} participantCount={participants.length} onRejoin={props.onRejoin} onGoHome={props.onClose} />;
@@ -476,6 +488,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
       roomName={props.roomName ?? props.roomId}
       displayName={props.settings.displayName}
       logoUrl={props.logoUrl}
+      logoUrlOnDark={props.logoUrlOnDark}
       meetingLink={props.meetingLink}
       duration={duration}
       layout={effectiveLayout}
@@ -492,6 +505,8 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
       inviteDialog={canInvite ? { isOpen: isInviteOpen, onOpenChange: setInviteOpen, meetingLink: props.meetingLink ?? "", onCopyLink: copyLink } : undefined}
       reactions={canReact ? { reactions: snapshot.reactions, onSelect: (reaction) => runCommand(() => actions.sendReaction(reaction), "Reaction failed") } : undefined}
       reconnecting={props.phase === "reconnecting" ? { isVisible: true, status: "reconnecting", message: snapshot.failure?.message, onLeave: canLeave ? () => void leave() : undefined } : undefined}
+      palette={dialogSettings.appearance.palette ?? props.initialPalette ?? "light"}
+      texture={dialogSettings.appearance.texture ?? props.initialTexture ?? "none"}
       overlay={
         <>
           {incomingRequest ? <MediaRequestDialog request={incomingRequest} onDecline={() => actions.declineMediaRequest(incomingRequest.requestId)} onAllow={() => void runCommand(() => actions.acceptMediaRequest(incomingRequest.requestId), "Media request failed")} /> : null}
@@ -561,13 +576,14 @@ function createControls(input: {
   };
 }
 
-function createWhiteboardView(props: ActiveVideoConferenceProps, session: ChalkSessionStore, snapshot: ChalkSessionSnapshot, isOpen: boolean): ConferenceViewProps["whiteboard"] {
+function createWhiteboardView(props: ActiveVideoConferenceProps, session: ChalkSessionStore, snapshot: ChalkSessionSnapshot, isOpen: boolean, theme: ThemeMode): ConferenceViewProps["whiteboard"] {
   if (!isOpen || !session.whiteboard || props.whiteboardEnabled === false || props.canUseWhiteboard === false) return undefined;
   const whiteboard = session.whiteboard;
   return {
     isOpen: true,
     props: {
       canDraw: snapshot.whiteboard.canDraw,
+      theme,
       collab: {
         canDraw: snapshot.whiteboard.canDraw,
         subscribe: (listener) => whiteboard.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
@@ -583,13 +599,13 @@ function createWhiteboardView(props: ActiveVideoConferenceProps, session: ChalkS
   };
 }
 
-function defaultDialogSettings(settings: PreJoinSettings, layout: ConferenceLayout): SettingsDialogValue {
+function defaultDialogSettings(settings: PreJoinSettings, layout: ConferenceLayout, palette: ThemePalette, texture: ThemeTexture): SettingsDialogValue {
   return {
     identity: { displayName: settings.displayName },
     join: { videoEnabled: settings.cameraEnabled, audioEnabled: settings.microphoneEnabled },
     audio: { selectedInput: undefined, selectedOutput: undefined, outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
     video: { selectedInput: undefined, quality: "auto" },
-    appearance: { layout, theme: "light", gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
+    appearance: { layout, theme: getThemeMode(palette), palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
     experience: { captions: false, compactMode: false, showInviteToast: false, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false },
   };
 }

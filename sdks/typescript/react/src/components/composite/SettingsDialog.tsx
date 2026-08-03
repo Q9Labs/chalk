@@ -4,9 +4,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
-import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
+import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { IconButton, Input, Toggle, VolumeSlider } from "../atomic";
+import { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_TEXTURES, type ThemePalette, type ThemeTexture } from "../theme";
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
@@ -37,6 +38,8 @@ export interface SettingsDialogValue {
   appearance: {
     layout: string;
     theme: "light" | "dark" | "system";
+    palette?: ThemePalette;
+    texture?: ThemeTexture;
     gradient: "default" | "darker";
     showFilmstrip: boolean;
     reducedMotion: boolean;
@@ -129,9 +132,9 @@ const SECTIONS = [
   {
     id: "appearance",
     label: "Appearance",
-    description: "Theme, layout, motion",
+    description: "Palette, texture, layout",
     icon: Monitor01Icon,
-    keywords: ["theme", "layout", "filmstrip", "motion", "dark", "light", "color", "gradient", "profile", "avatar", "facehash", "generated", "initials", "fun"],
+    keywords: ["theme", "palette", "texture", "paper", "slate", "layout", "filmstrip", "motion", "dark", "light", "color", "gradient", "profile", "avatar", "facehash", "generated", "initials", "fun"],
   },
   {
     id: "experience",
@@ -150,10 +153,10 @@ const SECTIONS = [
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[10px] border border-[#deddd7] bg-white p-4 shadow-none sm:p-5">
+    <section className="rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-4 shadow-none sm:p-5">
       <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[#202329]">{title}</h3>
-        <p className="mt-1 text-xs text-[#6d727b]">{description}</p>
+        <h3 className="text-sm font-semibold text-[var(--chalk-app-text)]">{title}</h3>
+        <p className="mt-1 text-xs text-[var(--chalk-app-text-muted)]">{description}</p>
       </div>
       <div className="space-y-4">{children}</div>
     </section>
@@ -164,12 +167,12 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
   const titleId = React.useId();
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[#deddd7] bg-white p-4">
+    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-4">
       <div className="min-w-0 flex-1">
-        <div id={titleId} className="text-sm font-medium text-[#202329]">
+        <div id={titleId} className="text-sm font-medium text-[var(--chalk-app-text)]">
           {title}
         </div>
-        <div className="text-xs text-[#6d727b]">{description}</div>
+        <div className="text-xs text-[var(--chalk-app-text-muted)]">{description}</div>
       </div>
       <Toggle checked={checked} onChange={onChange} ariaLabelledby={titleId} />
     </div>
@@ -211,6 +214,11 @@ export const SettingsDialog = React.memo(
     const portalTheme = resolvePortalThemeFromDocument();
     const isDesktop = useMediaQuery("(min-width: 768px)");
     const disableMotion = prefersReducedMotion || reducedMotion;
+    const fallbackPalette: ThemePalette = settings.appearance.theme === "dark" || (settings.appearance.theme === "system" && portalTheme === "dark") ? "warm-charcoal" : "light";
+    const resolvedPalette = settings.appearance.palette ?? fallbackPalette;
+    const resolvedTexture = settings.appearance.texture ?? "none";
+    const resolvedTheme = getThemeMode(resolvedPalette);
+    const usesDarkPalette = isDarkMode || isDarkThemePalette(resolvedPalette);
     const [activeSection, setActiveSection] = useState<SectionId>("audio");
     const [isNavOpen, setIsNavOpen] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -381,29 +389,63 @@ export const SettingsDialog = React.memo(
         case "appearance":
           return (
             <div className="space-y-5">
-              <SectionCard title="Theme" description="Switch the room between light, dark, or follow the system.">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {(
-                    [
-                      ["light", Sun02Icon, "Light"],
-                      ["dark", Moon02Icon, "Dark"],
-                      ["system", Monitor01Icon, "System"],
-                    ] as const
-                  ).map(([value, Icon, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => onUpdateAppearance({ theme: value })}
-                      className={cn("rounded-2xl border p-4 text-left transition-colors", settings.appearance.theme === value ? "border-primary bg-primary/10 text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
-                    >
-                      <Icon className="mb-3 h-5 w-5" />
-                      <div className="text-sm font-semibold">{label}</div>
-                    </button>
-                  ))}
+              <SectionCard title="Palette" description="Choose a complete color family. Every palette can use any material texture.">
+                {(["light", "dark"] as const).map((mode) => (
+                  <div key={mode} className="space-y-2.5">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">{mode} palettes</div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {THEME_PALETTES.filter((palette) => palette.mode === mode).map((palette) => {
+                        const isSelected = resolvedPalette === palette.value;
+                        return (
+                          <button
+                            key={palette.value}
+                            type="button"
+                            onClick={() => onUpdateAppearance({ palette: palette.value, theme: palette.mode })}
+                            aria-pressed={isSelected}
+                            className={cn("flex items-center gap-3 rounded-[10px] border p-3 text-left transition-colors", isSelected ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-muted/50")}
+                          >
+                            <span className="flex shrink-0 overflow-hidden rounded-full border border-black/10 shadow-sm" aria-hidden="true">
+                              {palette.swatch.map((color) => (
+                                <span key={color} className="h-7 w-3" style={{ backgroundColor: color }} />
+                              ))}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-semibold">{palette.label}</span>
+                              <span className="block text-[11px] opacity-70">{palette.family} family</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </SectionCard>
+
+              <SectionCard title="Texture" description="Layer a material treatment over the selected palette without changing its colors.">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {THEME_TEXTURES.map((texture) => {
+                    const isSelected = resolvedTexture === texture.value;
+                    return (
+                      <button
+                        key={texture.value}
+                        type="button"
+                        onClick={() => onUpdateAppearance({ texture: texture.value })}
+                        aria-label={`Use ${texture.label} texture`}
+                        aria-pressed={isSelected}
+                        className={cn("overflow-hidden rounded-[10px] border text-left transition-colors", isSelected ? "border-primary text-primary" : "border-border text-foreground hover:border-primary/50")}
+                      >
+                        <span data-chalk data-chalk-theme={resolvedTheme} data-chalk-palette={resolvedPalette} data-chalk-texture={texture.value} className="chalk-root chalk-textured-surface block h-12 border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-stage)]" aria-hidden="true" />
+                        <span className="block bg-[var(--chalk-app-panel)] p-2.5">
+                          <span className="block text-xs font-semibold">{texture.label}</span>
+                          <span className="mt-0.5 block text-[10px] leading-4 text-[var(--chalk-app-text-muted)]">{texture.description}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </SectionCard>
 
-              {isDarkMode && (
+              {usesDarkPalette && (
                 <SectionCard title="Background Gradient" description="Adjust the intensity of the background gradient.">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <button
@@ -497,7 +539,7 @@ export const SettingsDialog = React.memo(
                     ] as const
                   ).map(([value, Icon, label]) => (
                     <button
-                      key={value}
+                      key={label}
                       type="button"
                       onClick={() => onUpdateAppearance({ layout: value })}
                       className={cn("rounded-2xl border p-4 text-left transition-colors", settings.appearance.layout === value ? "border-primary bg-primary/10 text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
@@ -615,10 +657,12 @@ export const SettingsDialog = React.memo(
           <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-[#0c0e12]/20 backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
           <Dialog.Popup
             data-chalk
-            data-chalk-theme={portalTheme}
+            data-chalk-theme={resolvedTheme}
+            data-chalk-palette={resolvedPalette}
+            data-chalk-texture={resolvedTexture}
             className={cn(
-              "chalk-root",
-              "fixed inset-4 z-[101] m-auto flex max-h-[min(680px,calc(100dvh-32px))] w-auto max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-[#c9c8c2] bg-[#fbfaf7] text-[#202329] shadow-[0_28px_80px_rgba(12,14,18,0.2)] md:inset-0",
+              "chalk-root chalk-textured-surface",
+              "fixed inset-4 z-[101] m-auto flex max-h-[min(680px,calc(100dvh-32px))] w-auto max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-chrome)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] md:inset-0",
               !disableMotion && "animate-in fade-in duration-300 ease-out",
               !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
             )}
@@ -626,19 +670,27 @@ export const SettingsDialog = React.memo(
           >
             <Dialog.Title className="sr-only">Meeting settings</Dialog.Title>
             <div className="flex h-full flex-col md:flex-row">
-              <aside className={cn("flex w-full shrink-0 flex-col border-[#deddd7] bg-[#f4f3ef] md:w-44 md:border-r", !showSidebar && "hidden")}>
+              <aside className={cn("flex w-full shrink-0 flex-col border-[var(--chalk-app-line)] bg-[var(--chalk-app-control-group)] md:w-44 md:border-r", !showSidebar && "hidden")}>
                 <div className="p-3 pb-2">
                   <div className="mb-5 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Settings01Icon className="h-5 w-5 text-[#6d727b]" />
+                      <Settings01Icon className="h-5 w-5 text-[var(--chalk-app-text-muted)]" />
                       <div>
                         <div className="text-base font-semibold">Settings</div>
-                        <div className="text-xs text-[#6d727b]">Local to this browser</div>
+                        <div className="text-xs text-[var(--chalk-app-text-muted)]">Local to this browser</div>
                       </div>
                     </div>
                     <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" className="md:hidden" />
                   </div>
-                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" icon={<Search01Icon className="h-4 w-4" />} fullWidth className="rounded-[8px] border-[#c9c8c2] bg-white" aria-label="Search settings" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search settings"
+                    icon={<Search01Icon className="h-4 w-4" />}
+                    fullWidth
+                    className="rounded-[8px] border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-input)]"
+                    aria-label="Search settings"
+                  />
                 </div>
                 <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
                   {filteredSections.map((section) => {
@@ -651,7 +703,10 @@ export const SettingsDialog = React.memo(
                           setActiveSection(section.id);
                           setIsNavOpen(false);
                         }}
-                        className={cn("flex w-full items-start gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors", activeSection === section.id ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.06)]" : "text-[#6d727b] hover:text-[#202329]")}
+                        className={cn(
+                          "flex w-full items-start gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors",
+                          activeSection === section.id ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]",
+                        )}
                       >
                         <Icon className="mt-0.5 h-4 w-4 shrink-0" />
                         <span className="min-w-0">
@@ -661,22 +716,22 @@ export const SettingsDialog = React.memo(
                       </button>
                     );
                   })}
-                  {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[#deddd7] px-4 py-8 text-center text-sm text-[#6d727b]">No matching settings.</div>}
+                  {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[var(--chalk-app-line)] px-4 py-8 text-center text-sm text-[var(--chalk-app-text-muted)]">No matching settings.</div>}
                 </nav>
               </aside>
 
               <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
-                <div className="flex items-start justify-between border-b border-[#deddd7] bg-[#fbfaf7] px-5 py-4 md:px-6">
+                <div className="flex items-start justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-5 py-4 md:px-6">
                   <div className="flex items-center gap-3">
                     <IconButton icon={<ArrowLeft02Icon className="h-5 w-5" />} variant="ghost" onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections" />
                     <div>
-                      <h2 className="text-lg font-semibold text-[#202329] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
-                      <p className="mt-0.5 text-xs text-[#6d727b] md:mt-1 md:text-sm">Changes apply to this device.</p>
+                      <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                      <p className="mt-0.5 text-xs text-[var(--chalk-app-text-muted)] md:mt-1 md:text-sm">Changes apply to this device.</p>
                     </div>
                   </div>
                   <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbfaf7] px-5 py-5 md:px-6">
+                <div className="chalk-textured-surface min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
                   <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                 </div>
               </div>

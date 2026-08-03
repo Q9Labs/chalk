@@ -35,18 +35,23 @@ vi.mock("../conference-view/ConferenceView", () => ({
     panels,
     controls,
     settingsDialog,
+    palette,
+    texture,
   }: {
     readonly reconnecting?: { readonly isVisible: boolean };
     readonly onLeave?: () => void | Promise<void>;
     readonly layout?: string;
     readonly panels?: { readonly active: string | null; readonly onChange: (panel: string | null) => void };
     readonly controls?: { readonly buttons?: readonly string[] };
+    readonly palette?: string;
+    readonly texture?: string;
     readonly settingsDialog?: {
       readonly onOpenChange: (open: boolean) => void;
       readonly onUpdateIdentity: (updates: { readonly displayName: string }) => void;
+      readonly onUpdateAppearance: (updates: { readonly palette: "warm-porcelain"; readonly theme: "light" }) => void;
     };
   }) => (
-    <div data-testid="conference-view" data-layout={layout} data-active-panel={panels?.active ?? ""} data-buttons={controls?.buttons?.join(",")}>
+    <div data-testid="conference-view" data-layout={layout} data-active-panel={panels?.active ?? ""} data-buttons={controls?.buttons?.join(",")} data-palette={palette} data-texture={texture}>
       Active conference
       {reconnecting?.isVisible ? <div data-testid="reconnecting-overlay">Reconnecting</div> : null}
       <button type="button" onClick={() => void onLeave?.()}>
@@ -60,6 +65,9 @@ vi.mock("../conference-view/ConferenceView", () => ({
       </button>
       <button type="button" onClick={() => settingsDialog?.onOpenChange(false)}>
         Close settings
+      </button>
+      <button type="button" onClick={() => settingsDialog?.onUpdateAppearance({ palette: "warm-porcelain", theme: "light" })}>
+        Use warm porcelain
       </button>
     </div>
   ),
@@ -175,14 +183,22 @@ describe("VideoConference", () => {
   it("applies the display name from settings when the dialog closes", async () => {
     const testSession = createLiveTestSession();
     const setDisplayName = vi.fn(async () => undefined);
+    const onAppearanceChange = vi.fn();
     Object.assign(testSession, { setDisplayName });
 
-    render(<VideoConference roomId="room-1" userName="Ada" autoJoin createSession={() => testSession} />);
-    await waitFor(() => expect(screen.getByTestId("conference-view")).toBeInTheDocument());
+    render(<VideoConference roomId="room-1" userName="Ada" autoJoin initialPalette="cool-graphite" initialTexture="slate" onAppearanceChange={onAppearanceChange} createSession={() => testSession} />);
+    const activeSurface = await screen.findByTestId("conference-view");
+    expect(activeSurface).toHaveAttribute("data-palette", "cool-graphite");
+    expect(activeSurface).toHaveAttribute("data-texture", "slate");
 
     fireEvent.click(screen.getByRole("button", { name: "Update display name" }));
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     await waitFor(() => expect(setDisplayName).toHaveBeenCalledWith("Grace"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Use warm porcelain" }));
+
+    await waitFor(() => expect(activeSurface).toHaveAttribute("data-palette", "warm-porcelain"));
+    expect(onAppearanceChange).toHaveBeenCalledWith({ palette: "warm-porcelain", texture: "slate" });
   });
 });
 

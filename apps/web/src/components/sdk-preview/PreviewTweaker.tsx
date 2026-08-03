@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ThemePalette, ThemeTexture } from "@q9labsai/chalk-react/components";
+import { THEME_PALETTES, THEME_TEXTURES, type ThemePalette, type ThemeTexture } from "@q9labsai/chalk-react/components";
 
 import { Cancel01Icon, Settings01Icon } from "../../../../../sdks/typescript/react/src/utils/icons";
 import type { Toast } from "../../../../../sdks/typescript/react/src/components/toast-stack/ToastStack";
@@ -22,23 +22,6 @@ interface PreviewTweakerProps {
 const triggerClassName = "rounded-[7px] border border-[#deddd7] bg-white px-3 py-2 text-left text-xs font-medium text-[#202329] transition hover:border-[#b7b6b0] hover:bg-[#f7f6f2]";
 const fieldClassName = "mt-1 h-9 w-full rounded-[7px] border border-[#c9c8c2] bg-white px-2.5 text-xs text-[#202329] outline-none focus:border-[#55aac9]";
 
-const PALETTES: ReadonlyArray<{ readonly value: ThemePalette; readonly label: string }> = [
-  { value: "light", label: "Light" },
-  { value: "warm-charcoal", label: "Warm charcoal" },
-  { value: "cool-graphite", label: "Cool graphite" },
-  { value: "high-contrast-ink", label: "High-contrast ink" },
-  { value: "espresso-night", label: "Espresso night" },
-  { value: "chalkboard-atelier", label: "Chalkboard atelier" },
-  { value: "prism-nocturne", label: "Prism nocturne" },
-  { value: "oled-signal", label: "OLED signal" },
-];
-
-const TEXTURES: ReadonlyArray<{ readonly value: ThemeTexture; readonly label: string }> = [
-  { value: "none", label: "Clean" },
-  { value: "paper", label: "Paper grain" },
-  { value: "slate", label: "Slate" },
-];
-
 export function PreviewTweaker(props: PreviewTweakerProps) {
   const [isOpen, setIsOpen] = useState(false);
   return (
@@ -58,7 +41,7 @@ export function PreviewTweaker(props: PreviewTweakerProps) {
             <label className="text-[11px] font-medium text-[#555b65]">
               Palette
               <select className={fieldClassName} value={props.palette} onChange={(event) => props.onPaletteChange(event.target.value as ThemePalette)}>
-                {PALETTES.map((option) => (
+                {THEME_PALETTES.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -68,7 +51,7 @@ export function PreviewTweaker(props: PreviewTweakerProps) {
             <label className="text-[11px] font-medium text-[#555b65]">
               Texture
               <select className={fieldClassName} value={props.texture} onChange={(event) => props.onTextureChange(event.target.value as ThemeTexture)}>
-                {TEXTURES.map((option) => (
+                {THEME_TEXTURES.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

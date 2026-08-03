@@ -99,8 +99,8 @@ export const ParticipantsPanel = React.memo(
       return sorted;
     }, [participants, searchQuery]);
 
-    const listSpacingClassName = variant === "sidebar" ? "divide-y divide-[#ecebe6]" : "space-y-1";
-    const emptyTextClassName = variant === "default" ? "text-chalk-text-muted" : "text-muted-foreground";
+    const listSpacingClassName = variant === "sidebar" ? "divide-y divide-[var(--chalk-app-line)]" : "space-y-1";
+    const emptyTextClassName = "text-[var(--chalk-app-text-muted)]";
 
     const rows = (
       <div className={listSpacingClassName}>
@@ -136,10 +136,10 @@ export const ParticipantsPanel = React.memo(
     // Mobile variant - fills container, no header (MobilePanel provides it)
     if (variant === "mobile") {
       return (
-        <div className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative bg-card", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
+        <div className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {onAddPeople && (
-              <Button onClick={onAddPeople} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-full py-3 px-4 mb-4 shadow-lg shadow-primary/25 min-h-[48px]">
+              <Button onClick={onAddPeople} className="mb-4 min-h-[48px] w-full rounded-full bg-[var(--chalk-app-control-primary)] px-4 py-3 !text-white shadow-[var(--chalk-app-shadow-control)] hover:bg-[var(--chalk-app-control-primary-hover)]">
                 <UserGroupIcon className="w-4 h-4" />
                 <span>Add people</span>
               </Button>
@@ -147,7 +147,7 @@ export const ParticipantsPanel = React.memo(
 
             {/* Section Label */}
             <div className="mb-3 px-1">
-              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">IN THE MEETING ({participants.length})</p>
+              <p className="text-[var(--chalk-app-text-muted)] text-[10px] font-semibold uppercase tracking-[0.1em]">IN THE MEETING ({participants.length})</p>
             </div>
 
             {/* Participants List */}
@@ -159,22 +159,28 @@ export const ParticipantsPanel = React.memo(
 
     if (variant === "sidebar") {
       return (
-        <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-white font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
-          <div className="flex items-center justify-between border-b border-[#deddd7] px-5 py-[18px]">
+        <div
+          className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)}
+          style={themeVariables as React.CSSProperties}
+          data-tour="participants-panel"
+          role="complementary"
+          aria-label="Participants list"
+        >
+          <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-5 py-[18px]">
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-[-0.025em] text-[#0c0e12]">{title === "Participants" ? "People" : title}</h2>
-              <span className="grid min-w-6 place-items-center rounded-full bg-[#eeede8] px-1.5 py-0.5 text-xs font-semibold text-[#555b65]">{participants.length}</span>
+              <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title === "Participants" ? "People" : title}</h2>
+              <span className="grid min-w-6 place-items-center rounded-full bg-[var(--chalk-app-control-group)] px-1.5 py-0.5 text-xs font-semibold text-[var(--chalk-app-text-muted)]">{participants.length}</span>
             </div>
 
             <div className="flex items-center gap-2">
               {onAddPeople && (
-                <Button onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] border-0 bg-[#202329] px-3 text-sm font-semibold !text-white transition-colors hover:bg-[#343840]">
+                <Button onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] border-0 bg-[var(--chalk-app-control-primary)] px-3 text-sm font-semibold !text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)]">
                   <UserGroupIcon className="w-4 h-4" />
                   <span>Invite</span>
                 </Button>
               )}
               {onClose && (
-                <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[#deddd7] text-[#555b65] transition-colors hover:bg-[#f7f6f2] hover:text-[#0c0e12]" aria-label="Close">
+                <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--chalk-app-line)] text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" aria-label="Close">
                   <Cancel01Icon className="w-5 h-5" />
                 </button>
               )}
@@ -187,9 +193,9 @@ export const ParticipantsPanel = React.memo(
                 placeholder="Search people"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search01Icon className="w-4 h-4 text-[#858a92]" />}
+                icon={<Search01Icon className="h-4 w-4 text-[var(--chalk-app-text-muted)]" />}
                 iconPosition="left"
-                className="w-full rounded-[7px] border-[#deddd7] bg-[#fbfaf7] transition-all placeholder:text-[#858a92] focus:border-[#9dcfe1] focus:bg-white"
+                className="w-full rounded-[7px] border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] transition-all placeholder:text-[var(--chalk-app-text-muted)] focus:border-[var(--chalk-app-control-active-line)] focus:bg-[var(--chalk-app-panel)]"
               />
             </div>
           )}
@@ -202,15 +208,15 @@ export const ParticipantsPanel = React.memo(
     // Default rendering (preserving exact existing structure/classes)
     return (
       <div
-        className={cn("flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
+        className={cn("chalk-textured-surface flex h-full w-80 flex-col border-l border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
         style={themeVariables as React.CSSProperties}
         data-tour="participants-panel"
         role="complementary"
         aria-label="Participants list"
       >
-        <div className="flex items-center justify-between p-4 border-b border-chalk-border-subtle">
+        <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] p-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-chalk-text-primary">{title}</h2>
+            <h2 className="text-[var(--chalk-app-text)] text-sm font-semibold">{title}</h2>
             <Badge variant="default" count={participants.length} />
           </div>
           {onClose && <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close participant list" />}

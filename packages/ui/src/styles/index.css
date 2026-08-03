@@ -171,6 +171,202 @@
   --chalk-app-texture-blend: normal;
 }
 
+[data-chalk][data-chalk-palette="warm-porcelain"] {
+  --chalk-app-canvas: #f2ebe2;
+  --chalk-app-chrome: #f8f3ec;
+  --chalk-app-stage: #eee4dc;
+  --chalk-app-panel: #fffaf5;
+  --chalk-app-tile-base: #eee4dc;
+  --chalk-app-tile-color-strength: 18%;
+  --chalk-app-text: #352f2b;
+  --chalk-app-text-muted: #70655e;
+  --chalk-app-line: #ded2c7;
+  --chalk-app-line-strong: #c8b8aa;
+  --chalk-app-control: #fffaf5;
+  --chalk-app-control-hover: #eee5dd;
+  --chalk-app-control-group: #eadfd5;
+  --chalk-app-control-primary: #51443c;
+  --chalk-app-control-primary-hover: #66564b;
+  --chalk-app-control-active: #dceef2;
+  --chalk-app-control-active-line: #6aa8ba;
+  --chalk-app-control-active-text: #29383d;
+  --chalk-app-message-remote: #eee7e0;
+  --chalk-app-message-local: #51443c;
+  --chalk-app-message-local-text: #fffaf5;
+  --chalk-app-input: #fffdf9;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(72, 55, 43, 0.08);
+  --chalk-app-shadow-sm: 0 10px 30px rgba(72, 55, 43, 0.08);
+  --chalk-app-shadow-control: 0 6px 18px rgba(72, 55, 43, 0.13);
+}
+
+[data-chalk][data-chalk-palette="cool-mist"] {
+  --chalk-app-canvas: #edf2f5;
+  --chalk-app-chrome: #f6f8fa;
+  --chalk-app-stage: #e7eef2;
+  --chalk-app-panel: #fbfdfe;
+  --chalk-app-tile-base: #e7eef2;
+  --chalk-app-tile-color-strength: 18%;
+  --chalk-app-text: #24313b;
+  --chalk-app-text-muted: #65727e;
+  --chalk-app-line: #d4dde3;
+  --chalk-app-line-strong: #b8c6cf;
+  --chalk-app-control: #fbfdfe;
+  --chalk-app-control-hover: #e6edf1;
+  --chalk-app-control-group: #e1e9ee;
+  --chalk-app-control-primary: #34414d;
+  --chalk-app-control-primary-hover: #465563;
+  --chalk-app-control-active: #dceff7;
+  --chalk-app-control-active-line: #5599b5;
+  --chalk-app-control-active-text: #21343d;
+  --chalk-app-message-remote: #e9eef1;
+  --chalk-app-message-local: #34414d;
+  --chalk-app-message-local-text: #f8fbfc;
+  --chalk-app-input: #ffffff;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(35, 54, 67, 0.08);
+  --chalk-app-shadow-sm: 0 10px 32px rgba(35, 54, 67, 0.08);
+  --chalk-app-shadow-control: 0 6px 18px rgba(35, 54, 67, 0.13);
+}
+
+[data-chalk][data-chalk-palette="paper-and-ink"] {
+  --chalk-app-canvas: #f4f4f0;
+  --chalk-app-chrome: #fafaf7;
+  --chalk-app-stage: #efefea;
+  --chalk-app-panel: #ffffff;
+  --chalk-app-tile-base: #eeeeea;
+  --chalk-app-tile-color-strength: 14%;
+  --chalk-app-text: #101214;
+  --chalk-app-text-muted: #555b62;
+  --chalk-app-line: #d7d8d5;
+  --chalk-app-line-strong: #b8bab8;
+  --chalk-app-control: #ffffff;
+  --chalk-app-control-hover: #e9e9e5;
+  --chalk-app-control-group: #e8e8e3;
+  --chalk-app-control-primary: #15171a;
+  --chalk-app-control-primary-hover: #2b2e32;
+  --chalk-app-control-active: #e3eff8;
+  --chalk-app-control-active-line: #196da8;
+  --chalk-app-control-active-text: #101214;
+  --chalk-app-message-remote: #eeeeea;
+  --chalk-app-message-local: #15171a;
+  --chalk-app-message-local-text: #ffffff;
+  --chalk-app-input: #ffffff;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(16, 18, 20, 0.1);
+  --chalk-app-shadow-sm: 0 8px 26px rgba(16, 18, 20, 0.08);
+  --chalk-app-shadow-control: 0 5px 16px rgba(16, 18, 20, 0.14);
+}
+
+[data-chalk][data-chalk-palette="cream-and-clay"] {
+  --chalk-app-canvas: #f6eadf;
+  --chalk-app-chrome: #fbf3ea;
+  --chalk-app-stage: #f1ddcd;
+  --chalk-app-panel: #fffaf4;
+  --chalk-app-tile-base: #efddcf;
+  --chalk-app-tile-color-strength: 22%;
+  --chalk-app-text: #432d24;
+  --chalk-app-text-muted: #7d6458;
+  --chalk-app-line: #e2cfc0;
+  --chalk-app-line-strong: #c8ab97;
+  --chalk-app-control: #fffaf4;
+  --chalk-app-control-hover: #f0dfd1;
+  --chalk-app-control-group: #ead6c6;
+  --chalk-app-control-primary: #5c3828;
+  --chalk-app-control-primary-hover: #744733;
+  --chalk-app-control-active: #e8e8d5;
+  --chalk-app-control-active-line: #87945e;
+  --chalk-app-control-active-text: #354025;
+  --chalk-app-message-remote: #f1e5da;
+  --chalk-app-message-local: #5c3828;
+  --chalk-app-message-local-text: #fffaf4;
+  --chalk-app-input: #fffdf8;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(86, 50, 34, 0.1);
+  --chalk-app-shadow-sm: 0 10px 32px rgba(86, 50, 34, 0.09);
+  --chalk-app-shadow-control: 0 6px 18px rgba(86, 50, 34, 0.15);
+}
+
+[data-chalk][data-chalk-palette="studio-canvas"] {
+  --chalk-app-canvas: #f0eee5;
+  --chalk-app-chrome: #f8f5ec;
+  --chalk-app-stage: #ebe9de;
+  --chalk-app-panel: #fdfbf5;
+  --chalk-app-tile-base: #e9e7dc;
+  --chalk-app-tile-color-strength: 22%;
+  --chalk-app-text: #303832;
+  --chalk-app-text-muted: #657067;
+  --chalk-app-line: #d8d7ca;
+  --chalk-app-line-strong: #b9bdad;
+  --chalk-app-control: #fdfbf5;
+  --chalk-app-control-hover: #e8e7dc;
+  --chalk-app-control-group: #e4e4d8;
+  --chalk-app-control-primary: #48594b;
+  --chalk-app-control-primary-hover: #5a6e5d;
+  --chalk-app-control-active: #dceff2;
+  --chalk-app-control-active-line: #5e9bab;
+  --chalk-app-control-active-text: #294047;
+  --chalk-app-message-remote: #ecebe2;
+  --chalk-app-message-local: #48594b;
+  --chalk-app-message-local-text: #fbfaf4;
+  --chalk-app-input: #fffef9;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(48, 56, 50, 0.08);
+  --chalk-app-shadow-sm: 0 10px 30px rgba(48, 56, 50, 0.08);
+  --chalk-app-shadow-control: 0 6px 18px rgba(48, 56, 50, 0.13);
+}
+
+[data-chalk][data-chalk-palette="prism-daylight"] {
+  --chalk-app-canvas: #f4f1fb;
+  --chalk-app-chrome: #fbf9ff;
+  --chalk-app-stage: #eee8fa;
+  --chalk-app-panel: #fefcff;
+  --chalk-app-tile-base: #eee8f7;
+  --chalk-app-tile-color-strength: 26%;
+  --chalk-app-text: #2b2037;
+  --chalk-app-text-muted: #71657e;
+  --chalk-app-line: #ded5ea;
+  --chalk-app-line-strong: #c4b4d8;
+  --chalk-app-control: #fefcff;
+  --chalk-app-control-hover: #ebe3f5;
+  --chalk-app-control-group: #e9e1f2;
+  --chalk-app-control-primary: #4c2e78;
+  --chalk-app-control-primary-hover: #614091;
+  --chalk-app-control-active: #e5dcfb;
+  --chalk-app-control-active-line: #7651d2;
+  --chalk-app-control-active-text: #34204f;
+  --chalk-app-message-remote: #eee9f4;
+  --chalk-app-message-local: #3b245c;
+  --chalk-app-message-local-text: #ffffff;
+  --chalk-app-input: #ffffff;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(54, 33, 78, 0.09);
+  --chalk-app-shadow-sm: 0 12px 36px rgba(75, 44, 110, 0.1);
+  --chalk-app-shadow-control: 0 7px 20px rgba(75, 44, 110, 0.16);
+}
+
+[data-chalk][data-chalk-palette="signal-white"] {
+  --chalk-app-canvas: #f3f7fb;
+  --chalk-app-chrome: #ffffff;
+  --chalk-app-stage: #edf4fa;
+  --chalk-app-panel: #ffffff;
+  --chalk-app-tile-base: #eef4f8;
+  --chalk-app-tile-color-strength: 22%;
+  --chalk-app-text: #0c1117;
+  --chalk-app-text-muted: #596674;
+  --chalk-app-line: #d8e0e7;
+  --chalk-app-line-strong: #b5c2cd;
+  --chalk-app-control: #ffffff;
+  --chalk-app-control-hover: #e8f0f6;
+  --chalk-app-control-group: #e5edf3;
+  --chalk-app-control-primary: #111820;
+  --chalk-app-control-primary-hover: #28323d;
+  --chalk-app-control-active: #e1f0ff;
+  --chalk-app-control-active-line: #1684e2;
+  --chalk-app-control-active-text: #0b4f87;
+  --chalk-app-message-remote: #edf1f4;
+  --chalk-app-message-local: #111820;
+  --chalk-app-message-local-text: #ffffff;
+  --chalk-app-input: #ffffff;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(12, 17, 23, 0.09);
+  --chalk-app-shadow-sm: 0 10px 32px rgba(12, 38, 62, 0.08);
+  --chalk-app-shadow-control: 0 6px 18px rgba(12, 38, 62, 0.14);
+}
+
 /* Dark mode */
 [data-chalk].dark,
 [data-chalk][data-chalk-theme="dark"],
@@ -456,7 +652,7 @@
   --ring: var(--chalk-app-control-active-line);
 }
 
-[data-chalk][data-chalk-palette]:not([data-chalk-palette="light"]) {
+[data-chalk][data-chalk-theme="dark"] {
   color-scheme: dark;
 }
 
@@ -472,6 +668,13 @@
     url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.36' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.2'/%3E%3C/svg%3E");
   --chalk-app-texture-size: auto, 220px 220px;
   --chalk-app-texture-blend: soft-light;
+}
+
+[data-chalk][data-chalk-theme="light"][data-chalk-texture="slate"] {
+  --chalk-app-texture-image:
+    repeating-linear-gradient(7deg, transparent 0 9px, rgba(12, 14, 18, 0.022) 10px, transparent 11px 19px),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.36' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
+  --chalk-app-texture-blend: multiply;
 }
 
 .chalk-textured-surface {

@@ -4,6 +4,8 @@ export { useChalkActions, useChalkSelector, useChalkSession, useChalkSnapshot, u
 export type { ChalkSelectionEquality, ChalkSelector } from "./session/hooks";
 export { VideoConference } from "./components/video-conference/VideoConference";
 export type { VideoConferenceProps, VideoConferenceRole } from "./components/video-conference/VideoConference";
+export { getThemeMode, isDarkThemePalette, THEME_PALETTES, THEME_TEXTURES } from "./components/theme";
+export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./components/theme";
 export type { PreJoinSettings } from "./components/pre-join-screen/PreJoinScreen";
 export type { ConferenceEventHandlers, ParticipantJoinedEvent, ParticipantLeftEvent, ScreenShareStartedEvent, ScreenShareStoppedEvent, SessionEndedEvent } from "./session/use-conference-events";
 export type { ConferencePhase } from "@q9labsai/chalk-client";

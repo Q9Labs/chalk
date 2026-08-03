@@ -44,12 +44,18 @@ export const ConferenceInfoDialog = React.memo<ConferenceInfoDialogProps>(
     if (!isOpen) return null;
 
     return (
-      <div className="fixed inset-0 z-50 grid place-items-center bg-[#0c0e12]/20 p-4 backdrop-blur-[1px]" onMouseDown={onClose}>
-        <section className={cn("w-full max-w-[500px] overflow-hidden rounded-[14px] border border-[#c9c8c2] bg-[#fbfaf7] text-[#0c0e12] shadow-[0_28px_80px_rgba(12,14,18,0.2)]", className)} role="dialog" aria-modal="true" aria-label="Meeting details" onMouseDown={(event) => event.stopPropagation()}>
-          <header className="flex items-start justify-between gap-5 border-b border-[#deddd7] px-6 py-5">
+      <div className="fixed inset-0 z-50 grid place-items-center bg-black/20 p-4 backdrop-blur-[1px]" onMouseDown={onClose}>
+        <section
+          className={cn("chalk-textured-surface w-full max-w-[500px] overflow-hidden rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]", className)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Meeting details"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <header className="flex items-start justify-between gap-5 border-b border-[var(--chalk-app-line)] px-6 py-5">
             <div className="min-w-0">
               <h2 className="text-xl font-semibold tracking-[-0.025em]">Meeting details</h2>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[#6d727b]">
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[var(--chalk-app-text-muted)]">
                 <span className="truncate">{roomName}</span>
                 <span aria-hidden="true">·</span>
                 <span className="font-mono tabular-nums">{formatDuration(meetingDuration)}</span>
@@ -57,7 +63,7 @@ export const ConferenceInfoDialog = React.memo<ConferenceInfoDialogProps>(
                 {isTranscribing ? <span className="rounded-full bg-[#e5f3f8] px-2 py-0.5 text-[#315f72]">Transcribing</span> : null}
               </div>
             </div>
-            <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] text-[#6d727b] transition hover:bg-[#eeede8] hover:text-[#0c0e12]" aria-label="Close meeting details">
+            <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] text-[var(--chalk-app-text-muted)] transition hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" aria-label="Close meeting details">
               <Cancel01Icon size={19} />
             </button>
           </header>
@@ -66,14 +72,14 @@ export const ConferenceInfoDialog = React.memo<ConferenceInfoDialogProps>(
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold">Invite link</p>
-                {meetingId ? <p className="font-mono text-[11px] text-[#858a92]">ID {meetingId}</p> : null}
+                {meetingId ? <p className="font-mono text-[11px] text-[var(--chalk-app-text-muted)]">ID {meetingId}</p> : null}
               </div>
-              <div className="flex items-center gap-2 rounded-[10px] border border-[#deddd7] bg-white p-2">
-                <p className="min-w-0 flex-1 truncate px-2 font-mono text-xs text-[#555b65]">{meetingUrl}</p>
+              <div className="flex items-center gap-2 rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] p-2">
+                <p className="min-w-0 flex-1 truncate px-2 font-mono text-xs text-[var(--chalk-app-text-muted)]">{meetingUrl}</p>
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className={cn("flex h-9 shrink-0 items-center gap-2 rounded-[7px] px-3 text-xs font-semibold transition", copied ? "bg-[#e3eadf] text-[#49645d]" : "bg-[#202329] !text-white hover:bg-[#343840]")}
+                  className={cn("flex h-9 shrink-0 items-center gap-2 rounded-[7px] px-3 text-xs font-semibold transition", copied ? "bg-[#e3eadf] text-[#49645d]" : "bg-[var(--chalk-app-control-primary)] !text-white hover:bg-[var(--chalk-app-control-primary-hover)]")}
                   aria-label={copied ? "Meeting link copied" : "Copy meeting link"}
                   aria-live="polite"
                 >
@@ -83,23 +89,23 @@ export const ConferenceInfoDialog = React.memo<ConferenceInfoDialogProps>(
               </div>
             </div>
 
-            <div className="grid overflow-hidden rounded-[10px] border border-[#deddd7] bg-white sm:grid-cols-2">
-              <div className="border-b border-[#deddd7] p-4 sm:border-b-0 sm:border-r">
+            <div className="grid overflow-hidden rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] sm:grid-cols-2">
+              <div className="border-b border-[var(--chalk-app-line)] p-4 sm:border-b-0 sm:border-r">
                 <div className="flex items-center gap-2 text-[#49645d]">
                   <Shield01Icon size={17} />
                   <span className="text-sm font-semibold">Media protected</span>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-[#6d727b]">Streams are encrypted in transit through the configured provider.</p>
+                <p className="mt-2 text-xs leading-5 text-[var(--chalk-app-text-muted)]">Streams are encrypted in transit through the configured provider.</p>
               </div>
               <div className="p-4">
                 <div className="flex items-center gap-2">
                   <Monitor01Icon size={17} />
                   <span className="text-sm font-semibold">Connection</span>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-[#6d727b]">
+                <p className="mt-2 text-xs leading-5 text-[var(--chalk-app-text-muted)]">
                   {stats.resolution} · {stats.latency} ms · {stats.packetLoss}% loss
                 </p>
-                <p className="mt-1 truncate text-[11px] text-[#858a92]">{stats.region}</p>
+                <p className="mt-1 truncate text-[11px] text-[var(--chalk-app-text-muted)]">{stats.region}</p>
               </div>
             </div>
           </div>
