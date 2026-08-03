@@ -86,6 +86,44 @@ contract leaks: `ChalkSessionMediaClient extends V3ClientMediaPlane` from
    → assignRole; participantSessionId → participantId; "room actions" as a
    concept dissolves into the controllers that own each action.
 
+## Rulings landed live (Hasan, 2026-08-03 night)
+
+- **D1 ruled: namespaced command grammar.** **D5 ruled: adopt
+  `noun.condition` error codes in this wave.** **D6 ruled: vocabulary
+  mapping approved.** Controller set confirmed by Hasan (media, chat,
+  participants, reactions, whiteboard); chat-file transport folds under
+  chat (`client.chat.files`), not a sixth controller.
+- **R1 (new requirement, from Hasan's production pain): access refresh
+  must survive real conditions.** Today's client HAS automatic refresh
+  but it is timer-shaped and fail-hard: a scheduled timer fires at
+  expiry−60s (only while `live`), `getSyncToken`/`getMediaToken` refresh
+  lazily inside the refresh window, and recovery refreshes explicitly.
+  Gaps that bite: background tabs / backgrounded RN apps throttle timers
+  so expiry passes silently; there is NO reactive refresh — an auth
+  rejection (`invalid_access` subject mismatch) fails the whole session
+  instead of refreshing once and retrying; pre-join access that expires
+  before `join()` throws instead of re-fetching. The rebuilt Connection
+  owns access as a first-class loop: (a) keep the scheduled refresh,
+  (b) revalidate freshness on wake/foreground (visibilitychange /
+  AppState) and before every command, (c) on ANY port rejecting with
+  `access.invalid`: refresh once, retry once, only then surface failure,
+  (d) stale access at join → silent re-fetch, never a user-facing error.
+- **Controller communication law**: controllers never call each other.
+  Three channels only: read sibling state from the store snapshot;
+  everything shared (ports, command gate, lifecycle events, access)
+  flows through Connection; a cross-feature action belongs wholly to the
+  controller that owns its outcome (accept-unmute lives entirely in
+  media). If a future action truly spans controllers it composes
+  top-down in SpaceClient — sideways calls stay banned.
+- **D7 (pending Hasan confirmation): Effect-TS placement.** Read of
+  Hasan's instruction: the rebuilt core is written in Effect (join,
+  recovery, serialized commands as Effect programs; tagged errors
+  carrying the `noun.condition` codes; interruption replacing hand-rolled
+  epoch plumbing where it can do so without changing semantics), while
+  the public SDK surface stays Promise-based for customers, with an
+  Effect-native entry exported for Effect users (today's `src/effect.ts`
+  precedent). React/RN consume the store, not Effect.
+
 ## Execution notes (for the wave worker, after ratification)
 
 Depends on the contract wave's regenerated types (spaces/episodes wire
