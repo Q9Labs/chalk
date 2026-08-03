@@ -370,10 +370,6 @@ ordinary join attempt. Host admission remains available through
 
 ### Fixed
 
-- Made the localhost browser backend replace an expired shared demo session once
-  on `session_not_active` admission conflicts, preserving other HTTP 409 errors
-  and emitting structured rotation outcomes instead of surfacing
-  `access_unavailable` after the session deadline.
 - Accepted committed Sync acknowledgements and matching terminal control events
   as final proof for participant Leave and Session end when the initiating
   client is removed before a final acknowledgement, and skipped redundant
