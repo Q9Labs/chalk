@@ -1,5 +1,14 @@
 # Chalk SDK Ubiquitous Language
 
+> **Superseded (2026-08-03).** The canonical vocabulary now lives in the
+> repo-root `GLOSSARY.md`; where this document disagrees with it, the
+> glossary wins. In particular: Room → Space, Session → Episode,
+> VideoConference → `<Chalk />`, and `Conference*` naming is retired. The
+> UI shape catalog below (Screen/View/Panel/Dialog/Picker and the naming
+> grammar) was ratified and remains useful input for the SDK rename wave.
+> Rulings and reasoning:
+> `scratchpad/ubiquitous-language-decision-session-log-2026-08-03.md`.
+
 This document defines the canonical language for Chalk SDKs. It applies to
 public SDK types, methods, hooks, components, props, events, files, examples,
 and documentation across platforms.

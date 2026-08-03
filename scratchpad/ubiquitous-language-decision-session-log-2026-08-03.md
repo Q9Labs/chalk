@@ -187,10 +187,16 @@ condition**: `episode.not_found`, `space.access_denied` (Hasan: no dashes).
 - **One live Episode per Space confirmed by Hasan** ("just creating new
   space"); parallel tracks are separate Spaces.
 
-## Open decisions (not yet ruled)
+## Open decisions
 
-- **Member/guest identity direction** (discussed, mechanics clarified, not
-  yet explicitly locked): Chalk never owns end-user identity; embedding app
+**2026-08-03, post-compaction: Hasan locked the last open ruling ("agree with
+that open ruling") — the decision phase is CLOSED.** Both Member/guest bullets
+below are now LOCKED as written; the promotion-path set is accepted as
+proposed (all three paths, auto-enroll still excluded). Only in-wave design
+details remain (SDK piece names under §9, turnkey copy, D3 posting corollary).
+
+- **Member/guest identity direction — LOCKED**: Chalk never owns end-user
+  identity; embedding app
   is the identity authority. What a Member gets over a guest (enumerated for
   the glossary): standing access (link just works), durable Role across
   Episodes, roster presence while dormant, continuous identity in history
@@ -201,7 +207,7 @@ condition**: `episode.not_found`, `space.access_denied` (Hasan: no dashes).
   (Stripe-customer pattern; external_id is a unique reference per tenant,
   NEVER the primary key — Chalk mints its own ids). Members then attach
   Space+Role to registered identities.
-- **Guest→Member promotion paths** (proposed, awaiting Hasan's taste):
+- **Guest→Member promotion paths — LOCKED as the proposed set**:
   (a) backend API call (register identity + add membership); (b) in-UI
   promotion by a holder of `manage_members` — requires resolving the guest to
   a registered identity via a handshake with the customer's identity system
