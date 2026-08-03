@@ -193,7 +193,7 @@ async function ensureAndroidEmulator() {
 }
 
 function reverseAndroidPorts(serial) {
-  for (const port of ["8080", "8081"]) {
+  for (const port of ["8787", "8080", "8081", "4100"]) {
     tryRun("adb", ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`]);
   }
 }

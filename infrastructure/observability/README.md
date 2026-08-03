@@ -29,10 +29,12 @@ http://127.0.0.1:4318   OTLP over HTTP
 http://127.0.0.1:4317   OTLP over gRPC
 ```
 
-`pnpm run observability:smoke` sends one trace, metric, and correlated log, then
-proves that Grafana provisioned the dashboard and that Tempo, Prometheus, and
-Loki can query their respective signal. It also verifies the webhook panels,
-the shared Journey ID filter, and every provisioned webhook alert rule.
+`pnpm run observability:smoke` waits for Grafana, the OpenTelemetry Collector,
+Prometheus, Tempo, and Loki. It also checks that Grafana can query the
+configured journey-ledger data source, then sends one trace, metric, and
+correlated log. The command proves that Grafana provisioned the dashboard and
+that each telemetry backend can query its data. It also verifies the webhook
+panels, the shared Journey ID filter, and every provisioned webhook alert rule.
 
 The stack also emits this independent pipeline canary every minute. Separate
 critical rules verify the canary metric in Prometheus, trace in Tempo, and log
@@ -69,10 +71,33 @@ route them through an independently tested human notification path.
 The durable journey skeleton remains in the API's Postgres
 `observability_journey_events` table. Grafana's provisioned `Chalk Journey
 Ledger` data source displays it beside operational telemetry. Entering a
-Journey ID in the dashboard filters both this ledger and correlated logs. The
-local data source owns an isolated `chalk_observability` database on localhost
-port `55432`, so existing development migration history cannot break the
-dashboard.
+Journey ID in the dashboard filters both this ledger and correlated logs.
+
+The observability stack uses its isolated `chalk_observability` database on a
+configurable localhost port. `CHALK_OBSERVABILITY_POSTGRES_PORT` defaults to
+`55432`, and the E2E harness uses the same value when it builds its database
+URL. Set another port when another local Postgres already owns the default:
+
+```bash
+CHALK_OBSERVABILITY_POSTGRES_PORT=55433 pnpm run observability:start
+CHALK_OBSERVABILITY_POSTGRES_PORT=55433 pnpm run observability:smoke
+```
+
+To point the data source at the normal API development database instead, set
+the target before starting the stack:
+
+```bash
+CHALK_OBSERVABILITY_LEDGER_TARGET=api pnpm run observability:start
+CHALK_OBSERVABILITY_LEDGER_TARGET=api pnpm run observability:smoke
+```
+
+The API target resolves to `host.docker.internal:5432`, database `chalk`, and
+the default local `postgres` credentials. Override those values when the API
+database uses different settings with `CHALK_GRAFANA_LEDGER_URL`,
+`CHALK_GRAFANA_LEDGER_DATABASE`, `CHALK_GRAFANA_LEDGER_USER`, and
+`CHALK_GRAFANA_LEDGER_PASSWORD`. The standalone stack and `observability:e2e`
+select the isolated observability database explicitly; `observability:e2e`
+also honors `CHALK_OBSERVABILITY_POSTGRES_PORT`.
 
 ## Recurring signed canary
 

@@ -3,11 +3,33 @@ import { waitFor } from "./poll.mjs";
 
 const serviceName = "chalk-observability-smoke";
 const canaryServiceName = "chalk-observability-canary";
-const otlpEndpoint = "http://127.0.0.1:4318";
+const grafanaBaseUrl = baseUrl("CHALK_OBSERVABILITY_GRAFANA_URL", "http://127.0.0.1:3000");
+const collectorBaseUrl = baseUrl("CHALK_OBSERVABILITY_COLLECTOR_URL", "http://127.0.0.1:13133");
+const lokiBaseUrl = baseUrl("CHALK_OBSERVABILITY_LOKI_URL", "http://127.0.0.1:3100");
+const otlpEndpoint = baseUrl("CHALK_OBSERVABILITY_OTLP_HTTP_URL", "http://127.0.0.1:4318");
+const prometheusBaseUrl = baseUrl("CHALK_OBSERVABILITY_PROMETHEUS_URL", "http://127.0.0.1:9090");
+const tempoBaseUrl = baseUrl("CHALK_OBSERVABILITY_TEMPO_URL", "http://127.0.0.1:3200");
+const grafanaAuthorization = `Basic ${Buffer.from("admin:admin").toString("base64")}`;
+const ledgerDatasourceUid = "chalk-journey-ledger";
+const ledgerDatasourceType = "grafana-postgresql-datasource";
 const traceId = randomBytes(16).toString("hex");
 const spanId = randomBytes(8).toString("hex");
 const now = BigInt(Date.now()) * 1_000_000n;
 const start = now - 25_000_000n;
+let ledgerDatasource;
+
+await Promise.all([
+  waitFor("Grafana readiness", () => endpointIsReady(`${grafanaBaseUrl}/api/health`)),
+  waitFor("OpenTelemetry Collector readiness", () => endpointIsReady(`${collectorBaseUrl}/ready`)),
+  waitFor("Prometheus readiness", () => endpointIsReady(`${prometheusBaseUrl}/-/ready`)),
+  waitFor("Tempo readiness", () => endpointIsReady(`${tempoBaseUrl}/ready`)),
+  waitFor("Loki readiness", () => endpointIsReady(`${lokiBaseUrl}/ready`)),
+]);
+
+await waitFor("Grafana journey-ledger datasource", async () => {
+  ledgerDatasource = await inspectLedgerDatasource();
+  return ledgerDatasource !== null;
+});
 
 const resource = {
   attributes: [
@@ -110,7 +132,7 @@ await send("/v1/logs", {
 });
 
 await waitFor("Grafana dashboard", async () => {
-  const response = await fetch("http://127.0.0.1:3000/api/dashboards/uid/chalk-observability-v1");
+  const response = await fetch(`${grafanaBaseUrl}/api/dashboards/uid/chalk-observability-v1`);
   if (!response.ok) return false;
   const body = await response.json();
   const panels = new Set(body.dashboard?.panels?.map((panel) => panel.id));
@@ -119,9 +141,9 @@ await waitFor("Grafana dashboard", async () => {
 });
 
 await waitFor("Grafana alert rules", async () => {
-  const response = await fetch("http://127.0.0.1:3000/api/v1/provisioning/alert-rules", {
+  const response = await fetch(`${grafanaBaseUrl}/api/v1/provisioning/alert-rules`, {
     headers: {
-      authorization: `Basic ${Buffer.from("admin:admin").toString("base64")}`,
+      authorization: grafanaAuthorization,
     },
   });
   if (!response.ok) return false;
@@ -160,7 +182,7 @@ for (const signal of ["metrics", "traces", "logs"]) {
 
 await waitFor("Tempo trace", async () => {
   const query = encodeURIComponent(`{ resource.service.name = "${serviceName}" }`);
-  const response = await fetch(`http://127.0.0.1:3200/api/search?q=${query}`);
+  const response = await fetch(`${tempoBaseUrl}/api/search?q=${query}`);
   if (!response.ok) return false;
   const body = await response.json();
   return body.traces?.some((trace) => trace.traceID?.padStart(32, "0") === traceId) ?? false;
@@ -172,7 +194,7 @@ await waitFor("Prometheus metric", async () => {
 
 await waitFor("Loki log", async () => {
   const query = encodeURIComponent(`{service_name="${serviceName}"}`);
-  const response = await fetch(`http://127.0.0.1:3100/loki/api/v1/query_range?query=${query}`);
+  const response = await fetch(`${lokiBaseUrl}/loki/api/v1/query_range?query=${query}`);
   if (!response.ok) return false;
   const body = await response.json();
   return body.data?.result?.length > 0;
@@ -197,6 +219,11 @@ console.log(
         "chalk-webhook-canary-missing",
       ],
       service: serviceName,
+      ledger_datasource: {
+        database: ledgerDatasource.database,
+        url: ledgerDatasource.url,
+        uid: ledgerDatasource.uid,
+      },
       trace_id: traceId,
       result: "passed",
     },
@@ -218,8 +245,56 @@ async function send(path, body) {
 }
 
 async function hasPrometheusValue(query, expected) {
-  const response = await fetch(`http://127.0.0.1:9090/api/v1/query?query=${encodeURIComponent(query)}`);
+  const response = await fetch(`${prometheusBaseUrl}/api/v1/query?query=${encodeURIComponent(query)}`);
   if (!response.ok) return false;
   const body = await response.json();
   return body.data?.result?.some((series) => Number(series.value?.[1]) >= expected) ?? false;
+}
+
+async function endpointIsReady(url) {
+  const response = await fetch(url);
+  return response.ok;
+}
+
+async function inspectLedgerDatasource() {
+  const response = await fetch(`${grafanaBaseUrl}/api/datasources/uid/${ledgerDatasourceUid}`, {
+    headers: { authorization: grafanaAuthorization },
+  });
+  if (!response.ok) return null;
+
+  const datasource = await response.json();
+  if (datasource.uid !== ledgerDatasourceUid || datasource.type !== ledgerDatasourceType) return null;
+
+  const queryResponse = await fetch(`${grafanaBaseUrl}/api/ds/query`, {
+    method: "POST",
+    headers: { authorization: grafanaAuthorization, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: String(Date.now() - 60_000),
+      to: String(Date.now()),
+      queries: [
+        {
+          datasource: { uid: ledgerDatasourceUid },
+          format: "table",
+          rawQuery: true,
+          rawSql: "SELECT 1 AS ready",
+          refId: "A",
+        },
+      ],
+    }),
+  });
+  if (!queryResponse.ok) return null;
+
+  const query = await queryResponse.json();
+  const ready = query.results?.A?.frames?.some((frame) => frame.data?.values?.some((column) => Array.isArray(column) && column.some((value) => value === 1 || value === "1"))) ?? false;
+  if (!ready) return null;
+
+  return {
+    database: datasource.jsonData?.database ?? datasource.database,
+    uid: datasource.uid,
+    url: datasource.url,
+  };
+}
+
+function baseUrl(name, fallback) {
+  return (process.env[name] ?? fallback).replace(/\/+$/, "");
 }

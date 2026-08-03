@@ -23,6 +23,7 @@ receiver_pid=""
 tunnel_pid=""
 webhook_proof_pid=""
 sfu_stub_pid=""
+observability_postgres_port="${CHALK_OBSERVABILITY_POSTGRES_PORT:-55432}"
 
 free_port() {
   node -e 'const server=require("node:net").createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close()})'
@@ -33,7 +34,7 @@ sync_port="$(free_port)"
 receiver_port="$(free_port)"
 provider_bridge_port="$(free_port)"
 sfu_stub_port="$(free_port)"
-database_url="postgres://postgres:postgres@127.0.0.1:55432/${database}?sslmode=disable"
+database_url="postgres://postgres:postgres@127.0.0.1:${observability_postgres_port}/${database}?sslmode=disable"
 receiver_secret_file="${artifact_dir}/webhook-receiver-secret.json"
 receiver_state_file="${artifact_dir}/webhook-receiver-state.json"
 receiver_inbox_file="${artifact_dir}/webhook-receiver-inbox.json"
@@ -265,7 +266,8 @@ node -e 'const { generateKeyPairSync }=require("node:crypto"); const { writeFile
 generate_provider_bridge_certificates
 start_sfu_stub
 wait_for_sfu_stub
-bash "${root}/infrastructure/observability/scripts/local.sh" start
+CHALK_OBSERVABILITY_LEDGER_TARGET=observability \
+  bash "${root}/infrastructure/observability/scripts/local.sh" start
 docker exec chalk-observability-postgres dropdb -U postgres --force --if-exists "${database}"
 docker exec chalk-observability-postgres createdb -U postgres "${database}"
 

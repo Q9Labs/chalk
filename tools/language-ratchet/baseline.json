@@ -99,10 +99,10 @@
     "waiting-room": 0
   },
   "infrastructure": {
-    "meeting": 182,
+    "meeting": 181,
     "conference": 0,
     "videoconference": 0,
-    "room": 83,
+    "room": 82,
     "session": 463,
     "attendee": 0,
     "waitingroom": 0,
@@ -135,7 +135,7 @@
     "meeting": 159,
     "conference": 7,
     "videoconference": 0,
-    "room": 169,
+    "room": 167,
     "session": 259,
     "attendee": 0,
     "waitingroom": 0,

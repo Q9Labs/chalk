@@ -75,6 +75,11 @@ test("lockfile changes select all JavaScript workspaces and dependency checks", 
   assert.match(plan.tasks.find((task) => task.id === "build").reason, /web/);
 });
 
+test("workspace builds run one at a time in dependency order", () => {
+  const buildTask = createGatePlan(["pnpm-lock.yaml"], { workspaces }).tasks.find((task) => task.id === "build");
+  assert.deepEqual(buildTask.command, ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "@q9labsai/chalk-client", "--filter", "@q9labsai/chalk-react", "--filter", "web", "run", "build"]);
+});
+
 test("gate definitions and unknown paths fail closed to full scope", () => {
   assert.equal(createGatePlan(["scripts/gates/commit.sh"], { workspaces }).full, true);
   assert.equal(createGatePlan([".github/workflows/sync-reliability.yml"], { workspaces }).full, true);

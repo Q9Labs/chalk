@@ -2,8 +2,10 @@
   "entry": [
     "**/*.test.ts",
     "**/*.test.tsx",
+    "**/*.test.mjs",
     "**/*.spec.ts",
     "**/*.spec.tsx",
+    "apps/mobile/scripts/prepare-local-bridge.mjs",
     "apps/api/docs/app.js",
     "apps/api/scripts/smoke-lifecycle.mjs",
     "apps/sync/scripts/reliability_harness.mjs",
@@ -27,6 +29,9 @@
     "sdks/typescript/react/src/index.ts",
     "sdks/typescript/react/src/components/lazy.tsx",
     "sdks/typescript/react-native/src/**/*.{ts,tsx}",
+    "sdks/typescript/react-native/embedded/chalk-whiteboard/chalk.css",
+    "sdks/typescript/react-native/embedded/chalk-whiteboard/index.css",
+    "sdks/typescript/react-native/embedded/chalk-whiteboard/mathjax-config.js",
     "tools/contract-codegen/src/emitters/*.mjs",
     "tools/contract-codegen/src/typespec-proof/tsp-index.mjs",
     "tools/contract-codegen/test/*.mjs",
@@ -70,6 +75,8 @@
   "duplicates": {
     "ignore": [
       "scripts/gates/**",
+      "scripts/dev/**",
+      "scratchpad/**",
       "apps/web/src/routes/status.tsx",
       "apps/web/src/components/EdgeDiagnostics.tsx",
       "apps/web/src/components/VideoPlayer.tsx",
@@ -110,6 +117,8 @@
       "**/*.test.ts",
       "**/*.test.tsx",
       "scripts/gates/**",
+      "scripts/dev/**",
+      "scripts/open-mobile-dev-simulators.mjs",
       "scripts/recorder/**",
       "scratchpad/**",
       "docs/**",

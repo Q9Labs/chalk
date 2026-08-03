@@ -7,12 +7,12 @@ tofu_dir="$repo_root/infrastructure/recorder"
 tofu -chdir="$tofu_dir" fmt -check -recursive
 tofu -chdir="$tofu_dir" init -backend=false -input=false -upgrade=false
 tofu -chdir="$tofu_dir" validate
-pnpm exec vitest run "$repo_root/scripts/recorder/validate-config.test.mjs"
+(cd "$repo_root" && pnpm exec vitest run --dir scripts/recorder validate-config.test.mjs)
 
 # A local validation gate must remain closed by default. This proves the
 # operational script cannot accidentally pass without staging evidence and
 # scoped credentials, while keeping the values themselves out of logs.
-if node "$repo_root/scripts/recorder/validate-config.mjs" >/dev/null 2>&1; then
+if (cd "$repo_root" && node scripts/recorder/validate-config.mjs) >/dev/null 2>&1; then
   echo "recorder gate unexpectedly passed without staging credentials" >&2
   exit 1
 fi

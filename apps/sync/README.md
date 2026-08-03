@@ -22,6 +22,19 @@ Development listens on `http://localhost:4100`. The interactive lab at
 `/dev/lab` exercises the legacy development surface. Production disables that
 surface and protocol v1.
 
+## Local parity
+
+The root `pnpm dev` profile runs Sync with `MIX_ENV=prod` and
+`CHALK_SYNC_LOCAL_PARITY=true`. Sync uses the migrated local Postgres database,
+verifies API-issued Ed25519 JWTs, binds to `127.0.0.1`, and reaches the Go API
+through the generated local mutual-TLS provider bridge. The runtime creates
+those signing and certificate identities under `.private/chalk-dev/`; no
+manual key or environment-file setup is needed.
+
+This path is distinct from `CHALK_SYNC_LOCAL_PROOF`: it does not use memory
+state or the development token verifier. `/readyz` checks the Postgres and
+provider-bridge dependencies before the root command reports ready.
+
 ## Durable architecture
 
 The v3 command path is:

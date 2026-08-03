@@ -121,6 +121,7 @@ defmodule ChalkSync.Operations.Probe do
          synchronous_standby_names_configured: String.trim(standby_names) != "",
          synchronous_standbys: synchronous_standbys,
          wal_lag_bytes: wal_lag_bytes,
+         synchronous_standby_requirement: synchronous_standby_requirement(),
          oldest_pending_lifecycle_intent_ms: pending_age_ms,
          retention_cleanup_lag_ms: retention_cleanup_lag_ms
        }}
@@ -201,6 +202,23 @@ defmodule ChalkSync.Operations.Probe do
 
       true ->
         :ok
+    end
+  end
+
+  @doc false
+  @spec synchronous_standby_requirement() :: String.t()
+  def synchronous_standby_requirement do
+    require_standby? = Application.get_env(:chalk_sync, :require_synchronous_standby, false)
+
+    cond do
+      Application.get_env(:chalk_sync, :local_parity, false) and not require_standby? ->
+        "disabled_local_parity"
+
+      require_standby? ->
+        "required"
+
+      true ->
+        "not_required"
     end
   end
 

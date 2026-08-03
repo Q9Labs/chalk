@@ -1,10 +1,25 @@
-# Chalk meeting broker
+# Chalk broker
 
-The meeting broker is the server-side participant-access boundary for Chalk web and native clients. Cloudflare routes `https://chalkmeet.com/local-chalk/*` to this Worker before the Pages origin, while localhost keeps using `apps/web/scripts/local-chalk-backend.mjs` through the Vite proxy.
+The broker is the server-side participant-access boundary for Chalk web and native clients. Cloudflare routes `https://chalkmeet.com/local-chalk/*` to this Worker before the Pages origin. The supervised local stack proxies the same path to Wrangler, while `apps/web/scripts/local-chalk-backend.mjs` remains the narrow web-only fallback.
 
 Each new meeting receives a 256-bit capability token and maps to one SQLite-backed Durable Object. The object persists the meeting lifetime, host, client sessions, participant identities, and participant generations. It creates an idempotent Chalk session in one pre-provisioned room only when an SDK first requests access, admits that client, and returns short-lived `ParticipantAccess`. The API key, tenant, room, and transport endpoints remain Worker bindings and never enter client bundles.
 
 The hard limits are an 8,192-byte JSON body, an 80-character display name, 32 client sessions per meeting, a 60-minute meeting/session lifetime, 20 creation attempts per minute for an anonymous source, and 120 authenticated broker calls per client session per minute. The host's cleanup ends the Chalk session and deletes the meeting's SQLite rows and alarm. Guest cleanup deletes only that guest's durable client state. The Durable Object alarm repeats host-style cleanup at expiry, while the Chalk session's own remaining maximum duration is the independent upper bound. `CHALK_MEETING_LIFETIME_SECONDS` exists for short local alarm proofs but is clamped to 3,600 seconds in code.
+
+## Local development
+
+`pnpm dev` is the supported local path. It starts the real Worker and the
+SQLite-backed Durable Object with the app, API, and Sync endpoints on
+localhost. The supervisor bootstraps disposable local Space data, maps the
+canonical credential names at the Worker adapter, and passes them through the
+child environment. Credentials never appear in `--var` arguments, tracked
+files, browser code, or logs.
+
+To run the checked-in Worker proof, use:
+
+```bash
+pnpm test:e2e
+```
 
 ## Deployment bindings
 

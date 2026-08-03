@@ -30,7 +30,7 @@ services:
       timeout: 2s
       retries: 30
     ports:
-      - 127.0.0.1:55432:5432
+      - "127.0.0.1:${CHALK_OBSERVABILITY_POSTGRES_PORT:-55432}:5432"
     restart: unless-stopped
     volumes:
       - chalk-observability-postgres-data:/var/lib/postgresql
@@ -42,6 +42,10 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /otel-lgtm/grafana/conf/provisioning/dashboards/chalk/chalk-observability.json
+      CHALK_GRAFANA_LEDGER_DATABASE: "${CHALK_GRAFANA_LEDGER_DATABASE:-chalk_observability}"
+      CHALK_GRAFANA_LEDGER_PASSWORD: "${CHALK_GRAFANA_LEDGER_PASSWORD:-postgres}"
+      CHALK_GRAFANA_LEDGER_URL: "${CHALK_GRAFANA_LEDGER_URL:-postgres:5432}"
+      CHALK_GRAFANA_LEDGER_USER: "${CHALK_GRAFANA_LEDGER_USER:-postgres}"
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_SECURITY_ADMIN_USER: admin
     depends_on:

@@ -152,6 +152,11 @@ ordinary join attempt. Host admission remains available through
 
 ### Added
 
+- One-command local core and mobile development profiles. `pnpm dev` starts
+  the Postgres-backed API and Sync path, local Worker broker, web, SDK
+  watchers, observability, and real Cloudflare SFU media on localhost, with
+  status, logs, smoke, stop, fixture refresh, and destructive reset commands.
+
 - Added bounded, parent-linked Chalk join traces covering media permission,
   participant access, media and Sync startup, the Sync-live wait, and terminal
   outcomes without recording media, tokens, SDP, or room identity.

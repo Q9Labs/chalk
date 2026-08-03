@@ -46,4 +46,20 @@ describe("createExpoConfig", () => {
 
     process.env.EXPO_PUBLIC_CHALK_BROKER_URL = originalBrokerUrl;
   });
+
+  it("passes the local broker URL into development builds", () => {
+    const originalBrokerUrl = process.env.EXPO_PUBLIC_CHALK_BROKER_URL;
+
+    process.env.EXPO_PUBLIC_CHALK_BROKER_URL = "http://127.0.0.1:8787/local-chalk";
+
+    const config = createExpoConfig("development");
+
+    expect(config.expo.extra.brokerUrl).toBe("http://127.0.0.1:8787/local-chalk");
+
+    if (originalBrokerUrl === undefined) {
+      delete process.env.EXPO_PUBLIC_CHALK_BROKER_URL;
+    } else {
+      process.env.EXPO_PUBLIC_CHALK_BROKER_URL = originalBrokerUrl;
+    }
+  });
 });

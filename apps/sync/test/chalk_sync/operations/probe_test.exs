@@ -7,6 +7,11 @@ defmodule ChalkSync.Operations.ProbeTest do
     previous_stateholder = Application.fetch_env!(:chalk_sync, :stateholder)
     previous_verifier = Application.fetch_env!(:chalk_sync, :token_verifier)
     previous_requirement = Application.fetch_env!(:chalk_sync, :require_production_auth)
+
+    previous_standby_requirement =
+      Application.fetch_env!(:chalk_sync, :require_synchronous_standby)
+
+    previous_local_parity = Application.get_env(:chalk_sync, :local_parity)
     previous_provider_bridge = Application.get_env(:chalk_sync, :provider_bridge)
 
     previous_poll_interval =
@@ -16,6 +21,14 @@ defmodule ChalkSync.Operations.ProbeTest do
       Application.put_env(:chalk_sync, :stateholder, previous_stateholder)
       Application.put_env(:chalk_sync, :token_verifier, previous_verifier)
       Application.put_env(:chalk_sync, :require_production_auth, previous_requirement)
+
+      Application.put_env(
+        :chalk_sync,
+        :require_synchronous_standby,
+        previous_standby_requirement
+      )
+
+      restore_env(:local_parity, previous_local_parity)
 
       if previous_provider_bridge,
         do: Application.put_env(:chalk_sync, :provider_bridge, previous_provider_bridge),
@@ -99,6 +112,20 @@ defmodule ChalkSync.Operations.ProbeTest do
     end
   end
 
+  test "labels the local parity synchronous-standby exception" do
+    Application.put_env(:chalk_sync, :local_parity, true)
+    Application.put_env(:chalk_sync, :require_synchronous_standby, false)
+
+    assert Probe.synchronous_standby_requirement() == "disabled_local_parity"
+
+    Application.put_env(:chalk_sync, :require_synchronous_standby, true)
+    assert Probe.synchronous_standby_requirement() == "required"
+
+    Application.put_env(:chalk_sync, :local_parity, false)
+    Application.put_env(:chalk_sync, :require_synchronous_standby, false)
+    assert Probe.synchronous_standby_requirement() == "not_required"
+  end
+
   test "rejects an unavailable, initializing, or stale external operation consumer" do
     assert Probe.validate_external_operation_health(%{consecutive_failures: 2}, false) ==
              {:error, :external_operation_consumer_unavailable}
@@ -167,4 +194,7 @@ defmodule ChalkSync.Operations.ProbeTest do
     Application.put_env(:chalk_sync, :external_operation_poll_interval_ms, 5_000)
     assert Probe.external_operation_staleness_timeout_ms() == 15_000
   end
+
+  defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
+  defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 end

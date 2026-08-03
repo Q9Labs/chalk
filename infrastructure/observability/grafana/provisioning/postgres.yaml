@@ -5,13 +5,13 @@ datasources:
     type: postgres
     uid: chalk-journey-ledger
     access: proxy
-    url: postgres:5432
-    user: postgres
+    url: ${CHALK_GRAFANA_LEDGER_URL}
+    user: ${CHALK_GRAFANA_LEDGER_USER}
     editable: false
     jsonData:
-      database: chalk_observability
+      database: ${CHALK_GRAFANA_LEDGER_DATABASE}
       postgresVersion: 1800
       sslmode: disable
       timescaledb: false
     secureJsonData:
-      password: postgres
+      password: ${CHALK_GRAFANA_LEDGER_PASSWORD}

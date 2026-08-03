@@ -82,10 +82,10 @@ function affectedWorkspaces(files, workspaces, selectAll) {
   return workspaces.filter((workspace) => selected.has(workspace.name));
 }
 
-function filteredPnpmCommand(workspaces, script, trailingArguments = []) {
+function filteredPnpmCommand(workspaces, script, trailingArguments = [], pnpmArguments = []) {
   const runnable = workspaces.filter((workspace) => workspace.scripts[script]);
   if (runnable.length === 0) return null;
-  return ["pnpm", ...runnable.flatMap((workspace) => ["--filter", workspace.name]), "run", script, ...trailingArguments];
+  return ["pnpm", ...pnpmArguments, ...runnable.flatMap((workspace) => ["--filter", workspace.name]), "run", script, ...trailingArguments];
 }
 
 function task(id, label, selected, reason, command, env = {}) {
@@ -138,7 +138,7 @@ export function createGatePlan(files, options = {}) {
     task("test-presence", "Test presence", full || sourceFiles.some((file) => [".ts", ".tsx"].includes(path.extname(file))), "TypeScript source files changed", ["pnpm", "run", "test:presence"], { TEST_PRESENCE_FILES: testPresenceFiles, TEST_PRESENCE_BASE_REF: base }),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types")),
     task("tests", "Affected workspace tests with coverage", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "test", ["--coverage"])),
-    task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "build")),
+    task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "build", [], ["--workspace-concurrency=1", "--sort"])),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task(
       "publint",

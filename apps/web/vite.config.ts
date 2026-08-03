@@ -9,6 +9,9 @@ import sdkReactPkg from "../../sdks/typescript/react/package.json";
 
 const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
 const buildTime = new Date().toISOString();
+const localWebOrigin = "http://127.0.0.1:3070";
+const localBrokerPort = process.env.CHALK_DEV_BROKER_PORT?.trim();
+const localBrokerTarget = process.env.CHALK_DEV_BROKER_ORIGIN?.trim() || (localBrokerPort ? `http://127.0.0.1:${localBrokerPort}` : "http://127.0.0.1:3071");
 
 // SPA mode for Cloudflare Pages deployment
 // SSR requires Cloudflare Workers, but our token only has Pages permission
@@ -25,7 +28,13 @@ const config = defineConfig({
     port: 3070,
     proxy: {
       "/local-chalk": {
-        target: "http://127.0.0.1:3071",
+        target: localBrokerTarget,
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on("proxyReq", (proxyRequest) => {
+            proxyRequest.setHeader("origin", localWebOrigin);
+          });
+        },
       },
     },
   },

@@ -11,7 +11,7 @@ export type LocalBrowserSession = {
 export async function createLocalBrowserSession(displayName: string, inviteToken?: string): Promise<LocalBrowserSession> {
   return request<LocalBrowserSession>("/browser-session", {
     displayName,
-    ...(!isLocalBrowser() && inviteToken ? { inviteToken } : {}),
+    ...(inviteToken ? { inviteToken } : {}),
   });
 }
 
@@ -57,9 +57,4 @@ async function errorMessage(response: Response): Promise<string> {
     // The HTTP status remains useful when a proxy returns a non-JSON error page.
   }
   return `The Chalk meeting backend returned HTTP ${response.status}`;
-}
-
-function isLocalBrowser(): boolean {
-  const hostname = globalThis.location?.hostname;
-  return hostname === "localhost" || hostname === "127.0.0.1";
 }

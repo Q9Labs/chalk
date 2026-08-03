@@ -8,6 +8,28 @@ fi
 root="$(cd "$(dirname "$0")/../../.." && pwd)"
 compose_file="${root}/infrastructure/observability/compose.yaml"
 command_name="${1:-start}"
+ledger_target="${CHALK_OBSERVABILITY_LEDGER_TARGET:-observability}"
+
+configure_ledger_datasource() {
+  case "${ledger_target}" in
+    api)
+      export CHALK_GRAFANA_LEDGER_DATABASE="${CHALK_GRAFANA_LEDGER_DATABASE:-chalk}"
+      export CHALK_GRAFANA_LEDGER_PASSWORD="${CHALK_GRAFANA_LEDGER_PASSWORD:-postgres}"
+      export CHALK_GRAFANA_LEDGER_URL="${CHALK_GRAFANA_LEDGER_URL:-host.docker.internal:5432}"
+      export CHALK_GRAFANA_LEDGER_USER="${CHALK_GRAFANA_LEDGER_USER:-postgres}"
+      ;;
+    observability)
+      export CHALK_GRAFANA_LEDGER_DATABASE="${CHALK_GRAFANA_LEDGER_DATABASE:-chalk_observability}"
+      export CHALK_GRAFANA_LEDGER_PASSWORD="${CHALK_GRAFANA_LEDGER_PASSWORD:-postgres}"
+      export CHALK_GRAFANA_LEDGER_URL="${CHALK_GRAFANA_LEDGER_URL:-postgres:5432}"
+      export CHALK_GRAFANA_LEDGER_USER="${CHALK_GRAFANA_LEDGER_USER:-postgres}"
+      ;;
+    *)
+      echo "CHALK_OBSERVABILITY_LEDGER_TARGET must be api or observability (got ${ledger_target})." >&2
+      exit 2
+      ;;
+  esac
+}
 
 wait_for_stack() {
   for _ in {1..90}; do
@@ -26,25 +48,32 @@ wait_for_stack() {
 
 case "${command_name}" in
   start)
+    configure_ledger_datasource
     docker compose -f "${compose_file}" up -d
     wait_for_stack
     echo "Grafana: http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability"
+    echo "Grafana journey ledger: ${CHALK_GRAFANA_LEDGER_DATABASE}@${CHALK_GRAFANA_LEDGER_URL}"
     echo "OTLP HTTP: http://127.0.0.1:4318"
     echo "OTLP gRPC: http://127.0.0.1:4317"
     ;;
   stop)
+    configure_ledger_datasource
     docker compose -f "${compose_file}" down
     ;;
   reset)
+    configure_ledger_datasource
     docker compose -f "${compose_file}" down --volumes
     ;;
   status)
+    configure_ledger_datasource
     docker compose -f "${compose_file}" ps
     ;;
   logs)
+    configure_ledger_datasource
     docker compose -f "${compose_file}" logs --follow --tail 200
     ;;
   smoke)
+    configure_ledger_datasource
     wait_for_stack
     node "${root}/infrastructure/observability/scripts/smoke.mjs"
     ;;

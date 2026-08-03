@@ -1,0 +1,270 @@
+<rr-doc title="Chalk full local dev experience — ready" register="spec" project="Chalk" risk="major" summary="Design one command that starts a production-shaped local Chalk meeting stack with real Cloudflare media, durable Sync, the real broker, and linked observability.">
+  <rr-deck id="chalk-full-local-dev">
+    <rr-slide spine="Outcome">
+      <h1>One command, one real meeting path</h1>
+      <p class="lede"><code>pnpm dev</code> should take an agent from a stopped checkout to two local clients using Chalk's real API, durable Sync, Worker broker, observability, and Cloudflare media.</p>
+      <rr-tiles>
+        <rr-tile icon="route" label="Normal entry" value="1 command" caption="Preflight through ready summary" />
+        <rr-tile icon="layers" label="Core pieces" value="9" caption="Backing services through clients and media" />
+        <rr-tile icon="check" label="Open decisions" value="0" caption="The implementation contract is ready" tone="green" />
+        <rr-tile icon="check" label="Accepted" value="5" caption="Profiles, secrets, reloads, proof, and state" tone="green" />
+      </rr-tiles>
+      <p><a href="full-local-dev-experience-spec-2026-08-03.md">Open the detailed implementation specification</a></p>
+    </rr-slide>
+
+    <rr-slide spine="Gap" title="The current command stops before Chalk's control plane">
+      <rr-panes>
+        <rr-before label="Today · pnpm dev">
+          <p>Starts SDK package watchers, Expo, the web app, and a Node-only local broker.</p>
+          <p>The API, migrations, Redis, Postgres, Sync, Worker broker, and observability remain separate.</p>
+          <p>Sync development uses memory state and development auth.</p>
+        </rr-before>
+        <rr-after label="Goal · one core runtime">
+          <p>Starts and checks every required service in dependency order.</p>
+          <p>Uses Postgres-backed Sync, API-issued JWTs, mutual TLS, and the real Worker broker.</p>
+          <p>Fails if real Cloudflare media cannot start.</p>
+        </rr-after>
+      </rr-panes>
+      <rr-beat>
+        <rr-callout tone="amber">A green package watcher or fake-provider test does not prove that two people can meet.</rr-callout>
+      </rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="System" title="The core profile owns the whole browser meeting path">
+      <rr-stage id="local-stack" crumb="CORE LOCAL RUNTIME">
+        <rr-legend><rr-key kind="new">new orchestration</rr-key><rr-key kind="green">real provider path</rr-key></rr-legend>
+        <rr-stage-body>
+          <rr-band label="One command">
+            <rr-block icon="route" title="Dev orchestrator" caption="Config, readiness, ownership, logs, cleanup" tone="is-new" />
+          </rr-band>
+          <rr-band label="Local authority">
+            <rr-block icon="db" title="Postgres + Redis" caption="Migrations and durable state" />
+            <rr-block icon="gear" title="Go API" caption="Real routes, JWTs, provider adapter" />
+            <rr-block icon="branch" title="Elixir Sync" caption="Postgres, JWT verification, provider bridge" />
+          </rr-band>
+          <rr-band label="Product path">
+            <rr-block icon="shield" title="Worker broker" caption="Real Durable Object meeting state" />
+            <rr-block icon="globe" title="Web + SDKs" caption="Two clients, one invite capability" />
+            <rr-block icon="signal" title="Cloudflare SFU" caption="Real audio and video" tone="is-new" />
+          </rr-band>
+          <rr-band label="Proof">
+            <rr-block icon="pulse" title="Local observability" caption="Linked traces, metrics, and logs" />
+            <rr-block icon="check" title="Media smoke" caption="Tracks received and counters increase" tone="is-new" />
+          </rr-band>
+        </rr-stage-body>
+      </rr-stage>
+    </rr-slide>
+
+    <rr-slide spine="Route" title="Readiness, not sleep, drives startup">
+      <rr-step wp="WP 1 · Validate">
+        <p>Claim the checkout runtime, then validate tools, fixed localhost ports, and development provider config before starting long-lived work.</p>
+      </rr-step>
+      <rr-step wp="WP 2 · Prepare">
+        <p>Start Postgres, Redis, and observability; apply migrations; generate runtime signing and mutual TLS identities.</p>
+      </rr-step>
+      <rr-step wp="WP 3 · Authorize">
+        <p>Start the API, wait for readiness, then create or rotate the local tenant, room, and narrow broker key through the real API.</p>
+      </rr-step>
+      <rr-step wp="WP 4 · Connect">
+        <p>Start Postgres-backed Sync, the local Worker and Durable Object broker, SDK watchers, and Vite. Print URLs only after every required check passes.</p>
+      </rr-step>
+    </rr-slide>
+
+    <rr-slide spine="Parity" title="Local exceptions stay named and bounded">
+      <table>
+        <thead>
+          <tr>
+            <th>Boundary</th>
+            <th>Same as production</th>
+            <th>Local exception</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>API</td>
+            <td>Same binary, routes, signing, provider adapter</td>
+            <td>Localhost and a local bootstrap token</td>
+          </tr>
+          <tr>
+            <td>Sync</td>
+            <td>Postgres authority, JWT auth, protocol v3, mutual TLS bridge</td>
+            <td>One node and no synchronous standby</td>
+          </tr>
+          <tr>
+            <td>Broker</td>
+            <td>Same Worker and Durable Object class</td>
+            <td>Local Wrangler and SQLite state</td>
+          </tr>
+          <tr>
+            <td>Media</td>
+            <td>Real Cloudflare SFU endpoint</td>
+            <td>Approved development app</td>
+          </tr>
+          <tr>
+            <td>Web</td>
+            <td>Same SDK and broker contract</td>
+            <td>Vite over localhost HTTP</td>
+          </tr>
+          <tr>
+            <td>Signals</td>
+            <td>Same OTLP shapes and journey context</td>
+            <td>One local observability container</td>
+          </tr>
+        </tbody>
+      </table>
+      <rr-beat><p>Fake APIs, the SFU stub, memory Sync, and development token verification stay useful for focused tests, but they cannot satisfy this environment's ready or media proof.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Shapes" title="The orchestrator returns exact outcomes">
+      <rr-types label="Intended function shapes">
+        <rr-sig name="resolveDevConfig" tone="new">(CLI + environment) → DevConfig | ConfigProblem[]</rr-sig>
+        <rr-sig name="prepareRuntime" tone="new">(DevConfig) → RuntimeLease | OwnershipConflict</rr-sig>
+        <rr-sig name="startService" tone="new">(ServiceSpec, RuntimeLease) → RunningService | StartupFailure</rr-sig>
+        <rr-sig name="waitForReady" tone="new">(RunningService) → ReadyService | ReadinessFailure</rr-sig>
+        <rr-sig name="bootstrapMeeting" tone="new">(Ready API, RuntimeLease) → BrokerBindings</rr-sig>
+        <rr-sig name="runMediaProof" tone="new">(ReadyRuntime) → MediaProofReport</rr-sig>
+        <rr-sig name="shutdown" tone="new">(RuntimeLease, StopReason) → CleanupReport</rr-sig>
+      </rr-types>
+      <rr-beat><p>The first root failure remains the result. Shutdown noise cannot replace a missing tool, busy port, child exit, readiness timeout, or provider rejection with a vague nonzero code.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Secrets" title="Runtime secrets stay out of code, arguments, and logs">
+      <rr-cols2>
+        <rr-card>
+          <h3>Generated per runtime</h3>
+          <p>Local system token, Ed25519 key, verification keyring, mutual TLS CA and leaves, and broker key.</p>
+          <p>Stored only under <code>.private/chalk-dev/</code> with restrictive permissions.</p>
+        </rr-card>
+        <rr-card>
+          <h3>Confirmed provider config</h3>
+          <p>The existing local-development SFU app ID and app secret come from its matching 1Password item.</p>
+          <p>The SFU adapter needs no broad Cloudflare account token.</p>
+        </rr-card>
+      </rr-cols2>
+      <rr-beat
+        ><rr-callout tone="green">Provider values enter only the API child environment. Wrangler receives its generated broker secrets through <code>process.env</code> plus declared required secrets, with no resolved <code>.dev.vars</code> file.</rr-callout></rr-beat
+      >
+    </rr-slide>
+
+    <rr-slide spine="Proof" title="Ready ends with media, control, and observability evidence">
+      <rr-journey>
+        <rr-stop>Host creates meeting</rr-stop><rr-sep /> <rr-stop>Guest joins</rr-stop><rr-sep /> <rr-stop tone="new">Both publish and receive</rr-stop><rr-sep /> <rr-stop tone="new">WebRTC counters rise</rr-stop><rr-sep /> <rr-stop>Host media action completes</rr-stop><rr-sep />
+        <rr-stop>Journey appears in Grafana</rr-stop>
+      </rr-journey>
+      <rr-beat><p>The smoke uses two clean browser contexts and synthetic camera and microphone sources, but the network path and provider remain real.</p></rr-beat>
+      <rr-beat><p>The redacted proof saves versions, provider type, track directions, bounded counters, outcomes, and journey IDs. It saves no media frames, audio, invites, or credentials.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Accepted 1" title="D1 · Core is default; mobile is explicit">
+      <rr-callout tone="green">
+        <h3>Accepted: no catch-all full profile</h3>
+        <p><b>Core:</b> <code>pnpm dev</code> starts Postgres, Redis, migrations, API, durable Sync, Worker broker, web, SDK watchers, observability, and real Cloudflare media.</p>
+        <rr-cols2>
+          <rr-card
+            ><h3>Explicit mobile</h3>
+            <p><code>pnpm dev -- --profile mobile</code> waits for core, then adds Expo and localhost device bridges. No device is a warning; an Expo or bridge failure leaves core supervised as degraded.</p></rr-card
+          >
+          <rr-card
+            ><h3>Still excluded</h3>
+            <p>Recorder, transcription, files, integrations, email, and OAuth need separate safe local contracts.</p></rr-card
+          >
+        </rr-cols2>
+      </rr-callout>
+    </rr-slide>
+
+    <rr-slide spine="Accepted 2" title="D2 · The existing SFU app and 1Password item match">
+      <rr-callout tone="green">
+        <h3>Accepted: fetch at runtime; persist no resolved provider secret</h3>
+        <p><b>Evidence:</b> the dashboard's local-development app ID and the 1Password item's <code>app_id</code> matched by hash, and the concealed <code>app_secret</code> is present.</p>
+        <rr-cols2>
+          <rr-card
+            ><h3>Discovery</h3>
+            <p>Find exactly one local Chalk SFU credential item, always use the discovered vault for reads, and cache only private source identifiers.</p></rr-card
+          >
+          <rr-card
+            ><h3>Injection</h3>
+            <p>Pass <code>app_id</code> and <code>app_secret</code> only to the API child environment. Reject production-marked items and ambiguous matches.</p></rr-card
+          >
+        </rr-cols2>
+      </rr-callout>
+    </rr-slide>
+
+    <rr-slide spine="Accepted 3" title="D3 · API and Sync reload automatically">
+      <rr-callout tone="green">
+        <h3>Accepted: automatic, readiness-gated restart</h3>
+        <p>Owned Go or Elixir source and config changes trigger a debounced rebuild and dependent restart. Ready returns only after real health checks pass.</p>
+        <rr-cols2>
+          <rr-card
+            ><h3>Healthy edit</h3>
+            <p>Stop affected dependants, rebuild, restart in dependency order, and restore ready.</p></rr-card
+          >
+          <rr-card
+            ><h3>Compile failure</h3>
+            <p>Enter <code>reload-failed</code> with the exact error and log path. Never present the last good binary as the edited code.</p></rr-card
+          >
+        </rr-cols2>
+      </rr-callout>
+    </rr-slide>
+
+    <rr-slide spine="Accepted 4" title="D4 · Startup proves the provider; smoke proves the meeting">
+      <rr-callout tone="green">
+        <h3>Accepted: light provider proof at startup; full smoke on demand</h3>
+        <p>Field presence is not enough, but two browsers on every edit cycle would add time and provider use.</p>
+        <rr-cols2>
+          <rr-card
+            ><h3>Startup</h3>
+            <p>Create and verify one no-track SFU connection through the real API adapter. Cloudflare has no close-connection endpoint, so no identifier is retained and provider expiry cleans the empty connection. Bad or revoked 1Password data blocks ready.</p></rr-card
+          >
+          <rr-card
+            ><h3>Full smoke</h3>
+            <p><code>pnpm dev:smoke</code> runs two clients, real tracks, rising counters, one host media action, and a linked journey.</p></rr-card
+          >
+        </rr-cols2>
+        <p>The full smoke is required for release handoff and whenever an agent needs media proof.</p>
+      </rr-callout>
+    </rr-slide>
+
+    <rr-slide spine="Accepted 5" title="D5 · State persists in one fixed local stack">
+      <rr-callout tone="green">
+        <h3>Accepted: persistent state and one machine-wide stack</h3>
+        <p>Persistent state exposes migration and stale-data bugs. Fixed localhost ports keep browser origins and mobile bridges simple.</p>
+        <rr-cols2>
+          <rr-card
+            ><h3>Normal stop</h3>
+            <p>Volumes and local Durable Object state survive. Disposable meeting and smoke fixtures do not.</p></rr-card
+          >
+          <rr-card
+            ><h3>Ownership</h3>
+            <p>An atomic per-user machine record names the active checkout and status. Another worktree fails early with the owner and URLs. <code>dev:reset</code> is the only full wipe.</p></rr-card
+          >
+        </rr-cols2>
+      </rr-callout>
+    </rr-slide>
+
+    <rr-slide spine="Execution" title="Four lanes rejoin before the real-media proof">
+      <rr-phases>
+        <rr-phase label="P0 · Contract" caption="Profiles, secrets, reloads, proof, and state accepted" state="done" />
+        <rr-phase label="P1 · Runtime" caption="CLI, manifest, logging, preflight, supervision, cleanup" />
+        <rr-phase label="P2 · Service lanes" caption="API, Sync, broker/web, and observability in parallel" />
+        <rr-phase label="P3 · Integration" caption="One orchestrator reconciles service contracts" />
+        <rr-phase label="P4 · Real media" caption="Two clients, provider operation, linked journey" />
+        <rr-phase label="P5 · Handoff" caption="Docs, gates, review, end-to-end proof, commit" />
+      </rr-phases>
+      <rr-beat><p>Luna workers own the bounded API, Sync, broker/web, observability, and media-proof lanes. The root orchestrator owns decisions, shared interfaces, integration, and sign-off.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Done" title="The environment is done only after a fresh real call">
+      <rr-checklist label="Acceptance gate">
+        <rr-todo>One command reaches ready from a stopped machine</rr-todo>
+        <rr-todo>Sync uses Postgres, API JWTs, and the mutual TLS bridge</rr-todo>
+        <rr-todo>The real Worker and Durable Object broker own meeting state</rr-todo>
+        <rr-todo>Two clients publish and receive real Cloudflare media</rr-todo>
+        <rr-todo>A host media action crosses Sync and reaches a terminal result</rr-todo>
+        <rr-todo>The linked journey is queryable in local Grafana</rr-todo>
+        <rr-todo>Failure and Ctrl-C leave no owned process running</rr-todo>
+        <rr-todo>A second start succeeds without hand cleanup</rr-todo>
+      </rr-checklist>
+      <rr-progress label="Decisions closed" pct="100" n="5/5" tone="green" />
+    </rr-slide>
+  </rr-deck>
+</rr-doc>
