@@ -54,8 +54,14 @@
       "@q9labsai/chalk-assets": ["./packages/assets/src/index.ts"],
       "@q9labsai/chalk-ui": ["./packages/ui/src/index.ts"],
       "@q9labsai/chalk-ui/assets": ["./packages/ui/src/assets.ts"],
+      "@q9labsai/chalk-ui/badge": ["./packages/ui/src/badge.tsx"],
       "@q9labsai/chalk-ui/button": ["./packages/ui/src/button.tsx"],
+      "@q9labsai/chalk-ui/card": ["./packages/ui/src/card.tsx"],
+      "@q9labsai/chalk-ui/input": ["./packages/ui/src/input.tsx"],
       "@q9labsai/chalk-ui/reactions": ["./packages/ui/src/reactions.ts"],
+      "@q9labsai/chalk-ui/toggle": ["./packages/ui/src/toggle.tsx"],
+      "@q9labsai/chalk-ui/toggle-group": ["./packages/ui/src/toggle-group.tsx"],
+      "@q9labsai/chalk-ui/tooltip": ["./packages/ui/src/tooltip.tsx"],
       "@q9labsai/chalk-ui/utils": ["./packages/ui/src/lib/utils.ts"]
     }
   },
