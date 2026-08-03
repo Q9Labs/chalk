@@ -426,3 +426,20 @@ Current reality being redesigned: `VideoConferenceProps` has ~45 props with
 a `createSession` factory prop, hard-coded `role: "host" | "participant"`,
 nine `*Enabled` toggles AND nine `can*` permission booleans (the `can*`
 family contradicts capability-driven UI once roles are customer-defined).
+
+## Public-surface gate CLOSED (Hasan, 2026-08-03 night, four rounds)
+
+`scratchpad/public-surface-design-2026-08-03.md` is FULLY RATIFIED.
+Headlines: three-rung ladder (`<Chalk />` sugar over `<ChalkProvider>`
+sugar over framework-agnostic `SpaceClient`); `space` + `getAccess` →
+opaque `AccessGrant` is the entire integration; **the pre-join screen
+is the ENTRANCE** ("Entrance is PERFECT!" — green room and lobby
+rejected; the entrance also hosts knock-waiting); `defaults` object;
+no className ever, `theme` the only styling door (mechanism ruled,
+token list awaits Hasan's UI pass); episode lifecycle flat;
+`client.on` emitter in core; `features` object; role and all `can*`
+props dead. All three co-design gates (schema, client SDK split,
+public surface) are now closed. Wave zero sits committed on
+`refactor/sync-v1-renumber` (e0931d7f deletion, a536ef51 renumber,
+report docs); its master merge waits on Hasan's call about the other
+agent's uncommitted README/checklist edits.
