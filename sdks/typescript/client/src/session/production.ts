@@ -1,6 +1,6 @@
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
-import { createV3SyncClient } from "../sync";
+import { createV1SyncClient } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileHttpTransport } from "../whiteboard";
 import type { ChalkSessionChatFileFactoryInput, ChalkSessionDependencies, ChalkSessionMediaFactoryInput, ChalkSessionSyncFactoryInput, ChalkSessionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
@@ -46,7 +46,7 @@ function createMediaClient(apiBaseURL: string, input: ChalkSessionMediaFactoryIn
 }
 
 function createSyncClient(syncURL: string, input: ChalkSessionSyncFactoryInput) {
-  return createV3SyncClient({
+  return createV1SyncClient({
     url: syncURL,
     token: input.token,
     mediaPlane: input.media,

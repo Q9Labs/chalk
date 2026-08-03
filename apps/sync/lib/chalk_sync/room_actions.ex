@@ -1,6 +1,6 @@
 defmodule ChalkSync.RoomActions do
   @moduledoc """
-  Cohesive Sync v3 room-actions domain boundary.
+  Cohesive Sync room-actions domain boundary.
 
   Public functions return exact generated-contract frame maps. The socket owns
   JSON encoding, logical queue admission, and protocol-phase enforcement.
@@ -14,7 +14,6 @@ defmodule ChalkSync.RoomActions do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
 
-  @extension_v1 "room_actions_v1"
   @extension_v2 "room_actions_v2"
   @reactions ["👍", "❤️", "😂", "😮", "😢", "🎉"]
   @reaction_ttl_ms 5_000
@@ -129,7 +128,7 @@ defmodule ChalkSync.RoomActions do
            "type" => "chat_send_result",
            "client_message_id" => client_message_id,
            "outcome" => "accepted",
-           "message" => Message.wire(message, version(options))
+           "message" => Message.wire(message)
          }}
 
       {:error, reason} ->
@@ -169,7 +168,7 @@ defmodule ChalkSync.RoomActions do
       }
 
       case repository.read_page(identity.session, request) do
-        {:ok, page} -> {:ok, loaded_page(request_id, page, version(options))}
+        {:ok, page} -> {:ok, loaded_page(request_id, page)}
         {:cursor_reset, floor} -> {:ok, cursor_reset_page(request_id, floor)}
         {:error, reason} -> {:error, reason}
       end
@@ -276,12 +275,12 @@ defmodule ChalkSync.RoomActions do
     end
   end
 
-  defp loaded_page(request_id, page, version) do
+  defp loaded_page(request_id, page) do
     %{
       "type" => "chat_page",
       "request_id" => request_id,
       "outcome" => "loaded",
-      "messages" => Enum.map(page.messages, &Message.wire(&1, version)),
+      "messages" => Enum.map(page.messages, &Message.wire/1),
       "has_more" => page.has_more,
       "head_sequence" => page.head_sequence,
       "retained_floor_sequence" => page.retained_floor_sequence
@@ -359,18 +358,13 @@ defmodule ChalkSync.RoomActions do
   defp normalize_direction(direction) when direction in [:older, :newer], do: direction
   defp normalize_direction(_direction), do: :invalid
 
-  defp negotiation(%{extension: extension} = cursor)
-       when extension in [@extension_v1, @extension_v2],
-       do: {extension, Map.delete(cursor, :extension)}
+  defp negotiation(%{extension: @extension_v2} = cursor),
+    do: {@extension_v2, Map.delete(cursor, :extension)}
 
-  defp negotiation(cursor), do: {@extension_v1, cursor}
-
-  defp negotiated_receipts(_repository, _identity, @extension_v1), do: {:ok, []}
+  defp negotiation(cursor), do: {@extension_v2, cursor}
 
   defp negotiated_receipts(repository, identity, @extension_v2),
     do: repository.read_receipts(identity.session)
-
-  defp maybe_put_receipts(extension, @extension_v1, _receipts), do: extension
 
   defp maybe_put_receipts(extension, @extension_v2, receipts) do
     Map.put(extension, "read_receipts", Enum.map(receipts, &receipt_body/1))
@@ -386,8 +380,6 @@ defmodule ChalkSync.RoomActions do
       "read_at" => receipt.read_at
     }
   end
-
-  defp version(options), do: Keyword.get(options, :version, 1)
 
   defp repository(options) do
     Keyword.get(

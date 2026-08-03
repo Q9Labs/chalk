@@ -75,7 +75,7 @@ defmodule Mix.Tasks.Sync.ReleaseArtifact do
       "git_sha" => git_sha,
       "migration_compatibility" => migration_compatibility(),
       "otp_release" => System.otp_release(),
-      "protocol_version" => 3
+      "protocol_version" => 1
     })
   end
 

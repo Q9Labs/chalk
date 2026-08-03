@@ -39,7 +39,7 @@ defmodule ChalkSync.OperationsTest do
     )
 
     identity = identity()
-    {:ok, command} = Command.new("drain-command-001", :raise_hand, %{})
+    {:ok, command} = Command.new("drain-command-001", :set_hand_raised, %{"raised" => true})
     assert {:ok, lease} = CommandAdmission.submit(admission, identity, command, self())
     assert_receive {:decision_started, task}
 

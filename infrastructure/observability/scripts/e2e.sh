@@ -239,7 +239,7 @@ start_sync() {
     CHALK_SYNC_PROVIDER_BRIDGE_CAFILE="${provider_bridge_ca_cert_file}" \
     MIX_ENV=prod \
     PORT="${sync_port}" \
-      mix run --no-start -e 'keys = System.fetch_env!("CHALK_SYNC_TOKEN_PUBLIC_KEYS") |> JSON.decode!() |> Map.new(fn {id, key} -> {id, Base.url_decode64!(key, padding: false)} end); Application.put_env(:chalk_sync, :minimum_compatible_sync_migration, String.to_integer(System.fetch_env!("CHALK_SYNC_REQUIRED_MIGRATION"))); Application.put_env(:chalk_sync, :enable_v1, true); Application.put_env(:chalk_sync, :token_verifier, ChalkSync.Auth.JWTTokenVerifier); Application.put_env(:chalk_sync, :token_issuer, System.fetch_env!("CHALK_SYNC_TOKEN_ISSUER")); Application.put_env(:chalk_sync, :token_audience, System.fetch_env!("CHALK_SYNC_TOKEN_AUDIENCE")); Application.put_env(:chalk_sync, :token_public_keys, keys); {:ok, _} = Application.ensure_all_started(:chalk_sync); Process.sleep(:infinity)'
+      mix run --no-start -e 'keys = System.fetch_env!("CHALK_SYNC_TOKEN_PUBLIC_KEYS") |> JSON.decode!() |> Map.new(fn {id, key} -> {id, Base.url_decode64!(key, padding: false)} end); Application.put_env(:chalk_sync, :minimum_compatible_sync_migration, String.to_integer(System.fetch_env!("CHALK_SYNC_REQUIRED_MIGRATION"))); Application.put_env(:chalk_sync, :token_verifier, ChalkSync.Auth.JWTTokenVerifier); Application.put_env(:chalk_sync, :token_issuer, System.fetch_env!("CHALK_SYNC_TOKEN_ISSUER")); Application.put_env(:chalk_sync, :token_audience, System.fetch_env!("CHALK_SYNC_TOKEN_AUDIENCE")); Application.put_env(:chalk_sync, :token_public_keys, keys); {:ok, _} = Application.ensure_all_started(:chalk_sync); Process.sleep(:infinity)'
   ) >"${artifact_dir}/sync.log" 2>&1 &
   sync_pid=$!
 }
@@ -355,7 +355,7 @@ if [[ -z "${webhook_url}" ]]; then
 fi
 
 CHALK_E2E_API_URL="http://127.0.0.1:${api_port}" \
-CHALK_E2E_SYNC_URL="ws://127.0.0.1:${sync_port}/v3/sync" \
+CHALK_E2E_SYNC_URL="ws://127.0.0.1:${sync_port}/v1/sync" \
 CHALK_E2E_SYSTEM_TOKEN="${system_token}" \
 CHALK_E2E_WEBHOOK_URL="${webhook_url}/webhook" \
 CHALK_WEBHOOK_RECEIVER_SECRET_FILE="${receiver_secret_file}" \
@@ -397,9 +397,9 @@ for _ in {1..240}; do
     room_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).room_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${host_seed_request_file}")"
     session_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).session_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${host_seed_request_file}")"
     participant_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).participant_session_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${host_seed_request_file}")"
-    verified_control_rows="$(docker exec chalk-observability-postgres psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select count(*) from room_sessions as session join sync_session_control as control on control.tenant_id = session.tenant_id and control.room_id = session.room_id and control.session_id = session.id where session.tenant_id = '${tenant_id}'::uuid and session.room_id = '${room_id}'::uuid and session.id = '${session_id}'::uuid and session.status = 'active' and session.host_exit_policy = 'require_transfer' and control.control_revision = 0 and control.state_schema_version = 3 and control.host_participant_session_id is null and control.snapshot_bytes > 0 and octet_length(control.state_digest) = 32 and control.folded_state @> jsonb_build_object('control_revision', 0, 'state_schema_version', 3, 'status', 'active', 'admission_policy', 'open', 'host_exit_policy', session.host_exit_policy, 'role_capabilities', session.role_capabilities, 'participants', jsonb_build_array())")"
+    verified_control_rows="$(docker exec chalk-observability-postgres psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select count(*) from room_sessions as session join sync_session_control as control on control.tenant_id = session.tenant_id and control.room_id = session.room_id and control.session_id = session.id where session.tenant_id = '${tenant_id}'::uuid and session.room_id = '${room_id}'::uuid and session.id = '${session_id}'::uuid and session.status = 'active' and session.host_exit_policy = 'require_transfer' and control.control_revision = 0 and control.state_schema_version = 1 and control.host_participant_session_id is null and control.snapshot_bytes > 0 and octet_length(control.state_digest) = 32 and control.folded_state @> jsonb_build_object('control_revision', 0, 'state_schema_version', 1, 'status', 'active', 'admission_policy', 'open', 'host_exit_policy', session.host_exit_policy, 'role_capabilities', session.role_capabilities, 'participants', jsonb_build_array())")"
     if [[ "${verified_control_rows}" != "1" ]]; then
-      echo "The public API created ${verified_control_rows:-0} valid schema-v3 Session control projections, want exactly one." >&2
+      echo "The public API created ${verified_control_rows:-0} valid schema-v1 Session control projections, want exactly one." >&2
       exit 1
     fi
     verified_participant_rows="$(docker exec chalk-observability-postgres psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select count(*) from participants where tenant_id = '${tenant_id}'::uuid and room_id = '${room_id}'::uuid and session_id = '${session_id}'::uuid and id = '${participant_id}'::uuid and status = 'joining' and role = 'host' and eligible_roles = array['host','cohost','participant']::text[]")"
@@ -409,7 +409,7 @@ for _ in {1..240}; do
     fi
     start_sync
     wait_for_sync
-    node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ api_created_host_role: true, api_created_v3_control_policy: true, verified_at: new Date().toISOString() }) + "\n", { mode: 0o600 })' "${host_seed_complete_file}"
+    node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ api_created_host_role: true, api_created_v1_control_policy: true, verified_at: new Date().toISOString() }) + "\n", { mode: 0o600 })' "${host_seed_complete_file}"
     break
   fi
   if ! kill -0 "${webhook_proof_pid}" >/dev/null 2>&1; then

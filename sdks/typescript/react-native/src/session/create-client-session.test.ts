@@ -14,7 +14,7 @@ describe("createClientSession", () => {
           apiBaseURL: "https://api.chalkmeet.com",
           clientSessionId,
           inviteToken,
-          syncURL: "wss://sync.chalkmeet.com/v3/sync",
+          syncURL: "wss://sync.chalkmeet.com/v1/sync",
         }),
       )
       .mockResolvedValueOnce(json(participantAccess()));
@@ -51,7 +51,7 @@ describe("createClientSession", () => {
           apiBaseURL: "https://api.chalkmeet.com",
           clientSessionId,
           inviteToken,
-          syncURL: "wss://sync.chalkmeet.com/v3/sync",
+          syncURL: "wss://sync.chalkmeet.com/v1/sync",
         }),
       )
       .mockResolvedValueOnce(new Response(null, { status: 204 }));

@@ -39,7 +39,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["sync"],
-      "properties": { "sync": { "const": 3 } }
+      "properties": { "sync": { "const": 1 } }
     },
     "runtime_artifacts": {
       "type": "object",

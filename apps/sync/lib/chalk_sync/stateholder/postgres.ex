@@ -38,7 +38,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   @max_pending_operations 2_048
   @max_publication_grant_reservations 6_144
   @pending_receipt_reserved_bytes 2_048
-  @schema_version 3
+  @schema_version 1
   @publication_operation_id ~r/\A[A-Za-z0-9_-]{16,128}\z/
 
   @impl ChalkSync.Stateholder
@@ -3839,7 +3839,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     with {:ok, control} <- read_control(connection, params),
          {:ok, status} <- read_session_status(connection, params),
          {:ok, state} <- validate_fold(session, control) do
-      build_recovery(connection, session, state, status, cursor, 3)
+      build_recovery(connection, session, state, status, cursor, 1)
     else
       {:error, reason} -> {:error, reason}
     end
@@ -4179,7 +4179,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp rejection_atom("screen_share_in_use"), do: :screen_share_in_use
   defp rejection_atom("external_operation_failed"), do: :external_operation_failed
 
-  defp required_capability(name) when name in [:raise_hand, :lower_hand, :set_hand_raised],
+  defp required_capability(:set_hand_raised),
     do: "raiseHand"
 
   defp required_capability(:set_display_name), do: "renameSelf"
@@ -4201,13 +4201,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp required_capability(:participant_leave), do: "self"
   defp required_capability(:end_session), do: "endMeeting"
 
-  defp duplicate_result(%{name: name}, _outcome) when name in [:raise_hand, :lower_hand],
-    do: :duplicate
-
   defp duplicate_result(_command, outcome), do: outcome
-
-  defp receipt_command_name(%{name: name}) when name in [:raise_hand, :lower_hand],
-    do: "set_hand_raised"
 
   defp receipt_command_name(command), do: Atom.to_string(command.name)
 

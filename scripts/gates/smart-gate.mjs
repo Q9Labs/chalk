@@ -41,7 +41,7 @@ function isGateDefinition(file) {
 }
 
 function isSyncReliabilityInput(file) {
-  return startsWithAny(file, ["apps/sync", "packages/whiteboard", "sdks/typescript/client/src/sync", "sdks/typescript/client/src/whiteboard"]) || file === "contract/schema/sync-v3.json" || file === "contract/schema/whiteboard-v1.json" || file.startsWith("contract/schema/fixtures/sync-v3/");
+  return startsWithAny(file, ["apps/sync", "packages/whiteboard", "sdks/typescript/client/src/sync", "sdks/typescript/client/src/whiteboard"]) || file === "contract/schema/sync-v1.json" || file === "contract/schema/whiteboard-v1.json" || file.startsWith("contract/schema/fixtures/sync-v1/");
 }
 
 function isKnownPath(file, workspaces) {

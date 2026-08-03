@@ -1,285 +1,732 @@
-defmodule ChalkSync.Transport.Socket do
-  @moduledoc """
-  WebSocket transport: one process per connection, stateless fanout.
-
-  Owns no authoritative state — it verifies the participant token, joins the
-  room's authoritative writer, relays frames, and pushes room events. If the
-  room server dies, the socket closes (1012) so the client reconnects and
-  re-snapshots; nothing authoritative is lost.
-  """
+defmodule ChalkSync.Transport.SocketV1 do
+  @moduledoc "Protocol-v1 WebSocket transport over the semantic Stateholder boundary."
 
   @behaviour WebSock
 
-  alias ChalkSync.Auth.TokenVerifier
-  alias ChalkSync.DevTools.TraceHub
-  alias ChalkSync.Observability
-  alias ChalkSync.Protocol
-  alias ChalkSync.Rooms.RoomServer
+  require Logger
 
-  @hello_timeout_ms 10_000
-  @protocol_reasons %{
-    malformed_json: "malformed_json",
-    missing_type: "missing_type",
-    unknown_type: "unknown_type",
-    invalid_command: "invalid_command",
-    unknown_command: "unknown_command",
-    invalid_payload: "invalid_payload",
-    invalid_cursor: "invalid_cursor",
-    unsupported_protocol: "unsupported_protocol"
-  }
+  alias ChalkSync.Auth.Claims
+  alias ChalkSync.Auth.TokenVerifier
+  alias ChalkSync.Observability
+  alias ChalkSync.ProtocolV1
+  alias ChalkSync.RoomActions
+  alias ChalkSync.RoomActions.OutboundQueue, as: RoomActionQueue
+  alias ChalkSync.Sessions.CommandAdmission
+  alias ChalkSync.Sessions.Coordinator
+  alias ChalkSync.Stateholder
+  alias ChalkSync.Stateholder.Command
+  alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.Operation
+  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.UUID
+
+  @hello_timeout_ms 5_000
+  @heartbeat_interval_ms 20_000
+  @missed_heartbeat_limit 2
+  @terminal_ack_timeout_ms 5_000
 
   @impl true
   def init(opts) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
-    connection_id = System.unique_integer([:positive, :monotonic])
-    TraceHub.record("socket", "connected", %{"connection_id" => connection_id})
 
-    state = %{
-      phase: :awaiting_hello,
-      hello_timer: timer,
-      claims: nil,
-      connection_id: connection_id,
-      observability: Map.get(opts, :observability),
-      close: nil
-    }
+    observability =
+      opts
+      |> Map.new()
+      |> Map.get(:observability)
+      |> Observability.merge(nil)
+      |> Observability.root("sync.websocket.handshake", %{transport: "websocket", protocol: 1})
 
-    {:ok, observe_handshake(state)}
+    {:ok,
+     %{
+       phase: :awaiting_hello,
+       hello_timer: timer,
+       heartbeat_timer: nil,
+       terminal_ack_timer: nil,
+       terminal_head: nil,
+       missed_heartbeats: 0,
+       identity: nil,
+       coordinator: nil,
+       commands: %{},
+       room_actions_negotiated: false,
+       room_actions_version: nil,
+       room_actions_queue: RoomActionQueue.new(),
+       observability: observability
+     }}
   end
 
   @impl true
   def handle_in({text, [opcode: :text]}, state) do
-    case Protocol.decode_with_context(text) do
-      {:ok, frame, frame_context} -> handle_frame(frame, ensure_observation(state, frame_context))
-      {:error, reason} -> protocol_error(reason, ensure_observation(state, nil))
+    case ProtocolV1.decode(text) do
+      {:ok, frame} -> handle_frame(frame, %{state | missed_heartbeats: 0})
+      {:error, reason} -> close_invalid_frame(reason, state)
     end
   end
 
-  def handle_in({_payload, _opts}, state) do
-    state =
-      state
-      |> ensure_observation(nil)
-      |> observe_phase("sync.protocol.rejected", %{"reason" => "non_text"})
-
-    close(state, 1003, "text frames only")
-  end
+  def handle_in({_payload, _opts}, state),
+    do: {:stop, :normal, {1009, "text frames only"}, state}
 
   @impl true
-  def handle_info({:sync_event, event, originating_context}, state) do
-    event_context =
-      Observability.phase(originating_context, "sync.broadcast.sent", %{
-        event_name: event.name
-      })
-
-    TraceHub.record("socket", "event_sent", %{
-      "connection_id" => state.connection_id,
-      "event" => event.name,
-      "revision" => event.revision
-    })
-
-    {:push, {:text, Protocol.encode_event(event, event_context)}, state}
-  end
-
-  def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state) do
-    state =
-      state
-      |> ensure_observation(nil)
-      |> observe_phase("sync.hello.timeout", %{})
-
-    TraceHub.record("socket", "hello_timed_out", %{"connection_id" => state.connection_id})
-    close(state, 1002, "hello timeout")
-  end
+  def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state),
+    do: {:stop, :normal, {1008, "hello timeout"}, state}
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
 
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
-    state = observe_phase(state, "sync.room.recovery", %{outcome: "reconnect_required"})
-    TraceHub.record("socket", "room_restarting", trace_context(state))
-    close(state, 1012, "room restarting")
+  def handle_info(:heartbeat_check, %{phase: :live} = state) do
+    missed = state.missed_heartbeats + 1
+
+    if missed >= @missed_heartbeat_limit do
+      cancel_timer(state.heartbeat_timer)
+      {:stop, :normal, {1001, "heartbeat timeout"}, %{state | heartbeat_timer: nil}}
+    else
+      {:ok,
+       state
+       |> Map.put(:missed_heartbeats, missed)
+       |> schedule_heartbeat()}
+    end
+  end
+
+  def handle_info(:heartbeat_check, state), do: {:ok, %{state | heartbeat_timer: nil}}
+
+  def handle_info(:terminal_ack_timeout, %{phase: :terminal} = state),
+    do:
+      {:stop, :normal, {1012, "terminal acknowledgement timeout"},
+       %{state | terminal_ack_timer: nil}}
+
+  def handle_info(:terminal_ack_timeout, state),
+    do: {:ok, %{state | terminal_ack_timer: nil}}
+
+  def handle_info(
+        {:sync_command_result, lease, command_id, result},
+        %{commands: commands} = state
+      ) do
+    case Map.pop(commands, lease) do
+      {^command_id, remaining} ->
+        next = %{state | commands: remaining}
+        command_result(command_id, result, next)
+
+      {nil, _remaining} ->
+        {:ok, state}
+    end
+  end
+
+  def handle_info(
+        {:sync_outbound_ready, coordinator},
+        %{phase: :recovering, coordinator: coordinator} = state
+      ) do
+    pop_outbound(state)
+  end
+
+  def handle_info(
+        {:sync_recovery_live, coordinator},
+        %{phase: :recovering, coordinator: coordinator} = state
+      ) do
+    state
+    |> Map.put(:phase, :live)
+    |> start_heartbeat()
+    |> push_room_action()
+  end
+
+  def handle_info({:sync_recovery_live, _coordinator}, state), do: {:ok, state}
+
+  def handle_info(
+        {:sync_v1_live_frame, coordinator, frame},
+        %{coordinator: coordinator} = state
+      ) do
+    {:push, {:text, ProtocolV1.encode!(frame)}, mark_control_checked(state)}
+  end
+
+  def handle_info(
+        {:directed_request, frame},
+        %{phase: :live} = state
+      ) do
+    {:push, {:text, ProtocolV1.encode!(frame)}, mark_control_checked(state)}
+  end
+
+  def handle_info(
+        {:room_action_frame, %{"type" => "chat_read_receipt"}},
+        %{room_actions_version: version} = state
+      )
+      when version != 2,
+      do: {:ok, state}
+
+  def handle_info(
+        {:room_action_frame, frame},
+        %{phase: :live, room_actions_negotiated: true} = state
+      ),
+      do: enqueue_room_action(frame, state)
+
+  def handle_info(
+        {:room_action_frame, %{"type" => "chat_read_receipt"} = frame},
+        %{
+          phase: :recovering,
+          room_actions_negotiated: true,
+          room_actions_version: 2
+        } = state
+      ),
+      do: buffer_room_action(frame, state)
+
+  def handle_info({:room_action_frame, _frame}, state), do: {:ok, state}
+
+  def handle_info(:room_actions_drain, state), do: push_room_action(state)
+
+  def handle_info(
+        {:sync_recovery_advance, coordinator},
+        %{phase: :recovering, coordinator: coordinator} = state
+      ) do
+    case Coordinator.advance_recovery(coordinator, self()) do
+      :ok -> {:ok, state}
+      {:error, _reason} -> {:stop, :normal, {1012, "delivery recovery required"}, state}
+    end
+  end
+
+  def handle_info({:sync_recovery_advance, _coordinator}, state), do: {:ok, state}
+
+  def handle_info(
+        {:sync_outbound_ready, coordinator},
+        %{phase: :live, coordinator: coordinator} = state
+      ) do
+    pop_outbound(state)
+  end
+
+  def handle_info(
+        {:sync_outbound_overflow, reason, _last_revision},
+        state
+      ) do
+    Logger.warning("sync v1 delivery recovery required: reason=#{reason}")
+    {:stop, :normal, {1012, "delivery recovery required"}, state}
+  end
+
+  def handle_info({:sync_server_drained, coordinator}, %{coordinator: coordinator} = state) do
+    {:stop, :normal, {1012, "server draining"}, %{state | phase: :draining}}
   end
 
   @impl true
-  def terminate(reason, state) do
-    context =
-      state.observability
-      |> Observability.terminal("sync.connection.closed", close_attributes(state, reason))
+  def terminate(_reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
+    cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.terminal_ack_timer)
+    unsubscribe_room_actions(state)
+    RoomActionQueue.close(state.room_actions_queue)
+    Coordinator.unsubscribe(coordinator, self())
 
-    TraceHub.record(
-      "socket",
-      "disconnected",
-      Map.put(trace_context(state), "reason", inspect(reason))
-    )
+    Observability.terminal(state.observability, "sync.websocket.closed", %{
+      protocol: 1,
+      phase: state.phase
+    })
 
-    _ = context
     :ok
   end
 
-  # -- Frames ------------------------------------------------------------------
+  def terminate(_reason, state) do
+    cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.terminal_ack_timer)
+    unsubscribe_room_actions(state)
+    RoomActionQueue.close(state.room_actions_queue)
 
-  defp handle_frame({:hello, %{token: token, cursor: cursor}}, %{phase: :awaiting_hello} = state) do
-    state = observe_phase(state, "sync.hello.received", %{})
+    Observability.terminal(state.observability, "sync.websocket.closed", %{
+      protocol: 1,
+      phase: state.phase
+    })
 
+    :ok
+  end
+
+  defp handle_frame(
+         {:hello, %{token: token, cursor: cursor} = hello},
+         %{phase: :awaiting_hello} = state
+       ) do
     with {:ok, claims} <- TokenVerifier.verify(token),
-         {:ok, room_pid, reply} <-
-           RoomServer.join(
-             claims.room_id,
-             claims.participant_id,
-             claims.display_name,
-             self(),
-             cursor,
-             state.observability
-           ) do
-      Process.cancel_timer(state.hello_timer)
-      Process.monitor(room_pid)
-
-      state =
-        state
-        |> observe_phase("sync.auth.accepted", %{})
-        |> observe_phase("sync.room.joined", %{welcome_mode: welcome_mode_label(reply)})
-
-      welcome = Protocol.encode_welcome(claims.participant_id, reply, state.observability)
-
-      TraceHub.record("socket", "participant_joined", %{
-        "connection_id" => state.connection_id,
-        "participant_id" => claims.participant_id,
-        "room_id" => claims.room_id,
-        "welcome_mode" => welcome_mode(reply)
-      })
-
-      {:push, {:text, welcome}, %{state | phase: :joined, claims: claims, hello_timer: nil}}
+         {:ok, identity} <- identity(claims),
+         {:ok, _lifecycle} <-
+           Stateholder.apply_lifecycle_intent(
+             identity.session,
+             identity.admission_lifecycle_intent_id
+           ),
+         {:ok, protocol_options, negotiated?, room_actions_version} <-
+           negotiate_room_actions(identity, Map.get(hello, :room_actions)),
+         {:ok, coordinator} <-
+           Coordinator.begin_recovery(identity, self(), protocol_options) do
+      start_registered_recovery(
+        state,
+        identity,
+        cursor,
+        coordinator,
+        negotiated?,
+        room_actions_version
+      )
     else
       {:error, :invalid_token} ->
-        state = observe_phase(state, "sync.auth.rejected", %{reason: "invalid_token"})
-        TraceHub.record("auth", "token_rejected", %{"connection_id" => state.connection_id})
-        close(state, 1008, "unauthorized")
+        {:stop, :normal, {1008, "invalid token"}, state}
+
+      {:error, :invalid_identity} ->
+        {:stop, :normal, {1008, "invalid token"}, state}
+
+      {:error, :invalid_admission_intent} ->
+        {:stop, :normal, {1008, "policy violation"}, state}
 
       {:error, reason} ->
-        state = observe_phase(state, "sync.hello.failed", %{reason: error_label(reason)})
-        close(state, 1011, "internal room error")
+        Logger.warning("sync v1 hello failed: reason=#{reason}")
+
+        {:stop, :normal, {1012, "dependency unavailable"}, state}
+
+      {:retryable, reason} ->
+        Logger.warning("sync v1 hello retryable: #{reason}")
+        {:stop, :normal, {1012, "dependency unavailable"}, state}
     end
   end
 
-  defp handle_frame({:hello, _}, state) do
-    protocol_error(:already_joined, state)
+  defp handle_frame({:hello, _hello}, state), do: protocol_error(:already_authenticated, state)
+
+  defp handle_frame(
+         {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
+         %{
+           phase: :terminal,
+           coordinator: coordinator,
+           terminal_head: %{revision: revision, state_digest: state_digest}
+         } = state
+       ) do
+    case Coordinator.acknowledge(coordinator, revision, state_digest, self()) do
+      :ok ->
+        cancel_timer(state.terminal_ack_timer)
+
+        {:stop, :normal, {1000, "terminal event acknowledged"},
+         %{state | terminal_ack_timer: nil}}
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "delivery recovery required"}, state}
+    end
   end
 
-  defp handle_frame({:command, command}, %{phase: :joined, claims: claims} = state) do
-    state =
-      observe_phase(state, "sync.command.received", %{command_name: Atom.to_string(command.name)})
+  defp handle_frame(
+         {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
+         %{phase: :live, coordinator: coordinator} = state
+       ) do
+    case Coordinator.acknowledge(coordinator, revision, state_digest, self()) do
+      :ok ->
+        {:ok, state}
 
-    result =
-      RoomServer.command(
-        claims.room_id,
-        claims.participant_id,
-        command.command_id,
-        command.name,
-        command.payload,
-        state.observability
-      )
-
-    state = observe_phase(state, "sync.command.ack", %{result: result_outcome(result)})
-
-    TraceHub.record("command", "processed", %{
-      "command" => Atom.to_string(command.name),
-      "command_id" => command.command_id,
-      "connection_id" => state.connection_id,
-      "participant_id" => claims.participant_id,
-      "result" => result_label(result),
-      "room_id" => claims.room_id
-    })
-
-    {:push, {:text, Protocol.encode_ack(command.command_id, result, state.observability)}, state}
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "delivery recovery required"}, state}
+    end
   end
 
-  defp handle_frame({:command, _}, %{phase: :awaiting_hello} = state) do
-    state = observe_phase(state, "sync.hello.required", %{})
-    close(state, 1002, "hello required")
+  defp handle_frame({:delivery_ack, _ack}, state),
+    do: protocol_error(:recovery_required, state)
+
+  defp handle_frame(
+         {:recovery_ack,
+          %{
+            recovery_id: recovery_id,
+            revision: revision,
+            state_digest: state_digest
+          }},
+         %{phase: :recovering, coordinator: coordinator} = state
+       ) do
+    case Coordinator.acknowledge_recovery(
+           coordinator,
+           recovery_id,
+           revision,
+           state_digest,
+           self()
+         ) do
+      :ok -> {:ok, state}
+      {:error, _reason} -> {:stop, :normal, {1012, "delivery recovery required"}, state}
+    end
   end
 
-  defp handle_frame({:ping, _correlation_fields}, state) do
-    {:push, {:text, Protocol.encode_pong(state.observability)}, state}
-  end
+  defp handle_frame({:recovery_ack, _ack}, state),
+    do: protocol_error(:recovery_required, state)
 
-  defp protocol_error(reason, state) do
-    state = observe_phase(state, "sync.protocol.rejected", %{reason: protocol_reason(reason)})
-
-    TraceHub.record("protocol", "frame_rejected", %{
-      "connection_id" => state.connection_id,
-      "reason" => to_string(reason)
-    })
-
-    {:push,
-     {:text, Protocol.encode_error(:protocol_error, to_string(reason), state.observability)},
-     state}
-  end
-
-  defp observe_handshake(%{observability: nil} = state), do: state
-
-  defp observe_handshake(state) do
-    observe_root(state, "sync.websocket.handshake", %{transport: "websocket"})
-  end
-
-  defp ensure_observation(state, frame_context) do
-    fresh_connection? = is_nil(state.observability)
-    context = Observability.merge(state.observability, frame_context)
-    state = %{state | observability: context}
-
-    if fresh_connection? do
-      observe_root(state, "sync.websocket.handshake", %{transport: "websocket"})
+  defp handle_frame({:command, command}, %{phase: :live, identity: identity} = state) do
+    with {:ok, durable_command} <-
+           Command.new(command.command_id, command.name, command.payload),
+         {:ok, lease} <- CommandAdmission.submit(identity, durable_command) do
+      {:ok, %{state | commands: Map.put(state.commands, lease, command.command_id)}}
     else
-      state
+      {:error, :overloaded} ->
+        {:push, {:text, ProtocolV1.retryable(command.command_id, :overloaded)}, state}
+
+      {:error, :server_draining} ->
+        {:push, {:text, ProtocolV1.retryable(command.command_id, :server_draining)}, state}
+
+      {:error, reason} ->
+        protocol_error(reason, state)
     end
   end
 
-  defp observe_root(state, name, attributes) do
-    %{state | observability: Observability.root(state.observability, name, attributes)}
+  defp handle_frame({:command, _command}, state), do: protocol_error(:recovery_required, state)
+
+  defp handle_frame({:operation, operation}, %{phase: :live, identity: identity} = state) do
+    observed = Observability.observed_operation_context(state.observability)
+
+    with {:ok, durable} <- Operation.new(operation.command_id, operation.name, operation.payload),
+         durable = Operation.observe(durable, observed),
+         {:ok, decision} <- Stateholder.begin_operation(identity, durable) do
+      {:push, {:text, ProtocolV1.operation_decision(decision)}, state}
+    else
+      {:retryable, reason} ->
+        {:push, {:text, ProtocolV1.retryable(operation.command_id, reason)}, state}
+
+      {:error, reason} ->
+        protocol_error(reason, state)
+    end
   end
 
-  defp observe_phase(state, name, attributes) do
-    %{state | observability: Observability.phase(state.observability, name, attributes)}
+  defp handle_frame({:operation, _operation}, state),
+    do: protocol_error(:recovery_required, state)
+
+  defp handle_frame(
+         {:live_target, target},
+         %{
+           phase: :live,
+           coordinator: coordinator,
+           identity: identity
+         } = state
+       ) do
+    case Coordinator.live_target(coordinator, identity, target, self()) do
+      {:ok, result} -> {:push, {:text, ProtocolV1.encode!(result)}, state}
+      {:error, reason} -> protocol_error(reason, state)
+    end
   end
 
-  defp close(state, code, reason) do
-    {:stop, :normal, {code, reason}, %{state | close: %{code: code, reason: reason}}}
+  defp handle_frame({:live_target, _target}, state),
+    do: protocol_error(:recovery_required, state)
+
+  defp handle_frame(
+         {:directed_request, request},
+         %{
+           phase: :live,
+           coordinator: coordinator,
+           identity: identity
+         } = state
+       ) do
+    case Coordinator.directed_request(coordinator, identity, request, self()) do
+      {:ok, result} -> {:push, {:text, ProtocolV1.encode!(result)}, state}
+      {:error, reason} -> protocol_error(reason, state)
+    end
   end
 
-  defp trace_context(%{claims: nil} = state),
-    do: %{"connection_id" => state.connection_id}
+  defp handle_frame({:directed_request, _request}, state),
+    do: protocol_error(:recovery_required, state)
 
-  defp trace_context(state) do
-    %{
-      "connection_id" => state.connection_id,
-      "participant_id" => state.claims.participant_id,
-      "room_id" => state.claims.room_id
-    }
+  defp handle_frame(
+         {:request_ack, request_id},
+         %{
+           phase: :live,
+           coordinator: coordinator,
+           identity: identity
+         } = state
+       ) do
+    case Coordinator.acknowledge_request(coordinator, identity, request_id, self()) do
+      :ok -> {:ok, state}
+      {:error, reason} -> protocol_error(reason, state)
+    end
   end
 
-  defp result_label({result, value}), do: "#{result}:#{value}"
-  defp welcome_mode(%{snapshot: %{}}), do: "snapshot"
-  defp welcome_mode(%{replay: events}), do: "replay (#{length(events)} events)"
-  defp welcome_mode_label(%{snapshot: %{}}), do: "snapshot"
-  defp welcome_mode_label(%{replay: _events}), do: "replay"
-  defp result_outcome({result, _value}), do: Atom.to_string(result)
+  defp handle_frame({:request_ack, _request_id}, state),
+    do: protocol_error(:recovery_required, state)
 
-  defp protocol_reason(reason), do: Map.get(@protocol_reasons, reason, "invalid_frame")
-
-  defp error_label(:retry), do: "retry"
-  defp error_label(:revision_conflict), do: "revision_conflict"
-  defp error_label(_reason), do: "internal"
-
-  defp close_attributes(%{close: %{code: code, reason: reason}}, _termination_reason) do
-    %{close_code: Integer.to_string(code), close_reason: close_reason_label(reason)}
+  defp handle_frame(
+         {:room_reaction_send, input},
+         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+       ) do
+    with {:ok, frame} <- RoomActions.send_reaction(identity, input) do
+      state = observe_room_action(state, "reaction.send", frame["outcome"])
+      enqueue_room_action(frame, state)
+    end
   end
 
-  defp close_attributes(_state, :normal), do: %{close_code: "peer", close_reason: "peer_closed"}
+  defp handle_frame(
+         {:chat_read_set, input},
+         %{
+           phase: :live,
+           identity: identity,
+           room_actions_negotiated: true,
+           room_actions_version: 2
+         } = state
+       ) do
+    with {:ok, frame} <- RoomActions.mark_chat_read(identity, input) do
+      state = observe_room_action(state, "chat.read", frame["outcome"])
+      enqueue_room_action(frame, state)
+    end
+  end
 
-  defp close_attributes(_state, _reason),
-    do: %{close_code: "internal", close_reason: "terminated"}
+  defp handle_frame(
+         {:chat_send, input},
+         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+       ) do
+    with {:ok, frame} <-
+           RoomActions.send_chat(identity, input, version: state.room_actions_version) do
+      state = observe_room_action(state, "chat.send", frame["outcome"])
+      enqueue_room_action(frame, state)
+    end
+  end
 
-  defp close_reason_label("hello timeout"), do: "hello_timeout"
-  defp close_reason_label("hello required"), do: "hello_required"
-  defp close_reason_label("text frames only"), do: "non_text"
-  defp close_reason_label("unauthorized"), do: "unauthorized"
-  defp close_reason_label("internal room error"), do: "internal_room_error"
-  defp close_reason_label("room restarting"), do: "room_restarting"
-  defp close_reason_label(_reason), do: "closed"
+  defp handle_frame(
+         {:chat_page_request, input},
+         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+       ) do
+    case RoomActions.read_chat_page(identity, input, version: state.room_actions_version) do
+      {:ok, frame} ->
+        state = observe_room_action(state, "chat.page", frame["outcome"])
+        enqueue_room_action(frame, state, :chat_page)
+
+      {:error, reason} ->
+        state = observe_room_action(state, "chat.page", "failed")
+        protocol_error(reason, state)
+    end
+  end
+
+  defp handle_frame({name, _input}, state)
+       when name in [:room_reaction_send, :chat_send, :chat_page_request, :chat_read_set],
+       do: protocol_error(:room_actions_not_negotiated, state)
+
+  defp handle_frame(:ping, state), do: {:push, {:text, ProtocolV1.pong()}, state}
+
+  defp start_registered_recovery(
+         state,
+         identity,
+         cursor,
+         coordinator,
+         room_actions_negotiated,
+         room_actions_version
+       ) do
+    with {:ok, recovery} <- Stateholder.recover(identity, cursor),
+         :ok <-
+           Coordinator.activate_recovery(
+             coordinator,
+             recovery,
+             self(),
+             recovery_timeout()
+           ) do
+      Process.cancel_timer(state.hello_timer)
+
+      {:ok,
+       %{
+         state
+         | phase: :recovering,
+           hello_timer: nil,
+           identity: identity,
+           coordinator: coordinator,
+           room_actions_negotiated: room_actions_negotiated,
+           room_actions_version: room_actions_version
+       }
+       |> observe_room_action("extension.negotiate", negotiation_outcome(room_actions_negotiated))}
+    else
+      {:error, reason} ->
+        Coordinator.unsubscribe(coordinator, self())
+        Logger.warning("sync v1 recovery failed: reason=#{reason}")
+        {:stop, :normal, {1012, "dependency unavailable"}, state}
+
+      {:retryable, reason} ->
+        Coordinator.unsubscribe(coordinator, self())
+        Logger.warning("sync v1 recovery retryable: #{reason}")
+        {:stop, :normal, {1012, "dependency unavailable"}, state}
+    end
+  end
+
+  defp command_result(command_id, result, state) do
+    case result do
+      {:ok, %{result: :pending, event: event}} when is_map(event) ->
+        pending_command_result(command_id, event, state)
+
+      {:ok, decision} ->
+        if is_map(decision.event), do: Coordinator.publish(state.identity.session, decision.event)
+        {:push, {:text, ProtocolV1.ack(decision)}, state}
+
+      {:retryable, reason} ->
+        {:push, {:text, ProtocolV1.retryable(command_id, reason)}, state}
+    end
+  end
+
+  defp pending_command_result(command_id, event, state) do
+    case Coordinator.publish_pending(state.identity.session, event, self()) do
+      {:ok, event_frames} ->
+        pending = ProtocolV1.operation_pending(command_id)
+        {:push, Enum.map(event_frames ++ [pending], &{:text, &1}), state}
+
+      {:error, _reason} ->
+        {:push, {:text, ProtocolV1.retryable(command_id, :dependency_unavailable)}, state}
+    end
+  end
+
+  defp protocol_error(reason, state),
+    do: {:push, {:text, ProtocolV1.error(:protocol_error, Atom.to_string(reason))}, state}
+
+  defp close_invalid_frame(reason, state) do
+    detail =
+      if(reason == :unsupported_protocol, do: "unsupported protocol", else: "invalid frame")
+
+    code = if(reason == :unsupported_protocol, do: :unsupported_protocol, else: :invalid_frame)
+
+    {:stop, :normal, {1009, detail}, {:text, ProtocolV1.error(code, detail)}, state}
+  end
+
+  defp identity(%Claims{} = claims) do
+    with {:ok, _tenant} <- UUID.dump(claims.tenant_id),
+         {:ok, _room} <- UUID.dump(claims.room_id),
+         {:ok, _session} <- UUID.dump(claims.session_id),
+         {:ok, _participant} <- UUID.dump(claims.participant_session_id),
+         {:ok, _intent} <- UUID.dump(claims.admission_lifecycle_intent_id),
+         generation when is_integer(generation) and generation > 0 <-
+           claims.participant_session_generation,
+         {:ok, authorization} <- identity_authorization(claims) do
+      {:ok,
+       %Identity{
+         session: %SessionKey{
+           tenant_id: String.downcase(claims.tenant_id),
+           room_id: String.downcase(claims.room_id),
+           session_id: String.downcase(claims.session_id)
+         },
+         participant_session_id: String.downcase(claims.participant_session_id),
+         participant_session_generation: generation,
+         admission_lifecycle_intent_id: String.downcase(claims.admission_lifecycle_intent_id),
+         protocol_version: 1,
+         role: authorization.role,
+         eligible_roles: authorization.eligible_roles,
+         capabilities: authorization.capabilities
+       }}
+    else
+      _ -> {:error, :invalid_identity}
+    end
+  end
+
+  defp identity_authorization(%Claims{} = claims) do
+    if Claims.valid_role_envelope?(claims.initial_role, claims.eligible_roles) do
+      {:ok, %{role: claims.initial_role, eligible_roles: claims.eligible_roles, capabilities: []}}
+    else
+      {:error, :invalid_role_envelope}
+    end
+  end
+
+  defp pop_outbound(%{coordinator: coordinator} = state) do
+    case Coordinator.pop(coordinator, self()) do
+      {:ok, encoded, false} ->
+        {:push, {:text, encoded}, mark_control_checked(state)}
+
+      {:ok, encoded, {:terminal, revision, state_digest}} ->
+        cancel_timer(state.heartbeat_timer)
+        timer = Process.send_after(self(), :terminal_ack_timeout, @terminal_ack_timeout_ms)
+
+        {:push, {:text, encoded},
+         %{
+           state
+           | phase: :terminal,
+             heartbeat_timer: nil,
+             terminal_ack_timer: timer,
+             terminal_head: %{revision: revision, state_digest: state_digest}
+         }}
+
+      :empty ->
+        {:ok, state}
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "delivery recovery required"}, state}
+    end
+  end
+
+  defp start_heartbeat(state) do
+    state
+    |> Map.put(:missed_heartbeats, 0)
+    |> schedule_heartbeat()
+  end
+
+  defp schedule_heartbeat(state) do
+    cancel_timer(state.heartbeat_timer)
+    timer = Process.send_after(self(), :heartbeat_check, @heartbeat_interval_ms)
+    %{state | heartbeat_timer: timer}
+  end
+
+  defp cancel_timer(timer) when is_reference(timer), do: Process.cancel_timer(timer)
+  defp cancel_timer(_timer), do: false
+
+  defp recovery_timeout do
+    Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5_000) + 1_000
+  end
+
+  defp negotiate_room_actions(_identity, nil), do: {:ok, %{}, false, nil}
+
+  defp negotiate_room_actions(identity, chat_cursor) do
+    case RoomActions.negotiate(identity, chat_cursor, self()) do
+      {:ok, extension} ->
+        {:ok, %{room_actions_extension: extension}, true, 2}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp enqueue_room_action(frame, state, kind \\ :frame) do
+    encoded = ProtocolV1.encode!(frame)
+
+    case RoomActionQueue.push(state.room_actions_queue, encoded, kind: kind) do
+      :ok ->
+        push_room_action(state)
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+    end
+  end
+
+  defp buffer_room_action(frame, state) do
+    encoded = ProtocolV1.encode!(frame)
+
+    case RoomActionQueue.push(state.room_actions_queue, encoded) do
+      :ok ->
+        {:ok, state}
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+    end
+  end
+
+  defp push_room_action(state) do
+    case RoomActionQueue.take(state.room_actions_queue, false) do
+      {:ok, %{encoded: encoded}} ->
+        case RoomActionQueue.stats(state.room_actions_queue) do
+          {:ok, %{queued_frames: queued}} when queued > 0 ->
+            send(self(), :room_actions_drain)
+
+          _other ->
+            :ok
+        end
+
+        {:push, {:text, encoded}, state}
+
+      :empty ->
+        {:ok, state}
+
+      {:error, _reason} ->
+        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+
+      :control_required ->
+        {:ok, state}
+    end
+  end
+
+  defp mark_control_checked(state) do
+    _result = RoomActionQueue.control_checked(state.room_actions_queue)
+    state
+  end
+
+  defp unsubscribe_room_actions(%{
+         identity: %Identity{} = identity,
+         room_actions_negotiated: true
+       }) do
+    RoomActions.unsubscribe(identity, self())
+  end
+
+  defp unsubscribe_room_actions(_state), do: :ok
+
+  defp observe_room_action(state, operation, outcome) do
+    observability =
+      Observability.phase(state.observability, "sync.room_action", %{
+        operation: operation,
+        outcome: outcome
+      })
+
+    %{state | observability: observability}
+  end
+
+  defp negotiation_outcome(true), do: "negotiated"
+  defp negotiation_outcome(false), do: "not_requested"
 end

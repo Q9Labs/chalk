@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { V3SessionSnapshot } from "../sync";
+import type { V1SessionSnapshot } from "../sync";
 import { initialChalkSessionSnapshot, projectChalkSessionSnapshot } from "./snapshot";
 
 describe("ChalkSession snapshot projection", () => {
@@ -75,7 +75,7 @@ describe("ChalkSession snapshot projection", () => {
       mediaPlane: { local: [], remote: [] },
       localMedia: { microphone: "enabled", camera: "disabled", screen: "disabled" },
       pendingCommandCount: 0,
-    } satisfies V3SessionSnapshot;
+    } satisfies V1SessionSnapshot;
 
     const snapshot = projectChalkSessionSnapshot({
       state: "live",

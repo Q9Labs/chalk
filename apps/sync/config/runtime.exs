@@ -133,7 +133,6 @@ if config_env() == :prod do
   end
 
   config :chalk_sync,
-    enable_v1: false,
     enforce_production_boot_checks: true,
     max_synchronous_wal_lag_bytes: max_wal_lag_bytes,
     provider_bridge: provider_bridge,

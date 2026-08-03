@@ -1,4 +1,4 @@
-import type { V3MediaPublication, V3MediaSource } from "../sync/v3-types";
+import type { V1MediaPublication, V1MediaSource } from "../sync/v1-types";
 
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
@@ -15,13 +15,13 @@ export type CloudflareSFUTrackRequest = {
   readonly mid?: string;
   readonly trackName: string;
   readonly sessionId?: string;
-  readonly source?: V3MediaSource;
+  readonly source?: V1MediaSource;
   readonly publicationId?: string;
 };
 
 export type CloudflareSFUCloseTrackRequest = {
   readonly mid: string;
-  readonly source: V3MediaSource;
+  readonly source: V1MediaSource;
   readonly publicationId: string;
 };
 
@@ -33,7 +33,7 @@ export type CloudflareSFUTracksResponse = {
 
 export type CloudflareSFUPublication = {
   readonly participantSessionId: string;
-  readonly source: V3MediaSource;
+  readonly source: V1MediaSource;
   readonly publicationId: string;
 };
 
@@ -54,7 +54,7 @@ export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
   readonly track: MediaStreamTrack;
 };
 
-export type CloudflareSFULocalTrack = Pick<V3MediaPublication, "source" | "enabled" | "publicationId"> & {
+export type CloudflareSFULocalTrack = Pick<V1MediaPublication, "source" | "enabled" | "publicationId"> & {
   readonly track: MediaStreamTrack;
 };
 

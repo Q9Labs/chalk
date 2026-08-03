@@ -12,7 +12,7 @@ defmodule ChalkSync.Sessions.CoordinatorTest do
     assert {:ok, recovery} = Memory.recover(identity, nil)
     assert {:ok, coordinator} = Coordinator.subscribe(identity, recovery.head, self())
 
-    {:ok, command} = Command.new("repair-command-001", :raise_hand, %{})
+    {:ok, command} = Command.new("repair-command-001", :set_hand_raised, %{"raised" => true})
     assert {:ok, decision} = Memory.decide_command(identity, command)
 
     send(coordinator, :repair_now)
@@ -29,8 +29,8 @@ defmodule ChalkSync.Sessions.CoordinatorTest do
     assert {:ok, recovery} = Memory.recover(identity, nil)
     assert {:ok, coordinator} = Coordinator.subscribe(identity, recovery.head, self())
 
-    {:ok, first} = Command.new("hint-order-command1", :raise_hand, %{})
-    {:ok, second} = Command.new("hint-order-command2", :lower_hand, %{})
+    {:ok, first} = Command.new("hint-order-command1", :set_hand_raised, %{"raised" => true})
+    {:ok, second} = Command.new("hint-order-command2", :set_hand_raised, %{"raised" => false})
     assert {:ok, %{revision: 2}} = Memory.decide_command(identity, first)
     assert {:ok, %{revision: 3}} = Memory.decide_command(identity, second)
 
@@ -65,9 +65,10 @@ defmodule ChalkSync.Sessions.CoordinatorTest do
     assert {:ok, ^coordinator} = Coordinator.subscribe(identity, recovery.head, fast)
 
     Enum.each(1..257, fn index ->
-      name = if(rem(index, 2) == 1, do: :raise_hand, else: :lower_hand)
       command_id = "slow-peer-#{String.pad_leading(Integer.to_string(index), 7, "0")}"
-      {:ok, command} = Command.new(command_id, name, %{})
+
+      {:ok, command} =
+        Command.new(command_id, :set_hand_raised, %{"raised" => rem(index, 2) == 1})
 
       assert {:ok, decision} = Memory.decide_command(identity, command)
       assert :ok = Coordinator.publish(identity.session, decision.event)
@@ -90,7 +91,7 @@ defmodule ChalkSync.Sessions.CoordinatorTest do
     assert {:ok, recovery} = Memory.recover(identity, nil)
     assert {:ok, coordinator} = Coordinator.subscribe(identity, recovery.head, self())
 
-    {:ok, command} = Command.new("drain-event-cmd01", :raise_hand, %{})
+    {:ok, command} = Command.new("drain-event-cmd01", :set_hand_raised, %{"raised" => true})
     assert {:ok, decision} = Memory.decide_command(identity, command)
     assert :ok = Coordinator.publish(identity.session, decision.event)
 
@@ -136,9 +137,11 @@ defmodule ChalkSync.Sessions.CoordinatorTest do
     assert {:ok, initial} = Memory.recover(identity, nil)
 
     Enum.each(1..129, fn index ->
-      name = if rem(index, 2) == 1, do: :raise_hand, else: :lower_hand
       command_id = "recovery-page-#{String.pad_leading(to_string(index), 4, "0")}"
-      assert {:ok, command} = Command.new(command_id, name, %{})
+
+      assert {:ok, command} =
+               Command.new(command_id, :set_hand_raised, %{"raised" => rem(index, 2) == 1})
+
       assert {:ok, _decision} = Memory.decide_command(identity, command)
     end)
 
@@ -229,7 +232,9 @@ defmodule ChalkSync.Sessions.CoordinatorTest do
     assert elapsed <= 6_500
     assert Process.alive?(coordinator)
 
-    {:ok, command} = Command.new("healthy-after-recovery-timeout", :raise_hand, %{})
+    {:ok, command} =
+      Command.new("healthy-after-recovery-timeout", :set_hand_raised, %{"raised" => true})
+
     assert {:ok, decision} = Memory.decide_command(identity, command)
     assert :ok = Coordinator.publish(identity.session, decision.event)
     assert_receive {:fast_revision, 2}

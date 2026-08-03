@@ -1,7 +1,7 @@
 import type { CloudflareSFUSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
-import type { V3SessionSnapshot } from "../sync";
-import type { V3DirectedRequest, V3RoomActionClientEvent, V3RoomActionsExtensionState } from "../sync/v3-types";
+import type { V1SessionSnapshot } from "../sync";
+import type { V1DirectedRequest, V1RoomActionClientEvent, V1RoomActionsExtensionState } from "../sync/v1-types";
 import { ParticipantAccessError } from "./access";
 import type { ParticipantAccessSubject } from "./access";
 import { ChalkSessionAccessManager } from "./access-manager";
@@ -119,7 +119,7 @@ export class ChalkSession implements ChalkSessionStore {
   #state: ChalkSessionState = "idle";
   #sync: ChalkSessionSyncClient | null = null;
   #syncRecoveryTimer: unknown;
-  #syncSnapshot: V3SessionSnapshot | null = null;
+  #syncSnapshot: V1SessionSnapshot | null = null;
   #teardownPromise: Promise<boolean> | null = null;
   #unsubscribeMedia: (() => void) | null = null;
   #unsubscribeRequests: (() => void) | null = null;
@@ -604,7 +604,7 @@ export class ChalkSession implements ChalkSessionStore {
     this.#handleMediaSnapshot(media.getSnapshot());
   }
 
-  #handleRoomActionEvent(event: V3RoomActionClientEvent): void {
+  #handleRoomActionEvent(event: V1RoomActionClientEvent): void {
     if (event.type === "reaction") {
       this.#observeReaction(event.reaction);
       return;
@@ -699,7 +699,7 @@ export class ChalkSession implements ChalkSessionStore {
     this.#publish();
   }
 
-  #handleDirectedRequest(request: V3DirectedRequest): void {
+  #handleDirectedRequest(request: V1DirectedRequest): void {
     const expiresAtMs = request.expires_at_ms;
     if (expiresAtMs <= this.#dependencies.clock.now()) return;
     const incoming: ChalkIncomingMediaRequest = {
@@ -733,7 +733,7 @@ export class ChalkSession implements ChalkSessionStore {
     this.#mediaRequestTimers.delete(requestId);
   }
 
-  #handleSyncSnapshot(snapshot: V3SessionSnapshot): void {
+  #handleSyncSnapshot(snapshot: V1SessionSnapshot): void {
     this.#syncSnapshot = snapshot;
     const failure = syncRuntimeFailure(snapshot, this.#access.current?.subject ?? null);
     if (failure) {
@@ -747,7 +747,7 @@ export class ChalkSession implements ChalkSessionStore {
     this.#publish();
   }
 
-  #removeRequestsFromMissingParticipants(snapshot: V3SessionSnapshot): void {
+  #removeRequestsFromMissingParticipants(snapshot: V1SessionSnapshot): void {
     const participantIds = new Set((snapshot.optimisticControl?.participants ?? snapshot.control?.participants ?? []).map((participant) => participant.participantSessionId));
     for (const request of this.#incomingMediaRequests) {
       if (!participantIds.has(request.actorParticipantSessionId)) this.#removeMediaRequest(request.requestId);
@@ -828,7 +828,7 @@ export class ChalkSession implements ChalkSessionStore {
     return this.#sync === sync && sync.getSnapshot().connection.phase === "live";
   }
 
-  #handleSyncConnection(phase: V3SessionSnapshot["connection"]["phase"]): void {
+  #handleSyncConnection(phase: V1SessionSnapshot["connection"]["phase"]): void {
     if (phase === "terminal") {
       this.#requestRecovery("sync");
       return;
@@ -1280,12 +1280,12 @@ class StartupFailure extends Error {
 }
 
 class SyncStartupDeadline extends TypeError {
-  constructor(readonly snapshot: V3SessionSnapshot) {
+  constructor(readonly snapshot: V1SessionSnapshot) {
     super("Sync did not become live before the startup deadline");
   }
 }
 
-function syncStartupDeadlineMessage(snapshot: V3SessionSnapshot): string {
+function syncStartupDeadlineMessage(snapshot: V1SessionSnapshot): string {
   if (snapshot.connection.phase === "connecting") return "The Sync transport could not establish a connection";
   if (snapshot.connection.phase !== "recovering") return "The Sync layer did not become live";
   if (snapshot.participantSessionId === null) return "The Sync transport connected but did not receive its welcome frame";
@@ -1354,16 +1354,16 @@ function selectSourceTrack(stream: MediaStream, source: "microphone" | "camera")
   return selected;
 }
 
-function syncSubjectMismatch(snapshot: V3SessionSnapshot, subject: ParticipantAccessSubject | null): boolean {
+function syncSubjectMismatch(snapshot: V1SessionSnapshot, subject: ParticipantAccessSubject | null): boolean {
   if (!subject || snapshot.participantSessionId === null) return false;
   return snapshot.participantSessionId !== subject.participantSessionId || snapshot.participantSessionGeneration !== subject.participantGeneration;
 }
 
-function syncSessionEnded(snapshot: V3SessionSnapshot): boolean {
+function syncSessionEnded(snapshot: V1SessionSnapshot): boolean {
   return snapshot.control?.status === "ended" || snapshot.optimisticControl?.status === "ended";
 }
 
-function syncRuntimeFailure(snapshot: V3SessionSnapshot, subject: ParticipantAccessSubject | null): SyncRuntimeFailure | null {
+function syncRuntimeFailure(snapshot: V1SessionSnapshot, subject: ParticipantAccessSubject | null): SyncRuntimeFailure | null {
   if (syncSubjectMismatch(snapshot, subject)) {
     return { code: "invalid_access", message: "Sync authenticated a different participant subject" };
   }
@@ -1373,7 +1373,7 @@ function syncRuntimeFailure(snapshot: V3SessionSnapshot, subject: ParticipantAcc
   return null;
 }
 
-function chatCatchUpRequest(latestSequence: string | null, extension: V3RoomActionsExtensionState): ChatCatchUpRequest | null {
+function chatCatchUpRequest(latestSequence: string | null, extension: V1RoomActionsExtensionState): ChatCatchUpRequest | null {
   const head = extension.chatHeadSequence;
   if (!extension.negotiated || head === null || (latestSequence !== null && compareSequence(latestSequence, head) >= 0)) return null;
   if (latestSequence === null) return { kind: "initial", input: { limit: MAX_CHAT_PAGE_SIZE } };

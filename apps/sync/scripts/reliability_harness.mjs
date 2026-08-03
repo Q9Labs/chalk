@@ -28,8 +28,8 @@ export function createProfilePlan(profile, runDirectory) {
 
   const correctness = [
     step("sync_full_gate", ["apps/sync/scripts/gate.sh", "run"]),
-    step("sync_v3_breaker", ["mix", "sync.breaker.v3", "--output", path.join(runDirectory, "sync-breaker-v3.json")], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
-    step("sync_v3_replay", ["mix", "sync.breaker.v3", "--replay", path.join(runDirectory, "sync-breaker-v3.json")], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
+    step("sync_v1_breaker", ["mix", "sync.breaker.v1", "--output", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
+    step("sync_v1_replay", ["mix", "sync.breaker.v1", "--replay", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test" } }),
     step("typescript_sync_and_whiteboard", ["pnpm", "--dir", "sdks/typescript/client", "exec", "vitest", "run", "src/sync", "src/whiteboard"]),
     step("whiteboard_collaboration", ["pnpm", "--dir", "packages/whiteboard", "exec", "vitest", "run", "src/collab", "src/embedded"]),
   ];

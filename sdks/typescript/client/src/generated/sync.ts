@@ -9,50 +9,224 @@ export const SyncProtocolMetadata = {
     field: "protocol",
     value: 1,
     transport: "websocket-json-text",
+    route: "/v1/sync",
   },
   directions: {
     clientToServer: "client-to-server",
     serverToClient: "server-to-client",
-  },
-  correlation: {
-    optionalTopLevelFields: {
-      journey_id: {
-        kind: "string",
-        format: "chalk-journey-id",
-      },
-      traceparent: {
-        kind: "string",
-        format: "w3c-traceparent",
-      },
-      tracestate: {
-        kind: "string",
-        format: "w3c-tracestate",
-      },
-    },
-    upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate"],
-    rule: "propagate_from_first_observed_layer_to_every_downstream_frame",
   },
   phases: [
     {
       id: "awaiting_hello",
       accepts: ["hello", "ping"],
       hello: {
-        transitionsTo: "joined",
+        transitionsTo: "recovering",
+        deadlineMs: 5000,
       },
     },
     {
-      id: "joined",
-      accepts: ["command", "ping"],
-      hello: {
-        connection: "open",
-        error: "already_joined",
+      id: "recovering",
+      accepts: ["recovery_ack", "ping"],
+      recoveryComplete: {
+        transitionsTo: "live",
       },
     },
+    {
+      id: "live",
+      accepts: ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "room_reaction_send", "chat_send", "chat_page_request", "chat_read_set", "ping"],
+      heartbeat: {
+        intervalMs: 20000,
+        missedDeadlinesBeforeClose: 2,
+      },
+    },
+    {
+      id: "terminal",
+      transitionsTo: "closed",
+    },
+    {
+      id: "draining",
+      transitionsTo: "closed",
+    },
   ],
+  streams: {
+    control: {
+      required: true,
+      authority: "postgres",
+      version: "revision-and-digest",
+      cursor: "controlCursor",
+      recovery: ["snapshot", "bounded_exact_replay", "up_to_date", "terminal"],
+    },
+    media: {
+      required: true,
+      authority: "media-plane-observation",
+      version: "projection-id-and-exact-next-sequence",
+      cursor: null,
+      recovery: ["replace_latest_snapshot"],
+    },
+    presence: {
+      required: true,
+      authority: "sync-live-projection",
+      version: "projection-id-and-exact-next-sequence",
+      cursor: null,
+      recovery: ["replace_latest_snapshot"],
+    },
+    requests: {
+      required: true,
+      authority: "directed-live-delivery",
+      version: "none",
+      cursor: null,
+      recovery: ["none"],
+    },
+  },
+  externalIntents: [
+    "admit_participant",
+    "deny_admission",
+    "admission_request_expired",
+    "mute_participant",
+    "stop_participant_camera",
+    "stop_participant_screen_share",
+    "remove_participant",
+    "start_recording",
+    "stop_recording",
+    "participant_leave",
+    "end_session",
+    "tenant_transfer_host",
+    "tenant_set_deadline",
+    "tenant_end_session",
+    "maximum_duration_expired",
+  ],
+  limits: {
+    decodedInboundFrameBytes: 65536,
+    tokenBytes: 8192,
+    commandIdMinBytes: 16,
+    commandIdMaxBytes: 64,
+    requestIdMinBytes: 16,
+    requestIdMaxBytes: 64,
+    decodedCommandPayloadBytes: 16384,
+    encodedLiveEventBytes: 32768,
+    replayPageMaxEvents: 128,
+    replayPageEncodedBytes: 262144,
+    completeReplayMaxEvents: 2048,
+    completeReplayEncodedBytes: 2097152,
+    snapshotEncodedBytes: 1048576,
+    projectionSnapshotEncodedBytes: 1048576,
+    projectionMaxItems: 1500,
+    directedRequestTtlMs: 30000,
+    directedRequestsPerActorTarget: 4,
+    roomActionFrameBytes: 32768,
+    roomActionQueueMaxFrames: 256,
+    roomActionBurstMax: 8,
+    chatMessageUtf8Bytes: 16384,
+    chatMessageUnicodeScalars: 4000,
+    chatAttachmentMaxItems: 5,
+    chatAttachmentFileNameUtf8Bytes: 255,
+    chatAttachmentMaxBytes: 26214400,
+    chatPageMaxMessages: 100,
+    chatPageEncodedBytes: 131072,
+    reactionTtlMs: 5000,
+    reactionRateWindowMs: 10000,
+    reactionRateMax: 10,
+    protocolErrorDetailBytes: 1024,
+  },
+  roomActions: {
+    extension: "room_actions_v2",
+    capabilities: ["sendReaction", "sendChat"],
+    reactions: ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+    attachmentMimeTypes: [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "application/pdf",
+      "text/plain",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.oasis.opendocument.text",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      "application/vnd.oasis.opendocument.presentation",
+    ],
+    chatCursor: {
+      exactFields: ["after_sequence", "retained_floor_sequence"],
+      afterSequence: "nullableUnsignedDecimal",
+      retainedFloorSequence: "nullableUnsignedDecimal",
+    },
+    helloExtension: {
+      exactFields: ["name", "chat_cursor"],
+    },
+    welcomeExtension: {
+      exactFields: ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"],
+    },
+    clientFrames: {
+      sendReaction: {
+        type: "room_reaction_send",
+        exactFields: ["type", "operation_id", "reaction"],
+      },
+      sendChat: {
+        type: "chat_send",
+        exactFields: ["type", "client_message_id", "text", "attachment_ids"],
+      },
+      readChatPage: {
+        type: "chat_page_request",
+        exactFields: ["type", "request_id", "direction", "cursor_sequence", "limit"],
+        directions: ["older", "newer"],
+      },
+      setChatRead: {
+        type: "chat_read_set",
+        exactFields: ["type", "request_id", "sequence"],
+      },
+    },
+    serverFrames: {
+      reaction: {
+        type: "room_reaction",
+        exactFields: ["type", "event_id", "participant_session_id", "display_name", "reaction", "occurred_at", "expires_at"],
+      },
+      reactionResult: {
+        type: "room_reaction_result",
+        acceptedFields: ["type", "operation_id", "outcome", "reaction"],
+        rejectedFields: ["type", "operation_id", "outcome", "error_code"],
+        outcomes: ["accepted", "rejected"],
+      },
+      chatMessage: {
+        type: "chat_message",
+        exactFields: ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "attachments", "created_at"],
+      },
+      chatSendResult: {
+        type: "chat_send_result",
+        acceptedFields: ["type", "client_message_id", "outcome", "message"],
+        rejectedFields: ["type", "client_message_id", "outcome", "error_code"],
+        outcomes: ["accepted", "rejected"],
+      },
+      chatPage: {
+        type: "chat_page",
+        loadedFields: ["type", "request_id", "outcome", "messages", "has_more", "head_sequence", "retained_floor_sequence"],
+        resetFields: ["type", "request_id", "outcome", "retained_floor_sequence"],
+        outcomes: ["loaded", "cursor_reset"],
+      },
+      chatHead: {
+        type: "chat_head",
+        exactFields: ["type", "head_sequence", "retained_floor_sequence"],
+      },
+      chatReadReceipt: {
+        type: "chat_read_receipt",
+        exactFields: ["type", "participant_session_id", "participant_session_generation", "sequence", "read_at"],
+      },
+      chatReadResult: {
+        type: "chat_read_result",
+        acceptedFields: ["type", "request_id", "outcome", "participant_session_id", "participant_session_generation", "sequence", "read_at"],
+        rejectedFields: ["type", "request_id", "outcome", "error_code"],
+        outcomes: ["accepted", "rejected"],
+      },
+    },
+    errorCodes: ["capability_denied", "invalid_payload", "rate_limited", "overloaded", "session_ended", "participant_stale", "client_message_id_conflict", "attachment_not_found", "attachment_not_ready", "attachment_already_claimed", "attachment_quota_exceeded", "dependency_unavailable"],
+  },
   continuity: {
     cursor: {
       field: "streams.control.cursor",
-      resume: "events_after_cursor",
+      resume: "events_after_cursor_when_digest_matches",
       stream: "control",
     },
     events: {
@@ -62,259 +236,1134 @@ export const SyncProtocolMetadata = {
       stream: "control",
     },
     snapshotFallback: {
-      when: ["cursor_missing", "cursor_future", "cursor_unavailable"],
+      when: ["cursor_missing", "cursor_future", "cursor_malformed", "cursor_expired", "cursor_unavailable", "cursor_same_revision_digest_mismatch"],
       welcomeMode: "snapshot",
+    },
+    replay: {
+      pageAcknowledgement: "recovery_ack",
+      pageCompletion: "recovery_complete_after_acknowledged_head",
+      liveEventsAfter: "recovery_complete",
+      maxEvents: 2048,
+      maxEncodedBytes: 2097152,
     },
   },
   idempotency: {
     key: "command_id",
-    outcomes: ["committed", "duplicate", "rejected"],
+    outcomes: ["committed", "satisfied", "rejected"],
     scope: "participant_session",
-    duplicate: "reuses_original_result",
+    duplicate: "reuses_original_semantic_outcome",
+    conflict: "preserves_original_receipt",
   },
   closeCodes: [
     {
-      code: 1002,
+      code: 1000,
       connection: "closed",
-      reasons: ["hello timeout", "hello required"],
-    },
-    {
-      code: 1003,
-      connection: "closed",
-      reasons: ["text frames only"],
+      reasons: ["terminal event acknowledged", "terminal recovery drained"],
     },
     {
       code: 1008,
       connection: "closed",
-      reasons: ["unauthorized"],
+      reasons: ["invalid token", "policy violation"],
     },
     {
-      code: 1011,
+      code: 1009,
       connection: "closed",
-      reasons: ["internal room error"],
+      reasons: ["malformed frame", "oversized frame"],
     },
     {
       code: 1012,
       connection: "closed",
-      reasons: ["room restarting"],
+      reasons: ["service restart", "server draining", "terminal acknowledgement timeout"],
     },
   ],
-  errorConnection: "open",
+} as const;
+export const SyncProtocolLimits = SyncProtocolMetadata.limits;
+export const SyncCloseCodes = SyncProtocolMetadata.closeCodes;
+export const SyncStateDigestMetadata = {
+  algorithm: "sha256",
+  prefix: "chalk-sync-state-v1",
+  versionEncoding: "uint32-big-endian",
+  projectionEncoding: "rfc8785-json",
+  wireEncoding: "hex-lowercase",
 } as const;
 
-export const SyncCloseCodes = SyncProtocolMetadata.closeCodes;
+const textEncoder = new TextEncoder();
+export function encodedSyncFrameBytes(frame: unknown): number {
+  return textEncoder.encode(JSON.stringify(frame)).byteLength;
+}
+function boundedUtf8String(maxBytes: number, minBytes = 0) {
+  return Schema.String.check(
+    Schema.makeFilter((value) => {
+      const bytes = textEncoder.encode(value).byteLength;
+      return bytes >= minBytes && bytes <= maxBytes ? undefined : { path: [], issue: "must fit the UTF-8 byte bounds" };
+    }),
+  );
+}
+function boundedFrame(maxBytes: number) {
+  return Schema.makeFilter((frame) => (encodedSyncFrameBytes(frame) <= maxBytes ? undefined : { path: [], issue: "must fit the encoded byte limit" }));
+}
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return isObject(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+function exactKeys(keys: readonly string[]) {
+  return Schema.makeFilter((value) => (exactObject(value, keys) ? undefined : { path: [], issue: "must not contain unknown or missing fields" }));
+}
+function uniqueStrings(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") && new Set(value).size === value.length;
+}
+function nonEmptyUniqueStrings(value: unknown): value is readonly string[] {
+  return uniqueStrings(value) && value.length > 0;
+}
+function sameStrings(left: unknown, right: unknown): boolean {
+  return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => value === right[index]);
+}
+function strictCursor(value: unknown): boolean {
+  return exactObject(value, ["revision", "state_schema_version", "state_digest"]);
+}
+function strictCommand(value: Record<string, unknown>): boolean {
+  if (!exactObject(value, ["type", "command_id", "name", "payload"]) || !isObject(value.payload)) return false;
+  switch (value.name) {
+    case "set_hand_raised":
+      return exactObject(value.payload, ["raised"]);
+    case "set_display_name":
+      return exactObject(value.payload, ["display_name"]);
+    case "set_admission_policy":
+      return exactObject(value.payload, ["policy"]);
+    case "set_participant_role":
+      return exactObject(value.payload, ["participant_session_id", "role"]);
+    case "transfer_host":
+      return exactObject(value.payload, ["participant_session_id"]);
+    default:
+      return false;
+  }
+}
+function strictRoomActionsHelloExtension(value: unknown): boolean {
+  return exactObject(value, ["name", "chat_cursor"]) && value.name === "room_actions_v2" && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
+}
+function strictHello(value: Record<string, unknown>): boolean {
+  const base = exactObject(value, ["type", "protocol", "token", "streams"]);
+  const extended = exactObject(value, ["type", "protocol", "token", "streams", "extensions"]) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictRoomActionsHelloExtension(value.extensions[0]);
+  if ((!base && !extended) || !exactObject(value.streams, ["control", "media", "presence", "requests"])) return false;
+  const streams = value.streams;
+  return (
+    exactObject(streams.control, ["cursor"]) &&
+    (streams.control.cursor === null || strictCursor(streams.control.cursor)) &&
+    exactObject(streams.media, ["cursor"]) &&
+    streams.media.cursor === null &&
+    exactObject(streams.presence, ["cursor"]) &&
+    streams.presence.cursor === null &&
+    exactObject(streams.requests, ["cursor"]) &&
+    streams.requests.cursor === null
+  );
+}
+function strictChatMessage(value: unknown): boolean {
+  return exactObject(value, ["type", "message_id", "client_message_id", "sequence", "participant_session_id", "display_name", "text", "attachments", "created_at"]) && Array.isArray(value.attachments) && value.attachments.every(strictChatAttachment);
+}
+function strictChatAttachment(value: unknown): boolean {
+  return exactObject(value, ["attachment_id", "file_name", "mime_type", "byte_length"]);
+}
+function strictRoomReaction(value: unknown): boolean {
+  return exactObject(value, ["type", "event_id", "participant_session_id", "display_name", "reaction", "occurred_at", "expires_at"]);
+}
+function strictOperation(value: Record<string, unknown>): boolean {
+  if (!exactObject(value, ["type", "command_id", "name", "payload"]) || !isObject(value.payload)) return false;
+  switch (value.name) {
+    case "admit_participant":
+      return exactObject(value.payload, ["admission_request_id"]);
+    case "deny_admission":
+      return exactObject(value.payload, ["admission_request_id"]);
+    case "mute_participant":
+      return exactObject(value.payload, ["participant_session_id"]);
+    case "stop_participant_camera":
+      return exactObject(value.payload, ["participant_session_id"]);
+    case "stop_participant_screen_share":
+      return exactObject(value.payload, ["participant_session_id"]);
+    case "remove_participant":
+      return exactObject(value.payload, ["participant_session_id"]);
+    case "start_recording":
+      return exactObject(value.payload, ["recording_id"]);
+    case "stop_recording":
+      return exactObject(value.payload, ["recording_id"]);
+    case "participant_leave":
+      return exactObject(value.payload, []);
+    case "end_session":
+      return exactObject(value.payload, []);
+    default:
+      return false;
+  }
+}
+function strictClientFrame(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  switch (value.type) {
+    case "hello":
+      return strictHello(value);
+    case "command":
+      return strictCommand(value);
+    case "operation":
+      return strictOperation(value);
+    case "live_target":
+      return exactObject(value, ["type", "operation_id", "name", "enabled"]);
+    case "directed_request":
+      return exactObject(value, ["type", "request_id", "name", "target_participant_session_id"]);
+    case "request_ack":
+      return exactObject(value, ["type", "request_id"]);
+    case "room_reaction_send":
+      return exactObject(value, ["type", "operation_id", "reaction"]);
+    case "chat_send":
+      return exactObject(value, ["type", "client_message_id", "text", "attachment_ids"]);
+    case "chat_page_request":
+      return exactObject(value, ["type", "request_id", "direction", "cursor_sequence", "limit"]);
+    case "chat_read_set":
+      return exactObject(value, ["type", "request_id", "sequence"]);
+    case "delivery_ack":
+      return exactObject(value, ["type", "stream", "revision", "state_digest"]);
+    case "recovery_ack":
+      return exactObject(value, ["type", "recovery_id", "revision", "state_digest"]);
+    case "ping":
+      return exactObject(value, ["type"]);
+    default:
+      return false;
+  }
+}
+function strictSnapshot(value: unknown): boolean {
+  if (
+    !exactObject(value, ["control_revision", "state_schema_version", "state_digest", "status", "admission_policy", "host_exit_policy", "host_participant_session_id", "deadline_at_ms", "deadline_generation", "role_capabilities", "recording", "participants", "admission_requests"]) ||
+    !exactObject(value.role_capabilities, ["host", "cohost", "participant"]) ||
+    (value.recording !== null && !exactObject(value.recording, ["recording_id", "status", "failure_code"])) ||
+    !Array.isArray(value.participants) ||
+    !value.participants.every((participant) => exactObject(participant, ["participant_session_id", "display_name", "hand_raised", "admission_revision", "role", "eligible_roles", "capabilities"])) ||
+    !Array.isArray(value.admission_requests) ||
+    !value.admission_requests.every((request) => exactObject(request, ["admission_request_id", "participant_session_id", "display_name", "initial_role", "eligible_roles", "expires_at_ms"]))
+  )
+    return false;
+  const roleCapabilities = value.role_capabilities;
+  if (!["host", "cohost", "participant"].every((role) => uniqueStrings(roleCapabilities[role]))) return false;
+  if (value.recording !== null && (value.recording.status === "failed") !== (value.recording.failure_code !== null)) return false;
+  const participantIds = new Set<unknown>();
+  let hostCount = 0;
+  for (const participant of value.participants) {
+    if (typeof participant.role !== "string" || participantIds.has(participant.participant_session_id) || !nonEmptyUniqueStrings(participant.eligible_roles) || !participant.eligible_roles.includes(participant.role) || !sameStrings(participant.capabilities, roleCapabilities[participant.role]))
+      return false;
+    participantIds.add(participant.participant_session_id);
+    if (participant.role === "host") {
+      if (!participant.eligible_roles.includes("cohost")) return false;
+      hostCount += 1;
+    }
+  }
+  const requestIds = new Set<unknown>();
+  const candidateIds = new Set<unknown>();
+  for (const request of value.admission_requests) {
+    if (
+      typeof request.initial_role !== "string" ||
+      requestIds.has(request.admission_request_id) ||
+      candidateIds.has(request.participant_session_id) ||
+      participantIds.has(request.participant_session_id) ||
+      !nonEmptyUniqueStrings(request.eligible_roles) ||
+      !request.eligible_roles.includes(request.initial_role) ||
+      (request.initial_role === "host" && !request.eligible_roles.includes("cohost"))
+    )
+      return false;
+    requestIds.add(request.admission_request_id);
+    candidateIds.add(request.participant_session_id);
+  }
+  if (value.status === "ended") return value.participants.length === 0 && value.admission_requests.length === 0 && value.host_participant_session_id === null && value.recording === null;
+  if (value.participants.length === 0) return value.host_participant_session_id === null;
+  return hostCount === 1 && value.host_participant_session_id !== null && value.participants.some((participant) => participant.participant_session_id === value.host_participant_session_id && participant.role === "host");
+}
+function strictEvent(value: Record<string, unknown>): boolean {
+  if (!isObject(value.payload)) return false;
+  const common = ["type", "stream", "name", "event_id", "base_revision", "revision", "schema_version", "resulting_state_digest", "payload"];
+  switch (value.name) {
+    case "participant_joined":
+      return exactObject(value.payload, ["participant_session_id", "display_name", "role", "eligible_roles", "admission_revision"]) && exactObject(value, [...common, "lifecycle_intent_id"]);
+    case "participant_left":
+      return exactObject(value.payload, ["participant_session_id", "reason"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "host_left_and_transferred":
+      return exactObject(value.payload, ["departing_participant_session_id", "successor_participant_session_id"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "session_ended":
+      return exactObject(value.payload, ["reason"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "hand_raised":
+      return exactObject(value.payload, ["participant_session_id"]) && exactObject(value, [...common, "command_id"]);
+    case "hand_lowered":
+      return exactObject(value.payload, ["participant_session_id"]) && exactObject(value, [...common, "command_id"]);
+    case "participant_display_name_changed":
+      return exactObject(value.payload, ["participant_session_id", "display_name"]) && exactObject(value, [...common, "command_id"]);
+    case "admission_policy_changed":
+      return exactObject(value.payload, ["policy"]) && exactObject(value, [...common, "command_id"]);
+    case "participant_role_changed":
+      return exactObject(value.payload, ["participant_session_id", "role"]) && exactObject(value, [...common, "command_id"]);
+    case "host_transferred":
+      return exactObject(value.payload, ["previous_host_participant_session_id", "new_host_participant_session_id"]) && (exactObject(value, [...common, "command_id"]) || exactObject(value, [...common, "external_operation_id"]));
+    case "deadline_changed":
+      return exactObject(value.payload, ["deadline_at_ms", "deadline_generation"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "admission_requested":
+      return exactObject(value.payload, ["admission_request_id", "participant_session_id", "display_name", "initial_role", "eligible_roles", "expires_at_ms"]) && exactObject(value, [...common, "lifecycle_intent_id"]);
+    case "admission_denied":
+      return exactObject(value.payload, ["admission_request_id"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "admission_expired":
+      return exactObject(value.payload, ["admission_request_id"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "participant_microphone_stopped":
+      return exactObject(value.payload, ["participant_session_id"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "participant_camera_stopped":
+      return exactObject(value.payload, ["participant_session_id"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "participant_screen_share_stopped":
+      return exactObject(value.payload, ["participant_session_id"]) && exactObject(value, [...common, "external_operation_id"]);
+    case "recording_status_changed":
+      return exactObject(value.payload, ["recording_id", "status", "failure_code"]) && exactObject(value, [...common, "external_operation_id"]);
+    default:
+      return false;
+  }
+}
+function strictProjectionItem(value: unknown, stream: unknown): boolean {
+  if (stream === "media") return exactObject(value, ["participant_session_id", "source", "enabled", "publication_id"]);
+  if (stream === "presence") return exactObject(value, ["participant_session_id", "state", "speaking", "active_speaker"]);
+  return false;
+}
+function strictProjection(value: Record<string, unknown>): boolean {
+  if (value.type === "projection_snapshot") return exactObject(value, ["type", "stream", "projection_id", "sequence", "items"]) && Array.isArray(value.items) && value.items.every((item) => strictProjectionItem(item, value.stream));
+  return exactObject(value, ["type", "stream", "projection_id", "sequence", "item"]) && strictProjectionItem(value.item, value.stream);
+}
+function strictWelcome(value: Record<string, unknown>): boolean {
+  const base = ["type", "protocol", "participant_session_id", "participant_session_generation", "recovery_id", "head", "mode"];
+  const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
+  const extensionValid = isObject(extension) && extension.name === "room_actions_v2" && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
+  const fields = extensionValid ? [...base, "extensions"] : base;
+  if (!strictCursor(value.head)) return false;
+  if (value.mode === "snapshot") return exactObject(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
+  if (value.mode === "terminal") return exactObject(value, [...fields, "reason"]);
+  return (value.mode === "replay" || value.mode === "up_to_date") && exactObject(value, fields);
+}
+function strictServerFrame(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  switch (value.type) {
+    case "welcome":
+      return strictWelcome(value);
+    case "replay_page":
+      return exactObject(value, ["type", "recovery_id", "first_revision", "last_revision", "events"]) && Array.isArray(value.events) && value.events.every((event) => isObject(event) && strictEvent(event));
+    case "recovery_complete":
+      return exactObject(value, ["type", "recovery_id", "head"]) && strictCursor(value.head);
+    case "event":
+      return strictEvent(value);
+    case "ack":
+      return value.outcome === "committed"
+        ? exactObject(value, ["type", "command_id", "delivery", "outcome", "event_id", "revision", "state_digest"])
+        : value.outcome === "satisfied"
+          ? exactObject(value, ["type", "command_id", "delivery", "outcome", "revision", "state_digest"])
+          : value.outcome === "rejected"
+            ? exactObject(value, ["type", "command_id", "delivery", "outcome", "reason"])
+            : value.outcome === "command_id_conflict" && exactObject(value, ["type", "command_id", "delivery", "outcome", "reason"]);
+    case "projection_snapshot":
+    case "projection_event":
+      return strictProjection(value);
+    case "live_target_result":
+      return exactObject(value, ["type", "operation_id", "name", "outcome", "error_code"]);
+    case "directed_request":
+      return exactObject(value, ["type", "request_id", "name", "actor_participant_session_id", "expires_at_ms"]);
+    case "directed_request_result":
+      return exactObject(value, ["type", "request_id", "result"]);
+    case "room_reaction":
+      return strictRoomReaction(value);
+    case "room_reaction_result":
+      return value.outcome === "accepted" ? exactObject(value, ["type", "operation_id", "outcome", "reaction"]) && strictRoomReaction(value.reaction) : value.outcome === "rejected" && exactObject(value, ["type", "operation_id", "outcome", "error_code"]);
+    case "chat_message":
+      return strictChatMessage(value);
+    case "chat_send_result":
+      return value.outcome === "accepted" ? exactObject(value, ["type", "client_message_id", "outcome", "message"]) && strictChatMessage(value.message) : value.outcome === "rejected" && exactObject(value, ["type", "client_message_id", "outcome", "error_code"]);
+    case "chat_page":
+      return value.outcome === "loaded"
+        ? exactObject(value, ["type", "request_id", "outcome", "messages", "has_more", "head_sequence", "retained_floor_sequence"]) && Array.isArray(value.messages) && value.messages.every(strictChatMessage)
+        : value.outcome === "cursor_reset" && exactObject(value, ["type", "request_id", "outcome", "retained_floor_sequence"]);
+    case "chat_head":
+      return exactObject(value, ["type", "head_sequence", "retained_floor_sequence"]);
+    case "chat_read_receipt":
+      return exactObject(value, ["type", "participant_session_id", "participant_session_generation", "sequence", "read_at"]);
+    case "chat_read_result":
+      return value.outcome === "accepted" ? exactObject(value, ["type", "request_id", "outcome", "participant_session_id", "participant_session_generation", "sequence", "read_at"]) : value.outcome === "rejected" && exactObject(value, ["type", "request_id", "outcome", "error_code"]);
+    case "retryable_error":
+      return exactObject(value, ["type", "command_id", "code"]);
+    case "error":
+      return exactObject(value, ["type", "code", "detail"]);
+    case "pong":
+      return exactObject(value, ["type"]);
+    default:
+      return false;
+  }
+}
 
-export const SyncCorrelationFieldsSchema = Schema.Struct({
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type SyncCorrelationFields = typeof SyncCorrelationFieldsSchema.Type;
+export const NonNegativeIntegerSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+export const PositiveIntegerSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
+export const UuidSchema = Schema.String.check(Schema.makeFilter((value) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value) ? undefined : { path: [], issue: "must be an RFC 4122 UUID" })));
+export const StateDigestSchema = Schema.String.check(Schema.makeFilter((value) => (/^[0-9a-f]{64}$/u.test(value) ? undefined : { path: [], issue: "must be a lowercase hexadecimal SHA-256 digest" })));
+export const UnsignedDecimalSchema = Schema.String.check(Schema.makeFilter((value) => (/^(?:0|[1-9][0-9]*)$/u.test(value) ? undefined : { path: [], issue: "must be an unsigned decimal integer" })));
+export const CommandIdSchema = boundedUtf8String(64).check(Schema.makeFilter((value) => (textEncoder.encode(value).byteLength >= 16 ? undefined : { path: [], issue: "must meet the command ID minimum byte length" })));
+export const RequestIdSchema = boundedUtf8String(64).check(Schema.makeFilter((value) => (textEncoder.encode(value).byteLength >= 16 ? undefined : { path: [], issue: "must meet the request ID minimum byte length" })));
+export const ControlCursorSchema = Schema.Struct({ revision: NonNegativeIntegerSchema, state_schema_version: PositiveIntegerSchema, state_digest: StateDigestSchema }).check(exactKeys(["revision", "state_schema_version", "state_digest"]));
+export type ControlCursor = typeof ControlCursorSchema.Type;
+export const CapabilitySchema = Schema.Union([
+  Schema.Literal("publishAudio"),
+  Schema.Literal("publishVideo"),
+  Schema.Literal("publishScreen"),
+  Schema.Literal("subscribe"),
+  Schema.Literal("raiseHand"),
+  Schema.Literal("renameSelf"),
+  Schema.Literal("manageAdmission"),
+  Schema.Literal("promoteDemote"),
+  Schema.Literal("transferHost"),
+  Schema.Literal("muteOthers"),
+  Schema.Literal("stopVideoOthers"),
+  Schema.Literal("stopScreenOthers"),
+  Schema.Literal("requestMediaOthers"),
+  Schema.Literal("removeParticipant"),
+  Schema.Literal("manageRecording"),
+  Schema.Literal("endMeeting"),
+]);
+export const RoleSchema = Schema.Union([Schema.Literal("host"), Schema.Literal("cohost"), Schema.Literal("participant")]);
+export const TerminalRecoveryReasonSchema = Schema.Union([Schema.Literal("session_ended"), Schema.Literal("participant_inactive"), Schema.Literal("stale_participant_generation")]);
+export const RejectionReasonSchema = Schema.Union([
+  Schema.Literal("session_ended"),
+  Schema.Literal("participant_inactive"),
+  Schema.Literal("stale_participant_generation"),
+  Schema.Literal("capability_denied"),
+  Schema.Literal("invalid_state"),
+  Schema.Literal("invalid_target"),
+  Schema.Literal("role_not_eligible"),
+  Schema.Literal("host_transfer_required"),
+  Schema.Literal("screen_share_in_use"),
+  Schema.Literal("recording_in_progress"),
+  Schema.Literal("command_id_conflict"),
+  Schema.Literal("external_operation_failed"),
+]);
+export const RetryableErrorCodeSchema = Schema.Union([Schema.Literal("overloaded"), Schema.Literal("server_draining"), Schema.Literal("dependency_unavailable"), Schema.Literal("decision_unavailable"), Schema.Literal("external_operation_pending")]);
+export const ProtocolErrorCodeSchema = Schema.Union([Schema.Literal("protocol_error"), Schema.Literal("invalid_frame"), Schema.Literal("unsupported_protocol")]);
 
 export const ParticipantSchema = Schema.Struct({
-  participant_id: Schema.String,
-  display_name: Schema.String,
+  participant_session_id: UuidSchema,
+  display_name: boundedUtf8String(256, 1),
   hand_raised: Schema.Boolean,
-});
-export type Participant = typeof ParticipantSchema.Type;
-
-export const SnapshotSchema = Schema.Struct({
-  control_revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  participants: Schema.Array(ParticipantSchema),
-});
-export type Snapshot = typeof SnapshotSchema.Type;
-
-export const HelloFrameSchema = Schema.Struct({
-  type: Schema.Literal("hello"),
-  protocol: Schema.Literal(1),
-  token: Schema.String,
-  streams: Schema.optional(
-    Schema.Struct({
-      control: Schema.optional(
-        Schema.Struct({
-          cursor: Schema.optional(Schema.NullOr(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)))),
-        }),
-      ),
-    }),
+  admission_revision: PositiveIntegerSchema,
+  role: RoleSchema,
+  eligible_roles: Schema.Array(RoleSchema).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(3),
+    Schema.makeFilter((roles) => (uniqueStrings(roles) ? undefined : { path: [], issue: "must contain unique roles" })),
   ),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type HelloFrame = typeof HelloFrameSchema.Type;
+  capabilities: Schema.Array(CapabilitySchema).check(Schema.isMaxLength(16)),
+}).check(
+  exactKeys(["participant_session_id", "display_name", "hand_raised", "admission_revision", "role", "eligible_roles", "capabilities"]),
+  Schema.makeFilter((participant) => (participant.eligible_roles.includes(participant.role) && (participant.role !== "host" || participant.eligible_roles.includes("cohost")) ? undefined : { path: ["eligible_roles"], issue: "must contain the current role and cohost eligibility for a host" })),
+);
+export const AdmissionRequestSchema = Schema.Struct({
+  admission_request_id: UuidSchema,
+  participant_session_id: UuidSchema,
+  display_name: boundedUtf8String(256, 1),
+  initial_role: RoleSchema,
+  eligible_roles: Schema.Array(RoleSchema).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(3),
+    Schema.makeFilter((roles) => (uniqueStrings(roles) ? undefined : { path: [], issue: "must contain unique roles" })),
+  ),
+  expires_at_ms: PositiveIntegerSchema,
+}).check(
+  exactKeys(["admission_request_id", "participant_session_id", "display_name", "initial_role", "eligible_roles", "expires_at_ms"]),
+  Schema.makeFilter((request) => (request.eligible_roles.includes(request.initial_role) && (request.initial_role !== "host" || request.eligible_roles.includes("cohost")) ? undefined : { path: ["eligible_roles"], issue: "must contain the initial role and cohost eligibility for a host" })),
+);
+const UniqueCapabilityArraySchema = Schema.Array(CapabilitySchema).check(
+  Schema.isMaxLength(16),
+  Schema.makeFilter((capabilities) => (uniqueStrings(capabilities) ? undefined : { path: [], issue: "must contain unique capabilities" })),
+);
+const RoleCapabilitiesSchema = Schema.Struct({ host: UniqueCapabilityArraySchema, cohost: UniqueCapabilityArraySchema, participant: UniqueCapabilityArraySchema }).check(exactKeys(["host", "cohost", "participant"]));
+const RecordingSchema = Schema.Struct({ recording_id: UuidSchema, status: Schema.Union([Schema.Literal("starting"), Schema.Literal("recording"), Schema.Literal("stopping"), Schema.Literal("stopped"), Schema.Literal("failed")]), failure_code: Schema.NullOr(boundedUtf8String(96, 1)) }).check(
+  exactKeys(["recording_id", "status", "failure_code"]),
+  Schema.makeFilter((recording) => ((recording.status === "failed") === (recording.failure_code !== null) ? undefined : { path: ["failure_code"], issue: "must be non-null exactly when recording status is failed" })),
+);
+export const SnapshotSchema = Schema.Struct({
+  control_revision: NonNegativeIntegerSchema,
+  state_schema_version: PositiveIntegerSchema,
+  state_digest: StateDigestSchema,
+  status: Schema.Union([Schema.Literal("active"), Schema.Literal("ended")]),
+  admission_policy: Schema.Union([Schema.Literal("open"), Schema.Literal("approval"), Schema.Literal("closed")]),
+  host_exit_policy: Schema.Union([Schema.Literal("require_transfer"), Schema.Literal("promote_cohost")]),
+  host_participant_session_id: Schema.NullOr(UuidSchema),
+  deadline_at_ms: PositiveIntegerSchema,
+  deadline_generation: PositiveIntegerSchema,
+  role_capabilities: RoleCapabilitiesSchema,
+  recording: Schema.NullOr(RecordingSchema),
+  participants: Schema.Array(ParticipantSchema).check(Schema.isMaxLength(500)),
+  admission_requests: Schema.Array(AdmissionRequestSchema).check(Schema.isMaxLength(500)),
+}).check(
+  Schema.makeFilter((snapshot) => (strictSnapshot(snapshot) ? undefined : { path: [], issue: "must satisfy durable control snapshot invariants" })),
+  boundedFrame(1048576),
+);
 
-export const ParticipantJoinedEventFrameSchema = Schema.Struct({
+const NullCursorStreamSchema = Schema.Struct({ cursor: Schema.Null }).check(exactKeys(["cursor"]));
+const StreamsSchema = Schema.Struct({ control: Schema.Struct({ cursor: Schema.NullOr(ControlCursorSchema) }).check(exactKeys(["cursor"])), media: NullCursorStreamSchema, presence: NullCursorStreamSchema, requests: NullCursorStreamSchema });
+export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema }).check(boundedFrame(65536));
+export const ChatCursorSchema = Schema.Struct({ after_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(["after_sequence", "retained_floor_sequence"]));
+export const RoomActionsHelloExtensionSchema = Schema.Struct({ name: Schema.Literal("room_actions_v2"), chat_cursor: ChatCursorSchema }).check(exactKeys(["name", "chat_cursor"]));
+export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema, extensions: Schema.Tuple([RoomActionsHelloExtensionSchema]) }).check(boundedFrame(65536));
+export const DeliveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("delivery_ack"), stream: Schema.Literal("control"), revision: PositiveIntegerSchema, state_digest: StateDigestSchema });
+export const RecoveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("recovery_ack"), recovery_id: UuidSchema, revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });
+
+export const SetHandRaisedCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("set_hand_raised"), payload: Schema.Struct({ raised: Schema.Boolean }) }).check(boundedFrame(65536));
+export type SetHandRaisedCommandFrame = typeof SetHandRaisedCommandFrameSchema.Type;
+export const SetDisplayNameCommandFrameSchema = Schema.Struct({
+  type: Schema.Literal("command"),
+  command_id: CommandIdSchema,
+  name: Schema.Literal("set_display_name"),
+  payload: Schema.Struct({ display_name: boundedUtf8String(256, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))) }),
+}).check(boundedFrame(65536));
+export type SetDisplayNameCommandFrame = typeof SetDisplayNameCommandFrameSchema.Type;
+export const SetAdmissionPolicyCommandFrameSchema = Schema.Struct({
+  type: Schema.Literal("command"),
+  command_id: CommandIdSchema,
+  name: Schema.Literal("set_admission_policy"),
+  payload: Schema.Struct({ policy: Schema.Union([Schema.Literal("open"), Schema.Literal("approval"), Schema.Literal("closed")]) }),
+}).check(boundedFrame(65536));
+export type SetAdmissionPolicyCommandFrame = typeof SetAdmissionPolicyCommandFrameSchema.Type;
+export const SetParticipantRoleCommandFrameSchema = Schema.Struct({
+  type: Schema.Literal("command"),
+  command_id: CommandIdSchema,
+  name: Schema.Literal("set_participant_role"),
+  payload: Schema.Struct({ participant_session_id: UuidSchema, role: Schema.Union([Schema.Literal("cohost"), Schema.Literal("participant")]) }),
+}).check(boundedFrame(65536));
+export type SetParticipantRoleCommandFrame = typeof SetParticipantRoleCommandFrameSchema.Type;
+export const TransferHostCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("transfer_host"), payload: Schema.Struct({ participant_session_id: UuidSchema }) }).check(boundedFrame(65536));
+export type TransferHostCommandFrame = typeof TransferHostCommandFrameSchema.Type;
+export const AdmitParticipantOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("admit_participant"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
+export type AdmitParticipantOperationFrame = typeof AdmitParticipantOperationFrameSchema.Type;
+export const DenyAdmissionOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("deny_admission"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
+export type DenyAdmissionOperationFrame = typeof DenyAdmissionOperationFrameSchema.Type;
+export const MuteParticipantOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("mute_participant"), payload: Schema.Struct({ participant_session_id: UuidSchema }) }).check(boundedFrame(65536));
+export type MuteParticipantOperationFrame = typeof MuteParticipantOperationFrameSchema.Type;
+export const StopParticipantCameraOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("stop_participant_camera"), payload: Schema.Struct({ participant_session_id: UuidSchema }) }).check(boundedFrame(65536));
+export type StopParticipantCameraOperationFrame = typeof StopParticipantCameraOperationFrameSchema.Type;
+export const StopParticipantScreenShareOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("stop_participant_screen_share"), payload: Schema.Struct({ participant_session_id: UuidSchema }) }).check(boundedFrame(65536));
+export type StopParticipantScreenShareOperationFrame = typeof StopParticipantScreenShareOperationFrameSchema.Type;
+export const RemoveParticipantOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("remove_participant"), payload: Schema.Struct({ participant_session_id: UuidSchema }) }).check(boundedFrame(65536));
+export type RemoveParticipantOperationFrame = typeof RemoveParticipantOperationFrameSchema.Type;
+export const StartRecordingOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("start_recording"), payload: Schema.Struct({ recording_id: UuidSchema }) }).check(boundedFrame(65536));
+export type StartRecordingOperationFrame = typeof StartRecordingOperationFrameSchema.Type;
+export const StopRecordingOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("stop_recording"), payload: Schema.Struct({ recording_id: UuidSchema }) }).check(boundedFrame(65536));
+export type StopRecordingOperationFrame = typeof StopRecordingOperationFrameSchema.Type;
+export const ParticipantLeaveOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("participant_leave"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
+export type ParticipantLeaveOperationFrame = typeof ParticipantLeaveOperationFrameSchema.Type;
+export const EndSessionOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("end_session"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
+export type EndSessionOperationFrame = typeof EndSessionOperationFrameSchema.Type;
+
+export const LiveTargetNameSchema = Schema.Union([Schema.Literal("set_microphone_enabled"), Schema.Literal("set_camera_enabled"), Schema.Literal("set_screen_share_enabled")]);
+export const LiveTargetFrameSchema = Schema.Struct({ type: Schema.Literal("live_target"), operation_id: RequestIdSchema, name: LiveTargetNameSchema, enabled: Schema.Boolean });
+export const DirectedRequestNameSchema = Schema.Union([Schema.Literal("request_unmute"), Schema.Literal("request_start_camera")]);
+export const DirectedRequestSendFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request"), request_id: RequestIdSchema, name: DirectedRequestNameSchema, target_participant_session_id: UuidSchema });
+export const RequestAckFrameSchema = Schema.Struct({ type: Schema.Literal("request_ack"), request_id: RequestIdSchema });
+export const RoomReactionSchema = Schema.Union([Schema.Literal("👍"), Schema.Literal("❤️"), Schema.Literal("😂"), Schema.Literal("😮"), Schema.Literal("😢"), Schema.Literal("🎉")]);
+export const RoomReactionSendFrameSchema = Schema.Struct({ type: Schema.Literal("room_reaction_send"), operation_id: RequestIdSchema, reaction: RoomReactionSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
+export const ChatTextSchema = boundedUtf8String(16384).check(Schema.makeFilter((value) => (Array.from(value).length <= 4000 ? undefined : { path: ["text"], issue: "must fit the Unicode scalar limit" })));
+export const ChatAttachmentMimeTypeSchema = Schema.Union([
+  Schema.Literal("image/png"),
+  Schema.Literal("image/jpeg"),
+  Schema.Literal("image/gif"),
+  Schema.Literal("image/webp"),
+  Schema.Literal("application/pdf"),
+  Schema.Literal("text/plain"),
+  Schema.Literal("application/msword"),
+  Schema.Literal("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+  Schema.Literal("application/vnd.ms-excel"),
+  Schema.Literal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+  Schema.Literal("application/vnd.ms-powerpoint"),
+  Schema.Literal("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+  Schema.Literal("application/vnd.oasis.opendocument.text"),
+  Schema.Literal("application/vnd.oasis.opendocument.spreadsheet"),
+  Schema.Literal("application/vnd.oasis.opendocument.presentation"),
+]);
+export const ChatAttachmentIdSchema = Schema.Array(UuidSchema).check(
+  Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems),
+  Schema.makeFilter((ids) => (uniqueStrings(ids) ? undefined : { path: ["attachment_ids"], issue: "must contain unique attachment IDs" })),
+);
+export const ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send"), client_message_id: RequestIdSchema, text: ChatTextSchema, attachment_ids: ChatAttachmentIdSchema }).check(
+  Schema.makeFilter((frame) => (frame.text.length > 0 || frame.attachment_ids.length > 0 ? undefined : { path: [], issue: "must contain text or at least one attachment" })),
+  boundedFrame(SyncProtocolLimits.roomActionFrameBytes),
+);
+export const ChatReadSetFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_set"), request_id: RequestIdSchema, sequence: UnsignedDecimalSchema }).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
+export const ChatPageDirectionSchema = Schema.Union([Schema.Literal("older"), Schema.Literal("newer")]);
+export const ChatPageRequestFrameSchema = Schema.Struct({ type: Schema.Literal("chat_page_request"), request_id: RequestIdSchema, direction: ChatPageDirectionSchema, cursor_sequence: Schema.NullOr(UnsignedDecimalSchema), limit: PositiveIntegerSchema }).check(
+  Schema.makeFilter((frame) => (frame.limit <= SyncProtocolLimits.chatPageMaxMessages ? undefined : { path: ["limit"], issue: "must fit the chat page limit" })),
+  boundedFrame(SyncProtocolLimits.roomActionFrameBytes),
+);
+
+const ParticipantJoinedLifecycleIntentIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
   name: Schema.Literal("participant_joined"),
-  base_revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({
-    display_name: Schema.String,
-    participant_id: Schema.String,
+    participant_session_id: UuidSchema,
+    display_name: boundedUtf8String(256, 1),
+    role: Schema.Union([Schema.Literal("host"), Schema.Literal("cohost"), Schema.Literal("participant")]),
+    eligible_roles: Schema.Array(RoleSchema).check(Schema.isMaxLength(3)),
+    admission_revision: PositiveIntegerSchema,
   }),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-}).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
-export type ParticipantJoinedEventFrame = typeof ParticipantJoinedEventFrameSchema.Type;
-
-export const ParticipantLeftEventFrameSchema = Schema.Struct({
+  lifecycle_intent_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const ParticipantLeftExternalOperationIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
   name: Schema.Literal("participant_left"),
-  base_revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
-  payload: Schema.Struct({
-    participant_id: Schema.String,
-  }),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-}).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
-export type ParticipantLeftEventFrame = typeof ParticipantLeftEventFrameSchema.Type;
-
-export const HandRaisedEventFrameSchema = Schema.Struct({
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema, reason: Schema.Union([Schema.Literal("left"), Schema.Literal("removed")]) }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const HostLeftAndTransferredExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("host_left_and_transferred"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ departing_participant_session_id: UuidSchema, successor_participant_session_id: UuidSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const SessionEndedExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("session_ended"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ reason: Schema.Union([Schema.Literal("ended_by_participant"), Schema.Literal("tenant_recovery"), Schema.Literal("maximum_duration")]) }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const HandRaisedCommandIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
   name: Schema.Literal("hand_raised"),
-  base_revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
-  payload: Schema.Struct({
-    participant_id: Schema.String,
-  }),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-}).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
-export type HandRaisedEventFrame = typeof HandRaisedEventFrameSchema.Type;
-
-export const HandLoweredEventFrameSchema = Schema.Struct({
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema }),
+  command_id: CommandIdSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const HandLoweredCommandIdEventVariantSchema = Schema.Struct({
   type: Schema.Literal("event"),
   stream: Schema.Literal("control"),
   name: Schema.Literal("hand_lowered"),
-  base_revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema }),
+  command_id: CommandIdSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const ParticipantDisplayNameChangedCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("participant_display_name_changed"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema, display_name: boundedUtf8String(256, 1) }),
+  command_id: CommandIdSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const AdmissionPolicyChangedCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("admission_policy_changed"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ policy: Schema.Union([Schema.Literal("open"), Schema.Literal("approval"), Schema.Literal("closed")]) }),
+  command_id: CommandIdSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const ParticipantRoleChangedCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("participant_role_changed"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema, role: Schema.Union([Schema.Literal("cohost"), Schema.Literal("participant")]) }),
+  command_id: CommandIdSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const HostTransferredCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("host_transferred"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ previous_host_participant_session_id: UuidSchema, new_host_participant_session_id: UuidSchema }),
+  command_id: CommandIdSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const HostTransferredExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("host_transferred"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ previous_host_participant_session_id: UuidSchema, new_host_participant_session_id: UuidSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const DeadlineChangedExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("deadline_changed"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ deadline_at_ms: PositiveIntegerSchema, deadline_generation: PositiveIntegerSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const AdmissionRequestedLifecycleIntentIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("admission_requested"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({
-    participant_id: Schema.String,
+    admission_request_id: UuidSchema,
+    participant_session_id: UuidSchema,
+    display_name: boundedUtf8String(256, 1),
+    initial_role: Schema.Union([Schema.Literal("host"), Schema.Literal("cohost"), Schema.Literal("participant")]),
+    eligible_roles: Schema.Array(RoleSchema).check(Schema.isMaxLength(3)),
+    expires_at_ms: PositiveIntegerSchema,
   }),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-}).check(Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })));
-export type HandLoweredEventFrame = typeof HandLoweredEventFrameSchema.Type;
+  lifecycle_intent_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const AdmissionDeniedExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("admission_denied"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ admission_request_id: UuidSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const AdmissionExpiredExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("admission_expired"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ admission_request_id: UuidSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const ParticipantMicrophoneStoppedExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("participant_microphone_stopped"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const ParticipantCameraStoppedExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("participant_camera_stopped"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const ParticipantScreenShareStoppedExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("participant_screen_share_stopped"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ participant_session_id: UuidSchema }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const RecordingStatusChangedExternalOperationIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("recording_status_changed"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ recording_id: UuidSchema, status: Schema.Union([Schema.Literal("starting"), Schema.Literal("recording"), Schema.Literal("stopping"), Schema.Literal("stopped"), Schema.Literal("failed")]), failure_code: Schema.NullOr(boundedUtf8String(96, 1)) }),
+  external_operation_id: UuidSchema,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+export const ParticipantJoinedEventFrameSchema = ParticipantJoinedLifecycleIntentIdEventVariantSchema;
+export const ParticipantLeftEventFrameSchema = ParticipantLeftExternalOperationIdEventVariantSchema;
+export const HostLeftAndTransferredEventFrameSchema = HostLeftAndTransferredExternalOperationIdEventVariantSchema;
+export const SessionEndedEventFrameSchema = SessionEndedExternalOperationIdEventVariantSchema;
+export const HandRaisedEventFrameSchema = HandRaisedCommandIdEventVariantSchema;
+export const HandLoweredEventFrameSchema = HandLoweredCommandIdEventVariantSchema;
+export const ParticipantDisplayNameChangedEventFrameSchema = ParticipantDisplayNameChangedCommandIdEventVariantSchema;
+export const AdmissionPolicyChangedEventFrameSchema = AdmissionPolicyChangedCommandIdEventVariantSchema;
+export const ParticipantRoleChangedEventFrameSchema = ParticipantRoleChangedCommandIdEventVariantSchema;
+export const HostTransferredEventFrameSchema = Schema.Union([HostTransferredCommandIdEventVariantSchema, HostTransferredExternalOperationIdEventVariantSchema]);
+export const DeadlineChangedEventFrameSchema = DeadlineChangedExternalOperationIdEventVariantSchema;
+export const AdmissionRequestedEventFrameSchema = AdmissionRequestedLifecycleIntentIdEventVariantSchema;
+export const AdmissionDeniedEventFrameSchema = AdmissionDeniedExternalOperationIdEventVariantSchema;
+export const AdmissionExpiredEventFrameSchema = AdmissionExpiredExternalOperationIdEventVariantSchema;
+export const ParticipantMicrophoneStoppedEventFrameSchema = ParticipantMicrophoneStoppedExternalOperationIdEventVariantSchema;
+export const ParticipantCameraStoppedEventFrameSchema = ParticipantCameraStoppedExternalOperationIdEventVariantSchema;
+export const ParticipantScreenShareStoppedEventFrameSchema = ParticipantScreenShareStoppedExternalOperationIdEventVariantSchema;
+export const RecordingStatusChangedEventFrameSchema = RecordingStatusChangedExternalOperationIdEventVariantSchema;
+export const EventFrameSchema = Schema.Union([
+  ParticipantJoinedEventFrameSchema,
+  ParticipantLeftEventFrameSchema,
+  HostLeftAndTransferredEventFrameSchema,
+  SessionEndedEventFrameSchema,
+  HandRaisedEventFrameSchema,
+  HandLoweredEventFrameSchema,
+  ParticipantDisplayNameChangedEventFrameSchema,
+  AdmissionPolicyChangedEventFrameSchema,
+  ParticipantRoleChangedEventFrameSchema,
+  HostTransferredEventFrameSchema,
+  DeadlineChangedEventFrameSchema,
+  AdmissionRequestedEventFrameSchema,
+  AdmissionDeniedEventFrameSchema,
+  AdmissionExpiredEventFrameSchema,
+  ParticipantMicrophoneStoppedEventFrameSchema,
+  ParticipantCameraStoppedEventFrameSchema,
+  ParticipantScreenShareStoppedEventFrameSchema,
+  RecordingStatusChangedEventFrameSchema,
+]);
 
-export const EventFrameSchema = Schema.Union([ParticipantJoinedEventFrameSchema, ParticipantLeftEventFrameSchema, HandRaisedEventFrameSchema, HandLoweredEventFrameSchema]);
-export type EventFrame = typeof EventFrameSchema.Type;
+export const RoomActionCapabilitySchema = Schema.Union([Schema.Literal("sendReaction"), Schema.Literal("sendChat")]);
+const RoomActionCapabilitiesSchema = Schema.Array(RoomActionCapabilitySchema).check(
+  Schema.isMaxLength(2),
+  Schema.makeFilter((capabilities) => (uniqueStrings(capabilities) ? undefined : { path: [], issue: "must contain unique room-action capabilities" })),
+);
+export const ChatReadReceiptSchema = Schema.Struct({ participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(
+  exactKeys(["participant_session_id", "participant_session_generation", "sequence", "read_at"]),
+);
+export type ChatReadReceipt = typeof ChatReadReceiptSchema.Type;
+export const RoomActionsWelcomeExtensionSchema = Schema.Struct({
+  name: Schema.Literal("room_actions_v2"),
+  capabilities: RoomActionCapabilitiesSchema,
+  participant_capabilities: Schema.Record(UuidSchema, RoomActionCapabilitiesSchema),
+  chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema),
+  retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
+  read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)),
+}).check(exactKeys(["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]));
+const WelcomeBase = { type: Schema.Literal("welcome"), protocol: Schema.Literal(1), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema };
+const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([RoomActionsWelcomeExtensionSchema]) };
+export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));
+export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("replay") });
+export const WelcomeUpToDateFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("up_to_date") });
+export const WelcomeTerminalFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema });
+export const ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));
+export const ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("replay") });
+export const ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("up_to_date") });
+export const ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema });
+export const WelcomeFrameSchema = Schema.Union([
+  ExtendedWelcomeSnapshotFrameSchema,
+  ExtendedWelcomeReplayFrameSchema,
+  ExtendedWelcomeUpToDateFrameSchema,
+  ExtendedWelcomeTerminalFrameSchema,
+  WelcomeSnapshotFrameSchema,
+  WelcomeReplayFrameSchema,
+  WelcomeUpToDateFrameSchema,
+  WelcomeTerminalFrameSchema,
+]);
+export const ReplayPageFrameSchema = Schema.Struct({
+  type: Schema.Literal("replay_page"),
+  recovery_id: UuidSchema,
+  first_revision: PositiveIntegerSchema,
+  last_revision: PositiveIntegerSchema,
+  events: Schema.Array(EventFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.replayPageMaxEvents)),
+}).check(
+  Schema.makeFilter((frame) => {
+    const first = frame.events[0];
+    const last = frame.events.at(-1);
+    return encodedSyncFrameBytes(frame) <= SyncProtocolLimits.replayPageEncodedBytes &&
+      first !== undefined &&
+      last !== undefined &&
+      first.revision === frame.first_revision &&
+      last.revision === frame.last_revision &&
+      frame.events.every((event, index) => index === 0 || event.base_revision === frame.events[index - 1]!.revision)
+      ? undefined
+      : { path: [], issue: "must declare one bounded contiguous replay page" };
+  }),
+);
+export const RecoveryCompleteFrameSchema = Schema.Struct({ type: Schema.Literal("recovery_complete"), recovery_id: UuidSchema, head: ControlCursorSchema });
 
-export const WelcomeSnapshotFrameSchema = Schema.Struct({
-  type: Schema.Literal("welcome"),
-  protocol: Schema.Literal(1),
-  participant_id: Schema.String,
-  mode: Schema.Literal("snapshot"),
-  snapshot: SnapshotSchema,
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
+export const AckDeliverySchema = Schema.Union([Schema.Literal("original"), Schema.Literal("duplicate")]);
+export const CommittedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("committed"), event_id: UuidSchema, revision: PositiveIntegerSchema, state_digest: StateDigestSchema });
+export const SatisfiedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("satisfied"), revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });
+export const RejectedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("rejected"), reason: RejectionReasonSchema });
+export const CommandIdConflictAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("command_id_conflict"), reason: Schema.Literal("command_id_conflict") });
+
+export const MediaProjectionItemSchema = Schema.Struct({ participant_session_id: UuidSchema, source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]), enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(
+  Schema.makeFilter((item) => (item.enabled === (item.publication_id !== null) ? undefined : { path: [], issue: "enabled must equal whether publication_id is non-null" })),
+);
+export const PresenceProjectionItemSchema = Schema.Struct({ participant_session_id: UuidSchema, state: Schema.Union([Schema.Literal("connected"), Schema.Literal("disconnected")]), speaking: Schema.Boolean, active_speaker: Schema.Boolean }).check(
+  Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })),
+);
+export const MediaProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal("projection_snapshot"), stream: Schema.Literal("media"), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(1500)) }).check(
+  boundedFrame(SyncProtocolLimits.projectionSnapshotEncodedBytes),
+);
+export const PresenceProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal("projection_snapshot"), stream: Schema.Literal("presence"), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(PresenceProjectionItemSchema).check(Schema.isMaxLength(500)) }).check(
+  boundedFrame(SyncProtocolLimits.projectionSnapshotEncodedBytes),
+);
+export const MediaProjectionEventFrameSchema = Schema.Struct({ type: Schema.Literal("projection_event"), stream: Schema.Literal("media"), projection_id: UuidSchema, sequence: PositiveIntegerSchema, item: MediaProjectionItemSchema }).check(boundedFrame(SyncProtocolLimits.encodedLiveEventBytes));
+export const PresenceProjectionEventFrameSchema = Schema.Struct({ type: Schema.Literal("projection_event"), stream: Schema.Literal("presence"), projection_id: UuidSchema, sequence: PositiveIntegerSchema, item: PresenceProjectionItemSchema }).check(
+  boundedFrame(SyncProtocolLimits.encodedLiveEventBytes),
+);
+export const ProjectionFrameSchema = Schema.Union([MediaProjectionSnapshotFrameSchema, PresenceProjectionSnapshotFrameSchema, MediaProjectionEventFrameSchema, PresenceProjectionEventFrameSchema]);
+
+export const LiveTargetOutcomeSchema = Schema.Union([Schema.Literal("confirmed"), Schema.Literal("satisfied"), Schema.Literal("retryable_failure"), Schema.Literal("terminal_failure"), Schema.Literal("ambiguous")]);
+export const LiveTargetResultFrameSchema = Schema.Struct({ type: Schema.Literal("live_target_result"), operation_id: RequestIdSchema, name: LiveTargetNameSchema, outcome: LiveTargetOutcomeSchema, error_code: Schema.NullOr(boundedUtf8String(SyncProtocolLimits.protocolErrorDetailBytes, 1)) });
+export const DirectedRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request"), request_id: RequestIdSchema, name: DirectedRequestNameSchema, actor_participant_session_id: UuidSchema, expires_at_ms: PositiveIntegerSchema });
+export const DirectedRequestResultSchema = Schema.Union([Schema.Literal("delivered"), Schema.Literal("target_unavailable"), Schema.Literal("expired"), Schema.Literal("rejected"), Schema.Literal("rate_limited")]);
+export const DirectedRequestResultFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request_result"), request_id: RequestIdSchema, result: DirectedRequestResultSchema });
+export const RoomReactionEventFrameSchema = Schema.Struct({
+  type: Schema.Literal("room_reaction"),
+  event_id: UuidSchema,
+  participant_session_id: UuidSchema,
+  display_name: boundedUtf8String(256, 1),
+  reaction: RoomReactionSchema,
+  occurred_at: boundedUtf8String(64, 1),
+  expires_at: boundedUtf8String(64, 1),
+}).check(boundedFrame(SyncProtocolLimits.roomActionFrameBytes));
+export const RoomActionErrorCodeSchema = Schema.Union([
+  Schema.Literal("capability_denied"),
+  Schema.Literal("invalid_payload"),
+  Schema.Literal("rate_limited"),
+  Schema.Literal("overloaded"),
+  Schema.Literal("session_ended"),
+  Schema.Literal("participant_stale"),
+  Schema.Literal("client_message_id_conflict"),
+  Schema.Literal("attachment_not_found"),
+  Schema.Literal("attachment_not_ready"),
+  Schema.Literal("attachment_already_claimed"),
+  Schema.Literal("attachment_quota_exceeded"),
+  Schema.Literal("dependency_unavailable"),
+]);
+export const AcceptedRoomReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("room_reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("accepted"), reaction: RoomReactionEventFrameSchema });
+export const RejectedRoomReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("room_reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: RoomActionErrorCodeSchema });
+export const RoomReactionResultFrameSchema = Schema.Union([AcceptedRoomReactionResultFrameSchema, RejectedRoomReactionResultFrameSchema]);
+export const ChatAttachmentSchema = Schema.Struct({ attachment_id: UuidSchema, file_name: boundedUtf8String(SyncProtocolLimits.chatAttachmentFileNameUtf8Bytes, 1), mime_type: ChatAttachmentMimeTypeSchema, byte_length: PositiveIntegerSchema }).check(
+  Schema.makeFilter((attachment) => (attachment.byte_length <= SyncProtocolLimits.chatAttachmentMaxBytes ? undefined : { path: ["byte_length"], issue: "must fit the attachment byte limit" })),
+  exactKeys(["attachment_id", "file_name", "mime_type", "byte_length"]),
+);
+export type ChatAttachment = typeof ChatAttachmentSchema.Type;
+export const ChatMessageFrameSchema = Schema.Struct({
+  type: Schema.Literal("chat_message"),
+  message_id: UuidSchema,
+  client_message_id: RequestIdSchema,
+  sequence: UnsignedDecimalSchema,
+  participant_session_id: UuidSchema,
+  display_name: boundedUtf8String(256, 1),
+  text: ChatTextSchema,
+  attachments: Schema.Array(ChatAttachmentSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems)),
+  created_at: boundedUtf8String(64, 1),
+}).check(
+  Schema.makeFilter((frame) => (frame.text.length > 0 || frame.attachments.length > 0 ? undefined : { path: [], issue: "must contain text or at least one attachment" })),
+  boundedFrame(SyncProtocolLimits.roomActionFrameBytes),
+);
+export const AnyChatMessageFrameSchema = ChatMessageFrameSchema;
+export const AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("accepted"), message: ChatMessageFrameSchema });
+export const RejectedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: RoomActionErrorCodeSchema });
+export const ChatSendResultFrameSchema = Schema.Union([AcceptedChatSendResultFrameSchema, RejectedChatSendResultFrameSchema]);
+export const LoadedChatPageFrameSchema = Schema.Struct({
+  type: Schema.Literal("chat_page"),
+  request_id: RequestIdSchema,
+  outcome: Schema.Literal("loaded"),
+  messages: Schema.Array(AnyChatMessageFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatPageMaxMessages)),
+  has_more: Schema.Boolean,
+  head_sequence: Schema.NullOr(UnsignedDecimalSchema),
+  retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
+}).check(boundedFrame(SyncProtocolLimits.chatPageEncodedBytes));
+export const ResetChatPageFrameSchema = Schema.Struct({ type: Schema.Literal("chat_page"), request_id: RequestIdSchema, outcome: Schema.Literal("cursor_reset"), retained_floor_sequence: UnsignedDecimalSchema });
+export const ChatPageFrameSchema = Schema.Union([LoadedChatPageFrameSchema, ResetChatPageFrameSchema]);
+export const ChatHeadFrameSchema = Schema.Struct({ type: Schema.Literal("chat_head"), head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) });
+export const ChatReadReceiptFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_receipt"), participant_session_id: UuidSchema, participant_session_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(
+  exactKeys(["type", "participant_session_id", "participant_session_generation", "sequence", "read_at"]),
+);
+export const AcceptedChatReadResultFrameSchema = Schema.Struct({
+  type: Schema.Literal("chat_read_result"),
+  request_id: RequestIdSchema,
+  outcome: Schema.Literal("accepted"),
+  participant_session_id: UuidSchema,
+  participant_session_generation: PositiveIntegerSchema,
+  sequence: UnsignedDecimalSchema,
+  read_at: boundedUtf8String(64, 1),
 });
-export type WelcomeSnapshotFrame = typeof WelcomeSnapshotFrameSchema.Type;
+export const RejectedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_result"), request_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: RoomActionErrorCodeSchema });
+export const ChatReadResultFrameSchema = Schema.Union([AcceptedChatReadResultFrameSchema, RejectedChatReadResultFrameSchema]);
+export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal("retryable_error"), command_id: CommandIdSchema, code: RetryableErrorCodeSchema });
+export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(1024) });
+export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
+export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong") });
 
-export const WelcomeReplayFrameSchema = Schema.Struct({
-  type: Schema.Literal("welcome"),
-  protocol: Schema.Literal(1),
-  participant_id: Schema.String,
-  mode: Schema.Literal("replay"),
-  events: Schema.Array(EventFrameSchema),
-  control_revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type WelcomeReplayFrame = typeof WelcomeReplayFrameSchema.Type;
-
-export const RaiseHandCommandFrameSchema = Schema.Struct({
-  type: Schema.Literal("command"),
-  command_id: Schema.String,
-  name: Schema.Literal("raise_hand"),
-  payload: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type RaiseHandCommandFrame = typeof RaiseHandCommandFrameSchema.Type;
-
-export const LowerHandCommandFrameSchema = Schema.Struct({
-  type: Schema.Literal("command"),
-  command_id: Schema.String,
-  name: Schema.Literal("lower_hand"),
-  payload: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type LowerHandCommandFrame = typeof LowerHandCommandFrameSchema.Type;
-
-export const CommittedAckFrameSchema = Schema.Struct({
-  type: Schema.Literal("ack"),
-  command_id: Schema.String,
-  result: Schema.Literal("committed"),
-  revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type CommittedAckFrame = typeof CommittedAckFrameSchema.Type;
-
-export const DuplicateAckFrameSchema = Schema.Struct({
-  type: Schema.Literal("ack"),
-  command_id: Schema.String,
-  result: Schema.Literal("duplicate"),
-  revision: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type DuplicateAckFrame = typeof DuplicateAckFrameSchema.Type;
-
-export const RejectedAckFrameSchema = Schema.Struct({
-  type: Schema.Literal("ack"),
-  command_id: Schema.String,
-  result: Schema.Literal("rejected"),
-  reason: Schema.String,
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type RejectedAckFrame = typeof RejectedAckFrameSchema.Type;
-
-export const ErrorFrameSchema = Schema.Struct({
-  type: Schema.Literal("error"),
-  code: Schema.String,
-  message: Schema.String,
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type ErrorFrame = typeof ErrorFrameSchema.Type;
-
-export const PingFrameSchema = Schema.Struct({
-  type: Schema.Literal("ping"),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type PingFrame = typeof PingFrameSchema.Type;
-
-export const PongFrameSchema = Schema.Struct({
-  type: Schema.Literal("pong"),
-  journey_id: Schema.optional(Schema.String),
-  traceparent: Schema.optional(Schema.String),
-  tracestate: Schema.optional(Schema.String),
-});
-export type PongFrame = typeof PongFrameSchema.Type;
-
-export const ClientFrameSchema = Schema.Union([HelloFrameSchema, RaiseHandCommandFrameSchema, LowerHandCommandFrameSchema, PingFrameSchema]);
-export type ClientFrame = typeof ClientFrameSchema.Type;
-
-export const ServerFrameSchema = Schema.Union([WelcomeSnapshotFrameSchema, WelcomeReplayFrameSchema, EventFrameSchema, CommittedAckFrameSchema, DuplicateAckFrameSchema, RejectedAckFrameSchema, ErrorFrameSchema, PongFrameSchema]);
-export type ServerFrame = typeof ServerFrameSchema.Type;
+export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => (strictClientFrame(frame) ? undefined : { path: [], issue: "must not contain unknown or missing fields" })))
+  .pipe(
+    Schema.decodeTo(
+      Schema.Union([
+        ExtendedHelloFrameSchema,
+        HelloFrameSchema,
+        SetHandRaisedCommandFrameSchema,
+        SetDisplayNameCommandFrameSchema,
+        SetAdmissionPolicyCommandFrameSchema,
+        SetParticipantRoleCommandFrameSchema,
+        TransferHostCommandFrameSchema,
+        AdmitParticipantOperationFrameSchema,
+        DenyAdmissionOperationFrameSchema,
+        MuteParticipantOperationFrameSchema,
+        StopParticipantCameraOperationFrameSchema,
+        StopParticipantScreenShareOperationFrameSchema,
+        RemoveParticipantOperationFrameSchema,
+        StartRecordingOperationFrameSchema,
+        StopRecordingOperationFrameSchema,
+        ParticipantLeaveOperationFrameSchema,
+        EndSessionOperationFrameSchema,
+        LiveTargetFrameSchema,
+        DirectedRequestSendFrameSchema,
+        RequestAckFrameSchema,
+        RoomReactionSendFrameSchema,
+        ChatSendFrameSchema,
+        ChatPageRequestFrameSchema,
+        ChatReadSetFrameSchema,
+        DeliveryAckFrameSchema,
+        RecoveryAckFrameSchema,
+        PingFrameSchema,
+      ]),
+    ),
+  )
+  .check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));
+export type SyncV1ClientFrame = typeof SyncV1ClientFrameSchema.Type;
+export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => (strictServerFrame(frame) ? undefined : { path: [], issue: "must not contain unknown or missing fields" }))).pipe(
+  Schema.decodeTo(
+    Schema.Union([
+      WelcomeFrameSchema,
+      ReplayPageFrameSchema,
+      RecoveryCompleteFrameSchema,
+      EventFrameSchema,
+      CommittedAckFrameSchema,
+      SatisfiedAckFrameSchema,
+      RejectedAckFrameSchema,
+      CommandIdConflictAckFrameSchema,
+      ProjectionFrameSchema,
+      LiveTargetResultFrameSchema,
+      DirectedRequestDeliverFrameSchema,
+      DirectedRequestResultFrameSchema,
+      RoomReactionEventFrameSchema,
+      RoomReactionResultFrameSchema,
+      ChatMessageFrameSchema,
+      ChatSendResultFrameSchema,
+      ChatPageFrameSchema,
+      ChatHeadFrameSchema,
+      ChatReadReceiptFrameSchema,
+      ChatReadResultFrameSchema,
+      RetryableErrorFrameSchema,
+      ErrorFrameSchema,
+      PongFrameSchema,
+    ]),
+  ),
+);
+export type SyncV1ServerFrame = typeof SyncV1ServerFrameSchema.Type;
+export function encodeSyncFrame(frame: SyncV1ClientFrame | SyncV1ServerFrame): string {
+  return JSON.stringify(frame);
+}

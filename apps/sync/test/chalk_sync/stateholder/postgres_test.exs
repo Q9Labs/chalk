@@ -48,7 +48,8 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     assert is_binary(committed.event_id)
 
     assert {:ok, duplicate} = Postgres.resolve_receipt(identity, command)
-    assert duplicate.result == :duplicate
+    assert duplicate.result == :committed
+    assert duplicate.delivery == :duplicate
     assert duplicate.event_id == committed.event_id
     assert duplicate.revision == committed.revision
 
@@ -128,11 +129,17 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     assert {:ok, %{result: :committed, revision: 2} = first} =
              Postgres.decide_command(identity, original)
 
+    rejected_identity = %{
+      identity
+      | participant_session_id: UUID.generate(),
+        admission_lifecycle_intent_id: UUID.generate()
+    }
+
     Enum.each(1..300, fn index ->
       filler = command("filler_#{String.pad_leading(to_string(index), 9, "0")}", :raise_hand)
 
-      assert {:ok, %{result: :rejected, reason: :invalid_state}} =
-               Postgres.decide_command(identity, filler)
+      assert {:ok, %{result: :rejected, reason: :participant_inactive}} =
+               Postgres.decide_command(rejected_identity, filler)
     end)
 
     alternate = SyncPostgres.start_connections(@database_url)
@@ -140,7 +147,8 @@ defmodule ChalkSync.Stateholder.PostgresTest do
 
     try do
       assert {:ok, duplicate} = Postgres.decide_command(identity, original)
-      assert duplicate.result == :duplicate
+      assert duplicate.result == :committed
+      assert duplicate.delivery == :duplicate
       assert duplicate.event_id == first.event_id
       assert duplicate.revision == first.revision
     after
@@ -159,7 +167,8 @@ defmodule ChalkSync.Stateholder.PostgresTest do
 
     try do
       assert {:ok, decision} = Postgres.decide_command(identity, command)
-      assert decision.result == :duplicate
+      assert decision.result == :committed
+      assert decision.delivery == :duplicate
       assert decision.revision == 2
     after
       Application.delete_env(:chalk_sync, :stateholder_fault_hook)
@@ -220,7 +229,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     assert Enum.all?(recovery.snapshot["participants"], & &1["hand_raised"])
   end
 
-  test "derives conflicts and preserves stable terminal rejections", %{fixture: fixture} do
+  test "derives conflicts and preserves stable terminal outcomes", %{fixture: fixture} do
     identity = hd(fixture.identities)
     original = command("stable_outcome_01", :raise_hand)
     changed = command("stable_outcome_01", :lower_hand)
@@ -230,16 +239,15 @@ defmodule ChalkSync.Stateholder.PostgresTest do
     assert {:ok, %{result: :command_id_conflict}} =
              Postgres.decide_command(identity, changed)
 
-    rejected = command("stable_reject_001", :raise_hand)
+    satisfied = command("stable_satisfied_01", :raise_hand)
 
-    assert {:ok, %{result: :rejected, reason: :invalid_state}} =
-             Postgres.decide_command(identity, rejected)
+    assert {:ok, %{result: :satisfied}} = Postgres.decide_command(identity, satisfied)
 
     assert {:ok, %{result: :committed}} =
              Postgres.decide_command(identity, command("lower_after_rej1", :lower_hand))
 
-    assert {:ok, %{result: :rejected, reason: :invalid_state}} =
-             Postgres.decide_command(identity, rejected)
+    assert {:ok, %{result: :satisfied, delivery: :duplicate}} =
+             Postgres.decide_command(identity, satisfied)
   end
 
   test "does not leak a receipt through a mismatched Room authority key", %{fixture: fixture} do
@@ -277,7 +285,7 @@ defmodule ChalkSync.Stateholder.PostgresTest do
              Postgres.decide_command(missing, command)
   end
 
-  test "satisfies an unchanged v3 target without an Event or head change", %{fixture: fixture} do
+  test "satisfies an unchanged v1 target without an Event or head change", %{fixture: fixture} do
     identity = hd(fixture.identities)
     target = command_payload("satisfied_target1", :set_hand_raised, %{"raised" => false})
 
@@ -370,7 +378,9 @@ defmodule ChalkSync.Stateholder.PostgresTest do
   end
 
   defp command(id, name) do
-    {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), name, %{})
+    payload = if name == :raise_hand, do: %{"raised" => true}, else: %{"raised" => false}
+    normalized_name = if name in [:raise_hand, :lower_hand], do: :set_hand_raised, else: name
+    {:ok, command} = Command.new(String.pad_trailing(id, 16, "_"), normalized_name, payload)
     command
   end
 

@@ -13,8 +13,7 @@ acceleration only.
   transaction boundary.
 - Durable lifecycle comes only from API intents. Socket loss is volatile
   presence and never a durable participant leave.
-- Protocol v3 and its generated contract are the production surface. V1 stays
-  disabled in production.
+- Protocol v1 and its generated contract are the production surface.
 - Keep every frame, queue, task set, replay, diagnostic buffer, and retained
   database set explicitly bounded.
 - Run the repository-root `pnpm run gate` before committing; it selects this

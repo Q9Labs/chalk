@@ -7,15 +7,15 @@ import type {
   ChalkRoomReaction,
   ChalkSendChatMessageInput,
   ChalkSessionSyncClient,
-  ChalkSyncV3RoomActionCapability,
-  V3AssignableRole,
-  V3CommandResult,
-  V3DirectedRequest,
-  V3DirectedRequestResult,
-  V3MediaSource,
-  V3RoomActionClientEvent,
-  V3SelfMediaTargetResult,
-  V3SessionSnapshot,
+  ChalkSyncV1RoomActionCapability,
+  V1AssignableRole,
+  V1CommandResult,
+  V1DirectedRequest,
+  V1DirectedRequestResult,
+  V1MediaSource,
+  V1RoomActionClientEvent,
+  V1SelfMediaTargetResult,
+  V1SessionSnapshot,
 } from "@q9labsai/chalk-client";
 import type { ChalkSessionMediaClient, ChalkSessionSyncFactoryInput } from "@q9labsai/chalk-client";
 
@@ -34,16 +34,16 @@ type RoomActionResult = ServerMessageOf<"room_action_result">;
 
 export class FixtureSyncClient implements ChalkSessionSyncClient {
   readonly #access: ChalkSessionSyncFactoryInput["access"];
-  readonly #listeners = new Set<(snapshot: V3SessionSnapshot) => void>();
-  readonly #roomActionListeners = new Set<(event: V3RoomActionClientEvent) => void>();
-  readonly #directedRequestListeners = new Set<(request: V3DirectedRequest) => void>();
+  readonly #listeners = new Set<(snapshot: V1SessionSnapshot) => void>();
+  readonly #roomActionListeners = new Set<(event: V1RoomActionClientEvent) => void>();
+  readonly #directedRequestListeners = new Set<(request: V1DirectedRequest) => void>();
   readonly #media: ChalkSessionMediaClient;
   readonly #syncURL: string;
   readonly #token: () => Promise<string>;
-  #pending = new Map<string, PendingRequest<V3CommandResult>>();
+  #pending = new Map<string, PendingRequest<V1CommandResult>>();
   #pendingRoomActions = new Map<string, PendingRequest<RoomActionResult>>();
-  #pendingDirectedRequests = new Map<string, PendingRequest<V3DirectedRequestResult>>();
-  #snapshot: V3SessionSnapshot;
+  #pendingDirectedRequests = new Map<string, PendingRequest<V1DirectedRequestResult>>();
+  #snapshot: V1SessionSnapshot;
   #socket: WebSocket | null = null;
   readonly #messageHandlers: ServerMessageHandlers = {
     state: (message) => this.#publish(syncSnapshot(this.#snapshot, message.state)),
@@ -67,7 +67,7 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
 
   getSnapshot = () => this.#snapshot;
 
-  subscribe = (listener: (snapshot: V3SessionSnapshot) => void) => {
+  subscribe = (listener: (snapshot: V1SessionSnapshot) => void) => {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   };
@@ -96,7 +96,7 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
   setHandRaised = (raised: boolean) => this.#command("set_hand_raised", { raised });
   setDisplayName = (displayName: string) => this.#command("set_display_name", { displayName });
   setAdmissionPolicy = (policy: string) => this.#command("set_admission_policy", { policy });
-  setParticipantRole = (participantSessionId: string, role: V3AssignableRole) => this.#command("set_participant_role", { participantSessionId, role });
+  setParticipantRole = (participantSessionId: string, role: V1AssignableRole) => this.#command("set_participant_role", { participantSessionId, role });
   transferHost = (participantSessionId: string) => this.#command("transfer_host", { participantSessionId });
   admit = (admissionRequestId: string) => this.#command("admit_participant", { admissionRequestId });
   deny = (admissionRequestId: string) => this.#command("deny_admission", { admissionRequestId });
@@ -115,9 +115,9 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
     readReceipts: [],
   });
 
-  getParticipantRoomActionCapabilities = (): Readonly<Record<string, readonly ChalkSyncV3RoomActionCapability[]>> => Object.fromEntries(this.#snapshot.control?.participants.map((participant) => [participant.participantSessionId, ["sendReaction", "sendChat"] as const]) ?? []);
+  getParticipantRoomActionCapabilities = (): Readonly<Record<string, readonly ChalkSyncV1RoomActionCapability[]>> => Object.fromEntries(this.#snapshot.control?.participants.map((participant) => [participant.participantSessionId, ["sendReaction", "sendChat"] as const]) ?? []);
 
-  subscribeRoomActions = (listener: (event: V3RoomActionClientEvent) => void) => {
+  subscribeRoomActions = (listener: (event: V1RoomActionClientEvent) => void) => {
     this.#roomActionListeners.add(listener);
     return () => this.#roomActionListeners.delete(listener);
   };
@@ -150,7 +150,7 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
     return loadedChatPage(messages.length);
   }
 
-  onDirectedRequest = (listener: (request: V3DirectedRequest) => void) => {
+  onDirectedRequest = (listener: (request: V1DirectedRequest) => void) => {
     this.#directedRequestListeners.add(listener);
     return () => this.#directedRequestListeners.delete(listener);
   };
@@ -162,7 +162,7 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
   setCameraEnabled = (enabled: boolean) => this.#setMedia("camera", enabled, "set_camera_enabled");
   setScreenShareEnabled = (enabled: boolean) => this.#setMedia("screen", enabled, "set_screen_share_enabled");
 
-  async #setMedia(source: V3MediaSource, enabled: boolean, name: V3SelfMediaTargetResult["name"]): Promise<V3SelfMediaTargetResult> {
+  async #setMedia(source: V1MediaSource, enabled: boolean, name: V1SelfMediaTargetResult["name"]): Promise<V1SelfMediaTargetResult> {
     const operationId = crypto.randomUUID();
     const mediaResult = await this.#media.setLocalPublicationTarget({ operationId, participantSessionId: this.#access.subject.participantSessionId, source, enabled });
     if (mediaResult.outcome !== "confirmed" && mediaResult.outcome !== "satisfied") throw new TypeError(`Fixture media rejected ${source}`);
@@ -170,7 +170,7 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
     return { operationId, name, serverOutcome: "confirmed", mediaPlaneOutcome: mediaResult.outcome };
   }
 
-  #command(name: string, payload: Record<string, unknown>): Promise<V3CommandResult> {
+  #command(name: string, payload: Record<string, unknown>): Promise<V1CommandResult> {
     return this.#request(this.#pending, { type: "command", name, payload });
   }
 
@@ -178,7 +178,7 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
     return this.#request(this.#pendingRoomActions, { type: "room_action", name, payload });
   }
 
-  #directedRequest(name: string, participantSessionId: string): Promise<V3DirectedRequestResult> {
+  #directedRequest(name: string, participantSessionId: string): Promise<V1DirectedRequestResult> {
     return this.#request(this.#pendingDirectedRequests, { type: "directed_request", name, participantSessionId });
   }
 
@@ -215,15 +215,15 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
     for (const message of messages) this.#emitRoomAction({ type: "chat_message", message });
   }
 
-  #emitDirectedRequest(request: V3DirectedRequest): void {
+  #emitDirectedRequest(request: V1DirectedRequest): void {
     for (const listener of this.#directedRequestListeners) listener(request);
   }
 
-  #emitRoomAction(event: V3RoomActionClientEvent): void {
+  #emitRoomAction(event: V1RoomActionClientEvent): void {
     for (const listener of this.#roomActionListeners) listener(event);
   }
 
-  #publish(snapshot: V3SessionSnapshot): void {
+  #publish(snapshot: V1SessionSnapshot): void {
     this.#snapshot = snapshot;
     for (const listener of this.#listeners) listener(snapshot);
   }
@@ -246,8 +246,8 @@ function rejectPending<T>(pendingRequests: Map<string, PendingRequest<T>>, error
   pendingRequests.clear();
 }
 
-function commandAcknowledgement(id: string): V3CommandResult {
-  return { type: "ack", command_id: id, delivery: "original", outcome: "satisfied", revision: 1, state_digest: "fixture" } as V3CommandResult;
+function commandAcknowledgement(id: string): V1CommandResult {
+  return { type: "ack", command_id: id, delivery: "original", outcome: "satisfied", revision: 1, state_digest: "fixture" } as V1CommandResult;
 }
 
 function loadedChatPage(count: number): ChalkChatPageResult {

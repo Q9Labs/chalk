@@ -31,8 +31,8 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
     proxy = start_supervised!({TcpFaultProxy, upstream_port: port_a})
     proxy_port = TcpFaultProxy.port(proxy)
 
-    {client_a, welcome_a} = Wire.connect_v3(proxy_port, identity_a)
-    {client_b, welcome_b} = Wire.connect_v3(port_b, identity_b)
+    {client_a, welcome_a} = Wire.connect_v1(proxy_port, identity_a)
+    {client_b, welcome_b} = Wire.connect_v1(port_b, identity_b)
     initial_revision = welcome_a["head"]["revision"]
     assert welcome_b["head"]["revision"] == initial_revision
 
@@ -46,7 +46,7 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
     assert second_frames["event"]["revision"] == initial_revision + 2
 
     assert :ok = TcpFaultProxy.heal(proxy)
-    {_reconnected, recovered} = Wire.connect_v3(proxy_port, identity_a)
+    {_reconnected, recovered} = Wire.connect_v1(proxy_port, identity_a)
     assert recovered["head"]["revision"] == initial_revision + 2
 
     prove_whiteboard_cross_node(port_a, port_b, identity_a, identity_b)
@@ -132,7 +132,7 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
   defp write_schedule do
     write_evidence("topology-schedule.json", %{
       "actions" => [
-        "cross_node_v3_commit",
+        "cross_node_v1_commit",
         "client_network_partition",
         "authoritative_recovery",
         "cross_node_whiteboard_update",

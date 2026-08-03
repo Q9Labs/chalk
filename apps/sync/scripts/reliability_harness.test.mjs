@@ -18,7 +18,7 @@ test("maps the three triggers to one harness with explicit profiles", () => {
 
   assert.deepEqual(
     correctness.map((step) => step.name),
-    ["sync_full_gate", "sync_v3_breaker", "sync_v3_replay", "typescript_sync_and_whiteboard", "whiteboard_collaboration"],
+    ["sync_full_gate", "sync_v1_breaker", "sync_v1_replay", "typescript_sync_and_whiteboard", "whiteboard_collaboration"],
   );
   assert.deepEqual(
     topology.map((step) => step.name),

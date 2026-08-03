@@ -194,7 +194,7 @@ defmodule ChalkSync.Sessions.CommandAdmission do
   defp command_result_outcome(_result), do: :unknown
 
   defp decide_command(
-         %Identity{protocol_version: 3} = identity,
+         %Identity{protocol_version: 1} = identity,
          %Command{name: name} = command
        )
        when name in [:set_participant_role, :transfer_host] do

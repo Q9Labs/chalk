@@ -22,7 +22,7 @@ Set only server-side environment variables before starting the app:
 export CHALK_API_KEY='chalk_sk_...'
 export CHALK_TENANT_ID='...'
 export CHALK_API_URL='http://127.0.0.1:8080'       # optional default
-export CHALK_SYNC_URL='ws://127.0.0.1:4100/v3/sync' # optional default
+export CHALK_SYNC_URL='ws://127.0.0.1:4100/v1/sync' # optional default
 ```
 
 `pnpm --dir apps/web dev` binds both processes to `127.0.0.1`. The backend exposes only `/local-chalk/browser-session`, `/local-chalk/access`, and `/local-chalk/cleanup`; it stores the API key and tenant, room, session, and participant identities server-side behind an opaque `HttpOnly; SameSite=Strict` cookie. The Vite proxy forwards those paths without injecting authorization headers.

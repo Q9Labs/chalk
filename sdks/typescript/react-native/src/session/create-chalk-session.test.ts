@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const chalkSession = vi.hoisted(() => vi.fn(function ChalkSession() {}));
 
 vi.mock("@q9labsai/chalk-client", () => ({
-  AsyncStorageV3PendingTargetStore: vi.fn(),
+  AsyncStorageV1PendingTargetStore: vi.fn(),
   ChalkSession: chalkSession,
   CloudflareSFUClient: vi.fn(),
   createChalkChatFileHttpTransport: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock("@q9labsai/chalk-client", () => ({
   createCloudflareSFUHTTPTransport: vi.fn(),
   createReactNativeSyncLifecycle: vi.fn(() => ({})),
   createReactNativeWebSocketFactory: vi.fn(() => ({})),
-  createV3SyncClient: vi.fn(),
+  createV1SyncClient: vi.fn(),
 }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({
   RTCPeerConnection: vi.fn(),
@@ -92,6 +92,6 @@ function options() {
   return {
     access: vi.fn(),
     apiBaseURL: "https://api.chalk.test",
-    syncURL: "wss://sync.chalk.test/v3/sync",
+    syncURL: "wss://sync.chalk.test/v1/sync",
   };
 }

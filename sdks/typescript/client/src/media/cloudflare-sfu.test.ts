@@ -77,7 +77,7 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("publishes camera and microphone, validates V3 targets, and retains provider identity while disabled", async () => {
+  it("publishes camera and microphone, validates V1 targets, and retains provider identity while disabled", async () => {
     const harness = createHarness();
     const microphone = new FakeTrack("microphone-track", "audio");
     const camera = new FakeTrack("camera-track", "video");
@@ -265,7 +265,7 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("notifies browser-ended screen capture and preserves the source for the subsequent V3 disable target", async () => {
+  it("notifies browser-ended screen capture and preserves the source for the subsequent V1 disable target", async () => {
     const onScreenEnded = vi.fn();
     const harness = createHarness({ onScreenEnded });
     await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));

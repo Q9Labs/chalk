@@ -1,5 +1,5 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { createV3SyncClient } from "../dist/index.js";
+import { createV1SyncClient } from "../dist/index.js";
 
 const action = process.argv[2];
 const url = requiredEnvironment("CHALK_SYNC_BROWSER_URL");
@@ -7,7 +7,7 @@ const token = requiredEnvironment("CHALK_SYNC_BROWSER_TOKEN");
 const pendingStorePath = requiredEnvironment("CHALK_SYNC_PENDING_STORE_PATH");
 
 async function run() {
-  const client = createV3SyncClient({
+  const client = createV1SyncClient({
     lifecycle: { subscribe: () => () => {} },
     pendingStore: new FilePendingCommandStore(pendingStorePath),
     token: async () => token,
@@ -65,7 +65,7 @@ class NodeSyncSocket {
 
   close(code, reason) {
     if (code !== undefined && code !== 1000 && (code < 3000 || code > 4999)) {
-      throw new Error(`v3 client requested invalid browser close code ${code} (${reason ?? "no reason"}); recent frames=${this.#receivedFrameTypes.join(",")}`);
+      throw new Error(`v1 client requested invalid browser close code ${code} (${reason ?? "no reason"}); recent frames=${this.#receivedFrameTypes.join(",")}`);
     }
     this.#socket.close(code, reason);
   }
@@ -73,7 +73,7 @@ class NodeSyncSocket {
 
 async function stagePendingCommand(client) {
   void client.setHandRaised(true);
-  const snapshot = await waitFor(() => (client.getSnapshot().pendingCommandCount === 1 ? client.getSnapshot() : null), "first process did not retain the staged v3 pending target");
+  const snapshot = await waitFor(() => (client.getSnapshot().pendingCommandCount === 1 ? client.getSnapshot() : null), "first process did not retain the staged v1 pending target");
 
   process.stdout.write(JSON.stringify({ pending: snapshot.pendingCommandCount }) + "\n");
   await new Promise(() => setInterval(() => {}, 60_000));

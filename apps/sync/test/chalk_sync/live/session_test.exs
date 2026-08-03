@@ -215,7 +215,7 @@ defmodule ChalkSync.Live.SessionTest do
       },
       participant_session_id: authority().participant_session_id,
       participant_session_generation: 1,
-      protocol_version: 3
+      protocol_version: 1
     }
   end
 

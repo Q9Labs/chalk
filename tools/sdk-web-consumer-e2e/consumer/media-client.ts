@@ -1,23 +1,23 @@
 // Fallow cannot see that ChalkSession consumes this adapter through the ChalkSessionMediaClient interface.
 // fallow-ignore-file unused-class-member
-import type { ChalkSessionMediaClient, ChalkSessionMediaFactoryInput, CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, V3MediaPlaneResult, V3MediaPlaneTarget, V3MediaPublication, V3MediaSource } from "@q9labsai/chalk-client";
+import type { ChalkSessionMediaClient, ChalkSessionMediaFactoryInput, CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, V1MediaPlaneResult, V1MediaPlaneTarget, V1MediaPublication, V1MediaSource } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
 import { registerPeer, registerSocket, releasePeer, releaseTrack } from "./resource-ledger";
 
 type PeerState = {
   readonly connection: RTCPeerConnection;
-  readonly senders: Map<V3MediaSource, RTCRtpSender>;
-  readonly remoteByMid: Map<string, V3MediaSource>;
+  readonly senders: Map<V1MediaSource, RTCRtpSender>;
+  readonly remoteByMid: Map<string, V1MediaSource>;
   makingOffer: boolean;
 };
 
 export class FixtureMediaClient implements ChalkSessionMediaClient {
   readonly #credential: () => Promise<string>;
   readonly #listeners = new Set<() => void>();
-  readonly #localListeners = new Set<(items: readonly V3MediaPublication[]) => void>();
-  readonly #remoteListeners = new Set<(items: readonly V3MediaPublication[]) => void>();
-  readonly #local = new Map<V3MediaSource, { track: MediaStreamTrack; enabled: boolean }>();
+  readonly #localListeners = new Set<(items: readonly V1MediaPublication[]) => void>();
+  readonly #remoteListeners = new Set<(items: readonly V1MediaPublication[]) => void>();
+  readonly #local = new Map<V1MediaSource, { track: MediaStreamTrack; enabled: boolean }>();
   readonly #onFailure: (error: unknown) => void;
   readonly #onScreenEnded: () => void;
   readonly #participantSessionId: string;
@@ -25,7 +25,7 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
   readonly #received = new Map<string, CloudflareSFURemoteTrack>();
   readonly #signalingURL: string;
   #bootstrap: CloudflareSFUBootstrap;
-  #remotePublications: readonly V3MediaPublication[] = [];
+  #remotePublications: readonly V1MediaPublication[] = [];
   #snapshot: CloudflareSFUSnapshot;
   #socket: WebSocket | null = null;
 
@@ -42,13 +42,13 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
   getSnapshot = () => this.#snapshot;
   subscribe = (listener: () => void) => (this.#listeners.add(listener), () => this.#listeners.delete(listener));
 
-  prepareLocalTrack(source: V3MediaSource, track: MediaStreamTrack): void {
+  prepareLocalTrack(source: V1MediaSource, track: MediaStreamTrack): void {
     this.#local.set(source, { track, enabled: false });
     if (source === "screen") track.addEventListener("ended", this.#onScreenEnded, { once: true });
     this.#publish();
   }
 
-  async clearPreparedLocalTrack(source: V3MediaSource): Promise<void> {
+  async clearPreparedLocalTrack(source: V1MediaSource): Promise<void> {
     const local = this.#local.get(source);
     if (!local) return;
     local.enabled = false;
@@ -95,7 +95,7 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
     this.#remoteListeners.clear();
   };
 
-  async setLocalPublicationTarget(target: V3MediaPlaneTarget): Promise<V3MediaPlaneResult> {
+  async setLocalPublicationTarget(target: V1MediaPlaneTarget): Promise<V1MediaPlaneResult> {
     const local = this.#local.get(target.source);
     if (!local) return { outcome: "terminal_failure", errorCode: "source_unavailable" };
     if (local.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
@@ -105,7 +105,7 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
     return { outcome: "confirmed", errorCode: null };
   }
 
-  async #applyLocalTarget(target: V3MediaPlaneTarget, local: { track: MediaStreamTrack; enabled: boolean }): Promise<void> {
+  async #applyLocalTarget(target: V1MediaPlaneTarget, local: { track: MediaStreamTrack; enabled: boolean }): Promise<void> {
     local.enabled = target.enabled;
     local.track.enabled = target.enabled;
     if (!target.enabled) return;
@@ -113,13 +113,13 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
     await this.#renegotiateAll();
   }
 
-  observeLocalPublications(listener: (items: readonly V3MediaPublication[]) => void) {
+  observeLocalPublications(listener: (items: readonly V1MediaPublication[]) => void) {
     this.#localListeners.add(listener);
     listener(this.#localProjection());
     return () => this.#localListeners.delete(listener);
   }
 
-  observeRemotePublications(listener: (items: readonly V3MediaPublication[]) => void) {
+  observeRemotePublications(listener: (items: readonly V1MediaPublication[]) => void) {
     this.#remoteListeners.add(listener);
     listener(this.#remotePublications);
     return () => this.#remoteListeners.delete(listener);
@@ -185,7 +185,7 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
     if (message.candidate) await peer.connection.addIceCandidate(message.candidate);
   }
 
-  #recordRemoteMids(peer: PeerState, mids: Readonly<Record<string, V3MediaSource>> | undefined): void {
+  #recordRemoteMids(peer: PeerState, mids: Readonly<Record<string, V1MediaSource>> | undefined): void {
     if (!mids) return;
     for (const [mid, source] of Object.entries(mids)) peer.remoteByMid.set(mid, source);
   }
@@ -216,7 +216,7 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
     return peer;
   }
 
-  #addSender(peer: PeerState, source: V3MediaSource, track: MediaStreamTrack): void {
+  #addSender(peer: PeerState, source: V1MediaSource, track: MediaStreamTrack): void {
     if (peer.senders.has(source)) return;
     peer.senders.set(source, peer.connection.addTrack(track, new MediaStream([track])));
   }
@@ -236,7 +236,7 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
     }
   }
 
-  #localMids(peer: PeerState): Readonly<Record<string, V3MediaSource>> {
+  #localMids(peer: PeerState): Readonly<Record<string, V1MediaSource>> {
     return Object.fromEntries(
       [...peer.senders].flatMap(([source, sender]) => {
         const mid = peer.connection.getTransceivers().find((item) => item.sender === sender)?.mid;
@@ -254,7 +254,7 @@ export class FixtureMediaClient implements ChalkSessionMediaClient {
     this.#socket.send(JSON.stringify({ type: "publications", publications: this.#localProjection() }));
   }
 
-  #localProjection(): readonly V3MediaPublication[] {
+  #localProjection(): readonly V1MediaPublication[] {
     return [...this.#local].map(([source, local]) => ({ participantSessionId: this.#participantSessionId, source, enabled: local.enabled, publicationId: local.enabled ? `${this.#bootstrap.connectionId}|${source}` : null }));
   }
 

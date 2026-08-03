@@ -1,7 +1,7 @@
 import type { CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
-import type { V3AdmissionPolicy, V3AssignableRole, V3CommandResult, V3SelfMediaTargetResult, V3SessionSnapshot, V3ClientMediaPlane } from "../sync";
-import type { V3DirectedRequest, V3DirectedRequestResult, V3RoomActionsClient } from "../sync/v3-types";
+import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1SelfMediaTargetResult, V1SessionSnapshot, V1ClientMediaPlane } from "../sync";
+import type { V1DirectedRequest, V1DirectedRequestResult, V1RoomActionsClient } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParticipantAccess, ParticipantMediaCredential } from "./access";
 
@@ -27,33 +27,33 @@ export type ChalkSessionMediaDevices = {
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
 };
 
-export type ChalkSessionSyncClient = V3RoomActionsClient & {
+export type ChalkSessionSyncClient = V1RoomActionsClient & {
   readonly start: () => Promise<void>;
   readonly stop: () => void;
-  readonly getSnapshot: () => V3SessionSnapshot;
-  readonly subscribe: (listener: (snapshot: V3SessionSnapshot) => void) => () => void;
-  readonly leave: () => Promise<V3CommandResult>;
-  readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V3SelfMediaTargetResult>;
-  readonly setCameraEnabled: (enabled: boolean) => Promise<V3SelfMediaTargetResult>;
-  readonly setScreenShareEnabled: (enabled: boolean) => Promise<V3SelfMediaTargetResult>;
-  readonly setHandRaised: (raised: boolean) => Promise<V3CommandResult>;
-  readonly setDisplayName: (displayName: string) => Promise<V3CommandResult>;
-  readonly setAdmissionPolicy: (policy: V3AdmissionPolicy) => Promise<V3CommandResult>;
-  readonly setParticipantRole: (participantSessionId: string, role: V3AssignableRole) => Promise<V3CommandResult>;
-  readonly transferHost: (participantSessionId: string) => Promise<V3CommandResult>;
-  readonly admit: (admissionRequestId: string) => Promise<V3CommandResult>;
-  readonly deny: (admissionRequestId: string) => Promise<V3CommandResult>;
-  readonly muteParticipant: (participantSessionId: string) => Promise<V3CommandResult>;
-  readonly stopParticipantCamera: (participantSessionId: string) => Promise<V3CommandResult>;
-  readonly stopParticipantScreenShare: (participantSessionId: string) => Promise<V3CommandResult>;
-  readonly removeParticipant: (participantSessionId: string) => Promise<V3CommandResult>;
-  readonly endSession: () => Promise<V3CommandResult>;
-  readonly onDirectedRequest: (listener: (request: V3DirectedRequest) => void) => () => void;
-  readonly requestUnmute: (participantSessionId: string) => Promise<V3DirectedRequestResult>;
-  readonly requestStartCamera: (participantSessionId: string) => Promise<V3DirectedRequestResult>;
+  readonly getSnapshot: () => V1SessionSnapshot;
+  readonly subscribe: (listener: (snapshot: V1SessionSnapshot) => void) => () => void;
+  readonly leave: () => Promise<V1CommandResult>;
+  readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
+  readonly setCameraEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
+  readonly setScreenShareEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
+  readonly setHandRaised: (raised: boolean) => Promise<V1CommandResult>;
+  readonly setDisplayName: (displayName: string) => Promise<V1CommandResult>;
+  readonly setAdmissionPolicy: (policy: V1AdmissionPolicy) => Promise<V1CommandResult>;
+  readonly setParticipantRole: (participantSessionId: string, role: V1AssignableRole) => Promise<V1CommandResult>;
+  readonly transferHost: (participantSessionId: string) => Promise<V1CommandResult>;
+  readonly admit: (admissionRequestId: string) => Promise<V1CommandResult>;
+  readonly deny: (admissionRequestId: string) => Promise<V1CommandResult>;
+  readonly muteParticipant: (participantSessionId: string) => Promise<V1CommandResult>;
+  readonly stopParticipantCamera: (participantSessionId: string) => Promise<V1CommandResult>;
+  readonly stopParticipantScreenShare: (participantSessionId: string) => Promise<V1CommandResult>;
+  readonly removeParticipant: (participantSessionId: string) => Promise<V1CommandResult>;
+  readonly endSession: () => Promise<V1CommandResult>;
+  readonly onDirectedRequest: (listener: (request: V1DirectedRequest) => void) => () => void;
+  readonly requestUnmute: (participantSessionId: string) => Promise<V1DirectedRequestResult>;
+  readonly requestStartCamera: (participantSessionId: string) => Promise<V1DirectedRequestResult>;
 };
 
-export type ChalkSessionMediaClient = V3ClientMediaPlane & {
+export type ChalkSessionMediaClient = V1ClientMediaPlane & {
   readonly start: (stream: MediaStream) => Promise<void>;
   readonly stop: () => void;
   readonly restart: (input: CloudflareSFUBootstrap) => Promise<void>;

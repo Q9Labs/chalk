@@ -13,7 +13,7 @@ import type {
   ChalkRoomActionsPhase,
   ChalkRoomReaction,
   ChalkSendChatMessageInput,
-  ChalkSyncV3RoomActionCapability,
+  ChalkSyncV1RoomActionCapability,
 } from "../room-actions/types";
 import type { ChalkChatFileTransport } from "../chat-files/types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
@@ -32,7 +32,7 @@ export type {
   ChalkRoomActionsPhase,
   ChalkRoomReaction,
   ChalkSendChatMessageInput,
-  ChalkSyncV3RoomActionCapability,
+  ChalkSyncV1RoomActionCapability,
 } from "../room-actions/types";
 export type {
   ChalkJsonValue,
@@ -203,8 +203,8 @@ export type ChalkSessionSnapshot = {
   readonly failure: ChalkSessionFailure | null;
   readonly roomActions: {
     readonly phase: ChalkRoomActionsPhase;
-    readonly version: 1 | 2 | null;
-    readonly capabilities: readonly ChalkSyncV3RoomActionCapability[];
+    readonly version: 2 | null;
+    readonly capabilities: readonly ChalkSyncV1RoomActionCapability[];
     readonly error: ChalkSessionFailure | null;
   };
   readonly participantRoomActionCapabilities: Readonly<Record<string, readonly ChalkRoomActionCapability[]>>;

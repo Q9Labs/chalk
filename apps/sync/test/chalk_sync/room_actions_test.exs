@@ -1,7 +1,7 @@
 defmodule ChalkSync.RoomActionsTest do
   use ExUnit.Case, async: true
 
-  alias ChalkSync.Contract.GeneratedV3
+  alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.RoomActions
   alias ChalkSync.RoomActions.Admission
   alias ChalkSync.RoomActions.Fanout
@@ -140,13 +140,21 @@ defmodule ChalkSync.RoomActionsTest do
              )
 
     assert extension == %{
-             "name" => "room_actions_v1",
+             "name" => "room_actions_v2",
              "capabilities" => ["sendReaction", "sendChat"],
              "participant_capabilities" => %{
                identity.participant_session_id => ["sendReaction", "sendChat"]
              },
              "chat_head_sequence" => "42",
-             "retained_floor_sequence" => "7"
+             "retained_floor_sequence" => "7",
+             "read_receipts" => [
+               %{
+                 "participant_session_id" => identity.participant_session_id,
+                 "participant_session_generation" => 1,
+                 "sequence" => "42",
+                 "read_at" => "2026-07-29T14:01:00.000Z"
+               }
+             ]
            }
 
     assert %{sessions: 1, subscribers: 1} = Fanout.stats(fanout)
@@ -178,7 +186,7 @@ defmodule ChalkSync.RoomActionsTest do
     assert result["reaction"]["display_name"] == "Ada"
     assert result["reaction"]["occurred_at"] == "2026-07-29T14:00:00.000Z"
     assert result["reaction"]["expires_at"] == "2026-07-29T14:00:05.000Z"
-    assert GeneratedV3.valid_server_frame?(result)
+    assert GeneratedV1.valid_server_frame?(result)
     assert_receive {:room_action_frame, event}
     assert event == result["reaction"]
   end
@@ -230,7 +238,7 @@ defmodule ChalkSync.RoomActionsTest do
 
     assert result["outcome"] == "accepted"
     assert result["message"]["sequence"] == "42"
-    assert GeneratedV3.valid_server_frame?(result)
+    assert GeneratedV1.valid_server_frame?(result)
 
     assert_receive {:room_action_frame,
                     %{
@@ -289,7 +297,7 @@ defmodule ChalkSync.RoomActionsTest do
 
     assert read_result["outcome"] == "accepted"
     assert read_result["sequence"] == "42"
-    assert GeneratedV3.valid_server_frame?(read_result)
+    assert GeneratedV1.valid_server_frame?(read_result)
 
     assert_receive {:room_action_frame,
                     %{
@@ -299,27 +307,6 @@ defmodule ChalkSync.RoomActionsTest do
                     }}
 
     assert participant_session_id == identity.participant_session_id
-  end
-
-  test "projects attachment-only chat as a valid deterministic v1 placeholder", %{
-    options: options
-  } do
-    identity = identity()
-
-    assert {:ok, result} =
-             RoomActions.send_chat(
-               identity,
-               %{
-                 client_message_id: "chat-message-0002",
-                 text: "",
-                 attachment_ids: ["018f2f65-2a77-7a44-8e9a-5b0b6f8d4c82"]
-               },
-               Keyword.put(options, :version, 1)
-             )
-
-    assert result["message"]["text"] == "[Attachment]"
-    refute Map.has_key?(result["message"], "attachments")
-    assert GeneratedV3.valid_server_frame?(result)
   end
 
   test "returns generated-valid loaded and cursor-reset pages", %{options: options} do
@@ -338,7 +325,7 @@ defmodule ChalkSync.RoomActionsTest do
              )
 
     assert loaded["outcome"] == "loaded"
-    assert GeneratedV3.valid_server_frame?(loaded)
+    assert GeneratedV1.valid_server_frame?(loaded)
 
     assert {:ok, reset} =
              RoomActions.read_chat_page(
@@ -353,7 +340,7 @@ defmodule ChalkSync.RoomActionsTest do
              )
 
     assert reset["outcome"] == "cursor_reset"
-    assert GeneratedV3.valid_server_frame?(reset)
+    assert GeneratedV1.valid_server_frame?(reset)
   end
 
   test "returns a generated-valid capability rejection", %{options: options} do
@@ -367,7 +354,7 @@ defmodule ChalkSync.RoomActionsTest do
              )
 
     assert result["error_code"] == "capability_denied"
-    assert GeneratedV3.valid_server_frame?(result)
+    assert GeneratedV1.valid_server_frame?(result)
   end
 
   defp identity do

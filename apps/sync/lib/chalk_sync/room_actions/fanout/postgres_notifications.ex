@@ -9,7 +9,7 @@ defmodule ChalkSync.RoomActions.Fanout.PostgresNotifications do
 
   @behaviour ChalkSync.RoomActions.Fanout.Transport
 
-  alias ChalkSync.Contract.GeneratedV3
+  alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Database
   alias ChalkSync.Stateholder.SessionKey
 
@@ -91,7 +91,7 @@ defmodule ChalkSync.RoomActions.Fanout.PostgresNotifications do
     }
 
     if exact_keys?(payload, ["kind", "tenant_id", "room_id", "session_id", "head"]) and
-         GeneratedV3.valid_server_frame?(value),
+         GeneratedV1.valid_server_frame?(value),
        do: {:ok, :chat_head, value},
        else: {:error, :invalid_payload}
   end
@@ -104,7 +104,7 @@ defmodule ChalkSync.RoomActions.Fanout.PostgresNotifications do
     decoded_kind = if kind == "reaction", do: :reaction, else: :chat_read_receipt
 
     if exact_keys?(payload, ["kind", "tenant_id", "room_id", "session_id", "event"]) and
-         GeneratedV3.valid_server_frame?(event),
+         GeneratedV1.valid_server_frame?(event),
        do: {:ok, decoded_kind, event},
        else: {:error, :invalid_payload}
   end

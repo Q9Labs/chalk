@@ -39,8 +39,8 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
 
     {node_a, port_a} = start_node("failover-a", proxy_database_url)
     {_node_b, port_b} = start_node("failover-b", proxy_database_url)
-    {client_a, _welcome_a} = Wire.connect_v3(port_a, identity_a)
-    {client_b, _welcome_b} = Wire.connect_v3(port_b, identity_b)
+    {client_a, _welcome_a} = Wire.connect_v1(port_a, identity_a)
+    {client_b, _welcome_b} = Wire.connect_v1(port_b, identity_b)
 
     {_client_a, committed} = Wire.commit_hand(client_a, "failover-hand-0001", true)
     assert committed["ack"]["outcome"] == "committed"
@@ -60,7 +60,7 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
     assert duplicate["revision"] == initial_revision + 1
 
     {_node_c, port_c} = start_node("failover-c", proxy_database_url)
-    {_recovered, welcome} = Wire.connect_v3(port_c, identity_a)
+    {_recovered, welcome} = Wire.connect_v1(port_c, identity_a)
     assert welcome["head"]["revision"] == initial_revision + 1
     Client.close(client_a)
 
@@ -112,7 +112,7 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
   end
 
   defp await_reconnect(node, port, identity, attempts) do
-    Wire.connect_v3(port, identity)
+    Wire.connect_v1(port, identity)
   rescue
     _exception ->
       Process.sleep(100)

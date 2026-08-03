@@ -22,7 +22,7 @@ of every gate.
   checks.
 - Go API changes run the complete language gate. Elixir Sync changes run the
   shared correctness profile: the full zero-skip PostgreSQL suite, Credo, the
-  replayed v3 breaker, and focused Sync and whiteboard SDK tests. Both use a
+  replayed v1 breaker, and focused Sync and whiteboard SDK tests. Both use a
   disposable, migrated PostgreSQL container that is removed on exit.
 - Contract producers and consumers run generated-contract and SDK drift checks.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.

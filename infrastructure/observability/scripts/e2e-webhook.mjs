@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { Effect } from "effect";
 import { createChalkEffectClient } from "../../../sdks/typescript/client/dist/effect.js";
-import { createBrowserWebSocketFactory, createTelemetryClient, V3SyncClient } from "../../../sdks/typescript/client/dist/index.js";
+import { createBrowserWebSocketFactory, createTelemetryClient, V1SyncClient } from "../../../sdks/typescript/client/dist/index.js";
 import { waitFor } from "./poll.mjs";
 
 const apiBaseUrl = required("CHALK_E2E_API_URL");
@@ -148,7 +148,7 @@ await waitFor(
   async () => {
     try {
       hostSeed = JSON.parse(await readFile(hostSeedCompleteFile, "utf8"));
-      return hostSeed.api_created_host_role === true && hostSeed.api_created_v3_control_policy === true;
+      return hostSeed.api_created_host_role === true && hostSeed.api_created_v1_control_policy === true;
     } catch {
       return false;
     }
@@ -176,8 +176,8 @@ const guestAdmission = await Effect.runPromise(
     },
   }),
 );
-const hostSync = await startV3Client(hostAdmission.sync_token, "host");
-const guestSync = await startV3Client(guestAdmission.sync_token, "guest");
+const hostSync = await startV1Client(hostAdmission.sync_token, "host");
+const guestSync = await startV1Client(guestAdmission.sync_token, "guest");
 guestSync.leave({ commandId: crypto.randomUUID() }).catch(() => undefined);
 await waitForCoreDelivery("participant.left");
 endpointSubscription = await Effect.runPromise(
@@ -274,7 +274,7 @@ console.log(
       first_failure_signature_verified: firstReceiverState.first_failure_signature_verified,
       processor_diagnostic_phases: [...processorPhases],
       api_created_host_role: hostSeed.api_created_host_role,
-      api_created_v3_control_policy: hostSeed.api_created_v3_control_policy,
+      api_created_v1_control_policy: hostSeed.api_created_v1_control_policy,
       surfaces: ["receiver", "public_sdk", "postgres", "tempo", "prometheus", "loki", "grafana"],
     },
     null,
@@ -311,9 +311,9 @@ async function waitForCoreDelivery(eventType) {
   return detail;
 }
 
-async function startV3Client(syncToken, label) {
+async function startV1Client(syncToken, label) {
   if (!syncToken) throw new Error(`${label} admission returned no Sync token.`);
-  const syncClient = new V3SyncClient({
+  const syncClient = new V1SyncClient({
     url: syncUrl,
     token: async () => syncToken,
     webSocket: createBrowserWebSocketFactory(),
@@ -328,7 +328,7 @@ async function startV3Client(syncToken, label) {
     retryDelayMs: 100,
   });
   await syncClient.start();
-  await waitFor(`${label} v3 Sync recovery`, async () => syncClient.getSnapshot().connection.phase === "live", 30);
+  await waitFor(`${label} v1 Sync recovery`, async () => syncClient.getSnapshot().connection.phase === "live", 30);
   return syncClient;
 }
 

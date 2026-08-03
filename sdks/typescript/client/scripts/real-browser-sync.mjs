@@ -117,8 +117,8 @@ function assertLocalhostWebSocketUrl(value) {
   const url = new URL(value);
   const localhost = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
-  if (url.protocol !== "ws:" || !localhost.has(url.hostname) || url.pathname !== "/v3/sync") {
-    throw new Error("real-browser sync proof only connects to an explicit ws://localhost/v3/sync URL");
+  if (url.protocol !== "ws:" || !localhost.has(url.hostname) || url.pathname !== "/v1/sync") {
+    throw new Error("real-browser sync proof only connects to an explicit ws://localhost/v1/sync URL");
   }
 }
 
@@ -289,7 +289,7 @@ function browserPage() {
   </head>
   <body>
     <script type="module">
-      import { createV3SyncClient, IndexedDbV3PendingTargetStore } from "/client/browser-proof.js";
+      import { createV1SyncClient, IndexedDbV1PendingTargetStore } from "/client/browser-proof.js";
 
       const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
       const waitFor = async (predicate, description) => {
@@ -305,8 +305,8 @@ function browserPage() {
       try {
         const config = await fetch("/config.json", { cache: "no-store" }).then((response) => response.json());
         const persistenceScope = "real-browser-" + crypto.randomUUID();
-        const pendingStore = new IndexedDbV3PendingTargetStore({ scope: persistenceScope });
-        const client = createV3SyncClient({
+        const pendingStore = new IndexedDbV1PendingTargetStore({ scope: persistenceScope });
+        const client = createV1SyncClient({
           url: config.url,
           token: async () => config.token,
           pendingStore,
@@ -324,14 +324,14 @@ function browserPage() {
           const targets = await pendingStore.load();
           return targets.length === 1 && targets[0].command.name === "set_hand_raised" &&
             targets[0].command.payload.raised === true && targets[0].bytes > 0 ? targets[0] : null;
-        }, "client did not persist the v3 hand-raised target");
+        }, "client did not persist the v1 hand-raised target");
         await commandResult;
         const snapshot = await waitFor(() => {
           const next = client.getSnapshot();
           const participant = next.control?.participants.find((item) => item.participantSessionId === next.participantSessionId);
           return next.pendingCommandCount === 0 && next.control?.revision === 2 && participant?.handRaised ? next : null;
         }, "client did not converge on the committed control event");
-        if ((await pendingStore.load()).length !== 0) throw new Error("client did not clear the persisted v3 target");
+        if ((await pendingStore.load()).length !== 0) throw new Error("client did not clear the persisted v1 target");
 
         client.stop();
         window.__chalkSyncProof = { status: "passed", revision: snapshot.control.revision, commandId: persisted.commandId };

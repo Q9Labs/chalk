@@ -123,7 +123,7 @@ jq -n \
       minimum_migration: 20260713130000,
       maximum_migration: null
     },
-    protocol_compatibility: {sync: 3},
+      protocol_compatibility: {sync: 1},
     runtime_artifacts: $runtime_artifacts
   }' >"${output}"
 

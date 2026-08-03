@@ -271,7 +271,7 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     refute checkpointed?(connection, fixture)
   end
 
-  test "deletes terminal v3 orchestration provenance with exact durable counters", %{
+  test "deletes terminal v1 orchestration provenance with exact durable counters", %{
     connections: connections
   } do
     connection = hd(connections)
@@ -324,7 +324,7 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     assert {:ok, %Result{sessions: 0}} = run_cleanup(connection, batch_size: 3)
   end
 
-  test "preserves ended Sessions with reconcilable v3 work", %{connections: connections} do
+  test "preserves ended Sessions with reconcilable v1 work", %{connections: connections} do
     connection = hd(connections)
 
     fixtures = [
@@ -372,7 +372,9 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
              Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
 
     if Keyword.get(options, :command?, false) do
-      assert {:ok, command} = Command.new("retention-command-0001", :raise_hand, %{})
+      assert {:ok, command} =
+               Command.new("retention-command-0001", :set_hand_raised, %{"raised" => true})
+
       assert {:ok, %{result: :committed}} = Postgres.decide_command(fixture.identity, command)
     end
 

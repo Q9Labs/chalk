@@ -9,7 +9,7 @@ One harness owns Sync reliability. Triggers select how deeply it runs:
 | Release candidate | `release`     | Promotion           |
 
 The correctness profile runs the full PostgreSQL-backed Sync suite with zero
-skips, the replayed v3 breaker, the TypeScript Sync client, and the separate
+skips, the replayed v1 breaker, the TypeScript Sync client, and the separate
 whiteboard transport. The topology profile starts real Sync OS processes and a
 PostgreSQL primary/standby pair, then covers cross-node convergence, client
 partitions, unclean node loss, whiteboard fanout, and database promotion. The

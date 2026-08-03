@@ -18,7 +18,7 @@ As of 2026-07-22. This is the human-readable view of [`product.yaml`](./product.
 - [x] Room, session, and participant-session separation
 - [x] Anonymous and token-based participant admission
 - [x] Lobby, admission, role, host-succession, and screen-share control semantics
-- [x] Local web room proof with camera, microphone, SFU media, and Sync v3
+- [x] Local web room proof with camera, microphone, SFU media, and Sync v1
 - [x] Public web create-room flow
 - [x] Production-ready hosted web meeting experience
 - [x] Mobile invite-link join flow
@@ -48,8 +48,8 @@ As of 2026-07-22. This is the human-readable view of [`product.yaml`](./product.
 
 ## Realtime Sync
 
-- [x] SyncEngine v3 client, codec, reducer, and persistence
-- [x] Elixir Sync v3 runtime with Postgres durability
+- [x] SyncEngine v1 client, codec, reducer, and persistence
+- [x] Elixir Sync v1 runtime with Postgres durability
 - [x] Bounded recovery, replay, receipts, and backpressure behavior
 - [ ] Production topology, standby, and failure-recovery qualification
 

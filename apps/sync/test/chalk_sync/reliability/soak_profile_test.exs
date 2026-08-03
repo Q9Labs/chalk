@@ -89,7 +89,7 @@ defmodule ChalkSync.Reliability.SoakProfileTest do
     Enum.zip(fixtures, results)
     |> Enum.each(fn {fixture, result} ->
       recovery_port = Enum.at(ports, rem(result.client_index, length(ports)))
-      {recovered, welcome} = Wire.connect_v3(recovery_port, hd(fixture.identities))
+      {recovered, welcome} = Wire.connect_v1(recovery_port, hd(fixture.identities))
       assert welcome["head"]["revision"] == result.final_revision
       Client.close(recovered)
     end)
@@ -122,7 +122,7 @@ defmodule ChalkSync.Reliability.SoakProfileTest do
 
   defp exercise_client(fixture, client_index, port, deadline_ms) do
     identity = hd(fixture.identities)
-    {client, welcome} = Wire.connect_v3(port, identity)
+    {client, welcome} = Wire.connect_v1(port, identity)
     initial_revision = welcome["head"]["revision"]
 
     result =
@@ -268,7 +268,7 @@ defmodule ChalkSync.Reliability.SoakProfileTest do
          attempts,
          recovery_count
        ) do
-    case Wire.connect_v3_result(port, identity) do
+    case Wire.connect_v1_result(port, identity) do
       {:ok, client, welcome} ->
         assert welcome["head"]["revision"] in [expected_revision - 1, expected_revision]
         client = Wire.send_hand(client, command_id, raised)

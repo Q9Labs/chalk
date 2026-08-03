@@ -27,7 +27,6 @@ defmodule ChalkSync.RealBrowserFixture do
   defp configure!(database_url) do
     Application.put_env(:chalk_sync, :database_url, database_url)
     Application.put_env(:chalk_sync, :database_pool_size, 4)
-    Application.put_env(:chalk_sync, :enable_v1, false)
     Application.put_env(:chalk_sync, :port, :none)
     Application.put_env(:chalk_sync, :stateholder, Postgres)
   end
@@ -66,7 +65,7 @@ defmodule ChalkSync.RealBrowserFixture do
 
     IO.puts(
       "CHALK_SYNC_BROWSER_FIXTURE=" <>
-        JSON.encode!(%{url: "ws://127.0.0.1:#{port}/v3/sync", token: token})
+        JSON.encode!(%{url: "ws://127.0.0.1:#{port}/v1/sync", token: token})
     )
   end
 end

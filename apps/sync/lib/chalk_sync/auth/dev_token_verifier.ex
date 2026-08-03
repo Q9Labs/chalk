@@ -34,8 +34,7 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
          expires_at: Map.get(claims, "expires_at"),
          display_name: Map.get(claims, "display_name", "Guest"),
          initial_role: authorization.initial_role,
-         eligible_roles: authorization.eligible_roles,
-         capabilities: authorization.capabilities
+         eligible_roles: authorization.eligible_roles
        }}
     else
       _ -> {:error, :invalid_token}
@@ -57,29 +56,11 @@ defmodule ChalkSync.Auth.DevTokenVerifier do
   end
 
   defp authorization_envelope(claims) do
-    role_claims? = Map.has_key?(claims, "initial_role") or Map.has_key?(claims, "eligible_roles")
-    capabilities? = Map.has_key?(claims, "capabilities")
-
-    cond do
-      not role_claims? ->
-        {:ok,
-         %{
-           initial_role: nil,
-           eligible_roles: [],
-           capabilities: Map.get(claims, "capabilities", [])
-         }}
-
-      not capabilities? and
-          Claims.valid_role_envelope?(claims["initial_role"], claims["eligible_roles"]) ->
-        {:ok,
-         %{
-           initial_role: claims["initial_role"],
-           eligible_roles: claims["eligible_roles"],
-           capabilities: []
-         }}
-
-      true ->
-        {:error, :invalid_role_envelope}
+    if not Map.has_key?(claims, "capabilities") and
+         Claims.valid_role_envelope?(claims["initial_role"], claims["eligible_roles"]) do
+      {:ok, %{initial_role: claims["initial_role"], eligible_roles: claims["eligible_roles"]}}
+    else
+      {:error, :invalid_role_envelope}
     end
   end
 end

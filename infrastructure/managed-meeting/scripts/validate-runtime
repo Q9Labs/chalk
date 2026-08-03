@@ -180,7 +180,7 @@ jq -e '
   .database_compatibility == {
     engine: "postgresql", major: 18, minimum_migration: 20260713130000, maximum_migration: null
   } and
-  .protocol_compatibility.sync == 3
+  .protocol_compatibility.sync == 1
 ' "${manifest}" >/dev/null || fail "release manifest compatibility contract is invalid"
 if [[ "${allow_dirty}" != true && "$(jq -r '.source_tree_state' "${manifest}")" != clean ]]; then
   fail "dirty source manifests cannot be promoted"
