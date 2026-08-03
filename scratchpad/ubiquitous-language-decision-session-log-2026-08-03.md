@@ -333,6 +333,15 @@ when its report lands at /tmp/codex-sync-renumber.md.
   kept accountable; his UI work is sequenced after the React/RN wave.
 - Client SDK split co-design started live:
   `scratchpad/client-sdk-split-design-2026-08-03.md` (six DECIDE items).
+- **Client SDK split design FULLY RATIFIED in the live session** (all
+  seven DECIDE items + R1 access-refresh requirement + controller
+  communication law; Effect core with Promise facade confirmed). The
+  design sheet is the implementation brief. Both co-design gates are now
+  closed — schema walkthrough AND client SDK split. Remaining pipeline is
+  pure execution: wave zero merges → tighten ratchet → merge UI
+  primitives → contract wave (Sol high candidate, Hasan approves
+  assignment) → client SDK wave → React/RN → apps → infra →
+  observability → marketing. Hasan's UI work starts after React/RN.
 
 **Design-sheet rule (Hasan raised, 2026-08-03, pre-compaction): abstractions
 are designed, never just renamed — and designed WITH Hasan.** Every wave

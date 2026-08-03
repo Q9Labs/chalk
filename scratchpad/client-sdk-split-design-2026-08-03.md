@@ -3,8 +3,14 @@
 Co-design sheet for the ratified ChalkSession split (option A, locked:
 narrow connection coordinator + feature controllers behind one UI-facing
 store). Grounded in `sdks/typescript/client/src/session/chalk-session.ts`
-(1,464 lines) and `session/dependencies.ts` at master. Sections marked
-**DECIDE** are being ruled live with Hasan.
+(1,464 lines) and `session/dependencies.ts` at master.
+
+**STATUS: FULLY RATIFIED (Hasan, live co-design session, 2026-08-03
+night).** All seven DECIDE items ruled (D1–D6 under DECIDE below, D7
+under Rulings), controller set confirmed, R1 access-refresh requirement
+and the controller-communication law locked. Nothing here awaits a
+decision; the client-SDK wave implements this sheet as written, after
+the contract wave regenerates the wire types.
 
 ## Code reality: seven jobs in one class
 
@@ -115,8 +121,8 @@ contract leaks: `ChalkSessionMediaClient extends V3ClientMediaPlane` from
   controller that owns its outcome (accept-unmute lives entirely in
   media). If a future action truly spans controllers it composes
   top-down in SpaceClient — sideways calls stay banned.
-- **D7 (pending Hasan confirmation): Effect-TS placement.** Read of
-  Hasan's instruction: the rebuilt core is written in Effect (join,
+- **D7 RULED (Hasan, 2026-08-03 night: "yes, you got it"): Effect-TS
+  placement.** The rebuilt core is written in Effect (join,
   recovery, serialized commands as Effect programs; tagged errors
   carrying the `noun.condition` codes; interruption replacing hand-rolled
   epoch plumbing where it can do so without changing semantics), while
