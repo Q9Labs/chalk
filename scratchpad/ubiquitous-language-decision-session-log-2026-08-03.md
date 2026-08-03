@@ -213,10 +213,9 @@ condition**: `episode.not_found`, `space.access_denied` (Hasan: no dashes).
   wave design under §9 (no Chalk prefix).
 - Host/guest words in UI copy of the `<Chalk />` turnkey: turnkey defines its
   own product copy; specifics undecided.
-- **`state_schema_version: 3` / `chalk-sync-state-v3`** (from archaeology
-  report): internal durable-state schema counter — reset to 1 with the
-  protocol renumber, or keep as an internal migration counter exempt from
-  §8? Awaiting ruling.
+- **`state_schema_version: 3` / `chalk-sync-state-v3`** — **LOCKED (Hasan,
+  2026-08-03): reset to 1** with the protocol renumber. No exemption; §8 goes
+  all the way down.
 
 ## Parked concepts and considerations (revisit only deliberately)
 
@@ -232,6 +231,25 @@ condition**: `episode.not_found`, `space.access_denied` (Hasan: no dashes).
   bring their own agents — candidates: MCP (tools layer), A2A, ACP. Landscape
   still churning in 2026; native-first, adapters later, proper research pass
   before any commitment.
+  - **Expanded (Hasan dictation, post-compaction 2026-08-03):** realization
+    that none of the candidate standards may support **video and audio** —
+    they are text/JSON-RPC-shaped. Question raised: would Chalk have to
+    engineer its own custom standard? The agent requirement, wherever the
+    agent lives ("we want the agent, and we don't care where it lives"; it
+    brings its own tools and does its own stuff): (1) communicate through
+    video and audio; (2) share results in an integrated way so outputs appear
+    in the Space/Episode; (3) send chat messages in the Space/Episode;
+    (4) write on the whiteboard. Second agent kind also floated: an agent
+    that lives entirely **on Chalk** (e.g. a virtual box Chalk hosts) rather
+    than elsewhere. Claude's read, recorded for later evaluation: the AV gap
+    is real but doesn't demand a new cross-vendor standard — the native
+    server-side SDK **is** the standard for capabilities 1–4 (the agent is
+    just a Participant with credentials publishing WebRTC tracks and holding
+    the same chat/whiteboard/artifact contract as any client); MCP remains a
+    complementary text-layer bridge (expose chat/whiteboard/artifact writes
+    as tools) for agents that can't hold a media connection. Chalk-hosted vs
+    externally-hosted is a deployment option, not a protocol difference.
+    Still consideration-only; no commitment.
 - (Member left the parked list — un-parked and LOCKED as D2.)
 
 ## After the rulings close: execution plan
