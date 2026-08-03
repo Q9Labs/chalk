@@ -4,7 +4,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 
 import { cn } from "../../utils/cn";
 import { Cancel01Icon, Message01Icon, SentIcon, Upload01Icon } from "../../utils/icons";
-import { Button } from "../ui";
+import { Button } from "@q9labsai/chalk-ui";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, groupChatMessages, isChatScrollAtBottom, latestVisibleChatSequence, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
 

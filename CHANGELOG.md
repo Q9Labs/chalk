@@ -12,6 +12,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Consolidated the React UI primitives under `@q9labsai/chalk-ui`, preserving the
+  public SDK subpath while aligning shared styling with the paper, cool-neutral,
+  watercolor, and chalk-stick design language.
+
 ### Breaking
 
 Phase 1 unifies the published TypeScript SDK vocabulary. Historical names are
