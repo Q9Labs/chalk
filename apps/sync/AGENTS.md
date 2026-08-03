@@ -1,5 +1,8 @@
 # Chalk Sync
 
+Vocabulary follows the repo-root `GLOSSARY.md` (Sessions are being renamed to
+Episodes in waves); read it before naming anything.
+
 Elixir/OTP WebSocket sync server and primary `SyncEngine` adapter. Postgres is
 the sole durable authority for Session control state, exact event history,
 command receipts, and lifecycle intents. Node-local coordinators, ETS queues,

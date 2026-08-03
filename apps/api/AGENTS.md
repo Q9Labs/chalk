@@ -7,6 +7,8 @@ middleware, and domain packages under `internal/*`. Follow
 routes under one `/v1` boundary while operational routes like `/healthz` stay
 unversioned. Existing domains include identity, tenancy, rooms, session
 lifecycle, recordings, transcripts, integrations, audit logs, and webhooks.
+Vocabulary follows the repo-root `GLOSSARY.md` (rooms and sessions are being
+renamed to Spaces and Episodes in waves); read it before naming anything.
 
 ## Working Here
 

@@ -1,8 +1,15 @@
 # Chalk
 
-Ultra low-latency video conferencing built on Cloudflare RealtimeKit. This is a
-monorepo for the public SDK packages, demo apps, docs, and selected support
-tooling.
+An ultra low-latency real-time collaboration and communication layer built on
+Cloudflare RealtimeKit. This is a monorepo for the public SDK packages, demo
+apps, docs, and selected support tooling.
+
+## Language
+
+`GLOSSARY.md` at the repo root is the canonical vocabulary for every surface
+(Space, Episode, Participant, and the rest) and its banned-terms table is
+enforced by CI. Read it before naming anything; where existing code disagrees
+with it, the glossary states the target and rename waves are closing the gap.
 
 ## Quality Gate
 
