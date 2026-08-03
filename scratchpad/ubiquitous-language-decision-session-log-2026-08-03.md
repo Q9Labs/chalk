@@ -270,7 +270,10 @@ details remain (SDK piece names under §9, turnkey copy, D3 posting corollary).
    propagates), then client SDK, React/RN UI (`<Chalk />`), web+mobile apps,
    infra (`managed-meeting`→, `meeting-broker`→, `bootstrap-meeting`→),
    observability names, marketing/store listing, DB last. Grunt work via Codex
-   GPT-5.6-Luna relays (xhigh reasoning), pattern already proven this session.
+   GPT-5.6-Luna relays. Standing rule (Hasan, 2026-08-03): implementation
+   workers always run at **max** reasoning effort (a real Codex level above
+   xhigh), with codex stdout redirected to a file so the harness output cap
+   can't kill long runs.
 4. Point AGENTS.md files at the glossary; one-line scratchpad convention note.
 
 ## Work landed this session (already on master)

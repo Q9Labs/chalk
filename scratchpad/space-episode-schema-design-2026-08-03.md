@@ -146,6 +146,15 @@ identifiers, not error codes.
 
 ## DECIDE (Hasan)
 
+**Rulings landed 2026-08-03**: 1 = yes (squash), 2 = yes (kill), 4 = yes
+(live-Episode posting), 5 = delegated to Claude ("the chalk is in your
+hands"), locked as the bundles proposed under space_roles. Item 3 is pending
+a clarification: Hasan asked "you mean the transports?" — no; the proposal
+merges the three per-role capability grid columns on room_sessions
+(role_capabilities, room_action_role_capabilities,
+whiteboard_role_capabilities) into one capability list per role. Transports
+are untouched. Awaiting his yes/no with that understanding.
+
 1. **Migration shape: squash to a clean baseline (my rec) or additive rename
    migrations.** No users exist. A clean baseline (rewrite schema.sql plus
    the embedded startup migrations, recreate deployed databases) is honest
