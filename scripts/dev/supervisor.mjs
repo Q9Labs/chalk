@@ -12,6 +12,7 @@ function asFailure(error, stage = "startup", service) {
 export function createSupervisor(config, { serviceSpecs = [], hooks = {}, preflightFn = preflight, acquireLease = acquireMachineLease, now = () => new Date().toISOString() } = {}) {
   const ordered = dependencyOrder(serviceSpecs);
   const running = new Map();
+  const readyServices = new Set();
   const optionalFailures = new Map();
   let state = RuntimeState.STOPPED;
   let lease;
@@ -39,6 +40,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
     async start() {
       if (![RuntimeState.STOPPED, RuntimeState.FAILED].includes(state)) throw failure(FailureKind.STARTUP, `runtime is already ${state}`, { stage: "startup" });
       rootFailure = undefined;
+      readyServices.clear();
       optionalFailures.clear();
       stopPromise = new Promise((resolveStop) => {
         stopResolve = resolveStop;
@@ -91,6 +93,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
           errors.push(asFailure(error, "cleanup", spec.id));
         }
         running.delete(spec.id);
+        readyServices.delete(spec.id);
       }
       try {
         await hooks.stopResources?.({ config, lease, runtime });
@@ -123,9 +126,17 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
       if (!isReadyState(state) && state !== RuntimeState.RELOAD_FAILED) throw failure(FailureKind.NOT_READY, `runtime is ${state}`, { stage: "reload" });
       const ids = [...new Set(changes.map((change) => change.serviceId || change))];
       if (ids.length === 0) return runtime.status();
+      const recovering = state === RuntimeState.RELOAD_FAILED;
       state = transition(state, RuntimeState.RELOADING);
       const affected = new Set(ids);
       for (const id of ids) for (const dependant of dependantIds(ordered, id)) affected.add(dependant);
+      if (recovering) {
+        for (const spec of ordered) {
+          if (spec.optional || isServiceReady(spec)) continue;
+          affected.add(spec.id);
+          for (const dependant of dependantIds(ordered, spec.id)) affected.add(dependant);
+        }
+      }
       const requiredRecovery = [...affected].some((id) => {
         const spec = ordered.find((entry) => entry.id === id);
         return spec && !spec.optional;
@@ -144,7 +155,8 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
             await stopOne(spec).catch(() => {});
           }
         }
-        if (requiredRecovery && (!previousRootFailure?.service || affected.has(previousRootFailure.service))) rootFailure = undefined;
+        const requiredServicesReady = ordered.filter((spec) => !spec.optional).every(isServiceReady);
+        if (requiredRecovery && requiredServicesReady && (!previousRootFailure?.service || affected.has(previousRootFailure.service))) rootFailure = undefined;
         const nextState = rootFailure ? RuntimeState.RELOAD_FAILED : optionalFailures.size > 0 ? RuntimeState.DEGRADED : RuntimeState.READY;
         if (nextState === RuntimeState.DEGRADED) {
           state = transition(state, RuntimeState.READY);
@@ -199,6 +211,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
     running.set(spec.id, process);
     process.child?.once("exit", () => {
       if (running.get(spec.id) !== process) return;
+      readyServices.delete(spec.id);
       if (isReadyState(state)) {
         const childFailure = failureFromChild(process);
         if (spec.optional) {
@@ -213,6 +226,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
     });
     await (hooks.waitReady ? hooks.waitReady(spec, process, { config, runtime }) : waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs }));
     if (process.exited) throw failureFromChild(process);
+    readyServices.add(spec.id);
   }
 
   async function stopOne(spec) {
@@ -221,6 +235,12 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
     if (hooks.stopService) await hooks.stopService(spec, process, { config, lease, runtime });
     else await stopProcessGroup(process, { graceMs: config.timeouts.stopGraceMs });
     running.delete(spec.id);
+    readyServices.delete(spec.id);
+  }
+
+  function isServiceReady(spec) {
+    const process = running.get(spec.id);
+    return Boolean(process && !process.exited && readyServices.has(spec.id));
   }
 
   async function persist() {

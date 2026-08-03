@@ -442,6 +442,9 @@ test("reset confirmation reads an explicit yes/no answer from stdin", async () =
   setImmediate(() => input.end("yes\n"));
   assert.equal(await answer, true);
   await assert.rejects(confirmReset("Reset?", { input: null, output }), { kind: FailureKind.CONFIG, message: /requires --yes/ });
+  const nonInteractiveInput = new PassThrough();
+  nonInteractiveInput.isTTY = false;
+  await assert.rejects(confirmReset("Reset?", { input: nonInteractiveInput, output }), { kind: FailureKind.CONFIG, message: /requires --yes/ });
 });
 
 test("reload persists reloading state before child restart begins", async () => {
@@ -542,6 +545,44 @@ test("reload clears the root failure after the required service recovers", async
     const recovered = await supervisor.reload(["api"]);
     assert.equal(recovered.state, RuntimeState.READY);
     assert.equal(recovered.failure, undefined);
+    const manifest = await readManifest(config);
+    assert.equal(manifest.state, RuntimeState.READY);
+    assert.equal(manifest.failure, undefined);
+    await supervisor.stop();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("reload recovers missing required dependants after a metadata-free failure", async () => {
+  const { root, config } = await tempConfig();
+  let failApi = false;
+  try {
+    const supervisor = createSupervisor(config, {
+      serviceSpecs: [{ id: "api" }, { id: "sync", dependsOn: ["api"] }, { id: "sdk-client" }, { id: "web", dependsOn: ["sync", "sdk-client"] }],
+      preflightFn: async () => {},
+      hooks: {
+        watch: false,
+        startService: async (spec) => ({ id: spec.id, pid: process.pid + 1, exited: false, logPath: `${spec.id}.log` }),
+        waitReady: async (spec) => {
+          if (spec.id === "api" && failApi) throw failure(FailureKind.READINESS_TIMEOUT, "api did not become ready", { stage: "readiness" });
+        },
+        stopService: async () => {},
+      },
+    });
+    await supervisor.start();
+    failApi = true;
+    await assert.rejects(supervisor.reload(["api"]), { kind: FailureKind.READINESS_TIMEOUT });
+    assert.equal(supervisor.state, RuntimeState.RELOAD_FAILED);
+    assert.equal((await readManifest(config)).failure.service, undefined);
+    assert.equal(supervisor.running.has("sync"), false);
+    assert.equal(supervisor.running.has("web"), false);
+
+    failApi = false;
+    const recovered = await supervisor.reload(["sdk-client"]);
+    assert.equal(recovered.state, RuntimeState.READY);
+    assert.equal(recovered.failure, undefined);
+    assert.deepEqual(Object.keys(recovered.services), ["api", "sync", "sdk-client", "web"]);
     const manifest = await readManifest(config);
     assert.equal(manifest.state, RuntimeState.READY);
     assert.equal(manifest.failure, undefined);

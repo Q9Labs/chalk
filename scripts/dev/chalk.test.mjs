@@ -126,11 +126,12 @@ test("local adapter discovery finds the broker binding and web join route", asyn
 
 test("mobile service receives the local broker URL and configured web port", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-mobile-env-test-"));
-  const config = resolveDevConfig({ root, cwd: root, home: root, profile: "mobile", requiredTools: [], allowBusyPorts: ["web", "broker"] });
+  const config = resolveDevConfig({ root, cwd: root, home: root, profile: "mobile", env: { CHALK_DEV_BROKER_PORT: "9876" }, requiredTools: [], allowBusyPorts: ["web", "broker"] });
   config.brokerRuntime = { configName: "wrangler.toml", directory: root, spaceBindingName: "CHALK_SPACE_ID" };
   config.webJoinPath = "/local";
   await mkdir(join(root, "apps/mobile/scripts"), { recursive: true });
-  await writeFile(join(root, "apps/mobile/scripts/prepare-local-bridge.mjs"), "");
+  await writeFile(join(root, "apps/mobile/scripts/prepare-local-bridge.mjs"), 'process.stdout.write(process.env.CHALK_DEV_BROKER_PORT || "");\n');
+  const output = [];
   const childEnvironments = new Map();
   const resources = {
     state: { identity: { signing: { kid: "local-dev", rawPrivateKey: "private", publicKeyring: { "local-dev": "public" } } } },
@@ -140,6 +141,7 @@ test("mobile service receives the local broker URL and configured web port", asy
   };
   try {
     const supervisor = createChalkSupervisor(config, {
+      output: (line) => output.push(line),
       adapters: { resources, resolveSecrets: async () => undefined, acquireLease: async () => ({ runtimeId: "mobile-test", release: async () => {} }) },
       serviceSpecs: [{ id: "mobile", command: "node" }],
       hooks: {
@@ -152,6 +154,7 @@ test("mobile service receives the local broker URL and configured web port", asy
     });
     await supervisor.start();
     assert.equal(childEnvironments.get("mobile").EXPO_PUBLIC_CHALK_BROKER_URL, config.urls.broker);
+    assert.equal(output[0], String(config.ports.broker));
     assert.equal(childEnvironments.get("mobile").CHALK_DEV_WEB_PORT, String(config.ports.web));
     await supervisor.stop();
   } finally {

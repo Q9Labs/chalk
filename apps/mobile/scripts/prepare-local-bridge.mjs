@@ -5,6 +5,12 @@ import { pathToFileURL } from "node:url";
 
 export const LOCAL_BRIDGE_PORTS = [8787, 8080, 8081, 4100];
 
+export function resolveLocalBridgePorts(brokerPort = process.env.CHALK_DEV_BROKER_PORT) {
+  const resolvedBrokerPort = brokerPort === undefined || brokerPort === "" ? LOCAL_BRIDGE_PORTS[0] : Number(brokerPort);
+  if (!Number.isInteger(resolvedBrokerPort) || resolvedBrokerPort < 1 || resolvedBrokerPort > 65535) throw new Error("CHALK_DEV_BROKER_PORT must be a valid port");
+  return [resolvedBrokerPort, ...LOCAL_BRIDGE_PORTS.slice(1).filter((port) => port !== resolvedBrokerPort)];
+}
+
 export function parseConnectedDevices(output) {
   return output
     .split(/\r?\n/u)
@@ -21,7 +27,7 @@ function runCommand(command, args) {
   });
 }
 
-export function prepareLocalBridge({ command = process.env.ADB || "adb", ports = LOCAL_BRIDGE_PORTS, run = runCommand, log = console } = {}) {
+export function prepareLocalBridge({ command = process.env.ADB || "adb", brokerPort = process.env.CHALK_DEV_BROKER_PORT, ports = resolveLocalBridgePorts(brokerPort), run = runCommand, log = console } = {}) {
   let devicesOutput;
   try {
     devicesOutput = run(command, ["devices"]);

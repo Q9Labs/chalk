@@ -83,9 +83,14 @@ function installSignalShutdown(supervisor, source = process) {
   return {
     async waitForStop() {
       const naturalStop = supervisor.waitForStop?.();
-      if (!naturalStop) return signal.then(() => stopPromise);
-      const result = await Promise.race([naturalStop, signal.then(() => stopPromise)]);
-      return requested ? stopPromise : result;
+      const signalStop = signal.then(async () => {
+        await startup?.catch(() => {});
+        scheduleStop();
+        return stopPromise;
+      });
+      if (!naturalStop) return signalStop;
+      const result = await Promise.race([naturalStop, signalStop]);
+      return requested ? signalStop : result;
     },
     async drain() {
       if (requested) {

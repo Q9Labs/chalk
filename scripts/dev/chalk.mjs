@@ -58,7 +58,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     beforeStartService: async (spec) => {
       if (spec.id !== "mobile") return;
       const bridgePath = `${config.root}/apps/mobile/scripts/prepare-local-bridge.mjs`;
-      const result = await runChecked("node", [bridgePath], { cwd: config.root });
+      const result = await runChecked("node", [bridgePath], { cwd: config.root, env: { CHALK_DEV_BROKER_PORT: String(config.ports.broker) } });
       if (result.stdout?.trim()) output(result.stdout.trim());
       if (result.stderr?.trim()) output(result.stderr.trim());
     },

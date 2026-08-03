@@ -176,7 +176,7 @@ async function waitForPidExit(pid, timeoutMs, { expectedCommand, validate = vali
 }
 
 export async function confirmReset(prompt, { input = processStdin, output = processStdout } = {}) {
-  if (!input || typeof input.on !== "function") throw failure(FailureKind.CONFIG, "dev:reset requires --yes when interactive stdin is unavailable", { stage: "reset" });
+  if (!input || typeof input.on !== "function" || input.isTTY === false || (input === processStdin && input.isTTY !== true)) throw failure(FailureKind.CONFIG, "dev:reset requires --yes when interactive stdin is unavailable", { stage: "reset" });
   const readline = createInterface({ input, output });
   try {
     const answer = await readline.question(`${prompt} [y/N] `);

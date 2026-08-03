@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LOCAL_BRIDGE_PORTS, parseConnectedDevices, prepareLocalBridge } from "./prepare-local-bridge.mjs";
+import { LOCAL_BRIDGE_PORTS, parseConnectedDevices, prepareLocalBridge, resolveLocalBridgePorts } from "./prepare-local-bridge.mjs";
 
 describe("prepare-local-bridge", () => {
   it("only returns connected Android devices", () => {
@@ -17,6 +17,18 @@ describe("prepare-local-bridge", () => {
     expect(run).toHaveBeenNthCalledWith(2, "adb", ["-s", "phone-1", "reverse", "tcp:8787", "tcp:8787"]);
     expect(run).toHaveBeenNthCalledWith(5, "adb", ["-s", "phone-1", "reverse", "tcp:4100", "tcp:4100"]);
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it("reverses a configured broker port while preserving the API, Metro, and Sync ports", () => {
+    const brokerPort = 9876;
+    const run = vi.fn((command, args) => (args[0] === "devices" ? "List of devices attached\nphone-1\tdevice\n" : ""));
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    const result = prepareLocalBridge({ brokerPort, run, log });
+
+    expect(resolveLocalBridgePorts(brokerPort)).toEqual([brokerPort, 8080, 8081, 4100]);
+    expect(result).toEqual({ status: "ready", devices: ["phone-1"], ports: [brokerPort, 8080, 8081, 4100] });
+    expect(run).toHaveBeenNthCalledWith(2, "adb", ["-s", "phone-1", "reverse", `tcp:${brokerPort}`, `tcp:${brokerPort}`]);
   });
 
   it("warns and succeeds when no device is connected", () => {
