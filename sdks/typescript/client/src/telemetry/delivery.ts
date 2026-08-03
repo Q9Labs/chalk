@@ -469,7 +469,7 @@ class DeliveryService implements TelemetryDeliveryEffectService {
       this.#retryScheduled = true;
       return Effect.forkIn(
         Effect.void.pipe(
-          Effect.repeat(Schedule.spaced(this.options.retryDelayMs).pipe(Schedule.take(1))),
+          Effect.repeat(Schedule.spaced(this.options.retryDelayMs).pipe(Schedule.upTo({ times: 1 }))),
           Effect.andThen(
             Effect.sync(() => {
               this.#retryScheduled = false;

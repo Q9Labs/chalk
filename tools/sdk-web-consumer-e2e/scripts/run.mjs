@@ -323,7 +323,7 @@ function workspacePolicy(archiveDirectory_, archives) {
     "  msgpackr-extract: false",
     "# This exact beta is pinned by the packed SDK; the exclusion only accommodates pnpm's machine-local no-downgrade trust policy.",
     "trustPolicyExclude:",
-    '  - "effect@4.0.0-beta.94"',
+    '  - "effect@4.0.0-beta.102"',
     "",
   ].join("\n");
 }
