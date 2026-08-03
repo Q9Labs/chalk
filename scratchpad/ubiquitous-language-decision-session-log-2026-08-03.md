@@ -302,9 +302,16 @@ split), React/RN `<Chalk />`, apps, infra, observability, marketing, DB
 last. Reports land at /tmp/codex-*.md. Nothing awaits a Hasan decision.
 
 **Design-sheet rule (Hasan raised, 2026-08-03, pre-compaction): abstractions
-are designed, never just renamed.** Every wave carrying a boundary redraw
-gets a code-grounded design sheet with DECIDE items ruled by Hasan BEFORE its
-worker launches; Luna implements ratified designs, it never designs.
+are designed, never just renamed — and designed WITH Hasan.** Every wave
+carrying a boundary redraw gets a code-grounded design worked through in a
+live session (pen-and-paper style, like this session's decision sheets):
+Claude brings code reality and candidate shapes, Hasan co-designs and holds
+final decision on every piece; the DECIDE format is the record of what was
+settled, not the process. Only then does a worker launch; Luna implements
+ratified designs, it never designs. Amendment: the schema design was ratified
+checkbox-style, so before the contract wave launches, walk that design
+through with Hasan and revise freely — the wave does NOT launch without that.
+Note: no vocabulary renaming has started; wave zero is version plumbing only.
 `space-episode-schema-design-2026-08-03.md` is the template. Design status:
 contract wave designed+ratified; **client SDK split is the next sheet to
 draft** (coordinator responsibility line, controller set + boundaries, single
