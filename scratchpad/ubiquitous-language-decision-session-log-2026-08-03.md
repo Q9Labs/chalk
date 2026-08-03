@@ -276,6 +276,31 @@ details remain (SDK piece names under §9, turnkey copy, D3 posting corollary).
    can't kill long runs.
 4. Point AGENTS.md files at the glossary; one-line scratchpad convention note.
 
+## Execution state — 2026-08-03 afternoon (for post-compaction pickup)
+
+Decision phase fully closed, including all five schema DECIDE items in
+`scratchpad/space-episode-schema-design-2026-08-03.md` (ratified design for
+the contract wave). Landed on master: `GLOSSARY.md` (canonical), AGENTS.md
+pointers, superseded banner on `sdks/ubiquitous-language.md`.
+
+Three Luna workers in flight, each in its own worktree/branch:
+
+- `.worktrees/ui-primitives` / `refactor/ui-primitives-consolidation` —
+  React SDK primitives into packages/ui, restyled to the mockup design
+  system (xhigh; predates the max rule).
+- `.worktrees/sync-renumber` / `refactor/sync-v1-renumber` — wave zero:
+  legacy sync deletion + v3→v1 renumber. Killed twice by the harness output
+  cap (~242-file uncommitted diff preserved); third run resumes at **max**
+  reasoning with stdout redirected to disk.
+- `.worktrees/language-ratchet` / `tooling/language-ratchet` — banned-term
+  ratchet wired into the root gate (xhigh).
+
+Merge order when reports land: ratchet → wave zero (tighten baseline at
+merge) → UI primitives. Then launch the contract/schema wave from the
+ratified design doc (Luna at max), then client SDK wave (ChalkSession
+split), React/RN `<Chalk />`, apps, infra, observability, marketing, DB
+last. Reports land at /tmp/codex-*.md. Nothing awaits a Hasan decision.
+
 ## Work landed this session (already on master)
 
 - `35427f71` — API scratchpad consolidated into root scratchpad; empty `hey.md`
