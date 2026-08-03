@@ -137,6 +137,38 @@
   --chalk-lobby-glass-bg: rgba(255, 255, 255, 0.88);
   --chalk-lobby-glass-border: #e7e9ec;
   --chalk-lobby-avatar-glow: rgba(127, 192, 216, 0.3);
+
+  /* Composable product appearance: palette and material are independent. */
+  --chalk-app-canvas: #f7f6f2;
+  --chalk-app-chrome: #fbfaf7;
+  --chalk-app-stage: #fbfaf7;
+  --chalk-app-panel: #ffffff;
+  --chalk-app-tile-base: #f1f0eb;
+  --chalk-app-tile-color-strength: 22%;
+  --chalk-app-text: #0c0e12;
+  --chalk-app-text-muted: #555b65;
+  --chalk-app-line: #deddd7;
+  --chalk-app-line-strong: #c9c8c2;
+  --chalk-app-control: #ffffff;
+  --chalk-app-control-hover: #f1f0eb;
+  --chalk-app-control-group: #f0efeb;
+  --chalk-app-control-primary: #202329;
+  --chalk-app-control-primary-hover: #343840;
+  --chalk-app-control-active: #dff2f7;
+  --chalk-app-control-active-line: #9dcfe1;
+  --chalk-app-control-active-text: #202329;
+  --chalk-app-message-remote: #f3f2ee;
+  --chalk-app-message-local: #202329;
+  --chalk-app-message-local-text: #ffffff;
+  --chalk-app-input: #fbfaf7;
+  --chalk-app-danger: #c94343;
+  --chalk-app-danger-hover: #b33b3b;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(12, 14, 18, 0.08);
+  --chalk-app-shadow-sm: 0 8px 30px rgba(12, 14, 18, 0.06);
+  --chalk-app-shadow-control: 0 5px 16px rgba(12, 14, 18, 0.1);
+  --chalk-app-texture-image: none;
+  --chalk-app-texture-size: auto;
+  --chalk-app-texture-blend: normal;
 }
 
 /* Dark mode */
@@ -208,6 +240,248 @@
   --chalk-lobby-glass-bg: rgba(0, 0, 0, 0.6);
   --chalk-lobby-glass-border: rgba(255, 255, 255, 0.12);
   --chalk-lobby-avatar-glow: rgba(85, 170, 201, 0.5);
+}
+
+[data-chalk][data-chalk-palette="warm-charcoal"] {
+  --chalk-app-canvas: #151513;
+  --chalk-app-chrome: #191917;
+  --chalk-app-stage: #1d1d1a;
+  --chalk-app-panel: #21211d;
+  --chalk-app-tile-base: #1c1c19;
+  --chalk-app-tile-color-strength: 20%;
+  --chalk-app-text: #f4f3ee;
+  --chalk-app-text-muted: #a8a79f;
+  --chalk-app-line: #34342e;
+  --chalk-app-line-strong: #4b4a42;
+  --chalk-app-control: #292925;
+  --chalk-app-control-hover: #34342e;
+  --chalk-app-control-group: #20201c;
+  --chalk-app-control-primary: #252823;
+  --chalk-app-control-primary-hover: #353a33;
+  --chalk-app-control-active: #263941;
+  --chalk-app-control-active-line: #65b4d0;
+  --chalk-app-control-active-text: #f4f3ee;
+  --chalk-app-message-remote: #2a2a25;
+  --chalk-app-message-local: #27323a;
+  --chalk-app-message-local-text: #f4f3ee;
+  --chalk-app-input: #1a1a17;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --chalk-app-shadow-sm: 0 10px 34px rgba(0, 0, 0, 0.24);
+  --chalk-app-shadow-control: 0 6px 18px rgba(0, 0, 0, 0.34);
+}
+
+[data-chalk][data-chalk-palette="cool-graphite"] {
+  --chalk-app-canvas: #101318;
+  --chalk-app-chrome: #141820;
+  --chalk-app-stage: #171c24;
+  --chalk-app-panel: #1b2028;
+  --chalk-app-tile-base: #18202a;
+  --chalk-app-tile-color-strength: 22%;
+  --chalk-app-text: #f3f6f8;
+  --chalk-app-text-muted: #9da6b2;
+  --chalk-app-line: #303744;
+  --chalk-app-line-strong: #46505f;
+  --chalk-app-control: #202632;
+  --chalk-app-control-hover: #2a3240;
+  --chalk-app-control-group: #191f28;
+  --chalk-app-control-primary: #242b35;
+  --chalk-app-control-primary-hover: #313b49;
+  --chalk-app-control-active: #172f43;
+  --chalk-app-control-active-line: #55aac9;
+  --chalk-app-control-active-text: #f3f6f8;
+  --chalk-app-message-remote: #272e39;
+  --chalk-app-message-local: #141c25;
+  --chalk-app-message-local-text: #f3f6f8;
+  --chalk-app-input: #151a22;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.34);
+  --chalk-app-shadow-sm: 0 12px 36px rgba(0, 0, 0, 0.3);
+  --chalk-app-shadow-control: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+[data-chalk][data-chalk-palette="high-contrast-ink"] {
+  --chalk-app-canvas: #0c0e12;
+  --chalk-app-chrome: #12151a;
+  --chalk-app-stage: #151920;
+  --chalk-app-panel: #191d23;
+  --chalk-app-tile-base: #171b22;
+  --chalk-app-tile-color-strength: 19%;
+  --chalk-app-text: #fafaf7;
+  --chalk-app-text-muted: #a3a8b0;
+  --chalk-app-line: #343941;
+  --chalk-app-line-strong: #4b525d;
+  --chalk-app-control: #242932;
+  --chalk-app-control-hover: #303640;
+  --chalk-app-control-group: #171b21;
+  --chalk-app-control-primary: #1f242c;
+  --chalk-app-control-primary-hover: #2c333d;
+  --chalk-app-control-active: #163247;
+  --chalk-app-control-active-line: #63b9d7;
+  --chalk-app-control-active-text: #fafaf7;
+  --chalk-app-message-remote: #252a32;
+  --chalk-app-message-local: #10141a;
+  --chalk-app-message-local-text: #fafaf7;
+  --chalk-app-input: #14181e;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --chalk-app-shadow-sm: 0 12px 38px rgba(0, 0, 0, 0.34);
+  --chalk-app-shadow-control: 0 7px 20px rgba(0, 0, 0, 0.48);
+}
+
+[data-chalk][data-chalk-palette="espresso-night"] {
+  --chalk-app-canvas: #15110f;
+  --chalk-app-chrome: #1a1512;
+  --chalk-app-stage: #1e1714;
+  --chalk-app-panel: #211916;
+  --chalk-app-tile-base: #1d1614;
+  --chalk-app-tile-color-strength: 20%;
+  --chalk-app-text: #f5ede3;
+  --chalk-app-text-muted: #b8a79a;
+  --chalk-app-line: #4a3930;
+  --chalk-app-line-strong: #664b3d;
+  --chalk-app-control: #2c211d;
+  --chalk-app-control-hover: #3a2a24;
+  --chalk-app-control-group: #211916;
+  --chalk-app-control-primary: #2a211e;
+  --chalk-app-control-primary-hover: #3b2d28;
+  --chalk-app-control-active: #3d2c24;
+  --chalk-app-control-active-line: #c98656;
+  --chalk-app-control-active-text: #f5ede3;
+  --chalk-app-message-remote: #35271f;
+  --chalk-app-message-local: #1d252b;
+  --chalk-app-message-local-text: #f5ede3;
+  --chalk-app-input: #1a1412;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.38);
+  --chalk-app-shadow-sm: 0 12px 38px rgba(0, 0, 0, 0.32);
+  --chalk-app-shadow-control: 0 7px 20px rgba(0, 0, 0, 0.44);
+}
+
+[data-chalk][data-chalk-palette="chalkboard-atelier"] {
+  --chalk-app-canvas: #0d1714;
+  --chalk-app-chrome: #111d19;
+  --chalk-app-stage: #14221d;
+  --chalk-app-panel: #1b2c26;
+  --chalk-app-tile-base: #15241f;
+  --chalk-app-tile-color-strength: 18%;
+  --chalk-app-text: #eff3e9;
+  --chalk-app-text-muted: #9bab9f;
+  --chalk-app-line: #30473d;
+  --chalk-app-line-strong: #466355;
+  --chalk-app-control: #20332c;
+  --chalk-app-control-hover: #2a4138;
+  --chalk-app-control-group: #172720;
+  --chalk-app-control-primary: #1e3029;
+  --chalk-app-control-primary-hover: #2c443a;
+  --chalk-app-control-active: #1c3b40;
+  --chalk-app-control-active-line: #76bed1;
+  --chalk-app-control-active-text: #eff3e9;
+  --chalk-app-message-remote: #263a32;
+  --chalk-app-message-local: #182d2f;
+  --chalk-app-message-local-text: #eff3e9;
+  --chalk-app-input: #13211c;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.34);
+  --chalk-app-shadow-sm: 0 12px 36px rgba(0, 0, 0, 0.28);
+  --chalk-app-shadow-control: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+[data-chalk][data-chalk-palette="prism-nocturne"] {
+  --chalk-app-canvas: #100d17;
+  --chalk-app-chrome: #14101d;
+  --chalk-app-stage: #17131e;
+  --chalk-app-panel: #1a1424;
+  --chalk-app-tile-base: #18121f;
+  --chalk-app-tile-color-strength: 26%;
+  --chalk-app-text: #f5f0fa;
+  --chalk-app-text-muted: #a99db3;
+  --chalk-app-line: #3b3049;
+  --chalk-app-line-strong: #58446d;
+  --chalk-app-control: #231b30;
+  --chalk-app-control-hover: #302340;
+  --chalk-app-control-group: #1b1525;
+  --chalk-app-control-primary: #251b32;
+  --chalk-app-control-primary-hover: #352549;
+  --chalk-app-control-active: #2b1743;
+  --chalk-app-control-active-line: #9a63e6;
+  --chalk-app-control-active-text: #f5f0fa;
+  --chalk-app-message-remote: #2b2334;
+  --chalk-app-message-local: #191321;
+  --chalk-app-message-local-text: #f5f0fa;
+  --chalk-app-input: #17111f;
+  --chalk-app-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --chalk-app-shadow-sm: 0 14px 42px rgba(0, 0, 0, 0.35);
+  --chalk-app-shadow-control: 0 7px 24px rgba(44, 15, 74, 0.46);
+}
+
+[data-chalk][data-chalk-palette="oled-signal"] {
+  --chalk-app-canvas: #000000;
+  --chalk-app-chrome: #030405;
+  --chalk-app-stage: #000000;
+  --chalk-app-panel: #07090c;
+  --chalk-app-tile-base: #07090c;
+  --chalk-app-tile-color-strength: 12%;
+  --chalk-app-text: #f7f8fa;
+  --chalk-app-text-muted: #8b949e;
+  --chalk-app-line: #242a31;
+  --chalk-app-line-strong: #3a424c;
+  --chalk-app-control: #11151a;
+  --chalk-app-control-hover: #1a2027;
+  --chalk-app-control-group: #080a0d;
+  --chalk-app-control-primary: #11151a;
+  --chalk-app-control-primary-hover: #20262e;
+  --chalk-app-control-active: #081b32;
+  --chalk-app-control-active-line: #2f86ff;
+  --chalk-app-control-active-text: #f7f8fa;
+  --chalk-app-message-remote: #14171b;
+  --chalk-app-message-local: #090b0f;
+  --chalk-app-message-local-text: #f7f8fa;
+  --chalk-app-input: #080a0d;
+  --chalk-app-shadow-xs: none;
+  --chalk-app-shadow-sm: none;
+  --chalk-app-shadow-control: 0 6px 18px rgba(0, 0, 0, 0.7);
+}
+
+[data-chalk][data-chalk-palette] {
+  --background: var(--chalk-app-canvas);
+  --foreground: var(--chalk-app-text);
+  --card: var(--chalk-app-panel);
+  --card-foreground: var(--chalk-app-text);
+  --popover: var(--chalk-app-panel);
+  --popover-foreground: var(--chalk-app-text);
+  --secondary: var(--chalk-app-control);
+  --secondary-foreground: var(--chalk-app-text);
+  --muted: var(--chalk-app-control-group);
+  --muted-foreground: var(--chalk-app-text-muted);
+  --accent: var(--chalk-app-control-active);
+  --accent-foreground: var(--chalk-app-text);
+  --border: var(--chalk-app-line);
+  --input: var(--chalk-app-line-strong);
+  --ring: var(--chalk-app-control-active-line);
+}
+
+[data-chalk][data-chalk-palette]:not([data-chalk-palette="light"]) {
+  color-scheme: dark;
+}
+
+[data-chalk][data-chalk-texture="paper"] {
+  --chalk-app-texture-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.74' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.24'/%3E%3C/svg%3E");
+  --chalk-app-texture-size: 180px 180px;
+  --chalk-app-texture-blend: soft-light;
+}
+
+[data-chalk][data-chalk-texture="slate"] {
+  --chalk-app-texture-image:
+    repeating-linear-gradient(7deg, transparent 0 9px, rgba(255, 255, 255, 0.018) 10px, transparent 11px 19px),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.36' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.2'/%3E%3C/svg%3E");
+  --chalk-app-texture-size: auto, 220px 220px;
+  --chalk-app-texture-blend: soft-light;
+}
+
+.chalk-textured-surface {
+  background-image: var(--chalk-app-texture-image);
+  background-size: var(--chalk-app-texture-size);
+  background-blend-mode: var(--chalk-app-texture-blend);
+}
+
+.chalk-participant-wash {
+  background-color: color-mix(in srgb, var(--chalk-participant-color) var(--chalk-app-tile-color-strength), var(--chalk-app-tile-base));
 }
 
 /* =============================================================================

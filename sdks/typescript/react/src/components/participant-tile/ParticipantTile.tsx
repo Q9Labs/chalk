@@ -161,6 +161,7 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
           ...style,
           "--chalk-accent-speaking": participantColors.primary,
           "--chalk-accent-speaking-glow": `${participantColors.primary}4D`, // 30% opacity hex
+          "--chalk-participant-color": participantColors.primary,
           borderColor: participant.isSpeaking && prefersReducedMotion ? participantColors.primary : undefined,
           ...(pinned ? { "--tw-ring-color": `${participantColors.primary}80` } : {}),
         } as React.CSSProperties
@@ -178,7 +179,7 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
 
       {/* Avatar background when video is off or loading */}
       {!showVideo && showAvatar && (
-        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300" style={{ backgroundColor: participantColors.secondary }}>
+        <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 flex items-center justify-center transition-opacity duration-300">
           <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={Boolean(participant.avatarUrl)} className="opacity-90" gradientPreference={gradientPreference} />
         </div>
       )}

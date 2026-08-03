@@ -174,17 +174,22 @@ export const ChatPanel = React.memo(
     return (
       <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-card-foreground", variant !== "mobile" && "animate-in slide-in-from-right-5 duration-300", className)} role="complementary" aria-label="Chat panel">
         {variant === "sidebar" ? (
-          <header className="flex items-center justify-between border-b border-[#deddd7] px-5 py-[18px]">
-            <h2 className="text-xl font-semibold tracking-[-0.025em] text-[#0c0e12]">{title}</h2>
+          <header className="chalk-textured-surface flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-[18px]">
+            <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
             {onClose ? (
-              <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[#deddd7] text-[#555b65] transition-colors hover:bg-[#f7f6f2] hover:text-[#0c0e12]" aria-label="Close chat">
+              <button
+                type="button"
+                onClick={onClose}
+                className="grid h-9 w-9 place-items-center rounded-full border border-[var(--chalk-app-line)] text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]"
+                aria-label="Close chat"
+              >
                 <Cancel01Icon className="h-5 w-5" />
               </button>
             ) : null}
           </header>
         ) : null}
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto bg-white px-2 py-5" aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
+        <div ref={scrollRef} className="chalk-textured-surface flex-1 overflow-y-auto bg-[var(--chalk-app-panel)] px-2 py-5" aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
           {hasOlder && onLoadOlder ? (
             <Button variant="ghost" size="sm" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void loadOlder()}>
               {loadingOlder ? "Loading…" : "Load earlier messages"}
@@ -263,7 +268,7 @@ export const ChatPanel = React.memo(
             ))}
           </div>
         ) : null}
-        <div className="flex items-end gap-2 border-t border-[#deddd7] bg-white px-4 py-4">
+        <div className="chalk-textured-surface flex items-end gap-2 border-t border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-4 py-4">
           {onUploadAttachment ? (
             <>
               <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} />
@@ -284,10 +289,17 @@ export const ChatPanel = React.memo(
             placeholder={placeholder}
             disabled={disabled || sending}
             aria-label="Message"
-            className="min-h-11 max-h-[120px] flex-1 resize-none rounded-[8px] border border-[#deddd7] bg-[#fbfaf7] px-3.5 py-3 text-sm outline-none transition focus:border-[#74b7cf] focus:bg-white"
+            className="min-h-11 max-h-[120px] flex-1 resize-none rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] px-3.5 py-3 text-sm text-[var(--chalk-app-text)] outline-none transition placeholder:text-[var(--chalk-app-text-muted)] focus:border-[var(--chalk-app-control-active-line)]"
             rows={1}
           />
-          <Button type="button" size="icon" className="h-11 w-11 shrink-0 rounded-[8px] bg-[#202329] !text-white hover:bg-[#343840]" disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending} onClick={() => void send()} aria-label="Send message">
+          <Button
+            type="button"
+            size="icon"
+            className="h-11 w-11 shrink-0 rounded-[8px] bg-[var(--chalk-app-control-primary)] !text-white hover:bg-[var(--chalk-app-control-primary-hover)]"
+            disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending}
+            onClick={() => void send()}
+            aria-label="Send message"
+          >
             <SentIcon className="h-5 w-5" />
           </Button>
         </div>

@@ -310,6 +310,7 @@ export const CHALK_SOUND_ASSETS = {
 
 export const CHALK_LOGO_FILES = {
   logo: "chalk-logo.svg",
+  logoOnDark: "chalk-logo-on-dark.svg",
   icon: "chalk-icon.svg",
 } as const;
 

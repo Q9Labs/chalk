@@ -27,12 +27,12 @@ const formatDuration = (seconds: number): string => {
 
 export const ConferenceHeader = React.memo<ConferenceHeaderProps>(({ roomName, logoUrl, duration = 0, isRecording = false, isTranscribing = false, layout = "focus", onLayoutChange, onInvite, onInfo, onSettings, className }) => {
   return (
-    <header className={cn("flex h-[76px] shrink-0 items-center justify-between gap-4 border-b border-[#deddd7] bg-[#fbfaf7] px-4 text-[#0c0e12] sm:px-7 lg:px-8", className)} role="banner">
+    <header className={cn("chalk-textured-surface flex h-[76px] shrink-0 items-center justify-between gap-4 border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-4 text-[var(--chalk-app-text)] sm:px-7 lg:px-8", className)} role="banner">
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
         {logoUrl ? <img src={logoUrl} alt="Chalk" className="h-auto w-[108px] shrink-0 sm:w-[122px]" draggable={false} /> : <span className="shrink-0 text-xl font-bold tracking-tight">Chalk</span>}
-        <span className="hidden h-7 w-px bg-[#deddd7] sm:block" aria-hidden="true" />
+        <span className="hidden h-7 w-px bg-[var(--chalk-app-line)] sm:block" aria-hidden="true" />
         <h1 className="truncate text-sm font-semibold sm:text-base">{roomName}</h1>
-        <span className="hidden font-mono text-xs tabular-nums text-[#555b65] sm:block" aria-label={`Meeting duration ${formatDuration(duration)}`}>
+        <span className="hidden font-mono text-xs tabular-nums text-[var(--chalk-app-text-muted)] sm:block" aria-label={`Meeting duration ${formatDuration(duration)}`}>
           {formatDuration(duration)}
         </span>
       </div>
@@ -41,21 +41,26 @@ export const ConferenceHeader = React.memo<ConferenceHeaderProps>(({ roomName, l
         {isRecording && <StatusBadge status="recording" pulse />}
         {isTranscribing && <StatusBadge status="transcribing" />}
         {onInfo && (
-          <button type="button" onClick={onInfo} className="grid h-9 w-9 place-items-center rounded-[8px] text-[#555b65] transition hover:bg-[#f0efeb] hover:text-[#0c0e12]" aria-label="Meeting information">
+          <button type="button" onClick={onInfo} className="grid h-9 w-9 place-items-center rounded-[8px] text-[var(--chalk-app-text-muted)] transition hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" aria-label="Meeting information">
             <InformationCircleIcon size={18} />
           </button>
         )}
         {onInvite && (
-          <button type="button" onClick={onInvite} className="grid h-10 w-10 place-items-center rounded-[7px] border border-[#deddd7] bg-white transition hover:border-[#9f9f99] hover:bg-[#f7f6f2]" aria-label="Invite participants">
+          <button
+            type="button"
+            onClick={onInvite}
+            className="grid h-10 w-10 place-items-center rounded-[7px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] transition hover:border-[var(--chalk-app-line-strong)] hover:bg-[var(--chalk-app-control-hover)]"
+            aria-label="Invite participants"
+          >
             <UserGroupIcon size={18} />
           </button>
         )}
         {onLayoutChange && (
-          <div className="hidden gap-0.5 rounded-[9px] bg-[#f0efeb] p-1 sm:flex" role="group" aria-label="Video layout">
+          <div className="hidden gap-0.5 rounded-[9px] bg-[var(--chalk-app-control-group)] p-1 sm:flex" role="group" aria-label="Video layout">
             <button
               type="button"
               onClick={() => onLayoutChange("focus")}
-              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[#6d727b] transition", layout === "focus" ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.08)]" : "hover:text-[#202329]")}
+              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[var(--chalk-app-text-muted)] transition", layout === "focus" ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "hover:text-[var(--chalk-app-text)]")}
               aria-label="Spotlight layout"
               aria-pressed={layout === "focus"}
             >
@@ -64,7 +69,7 @@ export const ConferenceHeader = React.memo<ConferenceHeaderProps>(({ roomName, l
             <button
               type="button"
               onClick={() => onLayoutChange("grid")}
-              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[#6d727b] transition", layout === "grid" ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.08)]" : "hover:text-[#202329]")}
+              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[var(--chalk-app-text-muted)] transition", layout === "grid" ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "hover:text-[var(--chalk-app-text)]")}
               aria-label="Grid layout"
               aria-pressed={layout === "grid"}
             >
@@ -73,7 +78,7 @@ export const ConferenceHeader = React.memo<ConferenceHeaderProps>(({ roomName, l
             <button
               type="button"
               onClick={() => onLayoutChange("presentation")}
-              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[#6d727b] transition", layout === "presentation" ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.08)]" : "hover:text-[#202329]")}
+              className={cn("grid h-8 w-8 place-items-center rounded-[6px] text-[var(--chalk-app-text-muted)] transition", layout === "presentation" ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "hover:text-[var(--chalk-app-text)]")}
               aria-label="Presentation layout"
               aria-pressed={layout === "presentation"}
             >
@@ -82,7 +87,7 @@ export const ConferenceHeader = React.memo<ConferenceHeaderProps>(({ roomName, l
           </div>
         )}
         {onSettings && (
-          <button type="button" onClick={onSettings} className="grid h-10 w-10 place-items-center rounded-[7px] border border-[#deddd7] bg-white transition hover:border-[#9f9f99] hover:bg-[#f7f6f2]" aria-label="Settings">
+          <button type="button" onClick={onSettings} className="grid h-10 w-10 place-items-center rounded-[7px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] transition hover:border-[var(--chalk-app-line-strong)] hover:bg-[var(--chalk-app-control-hover)]" aria-label="Settings">
             <Settings01Icon size={18} />
           </button>
         )}

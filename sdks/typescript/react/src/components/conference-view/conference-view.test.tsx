@@ -57,6 +57,8 @@ describe("ConferenceView", () => {
     render(<ConferenceView {...props} />);
 
     expect(screen.getByRole("main")).toHaveAttribute("data-chalk-theme", "light");
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-palette", "light");
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-texture", "none");
     expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getByLabelText("Meeting stage")).toBeInTheDocument();
     expect(participantGridSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ layout: "grid", participants: props.participants }));
@@ -74,10 +76,15 @@ describe("ConferenceView", () => {
             onChange: onPanelChange,
             participants: { participants: [participant("ada")], searchable: false },
           },
+          palette: "oled-signal",
+          texture: "paper",
         })}
       />,
     );
 
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-theme", "dark");
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-palette", "oled-signal");
+    expect(screen.getByRole("main")).toHaveAttribute("data-chalk-texture", "paper");
     expect(screen.getByRole("complementary", { name: "Participants list" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onPanelChange).toHaveBeenCalledWith(null);

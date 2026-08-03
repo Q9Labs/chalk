@@ -23,7 +23,7 @@
   },
   "apps/web": {
     "meeting": 58,
-    "conference": 14,
+    "conference": 12,
     "videoconference": 5,
     "room": 120,
     "session": 200,

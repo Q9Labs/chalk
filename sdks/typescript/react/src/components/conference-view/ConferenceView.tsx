@@ -26,6 +26,8 @@ import { cn } from "../../utils/cn";
 
 export type ConferenceLayout = NonNullable<ParticipantGridProps["layout"]>;
 export type ConferencePanel = "chat" | "participants" | "transcript" | "admission" | "settings";
+export type ThemePalette = "light" | "warm-charcoal" | "cool-graphite" | "high-contrast-ink" | "espresso-night" | "chalkboard-atelier" | "prism-nocturne" | "oled-signal";
+export type ThemeTexture = "none" | "paper" | "slate";
 
 export type ConferenceViewPanelProps = {
   readonly active: ConferencePanel | null;
@@ -91,6 +93,8 @@ export interface ConferenceViewProps {
   readonly reconnecting?: Omit<ReconnectingOverlayProps, "isVisible"> & {
     readonly isVisible: boolean;
   };
+  readonly palette?: ThemePalette;
+  readonly texture?: ThemeTexture;
   readonly overlay?: React.ReactNode;
   readonly onLeave?: () => void | Promise<void>;
   readonly className?: string;
@@ -120,6 +124,8 @@ export function ConferenceView({
   toasts = [],
   onDismissToast,
   reconnecting,
+  palette = "light",
+  texture = "none",
   overlay,
   onLeave,
   className,
@@ -149,8 +155,14 @@ export function ConferenceView({
   };
 
   return (
-    <main data-chalk data-chalk-theme="light" className={cn("chalk-root relative h-dvh min-h-[620px] overflow-hidden bg-[#f7f6f2] text-[#0c0e12]", className)}>
-      <section className="relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[#deddd7] bg-[#fbfaf7]">
+    <main
+      data-chalk
+      data-chalk-theme={palette === "light" ? "light" : "dark"}
+      data-chalk-palette={palette}
+      data-chalk-texture={texture}
+      className={cn("chalk-root chalk-textured-surface relative h-dvh min-h-[620px] overflow-hidden bg-[var(--chalk-app-canvas)] text-[var(--chalk-app-text)]", className)}
+    >
+      <section className="chalk-textured-surface relative mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden border-x border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)]">
         <AudioOutput participants={[...audioParticipants]} />
         <ConferenceHeader
           roomName={roomName}
@@ -165,7 +177,7 @@ export function ConferenceView({
         />
 
         <div className={cn("relative mx-auto flex min-h-0 w-full max-w-[1320px] flex-1 gap-3 overflow-hidden px-3 pt-5 pb-3 sm:px-5 sm:pt-6 lg:px-8", panelContent && "lg:grid lg:grid-cols-[minmax(0,1fr)_340px]")}>
-          <section className="min-h-0 min-w-0 overflow-hidden rounded-[10px] bg-[#fbfaf7]" aria-label="Meeting stage">
+          <section className="chalk-textured-surface min-h-0 min-w-0 overflow-hidden rounded-[10px] bg-[var(--chalk-app-stage)]" aria-label="Meeting stage">
             {whiteboard?.isOpen ? (
               <WhiteboardView {...whiteboard.props} className={cn("h-full min-h-0", whiteboard.props.className)} />
             ) : layout === "presentation" && screenShare ? (
@@ -175,7 +187,11 @@ export function ConferenceView({
             )}
           </section>
 
-          {panelContent ? <aside className="absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[#deddd7] bg-white shadow-[0_8px_30px_rgba(12,14,18,0.06)] lg:static lg:block lg:w-[340px] lg:shrink-0">{panelContent}</aside> : null}
+          {panelContent ? (
+            <aside className="chalk-textured-surface absolute inset-x-3 top-20 bottom-24 z-40 min-h-0 overflow-hidden rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] shadow-[var(--chalk-app-shadow-sm)] lg:static lg:block lg:w-[340px] lg:shrink-0">
+              {panelContent}
+            </aside>
+          ) : null}
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">

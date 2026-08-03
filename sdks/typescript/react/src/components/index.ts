@@ -154,6 +154,8 @@ export type {
   ConferenceViewScreenShare,
   ConferenceViewSettingsDialogProps,
   ConferenceViewWhiteboard,
+  ThemePalette,
+  ThemeTexture,
   EndScreenProps,
   GuidedTourProps,
   JoiningScreenProps,

@@ -2,7 +2,7 @@ import type { ChalkChatMessage, ChalkRoomReaction } from "@q9labsai/chalk-client
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { ConferenceView, PreJoinScreen, type ConferenceLayout, type ConferencePanel, type Participant, type ParticipantListParticipant, type SettingsDialogValue, type Toast } from "@q9labsai/chalk-react/components";
+import { ConferenceView, PreJoinScreen, type ConferenceLayout, type ConferencePanel, type Participant, type ParticipantListParticipant, type SettingsDialogValue, type ThemePalette, type ThemeTexture, type Toast } from "@q9labsai/chalk-react/components";
 import { PreviewTweaker } from "../components/sdk-preview/PreviewTweaker";
 import { ScreenShareMock } from "../components/sdk-preview/ScreenShareMock";
 import "../styles/chalk-excalidraw.css";
@@ -11,7 +11,7 @@ export const Route = createFileRoute("/sdk-preview")({
   component: SdkPreviewPage,
 });
 
-type PreviewSurface = "lobby" | "conference";
+type PreviewSurface = "lobby" | "active";
 type PreviewParticipant = Participant & { readonly role: "host" | "co-host" | "participant" };
 
 const roomParticipants: PreviewParticipant[] = [
@@ -105,12 +105,12 @@ const INITIAL_SETTINGS: SettingsDialogValue = {
 const previewTrack = {} as MediaStreamTrack;
 
 function SdkPreviewPage() {
-  const [surface, setSurface] = useState<PreviewSurface>("lobby");
+  const [surface, setSurface] = useState<PreviewSurface>("active");
   const [displayName, setDisplayName] = useState("Hasan");
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isHandRaised, setIsHandRaised] = useState(false);
-  const [activePanel, setActivePanel] = useState<ConferencePanel | null>(null);
+  const [activePanel, setActivePanel] = useState<ConferencePanel | null>("chat");
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isInfoOpen, setInfoOpen] = useState(false);
   const [isWhiteboardOpen, setWhiteboardOpen] = useState(false);
@@ -118,6 +118,8 @@ function SdkPreviewPage() {
   const [notifications, setNotifications] = useState<Toast[]>([]);
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
   const [settings, setSettings] = useState(INITIAL_SETTINGS);
+  const [palette, setPalette] = useState<ThemePalette>("warm-charcoal");
+  const [texture, setTexture] = useState<ThemeTexture>("paper");
   const previewUrl = typeof window === "undefined" ? "http://localhost:3070/sdk-preview" : `${window.location.origin}/sdk-preview`;
 
   const participants = useMemo<PreviewParticipant[]>(
@@ -188,7 +190,7 @@ function SdkPreviewPage() {
           setDisplayName(nextSettings.displayName);
           setIsMuted(!nextSettings.microphoneEnabled);
           setIsVideoEnabled(nextSettings.cameraEnabled);
-          setSurface("conference");
+          setSurface("active");
         }}
       />
     );
@@ -199,7 +201,9 @@ function SdkPreviewPage() {
       <ConferenceView
         roomName="Design review"
         displayName={displayName}
-        logoUrl="/brand/chalk/chalk-logo.svg"
+        logoUrl={palette === "light" ? "/brand/chalk/chalk-logo.svg" : "/brand/chalk/chalk-logo-on-dark.svg"}
+        palette={palette}
+        texture={texture}
         meetingLink={previewUrl}
         duration={18 * 60 + 42}
         layout={layout}
@@ -296,6 +300,10 @@ function SdkPreviewPage() {
         onLeave={() => setSurface("lobby")}
       />
       <PreviewTweaker
+        palette={palette}
+        texture={texture}
+        onPaletteChange={setPalette}
+        onTextureChange={setTexture}
         onNotify={showNotification}
         onShowPeople={() => setActivePanel("participants")}
         onShowChat={() => setActivePanel("chat")}

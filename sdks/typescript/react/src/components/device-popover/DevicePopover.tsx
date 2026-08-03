@@ -99,7 +99,12 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
         disabled={disabled}
         haptic={haptic}
         size={size}
-        className={cn(floating ? "h-[52px] w-[52px] !rounded-full !bg-[#202329] !text-white shadow-[0_5px_16px_rgba(12,14,18,0.18)] hover:-translate-y-0.5 hover:!bg-[#343840]" : "rounded-r-none border-r border-black/5 bg-black/5 dark:border-white/5 dark:bg-white/10", isOpen && "brightness-110")}
+        className={cn(
+          floating
+            ? "chalk-textured-surface h-[52px] w-[52px] !rounded-full !bg-[var(--chalk-app-control-primary)] !text-white shadow-[var(--chalk-app-shadow-control)] hover:-translate-y-0.5 hover:!bg-[var(--chalk-app-control-primary-hover)]"
+            : "rounded-r-none border-r border-black/5 bg-black/5 dark:border-white/5 dark:bg-white/10",
+          isOpen && "brightness-110",
+        )}
       />
 
       {/* Chevron Trigger */}
@@ -112,7 +117,9 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
           aria-label={`Select ${dropdownLabel.toLowerCase()}`}
           className={cn(
             "chalk-button-tactile flex items-center justify-center transition-all duration-300 ease-out",
-            floating ? "absolute -right-1.5 -bottom-1.5 h-7 w-7 rounded-full border-2 border-[#fbfaf7] bg-[#343840] p-0 !text-white shadow-sm hover:bg-[#4a4f59]" : "rounded-r-full border-l border-black/5 bg-black/5 shadow-lg hover:brightness-110 dark:border-white/5 dark:bg-white/10",
+            floating
+              ? "chalk-textured-surface absolute -right-1.5 -bottom-1.5 h-7 w-7 rounded-full border-2 border-[var(--chalk-app-chrome)] bg-[var(--chalk-app-control-primary-hover)] p-0 !text-white shadow-sm hover:bg-[var(--chalk-app-line-strong)]"
+              : "rounded-r-full border-l border-black/5 bg-black/5 shadow-lg hover:brightness-110 dark:border-white/5 dark:bg-white/10",
             !floating && "text-foreground",
             !floating && chevronSizeClass,
             isOpen && "brightness-110",
@@ -129,7 +136,7 @@ export const DevicePopover = ({ type, isActive, onToggle, devices, selectedDevic
       {isOpen && (
         <div
           className={cn(
-            "pointer-events-auto absolute z-[70] max-h-[420px] w-[min(340px,calc(100vw-24px))] overflow-y-auto rounded-[14px] border border-[#c9c8c2] bg-[#fbfaf7] p-2 text-[#0c0e12] shadow-[0_22px_60px_rgba(12,14,18,0.16)] animate-in fade-in zoom-in-95 duration-150",
+            "chalk-textured-surface pointer-events-auto absolute z-[70] max-h-[420px] w-[min(340px,calc(100vw-24px))] overflow-y-auto rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-2 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)] animate-in fade-in zoom-in-95 duration-150",
             orientation === "up" ? "bottom-full mb-3" : "top-full mt-3",
             "left-0",
           )}
