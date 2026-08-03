@@ -301,6 +301,18 @@ ratified design doc (Luna at max), then client SDK wave (ChalkSession
 split), React/RN `<Chalk />`, apps, infra, observability, marketing, DB
 last. Reports land at /tmp/codex-*.md. Nothing awaits a Hasan decision.
 
+**Update (post-compaction pickup, same day):** ratchet and UI-primitives
+workers finished with green gates but could NOT commit — the codex sandbox
+cannot write linked-worktree git metadata (`.git/worktrees/<name>` lives in
+the main repo; complaint #3347). Claude reviewed and committed both:
+`62b2a40d` on `tooling/language-ratchet` (merged to master as `46484b09`;
+`pnpm run language:ratchet` green on master after merge) and `f60a4b8f` on
+`refactor/ui-primitives-consolidation` (awaits merge until after wave zero).
+Ratchet realities: baseline counts are large (session ~5.5k in api alone);
+noisy terms call/host/peer/bot/ai deliberately excluded from v1. The
+sync-renumber worker (max) is still running; expect to commit for it too
+when its report lands at /tmp/codex-sync-renumber.md.
+
 **Design-sheet rule (Hasan raised, 2026-08-03, pre-compaction): abstractions
 are designed, never just renamed — and designed WITH Hasan.** Every wave
 carrying a boundary redraw gets a code-grounded design worked through in a
