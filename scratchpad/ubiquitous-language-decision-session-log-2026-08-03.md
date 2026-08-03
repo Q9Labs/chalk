@@ -443,3 +443,27 @@ public surface) are now closed. Wave zero sits committed on
 `refactor/sync-v1-renumber` (e0931d7f deletion, a536ef51 renumber,
 report docs); its master merge waits on Hasan's call about the other
 agent's uncommitted README/checklist edits.
+
+## Wave zero + UI primitives MERGED; execution re-scoped (Hasan, 2026-08-03)
+
+Hasan ran the stash-park himself; the merge conflicted only in
+`apps/web/src/lib/chalk-access.test.ts` (drifted commit added
+`inviteToken` beside a `/v3/sync` URL — resolution keeps both, on
+`/v1/sync`). Four `/v3/sync` stragglers from the drifted local-stack
+commit (scripts/dev/chalk.mjs, README table) fixed inside the merge.
+Gate rounds: ratchet fails closed on IMPROVEMENTS (baseline updated and
+staged in-merge); stale `.worktrees/language-ratchet` copy broke the
+architecture-worker vitest filter (worktree removed); `packages/ui`
+typecheck needed the sequential library-chain build. Landed as 98968f04,
+full commit gate green (285s). `refactor/ui-primitives-consolidation`
+then auto-merged clean; ui+react build/typecheck/tests verified green.
+Other agent's README/checklist edits restored untouched via stash pop.
+All three merged worktrees removed (one stray session log preserved
+into scratchpad first).
+
+**Re-scope (Hasan)**: no subagent worker machinery at all — Hasan
+executes waves 1–6 himself with another agent; Claude keeps merge
+chores (done), the execution brief, and the marketing + docs passes
+(docs written spec-first from the ratified sheets are acceptance canon).
+C1: waves 5 ∥ 6 approved. C2: UI-pass scheduling dropped from the map.
+The handoff artifact is `scratchpad/wave-execution-brief-2026-08-03.md`.
