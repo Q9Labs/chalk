@@ -18,9 +18,9 @@ func runRouteWhiteboardFileUpload(ctx context.Context) (ScenarioResult, error) {
 	recorder := NewRecorder(now)
 	subject := whiteboardfiles.Subject{
 		TenantID:              mustID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
-		RoomID:                mustID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
-		SessionID:             mustID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
-		ParticipantSessionID:  mustID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+		SpaceID:               mustID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+		EpisodeID:             mustID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+		ParticipantID:         mustID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
 		ParticipantGeneration: 4,
 	}
 	body := json.RawMessage(`{

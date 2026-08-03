@@ -1,14 +1,14 @@
 defmodule ChalkSync.Live.PublicationFence do
   @moduledoc "Source-specific Postgres publication-fence checks."
 
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
   @sources [:microphone, :camera, :screen]
 
   @spec check(
           Postgrex.conn(),
-          SessionKey.t(),
+          EpisodeKey.t(),
           String.t(),
           pos_integer(),
           atom(),
@@ -17,8 +17,8 @@ defmodule ChalkSync.Live.PublicationFence do
         ) :: :clear | :owned | {:fenced, String.t()} | {:error, atom()}
   def check(
         connection,
-        session,
-        participant_session_id,
+        episode,
+        participant_id,
         participant_generation,
         source,
         external_operation_id,
@@ -26,9 +26,9 @@ defmodule ChalkSync.Live.PublicationFence do
       )
       when participant_generation > 0 and source in @sources do
     params = [
-      UUID.dump!(session.tenant_id),
-      UUID.dump!(session.session_id),
-      UUID.dump!(participant_session_id),
+      UUID.dump!(episode.tenant_id),
+      UUID.dump!(episode.episode_id),
+      UUID.dump!(participant_id),
       participant_generation,
       Atom.to_string(source),
       now
@@ -47,11 +47,11 @@ defmodule ChalkSync.Live.PublicationFence do
     end
   end
 
-  def check(_connection, _session, _participant, generation, _source, _operation, _now)
+  def check(_connection, _episode, _participant, generation, _source, _operation, _now)
       when not is_integer(generation) or generation <= 0,
       do: {:error, :invalid_generation}
 
-  def check(_connection, _session, _participant, _generation, _source, _operation, _now),
+  def check(_connection, _episode, _participant, _generation, _source, _operation, _now),
     do: {:error, :invalid_source}
 
   defp query do
@@ -59,8 +59,8 @@ defmodule ChalkSync.Live.PublicationFence do
     select external_operation_id
     from sync_publication_fences
     where tenant_id = $1
-      and session_id = $2
-      and participant_session_id = $3
+      and episode_id = $2
+      and participant_id = $3
       and participant_generation = $4
       and source = $5
       and expires_at > $6

@@ -17,7 +17,7 @@ defmodule ChalkSync.Live.DirectedRequestsTest do
                       "type" => "directed_request",
                       "request_id" => "directed-request-0001",
                       "name" => "request_unmute",
-                      "actor_participant_session_id" => @actor,
+                      "actor_participant_id" => @actor,
                       "expires_at_ms" => 30_100
                     }}
 
@@ -88,8 +88,8 @@ defmodule ChalkSync.Live.DirectedRequestsTest do
     %{
       request_id: request_id,
       name: :request_unmute,
-      actor_participant_session_id: @actor,
-      target_participant_session_id: @target
+      actor_participant_id: @actor,
+      target_participant_id: @target
     }
   end
 end

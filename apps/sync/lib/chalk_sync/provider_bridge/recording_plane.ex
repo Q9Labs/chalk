@@ -4,7 +4,7 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
   @behaviour ChalkSync.RecordingPlane
 
   alias ChalkSync.ProviderBridge.Client
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
 
   @enforce_keys [:client]
   defstruct [:client, context: %{}]
@@ -41,28 +41,28 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
   def start_recording(
         %__MODULE__{} = adapter,
         operation_id,
-        %SessionKey{} = session,
+        %EpisodeKey{} = episode,
         recording_id
       ) do
-    operation(adapter, operation_id, session, "recording.start", recording_id)
+    operation(adapter, operation_id, episode, "recording.start", recording_id)
   end
 
-  def start_recording(_adapter, _operation_id, _session, _recording_id),
+  def start_recording(_adapter, _operation_id, _episode, _recording_id),
     do: {:terminal_failure, :invalid_contract}
 
   @impl true
-  def stop_recording(%__MODULE__{} = adapter, operation_id, %SessionKey{} = session, recording_id) do
-    operation(adapter, operation_id, session, "recording.stop", recording_id)
+  def stop_recording(%__MODULE__{} = adapter, operation_id, %EpisodeKey{} = episode, recording_id) do
+    operation(adapter, operation_id, episode, "recording.stop", recording_id)
   end
 
-  def stop_recording(_adapter, _operation_id, _session, _recording_id),
+  def stop_recording(_adapter, _operation_id, _episode, _recording_id),
     do: {:terminal_failure, :invalid_contract}
 
-  defp operation(adapter, operation_id, session, effect, recording_id) do
+  defp operation(adapter, operation_id, episode, effect, recording_id) do
     payload = %{
       "effect" => effect,
-      "tenant_id" => session.tenant_id,
-      "session_id" => session.session_id,
+      "tenant_id" => episode.tenant_id,
+      "episode_id" => episode.episode_id,
       "recording_id" => recording_id
     }
 

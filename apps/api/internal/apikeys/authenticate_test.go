@@ -27,7 +27,7 @@ func TestAuthenticateBuildsTenantPrincipalAndAttributesUsage(t *testing.T) {
 	if principal.Kind != authentication.PrincipalAPIKey || principal.TenantID != tenantID || principal.APIKeyID != created.Key.ID {
 		t.Fatalf("principal = %+v, want tenant-bound API key", principal)
 	}
-	if len(principal.Scopes) != 1 || principal.Scopes[0] != authentication.ScopeRoomsRead {
+	if len(principal.Scopes) != 1 || principal.Scopes[0] != authentication.ScopeSpacesRead {
 		t.Fatalf("scopes = %v, want rooms:read", principal.Scopes)
 	}
 	if repository.lastUsage.KeyID != created.Key.ID || repository.lastUsage.IPAddress != clientIP || !repository.lastUsage.UsedAt.Equal(testNow) {

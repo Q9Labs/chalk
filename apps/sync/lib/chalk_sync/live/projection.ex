@@ -152,16 +152,16 @@ defmodule ChalkSync.Live.Projection do
   defp validate_items(_stream, _items), do: {:error, :invalid_stream}
 
   defp valid_item?(:media, item) do
-    exact_keys?(item, ["participant_session_id", "source", "enabled", "publication_id"]) and
+    exact_keys?(item, ["participant_id", "source", "enabled", "publication_id"]) and
       item["source"] in ["microphone", "camera", "screen"] and
-      is_boolean(item["enabled"]) and canonical_uuid?(item["participant_session_id"]) and
+      is_boolean(item["enabled"]) and canonical_uuid?(item["participant_id"]) and
       valid_publication(item["enabled"], item["publication_id"])
   end
 
   defp valid_item?(:presence, item) do
-    exact_keys?(item, ["participant_session_id", "state", "speaking", "active_speaker"]) and
+    exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"]) and
       item["state"] in ["connected", "disconnected"] and
-      canonical_uuid?(item["participant_session_id"]) and is_boolean(item["speaking"]) and
+      canonical_uuid?(item["participant_id"]) and is_boolean(item["speaking"]) and
       is_boolean(item["active_speaker"]) and
       (item["state"] == "connected" or (not item["speaking"] and not item["active_speaker"]))
   end
@@ -255,8 +255,8 @@ defmodule ChalkSync.Live.Projection do
 
   defp canonical_uuid?(value), do: match?({:ok, _bytes}, UUID.dump(value))
 
-  defp item_key(:media, item), do: {item["participant_session_id"], item["source"]}
-  defp item_key(:presence, item), do: item["participant_session_id"]
+  defp item_key(:media, item), do: {item["participant_id"], item["source"]}
+  defp item_key(:presence, item), do: item["participant_id"]
 
   defp snapshot_frame(stream, projection_id, items) do
     %{

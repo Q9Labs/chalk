@@ -27,8 +27,8 @@ func (v ParticipantVerifier) VerifyChatParticipant(ctx context.Context, credenti
 		return Subject{}, false, nil
 	}
 	return Subject{
-		TenantID: subject.TenantID, RoomID: subject.RoomID, SessionID: subject.SessionID,
-		ParticipantSessionID:  subject.ParticipantSessionID,
+		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID,
+		ParticipantID:         subject.ParticipantID,
 		ParticipantGeneration: subject.ParticipantGeneration,
 	}, true, nil
 }

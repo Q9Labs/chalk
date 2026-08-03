@@ -12,7 +12,7 @@ import (
 const (
 	testOperationID = "operation-000001"
 	testTenantID    = "11111111-1111-4111-8111-111111111111"
-	testSessionID   = "22222222-2222-4222-8222-222222222222"
+	testEpisodeID   = "22222222-2222-4222-8222-222222222222"
 )
 
 func TestExecutePersistsBeforeDispatchAndReplaysCompletion(t *testing.T) {
@@ -134,12 +134,12 @@ func TestExecuteRejectsInvalidProviderResultWithoutCompleting(t *testing.T) {
 func operationInput(t *testing.T) provideroperations.OperationInput {
 	t.Helper()
 	return provideroperations.OperationInput{
-		OperationID:          testOperationID,
-		Effect:               provideroperations.EffectRevokePublication,
-		TenantID:             mustID(t, testTenantID),
-		SessionID:            mustID(t, testSessionID),
-		ParticipantSessionID: mustID(t, "33333333-3333-4333-8333-333333333333"),
-		PublicationSource:    "camera",
+		OperationID:       testOperationID,
+		Effect:            provideroperations.EffectRevokePublication,
+		TenantID:          mustID(t, testTenantID),
+		EpisodeID:         mustID(t, testEpisodeID),
+		ParticipantID:     mustID(t, "33333333-3333-4333-8333-333333333333"),
+		PublicationSource: "camera",
 	}
 }
 
@@ -191,17 +191,17 @@ func (r *memoryRepository) Prepare(_ context.Context, input provideroperations.O
 		return provideroperations.PrepareResult{Receipt: r.receipt, Replay: true}, nil
 	}
 	r.receipt = provideroperations.Receipt{
-		OperationID:                  canonical.Input.OperationID,
-		Effect:                       canonical.Input.Effect,
-		TenantID:                     canonical.Input.TenantID,
-		SessionID:                    canonical.Input.SessionID,
-		ParticipantSessionID:         canonical.Input.ParticipantSessionID,
-		ParticipantSessionGeneration: canonical.Input.ParticipantSessionGeneration,
-		PublicationSource:            canonical.Input.PublicationSource,
-		RecordingID:                  canonical.Input.RecordingID,
-		Fingerprint:                  canonical.Fingerprint,
-		Payload:                      canonical.Payload,
-		State:                        provideroperations.ReceiptPrepared,
+		OperationID:           canonical.Input.OperationID,
+		Effect:                canonical.Input.Effect,
+		TenantID:              canonical.Input.TenantID,
+		EpisodeID:             canonical.Input.EpisodeID,
+		ParticipantID:         canonical.Input.ParticipantID,
+		ParticipantGeneration: canonical.Input.ParticipantGeneration,
+		PublicationSource:     canonical.Input.PublicationSource,
+		RecordingID:           canonical.Input.RecordingID,
+		Fingerprint:           canonical.Fingerprint,
+		Payload:               canonical.Payload,
+		State:                 provideroperations.ReceiptPrepared,
 	}
 	r.hasReceipt = true
 	return provideroperations.PrepareResult{Receipt: r.receipt}, nil
@@ -247,7 +247,7 @@ func (r *memoryRepository) AppendObservation(_ context.Context, input providerop
 		return provideroperations.Observation{}, err
 	}
 	return provideroperations.Observation{
-		TenantID: canonical.TenantID, SessionID: canonical.SessionID,
+		TenantID: canonical.TenantID, EpisodeID: canonical.EpisodeID,
 		Incarnation: canonical.Incarnation, Sequence: canonical.Sequence,
 		Publications: canonical.Publications, Fingerprint: fingerprint,
 	}, nil

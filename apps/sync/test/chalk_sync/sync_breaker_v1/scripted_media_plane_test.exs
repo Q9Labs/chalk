@@ -1,10 +1,10 @@
 defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlaneTest do
   use ExUnit.Case, async: true
 
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncBreakerV1.ScriptedMediaPlane
 
-  @session %SessionKey{tenant_id: "tenant", room_id: "room", session_id: "session"}
+  @episode %EpisodeKey{tenant_id: "tenant", space_id: "space", episode_id: "episode"}
 
   test "deduplicates stable external operation effects across lost responses and adapter restart" do
     actions = [
@@ -19,7 +19,7 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlaneTest do
              ScriptedMediaPlane.grant_publication(
                adapter,
                "operation-1",
-               @session,
+               @episode,
                "person",
                :camera
              )
@@ -30,7 +30,7 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlaneTest do
              ScriptedMediaPlane.grant_publication(
                restarted,
                "operation-1",
-               @session,
+               @episode,
                "person",
                :camera
              )
@@ -60,7 +60,7 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlaneTest do
 
     grant =
       Task.async(fn ->
-        ScriptedMediaPlane.grant_publication(adapter, "grant-1", @session, "person", :screen)
+        ScriptedMediaPlane.grant_publication(adapter, "grant-1", @episode, "person", :screen)
       end)
 
     assert_receive {:scripted_media_barrier, :before, :before_effect}
@@ -71,7 +71,7 @@ defmodule ChalkSync.SyncBreakerV1.ScriptedMediaPlaneTest do
 
     revoke =
       Task.async(fn ->
-        ScriptedMediaPlane.revoke_publication(adapter, "revoke-1", @session, "person", :screen)
+        ScriptedMediaPlane.revoke_publication(adapter, "revoke-1", @episode, "person", :screen)
       end)
 
     assert_receive {:scripted_media_barrier, :after, :after_effect}

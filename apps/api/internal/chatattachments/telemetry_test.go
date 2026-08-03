@@ -146,7 +146,7 @@ func TestRequestTelemetryIsBoundedAndDoesNotExposeAttachmentMaterial(t *testing.
 		"private-content-sentinel",
 		"signed-url-sentinel",
 		subject.TenantID.String(),
-		subject.SessionID.String(),
+		subject.EpisodeID.String(),
 	} {
 		if strings.Contains(signals, forbidden) {
 			t.Fatalf("telemetry exposed %q: %s", forbidden, signals)

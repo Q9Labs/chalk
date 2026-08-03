@@ -3,7 +3,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
 
   alias ChalkSync.Live.PublicationFence
   alias ChalkSync.Live.ScreenShareLease
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
@@ -41,9 +41,9 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:ok, lease} =
              ScreenShareLease.acquire(
                first,
-               fixture.session,
-               owner.participant_session_id,
-               owner.participant_session_generation,
+               fixture.episode,
+               owner.participant_id,
+               owner.participant_generation,
                now: @now,
                lease_id: "00000000-0000-4000-8000-000000000010"
              )
@@ -53,9 +53,9 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:error, :screen_share_in_use} =
              ScreenShareLease.acquire(
                second,
-               fixture.session,
-               contender.participant_session_id,
-               contender.participant_session_generation,
+               fixture.episode,
+               contender.participant_id,
+               contender.participant_generation,
                now: DateTime.add(@now, 9_999, :millisecond)
              )
 
@@ -64,17 +64,17 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:ok, takeover} =
              ScreenShareLease.acquire(
                second,
-               fixture.session,
-               contender.participant_session_id,
-               contender.participant_session_generation,
+               fixture.episode,
+               contender.participant_id,
+               contender.participant_generation,
                now: takeover_at,
                lease_id: "00000000-0000-4000-8000-000000000011"
              )
 
     assert takeover.lease_generation == 2
-    assert takeover.owner_participant_session_id == contender.participant_session_id
-    assert {:error, :lease_not_owned} = ScreenShareLease.release(first, fixture.session, lease)
-    assert :ok = ScreenShareLease.release(second, fixture.session, takeover)
+    assert takeover.owner_participant_id == contender.participant_id
+    assert {:error, :lease_not_owned} = ScreenShareLease.release(first, fixture.episode, lease)
+    assert :ok = ScreenShareLease.release(second, fixture.episode, takeover)
   end
 
   test "renews within the hard lifetime and expires in a bounded batch", %{
@@ -86,16 +86,16 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:ok, lease} =
              ScreenShareLease.acquire(
                connection,
-               fixture.session,
-               owner.participant_session_id,
-               owner.participant_session_generation,
+               fixture.episode,
+               owner.participant_id,
+               owner.participant_generation,
                now: @now,
                renewal_ms: 5_000,
                hard_lifetime_ms: 10_000
              )
 
     assert {:ok, renewed} =
-             ScreenShareLease.renew(connection, fixture.session, lease,
+             ScreenShareLease.renew(connection, fixture.episode, lease,
                now: DateTime.add(@now, 4_000, :millisecond),
                renewal_ms: 10_000
              )
@@ -107,7 +107,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
              ScreenShareLease.expire(connection, DateTime.add(@now, 10_000, :millisecond))
 
     assert {:error, :lease_expired} =
-             ScreenShareLease.renew(connection, fixture.session, renewed,
+             ScreenShareLease.renew(connection, fixture.episode, renewed,
                now: DateTime.add(@now, 10_001, :millisecond)
              )
 
@@ -124,9 +124,9 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:ok, original} =
              ScreenShareLease.acquire(
                first,
-               fixture.session,
-               owner.participant_session_id,
-               owner.participant_session_generation,
+               fixture.episode,
+               owner.participant_id,
+               owner.participant_generation,
                now: @now,
                renewal_ms: 5_000,
                hard_lifetime_ms: 20_000,
@@ -136,9 +136,9 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:ok, duplicate} =
              ScreenShareLease.acquire(
                first,
-               fixture.session,
-               owner.participant_session_id,
-               owner.participant_session_generation,
+               fixture.episode,
+               owner.participant_id,
+               owner.participant_generation,
                now: DateTime.add(@now, 4_000, :millisecond),
                renewal_ms: 5_000,
                hard_lifetime_ms: 20_000,
@@ -152,13 +152,13 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:error, :screen_share_in_use} =
              ScreenShareLease.acquire(
                second,
-               fixture.session,
-               contender.participant_session_id,
-               contender.participant_session_generation,
+               fixture.episode,
+               contender.participant_id,
+               contender.participant_generation,
                now: DateTime.add(@now, 6_000, :millisecond)
              )
 
-    assert :ok = ScreenShareLease.release(first, fixture.session, duplicate)
+    assert :ok = ScreenShareLease.release(first, fixture.episode, duplicate)
   end
 
   test "checks active publication fences by participant and source", %{
@@ -166,8 +166,8 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     fixture: fixture
   } do
     identity = hd(fixture.identities)
-    participant = identity.participant_session_id
-    generation = identity.participant_session_generation
+    participant = identity.participant_id
+    generation = identity.participant_generation
     operation_id = "00000000-0000-4000-8000-000000000020"
     insert_external_operation(connection, fixture, identity, operation_id)
 
@@ -175,14 +175,14 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
       connection,
       """
       insert into sync_publication_fences (
-        tenant_id, room_id, session_id, participant_session_id, participant_generation,
+        tenant_id, space_id, episode_id, participant_id, participant_generation,
         source, external_operation_id, created_at, expires_at
       ) values ($1, $2, $3, $4, $5, 'camera', $6, $7, $8)
       """,
       [
-        UUID.dump!(fixture.session.tenant_id),
-        UUID.dump!(fixture.session.room_id),
-        UUID.dump!(fixture.session.session_id),
+        UUID.dump!(fixture.episode.tenant_id),
+        UUID.dump!(fixture.episode.space_id),
+        UUID.dump!(fixture.episode.episode_id),
         UUID.dump!(participant),
         generation,
         UUID.dump!(operation_id),
@@ -194,7 +194,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert :owned =
              PublicationFence.check(
                connection,
-               fixture.session,
+               fixture.episode,
                participant,
                generation,
                :camera,
@@ -205,7 +205,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:fenced, ^operation_id} =
              PublicationFence.check(
                connection,
-               fixture.session,
+               fixture.episode,
                participant,
                generation,
                :camera,
@@ -216,7 +216,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert :clear =
              PublicationFence.check(
                connection,
-               fixture.session,
+               fixture.episode,
                participant,
                generation,
                :microphone,
@@ -227,7 +227,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert :clear =
              PublicationFence.check(
                connection,
-               fixture.session,
+               fixture.episode,
                participant,
                generation,
                :camera,
@@ -238,7 +238,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert :clear =
              PublicationFence.check(
                connection,
-               fixture.session,
+               fixture.episode,
                participant,
                generation + 1,
                :camera,
@@ -249,7 +249,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert {:error, :invalid_generation} =
              PublicationFence.check(
                connection,
-               fixture.session,
+               fixture.episode,
                participant,
                0,
                :camera,
@@ -263,67 +263,68 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
       connection,
       """
       insert into sync_external_operations (
-        tenant_id, room_id, session_id, external_operation_id, request_key,
-        request_fingerprint, operation_name, target_participant_session_id,
+        tenant_id, space_id, episode_id, external_operation_id, request_key,
+        request_fingerprint, operation_name, target_participant_id,
         target_participant_generation, payload
       ) values ($1, $2, $3, $4, 'remove-request-0001', $5, 'remove_participant', $6, $7, $8)
       """,
       [
-        UUID.dump!(fixture.session.tenant_id),
-        UUID.dump!(fixture.session.room_id),
-        UUID.dump!(fixture.session.session_id),
+        UUID.dump!(fixture.episode.tenant_id),
+        UUID.dump!(fixture.episode.space_id),
+        UUID.dump!(fixture.episode.episode_id),
         UUID.dump!(operation_id),
         :crypto.hash(:sha256, "remove-request-0001"),
-        UUID.dump!(identity.participant_session_id),
-        identity.participant_session_generation,
-        %{"participant_session_id" => identity.participant_session_id}
+        UUID.dump!(identity.participant_id),
+        identity.participant_generation,
+        %{"participant_id" => identity.participant_id}
       ]
     )
   end
 
   defp seed_fixture(connection) do
-    session = %SessionKey{
+    episode = %EpisodeKey{
       tenant_id: UUID.generate(),
-      room_id: UUID.generate(),
-      session_id: UUID.generate()
+      space_id: UUID.generate(),
+      episode_id: UUID.generate()
     }
 
     participants =
       Enum.map(1..2, fn generation ->
         %{
-          participant_session_id: UUID.generate(),
-          participant_session_generation: generation
+          participant_id: UUID.generate(),
+          participant_generation: generation
         }
       end)
 
     Postgrex.transaction(connection, fn transaction ->
       Postgrex.query!(transaction, "insert into tenants (id, name) values ($1, 'Live Test')", [
-        UUID.dump!(session.tenant_id)
+        UUID.dump!(episode.tenant_id)
       ])
 
       Postgrex.query!(
         transaction,
         """
-        insert into rooms (id, name, tenant_id, status, slug, media_plane)
-        values ($1, 'Live Test Room', $2, 'active', $3, 'cf_rtk')
+        insert into spaces (id, name, tenant_id, slug, media_plane)
+        values ($1, 'Live Test Space', $2, $3, 'cf_rtk')
         """,
         [
-          UUID.dump!(session.room_id),
-          UUID.dump!(session.tenant_id),
-          "live-test-#{session.room_id}"
+          UUID.dump!(episode.space_id),
+          UUID.dump!(episode.tenant_id),
+          "live-test-#{episode.space_id}"
         ]
       )
 
       Postgrex.query!(
         transaction,
         """
-        insert into room_sessions (id, status, room_id, tenant_id, started_at)
-        values ($1, 'active', $2, $3, now())
+        insert into episodes (id, status, space_id, tenant_id, started_at, config_snapshot)
+        values ($1, 'active', $2, $3, now(),
+          '{"roles":{"owner":["subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb)
         """,
         [
-          UUID.dump!(session.session_id),
-          UUID.dump!(session.room_id),
-          UUID.dump!(session.tenant_id)
+          UUID.dump!(episode.episode_id),
+          UUID.dump!(episode.space_id),
+          UUID.dump!(episode.tenant_id)
         ]
       )
 
@@ -332,16 +333,16 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
           transaction,
           """
           insert into participants (
-            id, name, capabilities, tenant_id, room_id, session_id,
-            generation, status, joined_at
-          ) values ($1, 'Live Participant', '{}', $2, $3, $4, $5, 'active', now())
+            id, name, capabilities, tenant_id, space_id, episode_id,
+            generation, status, role, joined_at
+          ) values ($1, 'Live Participant', '{"subscribe"}', $2, $3, $4, $5, 'active', 'observer', now())
           """,
           [
-            UUID.dump!(participant.participant_session_id),
-            UUID.dump!(session.tenant_id),
-            UUID.dump!(session.room_id),
-            UUID.dump!(session.session_id),
-            participant.participant_session_generation
+            UUID.dump!(participant.participant_id),
+            UUID.dump!(episode.tenant_id),
+            UUID.dump!(episode.space_id),
+            UUID.dump!(episode.episode_id),
+            participant.participant_generation
           ]
         )
       end)
@@ -349,25 +350,25 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
       Postgrex.query!(
         transaction,
         """
-        insert into sync_session_control (
-          tenant_id, room_id, session_id, folded_state, state_schema_version,
+        insert into sync_episode_control (
+          tenant_id, space_id, episode_id, folded_state, state_schema_version,
           state_digest, snapshot_bytes
         ) values ($1, $2, $3, '{}', 1, $4, 2)
         """,
         [
-          UUID.dump!(session.tenant_id),
-          UUID.dump!(session.room_id),
-          UUID.dump!(session.session_id),
+          UUID.dump!(episode.tenant_id),
+          UUID.dump!(episode.space_id),
+          UUID.dump!(episode.episode_id),
           :crypto.hash(:sha256, "live-test-state")
         ]
       )
     end)
 
-    %{session: session, identities: participants}
+    %{episode: episode, identities: participants}
   end
 
   defp cleanup_fixture(connection, fixture) do
-    tenant_id = UUID.dump!(fixture.session.tenant_id)
+    tenant_id = UUID.dump!(fixture.episode.tenant_id)
 
     Postgrex.transaction(connection, fn transaction ->
       Enum.each(
@@ -375,10 +376,10 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
           "sync_publication_fences",
           "sync_screen_share_leases",
           "sync_external_operations",
-          "sync_session_control",
+          "sync_episode_control",
           "participants",
-          "room_sessions",
-          "rooms"
+          "episodes",
+          "spaces"
         ],
         fn table ->
           Postgrex.query!(transaction, "delete from #{table} where tenant_id = $1", [tenant_id])

@@ -10,7 +10,7 @@ import (
 
 func TestJobValidationRejectsExpiredOrUnscopedAuthority(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	job := Job{ProtocolVersion: ProtocolVersion, JobID: "job", TenantID: "tenant", SessionID: "session", Attempt: 1, FencingGeneration: 1, Role: RoleCapture, ArtifactClass: "bundle", Authorization: JobAuthorization{Scope: "capture", ExpiresAt: now.Add(time.Minute)}, ObjectIntents: []ObjectIntent{{Key: "tmp/a", URL: "https://objects.invalid/tmp/a", Method: "PUT", Conditional: "if-none-match:*", MaxBytes: 100, ExpiresAt: now.Add(time.Minute), OwnerReference: "recording"}}}
+	job := Job{ProtocolVersion: ProtocolVersion, JobID: "job", TenantID: "tenant", EpisodeID: "episode", Attempt: 1, FencingGeneration: 1, Role: RoleCapture, ArtifactClass: "bundle", Authorization: JobAuthorization{Scope: "capture", ExpiresAt: now.Add(time.Minute)}, ObjectIntents: []ObjectIntent{{Key: "tmp/a", URL: "https://objects.invalid/tmp/a", Method: "PUT", Conditional: "if-none-match:*", MaxBytes: 100, ExpiresAt: now.Add(time.Minute), OwnerReference: "recording"}}}
 	if err := job.Validate(now); err != nil {
 		t.Fatalf("valid job rejected: %v", err)
 	}
@@ -188,7 +188,7 @@ func (s *retryableEventSink) Report(ctx context.Context, event WorkerEvent) erro
 
 func TestRuntimeReportsBoundedLifecycle(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	job := Job{ProtocolVersion: ProtocolVersion, JobID: "job", TenantID: "tenant", SessionID: "session", Attempt: 1, FencingGeneration: 1, Role: RoleRender, ArtifactClass: "mp4", Authorization: JobAuthorization{Scope: "render", IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}, ObjectIntents: []ObjectIntent{{Key: "tmp/input", URL: "https://objects.invalid/tmp/input", Method: "GET", MaxBytes: 100, ExpiresAt: now.Add(time.Minute), OwnerReference: "recording"}}}
+	job := Job{ProtocolVersion: ProtocolVersion, JobID: "job", TenantID: "tenant", EpisodeID: "episode", Attempt: 1, FencingGeneration: 1, Role: RoleRender, ArtifactClass: "mp4", Authorization: JobAuthorization{Scope: "render", IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}, ObjectIntents: []ObjectIntent{{Key: "tmp/input", URL: "https://objects.invalid/tmp/input", Method: "GET", MaxBytes: 100, ExpiresAt: now.Add(time.Minute), OwnerReference: "recording"}}}
 	sink := &eventSink{}
 	runtime, err := NewRuntime(job, sink, func() time.Time { return now })
 	if err != nil {
@@ -213,7 +213,7 @@ func TestRuntimeReportsBoundedLifecycle(t *testing.T) {
 
 func TestRuntimeRetriesFailedTerminalReport(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	job := Job{ProtocolVersion: ProtocolVersion, JobID: "job", TenantID: "tenant", SessionID: "session", Attempt: 1, FencingGeneration: 1, Role: RoleRender, ArtifactClass: "mp4", Authorization: JobAuthorization{Scope: "render", IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}, ObjectIntents: []ObjectIntent{{Key: "tmp/input", URL: "https://objects.invalid/tmp/input", Method: "GET", MaxBytes: 100, ExpiresAt: now.Add(time.Minute), OwnerReference: "recording"}}}
+	job := Job{ProtocolVersion: ProtocolVersion, JobID: "job", TenantID: "tenant", EpisodeID: "episode", Attempt: 1, FencingGeneration: 1, Role: RoleRender, ArtifactClass: "mp4", Authorization: JobAuthorization{Scope: "render", IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}, ObjectIntents: []ObjectIntent{{Key: "tmp/input", URL: "https://objects.invalid/tmp/input", Method: "GET", MaxBytes: 100, ExpiresAt: now.Add(time.Minute), OwnerReference: "recording"}}}
 	sink := &retryableEventSink{fail: true}
 	runtime, err := NewRuntime(job, sink, func() time.Time { return now })
 	if err != nil {

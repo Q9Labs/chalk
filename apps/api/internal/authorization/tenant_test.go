@@ -20,9 +20,9 @@ func TestTenantPolicyAllowsAPIKeyWithTenantScope(t *testing.T) {
 		Kind:     authentication.PrincipalAPIKey,
 		TenantID: tenantID,
 		APIKeyID: apiKeyID,
-		Scopes:   []authentication.Scope{authentication.ScopeRoomsWrite},
+		Scopes:   []authentication.Scope{authentication.ScopeSpacesWrite},
 	}, tenantID, authorization.TenantPermission{
-		Scope: authentication.ScopeRoomsWrite,
+		Scope: authentication.ScopeSpacesWrite,
 	})
 	if err != nil {
 		t.Fatalf("authorize tenant: %v", err)
@@ -38,9 +38,9 @@ func TestTenantPolicyRejectsAPIKeyWithoutScope(t *testing.T) {
 		Kind:     authentication.PrincipalAPIKey,
 		TenantID: tenantID,
 		APIKeyID: apiKeyID,
-		Scopes:   []authentication.Scope{authentication.ScopeRoomsRead},
+		Scopes:   []authentication.Scope{authentication.ScopeSpacesRead},
 	}, tenantID, authorization.TenantPermission{
-		Scope: authentication.ScopeRoomsWrite,
+		Scope: authentication.ScopeSpacesWrite,
 	})
 	if !errors.Is(err, authorization.ErrForbidden) {
 		t.Fatalf("error = %v, want forbidden", err)
@@ -57,9 +57,9 @@ func TestTenantPolicyRejectsAPIKeyForDifferentTenant(t *testing.T) {
 		Kind:     authentication.PrincipalAPIKey,
 		TenantID: otherTenantID,
 		APIKeyID: apiKeyID,
-		Scopes:   []authentication.Scope{authentication.ScopeRoomsWrite},
+		Scopes:   []authentication.Scope{authentication.ScopeSpacesWrite},
 	}, tenantID, authorization.TenantPermission{
-		Scope: authentication.ScopeRoomsWrite,
+		Scope: authentication.ScopeSpacesWrite,
 	})
 	if !errors.Is(err, authorization.ErrForbidden) {
 		t.Fatalf("error = %v, want forbidden", err)

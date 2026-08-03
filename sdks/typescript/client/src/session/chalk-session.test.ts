@@ -247,7 +247,7 @@ describe("ChalkSession", () => {
       type: "directed_request",
       request_id: "request-000000001",
       name: "request_start_camera",
-      actor_participant_session_id: "participant-host",
+      actor_participant_id: "participant-host",
       expires_at_ms: Date.now() + 30_000,
     });
 
@@ -915,7 +915,7 @@ class FakeSync implements ChalkSessionSyncClient {
   };
   getRoomActionsExtensionState = () => ({
     negotiated: this.snapshot.connection.phase === "live",
-    version: this.snapshot.connection.phase === "live" ? (2 as const) : null,
+    version: this.snapshot.connection.phase === "live" ? (1 as const) : null,
     capabilities: ["sendReaction", "sendChat"] as const,
     chatHeadSequence: this.chatHeadSequence,
     retainedFloorSequence: null,

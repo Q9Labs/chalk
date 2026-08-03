@@ -45,16 +45,16 @@ func (recordingPipelineService) GetPipeline(context.Context, utilities.ID, utili
 
 func TestCreateRecordingReservationUsesBoundedTenantAuthorizedContract(t *testing.T) {
 	tenantID := mustRecordingPipelineID(t, "11111111-1111-4111-8111-111111111111")
-	roomID := mustRecordingPipelineID(t, "22222222-2222-4222-8222-222222222222")
-	sessionID := mustRecordingPipelineID(t, "33333333-3333-4333-8333-333333333333")
+	spaceID := mustRecordingPipelineID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := mustRecordingPipelineID(t, "33333333-3333-4333-8333-333333333333")
 	now := time.Date(2026, 7, 13, 2, 0, 0, 0, time.UTC)
 	service := recordingPipelineService{reserve: func(_ context.Context, input recordingpipeline.ReservationInput) (recordingpipeline.Reservation, error) {
-		if input.TenantID != tenantID || input.RoomID != roomID || input.SessionID != sessionID || input.IdempotencyKey != "recording-request-0001" || input.MaxDuration != 45*time.Minute {
+		if input.TenantID != tenantID || input.SpaceID != spaceID || input.EpisodeID != episodeID || input.IdempotencyKey != "recording-request-0001" || input.MaxDuration != 45*time.Minute {
 			t.Fatalf("reserve input = %#v", input)
 		}
-		return recordingpipeline.Reservation{ID: mustRecordingPipelineID(t, "44444444-4444-4444-8444-444444444444"), TenantID: tenantID, RoomID: roomID, SessionID: sessionID, RecordingID: input.RecordingID, ParticipantCount: input.ParticipantCount, MaxDuration: input.MaxDuration, InputBitrateBPS: input.InputBitrateBPS, State: recordingpipeline.ReservationStateReserved, EndsAt: now.Add(45 * time.Minute), UpdatedAt: now, CreatedAt: now}, nil
+		return recordingpipeline.Reservation{ID: mustRecordingPipelineID(t, "44444444-4444-4444-8444-444444444444"), TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RecordingID: input.RecordingID, ParticipantCount: input.ParticipantCount, MaxDuration: input.MaxDuration, InputBitrateBPS: input.InputBitrateBPS, State: recordingpipeline.ReservationStateReserved, EndsAt: now.Add(45 * time.Minute), UpdatedAt: now, CreatedAt: now}, nil
 	}}
-	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/rooms/22222222-2222-4222-8222-222222222222/sessions/33333333-3333-4333-8333-333333333333/recording-reservations", "raw-session-token", `{"participant_count":3,"max_duration_minutes":45,"input_bitrate_bps":4000000}`)
+	request := bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/spaces/22222222-2222-4222-8222-222222222222/episodes/33333333-3333-4333-8333-333333333333/recording-reservations", "raw-session-token", `{"participant_count":3,"max_duration_minutes":45,"input_bitrate_bps":4000000}`)
 	request.Header.Set("Idempotency-Key", "recording-request-0001")
 	response := requestWithOptionsAndRequest(t, request, authenticatedOptions(t, httpapi.Options{RecordingPipeline: service}))
 	if response.Code != http.StatusCreated {
@@ -74,7 +74,7 @@ func TestCreateRecordingReservationRequiresAuthentication(t *testing.T) {
 		t.Fatal("unauthenticated request reached the recording pipeline service")
 		return recordingpipeline.Reservation{}, nil
 	}}
-	response := requestWithOptionsAndRequest(t, bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/rooms/22222222-2222-4222-8222-222222222222/sessions/33333333-3333-4333-8333-333333333333/recording-reservations", "", `{}`), httpapi.Options{Authentication: authenticationService{}, RecordingPipeline: service})
+	response := requestWithOptionsAndRequest(t, bearerRequestWithBody(http.MethodPost, "/v1/tenants/11111111-1111-4111-8111-111111111111/spaces/22222222-2222-4222-8222-222222222222/episodes/33333333-3333-4333-8333-333333333333/recording-reservations", "", `{}`), httpapi.Options{Authentication: authenticationService{}, RecordingPipeline: service})
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", response.Code)
 	}

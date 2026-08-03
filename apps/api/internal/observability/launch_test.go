@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
@@ -19,15 +19,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type participantIssuerFunc func(context.Context, participantaccess.Subject) (participantaccess.MediaCredential, error)
+type participantIssuerFunc func(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
 
-func (f participantIssuerFunc) Issue(ctx context.Context, subject participantaccess.Subject) (participantaccess.MediaCredential, error) {
+func (f participantIssuerFunc) Issue(ctx context.Context, subject accessgrants.Subject) (accessgrants.MediaCredential, error) {
 	return f(ctx, subject)
 }
 
-type participantVerifierFunc func(context.Context, string) (participantaccess.Subject, error)
+type participantVerifierFunc func(context.Context, string) (accessgrants.Subject, error)
 
-func (f participantVerifierFunc) Verify(ctx context.Context, credential string) (participantaccess.Subject, error) {
+func (f participantVerifierFunc) Verify(ctx context.Context, credential string) (accessgrants.Subject, error) {
 	return f(ctx, credential)
 }
 
@@ -81,14 +81,14 @@ func TestParticipantTelemetryPreservesParentAndClassifiesAudienceRejection(t *te
 	}
 	parent := trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled, Remote: true})
 	var observedParent trace.SpanContext
-	verifier := InstrumentParticipantMediaVerifier(participantVerifierFunc(func(verifyCtx context.Context, _ string) (participantaccess.Subject, error) {
+	verifier := InstrumentParticipantMediaVerifier(participantVerifierFunc(func(verifyCtx context.Context, _ string) (accessgrants.Subject, error) {
 		observedParent = trace.SpanContextFromContext(verifyCtx)
-		return participantaccess.Subject{}, participantaccess.ErrInvalidAudience
+		return accessgrants.Subject{}, accessgrants.ErrInvalidAudience
 	}), telemetry)
 
 	ctx := trace.ContextWithRemoteSpanContext(context.Background(), parent)
 	_, err = verifier.Verify(ctx, "credential-sentinel-must-not-leak")
-	if !errors.Is(err, participantaccess.ErrInvalidAudience) {
+	if !errors.Is(err, accessgrants.ErrInvalidAudience) {
 		t.Fatalf("verify error = %v", err)
 	}
 	if observedParent.TraceID() != traceID {
@@ -120,15 +120,15 @@ func TestParticipantIssuanceTelemetryClassifiesSuccessWithoutSubjectFields(t *te
 		now = now.Add(time.Millisecond)
 		return now
 	})
-	issuer := InstrumentParticipantAccessIssuer(participantIssuerFunc(func(context.Context, participantaccess.Subject) (participantaccess.MediaCredential, error) {
-		return participantaccess.MediaCredential{Token: "issued-token-sentinel", ExpiresAt: now.Add(time.Minute)}, nil
+	issuer := InstrumentAccessGrantIssuer(participantIssuerFunc(func(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error) {
+		return accessgrants.MediaCredential{Token: "issued-token-sentinel", ExpiresAt: now.Add(time.Minute)}, nil
 	}), telemetry)
 
-	credential, err := issuer.Issue(context.Background(), participantaccess.Subject{Provider: participantaccess.ProviderCloudflareSFU, CloudflareConnectionID: "connection-id-sentinel"})
+	credential, err := issuer.Issue(context.Background(), accessgrants.Subject{Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: "connection-id-sentinel"})
 	if err != nil || credential.Token == "" {
 		t.Fatalf("issue result = %#v, %v", credential, err)
 	}
-	metric := collectMetrics(t, reader)["chalk.api.participant_access.issuance"]
+	metric := collectMetrics(t, reader)["chalk.api.access_grant.issuance"]
 	assertMetricAttributeKeys(t, metric, map[string]bool{"outcome": true, "reason": true})
 	assertMetricHasAttributes(t, metric, map[string]string{"outcome": "issued", "reason": "none"})
 	assertSignalDoesNotContain(t, output.String())
@@ -210,7 +210,7 @@ func assertSignalDoesNotContain(t *testing.T, signal string) {
 		"issued-token-sentinel",
 		"connection-id-sentinel",
 		"chalk_sk_",
-		"rooms:read",
+		"spaces:read",
 		"203.0.113.9",
 	} {
 		if strings.Contains(signal, forbidden) {

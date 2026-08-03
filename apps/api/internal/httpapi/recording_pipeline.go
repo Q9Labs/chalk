@@ -37,10 +37,10 @@ type extendRecordingReservationBody struct {
 }
 
 type createRecordingReservationRequest struct {
-	TenantID, RoomID, SessionID utilities.ID
-	IdempotencyKey              string
-	ScheduledStart              *time.Time
-	Body                        createRecordingReservationBody
+	TenantID, SpaceID, EpisodeID utilities.ID
+	IdempotencyKey               string
+	ScheduledStart               *time.Time
+	Body                         createRecordingReservationBody
 }
 
 type recordingReservationRequest struct{ TenantID, ReservationID utilities.ID }
@@ -53,8 +53,8 @@ type recordingPipelineRequest struct{ TenantID, RecordingID utilities.ID }
 type recordingReservationResponse struct {
 	ID                 string  `json:"id"`
 	TenantID           string  `json:"tenant_id"`
-	RoomID             string  `json:"room_id"`
-	SessionID          string  `json:"session_id"`
+	SpaceID            string  `json:"space_id"`
+	EpisodeID          string  `json:"episode_id"`
 	RecordingID        string  `json:"recording_id"`
 	ParticipantCount   int     `json:"participant_count"`
 	MaxDurationMinutes int     `json:"max_duration_minutes"`
@@ -94,7 +94,7 @@ func recordingPipelineEndpoints(service RecordingPipelineService, metrics Record
 }
 
 func createRecordingReservationEndpoint(service RecordingPipelineService, metrics RecordingPipelineMetricRecorder, authorizer TenantAuthorizer) Endpoint[createRecordingReservationRequest, recordingReservationResponse] {
-	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recording-reservations", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recording-reservations", "createRecordingReservation", decodeCreateRecordingReservation, func(ctx context.Context, request createRecordingReservationRequest) (recordingReservationResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recording-reservations", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recording-reservations", "createRecordingReservation", decodeCreateRecordingReservation, func(ctx context.Context, request createRecordingReservationRequest) (recordingReservationResponse, error) {
 		if service == nil {
 			return recordingReservationResponse{}, apiErrorServiceUnavailable
 		}
@@ -106,7 +106,7 @@ func createRecordingReservationEndpoint(service RecordingPipelineService, metric
 			return recordingReservationResponse{}, err
 		}
 		reservation, err := service.Reserve(ctx, recordingpipeline.ReservationInput{
-			TenantID: request.TenantID, RoomID: request.RoomID, SessionID: request.SessionID, RecordingID: recordingID,
+			TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, RecordingID: recordingID,
 			IdempotencyKey: request.IdempotencyKey, ParticipantCount: request.Body.ParticipantCount,
 			MaxDuration: time.Duration(request.Body.MaxDurationMinutes) * time.Minute, InputBitrateBPS: request.Body.InputBitrateBPS, StartsAt: request.ScheduledStart,
 		})
@@ -117,10 +117,10 @@ func createRecordingReservationEndpoint(service RecordingPipelineService, metric
 		recordAdmission(metrics, ctx, "accepted", "reserved")
 		return reservationResponse(reservation), nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter(), idempotencyKeyParameter()).
+		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateRecordingReservationRequest", createRecordingReservationBody{}).
 		Responds(http.StatusCreated, "RecordingReservation", recordingReservationResponse{}).
-		Errors(pipelineWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidRequestKey, apiErrorInvalidRecordingParticipantCount, apiErrorInvalidRecordingDuration, apiErrorInvalidRecordingBitrate, apiErrorRecordingCapacityUnavailable, apiErrorIdempotencyConflict, apiErrorSessionNotFound, apiErrorRateLimited)...).
+		Errors(pipelineWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorInvalidRecordingParticipantCount, apiErrorInvalidRecordingDuration, apiErrorInvalidRecordingBitrate, apiErrorRecordingCapacityUnavailable, apiErrorIdempotencyConflict, apiErrorEpisodeNotFound, apiErrorRateLimited)...).
 		MapErrors(recordingPipelineAPIError)
 }
 
@@ -196,7 +196,7 @@ func getRecordingPipelineEndpoint(service RecordingPipelineService, authorizer T
 }
 
 func decodeCreateRecordingReservation(request *http.Request) (createRecordingReservationRequest, error) {
-	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(request)
+	tenantID, spaceID, episodeID, err := tenantSpaceEpisodeIDsRequest(request)
 	if err != nil {
 		return createRecordingReservationRequest{}, err
 	}
@@ -212,7 +212,7 @@ func decodeCreateRecordingReservation(request *http.Request) (createRecordingRes
 		}
 		scheduled = &parsed
 	}
-	return createRecordingReservationRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, IdempotencyKey: request.Header.Get(idempotencyKeyHeader), ScheduledStart: scheduled, Body: body}, nil
+	return createRecordingReservationRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, IdempotencyKey: request.Header.Get(idempotencyKeyHeader), ScheduledStart: scheduled, Body: body}, nil
 }
 
 func decodeRecordingReservation(request *http.Request) (recordingReservationRequest, error) {
@@ -252,7 +252,7 @@ func decodeRecordingPipeline(request *http.Request) (recordingPipelineRequest, e
 }
 
 func reservationResponse(value recordingpipeline.Reservation) recordingReservationResponse {
-	return recordingReservationResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RoomID: value.RoomID.String(), SessionID: value.SessionID.String(), RecordingID: value.RecordingID.String(), ParticipantCount: value.ParticipantCount, MaxDurationMinutes: int(value.MaxDuration / time.Minute), InputBitrateBPS: value.InputBitrateBPS, State: string(value.State), ScheduledStart: timeResponse(value.StartsAt), EndsAt: value.EndsAt.UTC().Format(time.RFC3339Nano), UpdatedAt: value.UpdatedAt.UTC().Format(time.RFC3339Nano), CreatedAt: value.CreatedAt.UTC().Format(time.RFC3339Nano)}
+	return recordingReservationResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), RecordingID: value.RecordingID.String(), ParticipantCount: value.ParticipantCount, MaxDurationMinutes: int(value.MaxDuration / time.Minute), InputBitrateBPS: value.InputBitrateBPS, State: string(value.State), ScheduledStart: timeResponse(value.StartsAt), EndsAt: value.EndsAt.UTC().Format(time.RFC3339Nano), UpdatedAt: value.UpdatedAt.UTC().Format(time.RFC3339Nano), CreatedAt: value.CreatedAt.UTC().Format(time.RFC3339Nano)}
 }
 
 func pipelineResponse(value recordingpipeline.Pipeline) recordingPipelineResponse {
@@ -278,10 +278,10 @@ func recordingPipelineAPIError(err error) (APIError, bool) {
 	switch {
 	case errors.Is(err, recordingpipeline.ErrInvalidTenantID):
 		return apiErrorInvalidTenantID, true
-	case errors.Is(err, recordingpipeline.ErrInvalidRoomID):
-		return apiErrorInvalidRoomID, true
-	case errors.Is(err, recordingpipeline.ErrInvalidSessionID):
-		return apiErrorInvalidSessionID, true
+	case errors.Is(err, recordingpipeline.ErrInvalidSpaceID):
+		return apiErrorInvalidSpaceID, true
+	case errors.Is(err, recordingpipeline.ErrInvalidEpisodeID):
+		return apiErrorInvalidEpisodeID, true
 	case errors.Is(err, recordingpipeline.ErrInvalidRecordingID):
 		return apiErrorInvalidRecordingID, true
 	case errors.Is(err, recordingpipeline.ErrInvalidReservationID):

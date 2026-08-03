@@ -11,7 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestCleanupUsesSevenDayEndedSessionRetentionAndDeletesObjectFirst(t *testing.T) {
+func TestCleanupUsesSevenDayEndedEpisodeRetentionAndDeletesObjectFirst(t *testing.T) {
 	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
 	claim := chatCleanupTestClaim(t)
 	events := []string{}
@@ -102,7 +102,7 @@ func chatCleanupTestClaim(t *testing.T) CleanupClaim {
 	t.Helper()
 	return CleanupClaim{
 		TenantID:     chatAttachmentTestID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID:    chatAttachmentTestID(t, "33333333-3333-4333-8333-333333333333"),
+		EpisodeID:    chatAttachmentTestID(t, "33333333-3333-4333-8333-333333333333"),
 		AttachmentID: chatAttachmentTestID(t, "55555555-5555-4555-8555-555555555555"),
 		ObjectKey:    "chat-attachments-v1/test-object",
 		Token:        chatAttachmentTestID(t, "77777777-7777-4777-8777-777777777777"),

@@ -2,8 +2,8 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
   @moduledoc false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Live.MediaPlaneTestAdapter
-  alias ChalkSync.Sessions.Coordinator
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncBreakerV1.DeliveryGateAdapter, as: Gate
   alias ChalkSync.SyncPostgres
@@ -81,7 +81,7 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
       start_gate([{:command_result, {:hold, :ack}}])
       client = Client.send_json(client, command("breaker_event_first01", true))
       assert_observed(:command_result, {:hold, :ack})
-      send(Coordinator.whereis(fixture.session), :repair_now)
+      send(Coordinator.whereis(fixture.episode), :repair_now)
 
       {:json, %{"type" => "event", "command_id" => "breaker_event_first01"}, client} =
         Client.recv(client)
@@ -111,7 +111,7 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
       assert_observed(:postgres_head_hint, :drop)
       assert_observed(:command_result, {:hold, :dropped_hint_ack})
       assert_no_frame(client)
-      coordinator = Coordinator.whereis(fixture.session)
+      coordinator = Coordinator.whereis(fixture.episode)
       send(coordinator, :repair_now)
       {:json, %{"type" => "event", "revision" => revision}, client} = Client.recv(client)
       {:ok, 1} = Gate.release(:dropped_hint_ack)
@@ -138,13 +138,13 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
       start_gate([])
       identity = hd(fixture.identities)
       client = connect_live(port, identity)
-      coordinator = Coordinator.whereis(fixture.session)
+      coordinator = Coordinator.whereis(fixture.episode)
       monitor = Process.monitor(coordinator)
       _closed = Client.close_tcp(client)
       Process.exit(coordinator, :kill)
       receive do: ({:DOWN, ^monitor, :process, ^coordinator, _reason} -> :ok)
       reconnected = connect_live(port, identity)
-      {:ok, recovery} = Postgres.recover(fixture.session, nil)
+      {:ok, recovery} = Postgres.recover(fixture.episode, nil)
 
       result("coordinator_kill_restart", %{
         "reconnected" => match?(%Client{}, reconnected),
@@ -167,14 +167,14 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
       ])
 
       earlier = [publication(observer, :camera)]
-      MediaPlaneTestAdapter.put_outcome(adapter, :observe_session_publications, {:ok, earlier})
-      :ok = Coordinator.reconcile_live(Coordinator.whereis(fixture.session))
+      MediaPlaneTestAdapter.put_outcome(adapter, :observe_episode_publications, {:ok, earlier})
+      :ok = Coordinator.reconcile_live(Coordinator.whereis(fixture.episode))
       assert_observed(:live_frame, {:hold, :earlier_live})
       assert_no_frame(observer_client)
 
       later = earlier ++ [publication(observer, :microphone)]
-      MediaPlaneTestAdapter.put_outcome(adapter, :observe_session_publications, {:ok, later})
-      :ok = Coordinator.reconcile_live(Coordinator.whereis(fixture.session))
+      MediaPlaneTestAdapter.put_outcome(adapter, :observe_episode_publications, {:ok, later})
+      :ok = Coordinator.reconcile_live(Coordinator.whereis(fixture.episode))
       assert_observed(:live_frame, {:hold, :later_live})
       assert_no_frame(observer_client)
 
@@ -244,15 +244,14 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
   defp hello(identity) do
     token =
       DevTokenVerifier.token(%{
-        "tenant_id" => identity.session.tenant_id,
-        "room_id" => identity.session.room_id,
-        "session_id" => identity.session.session_id,
-        "participant_id" => identity.participant_session_id,
-        "participant_session_id" => identity.participant_session_id,
-        "participant_session_generation" => identity.participant_session_generation,
+        "tenant_id" => identity.episode.tenant_id,
+        "space_id" => identity.episode.space_id,
+        "episode_id" => identity.episode.episode_id,
+        "participant_id" => identity.participant_id,
+        "participant_generation" => identity.participant_generation,
         "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
-        "initial_role" => identity.role,
-        "eligible_roles" => identity.eligible_roles,
+        "role" => identity.role,
+        "capabilities" => identity.capabilities,
         "issued_at" => 1,
         "expires_at" => 4_102_444_800
       })
@@ -280,7 +279,7 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
 
   defp publication(identity, source) do
     %{
-      participant_session_id: identity.participant_session_id,
+      participant_id: identity.participant_id,
       source: source,
       enabled: true,
       publication_id: "breaker-#{source}-publication"
@@ -313,13 +312,13 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
   defp normalize_action(action), do: Atom.to_string(action)
 
   defp with_fixture(connections, fun) do
-    fixture = SyncPostgres.seed_session(hd(connections), 2)
+    fixture = SyncPostgres.seed_episode(hd(connections), 2)
 
     try do: fun.(fixture),
         after:
           (
             Gate.stop()
-            SyncPostgres.cleanup(hd(connections), fixture.session)
+            SyncPostgres.cleanup(hd(connections), fixture.episode)
           )
   end
 

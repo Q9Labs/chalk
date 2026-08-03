@@ -132,7 +132,7 @@ export class V1SyncClient implements V1RoomActionsClient {
   #roomActions: V1RoomActionsExtensionState;
   #participantRoomActionCapabilities: Readonly<Record<string, readonly ChalkSyncV1RoomActionCapability[]>> = {};
   #chatAfterSequence: string | null;
-  #requestedRoomActionsVersion: 0 | 2;
+  #requestedRoomActionsVersion: 0 | 1;
   readonly #localMedia: Record<V1MediaSource, "unknown" | "requesting" | "enabled" | "disabled" | "failed"> = { microphone: "unknown", camera: "unknown", screen: "unknown" };
 
   constructor(options: V1SyncClientOptions) {
@@ -141,7 +141,7 @@ export class V1SyncClient implements V1RoomActionsClient {
     this.#store = options.pendingStore ?? new InMemoryV1PendingTargetStore();
     const cursor = options.roomActions === false ? { afterSequence: null, retainedFloorSequence: null } : (options.roomActions?.chatCursor ?? { afterSequence: null, retainedFloorSequence: null });
     this.#chatAfterSequence = cursor.afterSequence;
-    this.#requestedRoomActionsVersion = options.roomActions === false ? 0 : 2;
+    this.#requestedRoomActionsVersion = options.roomActions === false ? 0 : 1;
     this.#roomActions = {
       negotiated: false,
       version: null,
@@ -262,7 +262,7 @@ export class V1SyncClient implements V1RoomActionsClient {
     this.#assertRoomActionReady("sendReaction");
     this.#assertRoomActionCapacity();
     const operationId = this.#nextRoomActionId();
-    const frame = { type: "room_reaction_send", operation_id: operationId, reaction } as const;
+    const frame = { type: "reaction_send", operation_id: operationId, reaction } as const;
     encodeV1ClientFrame(frame);
     const promise = new Promise<ChalkRoomReaction>((resolve, reject) => this.#reactions.set(operationId, { resolve, reject, settled: false }));
     this.#send(frame);
@@ -284,7 +284,7 @@ export class V1SyncClient implements V1RoomActionsClient {
 
   markChatRead(sequence: string): Promise<ChalkChatReadReceipt> {
     this.#assertRoomActionReady();
-    if (this.#roomActions.version !== 2) throw new V1SyncError("durable chat read receipts require room_actions_v2", "room_actions_unavailable");
+    if (this.#roomActions.version !== 1) throw new V1SyncError("durable chat read receipts require collaboration_v1", "collaboration_unavailable");
     this.#assertRoomActionCapacity();
     const requestId = this.#nextRoomActionId();
     const frame = { type: "chat_read_set", request_id: requestId, sequence } as const;
@@ -325,11 +325,11 @@ export class V1SyncClient implements V1RoomActionsClient {
   }
 
   setParticipantRole(participantSessionId: string, role: V1AssignableRole, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendTarget({ name: "set_participant_role", payload: { participant_session_id: participantSessionId, role } }, options);
+    return this.#sendTarget({ name: "assign_roles", payload: { participant_id: participantSessionId, role } }, options);
   }
 
   transferHost(participantSessionId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendTarget({ name: "transfer_host", payload: { participant_session_id: participantSessionId } }, options);
+    return this.#sendTarget({ name: "assign_roles", payload: { participant_id: participantSessionId, role: "host" } }, options);
   }
 
   admit(admissionRequestId: string, options?: CommandOptions): Promise<V1CommandResult> {
@@ -341,19 +341,19 @@ export class V1SyncClient implements V1RoomActionsClient {
   }
 
   muteParticipant(participantSessionId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("mute_participant", { participant_session_id: participantSessionId }, options);
+    return this.#sendOperation("mute_participant", { participant_id: participantSessionId }, options);
   }
 
   stopParticipantCamera(participantSessionId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("stop_participant_camera", { participant_session_id: participantSessionId }, options);
+    return this.#sendOperation("stop_participant_camera", { participant_id: participantSessionId }, options);
   }
 
   stopParticipantScreenShare(participantSessionId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("stop_participant_screen_share", { participant_session_id: participantSessionId }, options);
+    return this.#sendOperation("stop_participant_screen_share", { participant_id: participantSessionId }, options);
   }
 
   removeParticipant(participantSessionId: string, options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("remove_participant", { participant_session_id: participantSessionId }, options);
+    return this.#sendOperation("remove_participant", { participant_id: participantSessionId }, options);
   }
 
   startRecording(options?: CommandOptions & { readonly recordingId?: string }): Promise<{ readonly recordingId: string; readonly result: V1CommandResult }> {
@@ -370,7 +370,7 @@ export class V1SyncClient implements V1RoomActionsClient {
   }
 
   endSession(options?: CommandOptions): Promise<V1CommandResult> {
-    return this.#sendOperation("end_session", {}, options);
+    return this.#sendOperation("end_episode", {}, options);
   }
 
   setMicrophoneEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
@@ -465,7 +465,7 @@ export class V1SyncClient implements V1RoomActionsClient {
     if (this.#phase.phase !== "live") return Promise.reject(new V1SyncError("directed requests are live-only and are never queued for replay", "not_live"));
     const requestId = options?.requestId ?? this.#nextRequestId();
     if (this.#requests.has(requestId) || this.#liveTargets.has(requestId)) throw new V1SyncError("request ID is already pending", "request_id_conflict");
-    const frame = { type: "directed_request", request_id: requestId, name, target_participant_session_id: participantSessionId } as const;
+    const frame = { type: "directed_request", request_id: requestId, name, target_participant_id: participantSessionId } as const;
     encodeV1ClientFrame(frame);
     const promise = new Promise<V1DirectedRequestResult>((resolve, reject) => this.#requests.set(requestId, { resolve, reject, settled: false, frame }));
     this.#send(frame);
@@ -520,7 +520,7 @@ export class V1SyncClient implements V1RoomActionsClient {
           after_sequence: this.#chatAfterSequence,
           retained_floor_sequence: this.#roomActions.retainedFloorSequence,
         };
-        this.#send({ ...hello, extensions: [{ name: "room_actions_v2", chat_cursor }] });
+        this.#send({ ...hello, extensions: [{ name: "collaboration_v1", chat_cursor }] });
       }
       this.#emit();
     } catch {
@@ -589,12 +589,12 @@ export class V1SyncClient implements V1RoomActionsClient {
       case "directed_request":
         this.#directedRequest(frame);
         return;
-      case "room_reaction":
+      case "reaction":
         this.#requireLive();
         this.#requireRoomActionsNegotiated();
         this.#emitRoomAction({ type: "reaction", reaction: roomReactionFromFrame(frame) });
         return;
-      case "room_reaction_result":
+      case "reaction_result":
         this.#roomReactionResult(frame);
         return;
       case "chat_message":
@@ -618,7 +618,7 @@ export class V1SyncClient implements V1RoomActionsClient {
         return;
       case "chat_read_receipt":
         this.#requireLive();
-        this.#requireRoomActionsVersion(2);
+        this.#requireRoomActionsVersion(1);
         {
           const receipt = chatReadReceiptFromFrame(frame);
           this.#rememberChatReadReceipt(receipt);
@@ -641,7 +641,7 @@ export class V1SyncClient implements V1RoomActionsClient {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     if ("extensions" in frame) {
       const extension = frame.extensions[0];
-      const version = 2;
+      const version = 1;
       if (this.#requestedRoomActionsVersion !== version) throw new V1ReplicaError("room-actions welcome version does not match the requested extension");
       this.#roomActions = {
         negotiated: true,
@@ -657,8 +657,8 @@ export class V1SyncClient implements V1RoomActionsClient {
       this.#roomActions = { ...this.#roomActions, negotiated: false, version: null, capabilities: [], readReceipts: [] };
       this.#participantRoomActionCapabilities = {};
     }
-    this.#participantSessionId = frame.participant_session_id;
-    this.#participantSessionGeneration = frame.participant_session_generation;
+    this.#participantSessionId = frame.participant_id;
+    this.#participantSessionGeneration = frame.participant_generation;
     this.#updateLocalMediaStates();
     if (frame.mode === "terminal") {
       await this.#settleTerminalRecoveryCommands(frame);
@@ -758,12 +758,7 @@ export class V1SyncClient implements V1RoomActionsClient {
   }
 
   async #settleTerminalLifecycleCommands(frame: Extract<SyncV1ServerFrame, { readonly type: "event" }>): Promise<void> {
-    const operationName =
-      frame.name === "session_ended"
-        ? "end_session"
-        : (frame.name === "participant_left" && frame.payload.participant_session_id === this.#participantSessionId) || (frame.name === "host_left_and_transferred" && frame.payload.departing_participant_session_id === this.#participantSessionId)
-          ? "participant_leave"
-          : null;
+    const operationName = frame.name === "episode_ended" ? "end_episode" : frame.name === "participant_left" && frame.payload.participant_id === this.#participantSessionId ? "participant_leave" : null;
     if (!operationName) return;
     for (const [commandId, deferred] of this.#commands) {
       if (deferred.frame.type !== "operation" || deferred.frame.name !== operationName) continue;
@@ -780,8 +775,8 @@ export class V1SyncClient implements V1RoomActionsClient {
 
   async #settleTerminalRecoveryCommands(frame: Extract<SyncV1ServerFrame, { readonly type: "welcome"; readonly mode: "terminal" }>): Promise<void> {
     const satisfiedOperations = new Set<V1OperationName>();
-    if (frame.reason === "session_ended") {
-      satisfiedOperations.add("end_session");
+    if (frame.reason === "episode_ended") {
+      satisfiedOperations.add("end_episode");
       satisfiedOperations.add("participant_leave");
     } else if (frame.reason === "participant_inactive") {
       satisfiedOperations.add("participant_leave");
@@ -967,7 +962,7 @@ export class V1SyncClient implements V1RoomActionsClient {
     for (const listener of this.#requestListeners) listener(frame);
   }
 
-  #roomReactionResult(frame: Extract<SyncV1ServerFrame, { readonly type: "room_reaction_result" }>): void {
+  #roomReactionResult(frame: Extract<SyncV1ServerFrame, { readonly type: "reaction_result" }>): void {
     this.#requireLive();
     this.#requireRoomActionsNegotiated();
     const deferred = this.#reactions.get(frame.operation_id);
@@ -1029,7 +1024,7 @@ export class V1SyncClient implements V1RoomActionsClient {
 
   #chatReadResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_read_result" }>): void {
     this.#requireLive();
-    this.#requireRoomActionsVersion(2);
+    this.#requireRoomActionsVersion(1);
     const deferred = this.#chatReads.get(frame.request_id);
     if (!deferred) return;
     this.#chatReads.delete(frame.request_id);
@@ -1044,7 +1039,7 @@ export class V1SyncClient implements V1RoomActionsClient {
 
   #assertChatMessageVersion(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>): void {
     const version = this.#roomActions.version;
-    if (version === 2 && !("attachments" in frame)) throw new V1ReplicaError("room_actions_v2 received a chat message without attachments");
+    if (version === 1 && !("attachments" in frame)) throw new V1ReplicaError("collaboration_v1 received a chat message without attachments");
   }
 
   #rememberChatReadReceipt(receipt: ChalkChatReadReceipt): void {
@@ -1238,9 +1233,9 @@ export class V1SyncClient implements V1RoomActionsClient {
     if (!this.#roomActions.negotiated) throw new V1ReplicaError("room-actions frame arrived without a negotiated extension");
   }
 
-  #requireRoomActionsVersion(version: 2): void {
+  #requireRoomActionsVersion(version: 1): void {
     this.#requireRoomActionsNegotiated();
-    if (this.#roomActions.version !== version) throw new V1ReplicaError(`room_actions_v${version} frame arrived on a different extension version`);
+    if (this.#roomActions.version !== version) throw new V1ReplicaError(`collaboration_v1 frame arrived on a different extension version`);
   }
 
   #requireControl(): V1ControlState {
@@ -1429,12 +1424,12 @@ function updateProjection<T>(projection: V1Projection<T> | null, projectionId: s
   return { projectionId, sequence, items: [...projection.items.filter((candidate) => key(candidate) !== itemKey), item] };
 }
 
-function mediaItem(item: { readonly participant_session_id: string; readonly source: V1MediaSource; readonly enabled: boolean; readonly publication_id: string | null }): V1MediaPublication {
-  return { participantSessionId: item.participant_session_id, source: item.source, enabled: item.enabled, publicationId: item.publication_id };
+function mediaItem(item: { readonly participant_id: string; readonly source: V1MediaSource; readonly enabled: boolean; readonly publication_id: string | null }): V1MediaPublication {
+  return { participantSessionId: item.participant_id, source: item.source, enabled: item.enabled, publicationId: item.publication_id };
 }
 
-function presenceItem(item: { readonly participant_session_id: string; readonly state: "connected" | "disconnected"; readonly speaking: boolean; readonly active_speaker: boolean }): V1Presence {
-  return { participantSessionId: item.participant_session_id, state: item.state, speaking: item.speaking, activeSpeaker: item.active_speaker };
+function presenceItem(item: { readonly participant_id: string; readonly state: "connected" | "disconnected"; readonly speaking: boolean; readonly active_speaker: boolean }): V1Presence {
+  return { participantSessionId: item.participant_id, state: item.state, speaking: item.speaking, activeSpeaker: item.active_speaker };
 }
 
 function mediaKey(item: V1MediaPublication): string {
@@ -1461,10 +1456,10 @@ function copyRoomActionCapabilities(capabilities: Readonly<Record<string, readon
   return Object.fromEntries(Object.entries(capabilities).map(([participantSessionId, values]) => [participantSessionId, [...values]]));
 }
 
-function chatReadReceiptFromWire(receipt: { readonly participant_session_id: string; readonly participant_session_generation: number; readonly sequence: string; readonly read_at: string }): ChalkChatReadReceipt {
+function chatReadReceiptFromWire(receipt: { readonly participant_id: string; readonly participant_generation: number; readonly sequence: string; readonly read_at: string }): ChalkChatReadReceipt {
   return {
-    participantSessionId: receipt.participant_session_id,
-    participantSessionGeneration: receipt.participant_session_generation,
+    participantSessionId: receipt.participant_id,
+    participantSessionGeneration: receipt.participant_generation,
     readThroughSequence: receipt.sequence,
     readAt: receipt.read_at,
   };
@@ -1514,7 +1509,7 @@ function validMediaPlaneResult(result: V1MediaPlaneResult): boolean {
 }
 
 function isTerminalLifecycleOperation(frame: SyncV1ClientFrame): boolean {
-  return frame.type === "operation" && (frame.name === "participant_leave" || frame.name === "end_session");
+  return frame.type === "operation" && (frame.name === "participant_leave" || frame.name === "end_episode");
 }
 
 function assertV1Url(value: string): void {

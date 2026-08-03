@@ -363,7 +363,7 @@ export class ChalkSession implements ChalkSessionStore {
     }
     this.#applyLocalReadThrough(sequence);
     this.#publish();
-    if (this.#sync?.getRoomActionsExtensionState().version !== 2) return Promise.resolve(null);
+    if (this.#sync?.getRoomActionsExtensionState().version !== 1) return Promise.resolve(null);
     return this.#runRoomAction("markChatRead", () => this.#sync!.markChatRead(sequence)).then((receipt) => {
       if (this.#mergeChatReadReceipt(receipt)) this.#publish();
       return receipt;
@@ -705,8 +705,8 @@ export class ChalkSession implements ChalkSessionStore {
     const incoming: ChalkIncomingMediaRequest = {
       requestId: request.request_id,
       kind: request.name === "request_unmute" ? "unmute" : "start_camera",
-      actorParticipantSessionId: request.actor_participant_session_id,
-      actorDisplayName: this.#syncSnapshot?.control?.participants.find((participant) => participant.participantSessionId === request.actor_participant_session_id)?.displayName ?? null,
+      actorParticipantSessionId: request.actor_participant_id,
+      actorDisplayName: this.#syncSnapshot?.control?.participants.find((participant) => participant.participantSessionId === request.actor_participant_id)?.displayName ?? null,
       expiresAt: new Date(expiresAtMs).toISOString(),
     };
     const collapsed = this.#incomingMediaRequests.filter((candidate) => candidate.requestId !== incoming.requestId && !(candidate.actorParticipantSessionId === incoming.actorParticipantSessionId && candidate.kind === incoming.kind));

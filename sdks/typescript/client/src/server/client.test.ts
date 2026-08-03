@@ -29,8 +29,9 @@ describe("createChalkServerClient", () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       requests.push({ init, url: String(input) });
       if (String(input).endsWith("/participants")) return jsonResponse({ ...lifecycle(), access: accessWire() }, 201);
-      if (String(input).endsWith("/access")) return jsonResponse(accessWire(), 201);
+      if (String(input).endsWith("/access-grant")) return jsonResponse(accessWire(), 201);
       if (String(input).endsWith("/remove")) return jsonResponse(removal(), 202);
+      if (String(input).endsWith("/episodes")) return jsonResponse(session(), 201);
       return jsonResponse(room(), 201);
     });
     const client = createChalkServerClient({
@@ -56,17 +57,18 @@ describe("createChalkServerClient", () => {
     const removed = await client.participants.remove(roomId, sessionId, participantId, { participantSessionGeneration: 2 }, { idempotencyKey: "remove-participant" });
 
     expect(requests.map(({ url }) => url)).toEqual([
-      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms`,
-      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms/${roomId}/sessions/${sessionId}/participants`,
-      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms/${roomId}/sessions/${sessionId}/participants/${participantId}/access`,
-      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/rooms/${roomId}/sessions/${sessionId}/participants/${participantId}/remove`,
+      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/spaces`,
+      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/spaces/${roomId}/episodes/${sessionId}/participants`,
+      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/spaces/${roomId}/episodes/${sessionId}/participants/${participantId}/access-grant`,
+      `https://api.example.test/base-that-is-preserved/v1/tenants/${tenantId}/spaces/${roomId}/episodes/${sessionId}/participants/${participantId}/remove`,
     ]);
     const headers = new Headers(requests[0]?.init?.headers);
     expect(headers.get("authorization")).toBe("Bearer chalk_sk_sentinel.secret");
     expect(headers.get("x-chalk-journey-id")).toBe("journey");
     expect(headers.get("traceparent")).toContain("11111111111111111111111111111111");
-    expect(JSON.parse(String(requests[2]?.init?.body))).toEqual({ current_media_token: "current-media-token", participant_session_generation: 2, replace_media_connection: false });
-    expect(JSON.parse(String(requests[3]?.init?.body))).toEqual({ participant_session_generation: 2 });
+    expect(JSON.parse(String(requests[1]?.init?.body))).toEqual({ name: "Guest", participant_id: participantId, role: "participant" });
+    expect(JSON.parse(String(requests[2]?.init?.body))).toEqual({ current_media_token: "current-media-token", participant_generation: 2, replace_media_connection: false });
+    expect(JSON.parse(String(requests[3]?.init?.body))).toEqual({ participant_generation: 2 });
     expect(new Headers(requests[3]?.init?.headers).get("idempotency-key")).toBe("remove-participant");
     expect(admission.access).toEqual(access);
     expect(access.subject).toEqual({ tenantId, roomId, sessionId, participantSessionId: participantId, participantGeneration: 2 });
@@ -133,7 +135,7 @@ describe("createChalkServerClient", () => {
       }),
     ).rejects.toMatchObject({ code: "network_error", retryable: true, status: 0 });
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_session_generation: 2, replace_media_connection: true });
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 2, replace_media_connection: true });
   });
 
   it("retries an ordinary access refresh after a lost response", async () => {
@@ -149,8 +151,8 @@ describe("createChalkServerClient", () => {
     ).resolves.toMatchObject({ media: { clientPayload: { connectionId: "connection" } } });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls.map((call) => JSON.parse(String(call[1]?.body)))).toEqual([
-      { current_media_token: "current-media-token", participant_session_generation: 2, replace_media_connection: false },
-      { current_media_token: "current-media-token", participant_session_generation: 2, replace_media_connection: false },
+      { current_media_token: "current-media-token", participant_generation: 2, replace_media_connection: false },
+      { current_media_token: "current-media-token", participant_generation: 2, replace_media_connection: false },
     ]);
   });
 });
@@ -164,7 +166,7 @@ function room() {
 }
 
 function session() {
-  return { created_at: "2026-01-01T00:00:00Z", created_by_user_id: null, ended_at: null, id: sessionId, metadata: null, room_id: roomId, started_at: "2026-01-01T00:00:00Z", status: "active", tenant_id: tenantId, updated_at: "2026-01-01T00:00:00Z" };
+  return { created_at: "2026-01-01T00:00:00Z", created_by_user_id: null, ended_at: null, id: sessionId, metadata: null, space_id: roomId, started_at: "2026-01-01T00:00:00Z", status: "active", tenant_id: tenantId, updated_at: "2026-01-01T00:00:00Z" };
 }
 
 function sessionInput() {
@@ -173,18 +175,21 @@ function sessionInput() {
 
 function lifecycle() {
   return {
-    lifecycle_intent: { created_at: "2026-01-01T00:00:00Z", id: "55555555-5555-4555-8555-555555555555", intent_name: "join", participant_session_generation: 2, participant_session_id: participantId, request_key: "request", status: "applied" },
-    participant: { generation: 2, id: participantId, room_id: roomId, session_id: sessionId, status: "active", tenant_id: tenantId },
+    lifecycle_intent: { created_at: "2026-01-01T00:00:00Z", id: "55555555-5555-4555-8555-555555555555", intent_name: "join", participant_generation: 2, participant_id: participantId, request_key: "request", status: "applied" },
+    participant: { generation: 2, id: participantId, space_id: roomId, episode_id: sessionId, status: "active", tenant_id: tenantId },
   };
 }
 
 function removal() {
-  return { lifecycle_intent: lifecycle().lifecycle_intent, participant: { ...lifecycle().participant, status: "removing" } };
+  return {
+    external_operation: { created_at: "2026-01-01T00:00:00Z", id: "55555555-5555-4555-8555-555555555555", operation_name: "remove_participant", request_key: "request", status: "pending", target_participant_generation: 2, target_participant_id: participantId },
+    participant: { ...lifecycle().participant, status: "removing" },
+  };
 }
 
 function accessWire() {
   return {
-    subject: { tenant_id: tenantId, room_id: roomId, session_id: sessionId, participant_session_id: participantId, participant_generation: 2 },
+    subject: { tenant_id: tenantId, space_id: roomId, episode_id: sessionId, participant_id: participantId, participant_generation: 2 },
     sync: { token: "sync-token", expires_at: "2026-01-01T00:05:00Z" },
     media: { token: "media-token", expires_at: "2026-01-01T00:05:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection", stunServer: "stun:example.test" } },
   };

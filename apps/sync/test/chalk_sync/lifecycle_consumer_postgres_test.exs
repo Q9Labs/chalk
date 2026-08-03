@@ -39,7 +39,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     good = SyncPostgres.seed_pending_join(connection)
 
     on_exit(fn ->
-      Enum.each([good | poison], &SyncPostgres.cleanup(connection, &1.session))
+      Enum.each([good | poison], &SyncPostgres.cleanup(connection, &1.episode))
     end)
 
     Enum.each(poison, fn fixture ->
@@ -73,14 +73,14 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   } do
     connection = hd(connections)
     fixture = SyncPostgres.seed_pending_join(connection)
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     first =
       Task.async(fn ->
         Process.put(:sync_test_node, :first)
 
         Postgres.record_lifecycle_failure(
-          fixture.session,
+          fixture.episode,
           fixture.lifecycle_intent_id,
           :dependency_unavailable
         )
@@ -91,7 +91,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
         Process.put(:sync_test_node, :second)
 
         Postgres.record_lifecycle_failure(
-          fixture.session,
+          fixture.episode,
           fixture.lifecycle_intent_id,
           :dependency_unavailable
         )
@@ -109,7 +109,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
     assert :ok =
              Postgres.record_lifecycle_failure(
-               fixture.session,
+               fixture.episode,
                fixture.lifecycle_intent_id,
                :dependency_unavailable
              )
@@ -118,7 +118,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
              intent_attempt(connection, fixture)
 
     assert {:ok, %{result: :applied}} =
-             Postgres.apply_lifecycle_intent(fixture.session, fixture.lifecycle_intent_id)
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     assert ["applied", 2_147_483_647, nil] = intent_attempt(connection, fixture)
   end
@@ -128,7 +128,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     poison = Enum.map(1..32, fn _index -> SyncPostgres.seed_pending_join(connection) end)
 
     on_exit(fn ->
-      Enum.each(poison, &SyncPostgres.cleanup(connection, &1.session))
+      Enum.each(poison, &SyncPostgres.cleanup(connection, &1.episode))
     end)
 
     Enum.each(poison, fn fixture ->
@@ -140,7 +140,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
       assert :ok =
                Postgres.record_lifecycle_failure(
-                 fixture.session,
+                 fixture.episode,
                  fixture.lifecycle_intent_id,
                  :dependency_unavailable
                )
@@ -152,7 +152,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   test "saturates a poisoned intent before it is superseded", %{connections: connections} do
     connection = hd(connections)
     fixture = SyncPostgres.seed_pending_join(connection)
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     Postgrex.query!(
       connection,
@@ -161,16 +161,16 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     )
 
     assert {:ok, operation} =
-             Operation.new("consumer_tenant_end", :tenant_end_session, %{})
+             Operation.new("consumer_tenant_end", :tenant_end_episode, %{})
 
     assert {:ok, %{external_operation_id: operation_id}} =
-             Postgres.begin_internal_operation(fixture.session, operation)
+             Postgres.begin_internal_operation(fixture.episode, operation)
 
     assert {:ok, %{result: :applied}} =
              Postgres.finalize_operation(
-               fixture.session,
+               fixture.episode,
                operation_id,
-               {:applied, :session_ended, %{"reason" => "tenant_recovery"}}
+               {:applied, :episode_ended, %{"reason" => "tenant_recovery"}}
              )
 
     assert ["superseded", 2_147_483_647, nil] = intent_attempt(connection, fixture)
@@ -182,9 +182,9 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
       """
       update participants
       set status = 'active'
-      where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
+      where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4
       """,
-      session_params(fixture) ++ [UUID.dump!(fixture.identity.participant_session_id)]
+      episode_params(fixture) ++ [UUID.dump!(fixture.identity.participant_id)]
     )
   end
 
@@ -194,9 +194,9 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
       """
       update sync_lifecycle_intents
       set created_at = now() - interval '1 minute'
-      where tenant_id = $1 and room_id = $2 and session_id = $3 and lifecycle_intent_id = $4
+      where tenant_id = $1 and space_id = $2 and episode_id = $3 and lifecycle_intent_id = $4
       """,
-      session_params(fixture) ++ [UUID.dump!(fixture.lifecycle_intent_id)]
+      episode_params(fixture) ++ [UUID.dump!(fixture.lifecycle_intent_id)]
     )
   end
 
@@ -224,11 +224,11 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     |> then(fn [attempt] -> attempt end)
   end
 
-  defp session_params(fixture) do
+  defp episode_params(fixture) do
     [
-      UUID.dump!(fixture.session.tenant_id),
-      UUID.dump!(fixture.session.room_id),
-      UUID.dump!(fixture.session.session_id)
+      UUID.dump!(fixture.episode.tenant_id),
+      UUID.dump!(fixture.episode.space_id),
+      UUID.dump!(fixture.episode.episode_id)
     ]
   end
 

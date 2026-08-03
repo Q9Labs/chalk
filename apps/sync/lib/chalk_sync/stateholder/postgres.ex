@@ -2,7 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   @moduledoc """
   PostgreSQL authority for atomic control decisions and recovery reads.
 
-  Every command locks the Session control row, resolves its receipt first,
+  Every command locks the Episode control row, resolves its receipt first,
   validates locked product facts, and commits the event, folded state, revision,
   and receipt together. Notification payloads are disposable head hints.
   """
@@ -14,10 +14,11 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.CanonicalJSON
   alias ChalkSync.Database
   alias ChalkSync.DeliveryGate
+  alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Observability
-  alias ChalkSync.Sessions.Reducer
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Decision
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.LifecycleDecision
@@ -25,7 +26,6 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Postgres.SQL
   alias ChalkSync.Stateholder.Recovery
-  alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.Telemetry
   alias ChalkSync.UUID
   alias ChalkSync.Webhooks.Producer, as: WebhookProducer
@@ -68,7 +68,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def resolve_receipt(%Identity{} = identity, %Command{} = command) do
-    connection = Database.connection(identity.session, 1)
+    connection = Database.connection(identity.episode, 1)
     params = receipt_params(identity, command)
 
     case Postgrex.query(connection, SQL.select_receipt(), params, timeout: 1_000) do
@@ -81,14 +81,14 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
-  def apply_lifecycle_intent(%SessionKey{} = session, lifecycle_intent_id)
+  def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id)
       when is_binary(lifecycle_intent_id) do
     case UUID.dump(lifecycle_intent_id) do
       {:ok, _uuid} ->
-        case run_lifecycle_transaction(session, lifecycle_intent_id) do
+        case run_lifecycle_transaction(episode, lifecycle_intent_id) do
           {:ok, %LifecycleDecision{} = decision} ->
-            lifecycle_checkpoint(:after_commit_before_reply, session, lifecycle_intent_id)
-            observe_lifecycle_webhook(session, lifecycle_intent_id, decision)
+            lifecycle_checkpoint(:after_commit_before_reply, episode, lifecycle_intent_id)
+            observe_lifecycle_webhook(episode, lifecycle_intent_id, decision)
             {:ok, decision}
 
           {:error, {:retryable, reason}} ->
@@ -98,7 +98,7 @@ defmodule ChalkSync.Stateholder.Postgres do
             {:error, reason}
 
           {:error, _reason} ->
-            resolve_uncertain_lifecycle(session, lifecycle_intent_id)
+            resolve_uncertain_lifecycle(episode, lifecycle_intent_id)
         end
 
       :error ->
@@ -108,22 +108,22 @@ defmodule ChalkSync.Stateholder.Postgres do
     exception ->
       Logger.error("sync lifecycle transaction became uncertain: #{Exception.message(exception)}")
 
-      resolve_uncertain_lifecycle(session, lifecycle_intent_id)
+      resolve_uncertain_lifecycle(episode, lifecycle_intent_id)
   catch
     :exit, reason ->
       Logger.error("sync lifecycle transaction exited before resolution: #{inspect(reason)}")
-      resolve_uncertain_lifecycle(session, lifecycle_intent_id)
+      resolve_uncertain_lifecycle(episode, lifecycle_intent_id)
   end
 
   @impl ChalkSync.Stateholder
-  def record_lifecycle_failure(%SessionKey{} = session, lifecycle_intent_id, reason)
+  def record_lifecycle_failure(%EpisodeKey{} = episode, lifecycle_intent_id, reason)
       when is_binary(lifecycle_intent_id) and is_atom(reason) do
     case UUID.dump(lifecycle_intent_id) do
       {:ok, _uuid} ->
         case Postgrex.query(
-               Database.connection(session),
+               Database.connection(episode),
                SQL.record_lifecycle_failure(),
-               lifecycle_intent_params(session, lifecycle_intent_id) ++ [Atom.to_string(reason)],
+               lifecycle_intent_params(episode, lifecycle_intent_id) ++ [Atom.to_string(reason)],
                timeout: 1_000
              ) do
           {:ok, _result} -> :ok
@@ -141,25 +141,25 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def pending_lifecycle_intents(limit) when is_integer(limit) and limit in 1..64 do
-    session = %SessionKey{
+    episode = %EpisodeKey{
       tenant_id: "background",
-      room_id: "background",
-      session_id: "background"
+      space_id: "background",
+      episode_id: "background"
     }
 
     case Postgrex.query(
-           Database.connection(session),
+           Database.connection(episode),
            SQL.discover_pending_lifecycle_intents(),
            [limit],
            timeout: 2_000
          ) do
       {:ok, %{rows: rows}} ->
         {:ok,
-         Enum.map(rows, fn [tenant_id, room_id, session_id, intent_id] ->
-           {%SessionKey{
+         Enum.map(rows, fn [tenant_id, space_id, episode_id, intent_id] ->
+           {%EpisodeKey{
               tenant_id: UUID.load!(tenant_id),
-              room_id: UUID.load!(room_id),
-              session_id: UUID.load!(session_id)
+              space_id: UUID.load!(space_id),
+              episode_id: UUID.load!(episode_id)
             }, UUID.load!(intent_id)}
          end)}
 
@@ -191,12 +191,12 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
-  def begin_internal_operation(%SessionKey{} = session, %Operation{} = operation) do
-    case run_internal_operation_transaction(session, operation) do
+  def begin_internal_operation(%EpisodeKey{} = episode, %Operation{} = operation) do
+    case run_internal_operation_transaction(episode, operation) do
       {:ok, %OperationDecision{} = decision} -> {:ok, decision}
       {:error, {:retryable, reason}} -> {:retryable, reason}
       {:error, {:error, reason}} -> {:error, reason}
-      {:error, _reason} -> resolve_uncertain_internal_operation(session, operation)
+      {:error, _reason} -> resolve_uncertain_internal_operation(episode, operation)
     end
   rescue
     exception ->
@@ -204,11 +204,11 @@ defmodule ChalkSync.Stateholder.Postgres do
         "sync internal operation acceptance became uncertain: #{Exception.message(exception)}"
       )
 
-      resolve_uncertain_internal_operation(session, operation)
+      resolve_uncertain_internal_operation(episode, operation)
   catch
     :exit, reason ->
       Logger.error("sync internal operation acceptance exited: #{inspect(reason)}")
-      resolve_uncertain_internal_operation(session, operation)
+      resolve_uncertain_internal_operation(episode, operation)
   end
 
   @impl ChalkSync.Stateholder
@@ -222,14 +222,14 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   defp claim_operation_rows(query, limit) do
-    session = %SessionKey{
+    episode = %EpisodeKey{
       tenant_id: "background",
-      room_id: "background",
-      session_id: "background"
+      space_id: "background",
+      episode_id: "background"
     }
 
     case Postgrex.query(
-           Database.connection(session),
+           Database.connection(episode),
            query,
            [limit],
            timeout: 2_000
@@ -239,10 +239,10 @@ defmodule ChalkSync.Stateholder.Postgres do
          Enum.map(rows, fn row ->
            operation = external_operation_from_row(row)
 
-           {%SessionKey{
+           {%EpisodeKey{
               tenant_id: UUID.load!(Enum.at(row, 0)),
-              room_id: UUID.load!(Enum.at(row, 1)),
-              session_id: UUID.load!(Enum.at(row, 2))
+              space_id: UUID.load!(Enum.at(row, 1)),
+              episode_id: UUID.load!(Enum.at(row, 2))
             }, operation}
          end)}
 
@@ -256,21 +256,21 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
-  def read_operation(%SessionKey{} = session, external_operation_id)
+  def read_operation(%EpisodeKey{} = episode, external_operation_id)
       when is_binary(external_operation_id) do
     case UUID.dump(external_operation_id) do
-      {:ok, id} -> read_operation_row(session, id)
+      {:ok, id} -> read_operation_row(episode, id)
       :error -> :not_found
     end
   catch
     :exit, _reason -> {:retryable, :decision_unavailable}
   end
 
-  defp read_operation_row(session, id) do
+  defp read_operation_row(episode, id) do
     case Postgrex.query(
-           Database.connection(session, 1),
+           Database.connection(episode, 1),
            SQL.read_operation(),
-           session_params(session) ++ [id],
+           episode_params(episode) ++ [id],
            timeout: 1_000
          ) do
       {:ok, %{rows: [row]}} -> {:ok, external_operation_from_row(row)}
@@ -280,15 +280,15 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
-  def participant_authority(%SessionKey{} = session, participant_session_id, expected_generation)
-      when is_binary(participant_session_id) and
+  def participant_authority(%EpisodeKey{} = episode, participant_id, expected_generation)
+      when is_binary(participant_id) and
              (is_nil(expected_generation) or
                 (is_integer(expected_generation) and expected_generation > 0)) do
-    case UUID.dump(participant_session_id) do
+    case UUID.dump(participant_id) do
       {:ok, participant_id} ->
         read_participant_authority(
-          session,
-          participant_session_id,
+          episode,
+          participant_id,
           participant_id,
           expected_generation
         )
@@ -302,28 +302,28 @@ defmodule ChalkSync.Stateholder.Postgres do
     :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
-  defp read_participant_authority(session, participant_session_id, participant_id, expected) do
+  defp read_participant_authority(episode, participant_id, participant_id, expected) do
     result =
       Postgrex.query(
-        Database.connection(session),
+        Database.connection(episode),
         SQL.participant_authority(),
-        session_params(session) ++ [participant_id],
+        episode_params(episode) ++ [participant_id],
         timeout: 1_000
       )
 
-    participant_authority_result(result, participant_session_id, expected)
+    participant_authority_result(result, participant_id, expected)
   end
 
   defp participant_authority_result({:ok, %{rows: []}}, _participant_id, _expected),
-    do: {:error, :session_not_found}
+    do: {:error, :episode_not_found}
 
   defp participant_authority_result(
-         {:ok, %{rows: [[session_status, _generation, _status, _role, _capabilities]]}},
+         {:ok, %{rows: [[episode_status, _generation, _status, _role, _capabilities]]}},
          _participant_id,
          _expected
        )
-       when session_status != "active",
-       do: {:error, :session_ended}
+       when episode_status != "active",
+       do: {:error, :episode_ended}
 
   defp participant_authority_result(
          {:ok, %{rows: [["active", generation, _status, _role, _capabilities]]}},
@@ -334,16 +334,16 @@ defmodule ChalkSync.Stateholder.Postgres do
        do: {:error, :stale_participant_generation}
 
   defp participant_authority_result(
-         {:ok, %{rows: [["active", generation, "active", role, role_capabilities]]}},
+         {:ok, %{rows: [["active", generation, "active", role, capabilities]]}},
          participant_id,
          _expected
        ) do
     {:ok,
      %{
-       participant_session_id: participant_id,
+       participant_id: UUID.load!(participant_id),
        generation: generation,
        role: role,
-       capabilities: Map.fetch!(role_capabilities, role)
+       capabilities: capabilities
      }}
   end
 
@@ -357,7 +357,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   def reserve_publication_grant(%Identity{} = identity, operation_id, source)
       when is_binary(operation_id) and source in [:microphone, :camera, :screen] do
     case Postgrex.transaction(
-           Database.connection(identity.session),
+           Database.connection(identity.episode),
            &reserve_publication_grant_transaction(&1, identity, operation_id, source),
            timeout: @transaction_timeout_ms,
            commit_comment: "chalk sync publication grant reservation"
@@ -377,10 +377,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: {:error, :invalid_operation}
 
   @impl ChalkSync.Stateholder
-  def complete_publication_grant(%SessionKey{} = session, reservation_id, outcome)
+  def complete_publication_grant(%EpisodeKey{} = episode, reservation_id, outcome)
       when is_binary(reservation_id) do
     case UUID.dump(reservation_id) do
-      {:ok, _id} -> complete_publication_grant(session, reservation_id, outcome, :valid)
+      {:ok, _id} -> complete_publication_grant(episode, reservation_id, outcome, :valid)
       :error -> {:error, :reservation_not_found}
     end
   rescue
@@ -389,10 +389,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
-  defp complete_publication_grant(session, reservation_id, outcome, :valid) do
+  defp complete_publication_grant(episode, reservation_id, outcome, :valid) do
     case Postgrex.transaction(
-           Database.connection(session),
-           &complete_publication_grant_transaction(&1, session, reservation_id, outcome),
+           Database.connection(episode),
+           &complete_publication_grant_transaction(&1, episode, reservation_id, outcome),
            timeout: @transaction_timeout_ms,
            commit_comment: "chalk sync publication grant completion"
          ) do
@@ -405,9 +405,9 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def begin_role_transition(%Identity{} = identity, %Command{} = command, publications)
-      when command.name in [:set_participant_role, :transfer_host] and is_list(publications) do
+      when command.name in [:assign_roles] and is_list(publications) do
     case Postgrex.transaction(
-           Database.connection(identity.session),
+           Database.connection(identity.episode),
            &role_transition_transaction(&1, identity, command, publications),
            timeout: @transaction_timeout_ms,
            commit_comment: "chalk sync role transition"
@@ -426,10 +426,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: decide_command(identity, command)
 
   @impl ChalkSync.Stateholder
-  def finalize_operation(%SessionKey{} = session, external_operation_id, outcome)
+  def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome)
       when is_binary(external_operation_id) and is_tuple(outcome) do
     case UUID.dump(external_operation_id) do
-      {:ok, _id} -> finalize_known_operation(session, external_operation_id, outcome)
+      {:ok, _id} -> finalize_known_operation(episode, external_operation_id, outcome)
       :error -> {:error, :operation_not_found}
     end
   rescue
@@ -438,17 +438,17 @@ defmodule ChalkSync.Stateholder.Postgres do
         "sync external operation finalization became uncertain: #{Exception.message(exception)}"
       )
 
-      resolve_uncertain_finalization(session, external_operation_id)
+      resolve_uncertain_finalization(episode, external_operation_id)
   catch
     :exit, reason ->
       Logger.error("sync external operation finalization exited: #{inspect(reason)}")
-      resolve_uncertain_finalization(session, external_operation_id)
+      resolve_uncertain_finalization(episode, external_operation_id)
   end
 
-  defp finalize_known_operation(session, external_operation_id, outcome) do
-    case run_operation_finalization(session, external_operation_id, outcome) do
+  defp finalize_known_operation(episode, external_operation_id, outcome) do
+    case run_operation_finalization(episode, external_operation_id, outcome) do
       {:ok, %OperationDecision{} = decision} ->
-        observe_webhook_finalization(session, external_operation_id, decision)
+        observe_webhook_finalization(episode, external_operation_id, decision)
         {:ok, decision}
 
       {:error, {:retryable, reason}} ->
@@ -458,13 +458,13 @@ defmodule ChalkSync.Stateholder.Postgres do
         {:error, reason}
 
       {:error, _reason} ->
-        resolve_uncertain_finalization(session, external_operation_id)
+        resolve_uncertain_finalization(episode, external_operation_id)
     end
   end
 
   @impl ChalkSync.Stateholder
   def recover(%Identity{} = identity, cursor) do
-    connection = Database.connection(identity.session)
+    connection = Database.connection(identity.episode)
 
     case Postgrex.transaction(
            connection,
@@ -483,12 +483,12 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @doc false
-  def recover(%SessionKey{} = session, cursor) do
-    connection = Database.connection(session)
+  def recover(%EpisodeKey{} = episode, cursor) do
+    connection = Database.connection(episode)
 
     case Postgrex.transaction(
            connection,
-           &recovery_transaction(&1, session, cursor),
+           &recovery_transaction(&1, episode, cursor),
            timeout: @transaction_timeout_ms
          ) do
       {:ok, %Recovery{} = recovery} -> {:ok, recovery}
@@ -503,19 +503,19 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
-  def recover_session(%SessionKey{} = session, cursor), do: recover(session, cursor)
+  def recover_episode(%EpisodeKey{} = episode, cursor), do: recover(episode, cursor)
 
   @impl ChalkSync.Stateholder
-  def recovery_page(%SessionKey{} = session, after_revision, through_revision) do
+  def recovery_page(%EpisodeKey{} = episode, after_revision, through_revision) do
     params = [
-      uuid(session.tenant_id),
-      uuid(session.session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.episode_id),
       after_revision,
       through_revision
     ]
 
     case Postgrex.query(
-           Database.connection(session),
+           Database.connection(episode),
            SQL.read_recovery_page(),
            params,
            timeout: @transaction_timeout_ms
@@ -531,7 +531,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp run_decision_transaction(identity, command) do
     Postgrex.transaction(
-      Database.connection(identity.session),
+      Database.connection(identity.episode),
       &decision_transaction(&1, identity, command),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync command"
@@ -545,19 +545,19 @@ defmodule ChalkSync.Stateholder.Postgres do
       Postgrex.rollback(connection, {:error, :invalid_operation})
     end
 
-    policy = lock_operation_session(connection, identity.session)
+    policy = lock_operation_episode(connection, identity.episode)
 
     participant =
       lock_operation_participant(
         connection,
-        identity.session,
-        identity.participant_session_id
+        identity.episode,
+        identity.participant_id
       )
 
     with :ok <-
            validate_operation_actor(identity, %{name: :participant_leave}, policy, participant),
          :ok <- validate_publication_capability(policy, participant, source) do
-      params = session_params(identity.session) ++ [operation_id]
+      params = episode_params(identity.episode) ++ [operation_id]
 
       case Postgrex.query!(connection, SQL.select_publication_grant_reservation(), params).rows do
         [row] -> publication_reservation(row)
@@ -568,21 +568,21 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp validate_publication_capability(policy, participant, source) do
+  defp validate_publication_capability(_policy, participant, source) do
     capability = publication_capability(source)
-    allowed = Map.get(policy.role_capabilities, participant.role, [])
+    allowed = participant.capabilities
     if capability in allowed, do: :ok, else: {:error, :capability_denied}
   end
 
   defp insert_publication_grant_reservation(connection, identity, operation_id, source) do
-    participant_id = uuid(identity.participant_session_id)
+    participant_id = uuid(identity.participant_id)
     source_name = Atom.to_string(source)
 
     fence_params = [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.episode_id),
       participant_id,
-      identity.participant_session_generation,
+      identity.participant_generation,
       source_name
     ]
 
@@ -594,7 +594,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     case Postgrex.query!(
            connection,
            SQL.count_publication_grant_reservations(),
-           session_params(identity.session)
+           episode_params(identity.episode)
          ).rows do
       [[count]] when count < @max_publication_grant_reservations -> :ok
       _ -> Postgrex.rollback(connection, {:retryable, :overloaded})
@@ -603,12 +603,12 @@ defmodule ChalkSync.Stateholder.Postgres do
     reservation_id = UUID.generate()
 
     params =
-      session_params(identity.session) ++
+      episode_params(identity.episode) ++
         [
           uuid(reservation_id),
           operation_id,
           participant_id,
-          identity.participant_session_generation,
+          identity.participant_generation,
           source_name
         ]
 
@@ -618,21 +618,21 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp complete_publication_grant_transaction(connection, session, reservation_id, outcome) do
+  defp complete_publication_grant_transaction(connection, episode, reservation_id, outcome) do
     configure_transaction(connection)
-    policy = lock_operation_session(connection, session)
-    params = session_params(session) ++ [uuid(reservation_id)]
+    policy = lock_operation_episode(connection, episode)
+    params = episode_params(episode) ++ [uuid(reservation_id)]
     observed = read_publication_reservation!(connection, params)
-    participant = lock_grant_participant!(connection, session, observed)
+    participant = lock_grant_participant!(connection, episode, observed)
     reservation = lock_publication_reservation!(connection, params)
 
-    reservation = persist_publication_grant_outcome(connection, session, reservation, outcome)
+    reservation = persist_publication_grant_outcome(connection, episode, reservation, outcome)
 
     cleanup_required =
-      publication_cleanup_required?(connection, session, policy, participant, reservation)
+      publication_cleanup_required?(connection, episode, policy, participant, reservation)
 
     if reservation.status == :failed and cleanup_required do
-      satisfy_failed_grant_child(connection, session, reservation)
+      satisfy_failed_grant_child(connection, episode, reservation)
     end
 
     Map.put(reservation, :result, if(cleanup_required, do: :cleanup_required, else: :authorized))
@@ -645,9 +645,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lock_grant_participant!(connection, session, reservation) do
+  defp lock_grant_participant!(connection, episode, reservation) do
     participant =
-      lock_operation_participant(connection, session, reservation.participant_session_id)
+      lock_operation_participant(connection, episode, reservation.participant_id)
 
     if participant && participant.generation == reservation.participant_generation,
       do: participant,
@@ -663,16 +663,16 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp persist_publication_grant_outcome(
          _connection,
-         _session,
+         _episode,
          %{status: status} = reservation,
          _outcome
        )
        when status in [:confirmed, :failed],
        do: reservation
 
-  defp persist_publication_grant_outcome(connection, session, reservation, outcome) do
+  defp persist_publication_grant_outcome(connection, episode, reservation, outcome) do
     {status, failure_code} = publication_grant_outcome(outcome)
-    params = session_params(session) ++ [uuid(reservation.reservation_id), status, failure_code]
+    params = episode_params(episode) ++ [uuid(reservation.reservation_id), status, failure_code]
 
     case Postgrex.query!(connection, SQL.complete_publication_grant_reservation(), params).rows do
       [row] -> publication_reservation(row)
@@ -688,18 +688,14 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp publication_grant_outcome(_outcome), do: {"ambiguous", nil}
 
-  defp publication_cleanup_required?(connection, session, policy, participant, reservation) do
+  defp publication_cleanup_required?(connection, episode, _policy, participant, reservation) do
     capability_denied =
-      publication_capability(reservation.source) not in Map.get(
-        policy.role_capabilities,
-        participant.role,
-        []
-      )
+      publication_capability(reservation.source) not in participant.capabilities
 
     fence_params = [
-      uuid(session.tenant_id),
-      uuid(session.session_id),
-      uuid(reservation.participant_session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.episode_id),
+      uuid(reservation.participant_id),
       reservation.participant_generation,
       Atom.to_string(reservation.source)
     ]
@@ -708,18 +704,18 @@ defmodule ChalkSync.Stateholder.Postgres do
       Postgrex.query!(connection, SQL.publication_fence(), fence_params).rows != []
   end
 
-  defp satisfy_failed_grant_child(connection, session, reservation) do
+  defp satisfy_failed_grant_child(connection, episode, reservation) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [
-          uuid(reservation.participant_session_id),
+          uuid(reservation.participant_id),
           reservation.participant_generation,
           Atom.to_string(reservation.source)
         ]
 
     case Postgrex.query!(connection, SQL.pending_role_transition_child_for_source(), params).rows do
       [[child_id]] ->
-        settle_role_transition_child(connection, session, UUID.load!(child_id), :applied)
+        settle_role_transition_child(connection, episode, UUID.load!(child_id), :applied)
 
       [] ->
         :ok
@@ -728,22 +724,22 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp role_transition_transaction(connection, identity, command, publications) do
     configure_transaction(connection)
-    {control, session_policy, actor} = lock_authority(connection, identity)
+    {control, episode_policy, actor} = lock_authority(connection, identity)
 
     case fetch_receipt(connection, identity, command) do
       {:ok, row} ->
         decision_from_receipt(command, row)
 
       :not_found ->
-        with :ok <- validate_product_state(identity, command, session_policy, actor),
-             {:ok, state} <- validate_fold(identity.session, control, session_policy),
+        with :ok <- validate_product_state(identity, command, episode_policy, actor),
+             {:ok, state} <- validate_fold(identity.episode, control, episode_policy),
              :ok <- validate_command_authority(identity, command, state),
              {:ok, affected} <-
                lock_role_transition_participants(connection, identity, command, actor),
              decision <-
                Reducer.decide_command(
                  state,
-                 identity.participant_session_id,
+                 identity.participant_id,
                  command.name,
                  command.payload
                ) do
@@ -751,7 +747,7 @@ defmodule ChalkSync.Stateholder.Postgres do
             connection,
             identity,
             command,
-            session_policy,
+            episode_policy,
             affected,
             publications,
             decision
@@ -766,32 +762,14 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp lock_role_transition_participants(
          connection,
          identity,
-         %{name: :set_participant_role} = command,
+         %{name: :assign_roles} = command,
          _actor
        ) do
-    target_id = command.payload["participantSessionId"]
+    target_id = command.payload["participantId"]
 
-    case lock_operation_participant(connection, identity.session, target_id) do
+    case lock_operation_participant(connection, identity.episode, target_id) do
       %{status: "active"} = target ->
         {:ok, Map.merge(target, %{id: target_id, next_role: command.payload["role"]})}
-
-      _ ->
-        {:error, :invalid_target}
-    end
-  end
-
-  defp lock_role_transition_participants(
-         connection,
-         identity,
-         %{name: :transfer_host} = command,
-         actor
-       ) do
-    target_id = command.payload["participantSessionId"]
-
-    case lock_operation_participant(connection, identity.session, target_id) do
-      %{status: "active"} ->
-        {:ok,
-         actor |> Map.put(:id, identity.participant_session_id) |> Map.put(:next_role, "cohost")}
 
       _ ->
         {:error, :invalid_target}
@@ -830,7 +808,7 @@ defmodule ChalkSync.Stateholder.Postgres do
          {:change, event, next_state}
        ) do
     lost_sources = lost_publication_sources(policy, affected.role, affected.next_role)
-    reservations = lock_publication_reservations(connection, identity.session, affected)
+    reservations = lock_publication_reservations(connection, identity.episode, affected)
 
     exercised_sources =
       lost_sources
@@ -858,8 +836,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lock_publication_reservations(connection, session, affected) do
-    params = session_params(session) ++ [uuid(affected.id), affected.generation]
+  defp lock_publication_reservations(connection, episode, affected) do
+    params = episode_params(episode) ++ [uuid(affected.id), affected.generation]
 
     Postgrex.query!(connection, SQL.lock_active_publication_reservations(), params).rows
     |> Enum.map(&publication_reservation/1)
@@ -878,7 +856,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp observed_enabled?(publications, participant_id, source) do
     Enum.any?(publications, fn publication ->
-      Map.get(publication, :participant_session_id) == participant_id and
+      Map.get(publication, :participant_id) == participant_id and
         Map.get(publication, :source) == source and Map.get(publication, :enabled) == true
     end)
   end
@@ -892,7 +870,7 @@ defmodule ChalkSync.Stateholder.Postgres do
          affected,
          sources
        ) do
-    ensure_transition_operation_capacity(connection, identity.session, length(sources) + 1)
+    ensure_transition_operation_capacity(connection, identity.episode, length(sources) + 1)
     event_id = UUID.generate()
     digest = Reducer.digest(state)
     stored_event = stored_event(event, event_id, command.id, digest)
@@ -908,16 +886,16 @@ defmodule ChalkSync.Stateholder.Postgres do
     update_command_product(connection, identity, event)
     update_control(connection, identity, state, event_bytes, receipt_bytes)
     insert_role_transition_parent(connection, identity, command, affected, parent_id)
-    insert_role_transition_children(connection, identity.session, affected, parent_id, sources)
+    insert_role_transition_children(connection, identity.episode, affected, parent_id, sources)
 
     parent = role_transition_parent(identity, command, affected, parent_id)
-    install_participant_fences(connection, identity.session, parent, affected, sources)
+    install_participant_fences(connection, identity.episode, parent, affected, sources)
 
     Postgrex.query!(connection, SQL.insert_pending_role_transition_receipt(), [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
-      uuid(identity.participant_session_id),
-      identity.participant_session_generation,
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.episode_id),
+      uuid(identity.participant_id),
+      identity.participant_generation,
       command.id,
       command.fingerprint,
       receipt_command_name(command),
@@ -927,7 +905,7 @@ defmodule ChalkSync.Stateholder.Postgres do
       digest
     ])
 
-    notify_head(connection, identity.session, event.revision)
+    notify_head(connection, identity.episode, event.revision)
 
     %Decision{
       command_id: command.id,
@@ -941,8 +919,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     }
   end
 
-  defp ensure_transition_operation_capacity(connection, session, required) do
-    case Postgrex.query!(connection, SQL.count_pending_operations(), session_params(session)).rows do
+  defp ensure_transition_operation_capacity(connection, episode, required) do
+    case Postgrex.query!(connection, SQL.count_pending_operations(), episode_params(episode)).rows do
       [[count]] when count + required <= @max_pending_operations -> :ok
       _ -> Postgrex.rollback(connection, {:retryable, :overloaded})
     end
@@ -950,33 +928,33 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp insert_role_transition_parent(connection, identity, command, affected, parent_id) do
     payload = Map.put(command.payload, "commandName", Atom.to_string(command.name))
-    request_key = String.replace(identity.participant_session_id, "-", "") <> "_" <> command.id
+    request_key = String.replace(identity.participant_id, "-", "") <> "_" <> command.id
 
     Postgrex.query!(connection, SQL.insert_role_transition_parent(), [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.room_id),
-      uuid(identity.session.session_id),
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.episode.episode_id),
       uuid(parent_id),
       request_key,
       command.fingerprint,
-      uuid(identity.participant_session_id),
-      identity.participant_session_generation,
+      uuid(identity.participant_id),
+      identity.participant_generation,
       uuid(affected.id),
       affected.generation,
       payload
     ])
   end
 
-  defp insert_role_transition_children(connection, session, affected, parent_id, sources) do
+  defp insert_role_transition_children(connection, episode, affected, parent_id, sources) do
     Enum.each(sources, fn source ->
       child_id = UUID.generate()
       request_key = "rt_#{String.replace(parent_id, "-", "")}_#{source}"
-      payload = %{"participantSessionId" => affected.id, "source" => Atom.to_string(source)}
+      payload = %{"participantId" => affected.id, "source" => Atom.to_string(source)}
 
       Postgrex.query!(
         connection,
         SQL.insert_role_transition_child(),
-        session_params(session) ++
+        episode_params(episode) ++
           [
             uuid(child_id),
             uuid(parent_id),
@@ -1000,9 +978,9 @@ defmodule ChalkSync.Stateholder.Postgres do
       payload: command.payload,
       status: :pending,
       attempt_count: 0,
-      actor_participant_session_id: identity.participant_session_id,
-      actor_generation: identity.participant_session_generation,
-      target_participant_session_id: affected.id,
+      actor_participant_id: identity.participant_id,
+      actor_generation: identity.participant_generation,
+      target_participant_id: affected.id,
       target_participant_generation: affected.generation
     }
   end
@@ -1024,7 +1002,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     %{
       reservation_id: UUID.load!(reservation_id),
       operation_id: operation_id,
-      participant_session_id: UUID.load!(participant_id),
+      participant_id: UUID.load!(participant_id),
       participant_generation: generation,
       source: String.to_existing_atom(source),
       status: String.to_existing_atom(status),
@@ -1033,10 +1011,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     }
   end
 
-  defp run_lifecycle_transaction(session, lifecycle_intent_id) do
+  defp run_lifecycle_transaction(episode, lifecycle_intent_id) do
     Postgrex.transaction(
-      Database.connection(session),
-      &lifecycle_transaction(&1, session, lifecycle_intent_id),
+      Database.connection(episode),
+      &lifecycle_transaction(&1, episode, lifecycle_intent_id),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync lifecycle intent"
     )
@@ -1044,26 +1022,26 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp run_operation_transaction(identity, operation) do
     Postgrex.transaction(
-      Database.connection(identity.session),
+      Database.connection(identity.episode),
       &operation_transaction(&1, identity, operation),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync external operation acceptance"
     )
   end
 
-  defp run_internal_operation_transaction(session, operation) do
+  defp run_internal_operation_transaction(episode, operation) do
     Postgrex.transaction(
-      Database.connection(session),
-      &internal_operation_transaction(&1, session, operation),
+      Database.connection(episode),
+      &internal_operation_transaction(&1, episode, operation),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync internal operation acceptance"
     )
   end
 
-  defp run_operation_finalization(session, external_operation_id, outcome) do
+  defp run_operation_finalization(episode, external_operation_id, outcome) do
     Postgrex.transaction(
-      Database.connection(session),
-      &operation_finalization_transaction(&1, session, external_operation_id, outcome),
+      Database.connection(episode),
+      &operation_finalization_transaction(&1, episode, external_operation_id, outcome),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync external operation finalization"
     )
@@ -1071,9 +1049,9 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp operation_transaction(connection, identity, operation) do
     configure_transaction(connection)
-    control = lock_operation_control(connection, identity.session)
-    policy = lock_operation_session(connection, identity.session)
-    external_operation_checkpoint(:after_acceptance_authority_lock, identity.session, operation)
+    control = lock_operation_control(connection, identity.episode)
+    policy = lock_operation_episode(connection, identity.episode)
+    external_operation_checkpoint(:after_acceptance_authority_lock, identity.episode, operation)
 
     case fetch_operation_receipt(connection, identity, operation) do
       {:ok, row} ->
@@ -1083,14 +1061,14 @@ defmodule ChalkSync.Stateholder.Postgres do
         participant =
           lock_operation_participant(
             connection,
-            identity.session,
-            identity.participant_session_id
+            identity.episode,
+            identity.participant_id
           )
 
         with :ok <- validate_operation_actor(identity, operation, policy, participant),
-             {:ok, state} <- validate_fold(identity.session, control, policy),
+             {:ok, state} <- validate_fold(identity.episode, control, policy),
              {:ok, context} <- prepare_operation(connection, identity, operation, policy, state),
-             :ok <- ensure_operation_capacity(connection, identity.session) do
+             :ok <- ensure_operation_capacity(connection, identity.episode) do
           persist_operation_acceptance(connection, identity, operation, policy, state, context)
         else
           {:error, :overloaded} ->
@@ -1102,13 +1080,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp internal_operation_transaction(connection, session, operation) do
+  defp internal_operation_transaction(connection, episode, operation) do
     configure_transaction(connection)
-    control = lock_operation_control(connection, session)
-    policy = lock_operation_session(connection, session)
-    external_operation_checkpoint(:after_acceptance_authority_lock, session, operation)
+    control = lock_operation_control(connection, episode)
+    policy = lock_operation_episode(connection, episode)
+    external_operation_checkpoint(:after_acceptance_authority_lock, episode, operation)
 
-    case fetch_internal_operation(connection, session, operation) do
+    case fetch_internal_operation(connection, episode, operation) do
       {:ok, existing} when existing.request_fingerprint != operation.fingerprint ->
         %OperationDecision{
           request_key: operation.request_key,
@@ -1121,13 +1099,13 @@ defmodule ChalkSync.Stateholder.Postgres do
 
       :not_found ->
         with :ok <- validate_internal_operation(operation),
-             {:ok, state} <- validate_fold(session, control, policy),
+             {:ok, state} <- validate_fold(episode, control, policy),
              {:ok, context} <-
-               prepare_internal_operation(connection, session, operation, policy, state),
-             :ok <- ensure_operation_capacity(connection, session) do
+               prepare_internal_operation(connection, episode, operation, policy, state),
+             :ok <- ensure_operation_capacity(connection, episode) do
           persist_internal_operation_acceptance(
             connection,
-            session,
+            episode,
             operation,
             policy,
             state,
@@ -1140,54 +1118,57 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lock_operation_control(connection, session) do
-    case Postgrex.query!(connection, SQL.lock_control(), session_params(session)).rows do
+  defp lock_operation_control(connection, episode) do
+    case Postgrex.query!(connection, SQL.lock_control(), episode_params(episode)).rows do
       [row] -> control_row(row)
-      [] -> Postgrex.rollback(connection, {:error, :session_not_found})
+      [] -> Postgrex.rollback(connection, {:error, :episode_not_found})
     end
   end
 
-  defp lock_operation_session(connection, session) do
-    case Postgrex.query!(connection, SQL.lock_operation_session(), session_params(session)).rows do
+  defp lock_operation_episode(connection, episode) do
+    case Postgrex.query!(connection, SQL.lock_operation_episode(), episode_params(episode)).rows do
       [
         [
           status,
-          host_exit_policy,
-          role_capabilities,
+          config_snapshot,
           deadline_at,
           deadline_generation,
-          ceiling,
           created_at
         ]
       ] ->
+        snapshot = if is_map(config_snapshot), do: config_snapshot, else: %{}
+
+        role_capabilities =
+          Map.get(snapshot, "roles", Map.get(snapshot, "role_capabilities", %{}))
+
         %{
           status: status,
-          host_exit_policy: host_exit_policy,
           role_capabilities: role_capabilities,
           deadline_at: deadline_at,
           deadline_generation: deadline_generation,
-          maximum_duration_ceiling_seconds: ceiling,
+          maximum_duration_ceiling_seconds:
+            Map.get(snapshot, "maximum_episode_duration_seconds", 2_592_000),
           created_at: created_at
         }
 
       [] ->
-        Postgrex.rollback(connection, {:error, :session_not_found})
+        Postgrex.rollback(connection, {:error, :episode_not_found})
     end
   end
 
-  defp lock_operation_participant(connection, session, participant_id) do
+  defp lock_operation_participant(connection, episode, participant_id) do
     case Postgrex.query!(
            connection,
            SQL.lock_participant(),
-           session_params(session) ++ [uuid(participant_id)]
+           episode_params(episode) ++ [uuid(participant_id)]
          ).rows do
-      [[generation, status, role, eligible_roles]] ->
+      [[generation, status, role, capabilities]] ->
         %{
           id: participant_id,
           generation: generation,
           status: status,
           role: role,
-          eligible_roles: eligible_roles
+          capabilities: capabilities
         }
 
       [] ->
@@ -1197,8 +1178,8 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp fetch_operation_receipt(connection, identity, operation) do
     params =
-      session_params(identity.session) ++
-        [uuid(identity.participant_session_id), operation.request_key]
+      episode_params(identity.episode) ++
+        [uuid(identity.participant_id), operation.request_key]
 
     case Postgrex.query!(connection, SQL.select_operation_receipt(), params).rows do
       [row] -> {:ok, row}
@@ -1206,9 +1187,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp fetch_internal_operation(connection, session, operation) do
+  defp fetch_internal_operation(connection, episode, operation) do
     params =
-      session_params(session) ++ [Atom.to_string(operation.name), operation.request_key]
+      episode_params(episode) ++ [Atom.to_string(operation.name), operation.request_key]
 
     case Postgrex.query!(connection, SQL.select_internal_operation(), params).rows do
       [row] -> {:ok, external_operation_from_row(row)}
@@ -1218,13 +1199,13 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp validate_operation_actor(_identity, _operation, %{status: status}, _participant)
        when status != "active",
-       do: {:error, :session_ended}
+       do: {:error, :episode_ended}
 
   defp validate_operation_actor(_identity, _operation, _policy, nil),
     do: {:error, :participant_inactive}
 
   defp validate_operation_actor(identity, _operation, _policy, participant)
-       when participant.generation != identity.participant_session_generation,
+       when participant.generation != identity.participant_generation,
        do: {:error, :stale_participant_generation}
 
   defp validate_operation_actor(_identity, _operation, _policy, %{status: status})
@@ -1234,18 +1215,17 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp validate_operation_actor(_identity, %{name: :participant_leave}, _policy, _participant),
     do: :ok
 
-  defp validate_operation_actor(_identity, operation, policy, participant) do
+  defp validate_operation_actor(_identity, operation, _policy, participant) do
     required = required_capability(operation.name)
-    allowed = Map.get(policy.role_capabilities, participant.role, [])
+    allowed = participant.capabilities
     if required in allowed, do: :ok, else: {:error, :capability_denied}
   end
 
   defp validate_internal_operation(%{name: name})
        when name in [
               :admission_request_expired,
-              :tenant_transfer_host,
               :tenant_set_deadline,
-              :tenant_end_session,
+              :tenant_end_episode,
               :maximum_duration_expired
             ],
        do: :ok
@@ -1255,7 +1235,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp prepare_operation(connection, identity, operation, _policy, state) do
     case operation.name do
       name when name in [:admit_participant, :deny_admission] ->
-        with {:ok, admission} <- lock_pending_admission(connection, identity.session, operation) do
+        with {:ok, admission} <- lock_pending_admission(connection, identity.episode, operation) do
           {:ok, %{admission: admission, target: nil, sources: []}}
         end
 
@@ -1266,23 +1246,23 @@ defmodule ChalkSync.Stateholder.Postgres do
              :stop_participant_screen_share,
              :remove_participant
            ] ->
-        prepare_participant_target(connection, identity.session, operation)
+        prepare_participant_target(connection, identity.episode, operation)
 
       :participant_leave ->
         target =
           lock_operation_participant(
             connection,
-            identity.session,
-            identity.participant_session_id
+            identity.episode,
+            identity.participant_id
           )
 
         validate_leave_acceptance(state, target)
 
       name when name in [:start_recording, :stop_recording] ->
-        prepare_recording(connection, identity.session, operation, state)
+        prepare_recording(connection, identity.episode, operation, state)
 
-      :end_session ->
-        prepare_end_operation(connection, identity.session, nil)
+      :end_episode ->
+        prepare_end_operation(connection, identity.episode, nil)
 
       _ ->
         {:error, :invalid_state}
@@ -1291,12 +1271,12 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp prepare_internal_operation(
          connection,
-         session,
+         episode,
          %{name: :admission_request_expired} = op,
          _policy,
          _state
        ) do
-    case lock_pending_admission(connection, session, op) do
+    case lock_pending_admission(connection, episode, op) do
       {:ok, admission} ->
         if DateTime.compare(admission.expires_at, DateTime.utc_now()) in [:lt, :eq],
           do: {:ok, %{admission: admission, target: nil, sources: []}},
@@ -1308,17 +1288,8 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   defp prepare_internal_operation(
-         connection,
-         session,
-         %{name: :tenant_transfer_host} = operation,
-         _policy,
-         state
-       ),
-       do: prepare_tenant_transfer(connection, session, operation, state)
-
-  defp prepare_internal_operation(
          _connection,
-         _session,
+         _episode,
          %{name: :tenant_set_deadline} = operation,
          policy,
          _state
@@ -1327,21 +1298,21 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp prepare_internal_operation(
          connection,
-         session,
-         %{name: :tenant_end_session},
+         episode,
+         %{name: :tenant_end_episode},
          policy,
          _state
        ) do
     if policy.status == "active" do
-      prepare_end_operation(connection, session, nil)
+      prepare_end_operation(connection, episode, nil)
     else
-      {:error, :session_ended}
+      {:error, :episode_ended}
     end
   end
 
   defp prepare_internal_operation(
          connection,
-         session,
+         episode,
          %{name: :maximum_duration_expired, payload: payload},
          policy,
          _state
@@ -1354,19 +1325,19 @@ defmodule ChalkSync.Stateholder.Postgres do
         {:error, :stale_deadline_generation}
 
       policy.status != "active" || !due ->
-        {:error, :session_ended}
+        {:error, :episode_ended}
 
       true ->
-        prepare_end_operation(connection, session, supplied_generation)
+        prepare_end_operation(connection, episode, supplied_generation)
     end
   end
 
-  defp prepare_end_operation(connection, session, deadline_generation) do
+  defp prepare_end_operation(connection, episode, deadline_generation) do
     recording_id =
       case Postgrex.query!(
              connection,
              SQL.lock_active_recording_for_end(),
-             session_params(session)
+             episode_params(episode)
            ).rows do
         [[id]] -> UUID.load!(id)
         [] -> nil
@@ -1376,15 +1347,15 @@ defmodule ChalkSync.Stateholder.Postgres do
      %{
        target: nil,
        sources: [],
-       end_session: true,
+       end_episode: true,
        deadline_generation: deadline_generation,
        recording_id: recording_id
      }}
   end
 
-  defp lock_pending_admission(connection, session, operation) do
+  defp lock_pending_admission(connection, episode, operation) do
     request_id = operation.payload["admissionRequestId"]
-    params = session_params(session) ++ [uuid(request_id)]
+    params = episode_params(episode) ++ [uuid(request_id)]
 
     case Postgrex.query!(connection, SQL.lock_admission_request(), params).rows do
       [
@@ -1392,8 +1363,7 @@ defmodule ChalkSync.Stateholder.Postgres do
           id,
           participant_id,
           display_name,
-          initial_role,
-          eligible_roles,
+          role,
           "pending",
           expires_at,
           nil
@@ -1402,14 +1372,13 @@ defmodule ChalkSync.Stateholder.Postgres do
         {:ok,
          %{
            id: UUID.load!(id),
-           participant_session_id: UUID.load!(participant_id),
+           participant_id: UUID.load!(participant_id),
            display_name: display_name,
-           initial_role: initial_role,
-           eligible_roles: eligible_roles,
+           role: role,
            expires_at: expires_at
          }}
 
-      [[_id, _participant_id, _name, _role, _roles, _status, _expires_at, _decision]] ->
+      [[_id, _participant_id, _name, _role, _status, _expires_at, _decision]] ->
         {:error, :invalid_state}
 
       [] ->
@@ -1417,10 +1386,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp prepare_participant_target(connection, session, operation) do
-    target_id = operation.payload["participantSessionId"]
+  defp prepare_participant_target(connection, episode, operation) do
+    target_id = operation.payload["participantId"]
 
-    case lock_operation_participant(connection, session, target_id) do
+    case lock_operation_participant(connection, episode, target_id) do
       %{status: "active"} = target ->
         sources = operation_sources(operation.name)
         {:ok, %{target: target, sources: sources}}
@@ -1432,7 +1401,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp validate_leave_acceptance(state, %{status: "active"} = target) do
     case Reducer.decide_external(state, :participant_leave, %{
-           "participant_session_id" => target.id,
+           "participant_id" => target.id,
            "reason" => "left"
          }) do
       {:change, _event, _next} ->
@@ -1445,7 +1414,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp validate_leave_acceptance(_state, _target), do: {:error, :participant_inactive}
 
-  defp prepare_recording(_connection, _session, %{name: :start_recording} = operation, state) do
+  defp prepare_recording(_connection, _episode, %{name: :start_recording} = operation, state) do
     recording_id = operation.payload["recordingId"]
 
     if is_nil(state.recording) or state.recording["status"] in ["stopped", "failed"] do
@@ -1455,9 +1424,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp prepare_recording(connection, session, %{name: :stop_recording} = operation, state) do
+  defp prepare_recording(connection, episode, %{name: :stop_recording} = operation, state) do
     recording_id = operation.payload["recordingId"]
-    params = session_params(session) ++ [uuid(recording_id)]
+    params = episode_params(episode) ++ [uuid(recording_id)]
 
     case Postgrex.query!(connection, SQL.lock_recording(), params).rows do
       [["recording", _generation, _start_id, nil]] ->
@@ -1470,20 +1439,6 @@ defmodule ChalkSync.Stateholder.Postgres do
         else
           {:error, :invalid_state}
         end
-
-      _ ->
-        {:error, :invalid_target}
-    end
-  end
-
-  defp prepare_tenant_transfer(connection, session, operation, state) do
-    target_id = operation.payload["participantSessionId"]
-
-    case lock_operation_participant(connection, session, target_id) do
-      %{status: "active", eligible_roles: eligible_roles} = target ->
-        if "host" in eligible_roles and target_id != state.host_participant_session_id,
-          do: {:ok, %{target: target, sources: []}},
-          else: {:error, :invalid_target}
 
       _ ->
         {:error, :invalid_target}
@@ -1511,8 +1466,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp ensure_operation_capacity(connection, session) do
-    case Postgrex.query!(connection, SQL.count_pending_operations(), session_params(session)).rows do
+  defp ensure_operation_capacity(connection, episode) do
+    case Postgrex.query!(connection, SQL.count_pending_operations(), episode_params(episode)).rows do
       [[count]] when count < @max_pending_operations -> :ok
       _ -> {:error, :overloaded}
     end
@@ -1523,32 +1478,32 @@ defmodule ChalkSync.Stateholder.Postgres do
 
     insert_external_operation(
       connection,
-      identity.session,
+      identity.episode,
       external,
       context,
       operation.observed_context
     )
 
     accepted_state =
-      persist_pre_call_authority(connection, identity.session, external, state, context)
+      persist_pre_call_authority(connection, identity.episode, external, state, context)
 
     insert_pending_operation_receipt(connection, identity, operation, external)
 
-    increment_pending_receipt_capacity(connection, identity.session, accepted_state.revision)
+    increment_pending_receipt_capacity(connection, identity.episode, accepted_state.revision)
     operation_decision(external, :original)
   end
 
   defp persist_internal_operation_acceptance(
          connection,
-         session,
+         episode,
          operation,
          _policy,
          state,
          context
        ) do
     external = build_external_operation(nil, operation, context)
-    insert_external_operation(connection, session, external, context, operation.observed_context)
-    _accepted_state = persist_pre_call_authority(connection, session, external, state, context)
+    insert_external_operation(connection, episode, external, context, operation.observed_context)
+    _accepted_state = persist_pre_call_authority(connection, episode, external, state, context)
     operation_decision(external, :original)
   end
 
@@ -1564,9 +1519,9 @@ defmodule ChalkSync.Stateholder.Postgres do
       payload: operation.payload,
       status: :pending,
       attempt_count: 0,
-      actor_participant_session_id: identity && identity.participant_session_id,
-      actor_generation: identity && identity.participant_session_generation,
-      target_participant_session_id: target && target.id,
+      actor_participant_id: identity && identity.participant_id,
+      actor_generation: identity && identity.participant_generation,
+      target_participant_id: target && target.id,
       target_participant_generation: target && target.generation,
       recording_id: context[:recording_id],
       deadline_generation: context[:deadline_generation],
@@ -1577,21 +1532,21 @@ defmodule ChalkSync.Stateholder.Postgres do
     }
   end
 
-  defp insert_external_operation(connection, session, external, context, observed) do
+  defp insert_external_operation(connection, episode, external, context, observed) do
     source = operation_source(external.name)
-    fence_active = context.sources != [] || context[:end_session] == true
+    fence_active = context.sources != [] || context[:end_episode] == true
 
     Postgrex.query!(connection, SQL.insert_external_operation(), [
-      uuid(session.tenant_id),
-      uuid(session.room_id),
-      uuid(session.session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.space_id),
+      uuid(episode.episode_id),
       uuid(external.external_operation_id),
       external.request_key,
       external.request_fingerprint,
-      Atom.to_string(external.name),
-      nullable_dump(external.actor_participant_session_id),
+      operation_name_string(external.name),
+      nullable_dump(external.actor_participant_id),
       external.actor_generation,
-      nullable_dump(external.target_participant_session_id),
+      nullable_dump(external.target_participant_id),
       external.target_participant_generation,
       source,
       nullable_dump(external.recording_id),
@@ -1606,6 +1561,9 @@ defmodule ChalkSync.Stateholder.Postgres do
 
     insert_external_operation_journey_event(connection, external, observed)
   end
+
+  defp operation_name_string(:maximum_duration_expired), do: "maximum_episode_duration_expired"
+  defp operation_name_string(name), do: Atom.to_string(name)
 
   defp insert_external_operation_journey_event(_connection, _external, nil), do: :ok
 
@@ -1624,31 +1582,31 @@ defmodule ChalkSync.Stateholder.Postgres do
     ])
   end
 
-  defp persist_pre_call_authority(connection, session, external, state, context) do
-    reserve_admission_decision(connection, session, external, context[:admission])
+  defp persist_pre_call_authority(connection, episode, external, state, context) do
+    reserve_admission_decision(connection, episode, external, context[:admission])
 
     participants =
-      if context[:end_session],
-        do: lock_all_operation_participants(connection, session),
+      if context[:end_episode],
+        do: lock_all_operation_participants(connection, episode),
         else: List.wrap(context[:target])
 
-    install_operation_fences(connection, session, external, participants, context)
+    install_operation_fences(connection, episode, external, participants, context)
 
     cond do
       context[:recording_action] == :start ->
-        accept_recording_start(connection, session, external)
-        persist_acceptance_fact(connection, session, external, state, "starting")
+        accept_recording_start(connection, episode, external)
+        persist_acceptance_fact(connection, episode, external, state, "starting")
 
       context[:recording_action] == :stop ->
-        accept_recording_stop(connection, session, external)
-        persist_acceptance_fact(connection, session, external, state, "stopping")
+        accept_recording_stop(connection, episode, external)
+        persist_acceptance_fact(connection, episode, external, state, "stopping")
 
       context[:leave] || external.name == :remove_participant ->
-        mark_operation_participant_leaving(connection, session, external)
+        mark_operation_participant_leaving(connection, episode, external)
         state
 
-      context[:end_session] ->
-        mark_operation_session_ending(connection, session)
+      context[:end_episode] ->
+        mark_operation_episode_ending(connection, episode)
         state
 
       true ->
@@ -1656,13 +1614,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp reserve_admission_decision(_connection, _session, _external, nil), do: :ok
+  defp reserve_admission_decision(_connection, _episode, _external, nil), do: :ok
 
-  defp reserve_admission_decision(connection, session, external, admission) do
-    participant_id = uuid(admission.participant_session_id)
+  defp reserve_admission_decision(connection, episode, external, admission) do
+    participant_id = uuid(admission.participant_id)
 
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [uuid(admission.id), uuid(external.external_operation_id)]
 
     case Postgrex.query!(connection, SQL.reserve_admission_request(), params).rows do
@@ -1671,36 +1629,36 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lock_all_operation_participants(connection, session) do
-    Postgrex.query!(connection, SQL.lock_active_participants(), session_params(session)).rows
-    |> Enum.map(fn [id, generation, role, eligible_roles] ->
+  defp lock_all_operation_participants(connection, episode) do
+    Postgrex.query!(connection, SQL.lock_active_participants(), episode_params(episode)).rows
+    |> Enum.map(fn [id, generation, role, capabilities] ->
       %{
         id: UUID.load!(id),
         generation: generation,
         status: "active",
         role: role,
-        eligible_roles: eligible_roles
+        capabilities: capabilities
       }
     end)
   end
 
-  defp install_operation_fences(connection, session, external, participants, context) do
-    sources = if context[:end_session], do: [:microphone, :camera, :screen], else: context.sources
+  defp install_operation_fences(connection, episode, external, participants, context) do
+    sources = if context[:end_episode], do: [:microphone, :camera, :screen], else: context.sources
 
     Enum.each(
       participants,
-      &install_participant_fences(connection, session, external, &1, sources)
+      &install_participant_fences(connection, episode, external, &1, sources)
     )
   end
 
-  defp install_participant_fences(_connection, _session, _external, nil, _sources), do: :ok
+  defp install_participant_fences(_connection, _episode, _external, nil, _sources), do: :ok
 
-  defp install_participant_fences(connection, session, external, participant, sources) do
+  defp install_participant_fences(connection, episode, external, participant, sources) do
     Enum.each(sources, fn source ->
       operation_id = uuid(external.external_operation_id)
 
       params =
-        session_params(session) ++
+        episode_params(episode) ++
           [uuid(participant.id), participant.generation, Atom.to_string(source), operation_id]
 
       case Postgrex.query!(connection, SQL.insert_publication_fence(), params).rows do
@@ -1710,10 +1668,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     end)
   end
 
-  defp mark_operation_participant_leaving(connection, session, external) do
+  defp mark_operation_participant_leaving(connection, episode, external) do
     params =
-      session_params(session) ++
-        [uuid(external.target_participant_session_id), external.target_participant_generation]
+      episode_params(episode) ++
+        [uuid(external.target_participant_id), external.target_participant_generation]
 
     case Postgrex.query!(connection, SQL.mark_participant_leaving(), params).rows do
       [[_id]] -> :ok
@@ -1721,19 +1679,19 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp mark_operation_session_ending(connection, session) do
-    case Postgrex.query!(connection, SQL.mark_session_ending(), session_params(session)).rows do
+  defp mark_operation_episode_ending(connection, episode) do
+    case Postgrex.query!(connection, SQL.mark_episode_ending(), episode_params(episode)).rows do
       [[_id]] -> :ok
-      [] -> Postgrex.rollback(connection, {:error, :session_ended})
+      [] -> Postgrex.rollback(connection, {:error, :episode_ended})
     end
   end
 
-  defp accept_recording_start(connection, session, external) do
+  defp accept_recording_start(connection, episode, external) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [
           uuid(external.recording_id),
-          uuid(external.actor_participant_session_id),
+          uuid(external.actor_participant_id),
           external.actor_generation,
           uuid(external.external_operation_id)
         ]
@@ -1744,9 +1702,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp accept_recording_stop(connection, session, external) do
+  defp accept_recording_stop(connection, episode, external) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [uuid(external.recording_id), uuid(external.external_operation_id)]
 
     case Postgrex.query!(connection, SQL.accept_recording_stop(), params).rows do
@@ -1755,7 +1713,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp persist_acceptance_fact(connection, session, external, state, status) do
+  defp persist_acceptance_fact(connection, episode, external, state, status) do
     payload = %{
       "recording_id" => external.recording_id,
       "status" => status,
@@ -1764,7 +1722,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
     case Reducer.apply_external(state, :recording_status_changed, payload) do
       {:ok, event, next_state} ->
-        persist_external_event(connection, session, external, event, next_state)
+        persist_external_event(connection, episode, external, event, next_state)
         next_state
 
       {:error, reason} ->
@@ -1774,10 +1732,10 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp insert_pending_operation_receipt(connection, identity, operation, external) do
     Postgrex.query!(connection, SQL.insert_pending_operation_receipt(), [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
-      uuid(identity.participant_session_id),
-      identity.participant_session_generation,
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.episode_id),
+      uuid(identity.participant_id),
+      identity.participant_generation,
       operation.request_key,
       operation.fingerprint,
       Atom.to_string(operation.name),
@@ -1785,8 +1743,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     ])
   end
 
-  defp increment_pending_receipt_capacity(connection, session, revision) do
-    params = session_params(session) ++ [@pending_receipt_reserved_bytes]
+  defp increment_pending_receipt_capacity(connection, episode, revision) do
+    params = episode_params(episode) ++ [@pending_receipt_reserved_bytes]
 
     case Postgrex.query!(connection, SQL.increment_pending_operation_capacity(), params).rows do
       [[^revision]] -> :ok
@@ -1848,7 +1806,7 @@ defmodule ChalkSync.Stateholder.Postgres do
          _operation,
          [_fingerprint, "pending", nil, nil, nil, nil, external_operation_id]
        ) do
-    params = session_params(identity.session) ++ [external_operation_id]
+    params = episode_params(identity.episode) ++ [external_operation_id]
 
     case Postgrex.query!(connection, SQL.read_operation(), params).rows do
       [row] -> operation_decision(external_operation_from_row(row), :duplicate)
@@ -1903,8 +1861,8 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp external_operation_from_row([
          _tenant_id,
-         _room_id,
-         _session_id,
+         _space_id,
+         _episode_id,
          operation_id,
          parent_operation_id,
          request_key,
@@ -1933,13 +1891,13 @@ defmodule ChalkSync.Stateholder.Postgres do
       parent_external_operation_id: nullable_uuid(parent_operation_id),
       request_key: request_key,
       request_fingerprint: fingerprint,
-      name: String.to_existing_atom(name),
+      name: external_operation_name(name),
       payload: payload,
       status: String.to_existing_atom(status),
       attempt_count: attempt_count,
-      actor_participant_session_id: nullable_uuid(actor_id),
+      actor_participant_id: nullable_uuid(actor_id),
       actor_generation: actor_generation,
-      target_participant_session_id: nullable_uuid(target_id),
+      target_participant_id: nullable_uuid(target_id),
       target_participant_generation: target_generation,
       source: source && String.to_existing_atom(source),
       recording_id: nullable_uuid(recording_id),
@@ -1954,6 +1912,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     }
   end
 
+  defp external_operation_name("maximum_episode_duration_expired"), do: :maximum_duration_expired
+  defp external_operation_name(name), do: String.to_existing_atom(name)
+
   defp failure_reason(nil), do: nil
 
   defp failure_reason(value) do
@@ -1962,23 +1923,23 @@ defmodule ChalkSync.Stateholder.Postgres do
     ArgumentError -> :external_operation_failed
   end
 
-  defp operation_finalization_transaction(connection, session, external_operation_id, outcome) do
+  defp operation_finalization_transaction(connection, episode, external_operation_id, outcome) do
     configure_transaction(connection)
-    control = lock_operation_control(connection, session)
-    policy = lock_operation_session(connection, session)
-    external = lock_external_operation(connection, session, external_operation_id)
+    control = lock_operation_control(connection, episode)
+    policy = lock_operation_episode(connection, episode)
+    external = lock_external_operation(connection, episode, external_operation_id)
 
     cond do
       external.status != :pending ->
         operation_decision(external, :duplicate)
 
       stale_maximum_duration?(external, policy) ->
-        settle_stale_maximum_duration(connection, session, external)
+        settle_stale_maximum_duration(connection, episode, external)
 
       true ->
-        with {:ok, state} <- validate_fold(session, control, policy),
-             :ok <- validate_finalization_authority(connection, session, external, policy) do
-          finalize_pending_operation(connection, session, external, state, outcome)
+        with {:ok, state} <- validate_fold(episode, control, policy),
+             :ok <- validate_finalization_authority(connection, episode, external, policy) do
+          finalize_pending_operation(connection, episode, external, state, outcome)
         else
           {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
         end
@@ -1992,10 +1953,10 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp stale_maximum_duration?(_external, _policy), do: false
 
-  defp settle_stale_maximum_duration(connection, session, external) do
-    release_failed_acceptance(connection, session, external)
-    delete_operation_fences(connection, session, external)
-    mark_external_failed(connection, session, external, "stale_deadline_generation")
+  defp settle_stale_maximum_duration(connection, episode, external) do
+    release_failed_acceptance(connection, episode, external)
+    delete_operation_fences(connection, episode, external)
+    mark_external_failed(connection, episode, external, "stale_deadline_generation")
 
     failed = %{
       external
@@ -2006,8 +1967,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     operation_decision(failed, :original)
   end
 
-  defp lock_external_operation(connection, session, external_operation_id) do
-    params = session_params(session) ++ [uuid(external_operation_id)]
+  defp lock_external_operation(connection, episode, external_operation_id) do
+    params = episode_params(episode) ++ [uuid(external_operation_id)]
 
     case Postgrex.query!(connection, SQL.lock_operation(), params).rows do
       [row] -> external_operation_from_row(row)
@@ -2015,43 +1976,43 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp validate_finalization_authority(connection, session, external, policy) do
-    with :ok <- validate_finalization_session(external, policy),
-         :ok <- validate_finalization_participant(connection, session, external, :actor),
-         :ok <- validate_finalization_participant(connection, session, external, :target) do
+  defp validate_finalization_authority(connection, episode, external, policy) do
+    with :ok <- validate_finalization_episode(external, policy),
+         :ok <- validate_finalization_participant(connection, episode, external, :actor),
+         :ok <- validate_finalization_participant(connection, episode, external, :target) do
       validate_finalization_deadline(external, policy)
     end
   end
 
-  defp validate_finalization_session(%{name: name}, %{status: "ending"})
-       when name in [:end_session, :tenant_end_session, :maximum_duration_expired],
+  defp validate_finalization_episode(%{name: name}, %{status: "ending"})
+       when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
        do: :ok
 
-  defp validate_finalization_session(%{name: name}, %{status: "active"})
-       when name not in [:end_session, :tenant_end_session, :maximum_duration_expired],
+  defp validate_finalization_episode(%{name: name}, %{status: "active"})
+       when name not in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
        do: :ok
 
-  defp validate_finalization_session(_external, _policy), do: {:error, :session_ended}
+  defp validate_finalization_episode(_external, _policy), do: {:error, :episode_ended}
 
-  defp validate_finalization_participant(_connection, _session, external, field)
-       when field == :actor and is_nil(external.actor_participant_session_id),
+  defp validate_finalization_participant(_connection, _episode, external, field)
+       when field == :actor and is_nil(external.actor_participant_id),
        do: :ok
 
-  defp validate_finalization_participant(_connection, _session, external, field)
-       when field == :target and is_nil(external.target_participant_session_id),
+  defp validate_finalization_participant(_connection, _episode, external, field)
+       when field == :target and is_nil(external.target_participant_id),
        do: :ok
 
-  defp validate_finalization_participant(connection, session, external, field) do
+  defp validate_finalization_participant(connection, episode, external, field) do
     {participant_id, generation} =
       case field do
         :actor ->
-          {external.actor_participant_session_id, external.actor_generation}
+          {external.actor_participant_id, external.actor_generation}
 
         :target ->
-          {external.target_participant_session_id, external.target_participant_generation}
+          {external.target_participant_id, external.target_participant_generation}
       end
 
-    case lock_operation_participant(connection, session, participant_id) do
+    case lock_operation_participant(connection, episode, participant_id) do
       %{generation: ^generation, status: status}
       when status in ["active", "leaving", "joining"] ->
         :ok
@@ -2093,15 +2054,15 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          %{name: :admit_participant} = external,
          state,
          {:confirmed, :local}
        ) do
-    with {:ok, admission} <- lock_reserved_admission_for_external(connection, session, external) do
+    with {:ok, admission} <- lock_reserved_admission_for_external(connection, episode, external) do
       finalize_admission_approval(
         connection,
-        session,
+        episode,
         external,
         state,
         :participant_joined,
@@ -2112,22 +2073,17 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          %{name: name} = external,
          state,
          {:confirmed, :local}
        )
-       when name in [
-              :deny_admission,
-              :admission_request_expired,
-              :tenant_transfer_host,
-              :tenant_set_deadline
-            ],
-       do: finalize_confirmed_operation(connection, session, external, state)
+       when name in [:deny_admission, :admission_request_expired, :tenant_set_deadline],
+       do: finalize_confirmed_operation(connection, episode, external, state)
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          %{name: name} = external,
          state,
          {:confirmed, :provider}
@@ -2138,47 +2094,47 @@ defmodule ChalkSync.Stateholder.Postgres do
               :stop_participant_screen_share,
               :remove_participant,
               :participant_leave,
-              :end_session,
-              :tenant_end_session,
+              :end_episode,
+              :tenant_end_episode,
               :maximum_duration_expired
             ],
-       do: finalize_confirmed_operation(connection, session, external, state)
+       do: finalize_confirmed_operation(connection, episode, external, state)
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          %{name: name} = external,
          state,
          {:confirmed, :recording}
        )
        when name in [:start_recording, :stop_recording],
-       do: finalize_confirmed_operation(connection, session, external, state)
+       do: finalize_confirmed_operation(connection, episode, external, state)
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          %{name: :role_transition_source_stop} = external,
          _state,
          {:confirmed, _provider}
        ) do
-    settle_role_transition_child(connection, session, external.external_operation_id, :applied)
+    settle_role_transition_child(connection, episode, external.external_operation_id, :applied)
     operation_decision(%{external | status: :applied}, :original)
   end
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          %{name: :role_transition_source_stop} = external,
          _state,
          {:applied, _name, _payload}
        ) do
-    settle_role_transition_child(connection, session, external.external_operation_id, :applied)
+    settle_role_transition_child(connection, episode, external.external_operation_id, :applied)
     operation_decision(%{external | status: :applied}, :original)
   end
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          %{name: :role_transition_source_stop} = external,
          _state,
          {:failed, reason}
@@ -2186,7 +2142,7 @@ defmodule ChalkSync.Stateholder.Postgres do
        when is_atom(reason) do
     settle_role_transition_child(
       connection,
-      session,
+      episode,
       external.external_operation_id,
       {:failed, reason}
     )
@@ -2194,7 +2150,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     operation_decision(%{external | status: :failed, last_error_code: reason}, :original)
   end
 
-  defp finalize_pending_operation(connection, session, external, state, {:failed, reason})
+  defp finalize_pending_operation(connection, episode, external, state, {:failed, reason})
        when is_atom(reason) do
     failure_code = Atom.to_string(reason)
 
@@ -2202,11 +2158,11 @@ defmodule ChalkSync.Stateholder.Postgres do
       Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
     end
 
-    state = maybe_persist_recording_failure(connection, session, external, state, failure_code)
-    release_failed_acceptance(connection, session, external)
-    delete_operation_fences(connection, session, external)
-    mark_external_failed(connection, session, external, failure_code)
-    reject_external_receipt(connection, session, external)
+    state = maybe_persist_recording_failure(connection, episode, external, state, failure_code)
+    release_failed_acceptance(connection, episode, external)
+    delete_operation_fences(connection, episode, external)
+    mark_external_failed(connection, episode, external, failure_code)
+    reject_external_receipt(connection, episode, external)
 
     failed = %{external | status: :failed, last_error_code: reason}
     operation_decision(failed, :original, state)
@@ -2214,28 +2170,28 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp finalize_pending_operation(
          connection,
-         session,
+         episode,
          external,
          state,
          {:applied, name, payload}
        )
        when is_atom(name) and is_map(payload) do
     if external.name == :admit_participant do
-      finalize_admission_approval(connection, session, external, state, name, payload)
+      finalize_admission_approval(connection, episode, external, state, name, payload)
     else
-      finalize_external_fact(connection, session, external, state, name, payload)
+      finalize_external_fact(connection, episode, external, state, name, payload)
     end
   end
 
-  defp finalize_pending_operation(connection, _session, _external, _state, _outcome),
+  defp finalize_pending_operation(connection, _episode, _external, _state, _outcome),
     do: Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
 
-  defp finalize_confirmed_operation(connection, session, external, state) do
+  defp finalize_confirmed_operation(connection, episode, external, state) do
     case local_operation_outcome(external, state) do
       {:ok, event_name, payload} ->
         finalize_pending_operation(
           connection,
-          session,
+          episode,
           external,
           state,
           {:applied, event_name, payload}
@@ -2246,8 +2202,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp settle_role_transition_child(connection, session, child_id, result) do
-    params = session_params(session) ++ [uuid(child_id)]
+  defp settle_role_transition_child(connection, episode, child_id, result) do
+    params = episode_params(episode) ++ [uuid(child_id)]
 
     parent_id =
       case result do
@@ -2270,11 +2226,11 @@ defmodule ChalkSync.Stateholder.Postgres do
           end
       end
 
-    settle_role_transition_parent(connection, session, UUID.load!(parent_id))
+    settle_role_transition_parent(connection, episode, UUID.load!(parent_id))
   end
 
-  defp settle_role_transition_parent(connection, session, parent_id) do
-    params = session_params(session) ++ [uuid(parent_id)]
+  defp settle_role_transition_parent(connection, episode, parent_id) do
+    params = episode_params(episode) ++ [uuid(parent_id)]
 
     parent =
       case Postgrex.query!(connection, SQL.lock_role_transition_parent(), params).rows do
@@ -2287,8 +2243,8 @@ defmodule ChalkSync.Stateholder.Postgres do
       |> Enum.map(&hd/1)
 
     case role_transition_settlement(statuses) do
-      :failed -> fail_role_transition_parent(connection, session, parent_id, params)
-      :applied -> apply_role_transition_parent(connection, session, parent, parent_id, params)
+      :failed -> fail_role_transition_parent(connection, episode, parent_id, params)
+      :applied -> apply_role_transition_parent(connection, episode, parent, parent_id, params)
       :pending -> :pending
     end
   end
@@ -2301,7 +2257,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp fail_role_transition_parent(connection, session, parent_id, params) do
+  defp fail_role_transition_parent(connection, episode, parent_id, params) do
     case Postgrex.query!(
            connection,
            SQL.fail_role_transition_parent(),
@@ -2312,23 +2268,23 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
 
     Postgrex.query!(connection, SQL.fail_role_transition_receipt(), [
-      uuid(session.tenant_id),
-      uuid(session.session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.episode_id),
       uuid(parent_id)
     ])
   end
 
-  defp apply_role_transition_parent(connection, session, parent, parent_id, params) do
+  defp apply_role_transition_parent(connection, episode, parent, parent_id, params) do
     case Postgrex.query!(connection, SQL.apply_role_transition_parent(), params).rows do
       [[_id]] -> :ok
       [] -> Postgrex.rollback(connection, {:error, :invalid_state})
     end
 
-    delete_operation_fences(connection, session, parent)
+    delete_operation_fences(connection, episode, parent)
 
     Postgrex.query!(connection, SQL.commit_role_transition_receipt(), [
-      uuid(session.tenant_id),
-      uuid(session.session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.episode_id),
       uuid(parent_id)
     ])
   end
@@ -2338,7 +2294,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     reason = if name == :participant_leave, do: "left", else: "removed"
 
     case Reducer.decide_external(state, :participant_leave, %{
-           "participant_session_id" => external.target_participant_session_id,
+           "participant_id" => external.target_participant_id,
            "reason" => reason
          }) do
       {:change, event, _next_state} ->
@@ -2356,29 +2312,29 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp finalize_external_fact(connection, session, external, state, name, payload) do
+  defp finalize_external_fact(connection, episode, external, state, name, payload) do
     case expected_external_fact(external, state, name, payload) do
       {:ok, event, next_state} ->
-        event_id = persist_external_event(connection, session, external, event, next_state)
+        event_id = persist_external_event(connection, episode, external, event, next_state)
 
         webhook_object =
-          update_external_products(connection, session, external, event, next_state)
+          update_external_products(connection, episode, external, event, next_state)
 
-        delete_operation_fences(connection, session, external)
-        mark_external_applied(connection, session, external, event_id, event.revision)
+        delete_operation_fences(connection, episode, external)
+        mark_external_applied(connection, episode, external, event_id, event.revision)
 
         commit_external_receipt(
           connection,
-          session,
+          episode,
           external,
           event_id,
           event.revision,
           next_state
         )
 
-        WebhookProducer.produce_external(connection, session, external, event, webhook_object)
-        external_operation_checkpoint(:after_webhook_production, session, external)
-        notify_head(connection, session, event.revision)
+        WebhookProducer.produce_external(connection, episode, external, event, webhook_object)
+        external_operation_checkpoint(:after_webhook_production, episode, external)
+        notify_head(connection, episode, event.revision)
 
         applied = %{
           external
@@ -2396,24 +2352,24 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp finalize_admission_approval(
          connection,
-         session,
+         episode,
          external,
          state,
          :participant_joined,
          payload
        ) do
-    with {:ok, admission} <- lock_reserved_admission_for_external(connection, session, external),
+    with {:ok, admission} <- lock_reserved_admission_for_external(connection, episode, external),
          true <- payload == admission_join_payload(admission, state),
-         {:ok, intent} <- lock_admission_join_intent(connection, session, admission),
+         {:ok, intent} <- lock_admission_join_intent(connection, episode, admission),
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, :participant_joined, payload) do
-      finalize_admission_row(connection, session, admission.id, "admitted", external)
-      decision = persist_lifecycle_commit(connection, session, intent, event, next_state)
-      mark_external_applied(connection, session, external, nil, nil)
+      finalize_admission_row(connection, episode, admission.id, "admitted", external)
+      decision = persist_lifecycle_commit(connection, episode, intent, event, next_state)
+      mark_external_applied(connection, episode, external, nil, nil)
 
       commit_external_receipt(
         connection,
-        session,
+        episode,
         external,
         decision.event_id,
         decision.revision,
@@ -2429,7 +2385,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp finalize_admission_approval(
          _connection,
-         _session,
+         _episode,
          _external,
          _state,
          _name,
@@ -2437,10 +2393,10 @@ defmodule ChalkSync.Stateholder.Postgres do
        ),
        do: {:error, :invalid_operation_outcome}
 
-  defp lock_reserved_admission_for_external(connection, session, external) do
+  defp lock_reserved_admission_for_external(connection, episode, external) do
     request_id = external.payload["admissionRequestId"]
     operation_id = uuid(external.external_operation_id)
-    params = session_params(session) ++ [uuid(request_id)]
+    params = episode_params(episode) ++ [uuid(request_id)]
 
     case Postgrex.query!(connection, SQL.lock_admission_request(), params).rows do
       [
@@ -2448,8 +2404,7 @@ defmodule ChalkSync.Stateholder.Postgres do
           id,
           participant_id,
           display_name,
-          initial_role,
-          eligible_roles,
+          role,
           "pending",
           expires_at,
           ^operation_id
@@ -2458,10 +2413,9 @@ defmodule ChalkSync.Stateholder.Postgres do
         {:ok,
          %{
            id: UUID.load!(id),
-           participant_session_id: UUID.load!(participant_id),
+           participant_id: UUID.load!(participant_id),
            display_name: display_name,
-           initial_role: initial_role,
-           eligible_roles: eligible_roles,
+           role: role,
            expires_at: expires_at
          }}
 
@@ -2472,26 +2426,24 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp admission_join_payload(admission, state) do
     %{
-      "participant_session_id" => admission.participant_session_id,
+      "participant_id" => admission.participant_id,
       "display_name" => admission.display_name,
-      "role" => admission.initial_role,
-      "eligible_roles" => admission.eligible_roles,
+      "role" => admission.role,
       "admission_revision" => state.revision + 1
     }
   end
 
-  defp lock_admission_join_intent(connection, session, admission) do
-    params = session_params(session) ++ [uuid(admission.participant_session_id)]
+  defp lock_admission_join_intent(connection, episode, admission) do
+    params = episode_params(episode) ++ [uuid(admission.participant_id)]
 
     case Postgrex.query!(connection, SQL.lock_admission_lifecycle_intent(), params).rows do
       [[intent_id, "pending", generation]] ->
         participant =
-          lock_operation_participant(connection, session, admission.participant_session_id)
+          lock_operation_participant(connection, episode, admission.participant_id)
 
         if participant && participant.generation == generation && participant.status == "joining" &&
-             participant.role == admission.initial_role &&
-             participant.eligible_roles == admission.eligible_roles do
-          {:ok, lock_lifecycle_intent(connection, session, UUID.load!(intent_id))}
+             participant.role == admission.role do
+          {:ok, lock_lifecycle_intent(connection, episode, UUID.load!(intent_id))}
         else
           {:error, :invalid_state}
         end
@@ -2506,7 +2458,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     reason = if external.name == :remove_participant, do: "removed", else: "left"
 
     case Reducer.decide_external(state, :participant_leave, %{
-           "participant_session_id" => external.target_participant_session_id,
+           "participant_id" => external.target_participant_id,
            "reason" => reason
          }) do
       {:change, event, next_state} ->
@@ -2536,19 +2488,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: {:admission_expired, %{"admission_request_id" => external.payload["admissionRequestId"]}}
 
   defp expected_fact(%{name: :mute_participant} = external, _state),
-    do:
-      {:participant_microphone_stopped,
-       %{"participant_session_id" => external.target_participant_session_id}}
+    do: {:participant_microphone_stopped, %{"participant_id" => external.target_participant_id}}
 
   defp expected_fact(%{name: :stop_participant_camera} = external, _state),
-    do:
-      {:participant_camera_stopped,
-       %{"participant_session_id" => external.target_participant_session_id}}
+    do: {:participant_camera_stopped, %{"participant_id" => external.target_participant_id}}
 
   defp expected_fact(%{name: :stop_participant_screen_share} = external, _state),
-    do:
-      {:participant_screen_share_stopped,
-       %{"participant_session_id" => external.target_participant_session_id}}
+    do: {:participant_screen_share_stopped, %{"participant_id" => external.target_participant_id}}
 
   defp expected_fact(%{name: name} = external, _state)
        when name in [:start_recording, :stop_recording] do
@@ -2562,22 +2508,14 @@ defmodule ChalkSync.Stateholder.Postgres do
      }}
   end
 
-  defp expected_fact(%{name: :end_session}, _state),
-    do: {:session_ended, %{"reason" => "ended_by_participant"}}
+  defp expected_fact(%{name: :end_episode}, _state),
+    do: {:episode_ended, %{"reason" => "ended_by_participant"}}
 
-  defp expected_fact(%{name: :tenant_end_session}, _state),
-    do: {:session_ended, %{"reason" => "tenant_recovery"}}
+  defp expected_fact(%{name: :tenant_end_episode}, _state),
+    do: {:episode_ended, %{"reason" => "tenant_recovery"}}
 
   defp expected_fact(%{name: :maximum_duration_expired}, _state),
-    do: {:session_ended, %{"reason" => "maximum_duration"}}
-
-  defp expected_fact(%{name: :tenant_transfer_host} = external, state),
-    do:
-      {:host_transferred,
-       %{
-         "previous_host_participant_session_id" => state.host_participant_session_id,
-         "new_host_participant_session_id" => external.target_participant_session_id
-       }}
+    do: {:episode_ended, %{"reason" => "maximum_duration"}}
 
   defp expected_fact(%{name: :tenant_set_deadline} = external, _state),
     do:
@@ -2589,7 +2527,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp expected_fact(_external, _state), do: :invalid
 
-  defp persist_external_event(connection, session, external, event, state) do
+  defp persist_external_event(connection, episode, external, event, state) do
     event_id = UUID.generate()
     digest = Reducer.digest(state)
 
@@ -2599,7 +2537,7 @@ defmodule ChalkSync.Stateholder.Postgres do
       |> Map.put(:command_id, nil)
       |> Map.put(:lifecycle_intent_id, nil)
       |> Map.put(:external_operation_id, external.external_operation_id)
-      |> Map.put(:actor_participant_session_id, external.actor_participant_session_id)
+      |> Map.put(:actor_participant_id, external.actor_participant_id)
       |> Map.put(:actor_generation, external.actor_generation)
       |> Map.put(:schema_version, @schema_version)
       |> Map.put(:resulting_state_digest, digest)
@@ -2611,15 +2549,15 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
 
     Postgrex.query!(connection, SQL.insert_external_event(), [
-      uuid(session.tenant_id),
-      uuid(session.room_id),
-      uuid(session.session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.space_id),
+      uuid(episode.episode_id),
       uuid(event_id),
       event.base_revision,
       event.revision,
       event.name,
       event.payload,
-      nullable_dump(external.actor_participant_session_id),
+      nullable_dump(external.actor_participant_id),
       external.actor_generation,
       uuid(external.external_operation_id),
       @schema_version,
@@ -2627,21 +2565,20 @@ defmodule ChalkSync.Stateholder.Postgres do
       event_bytes
     ])
 
-    update_external_control(connection, session, external, state, event_bytes)
+    update_external_control(connection, episode, external, state, event_bytes)
     event_id
   end
 
-  defp update_external_control(connection, session, external, state, event_bytes) do
+  defp update_external_control(connection, episode, external, state, event_bytes) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [
           state.revision,
           Reducer.snapshot(state),
           Reducer.state_schema_version(),
           Reducer.digest(state),
           Reducer.snapshot_bytes(state),
-          event_bytes,
-          nullable_dump(state.host_participant_session_id)
+          event_bytes
         ]
 
     query =
@@ -2662,36 +2599,24 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp update_external_products(connection, session, external, event, _state)
+  defp update_external_products(connection, episode, external, _event, _state)
        when external.name in [:remove_participant, :participant_leave] do
-    if event.name == "host_left_and_transferred" do
-      product_update!(
-        connection,
-        SQL.promote_host_after_leave(),
-        session_params(session) ++
-          [
-            uuid(event.payload["departing_participant_session_id"]),
-            uuid(event.payload["successor_participant_session_id"])
-          ]
-      )
-    end
-
-    complete_external_participant(connection, session, external)
+    complete_external_participant(connection, episode, external)
   end
 
-  defp update_external_products(connection, session, external, _event, _state)
-       when external.name in [:end_session, :tenant_end_session, :maximum_duration_expired] do
-    complete_external_session(connection, session, external)
+  defp update_external_products(connection, episode, external, _event, _state)
+       when external.name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] do
+    complete_external_episode(connection, episode, external)
   end
 
-  defp update_external_products(connection, session, %{name: name} = external, _event, _state)
+  defp update_external_products(connection, episode, %{name: name} = external, _event, _state)
        when name in [:deny_admission, :admission_request_expired] do
     status = if name == :deny_admission, do: "denied", else: "expired"
 
-    case lock_reserved_admission_for_external(connection, session, external) do
+    case lock_reserved_admission_for_external(connection, episode, external) do
       {:ok, admission} ->
-        finalize_admission_row(connection, session, admission.id, status, external)
-        complete_denied_admission_product(connection, session, admission)
+        finalize_admission_row(connection, episode, admission.id, status, external)
+        complete_denied_admission_product(connection, episode, admission)
 
       _ ->
         Postgrex.rollback(connection, {:error, :invalid_state})
@@ -2700,7 +2625,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp update_external_products(
          connection,
-         session,
+         episode,
          %{name: :stop_participant_screen_share} = external,
          _event,
          _state
@@ -2708,47 +2633,29 @@ defmodule ChalkSync.Stateholder.Postgres do
     Postgrex.query!(
       connection,
       SQL.release_screen_share_lease(),
-      session_params(session) ++
-        [uuid(external.target_participant_session_id), external.target_participant_generation]
+      episode_params(episode) ++
+        [uuid(external.target_participant_id), external.target_participant_generation]
     )
   end
 
-  defp update_external_products(connection, session, %{name: name} = external, event, _state)
+  defp update_external_products(connection, episode, %{name: name} = external, event, _state)
        when name in [:start_recording, :stop_recording],
-       do: finalize_recording_product(connection, session, external, event.payload["status"], nil)
+       do: finalize_recording_product(connection, episode, external, event.payload["status"], nil)
 
   defp update_external_products(
          connection,
-         session,
-         %{name: :tenant_transfer_host},
-         event,
-         _state
-       ) do
-    product_update!(
-      connection,
-      SQL.transfer_host_products(),
-      session_params(session) ++
-        [
-          uuid(event.payload["previous_host_participant_session_id"]),
-          uuid(event.payload["new_host_participant_session_id"])
-        ]
-    )
-  end
-
-  defp update_external_products(
-         connection,
-         session,
+         episode,
          %{name: :tenant_set_deadline} = external,
          _event,
          _state
        ),
-       do: update_deadline_product(connection, session, external)
+       do: update_deadline_product(connection, episode, external)
 
-  defp update_external_products(_connection, _session, _external, _event, _state), do: :ok
+  defp update_external_products(_connection, _episode, _external, _event, _state), do: :ok
 
-  defp finalize_admission_row(connection, session, admission_id, status, external) do
+  defp finalize_admission_row(connection, episode, admission_id, status, external) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [uuid(admission_id), status, uuid(external.external_operation_id)]
 
     case Postgrex.query!(connection, SQL.finalize_admission_request(), params).rows do
@@ -2757,18 +2664,18 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp complete_denied_admission_product(connection, session, admission) do
-    params = session_params(session) ++ [uuid(admission.participant_session_id)]
+  defp complete_denied_admission_product(connection, episode, admission) do
+    params = episode_params(episode) ++ [uuid(admission.participant_id)]
 
     Postgrex.query!(connection, SQL.supersede_admission_join_intent(), params)
     Postgrex.query!(connection, SQL.complete_admission_participant(), params)
     :ok
   end
 
-  defp complete_external_participant(connection, session, external) do
+  defp complete_external_participant(connection, episode, external) do
     params =
-      session_params(session) ++
-        [uuid(external.target_participant_session_id), external.target_participant_generation]
+      episode_params(episode) ++
+        [uuid(external.target_participant_id), external.target_participant_generation]
 
     case Postgrex.query!(connection, SQL.complete_external_participant(), params).rows do
       [row] ->
@@ -2779,13 +2686,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp complete_external_session(connection, session, external) do
+  defp complete_external_episode(connection, episode, external) do
     webhook_object =
-      case Postgrex.query!(connection, SQL.complete_external_session(), session_params(session)).rows do
-        [[id, room_id, status, started_at, ended_at, created_at, updated_at]] ->
+      case Postgrex.query!(connection, SQL.complete_external_episode(), episode_params(episode)).rows do
+        [[id, space_id, status, started_at, ended_at, created_at, updated_at]] ->
           %{
             id: UUID.load!(id),
-            room_id: UUID.load!(room_id),
+            space_id: UUID.load!(space_id),
             status: status,
             started_at: started_at,
             ended_at: ended_at,
@@ -2799,45 +2706,45 @@ defmodule ChalkSync.Stateholder.Postgres do
 
     Postgrex.query!(
       connection,
-      SQL.complete_external_session_participants(),
-      session_params(session)
+      SQL.complete_external_episode_participants(),
+      episode_params(episode)
     )
 
     Postgrex.query!(
       connection,
       SQL.supersede_pending_lifecycle_intents(),
-      session_params(session) ++ [uuid(external.external_operation_id)]
+      episode_params(episode) ++ [uuid(external.external_operation_id)]
     )
 
     Postgrex.query!(
       connection,
-      SQL.complete_external_session_admissions(),
-      session_params(session) ++ [uuid(external.external_operation_id)]
+      SQL.complete_external_episode_admissions(),
+      episode_params(episode) ++ [uuid(external.external_operation_id)]
     )
 
     Postgrex.query!(
       connection,
-      SQL.complete_external_session_recordings(),
-      session_params(session)
+      SQL.complete_external_episode_recordings(),
+      episode_params(episode)
     )
 
     webhook_object
   end
 
-  defp update_deadline_product(connection, session, external) do
+  defp update_deadline_product(connection, episode, external) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [external.payload["deadlineAtMs"], external.deadline_generation]
 
-    case Postgrex.query!(connection, SQL.update_session_deadline(), params).rows do
+    case Postgrex.query!(connection, SQL.update_episode_deadline(), params).rows do
       [[_id]] -> :ok
       [] -> Postgrex.rollback(connection, {:error, :stale_deadline_generation})
     end
   end
 
-  defp finalize_recording_product(connection, session, external, status, failure_code) do
+  defp finalize_recording_product(connection, episode, external, status, failure_code) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [uuid(external.recording_id), status, failure_code]
 
     case Postgrex.query!(connection, SQL.finalize_recording(), params).rows do
@@ -2846,7 +2753,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp maybe_persist_recording_failure(connection, session, external, state, failure_code)
+  defp maybe_persist_recording_failure(connection, episode, external, state, failure_code)
        when external.name in [:start_recording, :stop_recording] do
     payload = %{
       "recording_id" => external.recording_id,
@@ -2856,9 +2763,9 @@ defmodule ChalkSync.Stateholder.Postgres do
 
     case Reducer.apply_external(state, :recording_status_changed, payload) do
       {:ok, event, next_state} ->
-        _event_id = persist_external_event(connection, session, external, event, next_state)
-        finalize_recording_product(connection, session, external, "failed", failure_code)
-        notify_head(connection, session, event.revision)
+        _event_id = persist_external_event(connection, episode, external, event, next_state)
+        finalize_recording_product(connection, episode, external, "failed", failure_code)
+        notify_head(connection, episode, event.revision)
         next_state
 
       _ ->
@@ -2866,13 +2773,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp maybe_persist_recording_failure(_connection, _session, _external, state, _failure_code),
+  defp maybe_persist_recording_failure(_connection, _episode, _external, state, _failure_code),
     do: state
 
-  defp release_failed_acceptance(connection, session, external)
+  defp release_failed_acceptance(connection, episode, external)
        when external.name in [:admit_participant, :deny_admission, :admission_request_expired] do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [
           uuid(external.payload["admissionRequestId"]),
           uuid(external.external_operation_id)
@@ -2884,11 +2791,11 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp release_failed_acceptance(connection, session, external)
+  defp release_failed_acceptance(connection, episode, external)
        when external.name in [:remove_participant, :participant_leave] do
     params =
-      session_params(session) ++
-        [uuid(external.target_participant_session_id), external.target_participant_generation]
+      episode_params(episode) ++
+        [uuid(external.target_participant_id), external.target_participant_generation]
 
     case Postgrex.query!(connection, SQL.restore_participant_active(), params).rows do
       [[_id]] -> :ok
@@ -2896,27 +2803,27 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp release_failed_acceptance(connection, session, external)
-       when external.name in [:end_session, :tenant_end_session, :maximum_duration_expired] do
-    case Postgrex.query!(connection, SQL.restore_session_active(), session_params(session)).rows do
+  defp release_failed_acceptance(connection, episode, external)
+       when external.name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] do
+    case Postgrex.query!(connection, SQL.restore_episode_active(), episode_params(episode)).rows do
       [[_id]] -> :ok
       [] -> Postgrex.rollback(connection, {:error, :invalid_state})
     end
   end
 
-  defp release_failed_acceptance(_connection, _session, _external), do: :ok
+  defp release_failed_acceptance(_connection, _episode, _external), do: :ok
 
-  defp delete_operation_fences(connection, session, external) do
+  defp delete_operation_fences(connection, episode, external) do
     Postgrex.query!(
       connection,
       SQL.delete_operation_fences(),
-      session_params(session) ++ [uuid(external.external_operation_id)]
+      episode_params(episode) ++ [uuid(external.external_operation_id)]
     )
   end
 
-  defp mark_external_applied(connection, session, external, event_id, revision) do
+  defp mark_external_applied(connection, episode, external, event_id, revision) do
     params =
-      session_params(session) ++
+      episode_params(episode) ++
         [uuid(external.external_operation_id), nullable_dump(event_id), revision]
 
     case Postgrex.query!(connection, SQL.apply_external_operation(), params).rows do
@@ -2925,8 +2832,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp mark_external_failed(connection, session, external, failure_code) do
-    params = session_params(session) ++ [uuid(external.external_operation_id), failure_code]
+  defp mark_external_failed(connection, episode, external, failure_code) do
+    params = episode_params(episode) ++ [uuid(external.external_operation_id), failure_code]
 
     case Postgrex.query!(connection, SQL.fail_external_operation(), params).rows do
       [[_id]] -> :ok
@@ -2934,12 +2841,12 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp commit_external_receipt(connection, session, external, event_id, revision, state) do
-    if external.actor_participant_session_id do
+  defp commit_external_receipt(connection, episode, external, event_id, revision, state) do
+    if external.actor_participant_id do
       params = [
-        uuid(session.tenant_id),
-        uuid(session.session_id),
-        uuid(external.actor_participant_session_id),
+        uuid(episode.tenant_id),
+        uuid(episode.episode_id),
+        uuid(external.actor_participant_id),
         external.request_key,
         uuid(external.external_operation_id),
         uuid(event_id),
@@ -2954,12 +2861,12 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp reject_external_receipt(connection, session, external) do
-    if external.actor_participant_session_id do
+  defp reject_external_receipt(connection, episode, external) do
+    if external.actor_participant_id do
       params = [
-        uuid(session.tenant_id),
-        uuid(session.session_id),
-        uuid(external.actor_participant_session_id),
+        uuid(episode.tenant_id),
+        uuid(episode.episode_id),
+        uuid(external.actor_participant_id),
         external.request_key,
         uuid(external.external_operation_id)
       ]
@@ -2971,27 +2878,27 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lifecycle_transaction(connection, session, lifecycle_intent_id) do
+  defp lifecycle_transaction(connection, episode, lifecycle_intent_id) do
     configure_transaction(connection)
-    control = lock_lifecycle_control(connection, session)
-    intent = lock_lifecycle_intent(connection, session, lifecycle_intent_id)
+    control = lock_lifecycle_control(connection, episode)
+    intent = lock_lifecycle_intent(connection, episode, lifecycle_intent_id)
 
     case intent.status do
-      "applied" -> lifecycle_decision(connection, session, lifecycle_intent_id, intent)
+      "applied" -> lifecycle_decision(connection, episode, lifecycle_intent_id, intent)
       "superseded" -> superseded_lifecycle_decision(lifecycle_intent_id, intent)
-      "pending" -> apply_pending_lifecycle(connection, session, control, intent)
+      "pending" -> apply_pending_lifecycle(connection, episode, control, intent)
     end
   end
 
-  defp lock_lifecycle_control(connection, session) do
-    case Postgrex.query!(connection, SQL.lock_control(), session_params(session)).rows do
+  defp lock_lifecycle_control(connection, episode) do
+    case Postgrex.query!(connection, SQL.lock_control(), episode_params(episode)).rows do
       [row] -> control_row(row)
-      [] -> Postgrex.rollback(connection, {:error, :session_not_found})
+      [] -> Postgrex.rollback(connection, {:error, :episode_not_found})
     end
   end
 
-  defp lock_lifecycle_intent(connection, session, lifecycle_intent_id) do
-    params = lifecycle_intent_params(session, lifecycle_intent_id)
+  defp lock_lifecycle_intent(connection, episode, lifecycle_intent_id) do
+    params = lifecycle_intent_params(episode, lifecycle_intent_id)
 
     case Postgrex.query!(connection, SQL.lock_lifecycle_intent(), params).rows do
       [
@@ -3014,8 +2921,8 @@ defmodule ChalkSync.Stateholder.Postgres do
           id: lifecycle_intent_id,
           status: status,
           name: name,
-          participant_session_id: nullable_uuid(participant_id),
-          participant_session_generation: generation,
+          participant_id: nullable_uuid(participant_id),
+          participant_generation: generation,
           payload: payload,
           terminal_reason: reason,
           applied_event_id: nullable_uuid(event_id),
@@ -3031,39 +2938,42 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp apply_pending_lifecycle(connection, session, control, intent) do
-    session_status = lock_lifecycle_session_status(connection, session)
-    participant = lock_lifecycle_participant(connection, session, intent)
+  defp apply_pending_lifecycle(connection, episode, control, intent) do
+    episode_status = lock_lifecycle_episode_status(connection, episode)
+    participant = lock_lifecycle_participant(connection, episode, intent)
 
-    with :ok <- validate_lifecycle_product_state(intent, session_status, participant),
-         {:ok, state} <- validate_fold(session, control),
+    with :ok <- validate_lifecycle_product_state(intent, episode_status, participant),
+         {:ok, state} <- validate_fold(episode, control),
          payload = lifecycle_payload(intent, participant, state),
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, lifecycle_name(intent.name), payload) do
-      persist_lifecycle_commit(connection, session, intent, event, next_state)
+      persist_lifecycle_commit(connection, episode, intent, event, next_state)
     else
       {:error, reason} ->
         Postgrex.rollback(connection, {:error, normalize_lifecycle_error(reason)})
     end
   end
 
-  defp lock_lifecycle_session_status(connection, session) do
-    case Postgrex.query!(connection, SQL.lock_session(), session_params(session)).rows do
-      [[status, _host_exit_policy, _role_capabilities]] -> status
-      [] -> Postgrex.rollback(connection, {:error, :session_not_found})
+  defp lock_lifecycle_episode_status(connection, episode) do
+    case Postgrex.query!(connection, SQL.lock_episode(), episode_params(episode)).rows do
+      [[status, _config_snapshot, _deadline_at, _deadline_generation, _created_at]] ->
+        status
+
+      [] ->
+        Postgrex.rollback(connection, {:error, :episode_not_found})
     end
   end
 
-  defp lock_lifecycle_participant(_connection, _session, %{name: "session_ended"}), do: nil
+  defp lock_lifecycle_participant(_connection, _episode, %{name: "episode_ended"}), do: nil
 
   defp lock_lifecycle_participant(
          connection,
-         session,
+         episode,
          %{name: "admission_requested", payload: payload}
        ) do
     with {:ok, admission_request_id} <- UUID.dump(payload["admission_request_id"]),
-         {:ok, participant_session_id} <- UUID.dump(payload["participant_session_id"]) do
-      admission_params = session_params(session) ++ [admission_request_id]
+         {:ok, participant_id} <- UUID.dump(payload["participant_id"]) do
+      admission_params = episode_params(episode) ++ [admission_request_id]
 
       admission =
         case Postgrex.query!(connection, SQL.lock_admission_request(), admission_params).rows do
@@ -3072,8 +2982,7 @@ defmodule ChalkSync.Stateholder.Postgres do
               id,
               participant_id,
               display_name,
-              initial_role,
-              eligible_roles,
+              role,
               status,
               expires_at,
               _
@@ -3081,10 +2990,9 @@ defmodule ChalkSync.Stateholder.Postgres do
           ] ->
             %{
               id: UUID.load!(id),
-              participant_session_id: UUID.load!(participant_id),
+              participant_id: UUID.load!(participant_id),
               display_name: display_name,
-              initial_role: initial_role,
-              eligible_roles: eligible_roles,
+              role: role,
               status: status,
               expires_at: expires_at
             }
@@ -3097,16 +3005,16 @@ defmodule ChalkSync.Stateholder.Postgres do
         case Postgrex.query!(
                connection,
                SQL.lock_admission_participant(),
-               session_params(session) ++ [participant_session_id]
+               episode_params(episode) ++ [participant_id]
              ).rows do
-          [[generation, status, display_name, role, eligible_roles]] ->
+          [[generation, status, display_name, role, capabilities]] ->
             %{
-              id: payload["participant_session_id"],
+              id: payload["participant_id"],
               generation: generation,
               status: status,
               display_name: display_name,
               role: role,
-              eligible_roles: eligible_roles
+              capabilities: capabilities
             }
 
           [] ->
@@ -3119,12 +3027,12 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lock_lifecycle_participant(connection, session, intent) do
-    params = session_params(session) ++ [uuid(intent.participant_session_id)]
+  defp lock_lifecycle_participant(connection, episode, intent) do
+    params = episode_params(episode) ++ [uuid(intent.participant_id)]
 
     case Postgrex.query!(connection, SQL.lock_participant(), params).rows do
-      [[generation, status, role, eligible_roles]] ->
-        %{generation: generation, status: status, role: role, eligible_roles: eligible_roles}
+      [[generation, status, role, capabilities]] ->
+        %{generation: generation, status: status, role: role, capabilities: capabilities}
 
       [] ->
         Postgrex.rollback(connection, {:error, :participant_not_found})
@@ -3137,7 +3045,7 @@ defmodule ChalkSync.Stateholder.Postgres do
          participant
        ) do
     cond do
-      participant.generation != intent.participant_session_generation ->
+      participant.generation != intent.participant_generation ->
         {:error, :stale_participant_generation}
 
       participant.status != "joining" ->
@@ -3155,18 +3063,16 @@ defmodule ChalkSync.Stateholder.Postgres do
        ) do
     expected_payload = %{
       "admission_request_id" => admission.id,
-      "participant_session_id" => admission.participant_session_id,
+      "participant_id" => admission.participant_id,
       "display_name" => admission.display_name,
-      "initial_role" => admission.initial_role,
-      "eligible_roles" => admission.eligible_roles,
+      "role" => admission.role,
       "expires_at_ms" => DateTime.to_unix(admission.expires_at, :millisecond)
     }
 
     if admission.status == "pending" and participant.status == "joining" and
-         participant.id == admission.participant_session_id and
+         participant.id == admission.participant_id and
          participant.display_name == admission.display_name and
-         participant.role == admission.initial_role and
-         participant.eligible_roles == admission.eligible_roles and payload == expected_payload do
+         participant.role == admission.role and payload == expected_payload do
       :ok
     else
       {:error, :invalid_lifecycle_transition}
@@ -3179,7 +3085,7 @@ defmodule ChalkSync.Stateholder.Postgres do
          participant
        ) do
     cond do
-      participant.generation != intent.participant_session_generation ->
+      participant.generation != intent.participant_generation ->
         {:error, :stale_participant_generation}
 
       participant.status != "leaving" ->
@@ -3190,16 +3096,16 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp validate_lifecycle_product_state(%{name: "session_ended"}, "ending", nil), do: :ok
+  defp validate_lifecycle_product_state(%{name: "episode_ended"}, "ending", nil), do: :ok
 
   defp validate_lifecycle_product_state(%{name: name}, status, _participant)
        when name in ["participant_joined", "participant_left"] and status in ["ending", "ended"],
-       do: {:error, :session_ending}
+       do: {:error, :episode_ending}
 
   defp validate_lifecycle_product_state(_intent, _status, _participant),
     do: {:error, :invalid_lifecycle_transition}
 
-  defp persist_lifecycle_commit(connection, session, intent, event, state) do
+  defp persist_lifecycle_commit(connection, episode, intent, event, state) do
     event_id = UUID.generate()
     digest = Reducer.digest(state)
 
@@ -3217,19 +3123,19 @@ defmodule ChalkSync.Stateholder.Postgres do
       Postgrex.rollback(connection, {:retryable, :overloaded})
     end
 
-    insert_lifecycle_event(connection, session, stored_event, event_bytes)
-    lifecycle_checkpoint(:after_event_insert, session, intent.id)
-    update_lifecycle_control(connection, session, event.name, state, event_bytes)
-    webhook_object = update_lifecycle_product(connection, session, intent, event)
-    mark_lifecycle_applied(connection, session, intent.id, event_id, event.revision)
-    lifecycle_checkpoint(:after_intent_applied, session, intent.id)
+    insert_lifecycle_event(connection, episode, stored_event, event_bytes)
+    lifecycle_checkpoint(:after_event_insert, episode, intent.id)
+    update_lifecycle_control(connection, episode, event.name, state, event_bytes)
+    webhook_object = update_lifecycle_product(connection, episode, intent, event)
+    mark_lifecycle_applied(connection, episode, intent.id, event_id, event.revision)
+    lifecycle_checkpoint(:after_intent_applied, episode, intent.id)
 
     if webhook_object != :no_webhook do
-      WebhookProducer.produce(connection, session, intent, webhook_object)
+      WebhookProducer.produce(connection, episode, intent, webhook_object)
     end
 
-    lifecycle_checkpoint(:after_webhook_production, session, intent.id)
-    notify_head(connection, session, event.revision)
+    lifecycle_checkpoint(:after_webhook_production, episode, intent.id)
+    notify_head(connection, episode, event.revision)
 
     %LifecycleDecision{
       lifecycle_intent_id: intent.id,
@@ -3240,11 +3146,11 @@ defmodule ChalkSync.Stateholder.Postgres do
     }
   end
 
-  defp insert_lifecycle_event(connection, session, event, event_bytes) do
+  defp insert_lifecycle_event(connection, episode, event, event_bytes) do
     Postgrex.query!(connection, SQL.insert_lifecycle_event(), [
-      uuid(session.tenant_id),
-      uuid(session.room_id),
-      uuid(session.session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.space_id),
+      uuid(episode.episode_id),
       uuid(event.event_id),
       event.base_revision,
       event.revision,
@@ -3257,18 +3163,17 @@ defmodule ChalkSync.Stateholder.Postgres do
     ])
   end
 
-  defp update_lifecycle_control(connection, session, name, state, event_bytes) do
+  defp update_lifecycle_control(connection, episode, name, state, event_bytes) do
     params = [
-      uuid(session.tenant_id),
-      uuid(session.room_id),
-      uuid(session.session_id),
+      uuid(episode.tenant_id),
+      uuid(episode.space_id),
+      uuid(episode.episode_id),
       state.revision,
       Reducer.snapshot(state),
       Reducer.state_schema_version(),
       Reducer.digest(state),
       Reducer.snapshot_bytes(state),
-      event_bytes,
-      nullable_dump(state.host_participant_session_id)
+      event_bytes
     ]
 
     query =
@@ -3276,8 +3181,7 @@ defmodule ChalkSync.Stateholder.Postgres do
         "admission_requested" -> SQL.update_generic_lifecycle_control()
         "participant_joined" -> SQL.update_join_control()
         "participant_left" -> SQL.update_generic_lifecycle_control()
-        "host_left_and_transferred" -> SQL.update_generic_lifecycle_control()
-        "session_ended" -> SQL.update_end_control()
+        "episode_ended" -> SQL.update_end_control()
       end
 
     case Postgrex.query!(connection, query, params).rows do
@@ -3288,13 +3192,13 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp update_lifecycle_product(
          connection,
-         session,
+         episode,
          %{name: "participant_joined"} = intent,
          _event
        ) do
     params =
-      session_params(session) ++
-        [uuid(intent.participant_session_id), intent.participant_session_generation]
+      episode_params(episode) ++
+        [uuid(intent.participant_id), intent.participant_generation]
 
     case Postgrex.query!(connection, SQL.activate_lifecycle_participant(), params).rows do
       [row] ->
@@ -3307,28 +3211,16 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp update_lifecycle_product(
          _connection,
-         _session,
+         _episode,
          %{name: "admission_requested"},
          _event
        ),
        do: :no_webhook
 
-  defp update_lifecycle_product(connection, session, %{name: "participant_left"} = intent, event) do
-    if event.name == "host_left_and_transferred" do
-      product_update!(
-        connection,
-        SQL.promote_host_after_leave(),
-        session_params(session) ++
-          [
-            uuid(event.payload["departing_participant_session_id"]),
-            uuid(event.payload["successor_participant_session_id"])
-          ]
-      )
-    end
-
+  defp update_lifecycle_product(connection, episode, %{name: "participant_left"} = intent, _event) do
     params =
-      session_params(session) ++
-        [uuid(intent.participant_session_id), intent.participant_session_generation]
+      episode_params(episode) ++
+        [uuid(intent.participant_id), intent.participant_generation]
 
     case Postgrex.query!(connection, SQL.complete_lifecycle_participant(), params).rows do
       [row] ->
@@ -3339,20 +3231,20 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp update_lifecycle_product(connection, session, %{name: "session_ended"} = intent, _event) do
+  defp update_lifecycle_product(connection, episode, %{name: "episode_ended"} = intent, _event) do
     Postgrex.query!(
       connection,
       SQL.supersede_pending_lifecycle_intents(),
-      session_params(session) ++ [uuid(intent.id)]
+      episode_params(episode) ++ [uuid(intent.id)]
     )
 
-    Postgrex.query!(connection, SQL.complete_all_session_participants(), session_params(session))
+    Postgrex.query!(connection, SQL.complete_all_episode_participants(), episode_params(episode))
 
-    case Postgrex.query!(connection, SQL.complete_lifecycle_session(), session_params(session)).rows do
-      [[id, room_id, status, started_at, ended_at, created_at, updated_at]] ->
+    case Postgrex.query!(connection, SQL.complete_lifecycle_episode(), episode_params(episode)).rows do
+      [[id, space_id, status, started_at, ended_at, created_at, updated_at]] ->
         %{
           id: UUID.load!(id),
-          room_id: UUID.load!(room_id),
+          space_id: UUID.load!(space_id),
           status: status,
           started_at: started_at,
           ended_at: ended_at,
@@ -3367,9 +3259,9 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp participant_webhook_object([
          id,
-         user_id,
-         room_id,
-         session_id,
+         identity_id,
+         space_id,
+         episode_id,
          name,
          status,
          joined_at,
@@ -3378,9 +3270,9 @@ defmodule ChalkSync.Stateholder.Postgres do
        ]) do
     %{
       id: UUID.load!(id),
-      user_id: nullable_uuid(user_id),
-      room_id: UUID.load!(room_id),
-      session_id: UUID.load!(session_id),
+      identity_id: nullable_uuid(identity_id),
+      space_id: UUID.load!(space_id),
+      episode_id: UUID.load!(episode_id),
       name: name,
       status: status,
       joined_at: joined_at,
@@ -3389,8 +3281,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     }
   end
 
-  defp mark_lifecycle_applied(connection, session, intent_id, event_id, revision) do
-    params = lifecycle_intent_params(session, intent_id) ++ [uuid(event_id), revision]
+  defp mark_lifecycle_applied(connection, episode, intent_id, event_id, revision) do
+    params = lifecycle_intent_params(episode, intent_id) ++ [uuid(event_id), revision]
 
     case Postgrex.query!(connection, SQL.mark_lifecycle_intent_applied(), params).rows do
       [[^revision]] -> :ok
@@ -3398,8 +3290,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lifecycle_decision(connection, session, lifecycle_intent_id, intent) do
-    params = [uuid(session.tenant_id), uuid(session.session_id), uuid(lifecycle_intent_id)]
+  defp lifecycle_decision(connection, episode, lifecycle_intent_id, intent) do
+    params = [uuid(episode.tenant_id), uuid(episode.episode_id), uuid(lifecycle_intent_id)]
 
     case Postgrex.query!(connection, SQL.read_lifecycle_event(), params).rows do
       [row] ->
@@ -3429,13 +3321,11 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp lifecycle_name("admission_requested"), do: :admission_requested
   defp lifecycle_name("participant_joined"), do: :participant_joined
   defp lifecycle_name("participant_left"), do: :participant_left
-  defp lifecycle_name("session_ended"), do: :session_ended
+  defp lifecycle_name("episode_ended"), do: :episode_ended
 
   defp lifecycle_payload(%{name: "participant_joined", payload: payload}, participant, state) do
     payload
-    |> Map.delete("initial_role")
     |> Map.put("role", participant.role)
-    |> Map.put("eligible_roles", participant.eligible_roles)
     |> Map.put("admission_revision", state.revision + 1)
   end
 
@@ -3446,8 +3336,8 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp normalize_lifecycle_error(:unknown_event), do: :invalid_lifecycle_intent
   defp normalize_lifecycle_error(reason), do: reason
 
-  defp lifecycle_terminal_reason("superseded_by_session_end"),
-    do: :superseded_by_session_end
+  defp lifecycle_terminal_reason("superseded_by_episode_end"),
+    do: :superseded_by_episode_end
 
   defp lifecycle_terminal_reason("participant_already_terminal"),
     do: :participant_already_terminal
@@ -3458,7 +3348,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp decision_transaction(connection, identity, command) do
     configure_transaction(connection)
     checkpoint(:after_transaction_begin, identity, command)
-    {control, session_status, participant} = lock_authority(connection, identity)
+    {control, episode_status, participant} = lock_authority(connection, identity)
     checkpoint(:after_authority_lock, identity, command)
 
     receipt = fetch_receipt(connection, identity, command)
@@ -3470,7 +3360,7 @@ defmodule ChalkSync.Stateholder.Postgres do
           decision_from_receipt(command, row)
 
         :not_found ->
-          decide_new(connection, identity, command, control, session_status, participant)
+          decide_new(connection, identity, command, control, episode_status, participant)
       end
 
     checkpoint(:before_commit, identity, command)
@@ -3491,21 +3381,26 @@ defmodule ChalkSync.Stateholder.Postgres do
   def durable_synchronous_commit?(setting), do: setting in ["on", "remote_apply"]
 
   defp lock_authority(connection, identity) do
-    session_params = session_params(identity.session)
+    episode_params = episode_params(identity.episode)
 
     control =
-      case Postgrex.query!(connection, SQL.lock_control(), session_params).rows do
+      case Postgrex.query!(connection, SQL.lock_control(), episode_params).rows do
         [row] -> control_row(row)
         [] -> Postgrex.rollback(connection, {:retryable, :dependency_unavailable})
       end
 
-    session_policy =
-      case Postgrex.query!(connection, SQL.lock_session(), session_params).rows do
-        [[status, host_exit_policy, role_capabilities]] ->
+    episode_policy =
+      case Postgrex.query!(connection, SQL.lock_episode(), episode_params).rows do
+        [[status, config_snapshot, deadline_at, deadline_generation, created_at]] ->
+          snapshot = if is_map(config_snapshot), do: config_snapshot, else: %{}
+
           %{
             status: status,
-            host_exit_policy: host_exit_policy,
-            role_capabilities: role_capabilities
+            role_capabilities:
+              Map.get(snapshot, "roles", Map.get(snapshot, "role_capabilities", %{})),
+            deadline_at: deadline_at,
+            deadline_generation: deadline_generation,
+            created_at: created_at
           }
 
         [] ->
@@ -3514,14 +3409,14 @@ defmodule ChalkSync.Stateholder.Postgres do
 
     participant =
       case Postgrex.query!(connection, SQL.lock_participant(), participant_params(identity)).rows do
-        [[generation, status, role, eligible_roles]] ->
-          %{generation: generation, status: status, role: role, eligible_roles: eligible_roles}
+        [[generation, status, role, capabilities]] ->
+          %{generation: generation, status: status, role: role, capabilities: capabilities}
 
         [] ->
           nil
       end
 
-    {control, session_policy, participant}
+    {control, episode_policy, participant}
   end
 
   defp fetch_receipt(connection, identity, command) do
@@ -3531,14 +3426,14 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp decide_new(connection, identity, command, control, session_policy, participant) do
-    with :ok <- validate_product_state(identity, command, session_policy, participant),
-         {:ok, state} <- validate_fold(identity.session, control, session_policy),
+  defp decide_new(connection, identity, command, control, episode_policy, participant) do
+    with :ok <- validate_product_state(identity, command, episode_policy, participant),
+         {:ok, state} <- validate_fold(identity.episode, control, episode_policy),
          :ok <- validate_command_authority(identity, command, state),
          decision <-
            Reducer.decide_command(
              state,
-             identity.participant_session_id,
+             identity.participant_id,
              command.name,
              command.payload
            ) do
@@ -3560,66 +3455,57 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp validate_product_state(_identity, _command, %{status: status}, _participant)
        when status != "active",
-       do: {:error, :session_ended}
+       do: {:error, :episode_ended}
 
-  defp validate_product_state(_identity, _command, _session_status, nil),
+  defp validate_product_state(_identity, _command, _episode_status, nil),
     do: {:error, :participant_inactive}
 
-  defp validate_product_state(identity, _command, _session_status, participant)
-       when participant.generation != identity.participant_session_generation,
+  defp validate_product_state(identity, _command, _episode_status, participant)
+       when participant.generation != identity.participant_generation,
        do: {:error, :stale_participant_generation}
 
-  defp validate_product_state(_identity, _command, _session_status, participant)
+  defp validate_product_state(_identity, _command, _episode_status, participant)
        when participant.status != "active",
        do: {:error, :participant_inactive}
 
-  defp validate_product_state(_identity, command, session_policy, participant) do
+  defp validate_product_state(_identity, command, _episode_policy, participant) do
     capability = required_capability(command.name)
-    allowed = Map.get(session_policy.role_capabilities, participant.role, [])
+    allowed = participant.capabilities
 
     if capability in allowed, do: :ok, else: {:error, :capability_denied}
   end
 
-  defp validate_command_authority(identity, %{name: :transfer_host}, state) do
-    if state.host_participant_session_id == identity.participant_session_id,
-      do: :ok,
-      else: {:error, :capability_denied}
-  end
-
   defp validate_command_authority(_identity, _command, _state), do: :ok
 
-  defp validate_fold(session, control, session_policy) do
+  defp validate_fold(episode, control, episode_policy) do
     with @schema_version <- control.state_schema_version,
-         {:ok, state} <- Reducer.from_snapshot(session.session_id, control.folded_state),
+         {:ok, state} <- Reducer.from_snapshot(episode.episode_id, control.folded_state),
          true <- state.revision == control.revision,
          true <- Reducer.digest(state) == control.digest,
-         true <- state.host_participant_session_id == control.host_participant_session_id,
-         true <- state.host_exit_policy == session_policy.host_exit_policy,
-         true <- state.role_capabilities == session_policy.role_capabilities do
+         true <- state.role_capabilities == episode_policy.role_capabilities do
       {:ok, state}
     else
       _ -> {:error, :invalid_state}
     end
   end
 
-  defp validate_fold(session, control) do
+  defp validate_fold(episode, control) do
     policy = %{
       admission_policy: control.folded_state["admission_policy"],
-      host_exit_policy: control.folded_state["host_exit_policy"],
       role_capabilities: control.folded_state["role_capabilities"]
     }
 
-    validate_fold(session, control, policy)
+    validate_fold(episode, control, policy)
   end
 
   defp persist_rejection(connection, identity, command, reason) do
     receipt_bytes = receipt_bytes(command, :rejected, reason, nil, nil)
 
     Postgrex.query!(connection, SQL.insert_rejected_receipt(), [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
-      uuid(identity.participant_session_id),
-      identity.participant_session_generation,
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.episode_id),
+      uuid(identity.participant_id),
+      identity.participant_generation,
       command.id,
       command.fingerprint,
       receipt_command_name(command),
@@ -3627,9 +3513,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     ])
 
     case Postgrex.query!(connection, SQL.increment_rejected_receipt_capacity(), [
-           uuid(identity.session.tenant_id),
-           uuid(identity.session.room_id),
-           uuid(identity.session.session_id),
+           uuid(identity.episode.tenant_id),
+           uuid(identity.episode.space_id),
+           uuid(identity.episode.episode_id),
            receipt_bytes
          ]).rows do
       [[_revision]] ->
@@ -3659,7 +3545,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     checkpoint(:after_control_update, identity, command)
     insert_committed_receipt(connection, identity, command, event_id, event.revision, digest)
     checkpoint(:after_receipt_insert, identity, command)
-    notify_head(connection, identity.session, event.revision)
+    notify_head(connection, identity.episode, event.revision)
 
     %Decision{
       command_id: command.id,
@@ -3674,16 +3560,16 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp insert_event(connection, identity, command, event, event_bytes) do
     Postgrex.query!(connection, SQL.insert_event(), [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.room_id),
-      uuid(identity.session.session_id),
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.episode.episode_id),
       uuid(event.event_id),
       event.base_revision,
       event.revision,
       event.name,
       event.payload,
-      uuid(identity.participant_session_id),
-      identity.participant_session_generation,
+      uuid(identity.participant_id),
+      identity.participant_generation,
       command.id,
       event.schema_version,
       event.resulting_state_digest,
@@ -3693,17 +3579,16 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp update_control(connection, identity, state, event_bytes, receipt_bytes) do
     params = [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.room_id),
-      uuid(identity.session.session_id),
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.episode.episode_id),
       state.revision,
       Reducer.snapshot(state),
       Reducer.state_schema_version(),
       Reducer.digest(state),
       Reducer.snapshot_bytes(state),
       event_bytes,
-      receipt_bytes,
-      nullable_dump(state.host_participant_session_id)
+      receipt_bytes
     ]
 
     case Postgrex.query!(connection, SQL.update_committed_control(), params).rows do
@@ -3714,10 +3599,10 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp insert_committed_receipt(connection, identity, command, event_id, revision, digest) do
     Postgrex.query!(connection, SQL.insert_committed_receipt(), [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
-      uuid(identity.participant_session_id),
-      identity.participant_session_generation,
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.episode_id),
+      uuid(identity.participant_id),
+      identity.participant_generation,
       command.id,
       command.fingerprint,
       receipt_command_name(command),
@@ -3732,10 +3617,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     receipt_bytes = receipt_bytes(command, :satisfied, nil, nil, state.revision, digest)
 
     Postgrex.query!(connection, SQL.insert_satisfied_receipt(), [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
-      uuid(identity.participant_session_id),
-      identity.participant_session_generation,
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.episode_id),
+      uuid(identity.participant_id),
+      identity.participant_generation,
       command.id,
       command.fingerprint,
       receipt_command_name(command),
@@ -3744,9 +3629,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     ])
 
     case Postgrex.query!(connection, SQL.increment_satisfied_receipt_capacity(), [
-           uuid(identity.session.tenant_id),
-           uuid(identity.session.room_id),
-           uuid(identity.session.session_id),
+           uuid(identity.episode.tenant_id),
+           uuid(identity.episode.space_id),
+           uuid(identity.episode.episode_id),
            receipt_bytes
          ]).rows do
       [[revision]] when revision == state.revision ->
@@ -3765,24 +3650,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp update_command_product(connection, identity, %{name: "participant_role_changed"} = event) do
+  defp update_command_product(connection, identity, %{name: "role_assigned"} = event) do
     product_update!(
       connection,
       SQL.update_participant_role(),
-      session_params(identity.session) ++
-        [uuid(event.payload["participant_session_id"]), event.payload["role"]]
+      episode_params(identity.episode) ++
+        [uuid(event.payload["participant_id"]), event.payload["role"]]
     )
-  end
-
-  defp update_command_product(connection, identity, %{name: "host_transferred"} = event) do
-    params =
-      session_params(identity.session) ++
-        [
-          uuid(event.payload["previous_host_participant_session_id"]),
-          uuid(event.payload["new_host_participant_session_id"])
-        ]
-
-    product_update!(connection, SQL.transfer_host(), params)
   end
 
   defp update_command_product(_connection, _identity, _event), do: :ok
@@ -3794,9 +3668,9 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp notify_head(connection, session, revision) do
+  defp notify_head(connection, episode, revision) do
     payload =
-      "#{session.tenant_id}:#{session.room_id}:#{session.session_id}:#{revision}"
+      "#{episode.tenant_id}:#{episode.space_id}:#{episode.episode_id}:#{revision}"
 
     case DeliveryGate.decide(:postgres_head_hint, %{revision: revision}) do
       :deliver -> Postgrex.query!(connection, SQL.notify_head(), [payload])
@@ -3807,14 +3681,14 @@ defmodule ChalkSync.Stateholder.Postgres do
   defp recovery_transaction(connection, %Identity{} = identity, cursor) do
     Postgrex.query!(connection, "set transaction isolation level repeatable read read only", [])
 
-    with {:ok, control} <- read_control(connection, session_params(identity.session)),
-         {:ok, status} <- read_session_status(connection, session_params(identity.session)),
-         {:ok, state} <- validate_fold(identity.session, control) do
+    with {:ok, control} <- read_control(connection, episode_params(identity.episode)),
+         {:ok, status} <- read_episode_status(connection, episode_params(identity.episode)),
+         {:ok, state} <- validate_fold(identity.episode, control) do
       case validate_recovery_identity(connection, identity, status) do
         :ok ->
           build_recovery(
             connection,
-            identity.session,
+            identity.episode,
             state,
             status,
             cursor,
@@ -3832,25 +3706,25 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp recovery_transaction(connection, %SessionKey{} = session, cursor) do
+  defp recovery_transaction(connection, %EpisodeKey{} = episode, cursor) do
     Postgrex.query!(connection, "set transaction isolation level repeatable read read only", [])
-    params = session_params(session)
+    params = episode_params(episode)
 
     with {:ok, control} <- read_control(connection, params),
-         {:ok, status} <- read_session_status(connection, params),
-         {:ok, state} <- validate_fold(session, control) do
-      build_recovery(connection, session, state, status, cursor, 1)
+         {:ok, status} <- read_episode_status(connection, params),
+         {:ok, state} <- validate_fold(episode, control) do
+      build_recovery(connection, episode, state, status, cursor, 1)
     else
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp validate_recovery_identity(_connection, _identity, status) when status != "active",
-    do: {:terminal, :session_ended}
+    do: {:terminal, :episode_ended}
 
   defp validate_recovery_identity(connection, identity, _status) do
     case Postgrex.query!(connection, SQL.read_participant_status(), participant_params(identity)).rows do
-      [[generation, _status]] when generation != identity.participant_session_generation ->
+      [[generation, _status]] when generation != identity.participant_generation ->
         {:terminal, :stale_participant_generation}
 
       [[_generation, "active"]] ->
@@ -3878,32 +3752,31 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp read_control(connection, params) do
     case Postgrex.query!(connection, SQL.read_control(), params).rows do
-      [[revision, folded_state, schema, digest, _room_id, host_id]] ->
+      [[revision, folded_state, schema, digest, _space_id]] ->
         {:ok,
          %{
            revision: revision,
            folded_state: folded_state,
            state_schema_version: schema,
-           digest: digest,
-           host_participant_session_id: nullable_uuid(host_id)
+           digest: digest
          }}
 
       [] ->
-        {:error, :session_not_found}
+        {:error, :episode_not_found}
     end
   end
 
-  defp read_session_status(connection, params) do
-    case Postgrex.query!(connection, SQL.read_session_status(), params).rows do
+  defp read_episode_status(connection, params) do
+    case Postgrex.query!(connection, SQL.read_episode_status(), params).rows do
       [[status]] -> {:ok, status}
-      [] -> {:error, :session_not_found}
+      [] -> {:error, :episode_not_found}
     end
   end
 
-  defp build_recovery(_connection, _session, state, status, nil, protocol_version),
+  defp build_recovery(_connection, _episode, state, status, nil, protocol_version),
     do: snapshot_recovery(state, status, protocol_version)
 
-  defp build_recovery(connection, session, state, status, cursor, protocol_version)
+  defp build_recovery(connection, episode, state, status, cursor, protocol_version)
        when is_map(cursor) do
     head = recovery_head(state)
 
@@ -3911,10 +3784,10 @@ defmodule ChalkSync.Stateholder.Postgres do
       cursor_matches_head?(cursor, head) ->
         %Recovery{mode: recovery_mode(status, :up_to_date), head: head, snapshot: nil, events: []}
 
-      valid_replay_cursor?(connection, session, cursor, head) ->
+      valid_replay_cursor?(connection, episode, cursor, head) ->
         replay_recovery(
           connection,
-          session,
+          episode,
           state,
           status,
           cursor.revision,
@@ -3927,22 +3800,22 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp build_recovery(_connection, _session, state, status, _cursor, protocol_version),
+  defp build_recovery(_connection, _episode, state, status, _cursor, protocol_version),
     do: snapshot_recovery(state, status, protocol_version)
 
-  defp valid_replay_cursor?(connection, session, cursor, head) do
+  defp valid_replay_cursor?(connection, episode, cursor, head) do
     valid_shape =
       is_integer(cursor.revision) and cursor.revision >= 0 and cursor.revision < head.revision and
         cursor.state_schema_version == @schema_version and is_binary(cursor.digest)
 
-    valid_shape and cursor_digest(connection, session, cursor.revision) == cursor.digest
+    valid_shape and cursor_digest(connection, episode, cursor.revision) == cursor.digest
   end
 
-  defp cursor_digest(_connection, session, 0),
-    do: session.session_id |> Reducer.new() |> Reducer.digest()
+  defp cursor_digest(_connection, episode, 0),
+    do: episode.episode_id |> Reducer.new() |> Reducer.digest()
 
-  defp cursor_digest(connection, session, revision) do
-    params = [uuid(session.tenant_id), uuid(session.session_id), revision]
+  defp cursor_digest(connection, episode, revision) do
+    params = [uuid(episode.tenant_id), uuid(episode.episode_id), revision]
 
     case Postgrex.query!(connection, SQL.read_cursor_digest(), params).rows do
       [[digest]] -> digest
@@ -3952,14 +3825,14 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp replay_recovery(
          connection,
-         session,
+         episode,
          state,
          status,
          revision,
          head_revision,
          protocol_version
        ) do
-    params = [uuid(session.tenant_id), uuid(session.session_id), revision, head_revision]
+    params = [uuid(episode.tenant_id), uuid(episode.episode_id), revision, head_revision]
 
     [[event_count, encoded_bytes]] =
       Postgrex.query!(connection, SQL.replay_summary(), params).rows
@@ -3983,7 +3856,7 @@ defmodule ChalkSync.Stateholder.Postgres do
       head: recovery_head(state),
       snapshot: Reducer.snapshot(state, protocol_version),
       events: [],
-      terminal_reason: if(status == "ended", do: :session_ended)
+      terminal_reason: if(status == "ended", do: :episode_ended)
     }
   end
 
@@ -4033,7 +3906,7 @@ defmodule ChalkSync.Stateholder.Postgres do
       revision: revision,
       name: name,
       payload: payload,
-      actor_participant_session_id: nullable_uuid(actor_id),
+      actor_participant_id: nullable_uuid(actor_id),
       command_id: command_id,
       lifecycle_intent_id: nullable_uuid(lifecycle_intent_id),
       external_operation_id: nullable_uuid(external_operation_id),
@@ -4042,14 +3915,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     }
   end
 
-  defp control_row([revision, folded_state, schema, digest, snapshot_bytes, host_id]) do
+  defp control_row([revision, folded_state, schema, digest, snapshot_bytes]) do
     %{
       revision: revision,
       folded_state: folded_state,
       state_schema_version: schema,
       digest: digest,
-      snapshot_bytes: snapshot_bytes,
-      host_participant_session_id: nullable_uuid(host_id)
+      snapshot_bytes: snapshot_bytes
     }
   end
 
@@ -4154,26 +4026,22 @@ defmodule ChalkSync.Stateholder.Postgres do
     |> byte_size()
   end
 
-  defp terminal_reason(:session_ended), do: :session_ended
+  defp terminal_reason(:episode_ended), do: :episode_ended
   defp terminal_reason(:participant_inactive), do: :participant_inactive
   defp terminal_reason(:stale_participant_generation), do: :stale_participant_generation
   defp terminal_reason(:capability_denied), do: :capability_denied
   defp terminal_reason(:invalid_target), do: :invalid_target
-  defp terminal_reason(:role_not_eligible), do: :role_not_eligible
-  defp terminal_reason(:host_transfer_required), do: :host_transfer_required
   defp terminal_reason(:recording_in_progress), do: :recording_in_progress
   defp terminal_reason(:screen_share_in_use), do: :screen_share_in_use
   defp terminal_reason(:external_operation_failed), do: :external_operation_failed
   defp terminal_reason(_reason), do: :invalid_state
 
-  defp rejection_atom("session_ended"), do: :session_ended
+  defp rejection_atom("episode_ended"), do: :episode_ended
   defp rejection_atom("participant_inactive"), do: :participant_inactive
   defp rejection_atom("stale_participant_generation"), do: :stale_participant_generation
   defp rejection_atom("capability_denied"), do: :capability_denied
   defp rejection_atom("invalid_state"), do: :invalid_state
   defp rejection_atom("invalid_target"), do: :invalid_target
-  defp rejection_atom("role_not_eligible"), do: :role_not_eligible
-  defp rejection_atom("host_transfer_required"), do: :host_transfer_required
   defp rejection_atom("command_id_conflict"), do: :command_id_conflict
   defp rejection_atom("recording_in_progress"), do: :recording_in_progress
   defp rejection_atom("screen_share_in_use"), do: :screen_share_in_use
@@ -4184,8 +4052,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp required_capability(:set_display_name), do: "renameSelf"
   defp required_capability(:set_admission_policy), do: "manageAdmission"
-  defp required_capability(:set_participant_role), do: "promoteDemote"
-  defp required_capability(:transfer_host), do: "transferHost"
+  defp required_capability(:assign_roles), do: "assignRoles"
 
   defp required_capability(name) when name in [:admit_participant, :deny_admission],
     do: "manageAdmission"
@@ -4199,7 +4066,7 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: "manageRecording"
 
   defp required_capability(:participant_leave), do: "self"
-  defp required_capability(:end_session), do: "endMeeting"
+  defp required_capability(:end_episode), do: "endEpisode"
 
   defp duplicate_result(_command, outcome), do: outcome
 
@@ -4215,17 +4082,17 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   defp resolve_uncertain_operation(identity, operation) do
     params =
-      session_params(identity.session) ++
-        [uuid(identity.participant_session_id), operation.request_key]
+      episode_params(identity.episode) ++
+        [uuid(identity.participant_id), operation.request_key]
 
     case Postgrex.query(
-           Database.connection(identity.session, 1),
+           Database.connection(identity.episode, 1),
            SQL.select_operation_receipt(),
            params,
            timeout: 1_000
          ) do
       {:ok, %{rows: [row]}} ->
-        connection = Database.connection(identity.session, 1)
+        connection = Database.connection(identity.episode, 1)
         {:ok, operation_decision_from_receipt(connection, identity, operation, row)}
 
       {:ok, %{rows: []}} ->
@@ -4238,11 +4105,11 @@ defmodule ChalkSync.Stateholder.Postgres do
     :exit, _reason -> {:retryable, :decision_unavailable}
   end
 
-  defp resolve_uncertain_internal_operation(session, operation) do
-    params = session_params(session) ++ [Atom.to_string(operation.name), operation.request_key]
+  defp resolve_uncertain_internal_operation(episode, operation) do
+    params = episode_params(episode) ++ [Atom.to_string(operation.name), operation.request_key]
 
     case Postgrex.query(
-           Database.connection(session, 1),
+           Database.connection(episode, 1),
            SQL.select_internal_operation(),
            params,
            timeout: 1_000
@@ -4273,8 +4140,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     :exit, _reason -> {:retryable, :decision_unavailable}
   end
 
-  defp resolve_uncertain_finalization(session, external_operation_id) do
-    case read_operation(session, external_operation_id) do
+  defp resolve_uncertain_finalization(episode, external_operation_id) do
+    case read_operation(episode, external_operation_id) do
       {:ok, %{status: status} = external} when status in [:applied, :failed] ->
         {:ok, operation_decision(external, :duplicate)}
 
@@ -4289,15 +4156,15 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp resolve_uncertain_lifecycle(session, lifecycle_intent_id) do
-    connection = Database.connection(session, 1)
-    params = lifecycle_intent_params(session, lifecycle_intent_id)
+  defp resolve_uncertain_lifecycle(episode, lifecycle_intent_id) do
+    connection = Database.connection(episode, 1)
+    params = lifecycle_intent_params(episode, lifecycle_intent_id)
 
     case Postgrex.query(connection, SQL.read_lifecycle_intent_outcome(), params, timeout: 1_000) do
       {:ok, %{rows: [["applied", nil, event_id, revision]]}} ->
         event_params = [
-          uuid(session.tenant_id),
-          uuid(session.session_id),
+          uuid(episode.tenant_id),
+          uuid(episode.episode_id),
           uuid(lifecycle_intent_id)
         ]
 
@@ -4337,21 +4204,21 @@ defmodule ChalkSync.Stateholder.Postgres do
     :exit, _reason -> {:retryable, :decision_unavailable}
   end
 
-  defp session_params(session),
-    do: [uuid(session.tenant_id), uuid(session.room_id), uuid(session.session_id)]
+  defp episode_params(episode),
+    do: [uuid(episode.tenant_id), uuid(episode.space_id), uuid(episode.episode_id)]
 
   defp participant_params(identity),
-    do: session_params(identity.session) ++ [uuid(identity.participant_session_id)]
+    do: episode_params(identity.episode) ++ [uuid(identity.participant_id)]
 
-  defp lifecycle_intent_params(session, lifecycle_intent_id),
-    do: session_params(session) ++ [uuid(lifecycle_intent_id)]
+  defp lifecycle_intent_params(episode, lifecycle_intent_id),
+    do: episode_params(episode) ++ [uuid(lifecycle_intent_id)]
 
   defp receipt_params(identity, command) do
     [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.room_id),
-      uuid(identity.session.session_id),
-      uuid(identity.participant_session_id),
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.episode.episode_id),
+      uuid(identity.participant_id),
       command.id
     ]
   end
@@ -4360,8 +4227,8 @@ defmodule ChalkSync.Stateholder.Postgres do
     case Application.get_env(:chalk_sync, :stateholder_fault_hook) do
       hook when is_function(hook, 2) ->
         hook.(point, %{
-          tenant_id: identity.session.tenant_id,
-          session_id: identity.session.session_id,
+          tenant_id: identity.episode.tenant_id,
+          episode_id: identity.episode.episode_id,
           command_id: command.id
         })
 
@@ -4370,12 +4237,12 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp lifecycle_checkpoint(point, session, lifecycle_intent_id) do
+  defp lifecycle_checkpoint(point, episode, lifecycle_intent_id) do
     case Application.get_env(:chalk_sync, :lifecycle_fault_hook) do
       hook when is_function(hook, 2) ->
         hook.(point, %{
-          tenant_id: session.tenant_id,
-          session_id: session.session_id,
+          tenant_id: episode.tenant_id,
+          episode_id: episode.episode_id,
           lifecycle_intent_id: lifecycle_intent_id
         })
 
@@ -4384,12 +4251,12 @@ defmodule ChalkSync.Stateholder.Postgres do
     end
   end
 
-  defp external_operation_checkpoint(point, session, external) do
+  defp external_operation_checkpoint(point, episode, external) do
     case Application.get_env(:chalk_sync, :external_operation_fault_hook) do
       hook when is_function(hook, 2) ->
         hook.(point, %{
-          tenant_id: session.tenant_id,
-          session_id: session.session_id,
+          tenant_id: episode.tenant_id,
+          episode_id: episode.episode_id,
           external_operation_id: Map.get(external, :external_operation_id),
           request_key: Map.get(external, :request_key),
           operation: external.name
@@ -4401,23 +4268,23 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   defp observe_webhook_finalization(
-         session,
+         episode,
          external_operation_id,
          %{result: :applied, delivery: :original}
        ) do
-    case read_operation(session, external_operation_id) do
+    case read_operation(episode, external_operation_id) do
       {:ok, %{name: name} = operation}
       when name in [
              :remove_participant,
              :participant_leave,
-             :end_session,
-             :tenant_end_session,
+             :end_episode,
+             :tenant_end_episode,
              :maximum_duration_expired
            ] ->
         event_name = external_webhook_event_name(name)
 
         observe_webhook_production(
-          session,
+          episode,
           "sync_external:#{operation.external_operation_id}:#{event_name}",
           "external_operation"
         )
@@ -4431,30 +4298,30 @@ defmodule ChalkSync.Stateholder.Postgres do
     :exit, _reason -> :ok
   end
 
-  defp observe_webhook_finalization(_session, _external_operation_id, _decision), do: :ok
+  defp observe_webhook_finalization(_episode, _external_operation_id, _decision), do: :ok
 
   defp observe_lifecycle_webhook(
-         session,
+         episode,
          lifecycle_intent_id,
          %{result: :applied, event: %{name: event_name}}
        )
-       when event_name in ["participant_joined", "participant_left", "session_ended"] do
+       when event_name in ["participant_joined", "participant_left", "episode_ended"] do
     webhook_event_name = lifecycle_webhook_event_name(event_name)
 
     observe_webhook_production(
-      session,
+      episode,
       "sync_lifecycle:#{lifecycle_intent_id}:#{webhook_event_name}",
       "lifecycle_intent"
     )
   end
 
-  defp observe_lifecycle_webhook(_session, _lifecycle_intent_id, _decision), do: :ok
+  defp observe_lifecycle_webhook(_episode, _lifecycle_intent_id, _decision), do: :ok
 
-  defp observe_webhook_production(session, transition_key, transition) do
+  defp observe_webhook_production(episode, transition_key, transition) do
     case Postgrex.query(
-           Database.connection(session, 1),
+           Database.connection(episode, 1),
            WebhookSQL.production_summary(),
-           [uuid(session.tenant_id), transition_key],
+           [uuid(episode.tenant_id), transition_key],
            timeout: 1_000
          ) do
       {:ok, %{rows: rows}} ->
@@ -4510,12 +4377,12 @@ defmodule ChalkSync.Stateholder.Postgres do
        do: "participant.left"
 
   defp external_webhook_event_name(name)
-       when name in [:end_session, :tenant_end_session, :maximum_duration_expired],
-       do: "session.ended"
+       when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
+       do: "episode.ended"
 
   defp lifecycle_webhook_event_name("participant_joined"), do: "participant.joined"
   defp lifecycle_webhook_event_name("participant_left"), do: "participant.left"
-  defp lifecycle_webhook_event_name("session_ended"), do: "session.ended"
+  defp lifecycle_webhook_event_name("episode_ended"), do: "episode.ended"
 
   defp uuid(value), do: UUID.dump!(value)
   defp nullable_dump(nil), do: nil

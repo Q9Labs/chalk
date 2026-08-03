@@ -2,16 +2,16 @@ defmodule ChalkSync.Transport.SocketV1Test do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.ProtocolV1
-  alias ChalkSync.RoomActions.OutboundQueue, as: RoomActionQueue
-  alias ChalkSync.Sessions.Coordinator
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.Stateholder.OperationDecision
-  alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.TestWSClient, as: Client
+  alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
   alias ChalkSync.Transport.SocketV1
 
   @journey_id "10000000-0000-4000-8000-000000000001"
@@ -24,35 +24,35 @@ defmodule ChalkSync.Transport.SocketV1Test do
     @behaviour ChalkSync.MediaPlane
 
     @impl true
-    def observe_session_publications(controller, _session) do
+    def observe_episode_publications(controller, _episode) do
       send(controller, :blocking_media_observation_started)
       Process.sleep(:infinity)
     end
 
     @impl true
-    def grant_publication(_adapter, _operation_id, _session, _participant_id, _source),
+    def grant_publication(_adapter, _operation_id, _episode, _participant_id, _source),
       do: :confirmed
 
     @impl true
-    def revoke_publication(_adapter, _operation_id, _session, _participant_id, _source),
+    def revoke_publication(_adapter, _operation_id, _episode, _participant_id, _source),
       do: :confirmed
 
     @impl true
-    def remove_participant(_adapter, _operation_id, _session, _participant_id), do: :confirmed
+    def remove_participant(_adapter, _operation_id, _episode, _participant_id), do: :confirmed
 
     @impl true
-    def end_session(_adapter, _operation_id, _session), do: :confirmed
+    def end_episode(_adapter, _operation_id, _episode), do: :confirmed
   end
 
-  defmodule RoomActionRepository do
+  defmodule CollaborationRepository do
     @moduledoc false
-    @behaviour ChalkSync.RoomActions.ChatRepository
+    @behaviour ChalkSync.Chat.Repository
 
     @message %{
       message_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c81",
       client_message_id: "chat-message-0001",
       sequence: "1",
-      participant_session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      participant_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
       display_name: "Ada",
       text: "Hello from Chalk",
       attachments: [],
@@ -68,7 +68,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
        %{
          capabilities: ["sendReaction", "sendChat"],
          participant_capabilities: %{
-           identity.participant_session_id => ["sendReaction", "sendChat"]
+           identity.participant_id => ["sendReaction", "sendChat"]
          }
        }}
     end
@@ -94,7 +94,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
          outcome: :committed,
          message: %{
            @message
-           | participant_session_id: identity.participant_session_id,
+           | participant_id: identity.participant_id,
              client_message_id: input.client_message_id,
              text: input.text,
              attachments: attachments
@@ -103,10 +103,10 @@ defmodule ChalkSync.Transport.SocketV1Test do
     end
 
     @impl true
-    def head(_session), do: {:ok, %{head_sequence: "1", retained_floor_sequence: "1"}}
+    def head(_episode), do: {:ok, %{head_sequence: "1", retained_floor_sequence: "1"}}
 
     @impl true
-    def read_receipts(_session), do: {:ok, []}
+    def read_receipts(_episode), do: {:ok, []}
 
     @impl true
     def mark_read(identity, "1") do
@@ -114,8 +114,8 @@ defmodule ChalkSync.Transport.SocketV1Test do
        %{
          outcome: :advanced,
          receipt: %{
-           participant_session_id: identity.participant_session_id,
-           participant_session_generation: identity.participant_session_generation,
+           participant_id: identity.participant_id,
+           participant_generation: identity.participant_generation,
            sequence: "1",
            read_at: "2026-07-29T14:01:00.000Z"
          }
@@ -123,7 +123,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
     end
 
     @impl true
-    def read_page(_session, _request) do
+    def read_page(_episode, _request) do
       {:ok,
        %{
          messages: [@message],
@@ -137,16 +137,15 @@ defmodule ChalkSync.Transport.SocketV1Test do
   setup do
     previous = Application.get_env(:chalk_sync, :media_plane)
 
-    previous_room_action_repository =
-      Application.get_env(:chalk_sync, :room_actions_chat_repository)
+    previous_chat_repository = Application.get_env(:chalk_sync, :chat_repository)
 
     {:ok, adapter} = MediaPlaneTestAdapter.start_link()
     Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
 
     Application.put_env(
       :chalk_sync,
-      :room_actions_chat_repository,
-      RoomActionRepository
+      :chat_repository,
+      CollaborationRepository
     )
 
     on_exit(fn ->
@@ -154,24 +153,24 @@ defmodule ChalkSync.Transport.SocketV1Test do
         do: Application.put_env(:chalk_sync, :media_plane, previous),
         else: Application.delete_env(:chalk_sync, :media_plane)
 
-      if previous_room_action_repository,
+      if previous_chat_repository,
         do:
           Application.put_env(
             :chalk_sync,
-            :room_actions_chat_repository,
-            previous_room_action_repository
+            :chat_repository,
+            previous_chat_repository
           ),
-        else: Application.delete_env(:chalk_sync, :room_actions_chat_repository)
+        else: Application.delete_env(:chalk_sync, :chat_repository)
     end)
 
     {:ok, adapter: adapter}
   end
 
-  test "buffers v2 read receipts during recovery and delivers them on live transition" do
+  test "buffers collaboration read receipts during recovery and delivers them on live transition" do
     receipt = %{
       "type" => "chat_read_receipt",
-      "participant_session_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
-      "participant_session_generation" => 1,
+      "participant_id" => "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      "participant_generation" => 1,
       "sequence" => "42",
       "read_at" => "2026-07-29T14:01:00.000Z"
     }
@@ -182,26 +181,26 @@ defmodule ChalkSync.Transport.SocketV1Test do
       initial
       | phase: :recovering,
         coordinator: self(),
-        room_actions_negotiated: true,
-        room_actions_version: 2
+        collaboration_negotiated: true,
+        collaboration_version: 1
     }
 
     assert {:ok, buffered} =
-             SocketV1.handle_info({:room_action_frame, receipt}, recovering)
+             SocketV1.handle_info({:collaboration_frame, receipt}, recovering)
 
     assert {:ok, %{queued_frames: 1}} =
-             RoomActionQueue.stats(buffered.room_actions_queue)
+             CollaborationQueue.stats(buffered.collaboration_queue)
 
     assert {:push, {:text, encoded}, live} =
              SocketV1.handle_info({:sync_recovery_live, self()}, buffered)
 
     assert JSON.decode!(encoded) == receipt
     assert live.phase == :live
-    assert {:ok, %{queued_frames: 0}} = RoomActionQueue.stats(live.room_actions_queue)
+    assert {:ok, %{queued_frames: 0}} = CollaborationQueue.stats(live.collaboration_queue)
 
     Process.cancel_timer(initial.hello_timer)
     Process.cancel_timer(live.heartbeat_timer)
-    assert :ok = RoomActionQueue.close(live.room_actions_queue)
+    assert :ok = CollaborationQueue.close(live.collaboration_queue)
   end
 
   test "extended Sync v1 negotiates and carries reactions, chat, and paging", %{
@@ -213,7 +212,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
     extended_hello =
       Map.put(hello(identity), "extensions", [
         %{
-          "name" => "room_actions_v2",
+          "name" => "collaboration_v1",
           "chat_cursor" => %{
             "after_sequence" => nil,
             "retained_floor_sequence" => nil
@@ -228,7 +227,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
               "type" => "welcome",
               "extensions" => [
                 %{
-                  "name" => "room_actions_v2",
+                  "name" => "collaboration_v1",
                   "capabilities" => ["sendReaction", "sendChat"],
                   "chat_head_sequence" => "1",
                   "retained_floor_sequence" => "1"
@@ -247,19 +246,19 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     client =
       Client.send_json(client, %{
-        "type" => "room_reaction_send",
+        "type" => "reaction_send",
         "operation_id" => "reaction-op-00001",
         "reaction" => "🎉"
       })
 
     assert {:json,
             %{
-              "type" => "room_reaction_result",
+              "type" => "reaction_result",
               "operation_id" => "reaction-op-00001",
               "outcome" => "accepted"
             }, client} = Client.recv(client)
 
-    assert {:json, %{"type" => "room_reaction", "reaction" => "🎉"}, client} =
+    assert {:json, %{"type" => "reaction", "reaction" => "🎉"}, client} =
              Client.recv(client)
 
     client =
@@ -305,7 +304,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
     extended_hello =
       Map.put(hello(identity), "extensions", [
         %{
-          "name" => "room_actions_v2",
+          "name" => "collaboration_v1",
           "chat_cursor" => %{
             "after_sequence" => nil,
             "retained_floor_sequence" => nil
@@ -320,7 +319,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
               "type" => "welcome",
               "extensions" => [
                 %{
-                  "name" => "room_actions_v2",
+                  "name" => "collaboration_v1",
                   "read_receipts" => []
                 }
               ]
@@ -381,21 +380,21 @@ defmodule ChalkSync.Transport.SocketV1Test do
     assert {:json,
             %{
               "type" => "chat_read_receipt",
-              "participant_session_id" => participant_session_id,
+              "participant_id" => participant_id,
               "sequence" => "1"
             }, _client} = Client.recv(client)
 
-    assert participant_session_id == identity.participant_session_id
+    assert participant_id == identity.participant_id
   end
 
   test "real v1 operation captures upgrade journey and W3C context", %{port: port} do
     identity = identity()
 
     assert :ok =
-             Memory.seed_session(identity.session, [
+             Memory.seed_episode(identity.episode, [
                %{
-                 id: identity.participant_session_id,
-                 generation: identity.participant_session_generation,
+                 id: identity.participant_id,
+                 generation: identity.participant_generation,
                  display_name: "Ada",
                  capabilities: identity.capabilities,
                  admission_lifecycle_intent_id: identity.admission_lifecycle_intent_id
@@ -404,7 +403,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     assert {:ok, %{result: :already_applied}} =
              Memory.apply_lifecycle_intent(
-               identity.session,
+               identity.episode,
                identity.admission_lifecycle_intent_id
              )
 
@@ -432,9 +431,9 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     assert {:ok, operations} = Memory.claim_operations(64)
 
-    assert {_session, operation} =
-             Enum.find(operations, fn {session, operation} ->
-               session == identity.session and operation.request_key == "socket-operation-0001"
+    assert {_episode, operation} =
+             Enum.find(operations, fn {episode, operation} ->
+               episode == identity.episode and operation.request_key == "socket-operation-0001"
              end)
 
     assert operation.journey_id == @journey_id
@@ -472,7 +471,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
                operation == :revoke_publication
              end)
 
-    assert [identity.session, identity.participant_session_id, :camera] == arguments
+    assert [identity.episode, identity.participant_id, :camera] == arguments
 
     client =
       Client.send_json(client, %{
@@ -499,7 +498,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
     client = connect_live(port, identity)
 
     publication = %{
-      participant_session_id: identity.participant_session_id,
+      participant_id: identity.participant_id,
       source: :camera,
       enabled: true,
       publication_id: "provider-camera-publication"
@@ -507,7 +506,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     MediaPlaneTestAdapter.put_outcome(
       adapter,
-      :observe_session_publications,
+      :observe_episode_publications,
       {:ok, [publication]}
     )
 
@@ -521,7 +520,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     assert {:error, :timeout} = Client.recv(client, 2_200)
 
-    MediaPlaneTestAdapter.put_outcome(adapter, :observe_session_publications, {:ok, []})
+    MediaPlaneTestAdapter.put_outcome(adapter, :observe_episode_publications, {:ok, []})
 
     assert {:json,
             %{
@@ -535,7 +534,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
   test "blocked provider reconciliation does not block the coordinator mailbox", %{port: port} do
     identity = seed_identity()
     _client = connect_live(port, identity)
-    coordinator = Coordinator.whereis(identity.session)
+    coordinator = Coordinator.whereis(identity.episode)
     previous_timeout = Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms)
 
     Application.put_env(:chalk_sync, :media_plane, {BlockingMediaPlane, self()})
@@ -564,7 +563,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
   test "directed requests reach only a current active target and release on ACK", %{port: port} do
     actor = identity()
-    target = %{identity() | session: actor.session}
+    target = %{identity() | episode: actor.episode}
     seed_participants(actor, [actor, target])
 
     actor_client = connect_live(port, actor)
@@ -576,7 +575,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
         "type" => "directed_request",
         "request_id" => "socket-directed-0001",
         "name" => "request_unmute",
-        "target_participant_session_id" => target.participant_session_id
+        "target_participant_id" => target.participant_id
       })
 
     assert {:json,
@@ -590,10 +589,10 @@ defmodule ChalkSync.Transport.SocketV1Test do
             %{
               "type" => "directed_request",
               "request_id" => "socket-directed-0001",
-              "actor_participant_session_id" => actor_id
+              "actor_participant_id" => actor_id
             }, target_client} = Client.recv(target_client)
 
-    assert actor_id == actor.participant_session_id
+    assert actor_id == actor.participant_id
 
     target_client =
       Client.send_json(target_client, %{
@@ -608,7 +607,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
         "type" => "directed_request",
         "request_id" => "socket-directed-0002",
         "name" => "request_start_camera",
-        "target_participant_session_id" => target.participant_session_id
+        "target_participant_id" => target.participant_id
       })
 
     assert {:json, %{"request_id" => "socket-directed-0002", "result" => "delivered"},
@@ -617,7 +616,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
     assert {:json, %{"request_id" => "socket-directed-0002"}, _target_client} =
              Client.recv(target_client)
 
-    coordinator = Coordinator.whereis(actor.session)
+    coordinator = Coordinator.whereis(actor.episode)
 
     assert :ok =
              Coordinator.expire_live_requests(
@@ -654,12 +653,11 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     legacy_token =
       DevTokenVerifier.token(%{
-        "tenant_id" => identity.session.tenant_id,
-        "room_id" => identity.session.room_id,
-        "session_id" => identity.session.session_id,
-        "participant_id" => identity.participant_session_id,
-        "participant_session_id" => identity.participant_session_id,
-        "participant_session_generation" => identity.participant_session_generation,
+        "tenant_id" => identity.episode.tenant_id,
+        "space_id" => identity.episode.space_id,
+        "episode_id" => identity.episode.episode_id,
+        "participant_id" => identity.participant_id,
+        "participant_generation" => identity.participant_generation,
         "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
         "capabilities" => ["endMeeting"],
         "issued_at" => 1,
@@ -702,7 +700,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
       Client.send_json(client, %{
         "type" => "operation",
         "command_id" => "terminal-ack-operation-0001",
-        "name" => "end_session",
+        "name" => "end_episode",
         "payload" => %{}
       })
 
@@ -715,25 +713,25 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     assert {:ok, operations} = Memory.claim_operations(64)
 
-    assert {_session, %ExternalOperation{} = operation} =
-             Enum.find(operations, fn {session, operation} ->
-               session == identity.session and
+    assert {_episode, %ExternalOperation{} = operation} =
+             Enum.find(operations, fn {episode, operation} ->
+               episode == identity.episode and
                  operation.request_key == "terminal-ack-operation-0001"
              end)
 
     assert {:ok, decision} =
              Memory.finalize_operation(
-               identity.session,
+               identity.episode,
                operation.external_operation_id,
-               {:applied, :session_ended, %{"reason" => "ended_by_participant"}}
+               {:applied, :episode_ended, %{"reason" => "ended_by_participant"}}
              )
 
-    Coordinator.hint(identity.session, decision.revision)
+    Coordinator.hint(identity.episode, decision.revision)
 
     assert {:json,
             %{
               "type" => "event",
-              "name" => "session_ended",
+              "name" => "episode_ended",
               "revision" => revision,
               "resulting_state_digest" => state_digest
             }, client} = Client.recv(client)
@@ -753,7 +751,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
   test "all five v1 durable commands use exact ACKs and event delivery", %{port: port} do
     host = identity()
-    guest = %{identity() | session: host.session}
+    guest = %{identity() | episode: host.episode}
     seed_participants(host, [host, guest])
     client = connect_live(port, host)
 
@@ -769,17 +767,17 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
     {client, _policy_ack} =
       command(client, "v1-command-policy-01", "set_admission_policy", %{
-        "policy" => "approval"
+        "policy" => "knock"
       })
 
     client =
       Client.send_json(client, %{
         "type" => "command",
         "command_id" => "v1-command-reject-01",
-        "name" => "set_participant_role",
+        "name" => "assign_roles",
         "payload" => %{
-          "participant_session_id" => "00000000-0000-4000-8000-000000000099",
-          "role" => "cohost"
+          "participant_id" => "00000000-0000-4000-8000-000000000099",
+          "role" => "observer"
         }
       })
 
@@ -787,14 +785,15 @@ defmodule ChalkSync.Transport.SocketV1Test do
              Client.recv(client)
 
     {client, _role_ack} =
-      command(client, "v1-command-role-0001", "set_participant_role", %{
-        "participant_session_id" => guest.participant_session_id,
-        "role" => "cohost"
+      command(client, "v1-command-role-0001", "assign_roles", %{
+        "participant_id" => guest.participant_id,
+        "role" => "collaborator"
       })
 
     {client, _transfer_ack} =
-      command(client, "v1-command-host-0001", "transfer_host", %{
-        "participant_session_id" => guest.participant_session_id
+      command(client, "v1-command-role-0002", "assign_roles", %{
+        "participant_id" => guest.participant_id,
+        "role" => "observer"
       })
 
     client =
@@ -836,16 +835,14 @@ defmodule ChalkSync.Transport.SocketV1Test do
   defp hello(identity) do
     token =
       DevTokenVerifier.token(%{
-        "tenant_id" => identity.session.tenant_id,
-        "room_id" => identity.session.room_id,
-        "session_id" => identity.session.session_id,
-        "participant_id" => identity.participant_session_id,
-        "participant_session_id" => identity.participant_session_id,
-        "participant_session_generation" => identity.participant_session_generation,
+        "tenant_id" => identity.episode.tenant_id,
+        "space_id" => identity.episode.space_id,
+        "episode_id" => identity.episode.episode_id,
+        "participant_id" => identity.participant_id,
+        "participant_generation" => identity.participant_generation,
         "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
-        "initial_role" => identity.role || "participant",
-        "eligible_roles" =>
-          if(identity.eligible_roles == [], do: ["participant"], else: identity.eligible_roles),
+        "role" => identity.role || "owner",
+        "capabilities" => identity.capabilities,
         "issued_at" => 1,
         "expires_at" => 4_102_444_800
       })
@@ -880,7 +877,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
        "items" => presence
      }, client} = Client.recv(client)
 
-    assert Enum.any?(presence, &(&1["participant_session_id"] == identity.participant_session_id))
+    assert Enum.any?(presence, &(&1["participant_id"] == identity.participant_id))
     client
   end
 
@@ -892,14 +889,14 @@ defmodule ChalkSync.Transport.SocketV1Test do
 
   defp seed_participants(owner, participants) do
     assert :ok =
-             Memory.seed_session(
-               owner.session,
+             Memory.seed_episode(
+               owner.episode,
                Enum.map(participants, fn identity ->
                  %{
-                   id: identity.participant_session_id,
-                   generation: identity.participant_session_generation,
+                   id: identity.participant_id,
+                   generation: identity.participant_generation,
                    display_name: "Participant",
-                   eligible_roles: ["host", "cohost", "participant"],
+                   role: identity.role || "owner",
                    capabilities: identity.capabilities,
                    admission_lifecycle_intent_id: identity.admission_lifecycle_intent_id
                  }
@@ -909,7 +906,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
     Enum.each(participants, fn identity ->
       assert {:ok, %{result: :already_applied}} =
                Memory.apply_lifecycle_intent(
-                 identity.session,
+                 identity.episode,
                  identity.admission_lifecycle_intent_id
                )
     end)
@@ -945,15 +942,40 @@ defmodule ChalkSync.Transport.SocketV1Test do
     suffix = System.unique_integer([:positive, :monotonic])
 
     %Identity{
-      session: %SessionKey{
+      episode: %EpisodeKey{
         tenant_id: uuid(suffix),
-        room_id: uuid(suffix + 1),
-        session_id: uuid(suffix + 2)
+        space_id: uuid(suffix + 1),
+        episode_id: uuid(suffix + 2)
       },
-      participant_session_id: uuid(suffix + 3),
-      participant_session_generation: 1,
+      participant_id: uuid(suffix + 3),
+      participant_generation: 1,
       admission_lifecycle_intent_id: uuid(suffix + 4),
-      capabilities: ["control:hand"]
+      role: "owner",
+      capabilities: [
+        "publishAudio",
+        "publishVideo",
+        "publishScreen",
+        "subscribe",
+        "raiseHand",
+        "renameSelf",
+        "sendChat",
+        "sendReaction",
+        "drawWhiteboard",
+        "manageWhiteboard",
+        "manageAdmission",
+        "assignRoles",
+        "muteOthers",
+        "stopVideoOthers",
+        "stopScreenOthers",
+        "requestMediaOthers",
+        "removeParticipant",
+        "manageRecording",
+        "startEpisode",
+        "extendEpisode",
+        "endEpisode",
+        "manageMembers",
+        "clearSpaceContent"
+      ]
     }
   end
 

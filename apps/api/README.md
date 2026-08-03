@@ -133,7 +133,7 @@ apps/api/scripts/dev-services.sh start
 
 Participant admission returns a five-minute Ed25519-signed sync JWT. An
 authenticated tenant member can refresh it with
-`POST /v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token`.
+`POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token`.
 The refresh path reloads the active participant generation, capabilities, and
 admission intent from Postgres before signing.
 
@@ -147,9 +147,9 @@ supplied through the runtime secret boundary.
 Customer backends authenticate tenant API requests with credentials created by
 the API-key lifecycle routes. Raw values use the `chalk_sk_…` namespace and are
 shown only by create and rotate responses. Keep them in the backend secret
-boundary; browsers receive participant access bundles instead.
+boundary; browsers receive opaque AccessGrants instead.
 
-Participant access contains separate five-minute Sync and media JWTs. The media
+An AccessGrant contains separate five-minute Sync and media JWTs. The media
 JWT is accepted only by the participant-bound SFU signaling routes and is bound
 to the live participant generation, configured media provider, and exact
 Cloudflare connection. It is never treated as a tenant principal.

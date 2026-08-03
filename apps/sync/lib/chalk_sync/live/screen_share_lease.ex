@@ -1,7 +1,7 @@
 defmodule ChalkSync.Live.ScreenShareLease do
   @moduledoc "Postgres-backed single-screen-share lease coordination."
 
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
   @default_renewal_ms 10_000
@@ -12,7 +12,7 @@ defmodule ChalkSync.Live.ScreenShareLease do
 
   @type lease :: %{
           lease_id: String.t(),
-          owner_participant_session_id: String.t(),
+          owner_participant_id: String.t(),
           owner_generation: pos_integer(),
           lease_generation: pos_integer(),
           status: :active,
@@ -21,10 +21,10 @@ defmodule ChalkSync.Live.ScreenShareLease do
           hard_expires_at: DateTime.t()
         }
 
-  @spec acquire(Postgrex.conn(), SessionKey.t(), String.t(), pos_integer(), keyword()) ::
+  @spec acquire(Postgrex.conn(), EpisodeKey.t(), String.t(), pos_integer(), keyword()) ::
           {:ok, lease()}
           | {:error, :screen_share_in_use | :invalid_lease_bounds | :dependency_unavailable}
-  def acquire(connection, session, owner_participant_session_id, owner_generation, options \\ [])
+  def acquire(connection, episode, owner_participant_id, owner_generation, options \\ [])
       when owner_generation > 0 do
     now = Keyword.get(options, :now, DateTime.utc_now())
     renewal_ms = Keyword.get(options, :renewal_ms, @default_renewal_ms)
@@ -36,11 +36,11 @@ defmodule ChalkSync.Live.ScreenShareLease do
       hard_expires_at = DateTime.add(now, hard_lifetime_ms, :millisecond)
 
       params = [
-        UUID.dump!(session.tenant_id),
-        UUID.dump!(session.room_id),
-        UUID.dump!(session.session_id),
+        UUID.dump!(episode.tenant_id),
+        UUID.dump!(episode.space_id),
+        UUID.dump!(episode.episode_id),
         UUID.dump!(lease_id),
-        UUID.dump!(owner_participant_session_id),
+        UUID.dump!(owner_participant_id),
         owner_generation,
         now,
         renewed_until,
@@ -55,10 +55,10 @@ defmodule ChalkSync.Live.ScreenShareLease do
     end
   end
 
-  @spec renew(Postgrex.conn(), SessionKey.t(), lease(), keyword()) ::
+  @spec renew(Postgrex.conn(), EpisodeKey.t(), lease(), keyword()) ::
           {:ok, lease()}
           | {:error, :lease_expired | :invalid_lease_bounds | :dependency_unavailable}
-  def renew(connection, session, lease, options \\ []) do
+  def renew(connection, episode, lease, options \\ []) do
     now = Keyword.get(options, :now, DateTime.utc_now())
     renewal_ms = Keyword.get(options, :renewal_ms, @default_renewal_ms)
 
@@ -66,11 +66,11 @@ defmodule ChalkSync.Live.ScreenShareLease do
       requested_until = DateTime.add(now, renewal_ms, :millisecond)
 
       params = [
-        UUID.dump!(session.tenant_id),
-        UUID.dump!(session.session_id),
+        UUID.dump!(episode.tenant_id),
+        UUID.dump!(episode.episode_id),
         UUID.dump!(lease.lease_id),
         lease.lease_generation,
-        UUID.dump!(lease.owner_participant_session_id),
+        UUID.dump!(lease.owner_participant_id),
         lease.owner_generation,
         now,
         requested_until
@@ -84,15 +84,15 @@ defmodule ChalkSync.Live.ScreenShareLease do
     end
   end
 
-  @spec release(Postgrex.conn(), SessionKey.t(), lease()) ::
+  @spec release(Postgrex.conn(), EpisodeKey.t(), lease()) ::
           :ok | {:error, :lease_not_owned | :dependency_unavailable}
-  def release(connection, session, lease) do
+  def release(connection, episode, lease) do
     params = [
-      UUID.dump!(session.tenant_id),
-      UUID.dump!(session.session_id),
+      UUID.dump!(episode.tenant_id),
+      UUID.dump!(episode.episode_id),
       UUID.dump!(lease.lease_id),
       lease.lease_generation,
-      UUID.dump!(lease.owner_participant_session_id),
+      UUID.dump!(lease.owner_participant_id),
       lease.owner_generation
     ]
 
@@ -128,7 +128,7 @@ defmodule ChalkSync.Live.ScreenShareLease do
 
   defp load([
          lease_id,
-         owner_participant_session_id,
+         owner_participant_id,
          owner_generation,
          lease_generation,
          status,
@@ -138,7 +138,7 @@ defmodule ChalkSync.Live.ScreenShareLease do
        ]) do
     %{
       lease_id: UUID.load!(lease_id),
-      owner_participant_session_id: UUID.load!(owner_participant_session_id),
+      owner_participant_id: UUID.load!(owner_participant_id),
       owner_generation: owner_generation,
       lease_generation: lease_generation,
       status: String.to_existing_atom(status),
@@ -150,7 +150,7 @@ defmodule ChalkSync.Live.ScreenShareLease do
 
   defp returning do
     """
-    lease_id, owner_participant_session_id, owner_generation, lease_generation,
+    lease_id, owner_participant_id, owner_generation, lease_generation,
     status, acquired_at, renewed_until, hard_expires_at
     """
   end
@@ -158,13 +158,13 @@ defmodule ChalkSync.Live.ScreenShareLease do
   defp acquire_query do
     """
     insert into sync_screen_share_leases (
-      tenant_id, room_id, session_id, lease_id, owner_participant_session_id,
+      tenant_id, space_id, episode_id, lease_id, owner_participant_id,
       owner_generation, lease_generation, status, acquired_at, renewed_until, hard_expires_at
     ) values ($1, $2, $3, $4, $5, $6, 1, 'active', $7, $8, $9)
-    on conflict (tenant_id, session_id) do update
-    set room_id = excluded.room_id,
+    on conflict (tenant_id, episode_id) do update
+    set space_id = excluded.space_id,
         lease_id = case when #{same_active_owner()} then sync_screen_share_leases.lease_id else excluded.lease_id end,
-        owner_participant_session_id = case when #{same_active_owner()} then sync_screen_share_leases.owner_participant_session_id else excluded.owner_participant_session_id end,
+        owner_participant_id = case when #{same_active_owner()} then sync_screen_share_leases.owner_participant_id else excluded.owner_participant_id end,
         owner_generation = case when #{same_active_owner()} then sync_screen_share_leases.owner_generation else excluded.owner_generation end,
         lease_generation = case when #{same_active_owner()} then sync_screen_share_leases.lease_generation else sync_screen_share_leases.lease_generation + 1 end,
         status = 'active',
@@ -179,7 +179,7 @@ defmodule ChalkSync.Live.ScreenShareLease do
 
   defp same_active_owner do
     """
-    sync_screen_share_leases.owner_participant_session_id = excluded.owner_participant_session_id
+    sync_screen_share_leases.owner_participant_id = excluded.owner_participant_id
     and sync_screen_share_leases.owner_generation = excluded.owner_generation
     and least(sync_screen_share_leases.renewed_until, sync_screen_share_leases.hard_expires_at) > excluded.acquired_at
     """
@@ -190,10 +190,10 @@ defmodule ChalkSync.Live.ScreenShareLease do
     update sync_screen_share_leases
     set renewed_until = least(hard_expires_at, $8)
     where tenant_id = $1
-      and session_id = $2
+      and episode_id = $2
       and lease_id = $3
       and lease_generation = $4
-      and owner_participant_session_id = $5
+      and owner_participant_id = $5
       and owner_generation = $6
       and renewed_until > $7
       and hard_expires_at > $7
@@ -205,10 +205,10 @@ defmodule ChalkSync.Live.ScreenShareLease do
     """
     delete from sync_screen_share_leases
     where tenant_id = $1
-      and session_id = $2
+      and episode_id = $2
       and lease_id = $3
       and lease_generation = $4
-      and owner_participant_session_id = $5
+      and owner_participant_id = $5
       and owner_generation = $6
     """
   end

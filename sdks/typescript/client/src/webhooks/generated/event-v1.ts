@@ -28,22 +28,16 @@ export const webhookEventSchemaV1 = {
   additionalProperties: true,
   oneOf: [
     {
-      $ref: "#/$defs/roomCreated",
+      $ref: "#/$defs/spaceCreated",
     },
     {
-      $ref: "#/$defs/roomUpdated",
+      $ref: "#/$defs/spaceUpdated",
     },
     {
-      $ref: "#/$defs/roomArchived",
+      $ref: "#/$defs/episodeStarted",
     },
     {
-      $ref: "#/$defs/roomRestored",
-    },
-    {
-      $ref: "#/$defs/sessionStarted",
-    },
-    {
-      $ref: "#/$defs/sessionEnded",
+      $ref: "#/$defs/episodeEnded",
     },
     {
       $ref: "#/$defs/participantJoined",
@@ -123,9 +117,9 @@ export const webhookEventSchemaV1 = {
         },
       ],
     },
-    roomObject: {
+    spaceObject: {
       type: "object",
-      required: ["id", "name", "slug", "status", "media_plane", "created_at", "updated_at"],
+      required: ["id", "name", "slug", "media_plane", "created_at", "updated_at"],
       properties: {
         id: {
           $ref: "#/$defs/uuid",
@@ -135,9 +129,6 @@ export const webhookEventSchemaV1 = {
         },
         slug: {
           type: "string",
-        },
-        status: {
-          enum: ["active", "archived"],
         },
         media_plane: {
           type: "string",
@@ -151,14 +142,14 @@ export const webhookEventSchemaV1 = {
       },
       additionalProperties: true,
     },
-    sessionObject: {
+    episodeObject: {
       type: "object",
-      required: ["id", "room_id", "status", "started_at", "ended_at", "created_at", "updated_at"],
+      required: ["id", "space_id", "status", "started_at", "ended_at", "created_at", "updated_at"],
       properties: {
         id: {
           $ref: "#/$defs/uuid",
         },
-        room_id: {
+        space_id: {
           $ref: "#/$defs/uuid",
         },
         status: {
@@ -181,18 +172,18 @@ export const webhookEventSchemaV1 = {
     },
     participantObject: {
       type: "object",
-      required: ["id", "user_id", "room_id", "session_id", "name", "status", "joined_at", "left_at"],
+      required: ["id", "identity_id", "space_id", "episode_id", "name", "status", "joined_at", "left_at"],
       properties: {
         id: {
           $ref: "#/$defs/uuid",
         },
-        user_id: {
+        identity_id: {
           $ref: "#/$defs/nullableUUID",
         },
-        room_id: {
+        space_id: {
           $ref: "#/$defs/uuid",
         },
-        session_id: {
+        episode_id: {
           $ref: "#/$defs/uuid",
         },
         name: {
@@ -212,15 +203,15 @@ export const webhookEventSchemaV1 = {
     },
     recordingObject: {
       type: "object",
-      required: ["id", "room_id", "session_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      required: ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
       properties: {
         id: {
           $ref: "#/$defs/uuid",
         },
-        room_id: {
+        space_id: {
           $ref: "#/$defs/uuid",
         },
-        session_id: {
+        episode_id: {
           $ref: "#/$defs/uuid",
         },
         status: {
@@ -249,7 +240,7 @@ export const webhookEventSchemaV1 = {
     },
     transcriptObject: {
       type: "object",
-      required: ["id", "recording_id", "room_id", "session_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      required: ["id", "recording_id", "space_id", "episode_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
       properties: {
         id: {
           $ref: "#/$defs/uuid",
@@ -257,10 +248,10 @@ export const webhookEventSchemaV1 = {
         recording_id: {
           $ref: "#/$defs/uuid",
         },
-        room_id: {
+        space_id: {
           $ref: "#/$defs/uuid",
         },
-        session_id: {
+        episode_id: {
           $ref: "#/$defs/uuid",
         },
         status: {
@@ -294,40 +285,40 @@ export const webhookEventSchemaV1 = {
       },
       additionalProperties: true,
     },
-    roomData: {
+    spaceData: {
       type: "object",
       required: ["object"],
       properties: {
         object: {
-          $ref: "#/$defs/roomObject",
+          $ref: "#/$defs/spaceObject",
         },
       },
       additionalProperties: true,
     },
-    roomUpdatedData: {
+    spaceUpdatedData: {
       type: "object",
       required: ["object", "changed_fields"],
       properties: {
         object: {
-          $ref: "#/$defs/roomObject",
+          $ref: "#/$defs/spaceObject",
         },
         changed_fields: {
           type: "array",
           minItems: 1,
           uniqueItems: true,
           items: {
-            enum: ["media_plane", "metadata", "name", "recurring_policy", "slug"],
+            enum: ["admission_policy", "default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "metadata", "name", "recurring_policy", "slug"],
           },
         },
       },
       additionalProperties: true,
     },
-    sessionData: {
+    episodeData: {
       type: "object",
       required: ["object"],
       properties: {
         object: {
-          $ref: "#/$defs/sessionObject",
+          $ref: "#/$defs/episodeObject",
         },
       },
       additionalProperties: true,
@@ -362,88 +353,38 @@ export const webhookEventSchemaV1 = {
       },
       additionalProperties: true,
     },
-    roomCreated: {
-      $ref: "#/$defs/roomCreatedShape",
+    spaceCreated: {
+      $ref: "#/$defs/spaceCreatedShape",
     },
-    roomCreatedShape: {
+    spaceCreatedShape: {
       properties: {
         event: {
-          const: "room.created",
+          const: "space.created",
         },
         data: {
-          $ref: "#/$defs/roomData",
+          $ref: "#/$defs/spaceData",
         },
       },
     },
-    roomUpdated: {
+    spaceUpdated: {
       properties: {
         event: {
-          const: "room.updated",
+          const: "space.updated",
         },
         data: {
-          $ref: "#/$defs/roomUpdatedData",
+          $ref: "#/$defs/spaceUpdatedData",
         },
       },
     },
-    roomArchived: {
+    episodeStarted: {
       properties: {
         event: {
-          const: "room.archived",
+          const: "episode.started",
         },
         data: {
           allOf: [
             {
-              $ref: "#/$defs/roomData",
-            },
-            {
-              properties: {
-                object: {
-                  properties: {
-                    status: {
-                      const: "archived",
-                    },
-                  },
-                },
-              },
-            },
-          ],
-        },
-      },
-    },
-    roomRestored: {
-      properties: {
-        event: {
-          const: "room.restored",
-        },
-        data: {
-          allOf: [
-            {
-              $ref: "#/$defs/roomData",
-            },
-            {
-              properties: {
-                object: {
-                  properties: {
-                    status: {
-                      const: "active",
-                    },
-                  },
-                },
-              },
-            },
-          ],
-        },
-      },
-    },
-    sessionStarted: {
-      properties: {
-        event: {
-          const: "session.started",
-        },
-        data: {
-          allOf: [
-            {
-              $ref: "#/$defs/sessionData",
+              $ref: "#/$defs/episodeData",
             },
             {
               properties: {
@@ -463,15 +404,15 @@ export const webhookEventSchemaV1 = {
         },
       },
     },
-    sessionEnded: {
+    episodeEnded: {
       properties: {
         event: {
-          const: "session.ended",
+          const: "episode.ended",
         },
         data: {
           allOf: [
             {
-              $ref: "#/$defs/sessionData",
+              $ref: "#/$defs/episodeData",
             },
             {
               properties: {
@@ -779,12 +720,10 @@ export const webhookEventSchemaV1 = {
 } as const;
 
 export const knownWebhookEventNamesV1 = [
-  "room.created",
-  "room.updated",
-  "room.archived",
-  "room.restored",
-  "session.started",
-  "session.ended",
+  "space.created",
+  "space.updated",
+  "episode.started",
+  "episode.ended",
   "participant.joined",
   "participant.left",
   "recording.started",

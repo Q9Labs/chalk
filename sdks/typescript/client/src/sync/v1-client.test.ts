@@ -177,8 +177,8 @@ describe("V1SyncClient", () => {
     let index = 0;
     void client.setHandRaised(true, { commandId: commandIds[index++] });
     void client.setDisplayName("Renamed", { commandId: commandIds[index++] });
-    void client.setAdmissionPolicy("approval", { commandId: commandIds[index++] });
-    void client.setParticipantRole(peerId, "cohost", { commandId: commandIds[index++] });
+    void client.setAdmissionPolicy("knock", { commandId: commandIds[index++] });
+    void client.setParticipantRole(peerId, "collaborator", { commandId: commandIds[index++] });
     void client.transferHost(peerId, { commandId: commandIds[index++] });
     void client.admit(recoveryId, { commandId: commandIds[index++] });
     void client.deny(recoveryId, { commandId: commandIds[index++] });
@@ -203,8 +203,8 @@ describe("V1SyncClient", () => {
         "set_hand_raised",
         "set_display_name",
         "set_admission_policy",
-        "set_participant_role",
-        "transfer_host",
+        "assign_roles",
+        "assign_roles",
         "admit_participant",
         "deny_admission",
         "mute_participant",
@@ -214,7 +214,7 @@ describe("V1SyncClient", () => {
         "start_recording",
         "stop_recording",
         "participant_leave",
-        "end_session",
+        "end_episode",
       ].sort(),
     );
     expect("setParticipantMediaEnabled" in client).toBe(false);
@@ -387,7 +387,7 @@ describe("V1SyncClient", () => {
     socket.receive({
       type: "event",
       stream: "control",
-      name: "session_ended",
+      name: "episode_ended",
       event_id: recoveryId,
       base_revision: 1,
       revision: 2,
@@ -419,7 +419,7 @@ describe("V1SyncClient", () => {
       revision: 2,
       schema_version: 1,
       resulting_state_digest: digest,
-      payload: { participant_session_id: peerId, reason: "left" },
+      payload: { participant_id: peerId, reason: "left" },
       external_operation_id: commandIds[1],
     });
 
@@ -428,7 +428,7 @@ describe("V1SyncClient", () => {
   });
 
   it.each([
-    { operation: "end_session" as const, reason: "session_ended" as const },
+    { operation: "end_episode" as const, reason: "episode_ended" as const },
     { operation: "participant_leave" as const, reason: "participant_inactive" as const },
   ])("settles $operation from the authoritative $reason terminal recovery head", async ({ operation, reason }) => {
     const clock = new TestClock();
@@ -452,7 +452,7 @@ describe("V1SyncClient", () => {
     sockets[0]!.open();
     await settle();
     await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
-    const pending = operation === "end_session" ? client.endSession({ commandId: commandIds[0] }) : client.leave({ commandId: commandIds[0] });
+    const pending = operation === "end_episode" ? client.endSession({ commandId: commandIds[0] }) : client.leave({ commandId: commandIds[0] });
     sockets[0]!.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
     await settle();
 
@@ -467,8 +467,8 @@ describe("V1SyncClient", () => {
     sockets[1]!.receive({
       type: "welcome",
       protocol: 1,
-      participant_session_id: hostId,
-      participant_session_generation: 1,
+      participant_id: hostId,
+      participant_generation: 1,
       recovery_id: recoveryId,
       head: terminalHead,
       mode: "terminal",
@@ -654,7 +654,7 @@ describe("V1SyncClient", () => {
   it("uses request/deliver/ack/result frames and never queues requests while disconnected", async () => {
     const { client, socket } = await liveClient();
     const result = client.requestUnmute(peerId, { requestId: commandIds[0] });
-    expect(socket.frames().at(-1)).toMatchObject({ type: "directed_request", name: "request_unmute", target_participant_session_id: peerId });
+    expect(socket.frames().at(-1)).toMatchObject({ type: "directed_request", name: "request_unmute", target_participant_id: peerId });
     socket.receive({ type: "directed_request_result", request_id: commandIds[0], result: "delivered" });
     await expect(result).resolves.toMatchObject({ result: "delivered" });
 
@@ -683,7 +683,7 @@ describe("V1SyncClient", () => {
 
   it("rejects transient retry exhaustion while preserving durable targets", async () => {
     const { client, socket } = await liveClient({ retryDelayMs: 0 });
-    const target = client.setAdmissionPolicy("approval", { commandId: commandIds[0] });
+    const target = client.setAdmissionPolicy("knock", { commandId: commandIds[0] });
     const targetRejected = expect(target).rejects.toMatchObject({ code: "retry_exhausted" });
     await settle();
     for (let attempt = 0; attempt <= 3; attempt += 1) {
@@ -747,7 +747,7 @@ describe("V1SyncClient", () => {
     const store = new InMemoryV1PendingTargetStore();
     const initial = stateWithPeer("cohost");
     const { client, socket } = await liveClient({ clock, pendingStore: store, maxOperationPendingAgeMs: 10_000 }, initial);
-    const operation = client.setParticipantRole(peerId, "participant", { commandId: commandIds[0] });
+    const operation = client.setParticipantRole(peerId, "observer", { commandId: commandIds[0] });
     await settle();
     socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
     await settle();
@@ -756,25 +756,25 @@ describe("V1SyncClient", () => {
       ...initial,
       revision: 2,
       stateDigest: "0".repeat(64),
-      participants: initial.participants.map((participant) => (participant.participantSessionId === peerId ? { ...participant, role: "participant" as const, capabilities: [...initial.roleCapabilities.participant] } : participant)),
+      participants: initial.participants.map((participant) => (participant.participantSessionId === peerId ? { ...participant, role: "observer" as const, capabilities: [...initial.roleCapabilities.observer] } : participant)),
     };
     const digest = await computeV1StateDigest(next);
     const event = {
       type: "event",
       stream: "control",
-      name: "participant_role_changed",
+      name: "role_assigned",
       event_id: recoveryId,
       base_revision: 1,
       revision: 2,
       schema_version: 1,
       resulting_state_digest: digest,
-      payload: { participant_session_id: peerId, role: "participant" },
+      payload: { participant_id: peerId, role: "observer" },
       command_id: commandIds[0],
     } as const;
     const eventApplied = snapshotWhen(client, (snapshot) => snapshot.control?.revision === 2);
     socket.receive(event);
     await eventApplied;
-    expect(client.getSnapshot()).toMatchObject({ control: { participants: [{ role: "host" }, { role: "participant" }] }, pendingCommandCount: 1 });
+    expect(client.getSnapshot()).toMatchObject({ control: { participants: [{ role: "owner" }, { role: "observer" }] }, pendingCommandCount: 1 });
     expect(await store.load()).toHaveLength(1);
 
     socket.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "committed", event_id: recoveryId, revision: 2, state_digest: digest });
@@ -955,7 +955,7 @@ describe("V1SyncClient", () => {
     await settle();
     await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
 
-    void client.setAdmissionPolicy("approval", { commandId: commandIds[0] }).catch(() => undefined);
+    void client.setAdmissionPolicy("knock", { commandId: commandIds[0] }).catch(() => undefined);
     const request = client.requestStartCamera(peerId, { requestId: commandIds[1] });
     sockets[0]!.close(1012);
     await expect(request).rejects.toMatchObject({ code: "disconnected_before_delivery" });
@@ -988,7 +988,7 @@ describe("v1 exact decoding and durable state", () => {
   it("derives capabilities from the role map and rejects inconsistent redundant capabilities or nullable host", async () => {
     const snapshot = await wireSnapshot(baseState());
     const restored = await restoreV1Snapshot(snapshot);
-    expect(restored.participants[0]?.capabilities).toEqual(restored.roleCapabilities.host);
+    expect(restored.participants[0]?.capabilities).toEqual(restored.roleCapabilities.owner);
 
     snapshot.participants[0]!.capabilities = [];
     await expect(restoreV1Snapshot(snapshot)).rejects.toBeInstanceOf(V1ReplicaError);
@@ -997,7 +997,7 @@ describe("v1 exact decoding and durable state", () => {
     await expect(restoreV1Snapshot(invalid)).rejects.toBeInstanceOf(V1ReplicaError);
   });
 
-  it("derives first-host authority from the first host admission event", async () => {
+  it("derives participant authority from the first owner admission event", async () => {
     const empty: V1ControlState = {
       ...baseState(),
       revision: 0,
@@ -1007,8 +1007,8 @@ describe("v1 exact decoding and durable state", () => {
     const expected: V1ControlState = {
       ...empty,
       revision: 1,
-      hostParticipantSessionId: hostId,
-      participants: [{ participantSessionId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "host", eligibleRoles: ["host", "cohost"], capabilities: [...empty.roleCapabilities.host] }],
+      hostParticipantSessionId: null,
+      participants: [{ participantSessionId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: [...empty.roleCapabilities.owner] }],
     };
     const resultingStateDigest = await computeV1StateDigest(expected);
     const reduced = await applyV1Event(empty, {
@@ -1020,10 +1020,10 @@ describe("v1 exact decoding and durable state", () => {
       revision: 1,
       schema_version: 1,
       resulting_state_digest: resultingStateDigest,
-      payload: { participant_session_id: hostId, display_name: "Host", role: "host", eligible_roles: ["host", "cohost"], admission_revision: 1 },
+      payload: { participant_id: hostId, display_name: "Host", role: "owner", admission_revision: 1 },
       lifecycle_intent_id: projectionId,
     });
-    expect(reduced).toMatchObject({ hostParticipantSessionId: hostId, participants: [{ role: "host" }] });
+    expect(reduced).toMatchObject({ hostParticipantSessionId: null, participants: [{ role: "owner" }] });
   });
 
   it("rejects noncanonical display names and an ineligible pending host envelope", async () => {
@@ -1035,10 +1035,9 @@ describe("v1 exact decoding and durable state", () => {
     pendingHost.admission_requests = [
       {
         admission_request_id: recoveryId,
-        participant_session_id: peerId,
+        participant_id: hostId,
         display_name: "Pending host",
-        initial_role: "host",
-        eligible_roles: ["host"],
+        role: "observer",
         expires_at_ms: 120_000,
       },
     ];
@@ -1162,18 +1161,15 @@ describe("v1 exact decoding and durable state", () => {
     const valid = await wireSnapshot(baseState());
     const request = {
       admission_request_id: recoveryId,
-      participant_session_id: hostId,
+      participant_id: hostId,
       display_name: "Pending",
-      initial_role: "participant" as const,
-      eligible_roles: ["participant"] as const,
+      role: "observer" as const,
       expires_at_ms: 120_000,
     };
     const malformed: Snapshot[] = [
       { ...valid, participants: [...valid.participants, valid.participants[0]!] },
-      { ...valid, participants: valid.participants.map((participant) => ({ ...participant, eligible_roles: [] })) },
-      { ...valid, participants: valid.participants.map((participant) => ({ ...participant, role: "host" as const, eligible_roles: ["participant"] })) },
-      { ...valid, participants: valid.participants.map((participant) => ({ ...participant, eligible_roles: ["host"] })) },
-      { ...valid, participants: valid.participants.map((participant) => ({ ...participant, role: "participant" as const, capabilities: valid.role_capabilities.participant })) },
+      { ...valid, participants: valid.participants.map((participant) => ({ ...participant, role: "unknown" as const })) },
+      { ...valid, participants: valid.participants.map((participant) => ({ ...participant, capabilities: ["manageAdmission"] as const })) },
       { ...valid, status: "ended", participants: valid.participants },
       { ...valid, participants: valid.participants.map((participant) => ({ ...participant, capabilities: [] })) },
       { ...valid, admission_requests: [request] },
@@ -1251,18 +1247,19 @@ function baseState(): V1ControlState {
     status: "active",
     admissionPolicy: "open",
     hostExitPolicy: "require_transfer",
-    hostParticipantSessionId: hostId,
+    hostParticipantSessionId: null,
     deadlineAtMs: 99_999,
     deadlineGeneration: 1,
-    roleCapabilities: { host: ["publishAudio", "endMeeting"], cohost: ["publishAudio"], participant: ["subscribe"] },
+    roleCapabilities: { owner: ["publishAudio", "subscribe", "endEpisode"], collaborator: ["publishAudio"], observer: ["subscribe"] },
     recording: null,
-    participants: [{ participantSessionId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "host", eligibleRoles: ["host", "cohost"], capabilities: ["publishAudio", "endMeeting"] }],
+    participants: [{ participantSessionId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: ["publishAudio", "subscribe", "endEpisode"] }],
     admissionRequests: [],
   };
 }
 
 function stateWithPeer(role: "cohost" | "participant"): V1ControlState {
   const state = baseState();
+  const canonicalRole = role === "cohost" ? "collaborator" : "observer";
   return {
     ...state,
     participants: [
@@ -1272,9 +1269,9 @@ function stateWithPeer(role: "cohost" | "participant"): V1ControlState {
         displayName: "Peer",
         handRaised: false,
         admissionRevision: 2,
-        role,
-        eligibleRoles: ["cohost", "participant"],
-        capabilities: [...state.roleCapabilities[role]],
+        role: canonicalRole,
+        eligibleRoles: [canonicalRole],
+        capabilities: [...state.roleCapabilities[canonicalRole]],
       },
     ],
   };
@@ -1288,19 +1285,16 @@ async function wireSnapshot(initial: V1ControlState): Promise<Snapshot> {
     state_digest: state.stateDigest,
     status: state.status,
     admission_policy: state.admissionPolicy,
-    host_exit_policy: state.hostExitPolicy,
-    host_participant_session_id: state.hostParticipantSessionId,
     deadline_at_ms: state.deadlineAtMs,
     deadline_generation: state.deadlineGeneration,
     role_capabilities: state.roleCapabilities,
     recording: null,
     participants: state.participants.map((participant) => ({
-      participant_session_id: participant.participantSessionId,
+      participant_id: participant.participantSessionId,
       display_name: participant.displayName,
       hand_raised: participant.handRaised,
       admission_revision: participant.admissionRevision,
       role: participant.role,
-      eligible_roles: participant.eligibleRoles,
       capabilities: participant.capabilities,
     })),
     admission_requests: [],
@@ -1333,12 +1327,31 @@ class TestSocket implements SyncSocket {
   }
 
   receive(frame: unknown): void {
-    this.onmessage?.({ data: JSON.stringify(frame) });
+    this.onmessage?.({ data: JSON.stringify(normalizeLegacyFrame(frame)) });
   }
 
   frames(): Record<string, unknown>[] {
     return this.sent.map((frame) => JSON.parse(frame));
   }
+}
+
+function normalizeLegacyFrame(frame: unknown): unknown {
+  if (Array.isArray(frame)) return frame.map(normalizeLegacyFrame);
+  if (!frame || typeof frame !== "object") return frame;
+  const source = frame as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source)) {
+    const canonicalKey =
+      {
+        participant_session_id: "participant_id",
+        participant_session_generation: "participant_generation",
+        actor_participant_session_id: "actor_participant_id",
+        target_participant_session_id: "target_participant_id",
+      }[key] ?? key;
+    if (canonicalKey === "host_exit_policy" || canonicalKey === "host_participant_session_id" || canonicalKey === "eligible_roles") continue;
+    result[canonicalKey] = normalizeLegacyFrame(value);
+  }
+  return result;
 }
 
 class TestClock {

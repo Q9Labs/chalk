@@ -75,7 +75,7 @@ func (e providerFailure) Unwrap() error {
 	case e.statusCode == http.StatusUnauthorized, e.statusCode == http.StatusForbidden:
 		return mediaplane.ErrProviderUnauthorized
 	case e.statusCode == http.StatusNotFound, e.statusCode == http.StatusGone:
-		return mediaplane.ErrSessionNotFound
+		return mediaplane.ErrEpisodeNotFound
 	case e.statusCode == http.StatusTooManyRequests:
 		return mediaplane.ErrProviderRateLimited
 	default:
@@ -209,14 +209,14 @@ func NewAdapterWithClient(cfg config.CloudflareRealtimeConfig, client httpClient
 	return adapter, nil
 }
 
-func (a Adapter) EnsureSession(_ context.Context, input mediaplane.EnsureSessionInput) (mediaplane.Session, error) {
+func (a Adapter) EnsureEpisode(_ context.Context, input mediaplane.EnsureEpisodeInput) (mediaplane.Episode, error) {
 	if input.Provider != mediaplane.ProviderCloudflareSFU {
-		return mediaplane.Session{}, mediaplane.ErrInvalidProvider
+		return mediaplane.Episode{}, mediaplane.ErrInvalidProvider
 	}
 
-	return mediaplane.Session{
+	return mediaplane.Episode{
 		Provider: mediaplane.ProviderCloudflareSFU,
-		Ref:      input.SessionKey,
+		Ref:      input.EpisodeKey,
 		Metadata: a.providerMetadata(),
 	}, nil
 }
@@ -235,7 +235,7 @@ func (a Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInpu
 		participantRef = input.ParticipantName
 	}
 
-	return a.joinForConnection(input.Session.Ref, participantRef, connectionID), nil
+	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID), nil
 }
 
 func (a Adapter) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
@@ -243,7 +243,7 @@ func (a Adapter) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput)
 		return mediaplane.Join{}, mediaplane.ErrInvalidProvider
 	}
 
-	return a.joinForConnection(input.Session.Ref, input.ExternalParticipantID, input.ConnectionRef), nil
+	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef), nil
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
@@ -581,8 +581,8 @@ func sfuSpanError(err error) error {
 		return mediaplane.ErrProviderUnauthorized
 	case errors.Is(err, mediaplane.ErrProviderRateLimited):
 		return mediaplane.ErrProviderRateLimited
-	case errors.Is(err, mediaplane.ErrSessionNotFound):
-		return mediaplane.ErrSessionNotFound
+	case errors.Is(err, mediaplane.ErrEpisodeNotFound):
+		return mediaplane.ErrEpisodeNotFound
 	default:
 		return mediaplane.ErrProviderFailed
 	}
@@ -592,11 +592,11 @@ func (a Adapter) RemoveParticipant(context.Context, mediaplane.RemoveParticipant
 	return mediaplane.ErrUnsupportedOperation
 }
 
-func (a Adapter) EndSession(context.Context, mediaplane.EndSessionInput) error {
+func (a Adapter) EndEpisode(context.Context, mediaplane.EndEpisodeInput) error {
 	return mediaplane.ErrUnsupportedOperation
 }
 
-func (a Adapter) SessionUsage(_ context.Context, input mediaplane.SessionUsageInput) (mediaplane.Usage, error) {
+func (a Adapter) EpisodeUsage(_ context.Context, input mediaplane.EpisodeUsageInput) (mediaplane.Usage, error) {
 	if input.Provider != mediaplane.ProviderCloudflareSFU {
 		return mediaplane.Usage{}, mediaplane.ErrInvalidProvider
 	}
@@ -604,10 +604,10 @@ func (a Adapter) SessionUsage(_ context.Context, input mediaplane.SessionUsageIn
 	return mediaplane.Usage{Metadata: a.providerMetadata()}, nil
 }
 
-func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (metadata SessionMetadata, err error) {
-	sessionRef = strings.TrimSpace(sessionRef)
-	if sessionRef == "" {
-		return SessionMetadata{}, mediaplane.ErrInvalidSessionRef
+func (a Adapter) VerifySessionMetadata(ctx context.Context, episodeRef string) (metadata SessionMetadata, err error) {
+	episodeRef = strings.TrimSpace(episodeRef)
+	if episodeRef == "" {
+		return SessionMetadata{}, mediaplane.ErrInvalidEpisodeRef
 	}
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu.verify_session", trace.WithSpanKind(trace.SpanKindClient))
 	defer func() {
@@ -623,7 +623,7 @@ func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (
 	if a.client == nil {
 		return SessionMetadata{}, newProviderFailure("verify_session", failureStageTransport, 0, "plane_unavailable")
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/apps/%s/sessions/%s", a.endpoint, url.PathEscape(a.appID), url.PathEscape(sessionRef)), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/apps/%s/sessions/%s", a.endpoint, url.PathEscape(a.appID), url.PathEscape(episodeRef)), nil)
 	if err != nil {
 		return SessionMetadata{}, newProviderFailure("verify_session", failureStageContract, 0, "invalid_request")
 	}
@@ -651,7 +651,7 @@ func (a Adapter) VerifySessionMetadata(ctx context.Context, sessionRef string) (
 
 	return SessionMetadata{
 		Provider: mediaplane.ProviderCloudflareSFU,
-		Ref:      sessionRef,
+		Ref:      episodeRef,
 		Metadata: a.providerMetadata(),
 	}, nil
 }
@@ -665,14 +665,14 @@ func (a Adapter) providerMetadata() map[string]string {
 	}
 }
 
-func (a Adapter) joinForConnection(sessionRef string, participantRef string, connectionID string) mediaplane.Join {
+func (a Adapter) joinForConnection(episodeRef string, participantRef string, connectionID string) mediaplane.Join {
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderCloudflareSFU,
 		ParticipantRef: participantRef,
 		ClientPayload: map[string]any{
 			"connectionId": connectionID,
 			"provider":     string(mediaplane.ProviderCloudflareSFU),
-			"sessionRef":   sessionRef,
+			"episodeRef":   episodeRef,
 			"stunServer":   stunServer,
 			"syncOwner":    syncOwner,
 		},

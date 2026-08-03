@@ -1,15 +1,15 @@
 defmodule ChalkSync.Retention.CleanupWorker do
   @moduledoc """
-  Verifies and removes expired Session history in bounded PostgreSQL batches.
+  Verifies and removes expired Episode history in bounded PostgreSQL batches.
 
-  Each batch claims only ended Sessions outside the seven-day retention window.
+  Each batch claims only ended Episodes outside the seven-day retention window.
   `SKIP LOCKED` lets concurrent workers make progress without waiting. Every
   claimed control row remains locked while its event log is independently
   folded in bounded pages, checkpointed, and deleted in foreign-key order.
   """
 
+  alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Retention.SQL
-  alias ChalkSync.Sessions.Reducer
   alias ChalkSync.UUID
 
   @retention_seconds 7 * 24 * 60 * 60
@@ -20,7 +20,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
   defmodule Result do
     @moduledoc "Cleanup counters for one committed worker batch."
 
-    defstruct sessions: 0,
+    defstruct episodes: 0,
               event_rows: 0,
               event_bytes: 0,
               receipt_rows: 0,
@@ -41,7 +41,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
               publication_grant_reservation_bytes: 0
 
     @type t :: %__MODULE__{
-            sessions: non_neg_integer(),
+            episodes: non_neg_integer(),
             event_rows: non_neg_integer(),
             event_bytes: non_neg_integer(),
             receipt_rows: non_neg_integer(),
@@ -82,7 +82,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     Postgrex.transaction(connection, fn transaction ->
       Postgrex.query!(transaction, SQL.transaction_settings(), [])
 
-      Postgrex.query!(transaction, SQL.claim_eligible_sessions(), [cutoff, now, batch_size])
+      Postgrex.query!(transaction, SQL.claim_eligible_episodes(), [cutoff, now, batch_size])
       |> Map.fetch!(:rows)
       |> Enum.reduce(%Result{}, fn row, result ->
         cleanup_candidate(transaction, candidate(row), now, result)
@@ -149,7 +149,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
         )
 
         %Result{
-          sessions: result.sessions + 1,
+          episodes: result.episodes + 1,
           event_rows: result.event_rows + event_rows,
           event_bytes: result.event_bytes + event_bytes,
           receipt_rows: result.receipt_rows + receipt_rows,
@@ -181,7 +181,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
   end
 
   defp verify_history(transaction, candidate) do
-    state = Reducer.new(UUID.load!(candidate.session_id))
+    state = Reducer.new(UUID.load!(candidate.episode_id))
 
     with {:ok, state, event_count, event_bytes} <-
            fold_event_pages(transaction, candidate, state, 0, 0),
@@ -206,7 +206,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     rows =
       Postgrex.query!(transaction, SQL.read_event_page(), [
         candidate.tenant_id,
-        candidate.session_id,
+        candidate.episode_id,
         state.revision,
         @event_page_size
       ]).rows
@@ -252,7 +252,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
   defp write_checkpoint(transaction, candidate, now, event_count, event_bytes, measurements) do
     params = [
       candidate.tenant_id,
-      candidate.session_id,
+      candidate.episode_id,
       candidate.control_revision,
       candidate.state_digest,
       event_count,
@@ -277,13 +277,13 @@ defmodule ChalkSync.Retention.CleanupWorker do
     ]
 
     case Postgrex.query!(transaction, SQL.write_checkpoint(), params).rows do
-      [[_session_id]] -> :ok
+      [[_episode_id]] -> :ok
       [] -> Postgrex.rollback(transaction, {:invalid_history, :checkpoint_race})
     end
   end
 
   defp delete_count(transaction, query, candidate) do
-    case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.session_id]).rows do
+    case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.episode_id]).rows do
       [[count]] -> count
     end
   end
@@ -293,7 +293,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
   end
 
   defp measurement(transaction, query, candidate) do
-    case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.session_id]).rows do
+    case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.episode_id]).rows do
       [[rows, bytes]] -> {rows, bytes}
     end
   end
@@ -301,7 +301,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
   defp clear_terminal_operation_event_links(transaction, candidate) do
     Postgrex.query!(transaction, SQL.clear_terminal_operation_event_links(), [
       candidate.tenant_id,
-      candidate.session_id
+      candidate.episode_id
     ])
   end
 
@@ -323,8 +323,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
 
   defp candidate([
          tenant_id,
-         room_id,
-         session_id,
+         space_id,
+         episode_id,
          control_revision,
          folded_state,
          state_schema_version,
@@ -340,8 +340,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
        ]) do
     %{
       tenant_id: tenant_id,
-      room_id: room_id,
-      session_id: session_id,
+      space_id: space_id,
+      episode_id: episode_id,
       control_revision: control_revision,
       folded_state: folded_state,
       state_schema_version: state_schema_version,

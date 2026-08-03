@@ -1,8 +1,8 @@
 defmodule ChalkSync.WhiteboardV1.SocketTest do
   use ExUnit.Case, async: true
 
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.Transport.SocketWhiteboardV1
 
   @participant_id "20000000-0000-4000-8000-000000000002"
@@ -28,13 +28,13 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 
     identity = %Identity{
-      session: %SessionKey{
+      episode: %EpisodeKey{
         tenant_id: "30000000-0000-4000-8000-000000000003",
-        room_id: "40000000-0000-4000-8000-000000000004",
-        session_id: "50000000-0000-4000-8000-000000000005"
+        space_id: "40000000-0000-4000-8000-000000000004",
+        episode_id: "50000000-0000-4000-8000-000000000005"
       },
-      participant_session_id: @participant_id,
-      participant_session_generation: 1
+      participant_id: @participant_id,
+      participant_generation: 1
     }
 
     state = %{
@@ -50,7 +50,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                {:whiteboard_v1_frame,
                 %{
                   "type" => "cursor",
-                  "participant_session_id" => @participant_id,
+                  "participant_id" => @participant_id,
                   "display_name" => "Ada",
                   "x" => 1,
                   "y" => 2,
@@ -135,13 +135,13 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   defp identity do
     %Identity{
-      session: %SessionKey{
+      episode: %EpisodeKey{
         tenant_id: "30000000-0000-4000-8000-000000000003",
-        room_id: "40000000-0000-4000-8000-000000000004",
-        session_id: "50000000-0000-4000-8000-000000000005"
+        space_id: "40000000-0000-4000-8000-000000000004",
+        episode_id: "50000000-0000-4000-8000-000000000005"
       },
-      participant_session_id: @participant_id,
-      participant_session_generation: 1
+      participant_id: @participant_id,
+      participant_generation: 1
     }
   end
 end

@@ -48,12 +48,12 @@ func decodeWorkerLease(r *http.Request) (utilities.ID, workerLeaseBody, error) {
 func workerHeartbeatHandler(service TranscriptWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		jobID, body, err := decodeWorkerLease(r)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid request body")
 			return
 		}
 		job, err := service.Heartbeat(r.Context(), transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}, time.Now().Add(transcriptionWorkLeaseDuration))
@@ -75,19 +75,19 @@ type workerRetryBody struct {
 func workerRetryHandler(service TranscriptWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		id, body, err := workerRetryInput(r)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid retry request")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid retry request")
 			return
 		}
 		available := time.Now()
 		if body.RetryAt != "" {
 			available, err = time.Parse(time.RFC3339Nano, body.RetryAt)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", "Invalid retry time")
+				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid retry time")
 				return
 			}
 		}
@@ -133,29 +133,29 @@ type workerCompleteBody struct {
 func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthorizer, results ResultAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		var body workerCompleteBody
 		if err := decodeJSON(r, &body); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid completion request")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid completion request")
 			return
 		}
 		jobID, err := utilities.ParseID(body.JobID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid job id")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid job id")
 			return
 		}
 		checksum, err := decodeChecksum(body.ResultSHA256)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid checksum")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid checksum")
 			return
 		}
 		resolver, ok := service.(interface {
 			ResultKey(context.Context, transcripts.LeaseInput) (string, error)
 		})
 		if !ok {
-			writeError(w, http.StatusServiceUnavailable, "workload_authority_unavailable", "Result key authority unavailable")
+			writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Result key authority unavailable")
 			return
 		}
 		lease := transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}
@@ -165,7 +165,7 @@ func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthori
 			return
 		}
 		if err := results.VerifyResult(r.Context(), ResultVerification{JobID: jobID, Attempt: body.Attempt, Key: resultKey, ContentType: body.ContentType, Size: body.ResultSizeBytes, SHA256: checksum}); err != nil {
-			writeError(w, http.StatusBadGateway, "result_verification_failed", "Result object verification failed")
+			writeError(w, http.StatusBadGateway, "result.verification_failed", "Result object verification failed")
 			return
 		}
 		observedDurationMS := body.ProviderObservedDurationMS
@@ -185,15 +185,15 @@ func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthori
 func workerCancelHandler(service TranscriptWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		jobID, body, err := decodeWorkerLease(r)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid cancellation request")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid cancellation request")
 			return
 		}
-		job, err := service.Cancel(r.Context(), transcripts.CancelInput{LeaseInput: transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}, ErrorCode: "worker_cancelled", ErrorDetail: "worker cancelled"})
+		job, err := service.Cancel(r.Context(), transcripts.CancelInput{LeaseInput: transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}, ErrorCode: "worker.cancelled", ErrorDetail: "worker cancelled"})
 		if err != nil {
 			writeWorkerError(w, err)
 			return
@@ -215,19 +215,19 @@ func workerJobResponse(job transcripts.Job) workerJobResponseBody {
 func writeWorkerError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, transcripts.ErrInvalidLease), errors.Is(err, transcripts.ErrInvalidArtifact):
-		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid artifact worker request")
+		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid artifact worker request")
 	case errors.Is(err, transcripts.ErrJobNotFound):
-		writeError(w, http.StatusNotFound, "job_not_found", "Artifact job was not found")
+		writeError(w, http.StatusNotFound, "job.not_found", "Artifact job was not found")
 	case errors.Is(err, transcripts.ErrArtifactRepository):
-		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Artifact worker is unavailable")
+		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Artifact worker is unavailable")
 	case errors.Is(err, transcripts.ErrStaleLease):
-		writeError(w, http.StatusConflict, "stale_lease", "Lease is stale or expired")
+		writeError(w, http.StatusConflict, "lease.stale", "Lease is stale or expired")
 	case errors.Is(err, transcripts.ErrNoClaimableJob):
-		writeError(w, http.StatusNoContent, "no_work", "No work is currently available")
+		writeError(w, http.StatusNoContent, "work.none_available", "No work is currently available")
 	case errors.Is(err, transcripts.ErrDuplicateResult):
-		writeError(w, http.StatusConflict, "duplicate_result", "A result was already accepted")
+		writeError(w, http.StatusConflict, "result.duplicate", "A result was already accepted")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Artifact worker operation failed")
+		writeError(w, http.StatusInternalServerError, "internal.error", "Artifact worker operation failed")
 	}
 }
 

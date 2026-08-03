@@ -93,7 +93,7 @@ func (webhookService) AuditFailure(context.Context, webhooks.FailureAuditInput) 
 
 func TestWebhookRoutesRequireAuthenticationAndAdminAuthorization(t *testing.T) {
 	routes := []struct{ method, path, body string }{
-		{http.MethodPost, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","enabled":true,"api_version":1,"event_types":["room.created"]}`},
+		{http.MethodPost, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","enabled":true,"api_version":1,"event_types":["space.created"]}`},
 		{http.MethodGet, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints", ""},
 		{http.MethodGet, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID, ""},
 		{http.MethodPatch, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID, `{}`},
@@ -145,12 +145,12 @@ func TestWebhookCreateReturnsOneTimeSecretOnlyOnCreate(t *testing.T) {
 	now := time.Date(2026, time.July, 13, 0, 0, 0, 0, time.UTC)
 	endpointID, _ := utilities.ParseID(webhookEndpointID)
 	tenantID, _ := utilities.ParseID(webhookTenantID)
-	endpoint := webhooks.Endpoint{ID: endpointID, TenantID: tenantID, Name: "events", URLRedacted: "https://example.com/***", Enabled: true, Revision: 1, APIVersion: 1, EventTypes: []string{"room.created"}, CreatedAt: now, UpdatedAt: now}
+	endpoint := webhooks.Endpoint{ID: endpointID, TenantID: tenantID, Name: "events", URLRedacted: "https://example.com/***", Enabled: true, Revision: 1, APIVersion: 1, EventTypes: []string{"space.created"}, CreatedAt: now, UpdatedAt: now}
 	service := webhookService{create: func(context.Context, webhooks.CreateInput) (webhooks.CreateResult, error) {
 		return webhooks.CreateResult{Endpoint: endpoint, Secret: "whsec_once"}, nil
 	}, get: func(context.Context, utilities.ID, utilities.ID) (webhooks.Endpoint, error) { return endpoint, nil }}
 
-	create := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+webhookTenantID+"/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","enabled":true,"api_version":1,"event_types":["room.created"]}`, httpapi.Options{Webhooks: service})
+	create := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+webhookTenantID+"/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","enabled":true,"api_version":1,"event_types":["space.created"]}`, httpapi.Options{Webhooks: service})
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status = %d: %s", create.Code, create.Body.String())
 	}
@@ -183,8 +183,8 @@ func TestWebhookCreateAndRotateRejectMissingOrNullRequiredBooleans(t *testing.T)
 	tests := []struct {
 		name, path, body string
 	}{
-		{"create missing enabled", "/v1/tenants/" + webhookTenantID + "/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","api_version":1,"event_types":["room.created"]}`},
-		{"create null enabled", "/v1/tenants/" + webhookTenantID + "/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","enabled":null,"api_version":1,"event_types":["room.created"]}`},
+		{"create missing enabled", "/v1/tenants/" + webhookTenantID + "/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","api_version":1,"event_types":["space.created"]}`},
+		{"create null enabled", "/v1/tenants/" + webhookTenantID + "/webhook-endpoints", `{"name":"events","url":"https://example.com/hook","enabled":null,"api_version":1,"event_types":["space.created"]}`},
 		{"rotate missing revoke", "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID + "/rotate-secret", `{}`},
 		{"rotate null revoke", "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID + "/rotate-secret", `{"revoke_previous_immediately":null}`},
 	}
@@ -194,7 +194,7 @@ func TestWebhookCreateAndRotateRejectMissingOrNullRequiredBooleans(t *testing.T)
 			if res.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
 			}
-			assertErrorCode(t, res, "invalid_request")
+			assertErrorCode(t, res, "request.invalid")
 		})
 	}
 	if calls != 0 {
@@ -214,7 +214,7 @@ func TestWebhookRuntimeErrorsAndDeliveryFilters(t *testing.T) {
 			return webhooks.DeliveryResult{}, webhooks.ErrDeliveryNotRedeliverable
 		},
 		listDeliveries: func(_ context.Context, _, _ utilities.ID, filters webhooks.DeliveryFilters, _ pagination.PageRequest) (webhooks.DeliveryList, error) {
-			if !slices.Equal(filters.States, []string{"pending", "failed"}) || !slices.Equal(filters.EventTypes, []string{"room.created", "session.ended"}) {
+			if !slices.Equal(filters.States, []string{"pending", "failed"}) || !slices.Equal(filters.EventTypes, []string{"space.created", "episode.ended"}) {
 				t.Fatalf("filters = %#v", filters)
 			}
 			return webhooks.DeliveryList{}, nil
@@ -225,9 +225,9 @@ func TestWebhookRuntimeErrorsAndDeliveryFilters(t *testing.T) {
 		status                            int
 		code                              string
 	}{
-		{"revision conflict", http.MethodPatch, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID, `{"enabled":false}`, `"1"`, http.StatusPreconditionFailed, "webhook_endpoint_revision_conflict"},
-		{"erased event", http.MethodGet, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID + "/deliveries/" + webhookDeliveryID, "", "", http.StatusGone, "webhook_event_erased"},
-		{"redelivery conflict", http.MethodPost, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID + "/deliveries/" + webhookDeliveryID + "/redeliver", "", "", http.StatusConflict, "webhook_delivery_not_redeliverable"},
+		{"revision conflict", http.MethodPatch, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID, `{"enabled":false}`, `"1"`, http.StatusPreconditionFailed, "webhook.endpoint_revision_conflict"},
+		{"erased event", http.MethodGet, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID + "/deliveries/" + webhookDeliveryID, "", "", http.StatusGone, "webhook.event_erased"},
+		{"redelivery conflict", http.MethodPost, "/v1/tenants/" + webhookTenantID + "/webhook-endpoints/" + webhookEndpointID + "/deliveries/" + webhookDeliveryID + "/redeliver", "", "", http.StatusConflict, "webhook.delivery_not_redeliverable"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -242,7 +242,7 @@ func TestWebhookRuntimeErrorsAndDeliveryFilters(t *testing.T) {
 			assertErrorCode(t, res, test.code)
 		})
 	}
-	filters := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+webhookTenantID+"/webhook-endpoints/"+webhookEndpointID+"/deliveries?state=pending&state=failed&event_type=room.created&event_type=session.ended", httpapi.Options{Webhooks: service})
+	filters := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+webhookTenantID+"/webhook-endpoints/"+webhookEndpointID+"/deliveries?state=pending&state=failed&event_type=space.created&event_type=episode.ended", httpapi.Options{Webhooks: service})
 	if filters.Code != http.StatusOK {
 		t.Fatalf("filter status = %d: %s", filters.Code, filters.Body.String())
 	}
@@ -329,7 +329,7 @@ func TestWebhookReadRoutesUseDedicatedPrincipalScopedRateLimit(t *testing.T) {
 		want := http.StatusOK
 		if token == "raw-session-token" && len(limiter.keys) == 2 {
 			want = http.StatusTooManyRequests
-			assertErrorCode(t, res, "rate_limited")
+			assertErrorCode(t, res, "request.rate_limited")
 			if res.Header().Get(ratelimit.HeaderRetryAfter) != "2" {
 				t.Fatalf("retry-after = %q, want 2", res.Header().Get(ratelimit.HeaderRetryAfter))
 			}

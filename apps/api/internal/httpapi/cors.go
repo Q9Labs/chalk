@@ -36,7 +36,7 @@ func allowCORS(options CORSOptions) func(http.Handler) http.Handler {
 
 			if r.Method == http.MethodOptions {
 				if !ok {
-					writeError(w, http.StatusForbidden, "cors_origin_forbidden", "CORS origin is not allowed")
+					writeError(w, http.StatusForbidden, "cors.origin_forbidden", "CORS origin is not allowed")
 					return
 				}
 

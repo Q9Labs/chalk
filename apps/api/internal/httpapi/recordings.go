@@ -30,7 +30,7 @@ var (
 type RecordingService interface {
 	Create(ctx context.Context, input recordings.CreateInput) (recordings.Recording, error)
 	Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (recordings.Recording, error)
-	List(ctx context.Context, tenantID utilities.ID, sessionID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error)
+	List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error)
 	Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input recordings.UpdateInput) (recordings.Recording, error)
 }
 
@@ -41,8 +41,8 @@ type RecordingDownloadService interface {
 type recordingResponse struct {
 	ID              string  `json:"id"`
 	TenantID        string  `json:"tenant_id"`
-	RoomID          string  `json:"room_id"`
-	SessionID       string  `json:"session_id"`
+	SpaceID         string  `json:"space_id"`
+	EpisodeID       string  `json:"episode_id"`
 	Status          string  `json:"status"`
 	StorageProvider string  `json:"storage_provider"`
 	StorageKey      *string `json:"storage_key"`
@@ -84,14 +84,14 @@ type createRecordingDownloadURLRequest struct {
 
 type createRecordingEndpointRequest struct {
 	TenantID  utilities.ID
-	RoomID    utilities.ID
-	SessionID utilities.ID
+	SpaceID   utilities.ID
+	EpisodeID utilities.ID
 	Body      createRecordingRequest
 }
 
 type listRecordingsRequest struct {
 	TenantID  utilities.ID
-	SessionID utilities.ID
+	EpisodeID utilities.ID
 	Page      pagination.PageRequest
 }
 
@@ -129,7 +129,7 @@ func recordingEndpoints(service RecordingService, downloads RecordingDownloadSer
 }
 
 func createRecordingEndpoint(service RecordingService, authorizer TenantAuthorizer) Endpoint[createRecordingEndpointRequest, recordingResponse] {
-	return Post("/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings", "/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings", "createRecording", decodeCreateRecordingRequest, func(ctx context.Context, request createRecordingEndpointRequest) (recordingResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recordings", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recordings", "createRecording", decodeCreateRecordingRequest, func(ctx context.Context, request createRecordingEndpointRequest) (recordingResponse, error) {
 		if service == nil {
 			return recordingResponse{}, apiErrorServiceUnavailable
 		}
@@ -139,8 +139,8 @@ func createRecordingEndpoint(service RecordingService, authorizer TenantAuthoriz
 
 		recording, err := service.Create(ctx, recordings.CreateInput{
 			TenantID:        request.TenantID,
-			RoomID:          request.RoomID,
-			SessionID:       request.SessionID,
+			SpaceID:         request.SpaceID,
+			EpisodeID:       request.EpisodeID,
 			Status:          request.Body.Status,
 			StorageProvider: request.Body.StorageProvider,
 			StorageKey:      request.Body.StorageKey,
@@ -153,10 +153,10 @@ func createRecordingEndpoint(service RecordingService, authorizer TenantAuthoriz
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), roomIDParameter(), sessionIDParameter()).
+		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).
 		RequestBody("CreateRecordingRequest", createRecordingRequest{}).
 		Responds(http.StatusCreated, "Recording", recordingResponse{}).
-		Errors(recordingWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRoomID, apiErrorInvalidSessionID, apiErrorInvalidRecordingStatus, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidRecordingField, apiErrorSessionNotFound, apiErrorRateLimited)...).
+		Errors(recordingWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRecordingStatus, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidRecordingField, apiErrorEpisodeNotFound, apiErrorRateLimited)...).
 		MapErrors(recordingEndpointAPIError)
 }
 
@@ -169,16 +169,16 @@ func listRecordingsEndpoint(service RecordingService, authorizer TenantAuthorize
 			return recordingListResponse{}, err
 		}
 
-		list, err := service.List(ctx, request.TenantID, request.SessionID, request.Page)
+		list, err := service.List(ctx, request.TenantID, request.EpisodeID, request.Page)
 		if err != nil {
 			return recordingListResponse{}, err
 		}
 		return newRecordingListResponse(list)
 	}).
 		Auth(APIAuthSessionOrBearer).
-		Parameters(append([]APIParameterContract{tenantIDParameter(), sessionIDQueryParameter()}, paginationParameters()...)...).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), episodeIDQueryParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "RecordingList", recordingListResponse{}).
-		Errors(recordingReadErrors(apiErrorInvalidSessionID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
+		Errors(recordingReadErrors(apiErrorInvalidEpisodeID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
 		MapErrors(recordingEndpointAPIError)
 }
 
@@ -280,7 +280,7 @@ func createRecordingDownloadURLEndpoint(service RecordingService, downloads Reco
 }
 
 func decodeCreateRecordingRequest(r *http.Request) (createRecordingEndpointRequest, error) {
-	tenantID, roomID, sessionID, err := tenantRoomSessionIDsRequest(r)
+	tenantID, spaceID, episodeID, err := tenantSpaceEpisodeIDsRequest(r)
 	if err != nil {
 		return createRecordingEndpointRequest{}, err
 	}
@@ -288,7 +288,7 @@ func decodeCreateRecordingRequest(r *http.Request) (createRecordingEndpointReque
 	if err != nil {
 		return createRecordingEndpointRequest{}, err
 	}
-	return createRecordingEndpointRequest{TenantID: tenantID, RoomID: roomID, SessionID: sessionID, Body: body}, nil
+	return createRecordingEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Body: body}, nil
 }
 
 func decodeListRecordingsRequest(r *http.Request) (listRecordingsRequest, error) {
@@ -296,7 +296,7 @@ func decodeListRecordingsRequest(r *http.Request) (listRecordingsRequest, error)
 	if err != nil {
 		return listRecordingsRequest{}, err
 	}
-	sessionID, err := optionalSessionIDQuery(r)
+	episodeID, err := optionalEpisodeIDQuery(r)
 	if err != nil {
 		return listRecordingsRequest{}, err
 	}
@@ -304,7 +304,7 @@ func decodeListRecordingsRequest(r *http.Request) (listRecordingsRequest, error)
 	if err != nil {
 		return listRecordingsRequest{}, paginationAPIError(err)
 	}
-	return listRecordingsRequest{TenantID: tenantID, SessionID: sessionID, Page: page}, nil
+	return listRecordingsRequest{TenantID: tenantID, EpisodeID: episodeID, Page: page}, nil
 }
 
 func decodeGetRecordingRequest(r *http.Request) (getRecordingRequest, error) {
@@ -396,10 +396,10 @@ func recordingServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, recordings.ErrInvalidRecordingID):
 		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, recordings.ErrInvalidRoomID):
-		return apiErrorInvalidRoomID, true
-	case errors.Is(err, recordings.ErrInvalidSessionID):
-		return apiErrorInvalidSessionID, true
+	case errors.Is(err, recordings.ErrInvalidSpaceID):
+		return apiErrorInvalidSpaceID, true
+	case errors.Is(err, recordings.ErrInvalidEpisodeID):
+		return apiErrorInvalidEpisodeID, true
 	case errors.Is(err, recordings.ErrInvalidRecordingStatus):
 		return apiErrorInvalidRecordingStatus, true
 	case errors.Is(err, recordings.ErrInvalidStorageProvider):
@@ -408,8 +408,8 @@ func recordingServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidStorageKey, true
 	case errors.Is(err, recordings.ErrInvalidRecordingField):
 		return apiErrorInvalidRecordingField, true
-	case errors.Is(err, recordings.ErrSessionNotFound):
-		return apiErrorSessionNotFound, true
+	case errors.Is(err, recordings.ErrEpisodeNotFound):
+		return apiErrorEpisodeNotFound, true
 	case errors.Is(err, recordings.ErrRecordingNotFound):
 		return apiErrorRecordingNotFound, true
 	default:
@@ -451,8 +451,8 @@ func newRecordingResponse(recording recordings.Recording) recordingResponse {
 	return recordingResponse{
 		ID:              recording.ID.String(),
 		TenantID:        recording.TenantID.String(),
-		RoomID:          recording.RoomID.String(),
-		SessionID:       recording.SessionID.String(),
+		SpaceID:         recording.SpaceID.String(),
+		EpisodeID:       recording.EpisodeID.String(),
 		Status:          recording.Status,
 		StorageProvider: recording.StorageProvider,
 		StorageKey:      recording.StorageKey,

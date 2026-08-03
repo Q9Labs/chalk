@@ -1,7 +1,7 @@
 defmodule ChalkSync.ServerCase do
   @moduledoc """
   Boots a real Bandit listener on an ephemeral port for end-to-end tests.
-  Tests stay `async: true` by using unique room ids instead of resetting the
+  Tests stay `async: true` by using unique space ids instead of resetting the
   shared stateholder.
   """
 
@@ -9,7 +9,7 @@ defmodule ChalkSync.ServerCase do
 
   using do
     quote do
-      import ChalkSync.ServerCase, only: [unique_room_id: 0]
+      import ChalkSync.ServerCase, only: [unique_space_id: 0]
     end
   end
 
@@ -21,5 +21,5 @@ defmodule ChalkSync.ServerCase do
     %{port: port}
   end
 
-  def unique_room_id, do: "room-#{System.unique_integer([:positive])}"
+  def unique_space_id, do: "space-#{System.unique_integer([:positive])}"
 end

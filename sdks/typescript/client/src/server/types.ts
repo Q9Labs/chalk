@@ -148,7 +148,17 @@ export type ParticipantRemoval = {
   };
 };
 
-export type IssueParticipantAccessInput = { readonly participantSessionGeneration: number; readonly currentMediaToken: string; readonly replaceMediaConnection?: false } | { readonly participantSessionGeneration: number; readonly currentMediaToken?: never; readonly replaceMediaConnection: true };
+export type IssueParticipantAccessInput =
+  | {
+      readonly participantSessionGeneration: number;
+      readonly currentMediaToken: string;
+      readonly replaceMediaConnection?: false;
+    }
+  | {
+      readonly participantSessionGeneration: number;
+      readonly currentMediaToken?: never;
+      readonly replaceMediaConnection: true;
+    };
 
 export type APIKey = {
   readonly created_at: string;

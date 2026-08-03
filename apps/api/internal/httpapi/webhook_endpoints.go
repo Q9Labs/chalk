@@ -178,5 +178,5 @@ func redeliverWebhookEndpoint(service WebhookService, authorizer TenantAuthorize
 }
 
 func auditWebhookAuthorizationFailure(ctx context.Context, service WebhookService, tenantID utilities.ID, action, resourceType string, resourceID utilities.ID) {
-	service.AuditFailure(ctx, webhooks.FailureAuditInput{TenantID: tenantID, Action: action, ResourceType: resourceType, ResourceID: resourceID, ErrorCode: "forbidden"})
+	service.AuditFailure(ctx, webhooks.FailureAuditInput{TenantID: tenantID, Action: action, ResourceType: resourceType, ResourceID: resourceID, ErrorCode: "access.forbidden"})
 }

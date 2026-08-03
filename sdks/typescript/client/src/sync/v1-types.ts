@@ -9,20 +9,29 @@ export type V1Capability =
   | "subscribe"
   | "raiseHand"
   | "renameSelf"
+  | "sendChat"
+  | "sendReaction"
+  | "drawWhiteboard"
+  | "manageWhiteboard"
   | "manageAdmission"
-  | "promoteDemote"
-  | "transferHost"
+  | "assignRoles"
   | "muteOthers"
   | "stopVideoOthers"
   | "stopScreenOthers"
   | "requestMediaOthers"
   | "removeParticipant"
   | "manageRecording"
-  | "endMeeting";
+  | "startEpisode"
+  | "extendEpisode"
+  | "endEpisode"
+  | "manageMembers"
+  | "clearSpaceContent";
 
-export type V1Role = "host" | "cohost" | "participant";
-export type V1AssignableRole = Exclude<V1Role, "host">;
-export type V1AdmissionPolicy = "open" | "approval" | "closed";
+// Roles are customer-defined. The legacy aliases remain in the public client
+// until the SpaceClient wave, but the wire accepts any non-empty role name.
+export type V1Role = string;
+export type V1AssignableRole = string;
+export type V1AdmissionPolicy = "open" | "knock" | "members_only";
 export type V1MediaSource = "microphone" | "camera" | "screen";
 export type V1ConnectionPhase = "idle" | "connecting" | "recovering" | "live" | "terminal" | "stopped";
 
@@ -61,7 +70,7 @@ export type V1ControlState = {
   readonly hostParticipantSessionId: string | null;
   readonly deadlineAtMs: number;
   readonly deadlineGeneration: number;
-  readonly roleCapabilities: Readonly<Record<V1Role, readonly V1Capability[]>>;
+  readonly roleCapabilities: Readonly<Record<string, readonly V1Capability[]>>;
   readonly recording: V1Recording | null;
   readonly participants: readonly V1Participant[];
   readonly admissionRequests: readonly V1AdmissionRequest[];
@@ -127,10 +136,9 @@ export type V1TargetCommand =
   | { readonly name: "set_hand_raised"; readonly payload: { readonly raised: boolean } }
   | { readonly name: "set_display_name"; readonly payload: { readonly display_name: string } }
   | { readonly name: "set_admission_policy"; readonly payload: { readonly policy: V1AdmissionPolicy } }
-  | { readonly name: "set_participant_role"; readonly payload: { readonly participant_session_id: string; readonly role: V1AssignableRole } }
-  | { readonly name: "transfer_host"; readonly payload: { readonly participant_session_id: string } };
+  | { readonly name: "assign_roles"; readonly payload: { readonly participant_id: string; readonly role: V1AssignableRole } };
 
-export type V1OperationName = "admit_participant" | "deny_admission" | "mute_participant" | "stop_participant_camera" | "stop_participant_screen_share" | "remove_participant" | "start_recording" | "stop_recording" | "participant_leave" | "end_session";
+export type V1OperationName = "admit_participant" | "deny_admission" | "mute_participant" | "stop_participant_camera" | "stop_participant_screen_share" | "remove_participant" | "start_recording" | "stop_recording" | "participant_leave" | "start_episode" | "extend_episode" | "end_episode";
 
 export type V1PendingTarget = { readonly commandId: string; readonly command: V1TargetCommand; readonly createdAt: number; readonly bytes: number };
 
@@ -151,13 +159,13 @@ export type V1ChatCursor = {
 };
 
 export type V1RoomActionsExtensionRequest = {
-  readonly name: "room_actions_v2";
+  readonly name: "collaboration_v1";
   readonly chatCursor: V1ChatCursor;
 };
 
 export type V1RoomActionsExtensionState = {
   readonly negotiated: boolean;
-  readonly version: 2 | null;
+  readonly version: 1 | null;
   readonly capabilities: readonly ChalkSyncV1RoomActionCapability[];
   readonly chatHeadSequence: string | null;
   readonly retainedFloorSequence: string | null;

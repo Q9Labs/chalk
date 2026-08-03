@@ -54,7 +54,7 @@ defmodule ChalkSync.ProviderBridge.ConfigTest do
     assert client.tls[:cacertfile] == paths.cacertfile
   end
 
-  test "installs the provider bridge media plane for live sessions at boot" do
+  test "installs the provider bridge media plane for live episodes at boot" do
     paths = tls_files()
     previous_media_plane = Application.get_env(:chalk_sync, :media_plane)
 

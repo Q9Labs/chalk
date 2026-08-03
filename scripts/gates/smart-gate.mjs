@@ -108,7 +108,7 @@ export function createGatePlan(files, options = {}) {
   const selectedNames = selectedWorkspaces.map((workspace) => workspace.name).join(", ");
   const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api"]));
   const sync = full || nonDocumentationFiles.some(isSyncReliabilityInput);
-  const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-codegen", "sdks/typescript/client/src/generated"]));
+  const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   const architecture = full || nonDocumentationFiles.some((file) => file === "architecture.html" || startsWithAny(file, ["infrastructure/architecture-worker", "packages/assets/src/logos", "scripts/architecture-worker"]));
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder"]));
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file));

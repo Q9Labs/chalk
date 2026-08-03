@@ -20,7 +20,7 @@ where id = $3 and state in ('pending', 'retryable', 'leased')
   and (state <> 'leased' or (attempt_count = $4
       and lease_owner = $5 and lease_token_hash = $6
       and lease_expires_at > $7::timestamptz))
-returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 
 type CancelArtifactJobParams struct {
@@ -48,7 +48,7 @@ func (q *Queries) CancelArtifactJob(ctx context.Context, arg CancelArtifactJobPa
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -84,7 +84,7 @@ with expired_terminal as (
     where artifact_kind = 'transcription_chunk' and state = 'leased'
       and lease_expires_at <= $4::timestamptz
       and attempt_count >= attempt_limit
-    returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+    returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 ), failed as (
     select id, transcript_id from expired_terminal
     where transcript_id is not null
@@ -126,7 +126,7 @@ set state = 'leased', attempt_count = jobs.attempt_count + 1,
     lease_expires_at = $3, updated_at = now()
 from candidate
 where jobs.id = candidate.id and jobs.attempt_count < jobs.attempt_limit
-returning jobs.id, jobs.idempotency_key, jobs.tenant_id, jobs.session_id, jobs.recording_id, jobs.transcript_id, jobs.chunk_id, jobs.artifact_kind, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token_hash, jobs.lease_owner, jobs.lease_expires_at, jobs.error_code, jobs.error_detail, jobs.journey_id, jobs.traceparent, jobs.tracestate, jobs.terminal_at, jobs.updated_at, jobs.created_at
+returning jobs.id, jobs.idempotency_key, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.transcript_id, jobs.chunk_id, jobs.artifact_kind, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token_hash, jobs.lease_owner, jobs.lease_expires_at, jobs.error_code, jobs.error_detail, jobs.journey_id, jobs.traceparent, jobs.tracestate, jobs.terminal_at, jobs.updated_at, jobs.created_at
 `
 
 type ClaimArtifactJobParams struct {
@@ -148,7 +148,7 @@ func (q *Queries) ClaimArtifactJob(ctx context.Context, arg ClaimArtifactJobPara
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -184,7 +184,7 @@ with expired_terminal as (
     where artifact_kind = 'transcription_finalize' and state = 'leased'
       and lease_expires_at <= $4::timestamptz
       and attempt_count >= attempt_limit
-    returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+    returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 ), failed as (
     select id, transcript_id from expired_terminal
     where transcript_id is not null
@@ -226,7 +226,7 @@ set state = 'leased', attempt_count = jobs.attempt_count + 1,
     lease_expires_at = $3, updated_at = now()
 from candidate
 where jobs.id = candidate.id and jobs.attempt_count < jobs.attempt_limit
-returning jobs.id, jobs.idempotency_key, jobs.tenant_id, jobs.session_id, jobs.recording_id, jobs.transcript_id, jobs.chunk_id, jobs.artifact_kind, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token_hash, jobs.lease_owner, jobs.lease_expires_at, jobs.error_code, jobs.error_detail, jobs.journey_id, jobs.traceparent, jobs.tracestate, jobs.terminal_at, jobs.updated_at, jobs.created_at
+returning jobs.id, jobs.idempotency_key, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.transcript_id, jobs.chunk_id, jobs.artifact_kind, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token_hash, jobs.lease_owner, jobs.lease_expires_at, jobs.error_code, jobs.error_detail, jobs.journey_id, jobs.traceparent, jobs.tracestate, jobs.terminal_at, jobs.updated_at, jobs.created_at
 `
 
 type ClaimTranscriptionFinalizerJobParams struct {
@@ -248,7 +248,7 @@ func (q *Queries) ClaimTranscriptionFinalizerJob(ctx context.Context, arg ClaimT
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -281,7 +281,7 @@ set state = 'completed', lease_token_hash = null, lease_owner = null,
 where id = $1 and state = 'leased' and attempt_count = $2
   and lease_owner = $3 and lease_token_hash = $4
   and lease_expires_at > $5::timestamptz
-returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 
 type CompleteArtifactJobParams struct {
@@ -305,7 +305,7 @@ func (q *Queries) CompleteArtifactJob(ctx context.Context, arg CompleteArtifactJ
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -333,7 +333,7 @@ func (q *Queries) CompleteArtifactJob(ctx context.Context, arg CompleteArtifactJ
 
 const createArtifactJob = `-- name: CreateArtifactJob :one
 insert into artifact_jobs (
-    id, idempotency_key, tenant_id, session_id, recording_id, transcript_id,
+    id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id,
     chunk_id, artifact_kind, payload_schema_version, state, priority,
     available_at, attempt_limit, journey_id, traceparent, tracestate
 ) values (
@@ -343,14 +343,14 @@ insert into artifact_jobs (
     $11, $12, $13,
     $14, $15
 )
-returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 
 type CreateArtifactJobParams struct {
 	ID                   pgtype.UUID        `json:"id"`
 	IdempotencyKey       string             `json:"idempotency_key"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
-	SessionID            pgtype.UUID        `json:"session_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
 	RecordingID          pgtype.UUID        `json:"recording_id"`
 	TranscriptID         pgtype.UUID        `json:"transcript_id"`
 	ChunkID              pgtype.UUID        `json:"chunk_id"`
@@ -369,7 +369,7 @@ func (q *Queries) CreateArtifactJob(ctx context.Context, arg CreateArtifactJobPa
 		arg.ID,
 		arg.IdempotencyKey,
 		arg.TenantID,
-		arg.SessionID,
+		arg.EpisodeID,
 		arg.RecordingID,
 		arg.TranscriptID,
 		arg.ChunkID,
@@ -387,7 +387,7 @@ func (q *Queries) CreateArtifactJob(ctx context.Context, arg CreateArtifactJobPa
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -415,11 +415,11 @@ func (q *Queries) CreateArtifactJob(ctx context.Context, arg CreateArtifactJobPa
 
 const createTranscriptionFinalizerJobIfReady = `-- name: CreateTranscriptionFinalizerJobIfReady :one
 insert into artifact_jobs (
-    id, idempotency_key, tenant_id, session_id, recording_id, transcript_id,
+    id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id,
     artifact_kind, payload_schema_version, state, priority, available_at,
     attempt_limit, journey_id, traceparent, tracestate
 )
-select $1, 'transcription-finalize-' || t.id::text, t.tenant_id, t.session_id,
+select $1, 'transcription-finalize-' || t.id::text, t.tenant_id, t.episode_id,
     t.recording_id, t.id, 'transcription_finalize', 1, 'pending', $2,
     $3, $4, $5,
     $6, $7
@@ -428,7 +428,7 @@ where t.id = $8
   and exists (select 1 from transcript_chunks c where c.transcript_id = t.id)
   and not exists (select 1 from artifact_jobs j where j.transcript_id = t.id and j.artifact_kind = 'transcription_chunk' and j.state <> 'completed')
 on conflict (tenant_id, idempotency_key) do nothing
-returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 
 type CreateTranscriptionFinalizerJobIfReadyParams struct {
@@ -458,7 +458,7 @@ func (q *Queries) CreateTranscriptionFinalizerJobIfReady(ctx context.Context, ar
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -485,7 +485,7 @@ func (q *Queries) CreateTranscriptionFinalizerJobIfReady(ctx context.Context, ar
 }
 
 const getArtifactJob = `-- name: GetArtifactJob :one
-select id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs where id = $1
+select id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs where id = $1
 `
 
 func (q *Queries) GetArtifactJob(ctx context.Context, id pgtype.UUID) (ArtifactJob, error) {
@@ -495,7 +495,7 @@ func (q *Queries) GetArtifactJob(ctx context.Context, id pgtype.UUID) (ArtifactJ
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -522,7 +522,7 @@ func (q *Queries) GetArtifactJob(ctx context.Context, id pgtype.UUID) (ArtifactJ
 }
 
 const getArtifactJobByIdempotency = `-- name: GetArtifactJobByIdempotency :one
-select id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
+select id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
 where tenant_id = $1 and idempotency_key = $2
 `
 
@@ -538,7 +538,7 @@ func (q *Queries) GetArtifactJobByIdempotency(ctx context.Context, arg GetArtifa
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -565,7 +565,7 @@ func (q *Queries) GetArtifactJobByIdempotency(ctx context.Context, arg GetArtifa
 }
 
 const getTranscriptionChunkJob = `-- name: GetTranscriptionChunkJob :one
-select id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
+select id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
 where transcript_id = $1 and artifact_kind = 'transcription_chunk'
 order by created_at asc, id asc
 limit 1
@@ -578,7 +578,7 @@ func (q *Queries) GetTranscriptionChunkJob(ctx context.Context, transcriptID pgt
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -610,7 +610,7 @@ set lease_expires_at = $1, updated_at = now()
 where id = $2 and state = 'leased' and attempt_count = $3
   and lease_owner = $4 and lease_token_hash = $5
   and lease_expires_at > $6::timestamptz
-returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 
 type HeartbeatArtifactJobParams struct {
@@ -636,7 +636,7 @@ func (q *Queries) HeartbeatArtifactJob(ctx context.Context, arg HeartbeatArtifac
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -663,7 +663,7 @@ func (q *Queries) HeartbeatArtifactJob(ctx context.Context, arg HeartbeatArtifac
 }
 
 const listTranscriptionChunkJobs = `-- name: ListTranscriptionChunkJobs :many
-select id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
+select id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
 where transcript_id = $1
   and artifact_kind = 'transcription_chunk'
 order by created_at asc, id asc
@@ -682,7 +682,7 @@ func (q *Queries) ListTranscriptionChunkJobs(ctx context.Context, transcriptID p
 			&i.ID,
 			&i.IdempotencyKey,
 			&i.TenantID,
-			&i.SessionID,
+			&i.EpisodeID,
 			&i.RecordingID,
 			&i.TranscriptID,
 			&i.ChunkID,
@@ -716,7 +716,7 @@ func (q *Queries) ListTranscriptionChunkJobs(ctx context.Context, transcriptID p
 }
 
 const listTranscriptionFinalizerJobs = `-- name: ListTranscriptionFinalizerJobs :many
-select id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
+select id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at from artifact_jobs
 where transcript_id = $1
   and artifact_kind = 'transcription_finalize'
 order by created_at asc, id asc
@@ -735,7 +735,7 @@ func (q *Queries) ListTranscriptionFinalizerJobs(ctx context.Context, transcript
 			&i.ID,
 			&i.IdempotencyKey,
 			&i.TenantID,
-			&i.SessionID,
+			&i.EpisodeID,
 			&i.RecordingID,
 			&i.TranscriptID,
 			&i.ChunkID,
@@ -777,7 +777,7 @@ with updated as (
         lease_expires_at = null, terminal_at = case when attempt_count >= attempt_limit then now() else null end,
         updated_at = now()
     where state = 'leased' and lease_expires_at <= $2::timestamptz
-    returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+    returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 ), failed as (
     select id, transcript_id from updated
     where state = 'dead_letter' and transcript_id is not null
@@ -805,7 +805,7 @@ with updated as (
       and j.state in ('pending', 'retryable', 'leased')
       and exists (select 1 from projected p where p.id = j.transcript_id)
 )
-select artifact_jobs.id, artifact_jobs.idempotency_key, artifact_jobs.tenant_id, artifact_jobs.session_id, artifact_jobs.recording_id, artifact_jobs.transcript_id, artifact_jobs.chunk_id, artifact_jobs.artifact_kind, artifact_jobs.payload_schema_version, artifact_jobs.state, artifact_jobs.priority, artifact_jobs.available_at, artifact_jobs.attempt_count, artifact_jobs.attempt_limit, artifact_jobs.lease_token_hash, artifact_jobs.lease_owner, artifact_jobs.lease_expires_at, artifact_jobs.error_code, artifact_jobs.error_detail, artifact_jobs.journey_id, artifact_jobs.traceparent, artifact_jobs.tracestate, artifact_jobs.terminal_at, artifact_jobs.updated_at, artifact_jobs.created_at from artifact_jobs
+select artifact_jobs.id, artifact_jobs.idempotency_key, artifact_jobs.tenant_id, artifact_jobs.episode_id, artifact_jobs.recording_id, artifact_jobs.transcript_id, artifact_jobs.chunk_id, artifact_jobs.artifact_kind, artifact_jobs.payload_schema_version, artifact_jobs.state, artifact_jobs.priority, artifact_jobs.available_at, artifact_jobs.attempt_count, artifact_jobs.attempt_limit, artifact_jobs.lease_token_hash, artifact_jobs.lease_owner, artifact_jobs.lease_expires_at, artifact_jobs.error_code, artifact_jobs.error_detail, artifact_jobs.journey_id, artifact_jobs.traceparent, artifact_jobs.tracestate, artifact_jobs.terminal_at, artifact_jobs.updated_at, artifact_jobs.created_at from artifact_jobs
 where artifact_jobs.id in (select id from updated)
 `
 
@@ -827,7 +827,7 @@ func (q *Queries) RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExp
 			&i.ID,
 			&i.IdempotencyKey,
 			&i.TenantID,
-			&i.SessionID,
+			&i.EpisodeID,
 			&i.RecordingID,
 			&i.TranscriptID,
 			&i.ChunkID,
@@ -865,7 +865,7 @@ update artifact_jobs
 set state = 'retryable', available_at = $1, error_code = null,
     error_detail = null, terminal_at = null, updated_at = now()
 where id = $2 and state = 'dead_letter'
-returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 `
 
 type RequeueArtifactJobParams struct {
@@ -880,7 +880,7 @@ func (q *Queries) RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJob
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,
@@ -917,7 +917,7 @@ with updated as (
     where artifact_jobs.id = $5 and artifact_jobs.state = 'leased' and artifact_jobs.attempt_count = $6
       and artifact_jobs.lease_owner = $7 and artifact_jobs.lease_token_hash = $8
       and artifact_jobs.lease_expires_at > $9::timestamptz
-    returning id, idempotency_key, tenant_id, session_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
+    returning id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, chunk_id, artifact_kind, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token_hash, lease_owner, lease_expires_at, error_code, error_detail, journey_id, traceparent, tracestate, terminal_at, updated_at, created_at
 ), failed as (
     select id, transcript_id from updated
     where state = 'dead_letter' and transcript_id is not null
@@ -945,7 +945,7 @@ with updated as (
       and j.state in ('pending', 'retryable', 'leased')
       and exists (select 1 from projected p where p.id = j.transcript_id)
 )
-select artifact_jobs.id, artifact_jobs.idempotency_key, artifact_jobs.tenant_id, artifact_jobs.session_id, artifact_jobs.recording_id, artifact_jobs.transcript_id, artifact_jobs.chunk_id, artifact_jobs.artifact_kind, artifact_jobs.payload_schema_version, artifact_jobs.state, artifact_jobs.priority, artifact_jobs.available_at, artifact_jobs.attempt_count, artifact_jobs.attempt_limit, artifact_jobs.lease_token_hash, artifact_jobs.lease_owner, artifact_jobs.lease_expires_at, artifact_jobs.error_code, artifact_jobs.error_detail, artifact_jobs.journey_id, artifact_jobs.traceparent, artifact_jobs.tracestate, artifact_jobs.terminal_at, artifact_jobs.updated_at, artifact_jobs.created_at from artifact_jobs
+select artifact_jobs.id, artifact_jobs.idempotency_key, artifact_jobs.tenant_id, artifact_jobs.episode_id, artifact_jobs.recording_id, artifact_jobs.transcript_id, artifact_jobs.chunk_id, artifact_jobs.artifact_kind, artifact_jobs.payload_schema_version, artifact_jobs.state, artifact_jobs.priority, artifact_jobs.available_at, artifact_jobs.attempt_count, artifact_jobs.attempt_limit, artifact_jobs.lease_token_hash, artifact_jobs.lease_owner, artifact_jobs.lease_expires_at, artifact_jobs.error_code, artifact_jobs.error_detail, artifact_jobs.journey_id, artifact_jobs.traceparent, artifact_jobs.tracestate, artifact_jobs.terminal_at, artifact_jobs.updated_at, artifact_jobs.created_at from artifact_jobs
 where artifact_jobs.id in (select id from updated)
 `
 
@@ -978,7 +978,7 @@ func (q *Queries) RetryArtifactJob(ctx context.Context, arg RetryArtifactJobPara
 		&i.ID,
 		&i.IdempotencyKey,
 		&i.TenantID,
-		&i.SessionID,
+		&i.EpisodeID,
 		&i.RecordingID,
 		&i.TranscriptID,
 		&i.ChunkID,

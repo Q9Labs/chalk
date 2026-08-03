@@ -7,7 +7,7 @@ defmodule ChalkSync.Webhooks.Event do
 
   @spec encode!(String.t(), String.t(), String.t(), DateTime.t(), map()) :: binary()
   def encode!(event_id, event_name, tenant_id, occurred_at, object)
-      when event_name in ["participant.joined", "participant.left", "session.ended"] do
+      when event_name in ["participant.joined", "participant.left", "episode.ended"] do
     validate_uuid!(event_id, :event_id)
     validate_uuid!(tenant_id, :tenant_id)
     validate_datetime!(occurred_at, :occurred_at)
@@ -47,9 +47,9 @@ defmodule ChalkSync.Webhooks.Event do
        when event_name in ["participant.joined", "participant.left"] do
     encode_fields([
       {"id", object.id},
-      {"user_id", object.user_id},
-      {"room_id", object.room_id},
-      {"session_id", object.session_id},
+      {"identity_id", object.identity_id},
+      {"space_id", object.space_id},
+      {"episode_id", object.episode_id},
       {"name", object.name},
       {"status", object.status},
       {"joined_at", nullable_timestamp(object.joined_at)},
@@ -57,10 +57,10 @@ defmodule ChalkSync.Webhooks.Event do
     ])
   end
 
-  defp encode_object("session.ended", object) do
+  defp encode_object("episode.ended", object) do
     encode_fields([
       {"id", object.id},
-      {"room_id", object.room_id},
+      {"space_id", object.space_id},
       {"status", object.status},
       {"started_at", nullable_timestamp(object.started_at)},
       {"ended_at", nullable_timestamp(object.ended_at)},
@@ -72,9 +72,9 @@ defmodule ChalkSync.Webhooks.Event do
   defp validate_object!(event_name, object)
        when event_name in ["participant.joined", "participant.left"] and is_map(object) do
     validate_uuid!(Map.get(object, :id), :participant_id)
-    validate_nullable_uuid!(Map.get(object, :user_id), :user_id)
-    validate_uuid!(Map.get(object, :room_id), :room_id)
-    validate_uuid!(Map.get(object, :session_id), :session_id)
+    validate_nullable_uuid!(Map.get(object, :identity_id), :identity_id)
+    validate_uuid!(Map.get(object, :space_id), :space_id)
+    validate_uuid!(Map.get(object, :episode_id), :episode_id)
 
     unless is_nil(Map.get(object, :name)) or is_binary(Map.get(object, :name)),
       do: invalid!(:name)
@@ -88,11 +88,11 @@ defmodule ChalkSync.Webhooks.Event do
     end
   end
 
-  defp validate_object!("session.ended", object) when is_map(object) do
-    validate_uuid!(Map.get(object, :id), :session_id)
-    validate_uuid!(Map.get(object, :room_id), :room_id)
+  defp validate_object!("episode.ended", object) when is_map(object) do
+    validate_uuid!(Map.get(object, :id), :episode_id)
+    validate_uuid!(Map.get(object, :space_id), :space_id)
 
-    unless Map.get(object, :status) == "ended", do: invalid!(:session_status)
+    unless Map.get(object, :status) == "ended", do: invalid!(:episode_status)
 
     Enum.each([:started_at, :ended_at, :created_at, :updated_at], fn field ->
       validate_datetime!(Map.get(object, field), field)

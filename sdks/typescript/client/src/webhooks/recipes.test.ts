@@ -9,8 +9,8 @@ const processor = createWebhookProcessor({
   handlers: {
     "endpoint.test": () => undefined,
     "participant.left": () => undefined,
-    "room.created": () => undefined,
-    "session.started": () => undefined,
+    "space.created": () => undefined,
+    "episode.started": () => undefined,
   },
   toleranceSeconds: Number.MAX_SAFE_INTEGER,
 });
@@ -37,7 +37,7 @@ const nodeHttpRecipe = async (request: AsyncIterable<Uint8Array> & { headers: Re
 
 describe("documented raw-body recipes", () => {
   it("processes Web Request and Next.js route shapes", async () => {
-    const fixture = await signedFixture("room.created");
+    const fixture = await signedFixture("space.created");
     for (const _runtime of ["web", "next"] as const) {
       const request = new Request("https://receiver.invalid/chalk", { method: "POST", headers: fixture.headers, body: fixture.rawBody });
       expect((await webRequestRecipe(request, processor)).status).toBe(200);
@@ -45,7 +45,7 @@ describe("documented raw-body recipes", () => {
   });
 
   it("processes the Node HTTP async-iterable shape", async () => {
-    const fixture = await signedFixture("session.started");
+    const fixture = await signedFixture("episode.started");
     const request = {
       headers: Object.fromEntries(fixture.headers),
       async *[Symbol.asyncIterator]() {

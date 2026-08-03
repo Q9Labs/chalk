@@ -13,16 +13,16 @@ const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const requestIds = Array.from({ length: 12 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
-describe("V1SyncClient room_actions_v2", () => {
+describe("V1SyncClient collaboration_v1", () => {
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveRoomActionsClient();
     expect(socket.frames()[0]).toMatchObject({
       type: "hello",
-      extensions: [{ name: "room_actions_v2", chat_cursor: { after_sequence: null, retained_floor_sequence: null } }],
+      extensions: [{ name: "collaboration_v1", chat_cursor: { after_sequence: null, retained_floor_sequence: null } }],
     });
     expect(client.getRoomActionsExtensionState()).toEqual({
       negotiated: true,
-      version: 2,
+      version: 1,
       capabilities: ["sendReaction", "sendChat"],
       chatHeadSequence: "8",
       retainedFloorSequence: "2",
@@ -46,7 +46,7 @@ describe("V1SyncClient room_actions_v2", () => {
     const reaction = client.sendReaction("🎉");
     const reactionRequest = socket.frames().at(-1)!;
     socket.receive({
-      type: "room_reaction_result",
+      type: "reaction_result",
       operation_id: reactionRequest.operation_id,
       outcome: "accepted",
       reaction: roomReaction(reactionRequest.operation_id as string),
@@ -70,8 +70,8 @@ describe("V1SyncClient room_actions_v2", () => {
       type: "chat_read_result",
       request_id: readRequest.request_id,
       outcome: "accepted",
-      participant_session_id: participantId,
-      participant_session_generation: 1,
+      participant_id: participantId,
+      participant_generation: 1,
       sequence: "9",
       read_at: "2026-07-29T12:01:00.000Z",
     });
@@ -146,7 +146,7 @@ async function liveRoomActionsClient(overrides: Partial<ConstructorParameters<ty
   await client.start();
   socket.open();
   await settle();
-  const { state } = await recover(socket, "room_actions_v2");
+  const { state } = await recover(socket, "collaboration_v1");
   expect(socket.closeCalls).toEqual([]);
   expect(client.getSnapshot()).toMatchObject({
     connection: { phase: "live" },
@@ -156,13 +156,13 @@ async function liveRoomActionsClient(overrides: Partial<ConstructorParameters<ty
   return { client, socket, state };
 }
 
-async function recover(socket: TestSocket, extensionVersion: "room_actions_v2") {
+async function recover(socket: TestSocket, extensionVersion: "collaboration_v1") {
   const state = await stateWithDigest();
   const welcome = {
     type: "welcome",
     protocol: 1,
-    participant_session_id: participantId,
-    participant_session_generation: 1,
+    participant_id: participantId,
+    participant_generation: 1,
     recovery_id: recoveryId,
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode: "snapshot",
@@ -179,8 +179,8 @@ async function recover(socket: TestSocket, extensionVersion: "room_actions_v2") 
         retained_floor_sequence: "2",
         read_receipts: [
           {
-            participant_session_id: peerId,
-            participant_session_generation: 1,
+            participant_id: peerId,
+            participant_generation: 1,
             sequence: "7",
             read_at: "2026-07-29T12:00:00.000Z",
           },
@@ -208,11 +208,9 @@ function baseState(): V1ControlState {
     stateDigest: "0".repeat(64),
     status: "active",
     admissionPolicy: "open",
-    hostExitPolicy: "require_transfer",
-    hostParticipantSessionId: participantId,
     deadlineAtMs: 99_999,
     deadlineGeneration: 1,
-    roleCapabilities: { host: ["publishAudio", "endMeeting"], cohost: ["publishAudio"], participant: ["subscribe"] },
+    roleCapabilities: { owner: ["publishAudio", "subscribe", "endEpisode"], collaborator: ["publishAudio"], observer: ["subscribe"] },
     recording: null,
     participants: [
       {
@@ -220,9 +218,8 @@ function baseState(): V1ControlState {
         displayName: "Host",
         handRaised: false,
         admissionRevision: 1,
-        role: "host",
-        eligibleRoles: ["host", "cohost"],
-        capabilities: ["publishAudio", "endMeeting"],
+        role: "owner",
+        capabilities: ["publishAudio", "subscribe", "endEpisode"],
       },
     ],
     admissionRequests: [],
@@ -241,19 +238,16 @@ function wireSnapshot(state: V1ControlState): Snapshot {
     state_digest: state.stateDigest,
     status: state.status,
     admission_policy: state.admissionPolicy,
-    host_exit_policy: state.hostExitPolicy,
-    host_participant_session_id: state.hostParticipantSessionId,
     deadline_at_ms: state.deadlineAtMs,
     deadline_generation: state.deadlineGeneration,
     role_capabilities: state.roleCapabilities,
     recording: null,
     participants: state.participants.map((participant) => ({
-      participant_session_id: participant.participantSessionId,
+      participant_id: participant.participantSessionId,
       display_name: participant.displayName,
       hand_raised: participant.handRaised,
       admission_revision: participant.admissionRevision,
       role: participant.role,
-      eligible_roles: participant.eligibleRoles,
       capabilities: participant.capabilities,
     })),
     admission_requests: [],
@@ -262,9 +256,9 @@ function wireSnapshot(state: V1ControlState): Snapshot {
 
 function roomReaction(id: string) {
   return {
-    type: "room_reaction",
+    type: "reaction",
     event_id: id,
-    participant_session_id: participantId,
+    participant_id: participantId,
     display_name: "Host",
     reaction: "🎉",
     occurred_at: "2026-07-29T12:00:00.000Z",
@@ -278,7 +272,7 @@ function chatMessage(sequence: string, clientMessageId: string, attachments: rea
     message_id: requestIds[0]!,
     client_message_id: clientMessageId,
     sequence,
-    participant_session_id: participantId,
+    participant_id: participantId,
     display_name: "Host",
     text: attachments.length === 0 ? "Hello" : "",
     attachments: attachments.map((attachment) => ({

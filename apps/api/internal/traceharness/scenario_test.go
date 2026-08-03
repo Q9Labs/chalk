@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/q9labs/chalk/apps/api/internal/sessionlifecycle"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 )
 
@@ -50,8 +50,8 @@ func TestRunCreateTenantScenario(t *testing.T) {
 	assertEvent(t, result.Events, "database", "INSERT tenants RETURNING *")
 }
 
-func TestRunRouteRoomCreateMemberScenario(t *testing.T) {
-	result, err := Run(context.Background(), RouteRoomCreateMemberScenario)
+func TestRunRouteSpaceCreateMemberScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteSpaceCreateMemberScenario)
 	if err != nil {
 		t.Fatalf("run scenario: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRunRouteRoomCreateMemberScenario(t *testing.T) {
 
 	var body struct {
 		Name       string `json:"name"`
-		Status     string `json:"status"`
+		Slug       string `json:"slug"`
 		MediaPlane string `json:"media_plane"`
 	}
 	if err := json.Unmarshal(result.Body, &body); err != nil {
@@ -71,23 +71,23 @@ func TestRunRouteRoomCreateMemberScenario(t *testing.T) {
 	if body.Name != "Daily Review" {
 		t.Fatalf("name = %q, want Daily Review", body.Name)
 	}
-	if body.Status != "active" {
-		t.Fatalf("status = %q, want active", body.Status)
+	if body.Slug != "daily-review" {
+		t.Fatalf("slug = %q, want daily-review", body.Slug)
 	}
 	if body.MediaPlane != "cf_rtk" {
 		t.Fatalf("media_plane = %q, want cf_rtk", body.MediaPlane)
 	}
 
-	assertEvent(t, result.Events, "http", "POST /v1/tenants/"+tenantID().String()+"/rooms")
+	assertEvent(t, result.Events, "http", "POST /v1/tenants/"+tenantID().String()+"/spaces")
 	assertEvent(t, result.Events, "auth", "AuthenticateSession")
 	assertEvent(t, result.Events, "repository", "MembershipRepository.GetTenantMembershipForUser")
-	assertEvent(t, result.Events, "service", "rooms.Service.CreateRoom")
-	assertEvent(t, result.Events, "repository", "RoomRepository.CreateRoom")
-	assertEvent(t, result.Events, "database", "INSERT rooms RETURNING *")
+	assertEvent(t, result.Events, "service", "spaces.Service.CreateSpace")
+	assertEvent(t, result.Events, "repository", "SpaceRepository.CreateSpace")
+	assertEvent(t, result.Events, "database", "INSERT spaces RETURNING *")
 }
 
-func TestRunRouteSessionCreateMemberScenario(t *testing.T) {
-	result, err := Run(context.Background(), RouteSessionCreateMemberScenario)
+func TestRunRouteEpisodeCreateMemberScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteEpisodeCreateMemberScenario)
 	if err != nil {
 		t.Fatalf("run scenario: %v", err)
 	}
@@ -102,20 +102,82 @@ func TestRunRouteSessionCreateMemberScenario(t *testing.T) {
 	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if body.ID == "" || body.Status != sessionlifecycle.SessionStatusActive {
+	if body.ID == "" || body.Status != episodes.EpisodeStatusActive {
 		t.Fatalf("body = %#v", body)
 	}
 
-	assertEvent(t, result.Events, "service", "sessionlifecycle.Service.CreateSession")
-	assertEvent(t, result.Events, "repository", "SessionLifecycleRepository.CreateSession")
-	assertEvent(t, result.Events, "database", "INSERT session_create_requests")
-	assertEvent(t, result.Events, "database", "INSERT room_sessions")
-	assertEvent(t, result.Events, "database", "INSERT sync_session_control")
+	assertEvent(t, result.Events, "service", "episodes.Service.CreateEpisode")
+	assertEvent(t, result.Events, "repository", "EpisodeLifecycleRepository.CreateEpisode")
+	assertEvent(t, result.Events, "database", "INSERT episode_create_requests")
+	assertEvent(t, result.Events, "database", "INSERT episodes")
+	assertEvent(t, result.Events, "database", "INSERT sync_episode_control")
 	assertEvent(t, result.Events, "database", "COMMIT")
 }
 
-func TestRunRouteSessionEndMemberScenario(t *testing.T) {
-	result, err := Run(context.Background(), RouteSessionEndMemberScenario)
+func TestRunRouteEpisodeAdmitMemberScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteEpisodeAdmitMemberScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
+	}
+	var body struct {
+		Participant struct {
+			ID        string `json:"id"`
+			SpaceID   string `json:"space_id"`
+			EpisodeID string `json:"episode_id"`
+			Status    string `json:"status"`
+		} `json:"participant"`
+		Intent struct {
+			RequestKey string `json:"request_key"`
+			Status     string `json:"status"`
+		} `json:"lifecycle_intent"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Participant.ID == "" || body.Participant.SpaceID != spaceID().String() || body.Participant.EpisodeID != lifecycleEpisodeID().String() || body.Participant.Status != episodes.ParticipantStatusActive {
+		t.Fatalf("body = %#v", body)
+	}
+	if body.Intent.RequestKey != "episode-admit-trace-0001" || body.Intent.Status != episodes.IntentStatusPending {
+		t.Fatalf("intent = %#v", body.Intent)
+	}
+}
+
+func TestRunRouteEpisodeRemoveParticipantScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteEpisodeRemoveParticipantScenario)
+	if err != nil {
+		t.Fatalf("run scenario: %v", err)
+	}
+	if result.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusAccepted)
+	}
+	var body struct {
+		Participant struct {
+			ID         string `json:"id"`
+			Generation int64  `json:"generation"`
+			Status     string `json:"status"`
+		} `json:"participant"`
+		Operation struct {
+			RequestKey    string `json:"request_key"`
+			OperationName string `json:"operation_name"`
+			Status        string `json:"status"`
+		} `json:"external_operation"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Participant.ID != participantID().String() || body.Participant.Generation != 1 || body.Participant.Status != episodes.ParticipantStatusLeaving {
+		t.Fatalf("participant = %#v", body.Participant)
+	}
+	if body.Operation.RequestKey != "episode-remove-trace-0001" || body.Operation.OperationName != episodes.OperationRemoveParticipant || body.Operation.Status != episodes.IntentStatusPending {
+		t.Fatalf("operation = %#v", body.Operation)
+	}
+}
+
+func TestRunRouteEpisodeEndScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteEpisodeEndScenario)
 	if err != nil {
 		t.Fatalf("run scenario: %v", err)
 	}
@@ -133,29 +195,36 @@ func TestRunRouteSessionEndMemberScenario(t *testing.T) {
 	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if body.Status != "ending" || body.Operation.RequestKey != "session-end-trace-0001" || body.Operation.Status != "pending" {
+	if body.Status != episodes.EpisodeStatusEnding || body.Operation.RequestKey != "episode-end-trace-0001" || body.Operation.Status != episodes.IntentStatusPending {
 		t.Fatalf("body = %#v", body)
 	}
 
-	assertEvent(t, result.Events, "service", "sessionlifecycle.Service.RequestSessionEnd")
-	assertEvent(t, result.Events, "repository", "SessionLifecycleRepository.RequestSessionEnd")
-	assertEvent(t, result.Events, "database", "SET LOCAL synchronous_commit = on")
-	assertEvent(t, result.Events, "database", "INSERT sync_external_operations")
-	assertEvent(t, result.Events, "database", "UPDATE room_sessions SET status = ending")
-	assertEvent(t, result.Events, "database", "COMMIT")
+	assertEvent(t, result.Events, "service", "episodes.Service.RequestEpisodeEnd")
 }
 
-func TestRunRouteSessionSyncTokenScenario(t *testing.T) {
-	result, err := Run(context.Background(), RouteSessionSyncTokenScenario)
+func TestRunRouteEpisodeDeadlineScenario(t *testing.T) {
+	result, err := Run(context.Background(), RouteEpisodeDeadlineScenario)
 	if err != nil {
 		t.Fatalf("run scenario: %v", err)
 	}
-	if result.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusCreated)
+	if result.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusAccepted)
 	}
-	assertEvent(t, result.Events, "service", "synctokens.Broker.IssueForParticipant")
-	assertEvent(t, result.Events, "database", "SELECT active sync token subject")
-	assertEvent(t, result.Events, "crypto", "Ed25519 sign JWT")
+	var body struct {
+		Status    string `json:"status"`
+		Operation struct {
+			RequestKey         string `json:"request_key"`
+			OperationName      string `json:"operation_name"`
+			DeadlineGeneration int64  `json:"deadline_generation"`
+			Status             string `json:"status"`
+		} `json:"external_operation"`
+	}
+	if err := json.Unmarshal(result.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Status != episodes.EpisodeStatusActive || body.Operation.RequestKey != "episode-deadline-trace-0001" || body.Operation.OperationName != episodes.OperationTenantSetDeadline || body.Operation.DeadlineGeneration != 2 || body.Operation.Status != episodes.IntentStatusPending {
+		t.Fatalf("body = %#v", body)
+	}
 }
 
 func TestRunRouteRecordingTranscribeScenario(t *testing.T) {

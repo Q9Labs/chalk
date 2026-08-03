@@ -570,7 +570,7 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  tools/contract-codegen:
+  tools/contract-fixture-proof:
     devDependencies:
       '@typespec/compiler':
         specifier: 1.13.0

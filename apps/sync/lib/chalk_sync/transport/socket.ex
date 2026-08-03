@@ -7,17 +7,18 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   alias ChalkSync.Auth.Claims
   alias ChalkSync.Auth.TokenVerifier
+  alias ChalkSync.Chat
+  alias ChalkSync.Episodes.CommandIntake
+  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
-  alias ChalkSync.RoomActions
-  alias ChalkSync.RoomActions.OutboundQueue, as: RoomActionQueue
-  alias ChalkSync.Sessions.CommandAdmission
-  alias ChalkSync.Sessions.Coordinator
+  alias ChalkSync.Reactions
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.Command
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Operation
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
   alias ChalkSync.UUID
 
   @hello_timeout_ms 5_000
@@ -47,9 +48,9 @@ defmodule ChalkSync.Transport.SocketV1 do
        identity: nil,
        coordinator: nil,
        commands: %{},
-       room_actions_negotiated: false,
-       room_actions_version: nil,
-       room_actions_queue: RoomActionQueue.new(),
+       collaboration_negotiated: false,
+       collaboration_version: nil,
+       collaboration_queue: CollaborationQueue.new(),
        observability: observability
      }}
   end
@@ -123,7 +124,7 @@ defmodule ChalkSync.Transport.SocketV1 do
     state
     |> Map.put(:phase, :live)
     |> start_heartbeat()
-    |> push_room_action()
+    |> push_collaboration()
   end
 
   def handle_info({:sync_recovery_live, _coordinator}, state), do: {:ok, state}
@@ -143,31 +144,31 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   def handle_info(
-        {:room_action_frame, %{"type" => "chat_read_receipt"}},
-        %{room_actions_version: version} = state
+        {:collaboration_frame, %{"type" => "chat_read_receipt"}},
+        %{collaboration_version: version} = state
       )
-      when version != 2,
+      when version != 1,
       do: {:ok, state}
 
   def handle_info(
-        {:room_action_frame, frame},
-        %{phase: :live, room_actions_negotiated: true} = state
+        {:collaboration_frame, frame},
+        %{phase: :live, collaboration_negotiated: true} = state
       ),
-      do: enqueue_room_action(frame, state)
+      do: enqueue_collaboration(frame, state)
 
   def handle_info(
-        {:room_action_frame, %{"type" => "chat_read_receipt"} = frame},
+        {:collaboration_frame, %{"type" => "chat_read_receipt"} = frame},
         %{
           phase: :recovering,
-          room_actions_negotiated: true,
-          room_actions_version: 2
+          collaboration_negotiated: true,
+          collaboration_version: 1
         } = state
       ),
-      do: buffer_room_action(frame, state)
+      do: buffer_collaboration(frame, state)
 
-  def handle_info({:room_action_frame, _frame}, state), do: {:ok, state}
+  def handle_info({:collaboration_frame, _frame}, state), do: {:ok, state}
 
-  def handle_info(:room_actions_drain, state), do: push_room_action(state)
+  def handle_info(:collaboration_drain, state), do: push_collaboration(state)
 
   def handle_info(
         {:sync_recovery_advance, coordinator},
@@ -204,8 +205,8 @@ defmodule ChalkSync.Transport.SocketV1 do
   def terminate(_reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
     cancel_timer(state.heartbeat_timer)
     cancel_timer(state.terminal_ack_timer)
-    unsubscribe_room_actions(state)
-    RoomActionQueue.close(state.room_actions_queue)
+    unsubscribe_collaboration(state)
+    CollaborationQueue.close(state.collaboration_queue)
     Coordinator.unsubscribe(coordinator, self())
 
     Observability.terminal(state.observability, "sync.websocket.closed", %{
@@ -219,8 +220,8 @@ defmodule ChalkSync.Transport.SocketV1 do
   def terminate(_reason, state) do
     cancel_timer(state.heartbeat_timer)
     cancel_timer(state.terminal_ack_timer)
-    unsubscribe_room_actions(state)
-    RoomActionQueue.close(state.room_actions_queue)
+    unsubscribe_collaboration(state)
+    CollaborationQueue.close(state.collaboration_queue)
 
     Observability.terminal(state.observability, "sync.websocket.closed", %{
       protocol: 1,
@@ -238,11 +239,11 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:ok, identity} <- identity(claims),
          {:ok, _lifecycle} <-
            Stateholder.apply_lifecycle_intent(
-             identity.session,
+             identity.episode,
              identity.admission_lifecycle_intent_id
            ),
-         {:ok, protocol_options, negotiated?, room_actions_version} <-
-           negotiate_room_actions(identity, Map.get(hello, :room_actions)),
+         {:ok, protocol_options, negotiated?, collaboration_version} <-
+           negotiate_collaboration(identity, Map.get(hello, :collaboration)),
          {:ok, coordinator} <-
            Coordinator.begin_recovery(identity, self(), protocol_options) do
       start_registered_recovery(
@@ -251,7 +252,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         cursor,
         coordinator,
         negotiated?,
-        room_actions_version
+        collaboration_version
       )
     else
       {:error, :invalid_token} ->
@@ -339,7 +340,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame({:command, command}, %{phase: :live, identity: identity} = state) do
     with {:ok, durable_command} <-
            Command.new(command.command_id, command.name, command.payload),
-         {:ok, lease} <- CommandAdmission.submit(identity, durable_command) do
+         {:ok, lease} <- CommandIntake.submit(identity, durable_command) do
       {:ok, %{state | commands: Map.put(state.commands, lease, command.command_id)}}
     else
       {:error, :overloaded} ->
@@ -426,12 +427,12 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: protocol_error(:recovery_required, state)
 
   defp handle_frame(
-         {:room_reaction_send, input},
-         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+         {:reaction_send, input},
+         %{phase: :live, identity: identity, collaboration_negotiated: true} = state
        ) do
-    with {:ok, frame} <- RoomActions.send_reaction(identity, input) do
-      state = observe_room_action(state, "reaction.send", frame["outcome"])
-      enqueue_room_action(frame, state)
+    with {:ok, frame} <- Reactions.send(identity, input) do
+      state = observe_collaboration(state, "reaction.send", frame["outcome"])
+      enqueue_collaboration(frame, state)
     end
   end
 
@@ -440,45 +441,45 @@ defmodule ChalkSync.Transport.SocketV1 do
          %{
            phase: :live,
            identity: identity,
-           room_actions_negotiated: true,
-           room_actions_version: 2
+           collaboration_negotiated: true,
+           collaboration_version: 1
          } = state
        ) do
-    with {:ok, frame} <- RoomActions.mark_chat_read(identity, input) do
-      state = observe_room_action(state, "chat.read", frame["outcome"])
-      enqueue_room_action(frame, state)
+    with {:ok, frame} <- Chat.mark_chat_read(identity, input) do
+      state = observe_collaboration(state, "chat.read", frame["outcome"])
+      enqueue_collaboration(frame, state)
     end
   end
 
   defp handle_frame(
          {:chat_send, input},
-         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+         %{phase: :live, identity: identity, collaboration_negotiated: true} = state
        ) do
     with {:ok, frame} <-
-           RoomActions.send_chat(identity, input, version: state.room_actions_version) do
-      state = observe_room_action(state, "chat.send", frame["outcome"])
-      enqueue_room_action(frame, state)
+           Chat.send_chat(identity, input, version: state.collaboration_version) do
+      state = observe_collaboration(state, "chat.send", frame["outcome"])
+      enqueue_collaboration(frame, state)
     end
   end
 
   defp handle_frame(
          {:chat_page_request, input},
-         %{phase: :live, identity: identity, room_actions_negotiated: true} = state
+         %{phase: :live, identity: identity, collaboration_negotiated: true} = state
        ) do
-    case RoomActions.read_chat_page(identity, input, version: state.room_actions_version) do
+    case Chat.read_chat_page(identity, input, version: state.collaboration_version) do
       {:ok, frame} ->
-        state = observe_room_action(state, "chat.page", frame["outcome"])
-        enqueue_room_action(frame, state, :chat_page)
+        state = observe_collaboration(state, "chat.page", frame["outcome"])
+        enqueue_collaboration(frame, state, :chat_page)
 
       {:error, reason} ->
-        state = observe_room_action(state, "chat.page", "failed")
+        state = observe_collaboration(state, "chat.page", "failed")
         protocol_error(reason, state)
     end
   end
 
   defp handle_frame({name, _input}, state)
-       when name in [:room_reaction_send, :chat_send, :chat_page_request, :chat_read_set],
-       do: protocol_error(:room_actions_not_negotiated, state)
+       when name in [:reaction_send, :chat_send, :chat_page_request, :chat_read_set],
+       do: protocol_error(:collaboration_not_negotiated, state)
 
   defp handle_frame(:ping, state), do: {:push, {:text, ProtocolV1.pong()}, state}
 
@@ -487,8 +488,8 @@ defmodule ChalkSync.Transport.SocketV1 do
          identity,
          cursor,
          coordinator,
-         room_actions_negotiated,
-         room_actions_version
+         collaboration_negotiated,
+         collaboration_version
        ) do
     with {:ok, recovery} <- Stateholder.recover(identity, cursor),
          :ok <-
@@ -507,10 +508,13 @@ defmodule ChalkSync.Transport.SocketV1 do
            hello_timer: nil,
            identity: identity,
            coordinator: coordinator,
-           room_actions_negotiated: room_actions_negotiated,
-           room_actions_version: room_actions_version
+           collaboration_negotiated: collaboration_negotiated,
+           collaboration_version: collaboration_version
        }
-       |> observe_room_action("extension.negotiate", negotiation_outcome(room_actions_negotiated))}
+       |> observe_collaboration(
+         "extension.negotiate",
+         negotiation_outcome(collaboration_negotiated)
+       )}
     else
       {:error, reason} ->
         Coordinator.unsubscribe(coordinator, self())
@@ -530,7 +534,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         pending_command_result(command_id, event, state)
 
       {:ok, decision} ->
-        if is_map(decision.event), do: Coordinator.publish(state.identity.session, decision.event)
+        if is_map(decision.event), do: Coordinator.publish(state.identity.episode, decision.event)
         {:push, {:text, ProtocolV1.ack(decision)}, state}
 
       {:retryable, reason} ->
@@ -539,7 +543,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp pending_command_result(command_id, event, state) do
-    case Coordinator.publish_pending(state.identity.session, event, self()) do
+    case Coordinator.publish_pending(state.identity.episode, event, self()) do
       {:ok, event_frames} ->
         pending = ProtocolV1.operation_pending(command_id)
         {:push, Enum.map(event_frames ++ [pending], &{:text, &1}), state}
@@ -563,26 +567,25 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp identity(%Claims{} = claims) do
     with {:ok, _tenant} <- UUID.dump(claims.tenant_id),
-         {:ok, _room} <- UUID.dump(claims.room_id),
-         {:ok, _session} <- UUID.dump(claims.session_id),
-         {:ok, _participant} <- UUID.dump(claims.participant_session_id),
+         {:ok, _space} <- UUID.dump(claims.space_id),
+         {:ok, _episode} <- UUID.dump(claims.episode_id),
+         {:ok, _participant} <- UUID.dump(claims.participant_id),
          {:ok, _intent} <- UUID.dump(claims.admission_lifecycle_intent_id),
          generation when is_integer(generation) and generation > 0 <-
-           claims.participant_session_generation,
+           claims.participant_generation,
          {:ok, authorization} <- identity_authorization(claims) do
       {:ok,
        %Identity{
-         session: %SessionKey{
+         episode: %EpisodeKey{
            tenant_id: String.downcase(claims.tenant_id),
-           room_id: String.downcase(claims.room_id),
-           session_id: String.downcase(claims.session_id)
+           space_id: String.downcase(claims.space_id),
+           episode_id: String.downcase(claims.episode_id)
          },
-         participant_session_id: String.downcase(claims.participant_session_id),
-         participant_session_generation: generation,
+         participant_id: String.downcase(claims.participant_id),
+         participant_generation: generation,
          admission_lifecycle_intent_id: String.downcase(claims.admission_lifecycle_intent_id),
          protocol_version: 1,
          role: authorization.role,
-         eligible_roles: authorization.eligible_roles,
          capabilities: authorization.capabilities
        }}
     else
@@ -591,10 +594,10 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp identity_authorization(%Claims{} = claims) do
-    if Claims.valid_role_envelope?(claims.initial_role, claims.eligible_roles) do
-      {:ok, %{role: claims.initial_role, eligible_roles: claims.eligible_roles, capabilities: []}}
+    if Claims.valid_authorization?(claims.role, claims.capabilities) do
+      {:ok, %{role: claims.role, capabilities: claims.capabilities}}
     else
-      {:error, :invalid_role_envelope}
+      {:error, :invalid_authorization}
     end
   end
 
@@ -643,48 +646,48 @@ defmodule ChalkSync.Transport.SocketV1 do
     Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5_000) + 1_000
   end
 
-  defp negotiate_room_actions(_identity, nil), do: {:ok, %{}, false, nil}
+  defp negotiate_collaboration(_identity, nil), do: {:ok, %{}, false, nil}
 
-  defp negotiate_room_actions(identity, chat_cursor) do
-    case RoomActions.negotiate(identity, chat_cursor, self()) do
+  defp negotiate_collaboration(identity, chat_cursor) do
+    case Chat.negotiate(identity, chat_cursor, self()) do
       {:ok, extension} ->
-        {:ok, %{room_actions_extension: extension}, true, 2}
+        {:ok, %{collaboration_extension: extension}, true, 1}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp enqueue_room_action(frame, state, kind \\ :frame) do
+  defp enqueue_collaboration(frame, state, kind \\ :frame) do
     encoded = ProtocolV1.encode!(frame)
 
-    case RoomActionQueue.push(state.room_actions_queue, encoded, kind: kind) do
+    case CollaborationQueue.push(state.collaboration_queue, encoded, kind: kind) do
       :ok ->
-        push_room_action(state)
+        push_collaboration(state)
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+        {:stop, :normal, {1012, "space action delivery recovery required"}, state}
     end
   end
 
-  defp buffer_room_action(frame, state) do
+  defp buffer_collaboration(frame, state) do
     encoded = ProtocolV1.encode!(frame)
 
-    case RoomActionQueue.push(state.room_actions_queue, encoded) do
+    case CollaborationQueue.push(state.collaboration_queue, encoded) do
       :ok ->
         {:ok, state}
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+        {:stop, :normal, {1012, "space action delivery recovery required"}, state}
     end
   end
 
-  defp push_room_action(state) do
-    case RoomActionQueue.take(state.room_actions_queue, false) do
+  defp push_collaboration(state) do
+    case CollaborationQueue.take(state.collaboration_queue, false) do
       {:ok, %{encoded: encoded}} ->
-        case RoomActionQueue.stats(state.room_actions_queue) do
+        case CollaborationQueue.stats(state.collaboration_queue) do
           {:ok, %{queued_frames: queued}} when queued > 0 ->
-            send(self(), :room_actions_drain)
+            send(self(), :collaboration_drain)
 
           _other ->
             :ok
@@ -696,7 +699,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:ok, state}
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "room action delivery recovery required"}, state}
+        {:stop, :normal, {1012, "space action delivery recovery required"}, state}
 
       :control_required ->
         {:ok, state}
@@ -704,22 +707,22 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp mark_control_checked(state) do
-    _result = RoomActionQueue.control_checked(state.room_actions_queue)
+    _result = CollaborationQueue.control_checked(state.collaboration_queue)
     state
   end
 
-  defp unsubscribe_room_actions(%{
+  defp unsubscribe_collaboration(%{
          identity: %Identity{} = identity,
-         room_actions_negotiated: true
+         collaboration_negotiated: true
        }) do
-    RoomActions.unsubscribe(identity, self())
+    Chat.unsubscribe(identity, self())
   end
 
-  defp unsubscribe_room_actions(_state), do: :ok
+  defp unsubscribe_collaboration(_state), do: :ok
 
-  defp observe_room_action(state, operation, outcome) do
+  defp observe_collaboration(state, operation, outcome) do
     observability =
-      Observability.phase(state.observability, "sync.room_action", %{
+      Observability.phase(state.observability, "sync.collaboration", %{
         operation: operation,
         outcome: outcome
       })

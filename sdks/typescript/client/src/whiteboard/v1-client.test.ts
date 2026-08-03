@@ -219,8 +219,8 @@ function welcome(socket: TestSocket): void {
   socket.receive({
     type: "welcome",
     protocol: "whiteboard-v1",
-    participant_session_id: participantId,
-    participant_session_generation: 1,
+    participant_id: participantId,
+    participant_generation: 1,
     capabilities: ["drawWhiteboard", "manageWhiteboard"],
     participant_capabilities: ["drawWhiteboard", "manageWhiteboard"],
     scene_id: sceneId,

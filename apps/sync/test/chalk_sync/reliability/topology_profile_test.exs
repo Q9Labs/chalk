@@ -22,9 +22,9 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
     connection: connection
   } do
     write_schedule()
-    fixture = SyncPostgres.seed_session(connection, 2)
+    fixture = SyncPostgres.seed_episode(connection, 2)
     [identity_a, identity_b] = fixture.identities
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     {node_a, port_a} = start_node("topology-a")
     {_node_b, port_b} = start_node("topology-b")
@@ -99,7 +99,7 @@ defmodule ChalkSync.Reliability.TopologyProfileTest do
 
     author = Client.send_json(author, %{"type" => "cursor", "x" => 12, "y" => 24})
     {_observer, cursor} = Wire.receive_json_type(observer, "cursor")
-    assert cursor["participant_session_id"] == author_identity.participant_session_id
+    assert cursor["participant_id"] == author_identity.participant_id
     assert %Client{} = author
   end
 

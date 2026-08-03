@@ -1,6 +1,6 @@
 -- name: GetTenant :one
 select
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,
@@ -16,7 +16,7 @@ where id = $1;
 
 -- name: ListTenants :many
 select
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,
@@ -62,7 +62,7 @@ insert into tenants (
     sqlc.narg(website)
 )
 returning
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,
@@ -112,7 +112,7 @@ set
     updated_at = now()
 where id = sqlc.arg(id)
 returning
-    id,
+    id::uuid as id,
     name,
     default_region,
     default_media_plane,

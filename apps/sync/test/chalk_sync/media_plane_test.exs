@@ -2,7 +2,7 @@ defmodule ChalkSync.MediaPlaneTest do
   use ExUnit.Case, async: true
 
   alias ChalkSync.Live.MediaPlaneTestAdapter
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
 
   test "exposes permission and observation controls without a remote capture-enable operation" do
     callbacks = ChalkSync.MediaPlane.behaviour_info(:callbacks)
@@ -10,8 +10,8 @@ defmodule ChalkSync.MediaPlaneTest do
     assert {:grant_publication, 5} in callbacks
     assert {:revoke_publication, 5} in callbacks
     assert {:remove_participant, 4} in callbacks
-    assert {:end_session, 3} in callbacks
-    assert {:observe_session_publications, 2} in callbacks
+    assert {:end_episode, 3} in callbacks
+    assert {:observe_episode_publications, 2} in callbacks
 
     refute Enum.any?(callbacks, fn {name, _arity} ->
              name in [:enable_capture, :force_publication]
@@ -19,7 +19,7 @@ defmodule ChalkSync.MediaPlaneTest do
   end
 
   test "test adapter preserves stable operation ids and scripted outcomes" do
-    session = session()
+    episode = episode()
 
     {:ok, adapter} =
       MediaPlaneTestAdapter.start_link(
@@ -30,20 +30,20 @@ defmodule ChalkSync.MediaPlaneTest do
              MediaPlaneTestAdapter.revoke_publication(
                adapter,
                "operation-000001",
-               session,
+               episode,
                "00000000-0000-4000-8000-000000000004",
                :camera
              )
 
-    assert [{:revoke_publication, "operation-000001", [^session, _, :camera]}] =
+    assert [{:revoke_publication, "operation-000001", [^episode, _, :camera]}] =
              MediaPlaneTestAdapter.calls(adapter)
   end
 
-  defp session do
-    %SessionKey{
+  defp episode do
+    %EpisodeKey{
       tenant_id: "00000000-0000-4000-8000-000000000001",
-      room_id: "00000000-0000-4000-8000-000000000002",
-      session_id: "00000000-0000-4000-8000-000000000003"
+      space_id: "00000000-0000-4000-8000-000000000002",
+      episode_id: "00000000-0000-4000-8000-000000000003"
     }
   end
 end

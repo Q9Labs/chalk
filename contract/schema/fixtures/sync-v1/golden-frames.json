@@ -1,39 +1,209 @@
 {
   "client_frames": [
-    { "type": "hello", "protocol": 1, "token": "signed-token", "streams": { "control": { "cursor": null }, "media": { "cursor": null }, "presence": { "cursor": null }, "requests": { "cursor": null } } },
-    { "type": "command", "command_id": "command-00000001", "name": "set_hand_raised", "payload": { "raised": true } },
-    { "type": "command", "command_id": "command-00000002", "name": "set_display_name", "payload": { "display_name": "Ada" } },
-    { "type": "command", "command_id": "command-00000003", "name": "set_admission_policy", "payload": { "policy": "approval" } },
-    { "type": "command", "command_id": "command-00000004", "name": "set_participant_role", "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "role": "cohost" } },
-    { "type": "command", "command_id": "command-00000005", "name": "transfer_host", "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" } },
-    { "type": "operation", "command_id": "operation-command-00", "name": "admit_participant", "payload": { "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30" } },
-    { "type": "operation", "command_id": "operation-command-01", "name": "deny_admission", "payload": { "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c32" } },
-    { "type": "operation", "command_id": "operation-command-02", "name": "mute_participant", "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" } },
-    { "type": "operation", "command_id": "operation-command-03", "name": "stop_participant_camera", "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" } },
-    { "type": "operation", "command_id": "operation-command-04", "name": "stop_participant_screen_share", "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" } },
-    { "type": "operation", "command_id": "operation-command-05", "name": "remove_participant", "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" } },
-    { "type": "operation", "command_id": "operation-command-06", "name": "start_recording", "payload": { "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34" } },
-    { "type": "operation", "command_id": "operation-command-07", "name": "stop_recording", "payload": { "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34" } },
-    { "type": "operation", "command_id": "operation-command-08", "name": "participant_leave", "payload": {} },
-    { "type": "operation", "command_id": "operation-command-09", "name": "end_session", "payload": {} },
-    { "type": "live_target", "operation_id": "operation-0000001", "name": "set_microphone_enabled", "enabled": true },
-    { "type": "directed_request", "request_id": "request-000000001", "name": "request_unmute", "target_participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-    { "type": "request_ack", "request_id": "request-000000001" },
-    { "type": "delivery_ack", "stream": "control", "revision": 18, "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    { "type": "recovery_ack", "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22", "revision": 0, "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    { "type": "room_reaction_send", "operation_id": "reaction-op-00001", "reaction": "🎉" },
-    { "type": "chat_send", "client_message_id": "chat-message-0001", "text": "Hello from Chalk", "attachment_ids": [] },
-    { "type": "chat_page_request", "request_id": "chat-page-req-001", "direction": "newer", "cursor_sequence": "41", "limit": 50 },
-    { "type": "ping" }
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000001",
+      "name": "set_hand_raised",
+      "payload": {
+        "raised": true
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000002",
+      "name": "set_display_name",
+      "payload": {
+        "display_name": "Ada"
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000003",
+      "name": "set_admission_policy",
+      "payload": {
+        "policy": "knock"
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000004",
+      "name": "assign_roles",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "role": "collaborator"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-00",
+      "name": "admit_participant",
+      "payload": {
+        "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-01",
+      "name": "deny_admission",
+      "payload": {
+        "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c32"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-02",
+      "name": "mute_participant",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-03",
+      "name": "stop_participant_camera",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-04",
+      "name": "stop_participant_screen_share",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-05",
+      "name": "remove_participant",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-06",
+      "name": "start_recording",
+      "payload": {
+        "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-07",
+      "name": "stop_recording",
+      "payload": {
+        "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34"
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-08",
+      "name": "participant_leave",
+      "payload": {}
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-09",
+      "name": "start_episode",
+      "payload": {}
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-10",
+      "name": "extend_episode",
+      "payload": {
+        "extension_seconds": 60
+      }
+    },
+    {
+      "type": "operation",
+      "command_id": "operation-command-11",
+      "name": "end_episode",
+      "payload": {}
+    },
+    {
+      "type": "live_target",
+      "operation_id": "operation-0000001",
+      "name": "set_microphone_enabled",
+      "enabled": true
+    },
+    {
+      "type": "directed_request",
+      "request_id": "request-000000001",
+      "name": "request_unmute",
+      "target_participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+    },
+    {
+      "type": "request_ack",
+      "request_id": "request-000000001"
+    },
+    {
+      "type": "delivery_ack",
+      "stream": "control",
+      "revision": 18,
+      "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "type": "recovery_ack",
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "revision": 0,
+      "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "type": "reaction_send",
+      "operation_id": "reaction-op-00001",
+      "reaction": "🎉"
+    },
+    {
+      "type": "chat_send",
+      "client_message_id": "chat-message-0001",
+      "text": "Hello from Chalk",
+      "attachment_ids": []
+    },
+    {
+      "type": "chat_page_request",
+      "request_id": "chat-page-req-001",
+      "direction": "newer",
+      "cursor_sequence": "41",
+      "limit": 50
+    },
+    {
+      "type": "ping"
+    }
   ],
   "server_frames": [
     {
       "type": "welcome",
       "protocol": 1,
-      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
-      "participant_session_generation": 1,
+      "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_generation": 1,
       "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
-      "head": { "revision": 0, "state_schema_version": 1, "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      "head": {
+        "revision": 0,
+        "state_schema_version": 1,
+        "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
       "mode": "snapshot",
       "snapshot": {
         "control_revision": 0,
@@ -41,237 +211,49 @@
         "state_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "status": "active",
         "admission_policy": "open",
-        "host_exit_policy": "require_transfer",
-        "host_participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
         "deadline_at_ms": 30000,
         "deadline_generation": 1,
-        "role_capabilities": { "host": ["publishAudio", "endMeeting"], "cohost": ["publishAudio"], "participant": ["subscribe"] },
+        "role_capabilities": {
+          "owner": ["publishAudio", "endEpisode"],
+          "collaborator": ["publishAudio", "sendChat"],
+          "observer": ["subscribe", "sendReaction"]
+        },
         "recording": null,
         "participants": [
-          { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "display_name": "Ada", "hand_raised": false, "admission_revision": 1, "role": "host", "eligible_roles": ["host", "cohost"], "capabilities": ["publishAudio", "endMeeting"] },
-          { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27", "display_name": "Grace", "hand_raised": true, "admission_revision": 2, "role": "participant", "eligible_roles": ["participant"], "capabilities": ["subscribe"] }
+          {
+            "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+            "display_name": "Ada",
+            "hand_raised": false,
+            "admission_revision": 1,
+            "role": "owner",
+            "capabilities": ["publishAudio", "endEpisode"]
+          },
+          {
+            "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27",
+            "display_name": "Grace",
+            "hand_raised": true,
+            "admission_revision": 2,
+            "role": "observer",
+            "capabilities": ["subscribe", "sendReaction"]
+          }
         ],
         "admission_requests": [
-          { "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30", "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c31", "display_name": "Lin", "initial_role": "participant", "eligible_roles": ["participant"], "expires_at_ms": 45000 },
-          { "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c32", "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c33", "display_name": "Margaret", "initial_role": "cohost", "eligible_roles": ["cohost"], "expires_at_ms": 46000 }
+          {
+            "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30",
+            "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c31",
+            "display_name": "Lin",
+            "role": "observer",
+            "expires_at_ms": 45000
+          },
+          {
+            "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c32",
+            "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c33",
+            "display_name": "Margaret",
+            "role": "collaborator",
+            "expires_at_ms": 46000
+          }
         ]
       }
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "participant_joined",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c40",
-      "base_revision": 0,
-      "revision": 1,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "display_name": "Ada", "role": "host", "eligible_roles": ["host", "cohost"], "admission_revision": 1 },
-      "lifecycle_intent_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c60"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "participant_left",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c41",
-      "base_revision": 1,
-      "revision": 2,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27", "reason": "left" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c61"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "host_left_and_transferred",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c42",
-      "base_revision": 2,
-      "revision": 3,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "departing_participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "successor_participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c62"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "session_ended",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c43",
-      "base_revision": 3,
-      "revision": 4,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "reason": "ended_by_participant" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c63"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "hand_raised",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c44",
-      "base_revision": 4,
-      "revision": 5,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-      "command_id": "event-command-0004"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "hand_lowered",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c45",
-      "base_revision": 5,
-      "revision": 6,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-      "command_id": "event-command-0005"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "participant_display_name_changed",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c46",
-      "base_revision": 6,
-      "revision": 7,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27", "display_name": "Grace Hopper" },
-      "command_id": "event-command-0006"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "admission_policy_changed",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c47",
-      "base_revision": 7,
-      "revision": 8,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "policy": "approval" },
-      "command_id": "event-command-0007"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "participant_role_changed",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c48",
-      "base_revision": 8,
-      "revision": 9,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27", "role": "cohost" },
-      "command_id": "event-command-0008"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "host_transferred",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c49",
-      "base_revision": 9,
-      "revision": 10,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "previous_host_participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "new_host_participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-      "command_id": "event-command-0009"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "deadline_changed",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c4a",
-      "base_revision": 10,
-      "revision": 11,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "deadline_at_ms": 60000, "deadline_generation": 2 },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c6a"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "admission_requested",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c4b",
-      "base_revision": 11,
-      "revision": 12,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30", "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c31", "display_name": "Lin", "initial_role": "participant", "eligible_roles": ["participant"], "expires_at_ms": 45000 },
-      "lifecycle_intent_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c6b"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "admission_denied",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c4c",
-      "base_revision": 12,
-      "revision": 13,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c6c"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "admission_expired",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c4d",
-      "base_revision": 13,
-      "revision": 14,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c32" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c6d"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "participant_microphone_stopped",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c4e",
-      "base_revision": 14,
-      "revision": 15,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c6e"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "participant_camera_stopped",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c4f",
-      "base_revision": 15,
-      "revision": 16,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c6f"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "participant_screen_share_stopped",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c50",
-      "base_revision": 16,
-      "revision": 17,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27" },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c70"
-    },
-    {
-      "type": "event",
-      "stream": "control",
-      "name": "recording_status_changed",
-      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c51",
-      "base_revision": 17,
-      "revision": 18,
-      "schema_version": 1,
-      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "payload": { "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34", "status": "recording", "failure_code": null },
-      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c71"
     },
     {
       "type": "replay_page",
@@ -283,52 +265,136 @@
           "type": "event",
           "stream": "control",
           "name": "participant_joined",
-          "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c40",
+          "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c41",
           "base_revision": 0,
           "revision": 1,
           "schema_version": 1,
           "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "payload": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "display_name": "Ada", "role": "host", "eligible_roles": ["host", "cohost"], "admission_revision": 1 },
-          "lifecycle_intent_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c60"
+          "payload": {
+            "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+            "display_name": "Ada",
+            "role": "owner",
+            "admission_revision": 1
+          },
+          "lifecycle_intent_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c61"
         }
       ]
     },
-    { "type": "recovery_complete", "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22", "head": { "revision": 18, "state_schema_version": 1, "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } },
-    { "type": "ack", "command_id": "command-00000001", "delivery": "original", "outcome": "committed", "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c44", "revision": 5, "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-    { "type": "ack", "command_id": "command-00000002", "delivery": "duplicate", "outcome": "satisfied", "revision": 18, "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-    { "type": "ack", "command_id": "command-00000003", "delivery": "original", "outcome": "rejected", "reason": "capability_denied" },
-    { "type": "ack", "command_id": "command-00000004", "delivery": "original", "outcome": "command_id_conflict", "reason": "command_id_conflict" },
-    { "type": "projection_snapshot", "stream": "media", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25", "sequence": 0, "items": [{ "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "source": "microphone", "enabled": true, "publication_id": "publication-1" }] },
-    { "type": "projection_event", "stream": "presence", "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26", "sequence": 1, "item": { "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "state": "disconnected", "speaking": false, "active_speaker": false } },
-    { "type": "live_target_result", "operation_id": "operation-0000001", "name": "set_microphone_enabled", "outcome": "confirmed", "error_code": null },
-    { "type": "directed_request", "request_id": "request-000000001", "name": "request_unmute", "actor_participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", "expires_at_ms": 30000 },
-    { "type": "directed_request_result", "request_id": "request-000000001", "result": "delivered" },
+    {
+      "type": "recovery_complete",
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 18,
+        "state_schema_version": 1,
+        "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    {
+      "type": "ack",
+      "command_id": "command-00000001",
+      "delivery": "original",
+      "outcome": "committed",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c44",
+      "revision": 5,
+      "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "type": "ack",
+      "command_id": "command-00000002",
+      "delivery": "duplicate",
+      "outcome": "satisfied",
+      "revision": 18,
+      "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "type": "ack",
+      "command_id": "command-00000003",
+      "delivery": "original",
+      "outcome": "rejected",
+      "reason": "capability_denied"
+    },
+    {
+      "type": "ack",
+      "command_id": "command-00000004",
+      "delivery": "original",
+      "outcome": "command_id_conflict",
+      "reason": "command_id_conflict"
+    },
+    {
+      "type": "projection_snapshot",
+      "stream": "media",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25",
+      "sequence": 0,
+      "items": [
+        {
+          "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+          "source": "microphone",
+          "enabled": true,
+          "publication_id": "publication-1"
+        }
+      ]
+    },
+    {
+      "type": "projection_event",
+      "stream": "presence",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26",
+      "sequence": 1,
+      "item": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "state": "disconnected",
+        "speaking": false,
+        "active_speaker": false
+      }
+    },
+    {
+      "type": "live_target_result",
+      "operation_id": "operation-0000001",
+      "name": "set_microphone_enabled",
+      "outcome": "confirmed",
+      "error_code": null
+    },
+    {
+      "type": "directed_request",
+      "request_id": "request-000000001",
+      "name": "request_unmute",
+      "actor_participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "expires_at_ms": 30000
+    },
+    {
+      "type": "directed_request_result",
+      "request_id": "request-000000001",
+      "result": "delivered"
+    },
     {
       "type": "welcome",
       "protocol": 1,
-      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
-      "participant_session_generation": 1,
+      "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_generation": 1,
       "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
-      "head": { "revision": 18, "state_schema_version": 1, "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      "head": {
+        "revision": 18,
+        "state_schema_version": 1,
+        "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
       "mode": "up_to_date"
     },
     {
-      "type": "room_reaction",
+      "type": "reaction",
       "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c80",
-      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
       "display_name": "Ada",
       "reaction": "🎉",
       "occurred_at": "2026-07-29T14:00:00.000Z",
       "expires_at": "2026-07-29T14:00:05.000Z"
     },
     {
-      "type": "room_reaction_result",
+      "type": "reaction_result",
       "operation_id": "reaction-op-00001",
       "outcome": "accepted",
       "reaction": {
-        "type": "room_reaction",
+        "type": "reaction",
         "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c80",
-        "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
         "display_name": "Ada",
         "reaction": "🎉",
         "occurred_at": "2026-07-29T14:00:00.000Z",
@@ -340,7 +406,7 @@
       "message_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c81",
       "client_message_id": "chat-message-0001",
       "sequence": "42",
-      "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
       "display_name": "Ada",
       "text": "Hello from Chalk",
       "attachments": [],
@@ -355,7 +421,7 @@
         "message_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c81",
         "client_message_id": "chat-message-0001",
         "sequence": "42",
-        "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
         "display_name": "Ada",
         "text": "Hello from Chalk",
         "attachments": [],
@@ -372,7 +438,7 @@
           "message_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c81",
           "client_message_id": "chat-message-0001",
           "sequence": "42",
-          "participant_session_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+          "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
           "display_name": "Ada",
           "text": "Hello from Chalk",
           "attachments": [],
@@ -383,10 +449,280 @@
       "head_sequence": "42",
       "retained_floor_sequence": "7"
     },
-    { "type": "chat_page", "request_id": "chat-page-req-002", "outcome": "cursor_reset", "retained_floor_sequence": "7" },
-    { "type": "chat_head", "head_sequence": "42", "retained_floor_sequence": "7" },
-    { "type": "retryable_error", "command_id": "command-00000005", "code": "external_operation_pending" },
-    { "type": "error", "code": "invalid_frame", "detail": "unknown field" },
-    { "type": "pong" }
+    {
+      "type": "chat_page",
+      "request_id": "chat-page-req-002",
+      "outcome": "cursor_reset",
+      "retained_floor_sequence": "7"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "participant_joined",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c41",
+      "base_revision": 0,
+      "revision": 1,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "display_name": "Ada",
+        "role": "owner",
+        "admission_revision": 1
+      },
+      "lifecycle_intent_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c61"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "participant_left",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c42",
+      "base_revision": 1,
+      "revision": 2,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27",
+        "reason": "left"
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c62"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "episode_started",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c43",
+      "base_revision": 2,
+      "revision": 3,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "episode_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4ca1"
+      },
+      "lifecycle_intent_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c63"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "episode_ended",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c44",
+      "base_revision": 3,
+      "revision": 4,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "reason": "ended_by_participant"
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c64"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "hand_raised",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c45",
+      "base_revision": 4,
+      "revision": 5,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      },
+      "command_id": "event-command-0005"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "hand_lowered",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c46",
+      "base_revision": 5,
+      "revision": 6,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      },
+      "command_id": "event-command-0006"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "participant_display_name_changed",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c47",
+      "base_revision": 6,
+      "revision": 7,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27",
+        "display_name": "Grace Hopper"
+      },
+      "command_id": "event-command-0007"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_policy_changed",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c48",
+      "base_revision": 7,
+      "revision": 8,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "policy": "knock"
+      },
+      "command_id": "event-command-0008"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "role_assigned",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c49",
+      "base_revision": 8,
+      "revision": 9,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27",
+        "role": "collaborator"
+      },
+      "command_id": "event-command-0009"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "deadline_changed",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c50",
+      "base_revision": 9,
+      "revision": 10,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "deadline_at_ms": 60000,
+        "deadline_generation": 2
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c70"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_requested",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c51",
+      "base_revision": 10,
+      "revision": 11,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30",
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c31",
+        "display_name": "Lin",
+        "role": "observer",
+        "expires_at_ms": 45000
+      },
+      "lifecycle_intent_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c71"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_denied",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c52",
+      "base_revision": 11,
+      "revision": 12,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c30"
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c72"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_expired",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c53",
+      "base_revision": 12,
+      "revision": 13,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "admission_request_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c32"
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c73"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "participant_microphone_stopped",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c54",
+      "base_revision": 13,
+      "revision": 14,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c74"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "participant_camera_stopped",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c55",
+      "base_revision": 14,
+      "revision": 15,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c75"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "participant_screen_share_stopped",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c56",
+      "base_revision": 15,
+      "revision": 16,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c27"
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c76"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "recording_status_changed",
+      "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c57",
+      "base_revision": 16,
+      "revision": 17,
+      "schema_version": 1,
+      "resulting_state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload": {
+        "recording_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c34",
+        "status": "recording",
+        "failure_code": null
+      },
+      "external_operation_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c77"
+    },
+    {
+      "type": "chat_head",
+      "head_sequence": "42",
+      "retained_floor_sequence": "7"
+    },
+    {
+      "type": "retryable_error",
+      "command_id": "operation-command-11",
+      "code": "external_operation_pending"
+    },
+    {
+      "type": "error",
+      "code": "invalid_frame",
+      "detail": "unknown field"
+    },
+    {
+      "type": "pong"
+    }
   ]
 }

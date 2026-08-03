@@ -31,7 +31,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err := pool.Ping(ctx); err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `update recording_capacity set reserved_meetings = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0 where id = 1`); err != nil {
+	if _, err := pool.Exec(ctx, `insert into recording_capacity (id, reserved_episodes, reserved_participants, reserved_input_bitrate_bps) values (1, 0, 0, 0) on conflict (id) do update set reserved_episodes = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0, updated_at = now()`); err != nil {
 		t.Fatalf("reset recorder capacity fixture: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `insert into recording_pool_health (role, admission_open, ready_capacity, reason, observed_at) values ('capture', true, 1, 'integration fixture', now()), ('render', true, 1, 'integration fixture', now()) on conflict (role) do update set admission_open = true, ready_capacity = 1, reason = excluded.reason, observed_at = excluded.observed_at`); err != nil {
@@ -39,15 +39,15 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 
 	tenantID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be001")
-	roomID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be002")
-	sessionID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be003")
+	spaceID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be002")
+	episodeID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be003")
 	if _, err := pool.Exec(ctx, `insert into tenants (id, name) values ($1, 'recorder integration') on conflict do nothing`, tenantID.Bytes()); err != nil {
 		t.Fatalf("seed tenant fixture: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `insert into rooms (id, name, tenant_id, status, slug, media_plane) values ($1, 'recorder integration', $2, 'active', 'recorder-integration', 'cf_sfu') on conflict do nothing`, roomID.Bytes(), tenantID.Bytes()); err != nil {
-		t.Fatalf("seed room fixture: %v", err)
+	if _, err := pool.Exec(ctx, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, 'recorder integration', $2, 'recorder-integration', 'cf_sfu') on conflict do nothing`, spaceID.Bytes(), tenantID.Bytes()); err != nil {
+		t.Fatalf("seed space fixture: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `insert into room_sessions (id, status, room_id, tenant_id) values ($1, 'active', $2, $3) on conflict do nothing`, sessionID.Bytes(), roomID.Bytes(), tenantID.Bytes()); err != nil {
+	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb) on conflict do nothing`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
 		t.Fatalf("seed recorder fixture: %v", err)
 	}
 	defer func() {
@@ -57,15 +57,15 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		_, _ = pool.Exec(ctx, `delete from recording_pipelines where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from recording_reservations where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from recordings where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from room_sessions where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from rooms where tenant_id = $1`, tenantID.Bytes())
+		_, _ = pool.Exec(ctx, `delete from episodes where tenant_id = $1`, tenantID.Bytes())
+		_, _ = pool.Exec(ctx, `delete from spaces where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from tenants where id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `update recording_capacity set reserved_meetings = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0 where id = 1`)
+		_, _ = pool.Exec(ctx, `update recording_capacity set reserved_episodes = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0 where id = 1`)
 	}()
 
 	repository := postgres.NewRecordingPipelineRepositoryWithPool(pool)
 	input := recordingpipeline.ReservationInput{
-		TenantID: tenantID, RoomID: roomID, SessionID: sessionID,
+		TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 		IdempotencyKey: "recorder-integration-1", ParticipantCount: 3,
 		MaxDuration: time.Hour, InputBitrateBPS: 3_000_000,
 	}
@@ -144,7 +144,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		t.Fatal("immutable artifact update unexpectedly succeeded")
 	}
 	recoverInput := recordingpipeline.ReservationInput{
-		TenantID: tenantID, RoomID: roomID, SessionID: sessionID,
+		TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 		IdempotencyKey: "recorder-integration-recovery", ParticipantCount: 1,
 		MaxDuration: time.Hour, InputBitrateBPS: 1_000_000,
 	}
@@ -193,7 +193,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		t.Fatalf("reserved participants after capture completion = %d, want 1 for retryable recovery reservation", reservedParticipants)
 	}
 	noShowInput := recordingpipeline.ReservationInput{
-		TenantID: tenantID, RoomID: roomID, SessionID: sessionID,
+		TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 		IdempotencyKey: "recorder-integration-no-show", ParticipantCount: 2,
 		MaxDuration: time.Hour, InputBitrateBPS: 2_000_000,
 	}

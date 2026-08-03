@@ -174,12 +174,12 @@ describe("createWebhookProcessor", () => {
   it("returns a safe retryable failure when inbox completion fails", async () => {
     const inbox = new TestOnlyInMemoryWebhookInbox();
     const complete = vi.spyOn(inbox, "complete").mockRejectedValueOnce(new Error("database address"));
-    const processor = createWebhookProcessor({ secrets: [secret], inbox, handlers: { "room.restored": () => undefined }, toleranceSeconds: Number.MAX_SAFE_INTEGER });
-    const processResult = await processor.process(await requestFor("room.restored"));
+    const processor = createWebhookProcessor({ secrets: [secret], inbox, handlers: { "episode.started": () => undefined }, toleranceSeconds: Number.MAX_SAFE_INTEGER });
+    const processResult = await processor.process(await requestFor("episode.started"));
     expect(processResult).toMatchObject({ status: 500, outcome: "failed", errorCode: "inbox_complete_failed" });
     expect(JSON.stringify(processResult)).not.toContain("database address");
     expect(complete).toHaveBeenCalledOnce();
-    expect((await processor.process(await requestFor("room.restored"))).outcome).toBe("busy");
+    expect((await processor.process(await requestFor("episode.started"))).outcome).toBe("busy");
   });
 
   it("recovers after lease expiry and retains completion for 30 days", async () => {

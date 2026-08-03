@@ -33,8 +33,9 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
 
     assert {:ok, verified} = JWTTokenVerifier.verify(token)
     assert verified.tenant_id == "11111111-1111-4111-8111-111111111111"
-    assert verified.participant_session_generation == 1
-    assert verified.initial_role == "participant"
+    assert verified.participant_generation == 1
+    assert verified.role == "observer"
+    assert verified.capabilities == ["subscribe"]
   end
 
   test "accepts only the exact Sync audience", %{private_key: private_key} do
@@ -51,26 +52,23 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
     end
   end
 
-  test "rejects mixed, unknown, duplicate, ineligible, and unsafe host role envelopes", %{
+  test "rejects malformed role and capability claims", %{
     private_key: private_key
   } do
     base = claims()
 
     invalid = [
       Map.merge(base, %{
-        "initial_role" => "owner",
-        "eligible_roles" => ["owner"]
+        "role" => ""
       }),
       Map.merge(base, %{
-        "initial_role" => "participant",
-        "eligible_roles" => ["participant", "participant"]
+        "capabilities" => ["subscribe", "subscribe"]
       }),
       Map.merge(base, %{
-        "initial_role" => "cohost",
-        "eligible_roles" => ["participant"]
+        "capabilities" => ["not-a-capability"]
       }),
-      Map.merge(base, %{"initial_role" => "host", "eligible_roles" => ["host"]}),
-      Map.put(claims(), "capabilities", ["control:hand"])
+      Map.merge(base, %{"capabilities" => "subscribe"}),
+      Map.delete(base, "role")
     ]
 
     Enum.each(invalid, fn candidate ->
@@ -112,15 +110,14 @@ defmodule ChalkSync.Auth.JWTTokenVerifierTest do
       "nbf" => @now,
       "exp" => @now + 300,
       "tenant_id" => "11111111-1111-4111-8111-111111111111",
-      "room_id" => "22222222-2222-4222-8222-222222222222",
-      "session_id" => "33333333-3333-4333-8333-333333333333",
+      "space_id" => "22222222-2222-4222-8222-222222222222",
+      "episode_id" => "33333333-3333-4333-8333-333333333333",
       "participant_id" => participant,
-      "participant_session_id" => participant,
-      "participant_session_generation" => 1,
+      "participant_generation" => 1,
       "admission_lifecycle_intent_id" => "55555555-5555-4555-8555-555555555555",
       "display_name" => "Ada",
-      "initial_role" => "participant",
-      "eligible_roles" => ["participant", "cohost"]
+      "role" => "observer",
+      "capabilities" => ["subscribe"]
     }
   end
 

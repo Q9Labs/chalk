@@ -9,13 +9,13 @@ defmodule ChalkSync.Stateholder do
 
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Decision
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.LifecycleDecision
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Recovery
-  alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.Telemetry
 
   @callback decide_command(Identity.t(), Command.t()) ::
@@ -24,32 +24,32 @@ defmodule ChalkSync.Stateholder do
               {:ok, Decision.t()} | :not_found | {:retryable, atom()}
   @callback recover(Identity.t(), map() | nil) ::
               {:ok, Recovery.t()} | {:error, atom()} | {:retryable, atom()}
-  @callback recover_session(SessionKey.t(), map() | nil) ::
+  @callback recover_episode(EpisodeKey.t(), map() | nil) ::
               {:ok, Recovery.t()} | {:error, atom()} | {:retryable, atom()}
-  @callback recovery_page(SessionKey.t(), non_neg_integer(), non_neg_integer()) ::
+  @callback recovery_page(EpisodeKey.t(), non_neg_integer(), non_neg_integer()) ::
               {:ok, [map()]} | {:error, atom()} | {:retryable, atom()}
-  @callback apply_lifecycle_intent(SessionKey.t(), String.t()) ::
+  @callback apply_lifecycle_intent(EpisodeKey.t(), String.t()) ::
               {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
-  @callback record_lifecycle_failure(SessionKey.t(), String.t(), atom()) ::
+  @callback record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
               :ok | {:retryable, atom()}
   @callback pending_lifecycle_intents(pos_integer()) ::
-              {:ok, [{SessionKey.t(), String.t()}]} | {:retryable, atom()}
+              {:ok, [{EpisodeKey.t(), String.t()}]} | {:retryable, atom()}
   @callback begin_operation(Identity.t(), Operation.t()) ::
               {:ok, OperationDecision.t()} | {:retryable, atom()}
-  @callback begin_internal_operation(SessionKey.t(), Operation.t()) ::
+  @callback begin_internal_operation(EpisodeKey.t(), Operation.t()) ::
               {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
   @callback claim_operations(pos_integer()) ::
-              {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+              {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   @callback claim_local_operations(pos_integer()) ::
-              {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
-  @callback read_operation(SessionKey.t(), String.t()) ::
+              {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  @callback read_operation(EpisodeKey.t(), String.t()) ::
               {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}
-  @callback finalize_operation(SessionKey.t(), String.t(), tuple()) ::
+  @callback finalize_operation(EpisodeKey.t(), String.t(), tuple()) ::
               {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
-  @callback participant_authority(SessionKey.t(), String.t(), pos_integer() | nil) ::
+  @callback participant_authority(EpisodeKey.t(), String.t(), pos_integer() | nil) ::
               {:ok,
                %{
-                 participant_session_id: String.t(),
+                 participant_id: String.t(),
                  generation: pos_integer(),
                  role: String.t(),
                  capabilities: [String.t()]
@@ -58,7 +58,7 @@ defmodule ChalkSync.Stateholder do
               | {:retryable, atom()}
   @callback reserve_publication_grant(Identity.t(), String.t(), MediaPlane.source()) ::
               {:ok, map()} | {:error, atom()} | {:retryable, atom()}
-  @callback complete_publication_grant(SessionKey.t(), String.t(), MediaPlane.outcome()) ::
+  @callback complete_publication_grant(EpisodeKey.t(), String.t(), MediaPlane.outcome()) ::
               {:ok, map()} | {:error, atom()} | {:retryable, atom()}
   @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
               {:ok, Decision.t()} | {:retryable, atom()}
@@ -92,24 +92,24 @@ defmodule ChalkSync.Stateholder do
     timed_recovery(fn -> impl().recover(identity, cursor) end)
   end
 
-  @spec recover_session(SessionKey.t(), map() | nil) ::
+  @spec recover_episode(EpisodeKey.t(), map() | nil) ::
           {:ok, Recovery.t()} | {:error, atom()} | {:retryable, atom()}
-  def recover_session(%SessionKey{} = session, cursor),
-    do: timed_recovery(fn -> impl().recover_session(session, cursor) end)
+  def recover_episode(%EpisodeKey{} = episode, cursor),
+    do: timed_recovery(fn -> impl().recover_episode(episode, cursor) end)
 
-  @spec recovery_page(SessionKey.t(), non_neg_integer(), non_neg_integer()) ::
+  @spec recovery_page(EpisodeKey.t(), non_neg_integer(), non_neg_integer()) ::
           {:ok, [map()]} | {:error, atom()} | {:retryable, atom()}
-  def recovery_page(%SessionKey{} = session, after_revision, through_revision)
+  def recovery_page(%EpisodeKey{} = episode, after_revision, through_revision)
       when is_integer(after_revision) and is_integer(through_revision) and
              after_revision >= 0 and through_revision >= after_revision do
-    impl().recovery_page(session, after_revision, through_revision)
+    impl().recovery_page(episode, after_revision, through_revision)
   end
 
-  @spec apply_lifecycle_intent(SessionKey.t(), String.t()) ::
+  @spec apply_lifecycle_intent(EpisodeKey.t(), String.t()) ::
           {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
-  def apply_lifecycle_intent(%SessionKey{} = session, lifecycle_intent_id) do
+  def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id) do
     started_at = System.monotonic_time(:microsecond)
-    result = impl().apply_lifecycle_intent(session, lifecycle_intent_id)
+    result = impl().apply_lifecycle_intent(episode, lifecycle_intent_id)
 
     Telemetry.execute(
       [:lifecycle, :decision],
@@ -120,14 +120,14 @@ defmodule ChalkSync.Stateholder do
     result
   end
 
-  @spec record_lifecycle_failure(SessionKey.t(), String.t(), atom()) ::
+  @spec record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
           :ok | {:retryable, atom()}
-  def record_lifecycle_failure(%SessionKey{} = session, lifecycle_intent_id, reason)
+  def record_lifecycle_failure(%EpisodeKey{} = episode, lifecycle_intent_id, reason)
       when is_binary(lifecycle_intent_id) and is_atom(reason),
-      do: impl().record_lifecycle_failure(session, lifecycle_intent_id, reason)
+      do: impl().record_lifecycle_failure(episode, lifecycle_intent_id, reason)
 
   @spec pending_lifecycle_intents(pos_integer()) ::
-          {:ok, [{SessionKey.t(), String.t()}]} | {:retryable, atom()}
+          {:ok, [{EpisodeKey.t(), String.t()}]} | {:retryable, atom()}
   def pending_lifecycle_intents(limit) when is_integer(limit) and limit > 0,
     do: impl().pending_lifecycle_intents(limit)
 
@@ -136,40 +136,40 @@ defmodule ChalkSync.Stateholder do
   def begin_operation(%Identity{} = identity, %Operation{} = operation),
     do: impl().begin_operation(identity, operation)
 
-  @spec begin_internal_operation(SessionKey.t(), Operation.t()) ::
+  @spec begin_internal_operation(EpisodeKey.t(), Operation.t()) ::
           {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
-  def begin_internal_operation(%SessionKey{} = session, %Operation{} = operation),
-    do: impl().begin_internal_operation(session, operation)
+  def begin_internal_operation(%EpisodeKey{} = episode, %Operation{} = operation),
+    do: impl().begin_internal_operation(episode, operation)
 
   @spec claim_operations(pos_integer()) ::
-          {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+          {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   def claim_operations(limit) when is_integer(limit) and limit in 1..64,
     do: impl().claim_operations(limit)
 
   @spec claim_local_operations(pos_integer()) ::
-          {:ok, [{SessionKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+          {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
     do: impl().claim_local_operations(limit)
 
-  @spec read_operation(SessionKey.t(), String.t()) ::
+  @spec read_operation(EpisodeKey.t(), String.t()) ::
           {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}
-  def read_operation(%SessionKey{} = session, external_operation_id)
+  def read_operation(%EpisodeKey{} = episode, external_operation_id)
       when is_binary(external_operation_id),
-      do: impl().read_operation(session, external_operation_id)
+      do: impl().read_operation(episode, external_operation_id)
 
-  @spec finalize_operation(SessionKey.t(), String.t(), tuple()) ::
+  @spec finalize_operation(EpisodeKey.t(), String.t(), tuple()) ::
           {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
-  def finalize_operation(%SessionKey{} = session, external_operation_id, outcome)
+  def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome)
       when is_binary(external_operation_id) and is_tuple(outcome),
-      do: impl().finalize_operation(session, external_operation_id, outcome)
+      do: impl().finalize_operation(episode, external_operation_id, outcome)
 
-  @spec participant_authority(SessionKey.t(), String.t(), pos_integer() | nil) ::
+  @spec participant_authority(EpisodeKey.t(), String.t(), pos_integer() | nil) ::
           {:ok, map()} | {:error, atom()} | {:retryable, atom()}
-  def participant_authority(%SessionKey{} = session, participant_session_id, expected_generation)
-      when is_binary(participant_session_id) and
+  def participant_authority(%EpisodeKey{} = episode, participant_id, expected_generation)
+      when is_binary(participant_id) and
              (is_nil(expected_generation) or
                 (is_integer(expected_generation) and expected_generation > 0)),
-      do: impl().participant_authority(session, participant_session_id, expected_generation)
+      do: impl().participant_authority(episode, participant_id, expected_generation)
 
   @spec reserve_publication_grant(Identity.t(), String.t(), MediaPlane.source()) ::
           {:ok, map()} | {:error, atom()} | {:retryable, atom()}
@@ -177,11 +177,11 @@ defmodule ChalkSync.Stateholder do
       when is_binary(operation_id),
       do: impl().reserve_publication_grant(identity, operation_id, source)
 
-  @spec complete_publication_grant(SessionKey.t(), String.t(), MediaPlane.outcome()) ::
+  @spec complete_publication_grant(EpisodeKey.t(), String.t(), MediaPlane.outcome()) ::
           {:ok, map()} | {:error, atom()} | {:retryable, atom()}
-  def complete_publication_grant(%SessionKey{} = session, reservation_id, outcome)
+  def complete_publication_grant(%EpisodeKey{} = episode, reservation_id, outcome)
       when is_binary(reservation_id),
-      do: impl().complete_publication_grant(session, reservation_id, outcome)
+      do: impl().complete_publication_grant(episode, reservation_id, outcome)
 
   @spec begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
           {:ok, Decision.t()} | {:retryable, atom()}

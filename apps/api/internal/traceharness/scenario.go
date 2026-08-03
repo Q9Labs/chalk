@@ -73,14 +73,18 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteMembershipListViewer(ctx)
 	case RouteMembershipUpdateOwnerScenario:
 		return runRouteMembershipUpdateOwner(ctx)
-	case RouteRoomCreateMemberScenario:
-		return runRouteRoomCreateMember(ctx)
-	case RouteSessionCreateMemberScenario:
-		return runRouteSessionCreateMember(ctx)
-	case RouteSessionEndMemberScenario:
-		return runRouteSessionEndMember(ctx)
-	case RouteSessionSyncTokenScenario:
-		return runRouteSessionSyncToken(ctx)
+	case RouteSpaceCreateMemberScenario:
+		return runRouteSpaceCreateMember(ctx)
+	case RouteEpisodeCreateMemberScenario:
+		return runRouteEpisodeCreateMember(ctx)
+	case RouteEpisodeAdmitMemberScenario:
+		return runRouteEpisodeAdmitMember(ctx)
+	case RouteEpisodeRemoveParticipantScenario:
+		return runRouteEpisodeRemoveParticipant(ctx)
+	case RouteEpisodeEndScenario:
+		return runRouteEpisodeEnd(ctx)
+	case RouteEpisodeDeadlineScenario:
+		return runRouteEpisodeDeadline(ctx)
 	case RouteRecordingTranscribeScenario:
 		return runRouteRecordingTranscribe(ctx)
 	case RouteJourneyEventIntakeScenario:

@@ -67,7 +67,7 @@ func TestServicePatchNormalizesInputsBeforeRepository(t *testing.T) {
 	service := NewService(repository, nil)
 	name := "  Production events  "
 	targetURL := "https://Hooks.Example.com/chalk?token=secret"
-	eventTypes := []string{"room.updated", "room.created", "room.updated"}
+	eventTypes := []string{"space.updated", "space.created", "space.updated"}
 	_, err := service.Patch(context.Background(), webhookTestID(t, "10000000-0000-4000-8000-000000000001"), webhookTestID(t, "20000000-0000-4000-8000-000000000001"), PatchInput{
 		Name:             &name,
 		URL:              &targetURL,
@@ -84,7 +84,7 @@ func TestServicePatchNormalizesInputsBeforeRepository(t *testing.T) {
 	if got := *repository.patchInput.Name; got != "Production events" {
 		t.Fatalf("name = %q", got)
 	}
-	if got := *repository.patchInput.EventTypes; len(got) != 2 || got[0] != "room.created" || got[1] != "room.updated" {
+	if got := *repository.patchInput.EventTypes; len(got) != 2 || got[0] != "space.created" || got[1] != "space.updated" {
 		t.Fatalf("event types = %#v", got)
 	}
 	if repository.patchURL != "https://hooks.example.com/chalk?token=secret" {

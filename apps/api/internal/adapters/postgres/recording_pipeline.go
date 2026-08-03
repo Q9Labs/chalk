@@ -122,13 +122,13 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 		availableAt = time.Unix(0, 0).UTC()
 	}
 	params := sqlc.CreateRecordingReservationParams{
-		ParticipantMeetings:  1,
+		EpisodeCount:         1,
 		ParticipantCount:     int32(input.ParticipantCount),
 		InputBitrateBps:      input.InputBitrateBPS,
 		ID:                   uuid(input.ID),
 		TenantID:             uuid(input.TenantID),
-		RoomID:               uuid(input.RoomID),
-		SessionID:            uuid(input.SessionID),
+		SpaceID:              uuid(input.SpaceID),
+		EpisodeID:            uuid(input.EpisodeID),
 		RecordingID:          uuid(input.RecordingID),
 		IdempotencyKey:       input.IdempotencyKey,
 		RequestFingerprint:   fingerprint[:],
@@ -488,8 +488,8 @@ func mapReservation(row sqlc.CreateRecordingReservationRow) recordingpipeline.Re
 	return recordingpipeline.Reservation{
 		ID:               utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		RoomID:           utilities.IDFromBytes(row.RoomID.Bytes),
-		SessionID:        utilities.IDFromBytes(row.SessionID.Bytes),
+		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
 		IdempotencyKey:   row.IdempotencyKey,
 		ParticipantCount: int(row.ParticipantCount),
@@ -507,8 +507,8 @@ func mapReleasedReservation(row sqlc.ReleaseRecordingReservationRow) recordingpi
 	return recordingpipeline.Reservation{
 		ID:               utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		RoomID:           utilities.IDFromBytes(row.RoomID.Bytes),
-		SessionID:        utilities.IDFromBytes(row.SessionID.Bytes),
+		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
 		IdempotencyKey:   row.IdempotencyKey,
 		ParticipantCount: int(row.ParticipantCount),
@@ -526,8 +526,8 @@ func mapExpiredReservation(row sqlc.ExpireRecordingReservationsRow) recordingpip
 	return recordingpipeline.Reservation{
 		ID:               utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		RoomID:           utilities.IDFromBytes(row.RoomID.Bytes),
-		SessionID:        utilities.IDFromBytes(row.SessionID.Bytes),
+		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
 		IdempotencyKey:   row.IdempotencyKey,
 		ParticipantCount: int(row.ParticipantCount),
@@ -545,8 +545,8 @@ func mapGetReservation(row sqlc.GetRecordingReservationRow) recordingpipeline.Re
 	return recordingpipeline.Reservation{
 		ID:               utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		RoomID:           utilities.IDFromBytes(row.RoomID.Bytes),
-		SessionID:        utilities.IDFromBytes(row.SessionID.Bytes),
+		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
 		IdempotencyKey:   row.IdempotencyKey,
 		ParticipantCount: int(row.ParticipantCount),
@@ -564,8 +564,8 @@ func mapReservationByKey(row sqlc.GetRecordingReservationByKeyRow) recordingpipe
 	return recordingpipeline.Reservation{
 		ID:               utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:         utilities.IDFromBytes(row.TenantID.Bytes),
-		RoomID:           utilities.IDFromBytes(row.RoomID.Bytes),
-		SessionID:        utilities.IDFromBytes(row.SessionID.Bytes),
+		SpaceID:          utilities.IDFromBytes(row.SpaceID.Bytes),
+		EpisodeID:        utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:      utilities.IDFromBytes(row.RecordingID.Bytes),
 		IdempotencyKey:   row.IdempotencyKey,
 		ParticipantCount: int(row.ParticipantCount),
@@ -596,7 +596,7 @@ func mapRecordingJob(row sqlc.RecordingJob) recordingpipeline.Job {
 	return recordingpipeline.Job{
 		ID:                   utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),
-		SessionID:            utilities.IDFromBytes(row.SessionID.Bytes),
+		EpisodeID:            utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:          utilities.IDFromBytes(row.RecordingID.Bytes),
 		Kind:                 recordingpipeline.JobKind(row.Kind),
 		IdempotencyKey:       row.IdempotencyKey,
@@ -622,7 +622,7 @@ func mapClaimJob(row sqlc.ClaimRecordingJobRow) recordingpipeline.Job {
 	return recordingpipeline.Job{
 		ID:                   utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),
-		SessionID:            utilities.IDFromBytes(row.SessionID.Bytes),
+		EpisodeID:            utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:          utilities.IDFromBytes(row.RecordingID.Bytes),
 		Kind:                 recordingpipeline.JobKind(row.Kind),
 		IdempotencyKey:       row.IdempotencyKey,
@@ -648,7 +648,7 @@ func mapFailJob(row sqlc.FailRecordingJobRow) recordingpipeline.Job {
 	return recordingpipeline.Job{
 		ID:                   utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),
-		SessionID:            utilities.IDFromBytes(row.SessionID.Bytes),
+		EpisodeID:            utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:          utilities.IDFromBytes(row.RecordingID.Bytes),
 		Kind:                 recordingpipeline.JobKind(row.Kind),
 		IdempotencyKey:       row.IdempotencyKey,
@@ -674,7 +674,7 @@ func mapRecoveredJob(row sqlc.RecoverExpiredRecordingJobsRow) recordingpipeline.
 	return recordingpipeline.Job{
 		ID:                   utilities.IDFromBytes(row.ID.Bytes),
 		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),
-		SessionID:            utilities.IDFromBytes(row.SessionID.Bytes),
+		EpisodeID:            utilities.IDFromBytes(row.EpisodeID.Bytes),
 		RecordingID:          utilities.IDFromBytes(row.RecordingID.Bytes),
 		Kind:                 recordingpipeline.JobKind(row.Kind),
 		IdempotencyKey:       row.IdempotencyKey,

@@ -540,79 +540,78 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms": {
+  "/v1/tenants/{tenant_id}/spaces": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** List rooms */
-    get: operations["listRooms"];
+    /** List spaces */
+    get: operations["listSpaces"];
     put?: never;
-    /** Create room */
-    post: operations["createRoom"];
+    /** Create space */
+    post: operations["createSpace"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** Get room */
-    get: operations["getRoom"];
+    /** Get space */
+    get: operations["getSpace"];
     put?: never;
     post?: never;
     delete?: never;
     options?: never;
     head?: never;
-    /** Update room */
-    patch: operations["updateRoom"];
+    /** Update space */
+    patch: operations["updateSpace"];
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** List room sessions */
-    get: operations["listRoomSessions"];
+    /** List episodes */
+    get: operations["listEpisodes"];
     put?: never;
-    /** Create room session */
-    post: operations["createRoomSession"];
+    /** Create episode */
+    post: operations["createEpisode"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** Get room session */
-    get: operations["getRoomSession"];
+    /** Get episode */
+    get: operations["getEpisode"];
     put?: never;
     post?: never;
     delete?: never;
     options?: never;
     head?: never;
-    /** Update room session */
-    patch: operations["updateRoomSession"];
+    patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/deadline": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/deadline": {
     parameters: {
       query?: never;
       header?: never;
@@ -621,15 +620,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Set room session deadline */
-    post: operations["setRoomSessionDeadline"];
+    /** Set episode deadline */
+    post: operations["setEpisodeDeadline"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end": {
     parameters: {
       query?: never;
       header?: never;
@@ -638,15 +637,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** End room session */
-    post: operations["endRoomSession"];
+    /** End episode */
+    post: operations["endEpisode"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/host/recover": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants": {
     parameters: {
       query?: never;
       header?: never;
@@ -655,15 +654,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Recover room session host */
-    post: operations["recoverRoomSessionHost"];
+    /** Admit episode participant */
+    post: operations["admitEpisodeParticipant"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant": {
     parameters: {
       query?: never;
       header?: never;
@@ -672,32 +671,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Admit session participant */
-    post: operations["admitSessionParticipant"];
+    /** Issue access grant */
+    post: operations["issueAccessGrant"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/access": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Issue session participant access */
-    post: operations["issueSessionParticipantAccess"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/publications": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications": {
     parameters: {
       query?: never;
       header?: never;
@@ -714,7 +696,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/renegotiate": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate": {
     parameters: {
       query?: never;
       header?: never;
@@ -731,7 +713,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks": {
     parameters: {
       query?: never;
       header?: never;
@@ -748,7 +730,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks/close": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close": {
     parameters: {
       query?: never;
       header?: never;
@@ -765,7 +747,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/remove": {
     parameters: {
       query?: never;
       header?: never;
@@ -774,15 +756,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Remove session participant */
-    post: operations["removeSessionParticipant"];
+    /** Remove episode participant */
+    post: operations["removeEpisodeParticipant"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token": {
     parameters: {
       query?: never;
       header?: never;
@@ -791,15 +773,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Issue session participant sync token */
-    post: operations["issueSessionParticipantSyncToken"];
+    /** Issue episode participant sync token */
+    post: operations["issueEpisodeParticipantSyncToken"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recording-reservations": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recording-reservations": {
     parameters: {
       query?: never;
       header?: never;
@@ -816,7 +798,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings": {
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recordings": {
     parameters: {
       query?: never;
       header?: never;
@@ -1143,9 +1125,37 @@ export interface components {
       };
       secret: string;
     };
-    AdmitSessionParticipantRequest: {
-      eligible_roles: string[];
-      initial_role: string;
+    AccessGrant: {
+      media: {
+        client_payload: {
+          [key: string]:
+            | {
+                [key: string]: unknown;
+              }
+            | unknown[]
+            | string
+            | number
+            | boolean
+            | null;
+        };
+        expires_at: components["schemas"]["DateTimeString"];
+        provider: string;
+        token: string;
+      };
+      subject: {
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_generation: number;
+        participant_id: components["schemas"]["ParticipantId"];
+        space_id: components["schemas"]["SpaceId"];
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      sync: {
+        expires_at: components["schemas"]["DateTimeString"];
+        token: string;
+      };
+    };
+    AdmitEpisodeParticipantRequest: {
+      identity_id?: components["schemas"]["UUID"];
       metadata?:
         | {
             [key: string]: unknown;
@@ -1156,7 +1166,9 @@ export interface components {
         | boolean
         | null;
       name: string;
-      participant_session_id: components["schemas"]["RoomSessionId"];
+      participant_id?: components["schemas"]["ParticipantId"];
+      /** @enum {string} */
+      role: "owner" | "admin" | "member" | "viewer";
     };
     AuditLog: {
       action: string;
@@ -1265,7 +1277,7 @@ export interface components {
     CloudflareSFUPublicationsResponse: {
       incarnation: number;
       publications: {
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        participant_id: components["schemas"]["ParticipantId"];
         publication_id: string;
         source: string;
       }[];
@@ -1316,6 +1328,18 @@ export interface components {
       name: string;
       scopes: string[];
     };
+    CreateEpisodeRequest: {
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
+      started_at?: components["schemas"]["DateTimeString"] | null;
+    };
     CreateMembershipRequest: {
       /** @enum {string} */
       role: "owner" | "admin" | "member" | "viewer";
@@ -1346,7 +1370,19 @@ export interface components {
       participant_count: number;
       scheduled_start?: string | null;
     };
-    CreateRoomRequest: {
+    CreateSpaceRequest: {
+      admission_policy?:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
+      default_episode_duration_seconds: number;
+      linger_window_seconds: number;
+      maximum_episode_duration_seconds: number;
       media_plane: string;
       metadata?:
         | {
@@ -1368,26 +1404,6 @@ export interface components {
         | boolean
         | null;
       slug: string;
-      /** @enum {string} */
-      status: "active" | "archived" | "ended";
-    };
-    CreateRoomSessionRequest: {
-      admission_policy: string;
-      host_exit_policy: string;
-      maximum_duration_seconds: number;
-      metadata?:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      role_capabilities: {
-        [key: string]: string[];
-      };
-      started_at?: components["schemas"]["DateTimeString"] | null;
     };
     CreateTenantRequest: {
       ai_provider_config?: components["schemas"]["AIProviderConfig"] | null;
@@ -1417,6 +1433,59 @@ export interface components {
     DateTimeString: string;
     /** Format: email */
     Email: string;
+    Episode: {
+      config_snapshot:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
+      created_at: components["schemas"]["DateTimeString"];
+      deadline_at: components["schemas"]["DateTimeString"];
+      deadline_generation: number;
+      end_reason?: string | null;
+      ended_at?: components["schemas"]["DateTimeString"];
+      id: components["schemas"]["EpisodeId"];
+      metadata:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
+      space_id: components["schemas"]["SpaceId"];
+      started_at: components["schemas"]["DateTimeString"];
+      /** @enum {string} */
+      status: "active" | "ending" | "ended";
+      tenant_id: components["schemas"]["TenantId"];
+      updated_at: components["schemas"]["DateTimeString"];
+    };
+    EpisodeDeadline: components["schemas"]["EpisodeEnd"];
+    EpisodeEnd: {
+      episode_id: components["schemas"]["EpisodeId"];
+      external_operation: {
+        created_at: components["schemas"]["DateTimeString"];
+        deadline_generation?: number | null;
+        id: components["schemas"]["UUID"];
+        operation_name: string;
+        request_key: string;
+        status: string;
+        target_participant_generation?: number | null;
+        target_participant_id?: components["schemas"]["ParticipantId"] | null;
+      };
+      status: string;
+    };
+    /** Format: uuid */
+    EpisodeId: string;
+    EpisodeList: {
+      episodes: components["schemas"]["Episode"][];
+      pagination: components["schemas"]["Pagination"];
+    };
     ErrorResponse: {
       error: {
         code: string;
@@ -1527,9 +1596,9 @@ export interface components {
         }[];
       }[];
     };
-    IssueParticipantAccessRequest: {
+    IssueAccessGrantRequest: {
       current_media_token?: string;
-      participant_session_generation: number;
+      participant_generation: number;
       replace_media_connection: boolean;
     };
     JourneyEventBatch: {
@@ -1591,49 +1660,22 @@ export interface components {
       next_cursor: string | null;
       page_size: number;
     };
-    ParticipantAccess: {
-      media: {
-        client_payload: {
-          [key: string]:
-            | {
-                [key: string]: unknown;
-              }
-            | unknown[]
-            | string
-            | number
-            | boolean
-            | null;
-        };
-        expires_at: components["schemas"]["DateTimeString"];
-        provider: string;
-        token: string;
-      };
-      subject: {
-        participant_generation: number;
-        participant_session_id: components["schemas"]["RoomSessionId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        tenant_id: components["schemas"]["TenantId"];
-      };
-      sync: {
-        expires_at: components["schemas"]["DateTimeString"];
-        token: string;
-      };
-    };
+    /** Format: uuid */
+    ParticipantId: string;
     ParticipantLifecycle: {
-      access?: components["schemas"]["ParticipantAccess"] | null;
+      access?: components["schemas"]["AccessGrant"] | null;
       admission_request?: {
         expires_at: components["schemas"]["DateTimeString"];
-        id: components["schemas"]["UUID"];
+        id: components["schemas"]["ParticipantId"];
         status: string;
       } | null;
       expires_at?: components["schemas"]["DateTimeString"];
       lifecycle_intent: {
         created_at: components["schemas"]["DateTimeString"];
-        id: components["schemas"]["UUID"];
+        id: components["schemas"]["ParticipantId"];
         intent_name: string;
-        participant_session_generation: number | null;
-        participant_session_id: components["schemas"]["RoomSessionId"] | null;
+        participant_generation?: number | null;
+        participant_id?: components["schemas"]["ParticipantId"] | null;
         request_key: string;
         status: string;
       };
@@ -1652,10 +1694,14 @@ export interface components {
         provider: string;
       } | null;
       participant: {
+        capabilities: string[];
+        episode_id: components["schemas"]["EpisodeId"];
         generation: number;
-        id: components["schemas"]["UUID"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        id: components["schemas"]["ParticipantId"];
+        identity_id?: components["schemas"]["UUID"] | null;
+        /** @enum {string} */
+        role: "owner" | "admin" | "member" | "viewer";
+        space_id: components["schemas"]["SpaceId"];
         status: string;
         tenant_id: components["schemas"]["TenantId"];
       };
@@ -1669,20 +1715,25 @@ export interface components {
         operation_name: string;
         request_key: string;
         status: string;
-        target_participant_session_generation?: number | null;
-        target_participant_session_id?: components["schemas"]["RoomSessionId"] | null;
+        target_participant_generation?: number | null;
+        target_participant_id?: components["schemas"]["ParticipantId"] | null;
       };
       participant: {
+        capabilities: string[];
+        episode_id: components["schemas"]["EpisodeId"];
         generation: number;
         id: components["schemas"]["UUID"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        identity_id?: components["schemas"]["UUID"] | null;
+        /** @enum {string} */
+        role: "owner" | "admin" | "member" | "viewer";
+        space_id: components["schemas"]["SpaceId"];
         status: string;
         tenant_id: components["schemas"]["TenantId"];
       };
     };
     Recording: {
       created_at: components["schemas"]["DateTimeString"];
+      episode_id: components["schemas"]["EpisodeId"];
       id: components["schemas"]["RecordingId"];
       metadata:
         | {
@@ -1693,8 +1744,7 @@ export interface components {
         | number
         | boolean
         | null;
-      room_id: components["schemas"]["RoomId"];
-      session_id: components["schemas"]["RoomSessionId"];
+      space_id: components["schemas"]["SpaceId"];
       /** @enum {string} */
       status: "pending" | "processing" | "completed" | "failed";
       storage_key: string | null;
@@ -1731,21 +1781,17 @@ export interface components {
     RecordingReservation: {
       created_at: components["schemas"]["DateTimeString"];
       ends_at: components["schemas"]["DateTimeString"];
+      episode_id: components["schemas"]["EpisodeId"];
       id: components["schemas"]["UUID"];
       input_bitrate_bps: number;
       max_duration_minutes: number;
       participant_count: number;
       recording_id: components["schemas"]["RecordingId"];
-      room_id: components["schemas"]["RoomId"];
       scheduled_start: string | null;
-      session_id: components["schemas"]["RoomSessionId"];
+      space_id: components["schemas"]["SpaceId"];
       state: string;
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
-    };
-    RecoverRoomSessionHostRequest: {
-      participant_session_generation: number;
-      participant_session_id: components["schemas"]["RoomSessionId"];
     };
     Regions: {
       regions: {
@@ -1758,18 +1804,45 @@ export interface components {
       name: string;
       password: string;
     };
-    RemoveSessionParticipantRequest: {
-      participant_session_generation: number;
+    RemoveEpisodeParticipantRequest: {
+      participant_generation: number;
     };
     RequestTranscriptRequest: {
       idempotency_key: string;
       language: string;
       languages: string[];
     };
-    Room: {
+    RotateAPIKeyRequest: {
+      expires_at?: components["schemas"]["DateTimeString"] | null;
+    };
+    RotateWebhookSecretRequest: {
+      revoke_previous_immediately: boolean;
+    };
+    RotateWebhookSecretResponse: {
+      endpoint_id: components["schemas"]["UUID"];
+      previous_secret_expires_at: components["schemas"]["DateTimeString"] | null;
+      revision: number;
+      secret: string;
+    };
+    SetEpisodeDeadlineRequest: {
+      deadline_at: components["schemas"]["DateTimeString"];
+    };
+    Space: {
+      admission_policy:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
       created_at: components["schemas"]["DateTimeString"];
       created_by_user_id: components["schemas"]["UserId"] | null;
-      id: components["schemas"]["RoomId"];
+      default_episode_duration_seconds: number;
+      id: components["schemas"]["SpaceId"];
+      linger_window_seconds: number;
+      maximum_episode_duration_seconds: number;
       media_plane: string;
       metadata:
         | {
@@ -1790,87 +1863,20 @@ export interface components {
         | number
         | boolean
         | null;
+      roles: {
+        capabilities: string[];
+        id: components["schemas"]["SpaceId"];
+        name: string;
+      }[];
       slug: string;
-      /** @enum {string} */
-      status: "active" | "archived" | "ended";
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
     };
     /** Format: uuid */
-    RoomId: string;
-    RoomList: {
+    SpaceId: string;
+    SpaceList: {
       pagination: components["schemas"]["Pagination"];
-      rooms: components["schemas"]["Room"][];
-    };
-    RoomSession: {
-      created_at: components["schemas"]["DateTimeString"];
-      created_by_user_id: components["schemas"]["UserId"] | null;
-      ended_at: components["schemas"]["DateTimeString"] | null;
-      id: components["schemas"]["RoomSessionId"];
-      metadata:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      room_id: components["schemas"]["RoomId"];
-      started_at: components["schemas"]["DateTimeString"] | null;
-      /** @enum {string} */
-      status: "pending" | "active" | "ended" | "failed";
-      tenant_id: components["schemas"]["TenantId"];
-      updated_at: components["schemas"]["DateTimeString"];
-    };
-    /** Format: uuid */
-    RoomSessionId: string;
-    RoomSessionList: {
-      pagination: components["schemas"]["Pagination"];
-      sessions: components["schemas"]["RoomSession"][];
-    };
-    RotateAPIKeyRequest: {
-      expires_at?: components["schemas"]["DateTimeString"] | null;
-    };
-    RotateWebhookSecretRequest: {
-      revoke_previous_immediately: boolean;
-    };
-    RotateWebhookSecretResponse: {
-      endpoint_id: components["schemas"]["UUID"];
-      previous_secret_expires_at: components["schemas"]["DateTimeString"] | null;
-      revision: number;
-      secret: string;
-    };
-    SessionControl: {
-      external_operation: {
-        created_at: components["schemas"]["DateTimeString"];
-        deadline_generation?: number | null;
-        id: components["schemas"]["UUID"];
-        operation_name: string;
-        request_key: string;
-        status: string;
-        target_participant_session_generation?: number | null;
-        target_participant_session_id?: components["schemas"]["RoomSessionId"] | null;
-      };
-      session_id: components["schemas"]["RoomSessionId"];
-      status: string;
-    };
-    SessionEnd: {
-      external_operation: {
-        created_at: components["schemas"]["DateTimeString"];
-        deadline_generation?: number | null;
-        id: components["schemas"]["UUID"];
-        operation_name: string;
-        request_key: string;
-        status: string;
-        target_participant_session_generation?: number | null;
-        target_participant_session_id?: components["schemas"]["RoomSessionId"] | null;
-      };
-      session_id: components["schemas"]["RoomSessionId"];
-      status: string;
-    };
-    SetRoomSessionDeadlineRequest: {
-      deadline_at: components["schemas"]["DateTimeString"];
+      spaces: components["schemas"]["Space"][];
     };
     StartIntegrationConnectionRequest: {
       account_alias?: string | null;
@@ -1923,14 +1929,14 @@ export interface components {
       completed_at?: components["schemas"]["DateTimeString"] | null;
       created_at: components["schemas"]["DateTimeString"];
       deleted_at?: components["schemas"]["DateTimeString"] | null;
+      episode_id: components["schemas"]["EpisodeId"];
       generation: number;
       id: components["schemas"]["TranscriptId"];
       languages: string[];
       model?: string;
       provider?: string;
       recording_id: components["schemas"]["RecordingId"];
-      room_id: components["schemas"]["RoomId"];
-      session_id: components["schemas"]["RoomSessionId"];
+      space_id: components["schemas"]["SpaceId"];
       /** @enum {string} */
       status: "pending" | "processing" | "completed" | "failed";
       tenant_id: components["schemas"]["TenantId"];
@@ -1980,7 +1986,28 @@ export interface components {
       /** @enum {string} */
       storage_provider?: "r2";
     };
-    UpdateRoomRequest: {
+    UpdateSpaceRequest: {
+      admission_policy?:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
+      default_episode_duration_seconds: {
+        Set: boolean;
+        Value?: number | null;
+      };
+      linger_window_seconds: {
+        Set: boolean;
+        Value?: number | null;
+      };
+      maximum_episode_duration_seconds: {
+        Set: boolean;
+        Value?: number | null;
+      };
       media_plane?: string;
       metadata?:
         | {
@@ -2002,20 +2029,6 @@ export interface components {
         | boolean
         | null;
       slug?: string;
-      /** @enum {string} */
-      status?: "active" | "archived" | "ended";
-    };
-    UpdateRoomSessionRequest: {
-      metadata?:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      started_at?: components["schemas"]["DateTimeString"] | null;
     };
     UpdateTenantRequest: {
       ai_provider_config?: components["schemas"]["AIProviderConfig"] | null;
@@ -5061,7 +5074,7 @@ export interface operations {
   listRecordings: {
     parameters: {
       query?: {
-        session_id?: components["schemas"]["RoomSessionId"];
+        episode_id?: components["schemas"]["EpisodeId"];
         page_size?: number;
         cursor?: string;
       };
@@ -5589,7 +5602,7 @@ export interface operations {
       };
     };
   };
-  listRooms: {
+  listSpaces: {
     parameters: {
       query?: {
         page_size?: number;
@@ -5609,7 +5622,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RoomList"];
+          "application/json": components["schemas"]["SpaceList"];
         };
       };
       /** @description Bad Request */
@@ -5659,7 +5672,7 @@ export interface operations {
       };
     };
   };
-  createRoom: {
+  createSpace: {
     parameters: {
       query?: never;
       header?: never;
@@ -5670,7 +5683,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateRoomRequest"];
+        "application/json": components["schemas"]["CreateSpaceRequest"];
       };
     };
     responses: {
@@ -5680,7 +5693,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Room"];
+          "application/json": components["schemas"]["Space"];
         };
       };
       /** @description Bad Request */
@@ -5760,13 +5773,13 @@ export interface operations {
       };
     };
   };
-  getRoom: {
+  getSpace: {
     parameters: {
       query?: never;
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
+        space_id: components["schemas"]["SpaceId"];
       };
       cookie?: never;
     };
@@ -5778,7 +5791,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Room"];
+          "application/json": components["schemas"]["Space"];
         };
       };
       /** @description Bad Request */
@@ -5837,19 +5850,19 @@ export interface operations {
       };
     };
   };
-  updateRoom: {
+  updateSpace: {
     parameters: {
       query?: never;
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
+        space_id: components["schemas"]["SpaceId"];
       };
       cookie?: never;
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["UpdateRoomRequest"];
+        "application/json": components["schemas"]["UpdateSpaceRequest"];
       };
     };
     responses: {
@@ -5859,7 +5872,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Room"];
+          "application/json": components["schemas"]["Space"];
         };
       };
       /** @description Bad Request */
@@ -5948,7 +5961,7 @@ export interface operations {
       };
     };
   };
-  listRoomSessions: {
+  listEpisodes: {
     parameters: {
       query?: {
         page_size?: number;
@@ -5957,7 +5970,7 @@ export interface operations {
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
+        space_id: components["schemas"]["SpaceId"];
       };
       cookie?: never;
     };
@@ -5969,7 +5982,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RoomSessionList"];
+          "application/json": components["schemas"]["EpisodeList"];
         };
       };
       /** @description Bad Request */
@@ -5999,6 +6012,15 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       /** @description Internal Server Error */
       500: {
         headers: {
@@ -6019,7 +6041,7 @@ export interface operations {
       };
     };
   };
-  createRoomSession: {
+  createEpisode: {
     parameters: {
       query?: never;
       header: {
@@ -6027,13 +6049,13 @@ export interface operations {
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
+        space_id: components["schemas"]["SpaceId"];
       };
       cookie?: never;
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateRoomSessionRequest"];
+        "application/json": components["schemas"]["CreateEpisodeRequest"];
       };
     };
     responses: {
@@ -6043,7 +6065,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RoomSession"];
+          "application/json": components["schemas"]["Episode"];
         };
       };
       /** @description Bad Request */
@@ -6132,14 +6154,14 @@ export interface operations {
       };
     };
   };
-  getRoomSession: {
+  getEpisode: {
     parameters: {
       query?: never;
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
       };
       cookie?: never;
     };
@@ -6151,7 +6173,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RoomSession"];
+          "application/json": components["schemas"]["Episode"];
         };
       };
       /** @description Bad Request */
@@ -6210,110 +6232,7 @@ export interface operations {
       };
     };
   };
-  updateRoomSession: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["UpdateRoomSessionRequest"];
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["RoomSession"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Request Entity Too Large */
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  setRoomSessionDeadline: {
+  setEpisodeDeadline: {
     parameters: {
       query?: never;
       header: {
@@ -6321,14 +6240,14 @@ export interface operations {
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
       };
       cookie?: never;
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["SetRoomSessionDeadlineRequest"];
+        "application/json": components["schemas"]["SetEpisodeDeadlineRequest"];
       };
     };
     responses: {
@@ -6338,7 +6257,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SessionControl"];
+          "application/json": components["schemas"]["EpisodeDeadline"];
         };
       };
       /** @description Bad Request */
@@ -6427,7 +6346,7 @@ export interface operations {
       };
     };
   };
-  endRoomSession: {
+  endEpisode: {
     parameters: {
       query?: never;
       header: {
@@ -6435,8 +6354,8 @@ export interface operations {
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
       };
       cookie?: never;
     };
@@ -6448,7 +6367,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SessionEnd"];
+          "application/json": components["schemas"]["EpisodeEnd"];
         };
       };
       /** @description Bad Request */
@@ -6528,7 +6447,7 @@ export interface operations {
       };
     };
   };
-  recoverRoomSessionHost: {
+  admitEpisodeParticipant: {
     parameters: {
       query?: never;
       header: {
@@ -6536,128 +6455,14 @@ export interface operations {
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
       };
       cookie?: never;
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["RecoverRoomSessionHostRequest"];
-      };
-    };
-    responses: {
-      /** @description Accepted */
-      202: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SessionControl"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Request Entity Too Large */
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  admitSessionParticipant: {
-    parameters: {
-      query?: never;
-      header: {
-        "Idempotency-Key": string;
-      };
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["AdmitSessionParticipantRequest"];
+        "application/json": components["schemas"]["AdmitEpisodeParticipantRequest"];
       };
     };
     responses: {
@@ -6756,21 +6561,21 @@ export interface operations {
       };
     };
   };
-  issueSessionParticipantAccess: {
+  issueAccessGrant: {
     parameters: {
       query?: never;
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
       };
       cookie?: never;
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["IssueParticipantAccessRequest"];
+        "application/json": components["schemas"]["IssueAccessGrantRequest"];
       };
     };
     responses: {
@@ -6780,7 +6585,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ParticipantAccess"];
+          "application/json": components["schemas"]["AccessGrant"];
         };
       };
       /** @description Bad Request */
@@ -6875,9 +6680,9 @@ export interface operations {
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
       };
       cookie?: never;
     };
@@ -6966,9 +6771,9 @@ export interface operations {
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
       };
       cookie?: never;
     };
@@ -7070,9 +6875,9 @@ export interface operations {
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
       };
       cookie?: never;
     };
@@ -7174,9 +6979,9 @@ export interface operations {
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
       };
       cookie?: never;
     };
@@ -7272,7 +7077,7 @@ export interface operations {
       };
     };
   };
-  removeSessionParticipant: {
+  removeEpisodeParticipant: {
     parameters: {
       query?: never;
       header: {
@@ -7280,15 +7085,15 @@ export interface operations {
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
       };
       cookie?: never;
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["RemoveSessionParticipantRequest"];
+        "application/json": components["schemas"]["RemoveEpisodeParticipantRequest"];
       };
     };
     responses: {
@@ -7387,15 +7192,15 @@ export interface operations {
       };
     };
   };
-  issueSessionParticipantSyncToken: {
+  issueEpisodeParticipantSyncToken: {
     parameters: {
       query?: never;
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
-        participant_session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
       };
       cookie?: never;
     };
@@ -7458,6 +7263,15 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       /** @description Service Unavailable */
       503: {
         headers: {
@@ -7477,8 +7291,8 @@ export interface operations {
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
       };
       cookie?: never;
     };
@@ -7589,8 +7403,8 @@ export interface operations {
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];
-        room_id: components["schemas"]["RoomId"];
-        session_id: components["schemas"]["RoomSessionId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
       };
       cookie?: never;
     };
@@ -8601,23 +8415,7 @@ export interface operations {
     parameters: {
       query?: {
         state?: ("pending" | "retry_wait" | "delivering" | "succeeded" | "exhausted" | "canceled" | "erased")[];
-        event_type?: (
-          | "endpoint.test"
-          | "participant.joined"
-          | "participant.left"
-          | "recording.completed"
-          | "recording.failed"
-          | "recording.started"
-          | "room.archived"
-          | "room.created"
-          | "room.restored"
-          | "room.updated"
-          | "session.ended"
-          | "session.started"
-          | "transcript.completed"
-          | "transcript.failed"
-          | "transcript.started"
-        )[];
+        event_type?: ("endpoint.test" | "episode.ended" | "episode.started" | "participant.joined" | "participant.left" | "recording.completed" | "recording.failed" | "recording.started" | "space.created" | "space.updated" | "transcript.completed" | "transcript.failed" | "transcript.started")[];
         page_size?: number;
         cursor?: string;
       };

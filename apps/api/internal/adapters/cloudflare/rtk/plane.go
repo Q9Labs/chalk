@@ -105,28 +105,28 @@ func NewPlaneWithClient(cfg config.CloudflareRealtimeConfig, client httpClient, 
 	return plane, nil
 }
 
-func (p Plane) EnsureSession(ctx context.Context, input mediaplane.EnsureSessionInput) (mediaplane.Session, error) {
+func (p Plane) EnsureEpisode(ctx context.Context, input mediaplane.EnsureEpisodeInput) (mediaplane.Episode, error) {
 	if p.client == nil {
-		return mediaplane.Session{}, mediaplane.ErrPlaneUnavailable
+		return mediaplane.Episode{}, mediaplane.ErrPlaneUnavailable
 	}
 	if input.Provider != mediaplane.ProviderCloudflareRTK {
-		return mediaplane.Session{}, mediaplane.ErrInvalidProvider
+		return mediaplane.Episode{}, mediaplane.ErrInvalidProvider
 	}
 
 	title := input.Title
 	if title == "" {
-		title = input.SessionKey
+		title = input.EpisodeKey
 	}
 
 	var output meetingResponse
 	if err := p.do(ctx, http.MethodPost, p.meetingsPath(), meetingRequest{Title: title}, &output); err != nil {
-		return mediaplane.Session{}, err
+		return mediaplane.Episode{}, err
 	}
 	if strings.TrimSpace(output.ID) == "" {
-		return mediaplane.Session{}, fmt.Errorf("create rtk meeting: %w", mediaplane.ErrProviderFailed)
+		return mediaplane.Episode{}, fmt.Errorf("create rtk episode: %w", mediaplane.ErrProviderFailed)
 	}
 
-	return mediaplane.Session{
+	return mediaplane.Episode{
 		Provider: mediaplane.ProviderCloudflareRTK,
 		Ref:      output.ID,
 		Metadata: providerMetadata(p.appID),
@@ -142,7 +142,7 @@ func (p Plane) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput)
 	}
 
 	var output participantResponse
-	if err := p.do(ctx, http.MethodPost, p.participantsPath(input.Session.Ref), participantRequest{
+	if err := p.do(ctx, http.MethodPost, p.participantsPath(input.Episode.Ref), participantRequest{
 		Name:                input.ParticipantName,
 		PresetName:          p.providerPreset(input.ParticipantPreset),
 		CustomParticipantID: input.ExternalParticipantID,
@@ -184,10 +184,10 @@ func (p Plane) RemoveParticipant(ctx context.Context, input mediaplane.RemovePar
 		return mediaplane.ErrInvalidProvider
 	}
 
-	return p.do(ctx, http.MethodDelete, p.participantPath(input.SessionRef, input.ParticipantRef), nil, nil)
+	return p.do(ctx, http.MethodDelete, p.participantPath(input.EpisodeRef, input.ParticipantRef), nil, nil)
 }
 
-func (p Plane) EndSession(ctx context.Context, input mediaplane.EndSessionInput) error {
+func (p Plane) EndEpisode(ctx context.Context, input mediaplane.EndEpisodeInput) error {
 	if p.client == nil {
 		return mediaplane.ErrPlaneUnavailable
 	}
@@ -195,10 +195,10 @@ func (p Plane) EndSession(ctx context.Context, input mediaplane.EndSessionInput)
 		return mediaplane.ErrInvalidProvider
 	}
 
-	return p.do(ctx, http.MethodPost, p.kickAllPath(input.SessionRef), nil, nil)
+	return p.do(ctx, http.MethodPost, p.kickAllPath(input.EpisodeRef), nil, nil)
 }
 
-func (p Plane) SessionUsage(_ context.Context, input mediaplane.SessionUsageInput) (mediaplane.Usage, error) {
+func (p Plane) EpisodeUsage(_ context.Context, input mediaplane.EpisodeUsageInput) (mediaplane.Usage, error) {
 	if input.Provider != mediaplane.ProviderCloudflareRTK {
 		return mediaplane.Usage{}, mediaplane.ErrInvalidProvider
 	}
@@ -312,7 +312,7 @@ func rtkStatusError(statusCode int, payload []byte) error {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		providerErr = mediaplane.ErrProviderUnauthorized
 	case http.StatusNotFound:
-		providerErr = mediaplane.ErrSessionNotFound
+		providerErr = mediaplane.ErrEpisodeNotFound
 	case http.StatusTooManyRequests:
 		providerErr = mediaplane.ErrProviderRateLimited
 	}

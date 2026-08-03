@@ -75,5 +75,7 @@ export function toListParticipants(tiles: readonly Participant[], participants: 
 }
 
 function toListRole(role: ChalkParticipant["role"] | undefined): "host" | "co-host" | "participant" {
-  return role === "cohost" ? "co-host" : (role ?? "participant");
+  if (role === "host") return "host";
+  if (role === "cohost" || role === "collaborator") return "co-host";
+  return "participant";
 }

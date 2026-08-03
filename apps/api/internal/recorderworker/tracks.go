@@ -165,8 +165,8 @@ type AudioChunkPlan struct {
 	EndMs          int64    `json:"end_ms"`
 	LocalStartMs   int64    `json:"local_start_ms"`
 	LocalEndMs     int64    `json:"local_end_ms"`
-	MeetingStartMs int64    `json:"meeting_start_ms"`
-	MeetingEndMs   int64    `json:"meeting_end_ms"`
+	EpisodeStartMs int64    `json:"episode_start_ms"`
+	EpisodeEndMs   int64    `json:"episode_end_ms"`
 	ContextMs      int64    `json:"context_ms"`
 	PolicyVersion  string   `json:"policy_version"`
 	SourceHashes   []string `json:"source_hashes"`
@@ -193,7 +193,7 @@ func BuildAudioChunkPlan(manifest SpeakerTurnManifest, maxDurationMs, contextMs 
 			if chunkEnd > end {
 				chunkEnd = end
 			}
-			chunks = append(chunks, AudioChunkPlan{Sequence: sequence, StartMs: start, EndMs: chunkEnd, LocalStartMs: local, LocalEndMs: local + chunkEnd - start, MeetingStartMs: start, MeetingEndMs: chunkEnd, ContextMs: contextMs, PolicyVersion: manifest.Policy, SourceHashes: append([]string(nil), turn.SourceHashes...), Codec: "mp3", SampleRate: 16000, Channels: 1})
+			chunks = append(chunks, AudioChunkPlan{Sequence: sequence, StartMs: start, EndMs: chunkEnd, LocalStartMs: local, LocalEndMs: local + chunkEnd - start, EpisodeStartMs: start, EpisodeEndMs: chunkEnd, ContextMs: contextMs, PolicyVersion: manifest.Policy, SourceHashes: append([]string(nil), turn.SourceHashes...), Codec: "mp3", SampleRate: 16000, Channels: 1})
 			sequence++
 			local += chunkEnd - start
 			start = chunkEnd

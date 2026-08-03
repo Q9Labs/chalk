@@ -46,8 +46,8 @@ type PublishedReference struct {
 
 type RecordInput struct {
 	TenantID              utilities.ID
-	SessionID             utilities.ID
-	ParticipantSessionID  utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	ConnectionID          string
 	Tracks                []PublishedTrack
@@ -55,8 +55,8 @@ type RecordInput struct {
 
 type CloseInput struct {
 	TenantID              utilities.ID
-	SessionID             utilities.ID
-	ParticipantSessionID  utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	ConnectionID          string
 	MID                   string
@@ -89,14 +89,14 @@ func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
 
-func (s Service) Latest(ctx context.Context, tenantID, sessionID utilities.ID) (Snapshot, error) {
+func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (Snapshot, error) {
 	if s.repository == nil {
 		return Snapshot{}, ErrUnavailable
 	}
-	if tenantID.IsZero() || sessionID.IsZero() {
+	if tenantID.IsZero() || episodeID.IsZero() {
 		return Snapshot{}, ErrInvalidPublication
 	}
-	latest, err := s.latest(ctx, tenantID, sessionID)
+	latest, err := s.latest(ctx, tenantID, episodeID)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -124,7 +124,7 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 	}
 	references = publishedReferences(input)
 	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
-		latest, err := s.latest(ctx, input.TenantID, input.SessionID)
+		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +145,7 @@ func (s Service) PrepareClose(ctx context.Context, input CloseInput) (CloseDecis
 	if err := validateCloseInput(&input); err != nil {
 		return CloseDecision{}, err
 	}
-	latest, err := s.latest(ctx, input.TenantID, input.SessionID)
+	latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
 	if err != nil {
 		return CloseDecision{}, err
 	}
@@ -182,7 +182,7 @@ func (s Service) RecordClosedPublication(ctx context.Context, input CloseInput) 
 	}
 	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
 		attempts = attempt + 1
-		latest, err := s.latest(ctx, input.TenantID, input.SessionID)
+		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
 			return err
 		}
@@ -204,11 +204,11 @@ func (s Service) RecordClosedPublication(ctx context.Context, input CloseInput) 
 	return fmt.Errorf("append media publication close observation: %w", provideroperations.ErrObservationConflict)
 }
 
-func (s Service) latest(ctx context.Context, tenantID, sessionID utilities.ID) (*provideroperations.Observation, error) {
+func (s Service) latest(ctx context.Context, tenantID, episodeID utilities.ID) (*provideroperations.Observation, error) {
 	var cursor *provideroperations.Cursor
 	var latest *provideroperations.Observation
 	for {
-		page, err := s.repository.ListObservations(ctx, tenantID, sessionID, cursor, observationPageSize)
+		page, err := s.repository.ListObservations(ctx, tenantID, episodeID, cursor, observationPageSize)
 		if err != nil {
 			return nil, fmt.Errorf("list media publication observations: %w", err)
 		}
@@ -232,20 +232,20 @@ func merge(latest *provideroperations.Observation, input RecordInput, references
 		incarnation = latest.Incarnation
 		sequence = latest.Sequence + 1
 		for _, publication := range latest.Publications {
-			publications[publicationKey(publication.ParticipantSessionID, publication.Source)] = publication
+			publications[publicationKey(publication.ParticipantID, publication.Source)] = publication
 		}
 	}
 	for index, track := range input.Tracks {
 		publication := provideroperations.Publication{
-			ParticipantSessionID: input.ParticipantSessionID,
-			Source:               track.Source,
-			Enabled:              true,
-			PublicationID:        references[index].PublicationID,
+			ParticipantID: input.ParticipantID,
+			Source:        track.Source,
+			Enabled:       true,
+			PublicationID: references[index].PublicationID,
 		}
-		publications[publicationKey(publication.ParticipantSessionID, publication.Source)] = publication
+		publications[publicationKey(publication.ParticipantID, publication.Source)] = publication
 	}
 	values := sortedPublications(publications)
-	return provideroperations.ObservationInput{TenantID: input.TenantID, SessionID: input.SessionID, Incarnation: incarnation, Sequence: sequence, Publications: values}
+	return provideroperations.ObservationInput{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Incarnation: incarnation, Sequence: sequence, Publications: values}
 }
 
 type closeState uint8
@@ -261,7 +261,7 @@ func publicationCloseState(latest *provideroperations.Observation, input CloseIn
 		return closeStateSatisfied
 	}
 	for _, publication := range latest.Publications {
-		if publication.ParticipantSessionID != input.ParticipantSessionID || publication.Source != input.Source {
+		if publication.ParticipantID != input.ParticipantID || publication.Source != input.Source {
 			continue
 		}
 		if !publication.Enabled || publication.PublicationID == "" {
@@ -282,16 +282,16 @@ func disable(latest *provideroperations.Observation, input CloseInput) (provider
 	}
 	publications := make(map[string]provideroperations.Publication, len(latest.Publications))
 	for _, publication := range latest.Publications {
-		publications[publicationKey(publication.ParticipantSessionID, publication.Source)] = publication
+		publications[publicationKey(publication.ParticipantID, publication.Source)] = publication
 	}
-	key := publicationKey(input.ParticipantSessionID, input.Source)
+	key := publicationKey(input.ParticipantID, input.Source)
 	publication := publications[key]
 	publication.Enabled = false
 	publication.PublicationID = ""
 	publications[key] = publication
 	return provideroperations.ObservationInput{
 		TenantID:     input.TenantID,
-		SessionID:    input.SessionID,
+		EpisodeID:    input.EpisodeID,
 		Incarnation:  latest.Incarnation,
 		Sequence:     latest.Sequence + 1,
 		Publications: sortedPublications(publications),
@@ -315,14 +315,14 @@ func sortedPublications(publications map[string]provideroperations.Publication) 
 		values = append(values, publication)
 	}
 	sort.Slice(values, func(left, right int) bool {
-		return publicationKey(values[left].ParticipantSessionID, values[left].Source) < publicationKey(values[right].ParticipantSessionID, values[right].Source)
+		return publicationKey(values[left].ParticipantID, values[left].Source) < publicationKey(values[right].ParticipantID, values[right].Source)
 	})
 	return values
 }
 
 func validateInput(input *RecordInput) error {
 	input.ConnectionID = strings.TrimSpace(input.ConnectionID)
-	if input.TenantID.IsZero() || input.SessionID.IsZero() || input.ParticipantSessionID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") || len(input.Tracks) == 0 || len(input.Tracks) > 3 {
+	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") || len(input.Tracks) == 0 || len(input.Tracks) > 3 {
 		return ErrInvalidPublication
 	}
 	seen := make(map[string]struct{}, len(input.Tracks))
@@ -347,7 +347,7 @@ func validateCloseInput(input *CloseInput) error {
 	input.MID = strings.TrimSpace(input.MID)
 	input.Source = strings.TrimSpace(input.Source)
 	input.PublicationID = strings.TrimSpace(input.PublicationID)
-	if input.TenantID.IsZero() || input.SessionID.IsZero() || input.ParticipantSessionID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") {
+	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") {
 		return ErrInvalidPublication
 	}
 	if input.Source != "microphone" && input.Source != "camera" && input.Source != "screen" {

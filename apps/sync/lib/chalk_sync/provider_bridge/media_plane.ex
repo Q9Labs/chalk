@@ -4,7 +4,7 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
   @behaviour ChalkSync.MediaPlane
 
   alias ChalkSync.ProviderBridge.Client
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
 
   @enforce_keys [:client]
   defstruct [:client, context: %{}, participant_generation_resolver: nil]
@@ -44,62 +44,62 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
   @spec with_participant_generation(t(), String.t() | nil, pos_integer() | nil) :: t()
   def with_participant_generation(
         %__MODULE__{} = adapter,
-        participant_session_id,
+        participant_id,
         generation
       )
-      when is_binary(participant_session_id) and is_integer(generation) and generation > 0 do
-    resolver = fn _session, candidate_id ->
-      if candidate_id == participant_session_id, do: generation
+      when is_binary(participant_id) and is_integer(generation) and generation > 0 do
+    resolver = fn _episode, candidate_id ->
+      if candidate_id == participant_id, do: generation
     end
 
     %{adapter | participant_generation_resolver: resolver}
   end
 
-  def with_participant_generation(%__MODULE__{} = adapter, _participant_session_id, _generation),
+  def with_participant_generation(%__MODULE__{} = adapter, _participant_id, _generation),
     do: %{adapter | participant_generation_resolver: nil}
 
   @impl true
-  def grant_publication(adapter, operation_id, session, participant_session_id, source) do
-    operation(adapter, operation_id, session, "media.grant_publication",
-      participant_session_id: participant_session_id,
+  def grant_publication(adapter, operation_id, episode, participant_id, source) do
+    operation(adapter, operation_id, episode, "media.grant_publication",
+      participant_id: participant_id,
       publication_source: source
     )
   end
 
   @impl true
-  def revoke_publication(adapter, operation_id, session, participant_session_id, source) do
-    operation(adapter, operation_id, session, "media.revoke_publication",
-      participant_session_id: participant_session_id,
+  def revoke_publication(adapter, operation_id, episode, participant_id, source) do
+    operation(adapter, operation_id, episode, "media.revoke_publication",
+      participant_id: participant_id,
       publication_source: source
     )
   end
 
   @impl true
-  def remove_participant(adapter, operation_id, session, participant_session_id) do
-    operation(adapter, operation_id, session, "media.remove_participant",
-      participant_session_id: participant_session_id
+  def remove_participant(adapter, operation_id, episode, participant_id) do
+    operation(adapter, operation_id, episode, "media.remove_participant",
+      participant_id: participant_id
     )
   end
 
   @impl true
-  def end_session(adapter, operation_id, session) do
-    operation(adapter, operation_id, session, "media.end_session", [])
+  def end_episode(adapter, operation_id, episode) do
+    operation(adapter, operation_id, episode, "media.end_episode", [])
   end
 
   @impl true
-  def observe_session_publications(%__MODULE__{} = adapter, %SessionKey{} = session) do
-    Client.observe_session_publications(context_client(adapter), session)
+  def observe_episode_publications(%__MODULE__{} = adapter, %EpisodeKey{} = episode) do
+    Client.observe_episode_publications(context_client(adapter), episode)
   end
 
-  def observe_session_publications(_adapter, _session), do: {:error, :invalid_contract}
+  def observe_episode_publications(_adapter, _episode), do: {:error, :invalid_contract}
 
-  defp operation(%__MODULE__{} = adapter, operation_id, %SessionKey{} = session, effect, fields) do
+  defp operation(%__MODULE__{} = adapter, operation_id, %EpisodeKey{} = episode, effect, fields) do
     payload =
       fields
       |> Keyword.put(:effect, effect)
-      |> Keyword.put(:tenant_id, session.tenant_id)
-      |> Keyword.put(:session_id, session.session_id)
-      |> maybe_generation(adapter, session)
+      |> Keyword.put(:tenant_id, episode.tenant_id)
+      |> Keyword.put(:episode_id, episode.episode_id)
+      |> maybe_generation(adapter, episode)
       |> Map.new()
 
     case Client.post_operation(context_client(adapter), operation_id, payload) do
@@ -124,26 +124,26 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
     end
   end
 
-  defp operation(_adapter, _operation_id, _session, _effect, _fields),
+  defp operation(_adapter, _operation_id, _episode, _effect, _fields),
     do: {:terminal_failure, :invalid_contract}
 
-  defp maybe_generation(fields, %__MODULE__{participant_generation_resolver: nil}, _session),
+  defp maybe_generation(fields, %__MODULE__{participant_generation_resolver: nil}, _episode),
     do: fields
 
-  defp maybe_generation(fields, %__MODULE__{participant_generation_resolver: resolver}, session)
+  defp maybe_generation(fields, %__MODULE__{participant_generation_resolver: resolver}, episode)
        when is_function(resolver) do
-    participant_session_id = Keyword.get(fields, :participant_session_id)
+    participant_id = Keyword.get(fields, :participant_id)
 
     generation =
       cond do
-        is_nil(participant_session_id) -> nil
-        is_function(resolver, 2) -> resolver.(session, participant_session_id)
-        is_function(resolver, 1) -> resolver.(participant_session_id)
+        is_nil(participant_id) -> nil
+        is_function(resolver, 2) -> resolver.(episode, participant_id)
+        is_function(resolver, 1) -> resolver.(participant_id)
         true -> nil
       end
 
     if is_integer(generation) and generation > 0,
-      do: Keyword.put(fields, :participant_session_generation, generation),
+      do: Keyword.put(fields, :participant_generation, generation),
       else: fields
   rescue
     _ -> fields

@@ -4,12 +4,12 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
   alias ChalkSync.ProviderBridge.Client
   alias ChalkSync.ProviderBridge.MediaPlane
   alias ChalkSync.ProviderBridge.RecordingPlane
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
 
   @tenant "00000000-0000-4000-8000-000000000001"
-  @room "00000000-0000-4000-8000-000000000002"
-  @session_id "00000000-0000-4000-8000-000000000003"
-  @session %SessionKey{tenant_id: @tenant, room_id: @room, session_id: @session_id}
+  @space "00000000-0000-4000-8000-000000000002"
+  @episode_id "00000000-0000-4000-8000-000000000003"
+  @episode %EpisodeKey{tenant_id: @tenant, space_id: @space, episode_id: @episode_id}
   @participant "00000000-0000-4000-8000-000000000004"
   @recording "00000000-0000-4000-8000-000000000005"
 
@@ -63,7 +63,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              MediaPlane.grant_publication(
                adapter,
                "operation-0000001",
-               @session,
+               @episode,
                @participant,
                :camera
              )
@@ -76,8 +76,8 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     assert %{
              "effect" => "media.grant_publication",
              "tenant_id" => @tenant,
-             "session_id" => @session_id,
-             "participant_session_id" => @participant,
+             "episode_id" => @episode_id,
+             "participant_id" => @participant,
              "publication_source" => "camera"
            } = JSON.decode!(body)
 
@@ -86,7 +86,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     assert {"tracestate", "vendor=value"} in headers
 
     refute Enum.any?(JSON.decode!(body), fn {key, _value} ->
-             key == "participant_session_generation"
+             key == "participant_generation"
            end)
   end
 
@@ -110,7 +110,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              RecordingPlane.start_recording(
                adapter,
                "recording-operation-0001",
-               @session,
+               @episode,
                @recording
              )
 
@@ -120,7 +120,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              RecordingPlane.stop_recording(
                adapter,
                "recording-operation-0001",
-               @session,
+               @episode,
                @recording
              )
 
@@ -149,27 +149,27 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              MediaPlane.revoke_publication(
                adapter,
                "operation-revoke-0001",
-               @session,
+               @episode,
                @participant,
                :microphone
              )
 
     assert_receive {:media_effect, :post, _headers, _options, "media.revoke_publication", payload}
-    assert payload["participant_session_id"] == @participant
+    assert payload["participant_id"] == @participant
 
     assert :confirmed =
              MediaPlane.remove_participant(
                adapter,
                "operation-remove-0001",
-               @session,
+               @episode,
                @participant
              )
 
     assert_receive {:media_effect, :post, _headers, _options, "media.remove_participant", payload}
     refute Map.has_key?(payload, "publication_source")
 
-    assert :confirmed = MediaPlane.end_session(adapter, "operation-end-0001", @session)
-    assert_receive {:media_effect, :post, _headers, _options, "media.end_session", payload}
+    assert :confirmed = MediaPlane.end_episode(adapter, "operation-end-0001", @episode)
+    assert_receive {:media_effect, :post, _headers, _options, "media.end_episode", payload}
     assert payload["tenant_id"] == @tenant
   end
 
@@ -188,18 +188,18 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     adapter =
       MediaPlane.new!(
         Client.new!(base_url: "http://localhost", transport: transport),
-        participant_generation_resolver: fn _session, @participant -> 7 end
+        participant_generation_resolver: fn _episode, @participant -> 7 end
       )
 
     assert :confirmed =
              MediaPlane.remove_participant(
                adapter,
                "operation-remove-0002",
-               @session,
+               @episode,
                @participant
              )
 
-    assert_receive {:payload, %{"participant_session_generation" => 7}}
+    assert_receive {:payload, %{"participant_generation" => 7}}
   end
 
   test "decodes all provider outcomes" do
@@ -235,7 +235,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
 
       adapter = MediaPlane.new!(Client.new!(base_url: "http://localhost", transport: transport))
 
-      assert expected == MediaPlane.end_session(adapter, "operation-status-0001", @session)
+      assert expected == MediaPlane.end_episode(adapter, "operation-status-0001", @episode)
     end)
   end
 
@@ -247,7 +247,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
       MediaPlane.new!(Client.new!(base_url: "http://localhost", transport: malformed))
 
     assert {:retryable_failure, :malformed_response} =
-             MediaPlane.end_session(malformed_adapter, "operation-malformed-1", @session)
+             MediaPlane.end_episode(malformed_adapter, "operation-malformed-1", @episode)
 
     oversized_adapter =
       MediaPlane.new!(
@@ -255,7 +255,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
       )
 
     assert {:retryable_failure, :response_too_large} =
-             MediaPlane.end_session(oversized_adapter, "operation-oversized-1", @session)
+             MediaPlane.end_episode(oversized_adapter, "operation-oversized-1", @episode)
   end
 
   test "transport exceptions become retryable transport failures" do
@@ -263,7 +263,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     adapter = MediaPlane.new!(Client.new!(base_url: "http://localhost", transport: transport))
 
     assert {:retryable_failure, :transport_error} =
-             MediaPlane.end_session(adapter, "operation-exception-1", @session)
+             MediaPlane.end_episode(adapter, "operation-exception-1", @episode)
   end
 
   test "bounds request bytes before invoking the transport" do
@@ -278,7 +278,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
       )
 
     assert {:terminal_failure, :request_too_large} =
-             MediaPlane.end_session(adapter, "operation-request-too-large-1", @session)
+             MediaPlane.end_episode(adapter, "operation-request-too-large-1", @episode)
 
     refute_received :transport_called
   end
@@ -310,7 +310,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
       {:ok, 200, [],
        JSON.encode!(%{
          "operation_id" => "operation-valid-01",
-         "effect" => "media.end_session",
+         "effect" => "media.end_episode",
          "outcome" => "confirmed"
        })}
     end
@@ -318,18 +318,18 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     adapter = MediaPlane.new!(Client.new!(base_url: "http://localhost", transport: transport))
 
     assert {:terminal_failure, :invalid_contract} =
-             MediaPlane.end_session(adapter, "short", @session)
+             MediaPlane.end_episode(adapter, "short", @episode)
 
     refute_received :transport_called
 
-    invalid_session = %SessionKey{
+    invalid_episode = %EpisodeKey{
       tenant_id: "not-a-uuid",
-      room_id: @room,
-      session_id: @session_id
+      space_id: @space,
+      episode_id: @episode_id
     }
 
     assert {:terminal_failure, :invalid_contract} =
-             MediaPlane.end_session(adapter, "operation-invalid-01", invalid_session)
+             MediaPlane.end_episode(adapter, "operation-invalid-01", invalid_episode)
 
     refute_received :transport_called
   end
@@ -343,13 +343,13 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     client = Client.new!(base_url: "http://localhost", transport: transport)
 
     assert {:error, :invalid_cursor} =
-             Client.observe_session_publications(client, @session, after_incarnation: 1)
+             Client.observe_episode_publications(client, @episode, after_incarnation: 1)
 
     assert {:error, :invalid_cursor} =
-             Client.observe_session_publications(client, @session, after_sequence: 1)
+             Client.observe_episode_publications(client, @episode, after_sequence: 1)
 
     assert {:ok, %{incarnation: 0, sequence: 0, publications: []}} =
-             Client.observe_session_publications(client, @session,
+             Client.observe_episode_publications(client, @episode,
                after_incarnation: 0,
                after_sequence: 0
              )
@@ -372,10 +372,10 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              "sequence" => 9,
              "publications" => [
                %{
-                 "participant_session_id" => @participant,
+                 "participant_id" => @participant,
                  "source" => "camera",
                  "enabled" => true,
-                 "publication_id" => "cf:session-1:camera-track"
+                 "publication_id" => "cf:episode-1:camera-track"
                }
              ]
            }
@@ -389,23 +389,23 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
       Client.new!(base_url: "http://localhost:4100", transport: transport, max_observations: 4)
 
     assert {:ok, %{incarnation: 4, sequence: 9, publications: [publication]}} =
-             Client.observe_session_publications(client, @session,
+             Client.observe_episode_publications(client, @episode,
                after_incarnation: 3,
                after_sequence: 7,
                limit: 4
              )
 
     assert publication == %{
-             participant_session_id: @participant,
+             participant_id: @participant,
              source: :camera,
              enabled: true,
-             publication_id: "cf:session-1:camera-track"
+             publication_id: "cf:episode-1:camera-track"
            }
 
     assert_receive {:get, :get, url}
 
     assert url ==
-             "http://localhost:4100/internal/v1/sync/media-observations?tenant_id=#{@tenant}&session_id=#{@session_id}&after_incarnation=3&after_sequence=7&limit=4"
+             "http://localhost:4100/internal/v1/sync/media-observations?tenant_id=#{@tenant}&episode_id=#{@episode_id}&after_incarnation=3&after_sequence=7&limit=4"
   end
 
   test "bounds observation and publication counts and rejects unknown sources" do
@@ -428,7 +428,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
         max_observations: 1
       )
 
-    assert {:error, :observation_limit} = Client.observe_session_publications(client, @session)
+    assert {:error, :observation_limit} = Client.observe_episode_publications(client, @episode)
 
     unknown_source = fn _method, _url, _headers, _body, _options ->
       {:ok, 200, [],
@@ -439,7 +439,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              "sequence" => 1,
              "publications" => [
                %{
-                 "participant_session_id" => "p",
+                 "participant_id" => "p",
                  "source" => "speaker",
                  "enabled" => true,
                  "publication_id" => "opaque-track"
@@ -453,7 +453,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     end
 
     client = Client.new!(base_url: "http://localhost", transport: unknown_source)
-    assert {:error, :invalid_source} = Client.observe_session_publications(client, @session)
+    assert {:error, :invalid_source} = Client.observe_episode_publications(client, @episode)
 
     out_of_order = fn _method, _url, _headers, _body, _options ->
       {:ok, 200, [],
@@ -468,7 +468,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     end
 
     client = Client.new!(base_url: "http://localhost", transport: out_of_order)
-    assert {:error, :malformed_response} = Client.observe_session_publications(client, @session)
+    assert {:error, :malformed_response} = Client.observe_episode_publications(client, @episode)
   end
 
   test "preserves bounded opaque publication identifiers at the private boundary" do
@@ -481,7 +481,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
              "sequence" => 1,
              "publications" => [
                %{
-                 "participant_session_id" => @participant,
+                 "participant_id" => @participant,
                  "source" => "camera",
                  "enabled" => true,
                  "publication_id" => "provider-id"
@@ -497,7 +497,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     client = Client.new!(base_url: "http://localhost", transport: transport)
 
     assert {:ok, %{publications: [%{publication_id: "provider-id"}]}} =
-             Client.observe_session_publications(client, @session)
+             Client.observe_episode_publications(client, @episode)
   end
 
   test "rejects operation response contract drift and mismatched observation cursors" do
@@ -505,7 +505,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
       {:ok, 200, [],
        JSON.encode!(%{
          "operation_id" => "operation-outcome-0001",
-         "effect" => "media.end_session",
+         "effect" => "media.end_episode",
          "outcome" => "confirmed",
          "provider_id" => "private"
        })}
@@ -514,7 +514,7 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     adapter = MediaPlane.new!(Client.new!(base_url: "http://localhost", transport: unknown_key))
 
     assert {:retryable_failure, :malformed_response} =
-             MediaPlane.end_session(adapter, "operation-outcome-0001", @session)
+             MediaPlane.end_episode(adapter, "operation-outcome-0001", @episode)
 
     mismatched_cursor = fn _method, _url, _headers, _body, _options ->
       {:ok, 200, [],
@@ -526,14 +526,14 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     end
 
     client = Client.new!(base_url: "http://localhost", transport: mismatched_cursor)
-    assert {:error, :malformed_response} = Client.observe_session_publications(client, @session)
+    assert {:error, :malformed_response} = Client.observe_episode_publications(client, @episode)
   end
 
   defp outcome_response(outcome, reason \\ nil) do
     transport = fn _method, _url, _headers, _body, _options ->
       payload = %{
         "operation_id" => "operation-outcome-0001",
-        "effect" => "media.end_session",
+        "effect" => "media.end_episode",
         "outcome" => outcome
       }
 
@@ -542,6 +542,6 @@ defmodule ChalkSync.ProviderBridge.ClientTest do
     end
 
     adapter = MediaPlane.new!(Client.new!(base_url: "http://localhost", transport: transport))
-    MediaPlane.end_session(adapter, "operation-outcome-0001", @session)
+    MediaPlane.end_episode(adapter, "operation-outcome-0001", @episode)
   end
 end

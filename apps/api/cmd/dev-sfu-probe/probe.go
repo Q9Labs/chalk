@@ -16,7 +16,7 @@ import (
 const probeTimeout = 30 * time.Second
 
 const (
-	probeSessionRef        = "chalk-dev-sfu-probe"
+	probeEpisodeRef        = "chalk-dev-sfu-probe"
 	probeParticipantRef    = "chalk-dev-sfu-probe"
 	probeParticipantPreset = "contributor"
 )
@@ -98,9 +98,9 @@ func (p Probe) Run(parent context.Context) (Result, error) {
 
 	join, err := p.client.CreateJoin(ctx, mediaplane.CreateJoinInput{
 		Provider: mediaplane.ProviderCloudflareSFU,
-		Session: mediaplane.Session{
+		Episode: mediaplane.Episode{
 			Provider: mediaplane.ProviderCloudflareSFU,
-			Ref:      probeSessionRef,
+			Ref:      probeEpisodeRef,
 		},
 		ParticipantName:       probeParticipantRef,
 		ExternalParticipantID: probeParticipantRef,
@@ -150,7 +150,7 @@ func classifyProbeError(ctx context.Context, stage string, err error) ProbeError
 		class = FailureAuthentication
 	case errors.Is(err, mediaplane.ErrProviderRateLimited):
 		class = FailureRateLimited
-	case errors.Is(err, mediaplane.ErrInvalidProvider), errors.Is(err, mediaplane.ErrInvalidSessionRef):
+	case errors.Is(err, mediaplane.ErrInvalidProvider), errors.Is(err, mediaplane.ErrInvalidEpisodeRef):
 		class = FailureContract
 	case errors.Is(err, mediaplane.ErrPlaneUnavailable):
 		class = FailureUnavailable

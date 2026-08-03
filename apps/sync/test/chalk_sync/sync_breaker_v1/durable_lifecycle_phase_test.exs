@@ -13,17 +13,13 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhaseTest do
 
     assert result["verdict"] == "pass"
     assert result["invariants"]["all_schedules_executed"]
-    assert result["bounds"]["schedule_steps"] == 9
+    assert result["bounds"]["schedule_steps"] == 8
     assert Enum.map(result["observations"], & &1["schedule"]) == result["schedule"]
     assert length(result["digest_sequence"]) == result["folded_snapshot"]["control_revision"]
     assert Enum.all?(result["digest_sequence"], &(byte_size(&1["digest"]) == 64))
 
-    [host_race, admission_race] =
-      Enum.filter(result["observations"], &Map.has_key?(&1, "order"))
-
-    assert host_race["order"] == ["phase_host_transfer1", "phase_host_leave_001"]
+    [admission_race] = Enum.filter(result["observations"], &Map.has_key?(&1, "order"))
     assert admission_race["order"] == ["phase_admission_deny", "phase_admission_expiry"]
-    assert host_race["second_waited_for_authority_lock"]
     assert admission_race["second_waited_for_authority_lock"]
     refute Map.has_key?(result, "runtime_ms")
     refute inspect(result) =~ "#PID<"

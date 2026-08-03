@@ -49,18 +49,18 @@ defmodule ChalkSync.ProviderBridge.E2ETest do
   test "claims a durable mute, crosses mTLS provider bridge, and finalizes exactly once", %{
     connections: connections
   } do
-    fixture = SyncPostgres.seed_session(hd(connections), 2)
+    fixture = SyncPostgres.seed_episode(hd(connections), 2)
 
     on_exit(fn ->
-      cleanup_provider_bridge_rows(hd(connections), fixture.session)
-      SyncPostgres.cleanup(hd(connections), fixture.session)
+      cleanup_provider_bridge_rows(hd(connections), fixture.episode)
+      SyncPostgres.cleanup(hd(connections), fixture.episode)
     end)
 
     [host, guest] = fixture.identities
 
     {:ok, operation} =
       Operation.new("cross_runtime_mute_01", :mute_participant, %{
-        "participantSessionId" => guest.participant_session_id
+        "participantId" => guest.participant_id
       })
 
     assert {:ok, %{external_operation_id: operation_id}} =
@@ -68,8 +68,8 @@ defmodule ChalkSync.ProviderBridge.E2ETest do
 
     assert {:ok, claimed} = Postgres.claim_operations(64)
 
-    assert {session, external} =
-             Enum.find(claimed, fn {_session, candidate} ->
+    assert {episode, external} =
+             Enum.find(claimed, fn {_episode, candidate} ->
                candidate.external_operation_id == operation_id
              end)
 
@@ -85,7 +85,7 @@ defmodule ChalkSync.ProviderBridge.E2ETest do
 
     assert :confirmed =
              ExternalOperationConsumer.execute_operation(
-               session,
+               episode,
                external,
                {MediaPlane, adapter},
                nil,
@@ -93,11 +93,11 @@ defmodule ChalkSync.ProviderBridge.E2ETest do
              )
 
     assert {:ok, %{status: :applied, attempt_count: 1}} =
-             Postgres.read_operation(fixture.session, operation_id)
+             Postgres.read_operation(fixture.episode, operation_id)
 
     assert {:ok, remaining} = Postgres.claim_operations(64)
 
-    refute Enum.any?(remaining, fn {_session, candidate} ->
+    refute Enum.any?(remaining, fn {_episode, candidate} ->
              candidate.external_operation_id == operation_id
            end)
   end
@@ -108,24 +108,24 @@ defmodule ChalkSync.ProviderBridge.E2ETest do
     :exit, _reason -> :ok
   end
 
-  defp cleanup_provider_bridge_rows(connection, session) do
-    params = [UUID.dump!(session.tenant_id), UUID.dump!(session.session_id)]
+  defp cleanup_provider_bridge_rows(connection, episode) do
+    params = [UUID.dump!(episode.tenant_id), UUID.dump!(episode.episode_id)]
 
     Postgrex.query!(
       connection,
-      "delete from provider_operation_observations where tenant_id = $1 and session_id = $2",
+      "delete from provider_operation_observations where tenant_id = $1 and episode_id = $2",
       params
     )
 
     Postgrex.query!(
       connection,
-      "delete from provider_operation_observation_heads where tenant_id = $1 and session_id = $2",
+      "delete from provider_operation_observation_heads where tenant_id = $1 and episode_id = $2",
       params
     )
 
     Postgrex.query!(
       connection,
-      "delete from provider_operation_receipts where tenant_id = $1 and session_id = $2",
+      "delete from provider_operation_receipts where tenant_id = $1 and episode_id = $2",
       params
     )
   end

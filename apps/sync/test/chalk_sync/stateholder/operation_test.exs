@@ -10,17 +10,18 @@ defmodule ChalkSync.Stateholder.OperationTest do
       {:admit_participant, %{"admissionRequestId" => @uuid}},
       {:deny_admission, %{"admissionRequestId" => @uuid}},
       {:admission_request_expired, %{"admissionRequestId" => @uuid}},
-      {:mute_participant, %{"participantSessionId" => @uuid}},
-      {:stop_participant_camera, %{"participantSessionId" => @uuid}},
-      {:stop_participant_screen_share, %{"participantSessionId" => @uuid}},
-      {:remove_participant, %{"participantSessionId" => @uuid}},
+      {:mute_participant, %{"participantId" => @uuid}},
+      {:stop_participant_camera, %{"participantId" => @uuid}},
+      {:stop_participant_screen_share, %{"participantId" => @uuid}},
+      {:remove_participant, %{"participantId" => @uuid}},
       {:start_recording, %{"recordingId" => @uuid}},
       {:stop_recording, %{"recordingId" => @uuid}},
       {:participant_leave, %{}},
-      {:end_session, %{}},
-      {:tenant_transfer_host, %{"participantSessionId" => @uuid}},
+      {:start_episode, %{}},
+      {:extend_episode, %{"extensionSeconds" => 60}},
+      {:end_episode, %{}},
       {:tenant_set_deadline, %{"deadlineAtMs" => 10_000, "deadlineGeneration" => 2}},
-      {:tenant_end_session, %{}},
+      {:tenant_end_episode, %{}},
       {:maximum_duration_expired, %{"deadlineGeneration" => 2}}
     ]
 
@@ -32,14 +33,14 @@ defmodule ChalkSync.Stateholder.OperationTest do
   end
 
   test "rejects malformed request keys, unknown names, loose payloads, and invalid UUIDs" do
-    assert Operation.new("short", :end_session, %{}) == {:error, :invalid_request_key}
+    assert Operation.new("short", :end_episode, %{}) == {:error, :invalid_request_key}
     assert Operation.new("external_op_0001", :invented, %{}) == {:error, :unknown_operation}
 
     assert Operation.new("external_op_0001", :participant_leave, %{"extra" => true}) ==
              {:error, :invalid_payload}
 
     assert Operation.new("external_op_0001", :mute_participant, %{
-             "participantSessionId" => "not-a-uuid"
+             "participantId" => "not-a-uuid"
            }) == {:error, :invalid_payload}
 
     assert Operation.new("external_op_0001", :maximum_duration_expired, %{}) ==

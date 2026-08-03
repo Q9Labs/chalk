@@ -71,7 +71,7 @@ func (r *Runtime) emit(ctx context.Context, eventType EventType, heartbeat *Hear
 	if terminalState && eventType != EventTerminal {
 		return errors.New("worker runtime is terminal")
 	}
-	event := WorkerEvent{ProtocolVersion: ProtocolVersion, Type: eventType, JobID: r.job.JobID, TenantID: r.job.TenantID, SessionID: r.job.SessionID, Attempt: r.job.Attempt, FencingGeneration: r.job.FencingGeneration, JourneyID: r.job.JourneyID, TraceParent: r.job.TraceParent, At: r.now(), Heartbeat: heartbeat, Progress: progress, Terminal: terminal}
+	event := WorkerEvent{ProtocolVersion: ProtocolVersion, Type: eventType, JobID: r.job.JobID, TenantID: r.job.TenantID, EpisodeID: r.job.EpisodeID, Attempt: r.job.Attempt, FencingGeneration: r.job.FencingGeneration, JourneyID: r.job.JourneyID, TraceParent: r.job.TraceParent, At: r.now(), Heartbeat: heartbeat, Progress: progress, Terminal: terminal}
 	if err := event.Validate(r.now()); err != nil {
 		return err
 	}

@@ -1,11 +1,11 @@
-# Chalk Contract And SDK Codegen
+# Chalk Contract And Fixture Proof
 
 ## Purpose
 
-Chalk has one language-neutral client/server contract. That contract describes
-the HTTP control plane and the real-time sync protocol, then generates the wire
-types, validation schemas, clients, and server bindings used by every supported
-language.
+Chalk keeps authored HTTP and real-time schemas as the source of truth. The
+fixture-proof tool validates a representative frontend fixture and keeps the
+checked-in proof deterministic; the API and sync emitters consume their own
+authored schemas.
 
 Generated output must preserve Chalk semantics rather than flattening the API
 into generic strings and unknown objects. IDs remain branded references,
@@ -28,8 +28,9 @@ The contract and SDK roots have separate responsibilities:
 
 - `contract` owns authored language-neutral schemas and generated public
   protocol documents.
-- `tools/contract-codegen` owns the private compiler, normalized IR, emitters,
-  compatibility checks, fixtures, and golden tests.
+- `tools/contract-fixture-proof` owns the private fixture proof, proof IR,
+  compatibility checks, and golden tests. Its sibling emitters consume the
+  checked-in OpenAPI, sync, and whiteboard schemas directly.
 - `sdks` owns distributable language SDKs.
 - `packages` owns reusable cross-surface libraries such as assets, UI,
   whiteboard, and Facehash.
@@ -46,12 +47,10 @@ contract/
     asyncapi.json
     json-schema/
 
-tools/contract-codegen/
-  src/frontends/
-  src/ir/
-  src/emitters/
-  test/fixtures/
-  test/golden/
+tools/contract-fixture-proof/
+  src/typespec-proof/
+  src/proof.mjs
+  test/
 
 sdks/
   typescript/
@@ -78,16 +77,17 @@ apps/
 
 ## Contract Pipeline
 
-All frontends normalize into a Chalk-owned `ContractIR`. Every output is
-generated from that IR:
+The fixture proof normalizes its two representative frontends into a
+Chalk-owned `ContractIR`:
 
 ```text
-authored contract
+proof fixture
       -> frontend adapter
       -> ContractIR
-      -> OpenAPI and sync protocol documents
-      -> language SDK wire types and clients
-      -> Go and Elixir server bindings
+      -> deterministic proof report
+
+Production OpenAPI, sync, and whiteboard outputs are emitted from their
+checked-in schemas by the focused emitters.
 ```
 
 Emitter behavior never depends directly on TypeSpec compiler objects, Go
@@ -106,18 +106,18 @@ contract:
 1. TypeSpec, used as a parser, type checker, and semantic-model provider.
 2. A minimal Chalk-native declarative JSON format parsed with a
    location-preserving parser that rejects duplicate keys, then validated by
-   `tools/contract-codegen`.
+   `tools/contract-fixture-proof`.
 
 The proof contract includes:
 
-- Reusable `Tenant`, `User`, and `Room` entities.
-- Branded `TenantId`, `UserId`, `RoomId`, and `ParticipantId` scalars.
+- Reusable `Tenant`, `User`, and `Space` entities.
+- Branded `TenantId`, `UserId`, `SpaceId`, and `ParticipantId` scalars.
 - String length, numeric range, format, enum, optional, nullable, array, record,
   and recursive-reference constraints.
 - Three representative HTTP operations covering path/query parameters,
   authentication, request bodies, body limits, rate limits, success headers,
   response variants, and stable errors.
-- The production sync protocol version 1 frames for tenant/Session-scoped
+- The production sync protocol version 1 frames for tenant/Episode-scoped
   `hello`, snapshot/paged-replay/
   up-to-date recovery, typed commands and events, durable acknowledgement
   outcomes, terminal lifecycle results, protocol errors, `ping`, and `pong`.
@@ -246,9 +246,9 @@ not reach into SDK source paths.
 
 `@q9labsai/chalk-whiteboard/react` owns the reusable React canvas, Excalidraw
 loading and collaboration lifecycle, file synchronization, and math authoring.
-`@q9labsai/chalk-react` composes that surface into meetings and supplies Chalk's
+`@q9labsai/chalk-react` composes that surface into collaboration experiences and supplies Chalk's
 visual treatment. This keeps whiteboard behavior available to any React surface
-without coupling it to the TypeScript meeting SDK.
+without coupling it to the TypeScript collaboration SDK.
 
 ## Migration Map
 
@@ -259,14 +259,15 @@ without coupling it to the TypeScript meeting SDK.
 - `packages/chalk-whiteboard` becomes `packages/whiteboard`.
 - Framework-neutral asset metadata moves from `packages/ui` to
   `packages/assets`.
-- `scripts/codegen` implementation moves to `tools/contract-codegen`.
+- `scripts/codegen` remains thin orchestration around the focused emitters;
+  fixture-proof implementation lives in `tools/contract-fixture-proof`.
 - `apps/api/openapi/openapi.json` becomes `contract/generated/openapi.json`.
 - `apps/api/cmd/codegen` remains a transitional exporter until generated Go
   route descriptors participate in mounting, or a conformance test proves the
   live Chi route inventory and operation metadata equal the contract. It is
   removed only after complete route and semantic parity.
 - `apps/sync/lib/chalk_sync/protocol.ex` consumes the generated v1 binding
-  while Session state-machine behavior remains hand-written.
+  while Episode state-machine behavior remains hand-written.
 
 Moves preserve history and avoid unrelated refactors. Generated moves and
 semantic regeneration remain reviewable as separate changes within the final
@@ -334,7 +335,7 @@ The implementation is complete when all of the following are observed:
 
 ## Non-Goals
 
-- Generating handwritten meeting behavior, room-state decisions, or UI logic.
+- Generating handwritten episode behavior, space-state decisions, or UI logic.
 - Publishing the generator for customer-defined APIs.
 - Replacing the JSON wire protocols with Protobuf or another transport.
 - Moving the API or sync engine out of `apps`.

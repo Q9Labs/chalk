@@ -21,24 +21,24 @@ func TestNewPlaneRejectsMissingConfig(t *testing.T) {
 	}
 }
 
-func TestEnsureSessionCreatesMeeting(t *testing.T) {
+func TestEnsureEpisodeCreatesMeeting(t *testing.T) {
 	client := &roundTripStub{
 		statusCode:   http.StatusOK,
-		responseBody: `{"result":{"id":"meeting_123"}}`,
+		responseBody: `{"result":{"id":"episode_123"}}`,
 	}
 	plane := testPlane(t, client)
 
-	session, err := plane.EnsureSession(context.Background(), mediaplane.EnsureSessionInput{
+	episode, err := plane.EnsureEpisode(context.Background(), mediaplane.EnsureEpisodeInput{
 		Provider:   mediaplane.ProviderCloudflareRTK,
-		SessionKey: "session_123",
+		EpisodeKey: "episode_123",
 		Title:      "Weekly sync",
 	})
 	if err != nil {
-		t.Fatalf("ensure session: %v", err)
+		t.Fatalf("ensure episode: %v", err)
 	}
 
-	if session.Ref != "meeting_123" {
-		t.Fatalf("session ref = %q, want meeting_123", session.Ref)
+	if episode.Ref != "episode_123" {
+		t.Fatalf("episode ref = %q, want episode_123", episode.Ref)
 	}
 	if client.method != http.MethodPost {
 		t.Fatalf("method = %q, want POST", client.method)
@@ -62,9 +62,9 @@ func TestCreateJoinAddsParticipantAndReturnsToken(t *testing.T) {
 
 	join, err := plane.CreateJoin(context.Background(), mediaplane.CreateJoinInput{
 		Provider: mediaplane.ProviderCloudflareRTK,
-		Session: mediaplane.Session{
+		Episode: mediaplane.Episode{
 			Provider: mediaplane.ProviderCloudflareRTK,
-			Ref:      "meeting_123",
+			Ref:      "episode_123",
 		},
 		ParticipantName:       "Ada",
 		ExternalParticipantID: "external_123",
@@ -105,7 +105,7 @@ func TestLifecycleRequestsUseRTKPaths(t *testing.T) {
 
 	err := plane.RemoveParticipant(context.Background(), mediaplane.RemoveParticipantInput{
 		Provider:       mediaplane.ProviderCloudflareRTK,
-		SessionRef:     "meeting_123",
+		EpisodeRef:     "episode_123",
 		ParticipantRef: "participant_123",
 	})
 	if err != nil {
@@ -114,21 +114,21 @@ func TestLifecycleRequestsUseRTKPaths(t *testing.T) {
 	if client.method != http.MethodDelete {
 		t.Fatalf("method = %q, want DELETE", client.method)
 	}
-	if !strings.HasSuffix(client.path, "/meetings/meeting_123/participants/participant_123") {
+	if !strings.HasSuffix(client.path, "/meetings/episode_123/participants/participant_123") {
 		t.Fatalf("path = %q, want participant delete path", client.path)
 	}
 
-	err = plane.EndSession(context.Background(), mediaplane.EndSessionInput{
+	err = plane.EndEpisode(context.Background(), mediaplane.EndEpisodeInput{
 		Provider:   mediaplane.ProviderCloudflareRTK,
-		SessionRef: "meeting_123",
+		EpisodeRef: "episode_123",
 	})
 	if err != nil {
-		t.Fatalf("end session: %v", err)
+		t.Fatalf("end episode: %v", err)
 	}
 	if client.method != http.MethodPost {
 		t.Fatalf("method = %q, want POST", client.method)
 	}
-	if !strings.HasSuffix(client.path, "/meetings/meeting_123/active-session/kick-all") {
+	if !strings.HasSuffix(client.path, "/meetings/episode_123/active-session/kick-all") {
 		t.Fatalf("path = %q, want kick all path", client.path)
 	}
 }
@@ -139,7 +139,7 @@ func TestLifecycleRequestsEscapeProviderRefs(t *testing.T) {
 
 	err := plane.RemoveParticipant(context.Background(), mediaplane.RemoveParticipantInput{
 		Provider:       mediaplane.ProviderCloudflareRTK,
-		SessionRef:     "../meeting/123?x=1",
+		EpisodeRef:     "../meeting/123?x=1",
 		ParticipantRef: "participant/456#frag",
 	})
 	if err != nil {
@@ -151,12 +151,12 @@ func TestLifecycleRequestsEscapeProviderRefs(t *testing.T) {
 		t.Fatalf("path = %q, want %q", client.path, want)
 	}
 
-	err = plane.EndSession(context.Background(), mediaplane.EndSessionInput{
+	err = plane.EndEpisode(context.Background(), mediaplane.EndEpisodeInput{
 		Provider:   mediaplane.ProviderCloudflareRTK,
-		SessionRef: "../meeting/123?x=1",
+		EpisodeRef: "../meeting/123?x=1",
 	})
 	if err != nil {
-		t.Fatalf("end session: %v", err)
+		t.Fatalf("end episode: %v", err)
 	}
 
 	want = "/client/v4/accounts/account-id/realtime/kit/rtk-app-id/meetings/..%2Fmeeting%2F123%3Fx=1/active-session/kick-all"
@@ -172,7 +172,7 @@ func TestProviderErrorsMapToMediaplaneErrors(t *testing.T) {
 		want       error
 	}{
 		{name: "unauthorized", statusCode: http.StatusForbidden, want: mediaplane.ErrProviderUnauthorized},
-		{name: "not found", statusCode: http.StatusNotFound, want: mediaplane.ErrSessionNotFound},
+		{name: "not found", statusCode: http.StatusNotFound, want: mediaplane.ErrEpisodeNotFound},
 		{name: "rate limited", statusCode: http.StatusTooManyRequests, want: mediaplane.ErrProviderRateLimited},
 		{name: "provider failed", statusCode: http.StatusBadGateway, want: mediaplane.ErrProviderFailed},
 	}
@@ -185,9 +185,9 @@ func TestProviderErrorsMapToMediaplaneErrors(t *testing.T) {
 			}
 			plane := testPlane(t, client)
 
-			_, err := plane.EnsureSession(context.Background(), mediaplane.EnsureSessionInput{
+			_, err := plane.EnsureEpisode(context.Background(), mediaplane.EnsureEpisodeInput{
 				Provider:   mediaplane.ProviderCloudflareRTK,
-				SessionKey: "session_123",
+				EpisodeKey: "episode_123",
 			})
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("error = %v, want %v", err, tt.want)

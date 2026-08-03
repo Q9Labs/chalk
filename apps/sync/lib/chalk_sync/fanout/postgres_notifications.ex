@@ -11,17 +11,17 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
 
   require Logger
 
+  alias ChalkSync.Chat
   alias ChalkSync.Database
-  alias ChalkSync.RoomActions
-  alias ChalkSync.Sessions.Coordinator
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Episodes.Coordinator
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Telemetry
   alias ChalkSync.UUID
 
   @channel "chalk_sync_heads"
-  @room_action_channels [
-    "chalk_room_action_heads",
-    "chalk_room_action_transient"
+  @collaboration_channels [
+    "chalk_collaboration_heads",
+    "chalk_collaboration_transient"
   ]
 
   def start_link(options \\ []) do
@@ -47,8 +47,8 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
 
     {:ok, listen_ref} = Postgrex.Notifications.listen(notifications, @channel)
 
-    room_action_refs =
-      Map.new(@room_action_channels, fn channel ->
+    collaboration_refs =
+      Map.new(@collaboration_channels, fn channel ->
         {:ok, reference} = Postgrex.Notifications.listen(notifications, channel)
         {reference, channel}
       end)
@@ -57,7 +57,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
      %{
        notifications: notifications,
        listen_ref: listen_ref,
-       room_action_refs: room_action_refs,
+       collaboration_refs: collaboration_refs,
        received_count: 0,
        malformed_count: 0,
        last_received_at_ms: nil
@@ -75,9 +75,9 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
         %{notifications: notifications, listen_ref: listen_ref} = state
       ) do
     case parse_payload(payload) do
-      {:ok, session, revision} ->
+      {:ok, episode, revision} ->
         Telemetry.execute([:fanout, :notification], %{}, %{outcome: :valid})
-        Coordinator.hint(session, revision)
+        Coordinator.hint(episode, revision)
 
         {:noreply,
          %{
@@ -95,11 +95,11 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
 
   def handle_info(
         {:notification, notifications, listen_ref, channel, payload},
-        %{notifications: notifications, room_action_refs: room_action_refs} = state
+        %{notifications: notifications, collaboration_refs: collaboration_refs} = state
       )
-      when channel in @room_action_channels and is_map_key(room_action_refs, listen_ref) and
-             :erlang.map_get(listen_ref, room_action_refs) == channel do
-    case RoomActions.handle_fanout_notification(channel, payload) do
+      when channel in @collaboration_channels and is_map_key(collaboration_refs, listen_ref) and
+             :erlang.map_get(listen_ref, collaboration_refs) == channel do
+    case Chat.handle_fanout_notification(channel, payload) do
       :ok ->
         {:noreply,
          %{
@@ -109,22 +109,22 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
          }}
 
       {:error, :invalid_payload} ->
-        Logger.warning("discarded malformed room-action notification")
+        Logger.warning("discarded malformed space-action notification")
         {:noreply, %{state | malformed_count: state.malformed_count + 1}}
     end
   end
 
   defp parse_payload(payload) do
-    with [tenant_id, room_id, session_id, encoded_revision] <- String.split(payload, ":"),
+    with [tenant_id, space_id, episode_id, encoded_revision] <- String.split(payload, ":"),
          {:ok, _tenant} <- UUID.dump(tenant_id),
-         {:ok, _room} <- UUID.dump(room_id),
-         {:ok, _session} <- UUID.dump(session_id),
+         {:ok, _room} <- UUID.dump(space_id),
+         {:ok, _episode} <- UUID.dump(episode_id),
          {revision, ""} when revision >= 0 <- Integer.parse(encoded_revision) do
       {:ok,
-       %SessionKey{
+       %EpisodeKey{
          tenant_id: String.downcase(tenant_id),
-         room_id: String.downcase(room_id),
-         session_id: String.downcase(session_id)
+         space_id: String.downcase(space_id),
+         episode_id: String.downcase(episode_id)
        }, revision}
     else
       _ -> :error

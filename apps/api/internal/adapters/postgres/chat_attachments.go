@@ -44,8 +44,8 @@ func (r ChatAttachmentRepository) Reserve(ctx context.Context, input chatattachm
 		ObjectKey: upload.ObjectKey, OriginalFilename: upload.FileName, MimeType: upload.MIMEType,
 		ByteLength: upload.ByteLength, Sha256: upload.SHA256[:],
 		ExpiresAt: pgtype.Timestamptz{Time: upload.ExpiresAt, Valid: true},
-		TenantID:  uuid(input.Subject.TenantID), RoomID: uuid(input.Subject.RoomID),
-		SessionID: uuid(input.Subject.SessionID), ParticipantSessionID: uuid(input.Subject.ParticipantSessionID),
+		TenantID:  uuid(input.Subject.TenantID), SpaceID: uuid(input.Subject.SpaceID),
+		EpisodeID: uuid(input.Subject.EpisodeID), ParticipantID: uuid(input.Subject.ParticipantID),
 		ParticipantGeneration: input.Subject.ParticipantGeneration,
 	})
 	if chatAttachmentUniqueViolation(err) {
@@ -67,8 +67,8 @@ func (r ChatAttachmentRepository) Reserve(ctx context.Context, input chatattachm
 func (r ChatAttachmentRepository) existingReservation(ctx context.Context, input chatattachments.ReserveInput) (chatattachments.Upload, error) {
 	subject := input.Subject
 	row, err := r.queries.GetChatAttachmentByClientID(ctx, sqlc.GetChatAttachmentByClientIDParams{
-		TenantID: uuid(subject.TenantID), RoomID: uuid(subject.RoomID),
-		SessionID: uuid(subject.SessionID), ParticipantSessionID: uuid(subject.ParticipantSessionID),
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
 		ParticipantGeneration: subject.ParticipantGeneration, ClientAttachmentID: input.ClientAttachmentID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -110,8 +110,8 @@ func (r ChatAttachmentRepository) ClaimFinalize(
 		FinalizeClaimedUntil: pgtype.Timestamptz{
 			Time: leaseUntil, Valid: true,
 		},
-		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), RoomID: uuid(subject.RoomID),
-		SessionID: uuid(subject.SessionID), ParticipantSessionID: uuid(subject.ParticipantSessionID),
+		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
 		ParticipantGeneration: subject.ParticipantGeneration,
 		NowAt:                 pgtype.Timestamptz{Time: now, Valid: true},
 	})
@@ -138,8 +138,8 @@ func (r ChatAttachmentRepository) ClaimFinalize(
 	}
 
 	existing, findErr := r.queries.GetChatAttachmentByUploadID(ctx, sqlc.GetChatAttachmentByUploadIDParams{
-		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), RoomID: uuid(subject.RoomID),
-		SessionID: uuid(subject.SessionID), ParticipantSessionID: uuid(subject.ParticipantSessionID),
+		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
 		ParticipantGeneration: subject.ParticipantGeneration,
 	})
 	if errors.Is(findErr, pgx.ErrNoRows) {
@@ -236,9 +236,9 @@ func (r ChatAttachmentRepository) ReleaseFinalize(
 
 func (r ChatAttachmentRepository) AuthorizedDownload(ctx context.Context, subject chatattachments.Subject, attachmentID utilities.ID) (chatattachments.Upload, error) {
 	row, err := r.queries.GetAuthorizedChatAttachmentDownload(ctx, sqlc.GetAuthorizedChatAttachmentDownloadParams{
-		TenantID: uuid(subject.TenantID), RoomID: uuid(subject.RoomID),
-		SessionID: uuid(subject.SessionID), AttachmentID: uuid(attachmentID),
-		ParticipantSessionID:  uuid(subject.ParticipantSessionID),
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), AttachmentID: uuid(attachmentID),
+		ParticipantID:         uuid(subject.ParticipantID),
 		ParticipantGeneration: subject.ParticipantGeneration,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -274,7 +274,7 @@ func (r ChatAttachmentRepository) ClaimCleanup(ctx context.Context, input chatat
 	claims := make([]chatattachments.CleanupClaim, 0, len(rows))
 	for _, row := range rows {
 		claims = append(claims, chatattachments.CleanupClaim{
-			TenantID: utilities.IDFromBytes(row.TenantID.Bytes), SessionID: utilities.IDFromBytes(row.SessionID.Bytes),
+			TenantID: utilities.IDFromBytes(row.TenantID.Bytes), EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes),
 			AttachmentID: utilities.IDFromBytes(row.AttachmentID.Bytes), ObjectKey: row.ObjectKey,
 			Token: token,
 		})
@@ -284,7 +284,7 @@ func (r ChatAttachmentRepository) ClaimCleanup(ctx context.Context, input chatat
 
 func (r ChatAttachmentRepository) CompleteCleanup(ctx context.Context, claim chatattachments.CleanupClaim) error {
 	count, err := r.queries.CompleteChatAttachmentCleanup(ctx, sqlc.CompleteChatAttachmentCleanupParams{
-		TenantID: uuid(claim.TenantID), SessionID: uuid(claim.SessionID),
+		TenantID: uuid(claim.TenantID), EpisodeID: uuid(claim.EpisodeID),
 		AttachmentID: uuid(claim.AttachmentID), ClaimToken: uuid(claim.Token),
 	})
 	if err != nil {

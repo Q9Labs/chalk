@@ -1,6 +1,7 @@
 import { build } from "esbuild";
 
 await build({
+  absWorkingDir: import.meta.dirname,
   entryPoints: ["./app.tsx"],
   bundle: true,
   format: "esm",

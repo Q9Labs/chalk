@@ -41,44 +41,37 @@ export function optimisticV1Control(state: V1ControlState, actorId: string, comm
 }
 
 export function snapshotToState(snapshot: Snapshot): V1ControlState {
-  if (snapshot.host_participant_session_id === null && (snapshot.status !== "active" || snapshot.participants.length !== 0)) {
-    throw new V1ReplicaError("nullable host is valid only before the first admission");
-  }
-  const roleCapabilities = {
-    host: [...snapshot.role_capabilities.host],
-    cohost: [...snapshot.role_capabilities.cohost],
-    participant: [...snapshot.role_capabilities.participant],
-  };
-  for (const participant of snapshot.participants) {
-    if (!sameStrings(participant.capabilities, roleCapabilities[participant.role])) throw new V1ReplicaError("participant capabilities do not match the durable role map");
-  }
+  const roleCapabilities = Object.fromEntries(Object.entries(snapshot.role_capabilities).map(([role, capabilities]) => [role, [...capabilities]])) as Readonly<Record<string, V1ControlState["roleCapabilities"][string]>>;
   return {
     revision: snapshot.control_revision,
     stateSchemaVersion: snapshot.state_schema_version,
     stateDigest: snapshot.state_digest,
     status: snapshot.status,
     admissionPolicy: snapshot.admission_policy,
-    hostExitPolicy: snapshot.host_exit_policy,
-    hostParticipantSessionId: snapshot.host_participant_session_id,
+    // Kept as an internal compatibility alias until the SpaceClient wave.
+    hostExitPolicy: "require_transfer",
+    hostParticipantSessionId: null,
     deadlineAtMs: snapshot.deadline_at_ms,
     deadlineGeneration: snapshot.deadline_generation,
     roleCapabilities,
     recording: snapshot.recording && { recordingId: snapshot.recording.recording_id, status: snapshot.recording.status, failureCode: snapshot.recording.failure_code },
     participants: snapshot.participants.map((participant) => ({
-      participantSessionId: participant.participant_session_id,
+      participantSessionId: participant.participant_id,
       displayName: participant.display_name,
       handRaised: participant.hand_raised,
       admissionRevision: participant.admission_revision,
       role: participant.role,
-      eligibleRoles: [...participant.eligible_roles],
-      capabilities: [...roleCapabilities[participant.role]],
+      // The canonical wire contract carries one requested/assigned role. Keep
+      // the former list-shaped alias for consumers that still render it.
+      eligibleRoles: [participant.role],
+      capabilities: [...participant.capabilities],
     })),
     admissionRequests: snapshot.admission_requests.map((request) => ({
       admissionRequestId: request.admission_request_id,
-      participantSessionId: request.participant_session_id,
+      participantSessionId: request.participant_id,
       displayName: request.display_name,
-      initialRole: request.initial_role,
-      eligibleRoles: [...request.eligible_roles],
+      initialRole: request.role,
+      eligibleRoles: [request.role],
       expiresAtMs: request.expires_at_ms,
     })),
   };
@@ -86,25 +79,24 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
 
 export function assertV1ControlSemantics(state: V1ControlState): void {
   const participantIds = new Set<string>();
-  let hosts = 0;
   for (const participant of state.participants) {
     if (participantIds.has(participant.participantSessionId)) throw new V1ReplicaError("duplicate participant ID");
     participantIds.add(participant.participantSessionId);
-    assertEligibleRoles(participant.eligibleRoles);
-    if (!participant.eligibleRoles.includes(participant.role)) throw new V1ReplicaError("participant role is not eligible");
-    if (participant.role === "host") {
-      hosts += 1;
-      if (!participant.eligibleRoles.includes("cohost")) throw new V1ReplicaError("host must remain eligible for cohost");
-      if (participant.participantSessionId !== state.hostParticipantSessionId) throw new V1ReplicaError("host role does not match host authority");
-    }
-    if (!sameStrings(participant.capabilities, state.roleCapabilities[participant.role])) throw new V1ReplicaError("participant capabilities do not match the durable role map");
+    const capabilities = state.roleCapabilities[participant.role];
+    if (!capabilities) throw new V1ReplicaError("participant role has no capability bundle");
+    if (!sameStrings(participant.capabilities, capabilities)) throw new V1ReplicaError("participant capabilities do not match the durable role map");
     if (participant.displayName !== participant.displayName.trim() || participant.displayName.length === 0) throw new V1ReplicaError("participant display name has surrounding whitespace");
   }
-  if (state.status === "ended" && (state.participants.length !== 0 || state.hostParticipantSessionId !== null || state.admissionRequests.length !== 0 || state.recording !== null)) {
-    throw new V1ReplicaError("ended control state retains active Session state");
+  // Legacy callers may still populate the former host authority alias. It is
+  // not part of the canonical Episode snapshot, but when present it must not
+  // silently disagree with the role projection.
+  if (state.hostParticipantSessionId !== null) {
+    const hosts = state.participants.filter((participant) => participant.role === "host");
+    if (hosts.length !== 1 || hosts[0]?.participantSessionId !== state.hostParticipantSessionId) throw new V1ReplicaError("host authority does not match role projection");
   }
-  if (state.status === "active" && state.participants.length > 0 && (hosts !== 1 || state.hostParticipantSessionId === null)) throw new V1ReplicaError("active control state must have exactly one host");
-  if (state.status === "active" && state.participants.length === 0 && state.hostParticipantSessionId !== null) throw new V1ReplicaError("empty pre-admission state cannot name a host");
+  if (state.status === "ended" && (state.participants.length !== 0 || state.admissionRequests.length !== 0 || state.recording !== null)) {
+    throw new V1ReplicaError("ended control state retains active Episode state");
+  }
 
   const requestIds = new Set<string>();
   const pendingParticipantIds = new Set<string>();
@@ -113,9 +105,6 @@ export function assertV1ControlSemantics(state: V1ControlState): void {
     if (pendingParticipantIds.has(request.participantSessionId) || participantIds.has(request.participantSessionId)) throw new V1ReplicaError("active and pending participant IDs overlap");
     requestIds.add(request.admissionRequestId);
     pendingParticipantIds.add(request.participantSessionId);
-    assertEligibleRoles(request.eligibleRoles);
-    if (!request.eligibleRoles.includes(request.initialRole)) throw new V1ReplicaError("initial role is not eligible");
-    if (request.initialRole === "host" && !request.eligibleRoles.includes("cohost")) throw new V1ReplicaError("pending host must remain eligible for cohost");
     if (request.displayName !== request.displayName.trim() || request.displayName.length === 0) throw new V1ReplicaError("admission display name has surrounding whitespace");
   }
 
@@ -137,25 +126,21 @@ function durableProjection(state: V1ControlState): unknown {
     admission_requests: state.admissionRequests.map((request) => ({
       admission_request_id: request.admissionRequestId,
       display_name: request.displayName,
-      eligible_roles: request.eligibleRoles,
       expires_at_ms: request.expiresAtMs,
-      initial_role: request.initialRole,
-      participant_session_id: request.participantSessionId,
+      participant_id: request.participantSessionId,
+      role: request.initialRole,
     })),
     control_revision: state.revision,
     deadline_at_ms: state.deadlineAtMs,
     deadline_generation: state.deadlineGeneration,
-    host_exit_policy: state.hostExitPolicy,
-    host_participant_session_id: state.hostParticipantSessionId,
     participants: [...state.participants]
       .sort((left, right) => left.participantSessionId.localeCompare(right.participantSessionId))
       .map((participant) => ({
         admission_revision: participant.admissionRevision,
         capabilities: state.roleCapabilities[participant.role],
         display_name: participant.displayName,
-        eligible_roles: participant.eligibleRoles,
         hand_raised: participant.handRaised,
-        participant_session_id: participant.participantSessionId,
+        participant_id: participant.participantSessionId,
         role: participant.role,
       })),
     recording: state.recording && { failure_code: state.recording.failureCode, recording_id: state.recording.recordingId, status: state.recording.status },
@@ -172,43 +157,29 @@ async function assertDigest(state: V1ControlState): Promise<void> {
 function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
   switch (event.name) {
     case "participant_joined": {
-      if (state.participants.some((participant) => participant.participantSessionId === event.payload.participant_session_id)) throw new V1ReplicaError("duplicate participant join");
+      if (state.participants.some((participant) => participant.participantSessionId === event.payload.participant_id)) throw new V1ReplicaError("duplicate participant join");
       const participant = participantFromJoin(state, event.payload);
       return {
         ...state,
-        hostParticipantSessionId: participant.role === "host" && state.hostParticipantSessionId === null ? participant.participantSessionId : state.hostParticipantSessionId,
         participants: [...state.participants, participant],
         admissionRequests: state.admissionRequests.filter((request) => request.participantSessionId !== participant.participantSessionId),
       };
     }
     case "participant_left":
-      return removeParticipant(state, event.payload.participant_session_id);
-    case "host_left_and_transferred":
-      const withoutDepartingHost = removeParticipant(state, event.payload.departing_participant_session_id);
-      return {
-        ...withoutDepartingHost,
-        hostParticipantSessionId: event.payload.successor_participant_session_id,
-        participants: withoutDepartingHost.participants.map((participant) => withDerivedRole(state, participant, participant.participantSessionId === event.payload.successor_participant_session_id ? "host" : participant.role)),
-      };
-    case "session_ended":
-      return { ...state, status: "ended", participants: [], admissionRequests: [], hostParticipantSessionId: null, recording: null };
+      return removeParticipant(state, event.payload.participant_id);
+    case "episode_started":
+      return state;
+    case "episode_ended":
+      return { ...state, status: "ended", participants: [], admissionRequests: [], recording: null };
     case "hand_raised":
     case "hand_lowered":
-      return updateParticipant(state, event.payload.participant_session_id, (participant) => ({ ...participant, handRaised: event.name === "hand_raised" }));
+      return updateParticipant(state, event.payload.participant_id, (participant) => ({ ...participant, handRaised: event.name === "hand_raised" }));
     case "participant_display_name_changed":
-      return updateParticipant(state, event.payload.participant_session_id, (participant) => ({ ...participant, displayName: event.payload.display_name }));
+      return updateParticipant(state, event.payload.participant_id, (participant) => ({ ...participant, displayName: event.payload.display_name }));
     case "admission_policy_changed":
       return { ...state, admissionPolicy: event.payload.policy };
-    case "participant_role_changed":
-      return updateParticipant(state, event.payload.participant_session_id, (participant) => withDerivedRole(state, participant, event.payload.role));
-    case "host_transferred":
-      return {
-        ...state,
-        hostParticipantSessionId: event.payload.new_host_participant_session_id,
-        participants: state.participants.map((participant) =>
-          withDerivedRole(state, participant, participant.participantSessionId === event.payload.new_host_participant_session_id ? "host" : participant.participantSessionId === event.payload.previous_host_participant_session_id ? "cohost" : participant.role),
-        ),
-      };
+    case "role_assigned":
+      return updateParticipant(state, event.payload.participant_id, (participant) => withDerivedRole(state, participant, event.payload.role));
     case "admission_requested":
       return { ...state, admissionRequests: [...state.admissionRequests, admissionRequestFromEvent(event.payload)] };
     case "admission_denied":
@@ -222,7 +193,7 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
     case "participant_microphone_stopped":
     case "participant_camera_stopped":
     case "participant_screen_share_stopped":
-      requireParticipant(state, event.payload.participant_session_id);
+      requireParticipant(state, event.payload.participant_id);
       return state;
   }
 }
@@ -235,42 +206,41 @@ function applyOptimistic(state: V1ControlState, actorId: string, command: V1Targ
       return updateParticipant(state, actorId, (participant) => ({ ...participant, displayName: command.payload.display_name }), false);
     case "set_admission_policy":
       return { ...state, admissionPolicy: command.payload.policy };
-    case "set_participant_role":
-      return updateParticipant(state, command.payload.participant_session_id, (participant) => withDerivedRole(state, participant, command.payload.role), false);
-    case "transfer_host":
-      return {
-        ...state,
-        hostParticipantSessionId: command.payload.participant_session_id,
-        participants: state.participants.map((participant) => withDerivedRole(state, participant, participant.participantSessionId === command.payload.participant_session_id ? "host" : participant.participantSessionId === state.hostParticipantSessionId ? "cohost" : participant.role)),
-      };
+    case "assign_roles":
+      return updateParticipant(state, command.payload.participant_id, (participant) => withDerivedRole(state, participant, command.payload.role), false);
   }
 }
 
 function participantFromJoin(state: V1ControlState, payload: Extract<EventFrame, { readonly name: "participant_joined" }>["payload"]): V1Participant {
+  const capabilities = state.roleCapabilities[payload.role];
+  if (!capabilities) throw new V1ReplicaError("participant join references an unknown role");
+
   return {
-    participantSessionId: payload.participant_session_id,
+    participantSessionId: payload.participant_id,
     displayName: payload.display_name,
     handRaised: false,
     admissionRevision: payload.admission_revision,
     role: payload.role,
-    eligibleRoles: [...payload.eligible_roles],
-    capabilities: [...state.roleCapabilities[payload.role]],
+    eligibleRoles: [payload.role],
+    capabilities: [...capabilities],
   };
 }
 
 function admissionRequestFromEvent(payload: Extract<EventFrame, { readonly name: "admission_requested" }>["payload"]): V1AdmissionRequest {
   return {
     admissionRequestId: payload.admission_request_id,
-    participantSessionId: payload.participant_session_id,
+    participantSessionId: payload.participant_id,
     displayName: payload.display_name,
-    initialRole: payload.initial_role,
-    eligibleRoles: [...payload.eligible_roles],
+    initialRole: payload.role,
+    eligibleRoles: [payload.role],
     expiresAtMs: payload.expires_at_ms,
   };
 }
 
 function withDerivedRole(state: V1ControlState, participant: V1Participant, role: V1Role): V1Participant {
-  return { ...participant, role, capabilities: [...state.roleCapabilities[role]] };
+  const capabilities = state.roleCapabilities[role];
+  if (!capabilities) throw new V1ReplicaError("role assignment references an unknown role");
+  return { ...participant, role, capabilities: [...capabilities] };
 }
 
 function updateParticipant(state: V1ControlState, participantId: string, update: (participant: V1Participant) => V1Participant, required = true): V1ControlState {
@@ -331,10 +301,6 @@ function joinBytes(...parts: readonly Uint8Array[]): Uint8Array {
     offset += part.byteLength;
   }
   return output;
-}
-
-function assertEligibleRoles(roles: readonly V1Role[]): void {
-  if (roles.length === 0 || new Set(roles).size !== roles.length) throw new V1ReplicaError("eligible roles must be non-empty and unique");
 }
 
 function sameStrings(left: readonly string[], right: readonly string[]): boolean {

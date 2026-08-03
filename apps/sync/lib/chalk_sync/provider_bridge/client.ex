@@ -8,7 +8,7 @@ defmodule ChalkSync.ProviderBridge.Client do
   """
 
   alias ChalkSync.ProviderBridge.Codec
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
   @default_request_bytes 16 * 1024
@@ -19,7 +19,7 @@ defmodule ChalkSync.ProviderBridge.Client do
   @max_operation_id_bytes 128
   @max_identifier_bytes 256
   @local_hosts ["localhost", "127.0.0.1", "::1"]
-  @effects ~w(media.grant_publication media.revoke_publication media.remove_participant media.end_session recording.start recording.stop)
+  @effects ~w(media.grant_publication media.revoke_publication media.remove_participant media.end_episode recording.start recording.stop)
   @sources ~w(microphone camera screen)
 
   @type transport_response ::
@@ -128,14 +128,14 @@ defmodule ChalkSync.ProviderBridge.Client do
   def post_operation(_client, _operation_id, _payload),
     do: {:error, {:terminal_failure, :invalid_contract}}
 
-  @spec observe_session_publications(t(), SessionKey.t(), keyword()) ::
+  @spec observe_episode_publications(t(), EpisodeKey.t(), keyword()) ::
           {:ok, ChalkSync.MediaPlane.observation()} | {:error, atom()}
-  def observe_session_publications(client, session, options \\ [])
+  def observe_episode_publications(client, episode, options \\ [])
 
-  def observe_session_publications(%__MODULE__{} = client, %SessionKey{} = session, options) do
-    with :ok <- validate_uuid(session.tenant_id),
-         :ok <- validate_uuid(session.session_id),
-         {:ok, query} <- observation_query(client, session, options),
+  def observe_episode_publications(%__MODULE__{} = client, %EpisodeKey{} = episode, options) do
+    with :ok <- validate_uuid(episode.tenant_id),
+         :ok <- validate_uuid(episode.episode_id),
+         {:ok, query} <- observation_query(client, episode, options),
          {:ok, response} <- request(client, :get, observation_path(client, query), <<>>),
          {:ok, observation} <-
            Codec.decode_observation_response(
@@ -152,7 +152,7 @@ defmodule ChalkSync.ProviderBridge.Client do
     end
   end
 
-  def observe_session_publications(_client, _session, _options),
+  def observe_episode_publications(_client, _episode, _options),
     do: {:error, :invalid_contract}
 
   defp request(%__MODULE__{} = client, method, path, body) do
@@ -203,7 +203,7 @@ defmodule ChalkSync.ProviderBridge.Client do
   defp invoke_transport(_transport, _method, _path, _headers, _body, _options),
     do: {:error, :invalid_transport}
 
-  defp observation_query(client, %SessionKey{} = session, options) when is_list(options) do
+  defp observation_query(client, %EpisodeKey{} = episode, options) when is_list(options) do
     limit = Keyword.get(options, :limit, client.max_observations)
     after_incarnation = Keyword.get(options, :after_incarnation)
     after_sequence = Keyword.get(options, :after_sequence)
@@ -211,7 +211,7 @@ defmodule ChalkSync.ProviderBridge.Client do
     with true <- is_integer(limit) and limit > 0 and limit <= client.max_observations,
          {:ok, cursor_params} <- cursor_params(after_incarnation, after_sequence) do
       params =
-        [{"tenant_id", session.tenant_id}, {"session_id", session.session_id}]
+        [{"tenant_id", episode.tenant_id}, {"episode_id", episode.episode_id}]
         |> Kernel.++(cursor_params)
         |> Kernel.++([{"limit", Integer.to_string(limit)}])
 
@@ -222,7 +222,7 @@ defmodule ChalkSync.ProviderBridge.Client do
     end
   end
 
-  defp observation_query(_client, _session, _options), do: {:error, :invalid_contract}
+  defp observation_query(_client, _episode, _options), do: {:error, :invalid_contract}
 
   defp cursor_params(nil, nil), do: {:ok, []}
 
@@ -255,21 +255,21 @@ defmodule ChalkSync.ProviderBridge.Client do
 
     with {:ok, effect} <- normalize_effect(payload["effect"] || payload[:effect]),
          {:ok, tenant_id} <- required_payload_uuid(payload, "tenant_id"),
-         {:ok, session_id} <- required_payload_uuid(payload, "session_id"),
+         {:ok, episode_id} <- required_payload_uuid(payload, "episode_id"),
          {:ok, result} <- optional_payload_fields(payload) do
       {:ok,
        result
-       |> Map.merge(%{"effect" => effect, "tenant_id" => tenant_id, "session_id" => session_id})
+       |> Map.merge(%{"effect" => effect, "tenant_id" => tenant_id, "episode_id" => episode_id})
        |> Map.take(
-         ~w(effect tenant_id session_id participant_session_id participant_session_generation publication_source recording_id)
+         ~w(effect tenant_id episode_id participant_id participant_generation publication_source recording_id)
        )}
     end
   end
 
   defp optional_payload_fields(payload) do
     fields = [
-      {"participant_session_id", :uuid},
-      {"participant_session_generation", :positive_integer},
+      {"participant_id", :uuid},
+      {"participant_generation", :positive_integer},
       {"publication_source", :source},
       {"recording_id", :uuid}
     ]

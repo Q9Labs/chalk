@@ -38,9 +38,9 @@ func (r WhiteboardFileRepository) Reserve(ctx context.Context, input whiteboardf
 		UploadID: uuid(upload.UploadID), FileID: upload.FileID, ObjectKey: upload.ObjectKey,
 		MimeType: upload.MIMEType, ByteLength: upload.ByteLength, Sha256: upload.SHA256[:],
 		ExpiresAt: pgtype.Timestamptz{Time: upload.ExpiresAt, Valid: true}, SceneID: uuid(upload.SceneID),
-		TenantID: uuid(upload.Subject.TenantID), RoomID: uuid(upload.Subject.RoomID),
-		SessionID:             uuid(upload.Subject.SessionID),
-		ParticipantSessionID:  uuid(upload.Subject.ParticipantSessionID),
+		TenantID: uuid(upload.Subject.TenantID), SpaceID: uuid(upload.Subject.SpaceID),
+		EpisodeID:             uuid(upload.Subject.EpisodeID),
+		ParticipantID:         uuid(upload.Subject.ParticipantID),
 		ParticipantGeneration: upload.Subject.ParticipantGeneration,
 	})
 	if whiteboardFileUniqueViolation(err) {
@@ -64,8 +64,8 @@ func (r WhiteboardFileRepository) Fail(ctx context.Context, uploadID utilities.I
 
 func (r WhiteboardFileRepository) ClaimFinalize(ctx context.Context, subject whiteboardfiles.Subject, uploadID utilities.ID, now time.Time) (whiteboardfiles.Upload, error) {
 	row, err := r.queries.ClaimWhiteboardFileUploadFinalize(ctx, sqlc.ClaimWhiteboardFileUploadFinalizeParams{
-		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), RoomID: uuid(subject.RoomID),
-		SessionID: uuid(subject.SessionID), ParticipantSessionID: uuid(subject.ParticipantSessionID),
+		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
 		ParticipantGeneration: subject.ParticipantGeneration,
 		NowAt:                 pgtype.Timestamptz{Time: now, Valid: true},
 	})
@@ -76,8 +76,8 @@ func (r WhiteboardFileRepository) ClaimFinalize(ctx context.Context, subject whi
 		return whiteboardfiles.Upload{}, fmt.Errorf("claim whiteboard upload finalize: %w", err)
 	}
 	return mapWhiteboardUpload(
-		row.UploadID, row.TenantID, row.RoomID, row.SessionID, row.SceneID,
-		row.ParticipantSessionID, row.ParticipantGeneration, row.FileID, row.ObjectKey,
+		row.UploadID, row.TenantID, row.SpaceID, row.EpisodeID, row.SceneID,
+		row.ParticipantID, row.ParticipantGeneration, row.FileID, row.ObjectKey,
 		row.MimeType, row.ByteLength, row.Sha256, row.ExpiresAt,
 	)
 }
@@ -101,10 +101,10 @@ func (r WhiteboardFileRepository) Complete(ctx context.Context, input whiteboard
 
 func (r WhiteboardFileRepository) ReadyFile(ctx context.Context, subject whiteboardfiles.Subject, fileID string) (whiteboardfiles.Upload, error) {
 	row, err := r.queries.GetReadyWhiteboardFile(ctx, sqlc.GetReadyWhiteboardFileParams{
-		ParticipantSessionID:  uuid(subject.ParticipantSessionID),
+		ParticipantID:         uuid(subject.ParticipantID),
 		ParticipantGeneration: subject.ParticipantGeneration,
-		TenantID:              uuid(subject.TenantID), RoomID: uuid(subject.RoomID),
-		SessionID: uuid(subject.SessionID), FileID: fileID,
+		TenantID:              uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), FileID: fileID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return whiteboardfiles.Upload{}, whiteboardfiles.ErrFileNotFound
@@ -113,8 +113,8 @@ func (r WhiteboardFileRepository) ReadyFile(ctx context.Context, subject whitebo
 		return whiteboardfiles.Upload{}, fmt.Errorf("get ready whiteboard file: %w", err)
 	}
 	return mapWhiteboardUpload(
-		row.UploadID, row.TenantID, row.RoomID, row.SessionID, row.SceneID,
-		row.ParticipantSessionID, row.ParticipantGeneration, row.FileID, row.ObjectKey,
+		row.UploadID, row.TenantID, row.SpaceID, row.EpisodeID, row.SceneID,
+		row.ParticipantID, row.ParticipantGeneration, row.FileID, row.ObjectKey,
 		row.MimeType, row.ByteLength, row.Sha256, row.ExpiresAt,
 	)
 }
@@ -162,7 +162,7 @@ func (r WhiteboardFileRepository) CompleteCleanup(ctx context.Context, claim whi
 }
 
 func mapWhiteboardUpload(
-	uploadID, tenantID, roomID, sessionID, sceneID, participantID pgtype.UUID,
+	uploadID, tenantID, spaceID, episodeID, sceneID, participantID pgtype.UUID,
 	generation int64,
 	fileID, objectKey, mimeType string,
 	byteLength int64,
@@ -178,8 +178,8 @@ func mapWhiteboardUpload(
 	return whiteboardfiles.Upload{
 		UploadID: utilities.IDFromBytes(uploadID.Bytes),
 		Subject: whiteboardfiles.Subject{
-			TenantID: utilities.IDFromBytes(tenantID.Bytes), RoomID: utilities.IDFromBytes(roomID.Bytes),
-			SessionID: utilities.IDFromBytes(sessionID.Bytes), ParticipantSessionID: utilities.IDFromBytes(participantID.Bytes),
+			TenantID: utilities.IDFromBytes(tenantID.Bytes), SpaceID: utilities.IDFromBytes(spaceID.Bytes),
+			EpisodeID: utilities.IDFromBytes(episodeID.Bytes), ParticipantID: utilities.IDFromBytes(participantID.Bytes),
 			ParticipantGeneration: generation,
 		},
 		SceneID: utilities.IDFromBytes(sceneID.Bytes), FileID: fileID, ObjectKey: objectKey,

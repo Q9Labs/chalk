@@ -2,8 +2,8 @@
 
 Elixir/OTP WebSocket sync server and the primary `SyncEngine` adapter.
 
-Postgres is the sole durable authority for Session control state, ordered
-events, command receipts, participant-session lifecycle, lifecycle intents,
+Postgres is the sole durable authority for Episode control state, ordered
+events, command receipts, participant-episode lifecycle, lifecycle intents,
 and externally effective operation intents. Actual media publications remain
 MediaPlane truth. Every BEAM process, ETS table, notification, and SDK replica
 is a disposable projection. Redis is absent from the correctness path and may
@@ -41,7 +41,7 @@ The v1 command path is:
 ```text
 WebSocket
   -> bounded command admission
-  -> node-local Session coordinator
+  -> node-local Episode coordinator
   -> semantic Postgres transaction
   -> folded state + exact-next event + stable receipt
   -> Postgres head notification
@@ -49,22 +49,22 @@ WebSocket
   -> SDK canonical replica
 ```
 
-The authority key is `{tenant_id, session_id}`. The Session control row is the
+The authority key is `{tenant_id, episode_id}`. The Episode control row is the
 serialization lock. One transaction returns a committed event and receipt or a
 stable rejected receipt. An uncertain COMMIT is resolved by reading that
 receipt from a fresh writable-primary connection.
 
-`Sessions.Reducer` owns pure state transitions. `Stateholder.Postgres` owns
-production decisions and recovery. `Sessions.Coordinator` caches only local
+`Episodes.Reducer` owns pure state transitions. `Stateholder.Postgres` owns
+production decisions and recovery. `Episodes.Coordinator` caches only local
 heads and subscriptions. PostgreSQL notifications accelerate delivery, while a
 periodic authoritative head read repairs every dropped hint.
 
 ## Lifecycle
 
-Session creation writes the product Session and revision-zero control row in
+Episode creation writes the product Episode and revision-zero control row in
 one synchronous Postgres transaction. Admission produces bounded lifecycle
 intents. Removal, explicit Leave, host recovery, deadline expiry, Recording,
-and Session end reserve idempotent external operations under the same Session
+and Episode end reserve idempotent external operations under the same Episode
 control lock, execute provider effects outside the transaction, and finalize
 durable facts only after confirmation. Opening or losing a socket never creates
 a durable join or leave.
@@ -73,7 +73,7 @@ a durable join or leave.
 
 The language-neutral source is `contract/schema/sync-v1.json`; generated
 Elixir and TypeScript bindings are checked by the root codegen gate. V1 has
-strict frame bounds, tenant/Session-scoped identity, stable command IDs,
+strict frame bounds, tenant/Episode-scoped identity, stable command IDs,
 digest-checked control cursors, snapshot/replay/up-to-date recovery, bounded
 replay pages, retryable dependency outcomes, and explicit terminal lifecycle
 results. Control events retain their event, byte, and age reservations until
@@ -92,7 +92,7 @@ snapshots cannot overwrite newer truth.
 - `/metrics` exposes fixed-cardinality aggregate counters.
 - SIGTERM begins bounded drain, rejects new work, resolves accepted decisions,
   drains socket queues, and closes clients with retryable code 1012.
-- Ended Session history is independently folded and checkpointed before the
+- Ended Episode history is independently folded and checkpointed before the
   bounded retention worker deletes eligible rows after seven days.
 
 Production boot refuses Memory, the development verifier, an incompatible
@@ -120,12 +120,12 @@ eight-second durable-operation consumer budget.
 `ChalkSync.Observability` provides the observability boundary. It emits stable
 `:telemetry` events, correlated Logger metadata, and
 short OpenTelemetry spans. It does not retain a connection-long span. Socket
-work uses root, phase, and terminal events; room-writer work links back to the
+work uses root, phase, and terminal events; space-writer work links back to the
 originating socket span after crossing the OTP process boundary.
 
 Set `CHALK_SYNC_OTLP_ENDPOINT` to enable OTLP HTTP/protobuf export. The
 service resource name is `chalk-sync`; the exporter is otherwise disabled.
-The batch processor isolates collector failures from room and socket work.
+The batch processor isolates collector failures from space and socket work.
 
 ```bash
 CHALK_SYNC_OTLP_ENDPOINT=http://localhost:4318 mix run --no-halt
@@ -136,7 +136,7 @@ Its measurements are `%{count: 1}` and its metadata contains `event`, `stage`
 (`root`, `phase`, or `terminal`), `journey_id`, and bounded `attributes`.
 BEAM health uses `[:chalk_sync, :runtime, :health]` with memory, process, and
 run-queue measurements. Logger events include the journey and, when tracing is
-enabled, the trace and span identifiers. Tokens, room ids, participant ids,
+enabled, the trace and span identifiers. Tokens, space ids, participant ids,
 command ids, and raw revisions are never observability dimensions.
 
 Client and server protocol frames may carry these optional top-level fields

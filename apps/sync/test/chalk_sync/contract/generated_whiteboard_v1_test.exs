@@ -99,8 +99,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
     assert GeneratedWhiteboardV1.valid_server_frame?(%{
              "type" => "welcome",
              "protocol" => "whiteboard-v1",
-             "participant_session_id" => @participant_id,
-             "participant_session_generation" => 1,
+             "participant_id" => @participant_id,
+             "participant_generation" => 1,
              "capabilities" => ["drawWhiteboard", "manageWhiteboard"],
              "participant_capabilities" => ["drawWhiteboard"],
              "scene_id" => @scene_id,

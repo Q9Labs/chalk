@@ -18,7 +18,7 @@ defmodule ChalkSync.SyncBreakerV1.CampaignTest do
              ~w(durable_lifecycle_reference external-operation-live-media delivery_recovery wire_sdk)
 
     assert Enum.all?(first["phases"], &(&1["verdict"] == "pass"))
-    assert first["aggregate"]["bounds"]["schedule_steps"] == 37
+    assert first["aggregate"]["bounds"]["schedule_steps"] == 36
     assert first == second
   end
 end

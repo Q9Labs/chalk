@@ -1,11 +1,11 @@
 defmodule ChalkSync.OperationsTest do
   use ExUnit.Case, async: true
 
+  alias ChalkSync.Episodes.CommandIntake
   alias ChalkSync.Operations
-  alias ChalkSync.Sessions.CommandAdmission
   alias ChalkSync.Stateholder.Command
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.SessionKey
 
   test "drain rejects new work, waits for accepted decisions, then drains coordinators" do
     parent = self()
@@ -22,7 +22,7 @@ defmodule ChalkSync.OperationsTest do
     end
 
     start_supervised!(
-      {CommandAdmission,
+      {CommandIntake,
        name: admission, task_supervisor: task_supervisor, decision_fun: decision_fun},
       id: admission
     )
@@ -40,14 +40,14 @@ defmodule ChalkSync.OperationsTest do
 
     identity = identity()
     {:ok, command} = Command.new("drain-command-001", :set_hand_raised, %{"raised" => true})
-    assert {:ok, lease} = CommandAdmission.submit(admission, identity, command, self())
+    assert {:ok, lease} = CommandIntake.submit(admission, identity, command, self())
     assert_receive {:decision_started, task}
 
     drain = Task.async(fn -> Operations.begin_drain(operations, 1_000) end)
     eventually(fn -> not Operations.accepting_connections?(operations) end)
 
     assert {:error, :server_draining} =
-             CommandAdmission.submit(admission, identity, command, self())
+             CommandIntake.submit(admission, identity, command, self())
 
     assert Task.yield(drain, 0) == nil
     refute_receive :coordinators_drained, 25
@@ -64,13 +64,13 @@ defmodule ChalkSync.OperationsTest do
 
   defp identity do
     %Identity{
-      session: %SessionKey{
+      episode: %EpisodeKey{
         tenant_id: "018f2f65-2a77-4a44-8e9a-000000000001",
-        room_id: "018f2f65-2a77-4a44-8e9a-000000000002",
-        session_id: "018f2f65-2a77-4a44-8e9a-000000000003"
+        space_id: "018f2f65-2a77-4a44-8e9a-000000000002",
+        episode_id: "018f2f65-2a77-4a44-8e9a-000000000003"
       },
-      participant_session_id: "018f2f65-2a77-4a44-8e9a-000000000004",
-      participant_session_generation: 1,
+      participant_id: "018f2f65-2a77-4a44-8e9a-000000000004",
+      participant_generation: 1,
       admission_lifecycle_intent_id: "018f2f65-2a77-4a44-8e9a-000000000005",
       capabilities: ["control:hand"]
     }

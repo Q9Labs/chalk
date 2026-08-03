@@ -88,7 +88,7 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 					"sessionOrBearer": map[string]any{
 						"type":        "http",
 						"scheme":      "bearer",
-						"description": "Preview placeholder for routes accepted by Chalk session auth or bearer/API-key auth.",
+						"description": "Preview placeholder for routes accepted by Chalk account auth or bearer/API-key auth.",
 					},
 					"participantMediaBearer": map[string]any{
 						"type":         "http",
@@ -100,7 +100,7 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"type":         "http",
 						"scheme":       "bearer",
 						"bearerFormat": "JWT",
-						"description":  "Short-lived Sync participant credential bound to one room Session and participant generation.",
+						"description":  "Short-lived Sync participant credential bound to one Space Episode and participant generation.",
 					},
 				},
 				Schemas: make(map[string]map[string]any),
@@ -553,10 +553,8 @@ func fieldEnum(schemaName string, fieldName string) []string {
 		return []string{"r2"}
 	case "status":
 		switch schemaName {
-		case "Room", "RoomList", "CreateRoomRequest", "UpdateRoomRequest":
-			return []string{"active", "archived", "ended"}
-		case "RoomSession", "RoomSessionList", "CreateRoomSessionRequest", "UpdateRoomSessionRequest":
-			return []string{"pending", "active", "ended", "failed"}
+		case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest":
+			return []string{"active", "ending", "ended"}
 		case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest", "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
 			return []string{"pending", "processing", "completed", "failed"}
 		}
@@ -824,10 +822,11 @@ func schemaReference(name string) map[string]any {
 func idSchemaNames() []string {
 	return []string{
 		"AuditLogId",
+		"EpisodeId",
 		"MembershipId",
+		"ParticipantId",
 		"RecordingId",
-		"RoomId",
-		"RoomSessionId",
+		"SpaceId",
 		"TenantId",
 		"TranscriptId",
 		"UserId",
@@ -848,10 +847,12 @@ func idSchemaName(schemaName string, fieldName string) (string, bool) {
 			return "MembershipId", true
 		case "Recording":
 			return "RecordingId", true
-		case "Room":
-			return "RoomId", true
-		case "RoomSession":
-			return "RoomSessionId", true
+		case "Space":
+			return "SpaceId", true
+		case "Episode":
+			return "EpisodeId", true
+		case "Participant", "ParticipantLifecycle":
+			return "ParticipantId", true
 		case "Tenant":
 			return "TenantId", true
 		case "Transcript":
@@ -881,10 +882,12 @@ func exactIDSchemaName(fieldName string) (string, bool) {
 		return "MembershipId", true
 	case "recording_id":
 		return "RecordingId", true
-	case "room_id":
-		return "RoomId", true
-	case "session_id":
-		return "RoomSessionId", true
+	case "episode_id":
+		return "EpisodeId", true
+	case "participant_id", "participant_episode_id":
+		return "ParticipantId", true
+	case "space_id":
+		return "SpaceId", true
 	case "tenant_id":
 		return "TenantId", true
 	case "transcript_id":
@@ -902,10 +905,12 @@ func suffixIDSchemaName(fieldName string) (string, bool) {
 		name   string
 	}{
 		{"_audit_log_id", "AuditLogId"},
+		{"_participant_episode_id", "ParticipantId"},
+		{"_episode_id", "EpisodeId"},
 		{"_membership_id", "MembershipId"},
+		{"_participant_id", "ParticipantId"},
 		{"_recording_id", "RecordingId"},
-		{"_room_id", "RoomId"},
-		{"_session_id", "RoomSessionId"},
+		{"_space_id", "SpaceId"},
 		{"_tenant_id", "TenantId"},
 		{"_transcript_id", "TranscriptId"},
 		{"_user_id", "UserId"},

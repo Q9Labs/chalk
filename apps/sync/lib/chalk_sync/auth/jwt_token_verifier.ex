@@ -73,11 +73,10 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
            "nbf" => not_before,
            "exp" => expires_at,
            "tenant_id" => tenant_id,
-           "room_id" => room_id,
-           "session_id" => session_id,
+           "space_id" => space_id,
+           "episode_id" => episode_id,
            "participant_id" => participant_id,
-           "participant_session_id" => participant_session_id,
-           "participant_session_generation" => generation,
+           "participant_generation" => generation,
            "admission_lifecycle_intent_id" => intent_id,
            "display_name" => display_name
          } <- claims,
@@ -86,14 +85,13 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
              subject,
              jti,
              tenant_id,
-             room_id,
-             session_id,
+             space_id,
+             episode_id,
              participant_id,
              intent_id,
              display_name
            ]),
-         true <- valid_uuids?([tenant_id, room_id, session_id, participant_id, intent_id]),
-         true <- participant_session_id == subject,
+         true <- valid_uuids?([tenant_id, space_id, episode_id, participant_id, intent_id]),
          true <- participant_id == subject,
          true <- is_integer(generation) and generation > 0,
          true <- byte_size(display_name) <= 256,
@@ -102,17 +100,16 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
       {:ok,
        %Claims{
          tenant_id: tenant_id,
-         room_id: room_id,
+         space_id: space_id,
          participant_id: participant_id,
-         session_id: session_id,
-         participant_session_id: subject,
-         participant_session_generation: generation,
+         episode_id: episode_id,
+         participant_generation: generation,
          admission_lifecycle_intent_id: intent_id,
          issued_at: issued_at,
          expires_at: expires_at,
          display_name: display_name,
-         initial_role: authorization.initial_role,
-         eligible_roles: authorization.eligible_roles
+         role: authorization.role,
+         capabilities: authorization.capabilities
        }}
     else
       _ -> {:error, :invalid_claims}
@@ -126,11 +123,10 @@ defmodule ChalkSync.Auth.JWTTokenVerifier do
   defp valid_uuids?(values), do: Enum.all?(values, &match?({:ok, _uuid}, UUID.dump(&1)))
 
   defp authorization_envelope(claims) do
-    if not Map.has_key?(claims, "capabilities") and
-         Claims.valid_role_envelope?(claims["initial_role"], claims["eligible_roles"]) do
-      {:ok, %{initial_role: claims["initial_role"], eligible_roles: claims["eligible_roles"]}}
+    if Claims.valid_authorization?(claims["role"], claims["capabilities"]) do
+      {:ok, %{role: claims["role"], capabilities: claims["capabilities"]}}
     else
-      {:error, :invalid_role_envelope}
+      {:error, :invalid_authorization}
     end
   end
 

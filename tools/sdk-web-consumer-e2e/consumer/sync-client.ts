@@ -94,21 +94,21 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
 
   leave = () => this.#command("participant_leave", {});
   setHandRaised = (raised: boolean) => this.#command("set_hand_raised", { raised });
-  setDisplayName = (displayName: string) => this.#command("set_display_name", { displayName });
+  setDisplayName = (displayName: string) => this.#command("set_display_name", { display_name: displayName });
   setAdmissionPolicy = (policy: string) => this.#command("set_admission_policy", { policy });
-  setParticipantRole = (participantSessionId: string, role: V1AssignableRole) => this.#command("set_participant_role", { participantSessionId, role });
-  transferHost = (participantSessionId: string) => this.#command("transfer_host", { participantSessionId });
-  admit = (admissionRequestId: string) => this.#command("admit_participant", { admissionRequestId });
-  deny = (admissionRequestId: string) => this.#command("deny_admission", { admissionRequestId });
-  muteParticipant = (participantSessionId: string) => this.#command("mute_participant", { participantSessionId });
-  stopParticipantCamera = (participantSessionId: string) => this.#command("stop_participant_camera", { participantSessionId });
-  stopParticipantScreenShare = (participantSessionId: string) => this.#command("stop_participant_screen_share", { participantSessionId });
-  removeParticipant = (participantSessionId: string) => this.#command("remove_participant", { participantSessionId });
-  endSession = () => this.#command("end_session", {});
+  setParticipantRole = (participantSessionId: string, role: V1AssignableRole) => this.#command("assign_roles", { participant_id: participantSessionId, role });
+  transferHost = (participantSessionId: string) => this.#command("assign_roles", { participant_id: participantSessionId, role: "host" });
+  admit = (admissionRequestId: string) => this.#command("admit_participant", { admission_request_id: admissionRequestId });
+  deny = (admissionRequestId: string) => this.#command("deny_admission", { admission_request_id: admissionRequestId });
+  muteParticipant = (participantSessionId: string) => this.#command("mute_participant", { participant_id: participantSessionId });
+  stopParticipantCamera = (participantSessionId: string) => this.#command("stop_participant_camera", { participant_id: participantSessionId });
+  stopParticipantScreenShare = (participantSessionId: string) => this.#command("stop_participant_screen_share", { participant_id: participantSessionId });
+  removeParticipant = (participantSessionId: string) => this.#command("remove_participant", { participant_id: participantSessionId });
+  endSession = () => this.#command("end_episode", {});
 
   getRoomActionsExtensionState = () => ({
     negotiated: true,
-    version: 2 as const,
+    version: 1 as const,
     capabilities: ["sendReaction", "sendChat"] as const,
     chatHeadSequence: null,
     retainedFloorSequence: null,
@@ -179,7 +179,7 @@ export class FixtureSyncClient implements ChalkSessionSyncClient {
   }
 
   #directedRequest(name: string, participantSessionId: string): Promise<V1DirectedRequestResult> {
-    return this.#request(this.#pendingDirectedRequests, { type: "directed_request", name, participantSessionId });
+    return this.#request(this.#pendingDirectedRequests, { type: "directed_request", name, target_participant_id: participantSessionId });
   }
 
   #request<T>(pendingRequests: Map<string, PendingRequest<T>>, request: Record<string, unknown>): Promise<T> {

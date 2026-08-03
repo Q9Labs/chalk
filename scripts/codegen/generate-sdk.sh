@@ -4,12 +4,12 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 bash apps/api/scripts/generate-openapi.sh
-node tools/contract-codegen/src/emitters/effect-schemas.mjs
-node tools/contract-codegen/src/emitters/effect-http-api.mjs
-CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-codegen/src/emitters/sync-typescript.mjs
-CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-codegen/src/emitters/sync-elixir.mjs
-node tools/contract-codegen/src/emitters/whiteboard-typescript.mjs
-node tools/contract-codegen/src/emitters/whiteboard-elixir.mjs
+node tools/contract-fixture-proof/src/emitters/effect-schemas.mjs
+node tools/contract-fixture-proof/src/emitters/effect-http-api.mjs
+CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-fixture-proof/src/emitters/sync-typescript.mjs
+CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-fixture-proof/src/emitters/sync-elixir.mjs
+node tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs
+node tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs
 (cd apps/sync && mix format lib/chalk_sync/contract/generated_whiteboard_v1.ex)
 pnpm exec openapi-typescript contract/generated/openapi.json --output sdks/typescript/client/src/generated/openapi-types.d.ts
 pnpm exec oxfmt --write \

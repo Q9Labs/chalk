@@ -18,7 +18,7 @@ type workerClaimResponse struct {
 }
 type workerAssignment struct {
 	JobID                 string                   `json:"job_id"`
-	SessionID             string                   `json:"session_id"`
+	EpisodeID             string                   `json:"episode_id"`
 	Attempt               int                      `json:"attempt"`
 	LeaseToken            string                   `json:"lease_token"`
 	LeaseExpiresAt        string                   `json:"lease_expires_at"`
@@ -35,8 +35,8 @@ type workerChunkAssignment struct {
 	InputContentType  string               `json:"input_content_type"`
 	InputSizeBytes    int64                `json:"input_size_bytes"`
 	InputSHA256       string               `json:"input_sha256"`
-	MeetingStartMS    int64                `json:"meeting_start_ms"`
-	MeetingEndMS      int64                `json:"meeting_end_ms"`
+	EpisodeStartMS    int64                `json:"episode_start_ms"`
+	EpisodeEndMS      int64                `json:"episode_end_ms"`
 	SourceIdentity    workerSourceIdentity `json:"source_identity"`
 	SourceTrackClass  string               `json:"source_track_class"`
 }
@@ -56,16 +56,16 @@ type workerManifestAssignment struct {
 func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer, chunks ChunkAuthority, manifests ManifestAuthority, results ResultAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		var body workerClaimBody
 		if err := decodeJSON(r, &body); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid request body")
 			return
 		}
 		if body.BatchSize < 1 || body.BatchSize > 100 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid batch size")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid batch size")
 			return
 		}
 		assignments := make([]workerAssignment, 0, body.BatchSize)
@@ -80,29 +80,29 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 				return
 			}
 			if assignment.Chunk == nil || assignment.Job.LeaseExpiresAt == nil || assignment.Transcript.SourceManifestKey == nil {
-				writeError(w, http.StatusInternalServerError, "internal_error", "Invalid worker assignment")
+				writeError(w, http.StatusInternalServerError, "internal.error", "Invalid worker assignment")
 				return
 			}
 			const urlTTL = transcriptionWorkLeaseDuration
 			inputURL, err := chunks.CreateChunkGETURL(r.Context(), ChunkURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: assignment.Chunk.StorageKey, ExpiresIn: urlTTL})
 			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "workload_authority_unavailable", "Workload authority unavailable")
+				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
 				return
 			}
 			manifestURL, err := manifests.CreateManifestGETURL(r.Context(), ManifestURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: *assignment.Transcript.SourceManifestKey, ExpiresIn: urlTTL})
 			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "workload_authority_unavailable", "Workload authority unavailable")
+				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
 				return
 			}
 			outputURL, err := results.CreateResultPUTURL(r.Context(), ResultURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: assignment.Chunk.ResultKey, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: urlTTL})
 			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "workload_authority_unavailable", "Workload authority unavailable")
+				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
 				return
 			}
 			assignments = append(assignments, workerAssignment{
-				JobID: assignment.Job.ID.String(), SessionID: assignment.Job.SessionID.String(), Attempt: assignment.Job.Attempt,
+				JobID: assignment.Job.ID.String(), EpisodeID: assignment.Job.EpisodeID.String(), Attempt: assignment.Job.Attempt,
 				LeaseToken: assignment.LeaseToken, LeaseExpiresAt: utilities.FormatTimestamp(*assignment.Job.LeaseExpiresAt),
-				Chunk:        workerChunkAssignment{ChunkID: assignment.Chunk.ID.String(), InputURL: inputURL, InputURLExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), InputContentType: assignment.Chunk.ContentType, InputSizeBytes: assignment.Chunk.Size, InputSHA256: hex.EncodeToString(assignment.Chunk.Checksum), MeetingStartMS: assignment.Chunk.StartMS, MeetingEndMS: assignment.Chunk.EndMS, SourceIdentity: workerSourceIdentity{Kind: assignment.Chunk.IdentityKind, ParticipantID: assignment.Chunk.ParticipantRef, TrackEpoch: assignment.Chunk.TrackEpoch}, SourceTrackClass: assignment.Chunk.TrackClass},
+				Chunk:        workerChunkAssignment{ChunkID: assignment.Chunk.ID.String(), InputURL: inputURL, InputURLExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), InputContentType: assignment.Chunk.ContentType, InputSizeBytes: assignment.Chunk.Size, InputSHA256: hex.EncodeToString(assignment.Chunk.Checksum), EpisodeStartMS: assignment.Chunk.StartMS, EpisodeEndMS: assignment.Chunk.EndMS, SourceIdentity: workerSourceIdentity{Kind: assignment.Chunk.IdentityKind, ParticipantID: assignment.Chunk.ParticipantRef, TrackEpoch: assignment.Chunk.TrackEpoch}, SourceTrackClass: assignment.Chunk.TrackClass},
 				Manifest:     workerManifestAssignment{InputURL: manifestURL, ExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), ContentType: "application/json", SizeBytes: derefInt64(assignment.Transcript.SourceManifestSize), SHA256: hex.EncodeToString(assignment.Transcript.SourceManifestSHA256)},
 				OutputPutURL: outputURL, OutputPutURLExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), OutputContentType: "application/json",
 			})

@@ -136,9 +136,9 @@ export class ChalkSessionError extends Error {
 
 export type ChalkSessionConnectionPhase = "idle" | "connecting" | "healthy" | "recovering" | "failed" | "stopped";
 export type ChalkMediaSource = "microphone" | "camera" | "screen";
-export type ChalkParticipantRole = "host" | "cohost" | "participant";
-export type ChalkAssignableParticipantRole = Exclude<ChalkParticipantRole, "host">;
-export type ChalkAdmissionPolicy = "open" | "approval" | "closed";
+export type ChalkParticipantRole = string;
+export type ChalkAssignableParticipantRole = string;
+export type ChalkAdmissionPolicy = "open" | "knock" | "members_only";
 
 export type ChalkSessionCapability =
   | "publishAudio"
@@ -147,15 +147,22 @@ export type ChalkSessionCapability =
   | "subscribe"
   | "raiseHand"
   | "renameSelf"
+  | "sendChat"
+  | "sendReaction"
+  | "drawWhiteboard"
+  | "manageWhiteboard"
   | "manageAdmission"
-  | "promoteDemote"
-  | "transferHost"
+  | "assignRoles"
   | "muteOthers"
   | "stopVideoOthers"
   | "stopScreenOthers"
   | "requestMediaOthers"
   | "removeParticipant"
-  | "endMeeting";
+  | "startEpisode"
+  | "extendEpisode"
+  | "endEpisode"
+  | "manageMembers"
+  | "clearSpaceContent";
 
 export type ChalkParticipant = {
   readonly participantSessionId: string;
@@ -203,7 +210,7 @@ export type ChalkSessionSnapshot = {
   readonly failure: ChalkSessionFailure | null;
   readonly roomActions: {
     readonly phase: ChalkRoomActionsPhase;
-    readonly version: 2 | null;
+    readonly version: 1 | null;
     readonly capabilities: readonly ChalkSyncV1RoomActionCapability[];
     readonly error: ChalkSessionFailure | null;
   };

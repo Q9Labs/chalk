@@ -5,9 +5,6 @@ import { BrokerError, maximumDisplayNameLength, maximumMeetingParticipants, meet
 import { empty, json } from "./http";
 import { MeetingStore, type ClientRecord, type MeetingRecord } from "./store";
 
-const participantCapabilities = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf"];
-const hostCapabilities = [...participantCapabilities, "manageAdmission", "promoteDemote", "transferHost", "muteOthers", "stopVideoOthers", "stopScreenOthers", "requestMediaOthers", "removeParticipant", "endMeeting"];
-
 export class MeetingSession extends DurableObject<WorkerEnv> {
   private readonly store: MeetingStore;
   private queue: Promise<unknown> = Promise.resolve();
@@ -100,9 +97,9 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
         this.environment.CHALK_ROOM_ID,
         {
           admission_policy: "open",
-          host_exit_policy: "require_transfer",
+          host_exit_policy: "continue",
           maximum_duration_seconds: Math.max(1, Math.floor((meeting.expiresAt - now) / 1_000)),
-          role_capabilities: { host: hostCapabilities, cohost: participantCapabilities, participant: participantCapabilities },
+          role_capabilities: {},
         },
         { idempotencyKey: `meeting-session-${meeting.logId}` },
       );
@@ -154,7 +151,7 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
     try {
       await this.chalk(trace).participants.remove(this.environment.CHALK_ROOM_ID, meeting.sessionId, client.participantSessionId, { participantSessionGeneration: client.participantGeneration }, { idempotencyKey: `meeting-remove-${client.participantSessionId}-${client.participantGeneration}` });
     } catch (error) {
-      if (error instanceof ChalkAPIError && ["participant_not_active", "participant_not_found", "session_not_active", "session_not_found"].includes(error.code)) return;
+      if (error instanceof ChalkAPIError && ["participant_not_active", "participant_not_found", "episode_not_active", "episode_not_found", "session_not_active", "session_not_found"].includes(error.code)) return;
       throw error;
     }
   }
@@ -181,7 +178,7 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
       try {
         await this.chalk(trace).sessions.end(this.environment.CHALK_ROOM_ID, meeting.sessionId, { idempotencyKey: `meeting-end-${meeting.logId}` });
       } catch (error) {
-        if (!(error instanceof ChalkAPIError) || !["session_not_active", "session_not_found"].includes(error.code)) throw error;
+        if (!(error instanceof ChalkAPIError) || !["episode_not_active", "episode_not_found", "session_not_active", "session_not_found"].includes(error.code)) throw error;
       }
     }
     this.store.clearMeeting();

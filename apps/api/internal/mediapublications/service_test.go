@@ -11,17 +11,17 @@ import (
 
 func TestRecordPublishedTracksMergesSnapshotAndEncodesPullReference(t *testing.T) {
 	tenantID := testID(t, "11111111-1111-4111-8111-111111111111")
-	sessionID := testID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := testID(t, "22222222-2222-4222-8222-222222222222")
 	participantID := testID(t, "33333333-3333-4333-8333-333333333333")
 	otherParticipantID := testID(t, "44444444-4444-4444-8444-444444444444")
 	repository := &repositoryStub{observations: []provideroperations.Observation{{
-		TenantID: tenantID, SessionID: sessionID, Incarnation: 1, Sequence: 4,
-		Publications: []provideroperations.Publication{{ParticipantSessionID: otherParticipantID, Source: "microphone", Enabled: true, PublicationID: "other-session|other-track"}},
+		TenantID: tenantID, EpisodeID: episodeID, Incarnation: 1, Sequence: 4,
+		Publications: []provideroperations.Publication{{ParticipantID: otherParticipantID, Source: "microphone", Enabled: true, PublicationID: "other-episode|other-track"}},
 	}}}
 	service := NewService(repository)
 
 	references, err := service.RecordPublishedTracks(context.Background(), RecordInput{
-		TenantID: tenantID, SessionID: sessionID, ParticipantSessionID: participantID, ParticipantGeneration: 7, ConnectionID: "connection-123",
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 7, ConnectionID: "connection-123",
 		Tracks: []PublishedTrack{{Source: "camera", MID: "camera-mid", TrackName: "camera-track"}, {Source: "microphone", MID: "microphone-mid", TrackName: "microphone-track"}},
 	})
 	if err != nil {
@@ -35,7 +35,7 @@ func TestRecordPublishedTracksMergesSnapshotAndEncodesPullReference(t *testing.T
 	}
 	var found bool
 	for _, publication := range repository.appended.Publications {
-		if publication.ParticipantSessionID == participantID && publication.Source == "camera" {
+		if publication.ParticipantID == participantID && publication.Source == "camera" {
 			reference, parseErr := ParseReference(publication.PublicationID)
 			found = parseErr == nil && publication.PublicationID == references[0].PublicationID && reference == (Reference{Version: 1, ConnectionID: "connection-123", MID: "camera-mid", TrackName: "camera-track", ParticipantGeneration: 7, HasMID: true, HasParticipantGeneration: true}) && publication.Enabled
 		}
@@ -49,8 +49,8 @@ func TestRecordPublishedTracksRejectsAmbiguousReferences(t *testing.T) {
 	service := NewService(&repositoryStub{})
 	_, err := service.RecordPublishedTracks(context.Background(), RecordInput{
 		TenantID:              testID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID:             testID(t, "22222222-2222-4222-8222-222222222222"),
-		ParticipantSessionID:  testID(t, "33333333-3333-4333-8333-333333333333"),
+		EpisodeID:             testID(t, "22222222-2222-4222-8222-222222222222"),
+		ParticipantID:         testID(t, "33333333-3333-4333-8333-333333333333"),
 		ParticipantGeneration: 1,
 		ConnectionID:          "connection|invalid",
 		Tracks:                []PublishedTrack{{Source: "camera", MID: "camera-mid", TrackName: "camera-track"}},
@@ -62,7 +62,7 @@ func TestRecordPublishedTracksRejectsAmbiguousReferences(t *testing.T) {
 
 func TestRecordPublishedTracksRequiresGenerationAndMID(t *testing.T) {
 	tenantID := testID(t, "11111111-1111-4111-8111-111111111111")
-	sessionID := testID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := testID(t, "22222222-2222-4222-8222-222222222222")
 	participantID := testID(t, "33333333-3333-4333-8333-333333333333")
 	for _, test := range []struct {
 		name       string
@@ -76,8 +76,8 @@ func TestRecordPublishedTracksRequiresGenerationAndMID(t *testing.T) {
 			service := NewService(&repositoryStub{})
 			_, err := service.RecordPublishedTracks(context.Background(), RecordInput{
 				TenantID:              tenantID,
-				SessionID:             sessionID,
-				ParticipantSessionID:  participantID,
+				EpisodeID:             episodeID,
+				ParticipantID:         participantID,
 				ParticipantGeneration: test.generation,
 				ConnectionID:          "connection-123",
 				Tracks:                []PublishedTrack{{Source: "camera", MID: test.mid, TrackName: "camera-track"}},
@@ -91,13 +91,13 @@ func TestRecordPublishedTracksRequiresGenerationAndMID(t *testing.T) {
 
 func TestRecordClosedPublicationPersistsDisabledSnapshot(t *testing.T) {
 	tenantID := testID(t, "11111111-1111-4111-8111-111111111111")
-	sessionID := testID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := testID(t, "22222222-2222-4222-8222-222222222222")
 	participantID := testID(t, "33333333-3333-4333-8333-333333333333")
 	repository := &repositoryStub{}
 	service := NewService(repository)
 
 	_, err := service.RecordPublishedTracks(context.Background(), RecordInput{
-		TenantID: tenantID, SessionID: sessionID, ParticipantSessionID: participantID, ParticipantGeneration: 1, ConnectionID: "connection-123",
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "connection-123",
 		Tracks: []PublishedTrack{{Source: "camera", MID: "camera-mid", TrackName: "camera-track"}},
 	})
 	if err != nil {
@@ -105,14 +105,14 @@ func TestRecordClosedPublicationPersistsDisabledSnapshot(t *testing.T) {
 	}
 	publicationID := repository.appended.Publications[0].PublicationID
 	err = service.RecordClosedPublication(context.Background(), CloseInput{
-		TenantID: tenantID, SessionID: sessionID, ParticipantSessionID: participantID,
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID,
 		ParticipantGeneration: 1, ConnectionID: "connection-123", MID: "camera-mid", Source: "camera", PublicationID: publicationID,
 	})
 	if err != nil {
 		t.Fatalf("record closed publication: %v", err)
 	}
 
-	snapshot, err := service.Latest(context.Background(), tenantID, sessionID)
+	snapshot, err := service.Latest(context.Background(), tenantID, episodeID)
 	if err != nil {
 		t.Fatalf("latest: %v", err)
 	}
@@ -120,23 +120,23 @@ func TestRecordClosedPublicationPersistsDisabledSnapshot(t *testing.T) {
 		t.Fatalf("snapshot = %#v", snapshot)
 	}
 	publication := snapshot.Publications[0]
-	if publication.ParticipantSessionID != participantID || publication.Source != "camera" || publication.Enabled || publication.PublicationID != "" {
+	if publication.ParticipantID != participantID || publication.Source != "camera" || publication.Enabled || publication.PublicationID != "" {
 		t.Fatalf("closed publication = %#v", publication)
 	}
 }
 
 func TestRecordClosedPublicationIsIdempotent(t *testing.T) {
 	tenantID := testID(t, "11111111-1111-4111-8111-111111111111")
-	sessionID := testID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := testID(t, "22222222-2222-4222-8222-222222222222")
 	participantID := testID(t, "33333333-3333-4333-8333-333333333333")
 	publicationID := encodeReference("connection-123", "microphone-mid", "microphone-track", 3)
 	repository := &repositoryStub{observations: []provideroperations.Observation{{
-		TenantID: tenantID, SessionID: sessionID, Incarnation: 7, Sequence: 41,
-		Publications: []provideroperations.Publication{{ParticipantSessionID: participantID, Source: "microphone", Enabled: true, PublicationID: publicationID}},
+		TenantID: tenantID, EpisodeID: episodeID, Incarnation: 7, Sequence: 41,
+		Publications: []provideroperations.Publication{{ParticipantID: participantID, Source: "microphone", Enabled: true, PublicationID: publicationID}},
 	}}}
 	service := NewService(repository)
 	input := CloseInput{
-		TenantID: tenantID, SessionID: sessionID, ParticipantSessionID: participantID,
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID,
 		ParticipantGeneration: 3, ConnectionID: "connection-123", MID: "microphone-mid", Source: "microphone", PublicationID: publicationID,
 	}
 
@@ -164,18 +164,18 @@ func TestRecordClosedPublicationIsIdempotent(t *testing.T) {
 
 func TestPrepareCloseRejectsStaleReferenceBeforeProviderAndPreservesReplacement(t *testing.T) {
 	tenantID := testID(t, "11111111-1111-4111-8111-111111111111")
-	sessionID := testID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := testID(t, "22222222-2222-4222-8222-222222222222")
 	participantID := testID(t, "33333333-3333-4333-8333-333333333333")
 	replacementID := encodeReference("connection-new", "screen-mid", "screen-new", 8)
 	staleID := encodeReference("connection-old", "screen-mid", "screen-old", 7)
 	repository := &repositoryStub{observations: []provideroperations.Observation{{
-		TenantID: tenantID, SessionID: sessionID, Incarnation: 1, Sequence: 2,
-		Publications: []provideroperations.Publication{{ParticipantSessionID: participantID, Source: "screen", Enabled: true, PublicationID: replacementID}},
+		TenantID: tenantID, EpisodeID: episodeID, Incarnation: 1, Sequence: 2,
+		Publications: []provideroperations.Publication{{ParticipantID: participantID, Source: "screen", Enabled: true, PublicationID: replacementID}},
 	}}}
 	service := NewService(repository)
 
 	input := CloseInput{
-		TenantID: tenantID, SessionID: sessionID, ParticipantSessionID: participantID,
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID,
 		ParticipantGeneration: 7, ConnectionID: "connection-old", MID: "screen-mid", Source: "screen", PublicationID: staleID,
 	}
 	decision, err := service.PrepareClose(context.Background(), input)
@@ -189,7 +189,7 @@ func TestPrepareCloseRejectsStaleReferenceBeforeProviderAndPreservesReplacement(
 		t.Fatalf("stale close appended %#v", repository.appendedInputs)
 	}
 
-	snapshot, err := service.Latest(context.Background(), tenantID, sessionID)
+	snapshot, err := service.Latest(context.Background(), tenantID, episodeID)
 	if err != nil {
 		t.Fatalf("latest: %v", err)
 	}
@@ -201,20 +201,20 @@ func TestPrepareCloseRejectsStaleReferenceBeforeProviderAndPreservesReplacement(
 
 func TestRecordClosedPublicationCanRetryRegistryAfterProviderSuccess(t *testing.T) {
 	tenantID := testID(t, "11111111-1111-4111-8111-111111111111")
-	sessionID := testID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := testID(t, "22222222-2222-4222-8222-222222222222")
 	participantID := testID(t, "33333333-3333-4333-8333-333333333333")
 	publicationID := encodeReference("connection-123", "camera-mid", "camera-track", 4)
 	repositoryFailure := errors.New("database unavailable")
 	repository := &repositoryStub{
 		observations: []provideroperations.Observation{{
-			TenantID: tenantID, SessionID: sessionID, Incarnation: 3, Sequence: 8,
-			Publications: []provideroperations.Publication{{ParticipantSessionID: participantID, Source: "camera", Enabled: true, PublicationID: publicationID}},
+			TenantID: tenantID, EpisodeID: episodeID, Incarnation: 3, Sequence: 8,
+			Publications: []provideroperations.Publication{{ParticipantID: participantID, Source: "camera", Enabled: true, PublicationID: publicationID}},
 		}},
 		appendErrors: []error{repositoryFailure},
 	}
 	service := NewService(repository)
 	input := CloseInput{
-		TenantID: tenantID, SessionID: sessionID, ParticipantSessionID: participantID,
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID,
 		ParticipantGeneration: 4, ConnectionID: "connection-123", MID: "camera-mid", Source: "camera", PublicationID: publicationID,
 	}
 
@@ -233,8 +233,8 @@ func TestRecordClosedPublicationRejectsMismatchedConnection(t *testing.T) {
 	service := NewService(&repositoryStub{})
 	err := service.RecordClosedPublication(context.Background(), CloseInput{
 		TenantID:              testID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID:             testID(t, "22222222-2222-4222-8222-222222222222"),
-		ParticipantSessionID:  testID(t, "33333333-3333-4333-8333-333333333333"),
+		EpisodeID:             testID(t, "22222222-2222-4222-8222-222222222222"),
+		ParticipantID:         testID(t, "33333333-3333-4333-8333-333333333333"),
 		ParticipantGeneration: 1,
 		ConnectionID:          "connection-new",
 		MID:                   "camera-mid",
@@ -250,8 +250,8 @@ func TestRecordClosedPublicationRejectsMismatchedMID(t *testing.T) {
 	service := NewService(&repositoryStub{})
 	err := service.RecordClosedPublication(context.Background(), CloseInput{
 		TenantID:              testID(t, "11111111-1111-4111-8111-111111111111"),
-		SessionID:             testID(t, "22222222-2222-4222-8222-222222222222"),
-		ParticipantSessionID:  testID(t, "33333333-3333-4333-8333-333333333333"),
+		EpisodeID:             testID(t, "22222222-2222-4222-8222-222222222222"),
+		ParticipantID:         testID(t, "33333333-3333-4333-8333-333333333333"),
 		ParticipantGeneration: 1,
 		ConnectionID:          "connection-123",
 		MID:                   "other-mid",
@@ -265,8 +265,8 @@ func TestRecordClosedPublicationRejectsMismatchedMID(t *testing.T) {
 
 func TestRecordClosedPublicationRejectsLegacyAndMismatchedGenerationReferences(t *testing.T) {
 	base := CloseInput{
-		TenantID: testID(t, "11111111-1111-4111-8111-111111111111"), SessionID: testID(t, "22222222-2222-4222-8222-222222222222"),
-		ParticipantSessionID: testID(t, "33333333-3333-4333-8333-333333333333"), ParticipantGeneration: 8,
+		TenantID: testID(t, "11111111-1111-4111-8111-111111111111"), EpisodeID: testID(t, "22222222-2222-4222-8222-222222222222"),
+		ParticipantID: testID(t, "33333333-3333-4333-8333-333333333333"), ParticipantGeneration: 8,
 		ConnectionID: "connection-123", MID: "camera-mid", Source: "camera",
 	}
 	for _, test := range []struct {
@@ -301,7 +301,7 @@ func (r *repositoryStub) AppendObservation(_ context.Context, input provideroper
 	}
 	r.appended = input
 	r.appendedInputs = append(r.appendedInputs, input)
-	observation := provideroperations.Observation{TenantID: input.TenantID, SessionID: input.SessionID, Incarnation: input.Incarnation, Sequence: input.Sequence, Publications: input.Publications}
+	observation := provideroperations.Observation{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Incarnation: input.Incarnation, Sequence: input.Sequence, Publications: input.Publications}
 	r.observations = append(r.observations, observation)
 	return observation, nil
 }

@@ -70,9 +70,9 @@ func TestChatAttachmentRepositoryReservesFirstStreamAndPreservesIdempotency(t *t
 		ctx,
 		`select attachment_count, attachment_bytes
 		 from sync_chat_streams
-		 where tenant_id = $1 and session_id = $2`,
+		 where tenant_id = $1 and episode_id = $2`,
 		uuid(subject.TenantID),
-		uuid(subject.SessionID),
+		uuid(subject.EpisodeID),
 	).Scan(&attachmentCount, &attachmentBytes); err != nil {
 		t.Fatal(err)
 	}
@@ -249,9 +249,9 @@ func seedChatAttachmentSubject(
 	ctx := context.Background()
 	subject := chatattachments.Subject{
 		TenantID:              chatAttachmentIntegrationID(t),
-		RoomID:                chatAttachmentIntegrationID(t),
-		SessionID:             chatAttachmentIntegrationID(t),
-		ParticipantSessionID:  chatAttachmentIntegrationID(t),
+		SpaceID:               chatAttachmentIntegrationID(t),
+		EpisodeID:             chatAttachmentIntegrationID(t),
+		ParticipantID:         chatAttachmentIntegrationID(t),
 		ParticipantGeneration: 1,
 	}
 	if _, err := pool.Exec(
@@ -263,20 +263,20 @@ func seedChatAttachmentSubject(
 	}
 	if _, err := pool.Exec(
 		ctx,
-		`insert into rooms (id, name, tenant_id, status, slug, media_plane)
-		 values ($1, 'Chat attachment integration test', $2, 'active', $3, 'cf_sfu')`,
-		uuid(subject.RoomID),
+		`insert into spaces (id, name, tenant_id, slug, media_plane)
+			 values ($1, 'Chat attachment integration test', $2, $3, 'cf_sfu')`,
+		uuid(subject.SpaceID),
 		uuid(subject.TenantID),
-		"chat-attachment-"+subject.RoomID.String(),
+		"chat-attachment-"+subject.SpaceID.String(),
 	); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(
 		ctx,
-		`insert into room_sessions (id, status, room_id, tenant_id, started_at)
-		 values ($1, 'active', $2, $3, now())`,
-		uuid(subject.SessionID),
-		uuid(subject.RoomID),
+		`insert into episodes (id, status, space_id, tenant_id, started_at, config_snapshot)
+			 values ($1, 'active', $2, $3, now(), '{"roles":{"participant":["sendChat"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb)`,
+		uuid(subject.EpisodeID),
+		uuid(subject.SpaceID),
 		uuid(subject.TenantID),
 	); err != nil {
 		t.Fatal(err)
@@ -284,16 +284,16 @@ func seedChatAttachmentSubject(
 	if _, err := pool.Exec(
 		ctx,
 		`insert into participants (
-			id, name, capabilities, tenant_id, room_id, session_id,
-			generation, status, role, eligible_roles
+			id, name, capabilities, tenant_id, space_id, episode_id,
+			generation, status, role
 		) values (
 			$1, 'Chat attachment test participant', '{"sendChat"}',
-			$2, $3, $4, 1, 'active', 'participant', '{"participant"}'
+			$2, $3, $4, 1, 'active', 'participant'
 		)`,
-		uuid(subject.ParticipantSessionID),
+		uuid(subject.ParticipantID),
 		uuid(subject.TenantID),
-		uuid(subject.RoomID),
-		uuid(subject.SessionID),
+		uuid(subject.SpaceID),
+		uuid(subject.EpisodeID),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -312,8 +312,8 @@ func cleanupChatAttachmentTenant(
 		"sync_chat_messages",
 		"sync_chat_streams",
 		"participants",
-		"room_sessions",
-		"rooms",
+		"episodes",
+		"spaces",
 	} {
 		if _, err := pool.Exec(
 			context.Background(),

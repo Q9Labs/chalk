@@ -366,7 +366,7 @@ func TestJourneyEventIntakeReportsUnavailableLedger(t *testing.T) {
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusServiceUnavailable, response.Body.String())
 	}
-	if !bytes.Contains(response.Body.Bytes(), []byte(`"journey_ledger_unavailable"`)) {
+	if !bytes.Contains(response.Body.Bytes(), []byte(`"journey.ledger_unavailable"`)) {
 		t.Fatalf("response = %s", response.Body.String())
 	}
 }

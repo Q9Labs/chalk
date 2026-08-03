@@ -19,7 +19,7 @@ func TestNewWebhookDeliveryDetailResponseMapsAttempts(t *testing.T) {
 
 	response := newWebhookDeliveryDetailResponse(webhooks.DeliveryDetail{
 		Delivery: webhooks.Delivery{ID: utilities.IDFromBytes([16]byte{15: 2})},
-		Event:    json.RawMessage(`{"event":"room.created"}`),
+		Event:    json.RawMessage(`{"event":"space.created"}`),
 		Attempts: []webhooks.Attempt{{
 			ID:                  attemptID,
 			Number:              2,

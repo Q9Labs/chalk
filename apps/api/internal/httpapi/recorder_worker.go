@@ -136,7 +136,7 @@ type recorderWorkerPoolHealthBody struct {
 type recorderWorkerJobResponse struct {
 	JobID             string  `json:"job_id"`
 	TenantID          string  `json:"tenant_id"`
-	SessionID         string  `json:"session_id"`
+	EpisodeID         string  `json:"episode_id"`
 	RecordingID       string  `json:"recording_id"`
 	Kind              string  `json:"kind"`
 	State             string  `json:"state"`
@@ -222,16 +222,16 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 		}
 		leaseFor, valid := recorderWorkerLeaseDuration(body.LeaseForSeconds)
 		if !valid {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid lease duration")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid lease duration")
 			return
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		leaseToken, err := utilities.NewID()
 		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		job, err := service.Claim(request.Context(), recordingpipeline.ClaimInput{
@@ -266,11 +266,11 @@ func recorderWorkerHeartbeatHandler(service RecorderWorkerService) http.HandlerF
 		}
 		lease, ok := recorderWorkerLeaseInput(identity, body)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid worker lease")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
 			return
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		job, err := service.Heartbeat(request.Context(), lease)
@@ -293,16 +293,16 @@ func recorderWorkerProgressHandler(service RecorderWorkerService) http.HandlerFu
 			return
 		}
 		if strings.TrimSpace(body.Stage) == "" || body.Completed < 0 || body.Total < body.Completed || body.Bytes < 0 || len(body.Stage) > 128 || len(body.ObjectKey) > 2048 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid worker progress")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker progress")
 			return
 		}
 		lease, ok := recorderWorkerLeaseInput(identity, body.recorderWorkerLeaseBody)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid worker lease")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
 			return
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		job, err := service.Heartbeat(request.Context(), lease)
@@ -326,20 +326,20 @@ func recorderWorkerFailHandler(service RecorderWorkerService) http.HandlerFunc {
 		}
 		lease, ok := recorderWorkerLeaseInput(identity, body.recorderWorkerLeaseBody)
 		if !ok || strings.TrimSpace(body.ErrorCode) == "" || len(body.ErrorCode) > 128 || len(body.ErrorDetail) > 2048 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid worker failure")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker failure")
 			return
 		}
 		availableAt := time.Now().UTC()
 		if body.AvailableAt != "" {
 			parsed, err := time.Parse(time.RFC3339Nano, body.AvailableAt)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", "Invalid retry time")
+				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid retry time")
 				return
 			}
 			availableAt = parsed
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		job, err := service.Fail(request.Context(), recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: body.ErrorCode, ErrorDetail: body.ErrorDetail})
@@ -363,11 +363,11 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFu
 		}
 		lease, ok := recorderWorkerLeaseInput(identity, body.recorderWorkerLeaseBody)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid worker lease")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
 			return
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		var job recordingpipeline.Job
@@ -398,7 +398,7 @@ func recorderWorkerBundleHandler(service RecorderWorkerService) http.HandlerFunc
 			return
 		}
 		if identity.Role != workeridentity.RoleCapture {
-			writeError(w, http.StatusForbidden, "forbidden", "Only capture workers may report bundles")
+			writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers may report bundles")
 			return
 		}
 		body, ok := decodeRecorderWorkerBody[recorderWorkerBundleBody](w, request)
@@ -407,11 +407,11 @@ func recorderWorkerBundleHandler(service RecorderWorkerService) http.HandlerFunc
 		}
 		input, ok := recorderWorkerBundleInput(identity, body)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid recording bundle")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording bundle")
 			return
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		bundle, err := service.InsertBundle(request.Context(), input)
@@ -430,7 +430,7 @@ func recorderWorkerArtifactHandler(service RecorderWorkerService) http.HandlerFu
 			return
 		}
 		if identity.Role != workeridentity.RoleRender {
-			writeError(w, http.StatusForbidden, "forbidden", "Only render workers may report artifacts")
+			writeError(w, http.StatusForbidden, "worker.forbidden", "Only render workers may report artifacts")
 			return
 		}
 		body, ok := decodeRecorderWorkerBody[recorderWorkerArtifactBody](w, request)
@@ -439,11 +439,11 @@ func recorderWorkerArtifactHandler(service RecorderWorkerService) http.HandlerFu
 		}
 		input, ok := recorderWorkerArtifactInput(identity, body)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid recording artifact")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording artifact")
 			return
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		artifact, err := service.CommitArtifact(request.Context(), input)
@@ -466,7 +466,7 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService) http.Handler
 			return
 		}
 		if body.ReadyCapacity < 0 || len(body.Reason) > 256 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid recorder pool health")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder pool health")
 			return
 		}
 		observedAt := time.Now().UTC()
@@ -474,12 +474,12 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService) http.Handler
 			var err error
 			observedAt, err = time.Parse(time.RFC3339Nano, body.ObservedAt)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", "Invalid observation time")
+				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid observation time")
 				return
 			}
 		}
 		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Recorder worker service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		health, err := service.UpsertPoolHealth(request.Context(), recordingpipeline.PoolHealth{Role: recorderWorkerPoolRole(identity.Role), AdmissionOpen: body.AdmissionOpen, ReadyCapacity: body.ReadyCapacity, Reason: strings.TrimSpace(body.Reason), ObservedAt: observedAt})
@@ -494,7 +494,7 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService) http.Handler
 func recorderWorkerRequestIdentity(w http.ResponseWriter, request *http.Request) (workeridentity.Identity, bool) {
 	identity, ok := recorderWorkerIdentity(request.Context())
 	if !ok || identity.WorkerID.IsZero() || (identity.Role != workeridentity.RoleCapture && identity.Role != workeridentity.RoleRender) {
-		writeError(w, http.StatusUnauthorized, "worker_unauthorized", "Worker authentication required")
+		writeError(w, http.StatusUnauthorized, "worker.unauthorized", "Worker authentication required")
 		return workeridentity.Identity{}, false
 	}
 	return identity, true
@@ -594,7 +594,7 @@ func decodeRecorderWorkerBody[T any](w http.ResponseWriter, request *http.Reques
 		if apiErr, ok := errorAsAPIError(err); ok {
 			writeAPIError(w, apiErr)
 		} else {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid request body")
 		}
 		var zero T
 		return zero, false
@@ -603,7 +603,7 @@ func decodeRecorderWorkerBody[T any](w http.ResponseWriter, request *http.Reques
 }
 
 func recorderWorkerJobResponseValue(job recordingpipeline.Job) recorderWorkerJobResponse {
-	response := recorderWorkerJobResponse{JobID: job.ID.String(), TenantID: job.TenantID.String(), SessionID: job.SessionID.String(), RecordingID: job.RecordingID.String(), Kind: string(job.Kind), State: string(job.State), AttemptCount: job.AttemptCount, AttemptLimit: job.AttemptLimit, FencingGeneration: job.FencingGeneration, AvailableAt: utilities.FormatTimestamp(job.AvailableAt), UpdatedAt: utilities.FormatTimestamp(job.UpdatedAt), CreatedAt: utilities.FormatTimestamp(job.CreatedAt)}
+	response := recorderWorkerJobResponse{JobID: job.ID.String(), TenantID: job.TenantID.String(), EpisodeID: job.EpisodeID.String(), RecordingID: job.RecordingID.String(), Kind: string(job.Kind), State: string(job.State), AttemptCount: job.AttemptCount, AttemptLimit: job.AttemptLimit, FencingGeneration: job.FencingGeneration, AvailableAt: utilities.FormatTimestamp(job.AvailableAt), UpdatedAt: utilities.FormatTimestamp(job.UpdatedAt), CreatedAt: utilities.FormatTimestamp(job.CreatedAt)}
 	if job.LeaseToken != nil {
 		response.LeaseToken = *job.LeaseToken
 	}
@@ -652,14 +652,14 @@ func checksumString(value []byte) string {
 func writeRecorderWorkerError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, recordingpipeline.ErrInvalidJobID), errors.Is(err, recordingpipeline.ErrInvalidAttempt), errors.Is(err, recordingpipeline.ErrInvalidLease), errors.Is(err, recordingpipeline.ErrInvalidOwner), errors.Is(err, recordingpipeline.ErrInvalidRecordingID), errors.Is(err, recordingpipeline.ErrCapacityExceeded):
-		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid recorder worker request")
+		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder worker request")
 	case errors.Is(err, recordingpipeline.ErrJobNotFound):
-		writeError(w, http.StatusConflict, "stale_lease", "Worker lease is stale or unavailable")
+		writeError(w, http.StatusConflict, "lease.stale", "Worker lease is stale or unavailable")
 	case errors.Is(err, recordingpipeline.ErrArtifactConflict):
-		writeError(w, http.StatusConflict, "artifact_conflict", "Recording artifact conflicts with an existing commit")
+		writeError(w, http.StatusConflict, "artifact.conflict", "Recording artifact conflicts with an existing commit")
 	case errors.Is(err, recordingpipeline.ErrArtifactNotFound), errors.Is(err, recordingpipeline.ErrPoolHealthNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Recorder resource was not found")
+		writeError(w, http.StatusNotFound, "worker.not_found", "Recorder resource was not found")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal_error", "Recorder worker operation failed")
+		writeError(w, http.StatusInternalServerError, "internal.error", "Recorder worker operation failed")
 	}
 }

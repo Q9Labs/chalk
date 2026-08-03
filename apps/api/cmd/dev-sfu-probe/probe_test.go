@@ -44,7 +44,7 @@ func TestProbeCreatesAndVerifiesNoTrackConnectionWithoutReturningIdentifiers(t *
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	if createInput.Provider != mediaplane.ProviderCloudflareSFU || createInput.Session.Ref == "" || createInput.ParticipantPreset == "" {
+	if createInput.Provider != mediaplane.ProviderCloudflareSFU || createInput.Episode.Ref == "" || createInput.ParticipantPreset == "" {
 		t.Fatalf("create input = %+v", createInput)
 	}
 	if verifiedConnectionID != "connection-secret" {

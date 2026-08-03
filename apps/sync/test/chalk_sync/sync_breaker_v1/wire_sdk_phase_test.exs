@@ -10,7 +10,7 @@ defmodule ChalkSync.SyncBreakerV1.WireSdkPhaseTest do
     assert first["verdict"] == "pass"
     assert first["name"] == "wire_sdk"
     assert length(first["schedule"]) == 9
-    assert length(first["evidence"]["wire"]["declarative_targets"]) == 5
+    assert length(first["evidence"]["wire"]["declarative_targets"]) == 4
     assert length(first["evidence"]["wire"]["invalid_shapes"]["results"]) == 6
     assert first["evidence"]["wire"]["invalid_shapes"]["all_decode_rejected"]
     assert first["evidence"]["sdk"]["forbidden_client_shapes"]["all_encoder_rejected"]

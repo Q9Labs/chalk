@@ -36,17 +36,17 @@ returning
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
     after,
+    external_request_id,
     updated_at,
-    created_at,
-    resource_type,
-    resource_id,
-    external_request_id;
+    created_at;
 
 -- name: GetTenantAuditLog :one
 select
@@ -55,17 +55,17 @@ select
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
     after,
+    external_request_id,
     updated_at,
-    created_at,
-    resource_type,
-    resource_id,
-    external_request_id
+    created_at
 from audit_logs
 where
     tenant_id = sqlc.arg(tenant_id)
@@ -78,17 +78,17 @@ select
     actor_user_id,
     actor_type,
     action,
+    resource_type,
+    resource_id,
     details,
     outcome,
     error_code,
     error_message,
     before,
     after,
+    external_request_id,
     updated_at,
-    created_at,
-    resource_type,
-    resource_id,
-    external_request_id
+    created_at
 from audit_logs
 where
     tenant_id = sqlc.arg(tenant_id)

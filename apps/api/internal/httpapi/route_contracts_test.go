@@ -73,10 +73,10 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/recordings/{recording_id}"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts"},
-		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms"},
-		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}"},
-		{http.MethodPatch, "/v1/tenants/{tenant_id}/rooms/{room_id}"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}"},
+		{http.MethodPatch, "/v1/tenants/{tenant_id}/spaces/{space_id}"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}"},
@@ -87,23 +87,21 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}"},
 		{http.MethodPost, "/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver"},
-		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions"},
-		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}"},
-		{http.MethodPatch, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/deadline"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/end"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/host/recover"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/remove"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/access"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks"},
-		{http.MethodPut, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks/close"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/renegotiate"},
-		{http.MethodGet, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/publications"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/sync-token"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recordings"},
-		{http.MethodPost, "/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/recording-reservations"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/deadline"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/remove"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks"},
+		{http.MethodPut, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate"},
+		{http.MethodGet, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recordings"},
+		{http.MethodPost, "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/recording-reservations"},
 		{http.MethodGet, "/v1/tenants/{tenant_id}/recording-reservations/{recording_reservation_id}"},
 		{http.MethodPatch, "/v1/tenants/{tenant_id}/recording-reservations/{recording_reservation_id}"},
 		{http.MethodDelete, "/v1/tenants/{tenant_id}/recording-reservations/{recording_reservation_id}"},
@@ -202,7 +200,7 @@ func TestWebhookRouteContracts(t *testing.T) {
 			if contract.RateLimit.Name != wantPolicy || contract.RateLimit.Limit != wantLimit || contract.RateLimit.Window != time.Minute {
 				t.Fatalf("rate limit = %#v, want %s/%d per minute", contract.RateLimit, wantPolicy, wantLimit)
 			}
-			if !contractHasErrorCode(contract, "rate_limited") {
+			if !contractHasErrorCode(contract, "request.rate_limited") {
 				t.Fatal("route does not declare rate_limited")
 			}
 			if contract.Request == nil && test.request != "" || contract.Request != nil && contract.Request.Name != test.request {
@@ -227,7 +225,7 @@ func TestWebhookRouteContracts(t *testing.T) {
 		t.Fatalf("state parameter = %#v", state)
 	}
 	eventType := parameterByName(list.Parameters, "event_type")
-	if eventType == nil || eventType.Type != "array" || eventType.ItemsType != "string" || len(eventType.Enum) != 15 {
+	if eventType == nil || eventType.Type != "array" || eventType.ItemsType != "string" || !equalStrings(eventType.Enum, []string{"endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.created", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"}) {
 		t.Fatalf("event_type parameter = %#v", eventType)
 	}
 }
@@ -301,7 +299,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 			body:        "StartIntegrationConnectionRequest",
 			rateLimited: true,
 			parameters:  []string{"path:tenant_id"},
-			errors:      []string{"invalid_request", "payload_too_large", "invalid_callback_url", "rate_limited"},
+			errors:      []string{"request.invalid", "request.payload_too_large", "integration.invalid_callback_url", "request.rate_limited"},
 		},
 		{
 			operationID: "listIntegrationConnections",
@@ -309,7 +307,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 			path:        "/v1/tenants/{tenant_id}/integrations/connections",
 			status:      http.StatusOK,
 			parameters:  []string{"path:tenant_id", "query:provider", "query:service", "query:status", "query:page_size", "query:cursor"},
-			errors:      []string{"invalid_page_size", "invalid_cursor"},
+			errors:      []string{"pagination.invalid_page_size", "pagination.invalid_cursor"},
 		},
 		{
 			operationID: "getIntegrationConnection",
@@ -317,7 +315,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 			path:        "/v1/tenants/{tenant_id}/integrations/connections/{connection_id}",
 			status:      http.StatusOK,
 			parameters:  []string{"path:tenant_id", "path:connection_id"},
-			errors:      []string{"invalid_integration_connection_id"},
+			errors:      []string{"integration.invalid_connection_id"},
 		},
 		{
 			operationID: "refreshIntegrationConnection",
@@ -326,7 +324,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 			status:      http.StatusOK,
 			rateLimited: true,
 			parameters:  []string{"path:tenant_id", "path:connection_id"},
-			errors:      []string{"invalid_integration_connection_id", "rate_limited"},
+			errors:      []string{"integration.invalid_connection_id", "request.rate_limited"},
 		},
 		{
 			operationID: "executeIntegrationAction",
@@ -336,7 +334,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 			body:        "ExecuteIntegrationActionRequest",
 			rateLimited: true,
 			parameters:  []string{"path:tenant_id", "path:connection_id"},
-			errors:      []string{"invalid_request", "payload_too_large", "invalid_integration_action", "invalid_integration_action_input", "invalid_integration_action_text", "rate_limited"},
+			errors:      []string{"request.invalid", "request.payload_too_large", "integration.invalid_action", "integration.invalid_action_input", "integration.invalid_action_text", "request.rate_limited"},
 		},
 		{
 			operationID: "disableIntegrationConnection",
@@ -345,7 +343,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 			status:      http.StatusOK,
 			rateLimited: true,
 			parameters:  []string{"path:tenant_id", "path:connection_id", "query:revoke"},
-			errors:      []string{"invalid_integration_connection_id", "rate_limited"},
+			errors:      []string{"integration.invalid_connection_id", "request.rate_limited"},
 		},
 	}
 
@@ -380,7 +378,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 		if got := contractParameterNames(contract); !sameStrings(got, test.parameters) {
 			t.Fatalf("%s parameters = %v, want %v", test.operationID, got, test.parameters)
 		}
-		for _, code := range append([]string{"unauthenticated", "forbidden", "service_unavailable", "invalid_tenant_id", "internal_error"}, test.errors...) {
+		for _, code := range append([]string{"access.unauthenticated", "access.forbidden", "service.unavailable", "tenant.invalid_id", "service.internal_error"}, test.errors...) {
 			if !contractHasErrorCode(contract, code) {
 				t.Fatalf("%s does not declare %q", test.operationID, code)
 			}
@@ -388,7 +386,7 @@ func TestIntegrationRouteContracts(t *testing.T) {
 	}
 }
 
-func TestSessionLifecycleRouteContracts(t *testing.T) {
+func TestEpisodeLifecycleRouteContracts(t *testing.T) {
 	contracts := make(map[string]httpapi.APIRouteContract)
 	for _, contract := range httpapi.PreviewRouteContracts() {
 		contracts[contract.OperationID] = contract
@@ -399,11 +397,13 @@ func TestSessionLifecycleRouteContracts(t *testing.T) {
 		body        string
 		parameters  []string
 	}{
-		{"createRoomSession", http.StatusCreated, "CreateRoomSessionRequest", []string{"path:tenant_id", "path:room_id", "header:Idempotency-Key"}},
-		{"admitSessionParticipant", http.StatusCreated, "AdmitSessionParticipantRequest", []string{"path:tenant_id", "path:room_id", "path:session_id", "header:Idempotency-Key"}},
-		{"issueSessionParticipantSyncToken", http.StatusCreated, "", []string{"path:tenant_id", "path:room_id", "path:session_id", "path:participant_session_id"}},
-		{"removeSessionParticipant", http.StatusAccepted, "RemoveSessionParticipantRequest", []string{"path:tenant_id", "path:room_id", "path:session_id", "path:participant_session_id", "header:Idempotency-Key"}},
-		{"endRoomSession", http.StatusAccepted, "", []string{"path:tenant_id", "path:room_id", "path:session_id", "header:Idempotency-Key"}},
+		{"createEpisode", http.StatusCreated, "CreateEpisodeRequest", []string{"path:tenant_id", "path:space_id", "header:Idempotency-Key"}},
+		{"admitEpisodeParticipant", http.StatusCreated, "AdmitEpisodeParticipantRequest", []string{"path:tenant_id", "path:space_id", "path:episode_id", "header:Idempotency-Key"}},
+		{"issueEpisodeParticipantSyncToken", http.StatusCreated, "", []string{"path:tenant_id", "path:space_id", "path:episode_id", "path:participant_id"}},
+		{"removeEpisodeParticipant", http.StatusAccepted, "RemoveEpisodeParticipantRequest", []string{"path:tenant_id", "path:space_id", "path:episode_id", "path:participant_id", "header:Idempotency-Key"}},
+		{"issueAccessGrant", http.StatusCreated, "IssueAccessGrantRequest", []string{"path:tenant_id", "path:space_id", "path:episode_id", "path:participant_id"}},
+		{"endEpisode", http.StatusAccepted, "", []string{"path:tenant_id", "path:space_id", "path:episode_id", "header:Idempotency-Key"}},
+		{"setEpisodeDeadline", http.StatusAccepted, "SetEpisodeDeadlineRequest", []string{"path:tenant_id", "path:space_id", "path:episode_id", "header:Idempotency-Key"}},
 	}
 	for _, test := range tests {
 		contract, ok := contracts[test.operationID]
@@ -424,7 +424,7 @@ func TestSessionLifecycleRouteContracts(t *testing.T) {
 			t.Fatalf("%s parameters = %v, want %v", test.operationID, got, test.parameters)
 		}
 	}
-	createContract := contracts["createRoomSession"]
+	createContract := contracts["createEpisode"]
 	for _, parameter := range createContract.Parameters {
 		if parameter.Name == "Idempotency-Key" {
 			if parameter.Pattern != `^[A-Za-z0-9_-]+$` || parameter.MinLength != 16 || parameter.MaxLength != 128 {
@@ -433,7 +433,7 @@ func TestSessionLifecycleRouteContracts(t *testing.T) {
 			return
 		}
 	}
-	t.Fatal("createRoomSession does not declare Idempotency-Key")
+	t.Fatal("createEpisode does not declare Idempotency-Key")
 }
 
 type expectedRoute struct {

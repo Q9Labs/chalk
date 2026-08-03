@@ -2,10 +2,10 @@
 insert into sync_whiteboard_files (
     upload_id,
     tenant_id,
-    room_id,
-    session_id,
+    space_id,
+    episode_id,
     scene_id,
-    participant_session_id,
+    participant_id,
     participant_generation,
     file_id,
     object_key,
@@ -17,8 +17,8 @@ insert into sync_whiteboard_files (
 select
     sqlc.arg(upload_id),
     participant.tenant_id,
-    participant.room_id,
-    participant.session_id,
+    participant.space_id,
+    participant.episode_id,
     scene.scene_id,
     participant.id,
     participant.generation,
@@ -29,30 +29,30 @@ select
     sqlc.arg(sha256),
     sqlc.arg(expires_at)
 from participants participant
-join room_sessions session
-    on session.tenant_id = participant.tenant_id
-    and session.room_id = participant.room_id
-    and session.id = participant.session_id
+join episodes episode
+    on episode.tenant_id = participant.tenant_id
+    and episode.space_id = participant.space_id
+    and episode.id = participant.episode_id
 join sync_whiteboard_scenes scene
     on scene.tenant_id = participant.tenant_id
-    and scene.room_id = participant.room_id
-    and scene.session_id = participant.session_id
+    and scene.space_id = participant.space_id
     and scene.scene_id = sqlc.arg(scene_id)
     and scene.is_current
 left join sync_whiteboard_permissions permission
     on permission.tenant_id = participant.tenant_id
-    and permission.session_id = participant.session_id
-    and permission.participant_session_id = participant.id
+    and permission.space_id = participant.space_id
+    and permission.episode_id = participant.episode_id
+    and permission.participant_id = participant.id
 where participant.tenant_id = sqlc.arg(tenant_id)
-    and participant.room_id = sqlc.arg(room_id)
-    and participant.session_id = sqlc.arg(session_id)
-    and participant.id = sqlc.arg(participant_session_id)
+    and participant.space_id = sqlc.arg(space_id)
+    and participant.episode_id = sqlc.arg(episode_id)
+    and participant.id = sqlc.arg(participant_id)
     and participant.generation = sqlc.arg(participant_generation)
     and participant.status = 'active'
-    and session.status = 'active'
+    and episode.status = 'active'
     and coalesce(
         permission.can_draw,
-        (session.whiteboard_role_capabilities -> participant.role) ? 'drawWhiteboard'
+        participant.capabilities @> array['drawWhiteboard']::text[]
     );
 
 -- name: ClaimWhiteboardFileUploadFinalize :one
@@ -61,30 +61,29 @@ set status = 'finalizing', updated_at = now()
 from participants participant, sync_whiteboard_scenes scene
 where file.upload_id = sqlc.arg(upload_id)
     and file.tenant_id = sqlc.arg(tenant_id)
-    and file.room_id = sqlc.arg(room_id)
-    and file.session_id = sqlc.arg(session_id)
-    and file.participant_session_id = sqlc.arg(participant_session_id)
+    and file.space_id = sqlc.arg(space_id)
+    and file.episode_id = sqlc.arg(episode_id)
+    and file.participant_id = sqlc.arg(participant_id)
     and file.participant_generation = sqlc.arg(participant_generation)
     and file.status = 'pending'
     and file.expires_at > sqlc.arg(now_at)
     and participant.tenant_id = file.tenant_id
-    and participant.room_id = file.room_id
-    and participant.session_id = file.session_id
-    and participant.id = file.participant_session_id
+    and participant.space_id = file.space_id
+    and participant.episode_id = file.episode_id
+    and participant.id = file.participant_id
     and participant.generation = file.participant_generation
     and participant.status = 'active'
     and scene.tenant_id = file.tenant_id
-    and scene.room_id = file.room_id
-    and scene.session_id = file.session_id
+    and scene.space_id = file.space_id
     and scene.scene_id = file.scene_id
     and scene.is_current
 returning
     file.upload_id,
     file.tenant_id,
-    file.room_id,
-    file.session_id,
+    file.space_id,
+    file.episode_id,
     file.scene_id,
-    file.participant_session_id,
+    file.participant_id,
     file.participant_generation,
     file.file_id,
     file.object_key,
@@ -113,10 +112,10 @@ where upload_id = sqlc.arg(upload_id)
 select
     file.upload_id,
     file.tenant_id,
-    file.room_id,
-    file.session_id,
+    file.space_id,
+    file.episode_id,
     file.scene_id,
-    file.participant_session_id,
+    file.participant_id,
     file.participant_generation,
     file.file_id,
     file.object_key,
@@ -127,36 +126,35 @@ select
 from sync_whiteboard_files file
 join participants participant
     on participant.tenant_id = file.tenant_id
-    and participant.room_id = file.room_id
-    and participant.session_id = file.session_id
-    and participant.id = sqlc.arg(participant_session_id)
+    and participant.space_id = file.space_id
+    and participant.episode_id = file.episode_id
+    and participant.id = sqlc.arg(participant_id)
     and participant.generation = sqlc.arg(participant_generation)
-join room_sessions session
-    on session.tenant_id = file.tenant_id
-    and session.room_id = file.room_id
-    and session.id = file.session_id
+join episodes episode
+    on episode.tenant_id = file.tenant_id
+    and episode.space_id = file.space_id
+    and episode.id = file.episode_id
 join sync_whiteboard_scenes scene
     on scene.tenant_id = file.tenant_id
-    and scene.room_id = file.room_id
-    and scene.session_id = file.session_id
+    and scene.space_id = file.space_id
     and scene.scene_id = file.scene_id
 where file.tenant_id = sqlc.arg(tenant_id)
-    and file.room_id = sqlc.arg(room_id)
-    and file.session_id = sqlc.arg(session_id)
+    and file.space_id = sqlc.arg(space_id)
+    and file.episode_id = sqlc.arg(episode_id)
     and file.file_id = sqlc.arg(file_id)
     and file.status = 'ready'
     and participant.status = 'active'
-    and session.status = 'active'
+    and episode.status = 'active'
     and scene.is_current;
 
 -- name: ClaimWhiteboardFileCleanup :many
 with candidates as (
     select file.upload_id
     from sync_whiteboard_files file
-    join room_sessions session
-        on session.tenant_id = file.tenant_id
-        and session.room_id = file.room_id
-        and session.id = file.session_id
+    join episodes episode
+        on episode.tenant_id = file.tenant_id
+        and episode.space_id = file.space_id
+        and episode.id = file.episode_id
     where (
         file.cleanup_claimed_until is null
         or file.cleanup_claimed_until <= sqlc.arg(now_at)
@@ -167,14 +165,14 @@ with candidates as (
                 and file.expires_at <= sqlc.arg(now_at)
             )
             or (
-                session.status = 'ended'
-                and session.ended_at <= sqlc.arg(ended_before)
+                episode.status = 'ended'
+                and episode.ended_at <= sqlc.arg(ended_before)
             )
         )
     order by
         case
-            when session.status = 'ended' and session.ended_at <= sqlc.arg(ended_before)
-                then session.ended_at
+            when episode.status = 'ended' and episode.ended_at <= sqlc.arg(ended_before)
+                then episode.ended_at
             else file.expires_at
         end,
         file.upload_id

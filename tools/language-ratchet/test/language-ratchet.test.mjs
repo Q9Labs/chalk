@@ -69,6 +69,9 @@ test("tracked-file changes return failure for increases and decreases", async ()
     await writeFile(fixturePath, "Space\n");
     assert.equal(await runRatchet({ repositoryRoot, baselinePath }), 1);
     assert.match(errors.join("\n"), /Run pnpm run language:ratchet:update/);
+
+    await rm(fixturePath);
+    assert.equal(await runRatchet({ repositoryRoot, baselinePath, update: true }), 0);
   } finally {
     console.error = originalError;
     await rm(repositoryRoot, { recursive: true, force: true });

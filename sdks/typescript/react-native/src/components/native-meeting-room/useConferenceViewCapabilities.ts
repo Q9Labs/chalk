@@ -59,8 +59,8 @@ export function useConferenceViewCapabilities({ features, session, snapshot, cha
   const canScreenShare = screenShareAvailability.enabled;
   const canWhiteboard = features?.whiteboard !== false && session.whiteboard !== null;
   const canManageAdmission = capabilities.includes("manageAdmission");
-  const canSetParticipantRole = capabilities.includes("promoteDemote");
-  const canTransferHost = capabilities.includes("transferHost");
+  const canSetParticipantRole = capabilities.includes("assignRoles");
+  const canTransferHost = capabilities.includes("assignRoles");
   const canRequestMedia = capabilities.includes("requestMediaOthers");
   const canMuteParticipants = capabilities.includes("muteOthers");
   const canRemoveParticipants = capabilities.includes("removeParticipant");

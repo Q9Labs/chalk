@@ -186,7 +186,7 @@ function canActOnParticipant(controller: Controller): boolean {
   return controller.canMuteParticipants || controller.canRequestMedia || controller.canStopParticipantCamera || controller.canStopParticipantScreenShare || controller.canSetParticipantRole || controller.canTransferHost || controller.canRemoveParticipants;
 }
 
-function openParticipantActions(controller: Controller, participantSessionId: string, role: "host" | "cohost" | "participant"): void {
+function openParticipantActions(controller: Controller, participantSessionId: string, role: string): void {
   const buttons: { readonly label: string; readonly action: () => void }[] = [];
   if (controller.canMuteParticipants) buttons.push({ label: "Mute", action: () => controller.muteParticipant(participantSessionId) });
   if (controller.canRequestMedia) {

@@ -29,11 +29,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
   setup %{connections: connections} do
     connection = hd(connections)
-    fixture = SyncPostgres.seed_session(connection, 2)
+    fixture = SyncPostgres.seed_episode(connection, 2)
 
     on_exit(fn ->
-      cleanup_whiteboard(connection, fixture.session)
-      SyncPostgres.cleanup(connection, fixture.session)
+      cleanup_whiteboard(connection, fixture.episode)
+      SyncPostgres.cleanup(connection, fixture.episode)
     end)
 
     {:ok,
@@ -70,7 +70,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
     permission = %{
       operation_id: "whiteboard-permission-0001",
-      participant_session_id: participant.participant_session_id,
+      participant_id: participant.participant_id,
       can_draw: false
     }
 
@@ -110,8 +110,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     }
   end
 
-  defp cleanup_whiteboard(connection, session) do
-    params = [uuid(session.tenant_id), uuid(session.session_id)]
+  defp cleanup_whiteboard(connection, episode) do
+    params = [uuid(episode.tenant_id), uuid(episode.space_id)]
 
     Enum.each(
       [
@@ -124,7 +124,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
       fn table ->
         Postgrex.query!(
           connection,
-          "delete from #{table} where tenant_id = $1 and session_id = $2",
+          "delete from #{table} where tenant_id = $1 and space_id = $2",
           params
         )
       end

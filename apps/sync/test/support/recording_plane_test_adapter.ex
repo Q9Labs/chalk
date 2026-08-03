@@ -16,12 +16,12 @@ defmodule ChalkSync.RecordingPlaneTestAdapter do
   end
 
   @impl true
-  def start_recording(adapter, operation_id, session, recording_id),
-    do: call(adapter, :start_recording, operation_id, [session, recording_id])
+  def start_recording(adapter, operation_id, episode, recording_id),
+    do: call(adapter, :start_recording, operation_id, [episode, recording_id])
 
   @impl true
-  def stop_recording(adapter, operation_id, session, recording_id),
-    do: call(adapter, :stop_recording, operation_id, [session, recording_id])
+  def stop_recording(adapter, operation_id, episode, recording_id),
+    do: call(adapter, :stop_recording, operation_id, [episode, recording_id])
 
   @spec calls(Agent.agent()) :: [tuple()]
   def calls(adapter), do: Agent.get(adapter, &Enum.reverse(&1.calls))

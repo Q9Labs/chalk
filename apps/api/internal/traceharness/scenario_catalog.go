@@ -21,7 +21,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
-	"github.com/q9labs/chalk/apps/api/internal/rooms"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/users"
@@ -29,29 +29,31 @@ import (
 )
 
 const (
-	RouteAuthRegisterScenario           = "route:auth-register"
-	RouteAuthLoginScenario              = "route:auth-login"
-	RouteAuthLogoutScenario             = "route:auth-logout"
-	RouteAuthGoogleStartScenario        = "route:auth-google-start"
-	RouteAuthGoogleCallbackScenario     = "route:auth-google-callback"
-	RouteMeScenario                     = "route:me"
-	RouteTenantCreateScenario           = "route:tenant-create"
-	RouteTenantListSystemScenario       = "route:tenant-list-system"
-	RouteTenantGetAuthorizedScenario    = "route:tenant-get-authorized"
-	RouteTenantUpdateAuthorizedScenario = "route:tenant-update-authorized"
-	RouteRegionsListScenario            = "route:regions-list"
-	RouteUserCreateScenario             = "route:user-create"
-	RouteUserListSystemScenario         = "route:user-list-system"
-	RouteUserGetScenario                = "route:user-get"
-	RouteMembershipCreateOwnerScenario  = "route:membership-create-owner"
-	RouteMembershipListViewerScenario   = "route:membership-list-viewer"
-	RouteMembershipUpdateOwnerScenario  = "route:membership-update-owner"
-	RouteRoomCreateMemberScenario       = "route:room-create-member"
-	RouteSessionCreateMemberScenario    = "route:session-create-member"
-	RouteSessionEndMemberScenario       = "route:session-end-member"
-	RouteSessionSyncTokenScenario       = "route:session-sync-token"
-	RouteRecordingTranscribeScenario    = "route:recording-transcribe"
-	RouteJourneyEventIntakeScenario     = "route:telemetry-journey-event-intake"
+	RouteAuthRegisterScenario             = "route:auth-register"
+	RouteAuthLoginScenario                = "route:auth-login"
+	RouteAuthLogoutScenario               = "route:auth-logout"
+	RouteAuthGoogleStartScenario          = "route:auth-google-start"
+	RouteAuthGoogleCallbackScenario       = "route:auth-google-callback"
+	RouteMeScenario                       = "route:me"
+	RouteTenantCreateScenario             = "route:tenant-create"
+	RouteTenantListSystemScenario         = "route:tenant-list-system"
+	RouteTenantGetAuthorizedScenario      = "route:tenant-get-authorized"
+	RouteTenantUpdateAuthorizedScenario   = "route:tenant-update-authorized"
+	RouteRegionsListScenario              = "route:regions-list"
+	RouteUserCreateScenario               = "route:user-create"
+	RouteUserListSystemScenario           = "route:user-list-system"
+	RouteUserGetScenario                  = "route:user-get"
+	RouteMembershipCreateOwnerScenario    = "route:membership-create-owner"
+	RouteMembershipListViewerScenario     = "route:membership-list-viewer"
+	RouteMembershipUpdateOwnerScenario    = "route:membership-update-owner"
+	RouteSpaceCreateMemberScenario        = "route:space-create-member"
+	RouteEpisodeCreateMemberScenario      = "route:episode-create-member"
+	RouteEpisodeAdmitMemberScenario       = "route:episode-admit-member"
+	RouteEpisodeRemoveParticipantScenario = "route:episode-remove-participant"
+	RouteEpisodeEndScenario               = "route:episode-end"
+	RouteEpisodeDeadlineScenario          = "route:episode-deadline"
+	RouteRecordingTranscribeScenario      = "route:recording-transcribe"
+	RouteJourneyEventIntakeScenario       = "route:telemetry-journey-event-intake"
 
 	PolicyTenantSystemAllowScenario = "policy:tenant-system-allow"
 	PolicyTenantAPIKeyScopeScenario = "policy:tenant-api-key-scope"
@@ -95,10 +97,12 @@ func ScenarioNames() []string {
 		RouteMembershipCreateOwnerScenario,
 		RouteMembershipListViewerScenario,
 		RouteMembershipUpdateOwnerScenario,
-		RouteRoomCreateMemberScenario,
-		RouteSessionCreateMemberScenario,
-		RouteSessionEndMemberScenario,
-		RouteSessionSyncTokenScenario,
+		RouteSpaceCreateMemberScenario,
+		RouteEpisodeCreateMemberScenario,
+		RouteEpisodeAdmitMemberScenario,
+		RouteEpisodeRemoveParticipantScenario,
+		RouteEpisodeEndScenario,
+		RouteEpisodeDeadlineScenario,
 		RouteRecordingTranscribeScenario,
 		RouteJourneyEventIntakeScenario,
 		RouteChatAttachmentUploadScenario,
@@ -439,20 +443,20 @@ func runRouteMembershipUpdateOwner(ctx context.Context) (ScenarioResult, error) 
 	})
 }
 
-func runRouteRoomCreateMember(ctx context.Context) (ScenarioResult, error) {
+func runRouteSpaceCreateMember(ctx context.Context) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
-	body := json.RawMessage(`{"name":"  Daily Review  ","status":"active","slug":"daily-review","media_plane":"cf_rtk","metadata":{"purpose":"review"}}`)
+	body := json.RawMessage(`{"name":"  Daily Review  ","slug":"daily-review","media_plane":"cf_rtk","metadata":{"purpose":"review"},"admission_policy":{"mode":"open"}}`)
 
 	return runRouteTrace(ctx, routeTraceConfig{
-		Name:     RouteRoomCreateMemberScenario,
+		Name:     RouteSpaceCreateMemberScenario,
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Principal:  userPrincipal(),
 			PolicyRole: memberships.RoleMember,
 		}),
 		Method:         http.MethodPost,
-		Path:           "/v1/tenants/" + tenantID().String() + "/rooms",
+		Path:           "/v1/tenants/" + tenantID().String() + "/spaces",
 		Body:           body,
 		Authorization:  "Bearer trace-session-token",
 		ExpectedStatus: http.StatusCreated,
@@ -652,18 +656,18 @@ func runAdapterCloudflareSFUBootstrap(ctx context.Context) (ScenarioResult, erro
 	now := deterministicClock()
 	recorder := NewRecorder(now)
 	service := mediaplane.NewService(tracedMediaPlane{recorder: recorder, now: now})
-	input := mediaplane.EnsureSessionInput{
+	input := mediaplane.EnsureEpisodeInput{
 		Provider:   mediaplane.ProviderCloudflareSFU,
-		SessionKey: " room:demo ",
+		EpisodeKey: " space:demo ",
 		Title:      " Chalk Demo ",
 		Metadata:   map[string]string{"tenant_id": tenantID().String()},
 	}
-	span := recorder.Start("service", "mediaplane.Service.EnsureSession", "validate session bootstrap before sfu adapter", map[string]any{
-		"input": ensureSessionInputFields(input),
+	span := recorder.Start("service", "mediaplane.Service.EnsureEpisode", "validate Episode bootstrap before sfu adapter", map[string]any{
+		"input": ensureEpisodeInputFields(input),
 	})
-	session, err := service.EnsureSession(ctx, input)
-	span.End("media plane service returned sfu session metadata", map[string]any{"session": mediaSessionFields(session)}, err)
-	return directResult(AdapterCloudflareSFUBootstrapScenario, http.StatusOK, recorder, mediaSessionFields(session), err)
+	episode, err := service.EnsureEpisode(ctx, input)
+	span.End("media plane service returned sfu Episode metadata", map[string]any{"episode": mediaEpisodeFields(episode)}, err)
+	return directResult(AdapterCloudflareSFUBootstrapScenario, http.StatusOK, recorder, mediaEpisodeFields(episode), err)
 }
 
 func runAdapterCloudflareRTKJoin(ctx context.Context) (ScenarioResult, error) {
@@ -672,7 +676,7 @@ func runAdapterCloudflareRTKJoin(ctx context.Context) (ScenarioResult, error) {
 	service := mediaplane.NewService(tracedMediaPlane{recorder: recorder, now: now})
 	input := mediaplane.CreateJoinInput{
 		Provider:              mediaplane.ProviderCloudflareRTK,
-		Session:               mediaplane.Session{Provider: mediaplane.ProviderCloudflareRTK, Ref: "rtk-session-123"},
+		Episode:               mediaplane.Episode{Provider: mediaplane.ProviderCloudflareRTK, Ref: "rtk-episode-123"},
 		ParticipantName:       " Trace Reviewer ",
 		ExternalParticipantID: " user-111 ",
 		ParticipantPreset:     " contributor ",
@@ -882,9 +886,9 @@ func routerWithCoreServices(recorder *Recorder, now func() time.Time, options co
 			recorder: recorder,
 			next:     memberships.NewService(membershipRepository),
 		},
-		Rooms: tracedRoomService{
+		Spaces: tracedSpaceService{
 			recorder: recorder,
-			next:     rooms.NewService(tracedRoomRepository{recorder: recorder, now: now}),
+			next:     spaces.NewService(tracedSpaceRepository{recorder: recorder, now: now}),
 		},
 	})
 }
@@ -1405,8 +1409,8 @@ func (s tracedTranscriptArtifactService) Request(_ context.Context, input transc
 	span := s.recorder.Start("service", "transcripts.Service.Request", "validate idempotent artifact request and load recorder-owned source", map[string]any{"tenant_id": input.TenantID.String(), "recording_id": input.RecordingID.String(), "idempotency_key": input.IdempotencyKey, "languages": input.Languages})
 	s.recorder.Add("database", "SELECT recording_transcription_sources", "load committed manifest and track-aware chunk authority", map[string]any{"recording_id": input.RecordingID.String()})
 	s.recorder.Add("database", "BEGIN transcript request", "atomically insert transcript, chunks, and fenced artifact jobs", map[string]any{"idempotency_key": input.IdempotencyKey})
-	transcript := transcripts.Transcript{ID: transcriptArtifactID(), TenantID: input.TenantID, RecordingID: input.RecordingID, RoomID: roomID(), SessionID: roomSessionID(), Status: transcripts.StatusPreparing, Languages: []string{"en"}, Generation: 1, CreatedAt: s.now(), UpdatedAt: s.now()}
-	job := transcripts.Job{ID: transcriptJobID(), TenantID: input.TenantID, RecordingID: input.RecordingID, TranscriptID: transcript.ID, SessionID: transcript.SessionID, ArtifactKind: "transcription_chunk", PayloadSchemaVersion: 1, State: transcripts.JobStatePending, AttemptLimit: 4, CreatedAt: s.now(), UpdatedAt: s.now()}
+	transcript := transcripts.Transcript{ID: transcriptArtifactID(), TenantID: input.TenantID, RecordingID: input.RecordingID, SpaceID: spaceID(), EpisodeID: episodeID(), Status: transcripts.StatusPreparing, Languages: []string{"en"}, Generation: 1, CreatedAt: s.now(), UpdatedAt: s.now()}
+	job := transcripts.Job{ID: transcriptJobID(), TenantID: input.TenantID, RecordingID: input.RecordingID, TranscriptID: transcript.ID, EpisodeID: transcript.EpisodeID, ArtifactKind: "transcription_chunk", PayloadSchemaVersion: 1, State: transcripts.JobStatePending, AttemptLimit: 4, CreatedAt: s.now(), UpdatedAt: s.now()}
 	s.recorder.Add("provider", "Lambda Invoke Event", "send loss-tolerant post-commit dispatcher wake hint", map[string]any{"job_id": job.ID.String(), "payload_contains_media": false})
 	span.End("transcript request committed", map[string]any{"transcript": transcriptFields(transcript), "job_id": job.ID.String(), "job_state": job.State}, nil)
 	return transcript, job, nil
@@ -1424,166 +1428,98 @@ func (tracedTranscriptArtifactService) Delete(context.Context, utilities.ID, uti
 	return transcripts.Transcript{}, errors.New("delete transcript is not used by this trace scenario")
 }
 
-type tracedRoomService struct {
+type tracedSpaceService struct {
 	recorder *Recorder
-	next     rooms.Service
+	next     spaces.Service
 }
 
-func (s tracedRoomService) CreateRoom(ctx context.Context, input rooms.CreateRoomInput) (rooms.Room, error) {
-	span := s.recorder.Start("service", "rooms.Service.CreateRoom", "validate room create input", map[string]any{"input": roomCreateInputFields(input)})
-	room, err := s.next.CreateRoom(ctx, input)
-	span.End("room service returned domain room", map[string]any{"room": roomFields(room)}, err)
-	return room, err
+func (s tracedSpaceService) CreateSpace(ctx context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
+	span := s.recorder.Start("service", "spaces.Service.CreateSpace", "validate Space create input", map[string]any{"input": spaceCreateInputFields(input)})
+	space, err := s.next.CreateSpace(ctx, input)
+	span.End("Space service returned domain Space", map[string]any{"space": spaceFields(space)}, err)
+	return space, err
 }
 
-func (s tracedRoomService) GetRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID) (rooms.Room, error) {
-	span := s.recorder.Start("service", "rooms.Service.GetRoom", "validate room ids and load room", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String()})
-	room, err := s.next.GetRoom(ctx, tenantID, roomID)
-	span.End("room service returned domain room", map[string]any{"room": roomFields(room)}, err)
-	return room, err
+func (s tracedSpaceService) GetSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error) {
+	span := s.recorder.Start("service", "spaces.Service.GetSpace", "validate Space ids and load Space", map[string]any{"tenant_id": tenantID.String(), "space_id": spaceID.String()})
+	space, err := s.next.GetSpace(ctx, tenantID, spaceID)
+	span.End("Space service returned domain Space", map[string]any{"space": spaceFields(space)}, err)
+	return space, err
 }
 
-func (s tracedRoomService) ListRooms(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (rooms.RoomList, error) {
-	span := s.recorder.Start("service", "rooms.Service.ListRooms", "validate tenant id and load rooms", map[string]any{"tenant_id": tenantID.String(), "page": pageRequestFields(page)})
-	list, err := s.next.ListRooms(ctx, tenantID, page)
-	span.End("room service returned paginated rooms", map[string]any{"list": roomListFields(list)}, err)
+func (s tracedSpaceService) ListSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (spaces.SpaceList, error) {
+	span := s.recorder.Start("service", "spaces.Service.ListSpaces", "validate tenant id and load Spaces", map[string]any{"tenant_id": tenantID.String(), "page": pageRequestFields(page)})
+	list, err := s.next.ListSpaces(ctx, tenantID, page)
+	span.End("Space service returned paginated Spaces", map[string]any{"list": spaceListFields(list)}, err)
 	return list, err
 }
 
-func (s tracedRoomService) UpdateRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, input rooms.UpdateRoomInput) (rooms.Room, error) {
-	span := s.recorder.Start("service", "rooms.Service.UpdateRoom", "validate room patch", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "input": roomUpdateInputFields(input)})
-	room, err := s.next.UpdateRoom(ctx, tenantID, roomID, input)
-	span.End("room service returned updated room", map[string]any{"room": roomFields(room)}, err)
-	return room, err
+func (s tracedSpaceService) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input spaces.UpdateSpaceInput) (spaces.Space, error) {
+	span := s.recorder.Start("service", "spaces.Service.UpdateSpace", "validate Space patch", map[string]any{"tenant_id": tenantID.String(), "space_id": spaceID.String(), "input": spaceUpdateInputFields(input)})
+	space, err := s.next.UpdateSpace(ctx, tenantID, spaceID, input)
+	span.End("Space service returned updated Space", map[string]any{"space": spaceFields(space)}, err)
+	return space, err
 }
 
-func (s tracedRoomService) CreateSession(ctx context.Context, input rooms.CreateSessionInput) (rooms.Session, error) {
-	span := s.recorder.Start("service", "rooms.Service.CreateSession", "validate room session create input", map[string]any{"input": roomSessionCreateInputFields(input)})
-	session, err := s.next.CreateSession(ctx, input)
-	span.End("room service returned domain session", map[string]any{"session": roomSessionFields(session)}, err)
-	return session, err
-}
-
-func (s tracedRoomService) GetSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
-	span := s.recorder.Start("service", "rooms.Service.GetSession", "validate room session ids and load session", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String()})
-	session, err := s.next.GetSession(ctx, tenantID, roomID, sessionID)
-	span.End("room service returned domain session", map[string]any{"session": roomSessionFields(session)}, err)
-	return session, err
-}
-
-func (s tracedRoomService) ListSessions(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, page pagination.PageRequest) (rooms.SessionList, error) {
-	span := s.recorder.Start("service", "rooms.Service.ListSessions", "validate room ids and load sessions", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "page": pageRequestFields(page)})
-	list, err := s.next.ListSessions(ctx, tenantID, roomID, page)
-	span.End("room service returned paginated sessions", map[string]any{"list": roomSessionListFields(list)}, err)
-	return list, err
-}
-
-func (s tracedRoomService) UpdateSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID, input rooms.UpdateSessionInput) (rooms.Session, error) {
-	span := s.recorder.Start("service", "rooms.Service.UpdateSession", "validate room session patch", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String(), "input": roomSessionUpdateInputFields(input)})
-	session, err := s.next.UpdateSession(ctx, tenantID, roomID, sessionID, input)
-	span.End("room service returned updated session", map[string]any{"session": roomSessionFields(session)}, err)
-	return session, err
-}
-
-type tracedRoomRepository struct {
+type tracedSpaceRepository struct {
 	recorder *Recorder
 	now      func() time.Time
 }
 
-func (r tracedRoomRepository) CreateRoom(ctx context.Context, input rooms.CreateRoomInput) (rooms.Room, error) {
+func (r tracedSpaceRepository) CreateSpace(ctx context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
 	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.CreateRoom", "insert tenant room row", map[string]any{"domain_input": roomCreateInputFields(input)})
-	r.recorder.Add("database", "INSERT rooms RETURNING *", "execute query", map[string]any{"params": roomCreateInputFields(input)})
-	room := rooms.Room{
-		ID:              input.ID,
-		Name:            input.Name,
-		TenantID:        input.TenantID,
-		Status:          input.Status,
-		Slug:            input.Slug,
-		MediaPlane:      input.MediaPlane,
-		Metadata:        input.Metadata,
-		RecurringPolicy: input.RecurringPolicy,
-		CreatedByUserID: input.CreatedByUserID,
-		CreatedAt:       r.now(),
-		UpdatedAt:       r.now(),
+	span := r.recorder.Start("repository", "SpaceRepository.CreateSpace", "insert tenant Space row", map[string]any{"domain_input": spaceCreateInputFields(input)})
+	r.recorder.Add("database", "INSERT spaces RETURNING *", "execute query", map[string]any{"params": spaceCreateInputFields(input)})
+	space := spaces.Space{
+		ID:                            input.ID,
+		Name:                          input.Name,
+		TenantID:                      input.TenantID,
+		Slug:                          input.Slug,
+		MediaPlane:                    input.MediaPlane,
+		Metadata:                      input.Metadata,
+		RecurringPolicy:               input.RecurringPolicy,
+		AdmissionPolicy:               input.AdmissionPolicy,
+		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds,
+		MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,
+		LingerWindowSeconds:           input.LingerWindowSeconds,
+		CreatedByUserID:               input.CreatedByUserID,
+		CreatedAt:                     r.now(),
+		UpdatedAt:                     r.now(),
 	}
-	span.End("map database row to domain room", map[string]any{"room": roomFields(room)}, nil)
-	return room, nil
+	span.End("map database row to domain Space", map[string]any{"space": spaceFields(space)}, nil)
+	return space, nil
 }
 
-func (r tracedRoomRepository) GetRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID) (rooms.Room, error) {
+func (r tracedSpaceRepository) GetSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (spaces.Space, error) {
 	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.GetRoom", "select room by tenant and id", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String()})
-	room := roomFixture(r.now)
-	span.End("map database row to domain room", map[string]any{"room": roomFields(room)}, nil)
-	return room, nil
+	span := r.recorder.Start("repository", "SpaceRepository.GetSpace", "select Space by tenant and id", map[string]any{"tenant_id": tenantID.String(), "space_id": spaceID.String()})
+	space := spaceFixture(r.now)
+	space.ID = spaceID
+	space.TenantID = tenantID
+	span.End("map database row to domain Space", map[string]any{"space": spaceFields(space)}, nil)
+	return space, nil
 }
 
-func (r tracedRoomRepository) ListRooms(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (rooms.RoomList, error) {
+func (r tracedSpaceRepository) ListSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (spaces.SpaceList, error) {
 	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.ListRooms", "select paginated tenant rooms", map[string]any{"tenant_id": tenantID.String(), "page": pageRequestFields(page)})
-	list := rooms.RoomList{Rooms: []rooms.Room{roomFixture(r.now)}, Page: pagination.Page{PageSize: page.Size(), HasMore: false}}
-	span.End("map database rows to room list", map[string]any{"list": roomListFields(list)}, nil)
+	span := r.recorder.Start("repository", "SpaceRepository.ListSpaces", "select paginated tenant Spaces", map[string]any{"tenant_id": tenantID.String(), "page": pageRequestFields(page)})
+	list := spaces.SpaceList{Spaces: []spaces.Space{spaceFixture(r.now)}, Page: pagination.Page{PageSize: page.Size(), HasMore: false}}
+	span.End("map database rows to Space list", map[string]any{"list": spaceListFields(list)}, nil)
 	return list, nil
 }
 
-func (r tracedRoomRepository) UpdateRoom(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, input rooms.UpdateRoomInput) (rooms.Room, error) {
+func (r tracedSpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input spaces.UpdateSpaceInput) (spaces.Space, error) {
 	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.UpdateRoom", "update tenant room row", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "input": roomUpdateInputFields(input)})
-	room := roomFixture(r.now)
-	room.ID = roomID
-	room.TenantID = tenantID
+	span := r.recorder.Start("repository", "SpaceRepository.UpdateSpace", "update tenant Space row", map[string]any{"tenant_id": tenantID.String(), "space_id": spaceID.String(), "input": spaceUpdateInputFields(input)})
+	space := spaceFixture(r.now)
+	space.ID = spaceID
+	space.TenantID = tenantID
 	if input.Name.Set && input.Name.Value != nil {
-		room.Name = *input.Name.Value
+		space.Name = *input.Name.Value
 	}
-	if input.Status.Set && input.Status.Value != nil {
-		room.Status = *input.Status.Value
-	}
-	room.UpdatedAt = r.now()
-	span.End("map database row to updated room", map[string]any{"room": roomFields(room)}, nil)
-	return room, nil
-}
-
-func (r tracedRoomRepository) CreateSession(ctx context.Context, input rooms.CreateSessionInput) (rooms.Session, error) {
-	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.CreateSession", "insert room session row", map[string]any{"domain_input": roomSessionCreateInputFields(input)})
-	session := rooms.Session{ID: input.ID, Status: input.Status, Metadata: input.Metadata, RoomID: input.RoomID, TenantID: input.TenantID, CreatedByUserID: input.CreatedByUserID, StartedAt: input.StartedAt, EndedAt: input.EndedAt, CreatedAt: r.now(), UpdatedAt: r.now()}
-	span.End("map database row to domain session", map[string]any{"session": roomSessionFields(session)}, nil)
-	return session, nil
-}
-
-func (r tracedRoomRepository) GetSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID) (rooms.Session, error) {
-	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.GetSession", "select room session by tenant, room, and id", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String()})
-	session := roomSessionFixture(r.now)
-	session.ID = sessionID
-	session.RoomID = roomID
-	session.TenantID = tenantID
-	span.End("map database row to domain session", map[string]any{"session": roomSessionFields(session)}, nil)
-	return session, nil
-}
-
-func (r tracedRoomRepository) ListSessions(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, page pagination.PageRequest) (rooms.SessionList, error) {
-	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.ListSessions", "select paginated room sessions", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "page": pageRequestFields(page)})
-	list := rooms.SessionList{Sessions: []rooms.Session{roomSessionFixture(r.now)}, Page: pagination.Page{PageSize: page.Size(), HasMore: false}}
-	span.End("map database rows to session list", map[string]any{"list": roomSessionListFields(list)}, nil)
-	return list, nil
-}
-
-func (r tracedRoomRepository) UpdateSession(ctx context.Context, tenantID utilities.ID, roomID utilities.ID, sessionID utilities.ID, input rooms.UpdateSessionInput) (rooms.Session, error) {
-	_ = ctx
-	span := r.recorder.Start("repository", "RoomRepository.UpdateSession", "update room session row", map[string]any{"tenant_id": tenantID.String(), "room_id": roomID.String(), "session_id": sessionID.String(), "input": roomSessionUpdateInputFields(input)})
-	session := roomSessionFixture(r.now)
-	session.ID = sessionID
-	session.RoomID = roomID
-	session.TenantID = tenantID
-	if input.Status.Set && input.Status.Value != nil {
-		session.Status = *input.Status.Value
-	}
-	session.UpdatedAt = r.now()
-	span.End("map database row to updated session", map[string]any{"session": roomSessionFields(session)}, nil)
-	return session, nil
+	space.UpdatedAt = r.now()
+	span.End("map database row to updated Space", map[string]any{"space": spaceFields(space)}, nil)
+	return space, nil
 }
 
 type tracedDenyLimiter struct {
@@ -1689,18 +1625,18 @@ type tracedMediaPlane struct {
 	now      func() time.Time
 }
 
-func (p tracedMediaPlane) EnsureSession(ctx context.Context, input mediaplane.EnsureSessionInput) (mediaplane.Session, error) {
+func (p tracedMediaPlane) EnsureEpisode(ctx context.Context, input mediaplane.EnsureEpisodeInput) (mediaplane.Episode, error) {
 	_ = ctx
-	span := p.recorder.Start("adapter", "cloudflare.sfu.Adapter.EnsureSession", "map bootstrap request to cloudflare sfu session metadata", map[string]any{
-		"input": ensureSessionInputFields(input),
+	span := p.recorder.Start("adapter", "cloudflare.sfu.Adapter.EnsureEpisode", "map bootstrap request to cloudflare sfu Episode metadata", map[string]any{
+		"input": ensureEpisodeInputFields(input),
 	})
-	p.recorder.Add("provider", "Cloudflare SFU metadata", "build client bootstrap metadata without creating room server-side", map[string]any{
+	p.recorder.Add("provider", "Cloudflare SFU metadata", "build client bootstrap metadata without creating Space server-side", map[string]any{
 		"provider":    input.Provider,
-		"session_key": input.SessionKey,
+		"episode_key": input.EpisodeKey,
 	})
-	session := mediaplane.Session{Provider: input.Provider, Ref: "sfu-session-123", Metadata: map[string]string{"session_key": input.SessionKey, "tenant_id": input.Metadata["tenant_id"]}}
-	span.End("cloudflare sfu adapter returned session", map[string]any{"session": mediaSessionFields(session)}, nil)
-	return session, nil
+	episode := mediaplane.Episode{Provider: input.Provider, Ref: "sfu-episode-123", Metadata: map[string]string{"episode_key": input.EpisodeKey, "tenant_id": input.Metadata["tenant_id"]}}
+	span.End("cloudflare sfu adapter returned Episode", map[string]any{"episode": mediaEpisodeFields(episode)}, nil)
+	return episode, nil
 }
 
 func (p tracedMediaPlane) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
@@ -1709,14 +1645,14 @@ func (p tracedMediaPlane) CreateJoin(ctx context.Context, input mediaplane.Creat
 		"input": createJoinInputFields(input),
 	})
 	p.recorder.Add("provider", "POST /client/v4/accounts/{account_id}/realtime/apps/{app_id}/sessions/{session}/participants", "create realtimekit participant token", map[string]any{
-		"session_ref": input.Session.Ref,
+		"episode_ref": input.Episode.Ref,
 		"name":        input.ParticipantName,
 		"preset":      input.ParticipantPreset,
 	})
 	join := mediaplane.Join{
 		Provider:       input.Provider,
 		ParticipantRef: "rtk-participant-123",
-		ClientPayload:  map[string]any{"auth_token": "[redacted]", "room_name": input.Session.Ref},
+		ClientPayload:  map[string]any{"auth_token": "[redacted]", "episode_name": input.Episode.Ref},
 		ExpiresAt:      p.now().Add(15 * time.Minute),
 		Metadata:       map[string]string{"provider": string(input.Provider)},
 	}
@@ -1730,15 +1666,15 @@ func (p tracedMediaPlane) RemoveParticipant(ctx context.Context, input mediaplan
 	return nil
 }
 
-func (p tracedMediaPlane) EndSession(ctx context.Context, input mediaplane.EndSessionInput) error {
+func (p tracedMediaPlane) EndEpisode(ctx context.Context, input mediaplane.EndEpisodeInput) error {
 	_ = ctx
-	p.recorder.Add("adapter", "cloudflare.rtk.Plane.EndSession", "end media session", map[string]any{"input": endSessionInputFields(input)})
+	p.recorder.Add("adapter", "cloudflare.rtk.Plane.EndEpisode", "end media Episode", map[string]any{"input": endEpisodeInputFields(input)})
 	return nil
 }
 
-func (p tracedMediaPlane) SessionUsage(ctx context.Context, input mediaplane.SessionUsageInput) (mediaplane.Usage, error) {
+func (p tracedMediaPlane) EpisodeUsage(ctx context.Context, input mediaplane.EpisodeUsageInput) (mediaplane.Usage, error) {
 	_ = ctx
-	p.recorder.Add("adapter", "cloudflare.rtk.Plane.SessionUsage", "read media session usage", map[string]any{"input": usageInputFields(input)})
+	p.recorder.Add("adapter", "cloudflare.rtk.Plane.EpisodeUsage", "read media Episode usage", map[string]any{"input": episodeUsageInputFields(input)})
 	return mediaplane.Usage{ParticipantMinutes: 12, EgressBytes: 2048, IngressBytes: 1024}, nil
 }
 
@@ -1807,11 +1743,11 @@ func membershipID() utilities.ID {
 	return mustID("44444444-4444-4444-8444-444444444444")
 }
 
-func roomID() utilities.ID {
+func spaceID() utilities.ID {
 	return mustID("66666666-6666-4666-8666-666666666666")
 }
 
-func roomSessionID() utilities.ID {
+func episodeID() utilities.ID {
 	return mustID("77777777-7777-4777-8777-777777777777")
 }
 
@@ -1862,32 +1798,21 @@ func membershipFixture(now func() time.Time, role memberships.Role) memberships.
 	return memberships.Membership{ID: membershipID(), TenantID: tenantID(), UserID: userID(), Role: role, CreatedAt: now(), UpdatedAt: now()}
 }
 
-func roomFixture(now func() time.Time) rooms.Room {
-	return rooms.Room{
-		ID:              roomID(),
-		Name:            "Daily Review",
-		TenantID:        tenantID(),
-		Status:          rooms.StatusActive,
-		Slug:            "daily-review",
-		MediaPlane:      "cf_rtk",
-		Metadata:        json.RawMessage(`{"purpose":"review"}`),
-		CreatedByUserID: userID(),
-		CreatedAt:       now(),
-		UpdatedAt:       now(),
-	}
-}
-
-func roomSessionFixture(now func() time.Time) rooms.Session {
-	startedAt := now()
-	return rooms.Session{
-		ID:              roomSessionID(),
-		Status:          rooms.SessionStatusActive,
-		RoomID:          roomID(),
-		TenantID:        tenantID(),
-		CreatedByUserID: userID(),
-		StartedAt:       &startedAt,
-		CreatedAt:       now(),
-		UpdatedAt:       now(),
+func spaceFixture(now func() time.Time) spaces.Space {
+	return spaces.Space{
+		ID:                            spaceID(),
+		Name:                          "Daily Review",
+		TenantID:                      tenantID(),
+		Slug:                          "daily-review",
+		MediaPlane:                    "cf_rtk",
+		Metadata:                      json.RawMessage(`{"purpose":"review"}`),
+		AdmissionPolicy:               json.RawMessage(`{"mode":"open"}`),
+		DefaultEpisodeDurationSeconds: spaces.DefaultEpisodeDurationSeconds,
+		MaximumEpisodeDurationSeconds: spaces.DefaultMaximumEpisodeDurationSeconds,
+		LingerWindowSeconds:           spaces.DefaultLingerWindowSeconds,
+		CreatedByUserID:               userID(),
+		CreatedAt:                     now(),
+		UpdatedAt:                     now(),
 	}
 }
 
@@ -1896,8 +1821,8 @@ func transcriptFields(transcript transcripts.Transcript) map[string]any {
 		"id":           transcript.ID.String(),
 		"tenant_id":    transcript.TenantID.String(),
 		"recording_id": transcript.RecordingID.String(),
-		"room_id":      transcript.RoomID.String(),
-		"session_id":   transcript.SessionID.String(),
+		"space_id":     transcript.SpaceID.String(),
+		"episode_id":   transcript.EpisodeID.String(),
 		"status":       transcript.Status,
 		"provider":     transcript.Provider,
 		"model":        transcript.Model,
@@ -2082,113 +2007,76 @@ func membershipListFields(list memberships.MembershipList) map[string]any {
 	return map[string]any{"memberships": values, "page": pageFields(list.Page)}
 }
 
-func roomCreateInputFields(input rooms.CreateRoomInput) map[string]any {
+func spaceCreateInputFields(input spaces.CreateSpaceInput) map[string]any {
 	return map[string]any{
-		"id":                 input.ID.String(),
-		"name":               input.Name,
-		"tenant_id":          input.TenantID.String(),
-		"status":             input.Status,
-		"slug":               input.Slug,
-		"media_plane":        input.MediaPlane,
-		"metadata":           mustDecode(input.Metadata),
-		"recurring_policy":   decodedBody(input.RecurringPolicy),
-		"created_by_user_id": input.CreatedByUserID.String(),
+		"id":                               input.ID.String(),
+		"name":                             input.Name,
+		"tenant_id":                        input.TenantID.String(),
+		"slug":                             input.Slug,
+		"media_plane":                      input.MediaPlane,
+		"metadata":                         mustDecode(input.Metadata),
+		"recurring_policy":                 decodedBody(input.RecurringPolicy),
+		"admission_policy":                 decodedBody(input.AdmissionPolicy),
+		"default_episode_duration_seconds": input.DefaultEpisodeDurationSeconds,
+		"maximum_episode_duration_seconds": input.MaximumEpisodeDurationSeconds,
+		"linger_window_seconds":            input.LingerWindowSeconds,
+		"created_by_user_id":               input.CreatedByUserID.String(),
 	}
 }
 
-func roomUpdateInputFields(input rooms.UpdateRoomInput) map[string]any {
+func spaceUpdateInputFields(input spaces.UpdateSpaceInput) map[string]any {
 	return map[string]any{
-		"name":             optionalStringField(input.Name),
-		"status":           optionalStringField(input.Status),
-		"slug":             optionalStringField(input.Slug),
-		"media_plane":      optionalStringField(input.MediaPlane),
-		"metadata":         optionalJSONField(input.Metadata),
-		"recurring_policy": optionalJSONField(input.RecurringPolicy),
+		"name":                             optionalStringField(input.Name),
+		"slug":                             optionalStringField(input.Slug),
+		"media_plane":                      optionalStringField(input.MediaPlane),
+		"metadata":                         optionalJSONField(input.Metadata),
+		"recurring_policy":                 optionalJSONField(input.RecurringPolicy),
+		"admission_policy":                 optionalJSONField(input.AdmissionPolicy),
+		"default_episode_duration_seconds": optionalInt32Field(input.DefaultEpisodeDurationSeconds),
+		"maximum_episode_duration_seconds": optionalInt32Field(input.MaximumEpisodeDurationSeconds),
+		"linger_window_seconds":            optionalInt32Field(input.LingerWindowSeconds),
 	}
 }
 
-func roomFields(room rooms.Room) map[string]any {
+func spaceFields(space spaces.Space) map[string]any {
 	return map[string]any{
-		"id":                 room.ID.String(),
-		"name":               room.Name,
-		"tenant_id":          room.TenantID.String(),
-		"status":             room.Status,
-		"slug":               room.Slug,
-		"media_plane":        room.MediaPlane,
-		"metadata":           mustDecode(room.Metadata),
-		"recurring_policy":   decodedBody(room.RecurringPolicy),
-		"created_by_user_id": room.CreatedByUserID.String(),
-		"created_at":         timestamp(room.CreatedAt),
-		"updated_at":         timestamp(room.UpdatedAt),
+		"id":                               space.ID.String(),
+		"name":                             space.Name,
+		"tenant_id":                        space.TenantID.String(),
+		"slug":                             space.Slug,
+		"media_plane":                      space.MediaPlane,
+		"metadata":                         mustDecode(space.Metadata),
+		"recurring_policy":                 decodedBody(space.RecurringPolicy),
+		"admission_policy":                 decodedBody(space.AdmissionPolicy),
+		"default_episode_duration_seconds": space.DefaultEpisodeDurationSeconds,
+		"maximum_episode_duration_seconds": space.MaximumEpisodeDurationSeconds,
+		"linger_window_seconds":            space.LingerWindowSeconds,
+		"created_by_user_id":               space.CreatedByUserID.String(),
+		"created_at":                       timestamp(space.CreatedAt),
+		"updated_at":                       timestamp(space.UpdatedAt),
 	}
 }
 
-func roomListFields(list rooms.RoomList) map[string]any {
-	values := make([]map[string]any, 0, len(list.Rooms))
-	for _, room := range list.Rooms {
-		values = append(values, roomFields(room))
+func spaceListFields(list spaces.SpaceList) map[string]any {
+	values := make([]map[string]any, 0, len(list.Spaces))
+	for _, space := range list.Spaces {
+		values = append(values, spaceFields(space))
 	}
-	return map[string]any{"rooms": values, "page": pageFields(list.Page)}
-}
-
-func roomSessionCreateInputFields(input rooms.CreateSessionInput) map[string]any {
-	return map[string]any{
-		"id":                 input.ID.String(),
-		"status":             input.Status,
-		"metadata":           decodedBody(input.Metadata),
-		"room_id":            input.RoomID.String(),
-		"tenant_id":          input.TenantID.String(),
-		"created_by_user_id": input.CreatedByUserID.String(),
-		"started_at":         optionalTimeField(input.StartedAt),
-		"ended_at":           optionalTimeField(input.EndedAt),
-	}
-}
-
-func roomSessionUpdateInputFields(input rooms.UpdateSessionInput) map[string]any {
-	return map[string]any{
-		"status":     optionalStringField(input.Status),
-		"metadata":   optionalJSONField(input.Metadata),
-		"started_at": optionalPatchTimeField(input.StartedAt),
-		"ended_at":   optionalPatchTimeField(input.EndedAt),
-	}
-}
-
-func roomSessionFields(session rooms.Session) map[string]any {
-	return map[string]any{
-		"id":                 session.ID.String(),
-		"status":             session.Status,
-		"metadata":           decodedBody(session.Metadata),
-		"room_id":            session.RoomID.String(),
-		"tenant_id":          session.TenantID.String(),
-		"created_by_user_id": session.CreatedByUserID.String(),
-		"started_at":         optionalTimeField(session.StartedAt),
-		"ended_at":           optionalTimeField(session.EndedAt),
-		"created_at":         timestamp(session.CreatedAt),
-		"updated_at":         timestamp(session.UpdatedAt),
-	}
-}
-
-func roomSessionListFields(list rooms.SessionList) map[string]any {
-	values := make([]map[string]any, 0, len(list.Sessions))
-	for _, session := range list.Sessions {
-		values = append(values, roomSessionFields(session))
-	}
-	return map[string]any{"sessions": values, "page": pageFields(list.Page)}
+	return map[string]any{"spaces": values, "page": pageFields(list.Page)}
 }
 
 func optionalJSONField(value utilities.OptionalJSON) map[string]any {
 	return map[string]any{"set": value.Set, "value": decodedBody(value.Value)}
 }
 
-func optionalTimeField(value *time.Time) any {
-	if value == nil {
-		return nil
+func optionalInt32Field(value spaces.OptionalInt32) map[string]any {
+	if !value.Set {
+		return map[string]any{"set": false, "value": nil}
 	}
-	return timestamp(*value)
-}
-
-func optionalPatchTimeField(value rooms.OptionalTime) map[string]any {
-	return map[string]any{"set": value.Set, "value": optionalTimeField(value.Value)}
+	if value.Value == nil {
+		return map[string]any{"set": true, "value": nil}
+	}
+	return map[string]any{"set": true, "value": *value.Value}
 }
 
 func policyFields(policy ratelimit.Policy) map[string]any {
@@ -2223,28 +2111,28 @@ func redactSignedURL(value string) string {
 	return value
 }
 
-func ensureSessionInputFields(input mediaplane.EnsureSessionInput) map[string]any {
-	return map[string]any{"provider": input.Provider, "session_key": input.SessionKey, "title": input.Title, "metadata": input.Metadata}
+func ensureEpisodeInputFields(input mediaplane.EnsureEpisodeInput) map[string]any {
+	return map[string]any{"provider": input.Provider, "episode_key": input.EpisodeKey, "title": input.Title, "metadata": input.Metadata}
 }
 
 func createJoinInputFields(input mediaplane.CreateJoinInput) map[string]any {
-	return map[string]any{"provider": input.Provider, "session": mediaSessionFields(input.Session), "participant_name": input.ParticipantName, "external_participant_id": input.ExternalParticipantID, "participant_preset": input.ParticipantPreset, "metadata": input.Metadata}
+	return map[string]any{"provider": input.Provider, "episode": mediaEpisodeFields(input.Episode), "participant_name": input.ParticipantName, "external_participant_id": input.ExternalParticipantID, "participant_preset": input.ParticipantPreset, "metadata": input.Metadata}
 }
 
 func removeParticipantInputFields(input mediaplane.RemoveParticipantInput) map[string]any {
-	return map[string]any{"provider": input.Provider, "session_ref": input.SessionRef, "participant_ref": input.ParticipantRef}
+	return map[string]any{"provider": input.Provider, "episode_ref": input.EpisodeRef, "participant_ref": input.ParticipantRef}
 }
 
-func endSessionInputFields(input mediaplane.EndSessionInput) map[string]any {
-	return map[string]any{"provider": input.Provider, "session_ref": input.SessionRef}
+func endEpisodeInputFields(input mediaplane.EndEpisodeInput) map[string]any {
+	return map[string]any{"provider": input.Provider, "episode_ref": input.EpisodeRef}
 }
 
-func usageInputFields(input mediaplane.SessionUsageInput) map[string]any {
-	return map[string]any{"provider": input.Provider, "session_ref": input.SessionRef}
+func episodeUsageInputFields(input mediaplane.EpisodeUsageInput) map[string]any {
+	return map[string]any{"provider": input.Provider, "episode_ref": input.EpisodeRef}
 }
 
-func mediaSessionFields(session mediaplane.Session) map[string]any {
-	return map[string]any{"provider": session.Provider, "ref": session.Ref, "metadata": session.Metadata}
+func mediaEpisodeFields(episode mediaplane.Episode) map[string]any {
+	return map[string]any{"provider": episode.Provider, "ref": episode.Ref, "metadata": episode.Metadata}
 }
 
 func mediaJoinFields(join mediaplane.Join) map[string]any {
@@ -2275,6 +2163,8 @@ var _ authentication.OAuthStateStore = tracedOAuthStateStore{}
 var _ httpapi.AuthenticationService = staticAuthentication{}
 var _ httpapi.UserService = tracedUserService{}
 var _ users.UserRepository = tracedUserRepository{}
+var _ httpapi.SpaceService = tracedSpaceService{}
+var _ spaces.Repository = tracedSpaceRepository{}
 var _ httpapi.MembershipService = tracedMembershipService{}
 var _ memberships.MembershipRepository = tracedMembershipRepository{}
 var _ ratelimit.Limiter = tracedDenyLimiter{}

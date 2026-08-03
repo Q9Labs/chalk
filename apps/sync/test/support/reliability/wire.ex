@@ -90,16 +90,15 @@ defmodule ChalkSync.Reliability.Wire do
 
   def token(identity) do
     DevTokenVerifier.token(%{
-      "tenant_id" => identity.session.tenant_id,
-      "room_id" => identity.session.room_id,
-      "session_id" => identity.session.session_id,
-      "participant_id" => identity.participant_session_id,
-      "participant_session_id" => identity.participant_session_id,
-      "participant_session_generation" => identity.participant_session_generation,
+      "tenant_id" => identity.episode.tenant_id,
+      "space_id" => identity.episode.space_id,
+      "episode_id" => identity.episode.episode_id,
+      "participant_id" => identity.participant_id,
+      "participant_generation" => identity.participant_generation,
       "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
       "display_name" => "Reliability Test",
-      "initial_role" => identity.role,
-      "eligible_roles" => identity.eligible_roles,
+      "role" => identity.role,
+      "capabilities" => identity.capabilities,
       "issued_at" => 1,
       "expires_at" => 4_102_444_800
     })

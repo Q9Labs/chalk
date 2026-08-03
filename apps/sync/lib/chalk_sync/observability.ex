@@ -2,7 +2,7 @@ defmodule ChalkSync.Observability do
   @moduledoc """
   The single observability boundary for the sync service.
 
-  It keeps correlation data separate from room and participant state, emits a
+  It keeps correlation data separate from space and participant state, emits a
   stable telemetry contract, and makes each observed operation a short span.
   A WebSocket is deliberately never represented by one long-lived span.
   """

@@ -1,5 +1,5 @@
 defmodule ChalkSync.Stateholder.Recovery do
-  @moduledoc "Consistent authoritative recovery read for one Session."
+  @moduledoc "Consistent authoritative recovery read for one Episode."
 
   @enforce_keys [:mode, :head, :snapshot, :events]
   defstruct [:mode, :head, :snapshot, :events, :replay_cursor, :terminal_reason]
@@ -16,6 +16,6 @@ defmodule ChalkSync.Stateholder.Recovery do
           events: [map()],
           replay_cursor: non_neg_integer() | nil,
           terminal_reason:
-            :session_ended | :participant_inactive | :stale_participant_generation | nil
+            :episode_ended | :participant_inactive | :stale_participant_generation | nil
         }
 end

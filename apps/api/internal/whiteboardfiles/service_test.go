@@ -176,9 +176,9 @@ func testSubject(t *testing.T) Subject {
 	t.Helper()
 	return Subject{
 		TenantID:              mustID(t, "11111111-1111-4111-8111-111111111111"),
-		RoomID:                mustID(t, "22222222-2222-4222-8222-222222222222"),
-		SessionID:             mustID(t, "33333333-3333-4333-8333-333333333333"),
-		ParticipantSessionID:  mustID(t, "44444444-4444-4444-8444-444444444444"),
+		SpaceID:               mustID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID:             mustID(t, "33333333-3333-4333-8333-333333333333"),
+		ParticipantID:         mustID(t, "44444444-4444-4444-8444-444444444444"),
 		ParticipantGeneration: 1,
 	}
 }

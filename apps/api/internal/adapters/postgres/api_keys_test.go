@@ -128,7 +128,7 @@ func TestAPIKeyRepositoryMutationsCommitWithBoundedAudit(t *testing.T) {
 	now := time.Now().UTC()
 	created, err := repository.Create(ctx, apikeys.CreateRecordInput{
 		ID: keyID, TenantID: tenantID, Name: "Production",
-		Scopes:    []authentication.Scope{authentication.ScopeRoomsWrite},
+		Scopes:    []authentication.Scope{authentication.ScopeSpacesWrite},
 		KeyPrefix: "create_" + keyID.String()[:8], KeyHash: "create-hash",
 		ExpiresAt: now.Add(24 * time.Hour),
 	})
@@ -140,7 +140,7 @@ func TestAPIKeyRepositoryMutationsCommitWithBoundedAudit(t *testing.T) {
 	}
 	_, err = repository.Create(ctx, apikeys.CreateRecordInput{
 		ID: apiKeyNewID(t), TenantID: tenantID, Name: "Duplicate prefix",
-		Scopes:    []authentication.Scope{authentication.ScopeRoomsRead},
+		Scopes:    []authentication.Scope{authentication.ScopeSpacesRead},
 		KeyPrefix: created.Prefix, KeyHash: "different-hash", ExpiresAt: now.Add(24 * time.Hour),
 	})
 	if !errors.Is(err, apikeys.ErrPrefixConflict) {
@@ -227,7 +227,7 @@ func TestAPIKeyRepositoryRollsBackMutationWhenAuditFails(t *testing.T) {
 	repository := postgres.NewAPIKeyRepository(sqlc.New(pool), failingAPIKeyAuditTransactor{pool: pool})
 	_, err := repository.Create(ctx, apikeys.CreateRecordInput{
 		ID: keyID, TenantID: tenantID, Name: "Rollback",
-		Scopes:    []authentication.Scope{authentication.ScopeRoomsRead},
+		Scopes:    []authentication.Scope{authentication.ScopeSpacesRead},
 		KeyPrefix: "rollback_" + keyID.String()[:8], KeyHash: "rollback-hash",
 		ExpiresAt: time.Now().UTC().Add(24 * time.Hour),
 	})
@@ -310,7 +310,7 @@ func apiKeyRow(id, tenantID utilities.ID, name string) sqlc.GetTenantAPIKeyRow {
 		ID:        pgtype.UUID{Bytes: id.Bytes(), Valid: true},
 		TenantID:  pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true},
 		Name:      name,
-		Scopes:    []string{string(authentication.ScopeRoomsWrite), string(authentication.ScopeSessionsWrite)},
+		Scopes:    []string{string(authentication.ScopeSpacesWrite), string(authentication.ScopeEpisodesWrite)},
 		KeyHash:   "stored-hash",
 		KeyPrefix: "prefix123",
 		ExpiresAt: pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},

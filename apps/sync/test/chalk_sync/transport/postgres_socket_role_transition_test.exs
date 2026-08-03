@@ -12,9 +12,9 @@ defmodule ChalkSync.Transport.PostgresSocketV1RoleTransitionTest do
                   System.get_env("CHALK_DATABASE_URL")
 
   @role_capabilities %{
-    "host" => ["publishAudio", "publishVideo", "publishScreen", "subscribe", "promoteDemote"],
-    "cohost" => ["publishAudio", "publishVideo", "subscribe"],
-    "participant" => ["subscribe"]
+    "owner" => ["publishAudio", "publishVideo", "publishScreen", "subscribe", "assignRoles"],
+    "collaborator" => ["publishAudio", "publishVideo", "subscribe"],
+    "observer" => ["subscribe"]
   }
 
   if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
@@ -44,20 +44,20 @@ defmodule ChalkSync.Transport.PostgresSocketV1RoleTransitionTest do
     connection: connection,
     port: port
   } do
-    fixture = SyncPostgres.seed_session(connection, 2, %{role_capabilities: @role_capabilities})
+    fixture = SyncPostgres.seed_episode(connection, 2, %{role_capabilities: @role_capabilities})
     [host, guest] = fixture.identities
-    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.session) end)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
     {:ok, promote} =
-      Command.new("socket-role-promote1", :set_participant_role, %{
-        "participantSessionId" => guest.participant_session_id,
-        "role" => "cohost"
+      Command.new("socket-role-promote1", :assign_roles, %{
+        "participantId" => guest.participant_id,
+        "role" => "collaborator"
       })
 
     assert {:ok, %{result: :committed}} = Postgres.begin_role_transition(host, promote, [])
 
     publication = %{
-      participant_session_id: guest.participant_session_id,
+      participant_id: guest.participant_id,
       source: :camera,
       enabled: true,
       publication_id: "provider-camera-publication"
@@ -65,7 +65,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1RoleTransitionTest do
 
     {:ok, adapter} =
       MediaPlaneTestAdapter.start_link(
-        outcomes: %{observe_session_publications: {:ok, [publication]}}
+        outcomes: %{observe_episode_publications: {:ok, [publication]}}
       )
 
     previous_media_plane = Application.get_env(:chalk_sync, :media_plane)
@@ -73,14 +73,14 @@ defmodule ChalkSync.Transport.PostgresSocketV1RoleTransitionTest do
     on_exit(fn -> restore_env(:media_plane, previous_media_plane) end)
 
     client = connect_live(port, host)
-    command = role_command("socket-role-demote01", guest.participant_session_id)
+    command = role_command("socket-role-demote01", guest.participant_id)
     client = Client.send_json(client, command)
 
     assert {:json,
             %{
               "type" => "event",
               "command_id" => "socket-role-demote01",
-              "name" => "participant_role_changed"
+              "name" => "role_assigned"
             }, client} = Client.recv(client)
 
     assert {:json,
@@ -97,15 +97,15 @@ defmodule ChalkSync.Transport.PostgresSocketV1RoleTransitionTest do
 
     assert {:ok, claimed} = Postgres.claim_operations(64)
 
-    {_session, child} =
-      Enum.find(claimed, fn {_session, operation} ->
+    {_episode, child} =
+      Enum.find(claimed, fn {_episode, operation} ->
         operation.source == :camera and
-          operation.target_participant_session_id == guest.participant_session_id
+          operation.target_participant_id == guest.participant_id
       end)
 
     assert {:ok, %{result: :applied}} =
              Postgres.finalize_operation(
-               fixture.session,
+               fixture.episode,
                child.external_operation_id,
                {:confirmed, :provider}
              )
@@ -139,10 +139,10 @@ defmodule ChalkSync.Transport.PostgresSocketV1RoleTransitionTest do
     %{
       "type" => "command",
       "command_id" => command_id,
-      "name" => "set_participant_role",
+      "name" => "assign_roles",
       "payload" => %{
-        "participant_session_id" => participant_id,
-        "role" => "participant"
+        "participant_id" => participant_id,
+        "role" => "observer"
       }
     }
   end
@@ -150,15 +150,14 @@ defmodule ChalkSync.Transport.PostgresSocketV1RoleTransitionTest do
   defp hello(identity) do
     token =
       DevTokenVerifier.token(%{
-        "tenant_id" => identity.session.tenant_id,
-        "room_id" => identity.session.room_id,
-        "session_id" => identity.session.session_id,
-        "participant_id" => identity.participant_session_id,
-        "participant_session_id" => identity.participant_session_id,
-        "participant_session_generation" => identity.participant_session_generation,
+        "tenant_id" => identity.episode.tenant_id,
+        "space_id" => identity.episode.space_id,
+        "episode_id" => identity.episode.episode_id,
+        "participant_id" => identity.participant_id,
+        "participant_generation" => identity.participant_generation,
         "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
-        "initial_role" => identity.role,
-        "eligible_roles" => identity.eligible_roles,
+        "role" => identity.role,
+        "capabilities" => identity.capabilities,
         "issued_at" => 1,
         "expires_at" => 4_102_444_800
       })

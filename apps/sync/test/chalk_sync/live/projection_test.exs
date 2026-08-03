@@ -91,7 +91,7 @@ defmodule ChalkSync.Live.ProjectionTest do
     items =
       for index <- 1..501 do
         %{
-          "participant_session_id" =>
+          "participant_id" =>
             "00000000-0000-4000-8000-#{index |> Integer.to_string() |> String.pad_leading(12, "0")}",
           "state" => "connected",
           "speaking" => false,
@@ -176,14 +176,14 @@ defmodule ChalkSync.Live.ProjectionTest do
              Projection.reconcile(projection, desired, now_ms: 11)
 
     assert first["sequence"] == 1
-    assert first["item"]["participant_session_id"] == @participant
+    assert first["item"]["participant_id"] == @participant
     assert first["item"]["source"] == "camera"
     assert second["sequence"] == 2
-    assert second["item"]["participant_session_id"] == participant_two
+    assert second["item"]["participant_id"] == participant_two
     assert second["item"]["source"] == "microphone"
     assert second["item"]["enabled"] == false
     assert third["sequence"] == 3
-    assert third["item"]["participant_session_id"] == participant_three
+    assert third["item"]["participant_id"] == participant_three
     assert third["item"]["source"] == "screen"
     assert next.sequence == 3
   end
@@ -245,7 +245,7 @@ defmodule ChalkSync.Live.ProjectionTest do
 
   defp media_item(enabled, publication_id) do
     %{
-      "participant_session_id" => @participant,
+      "participant_id" => @participant,
       "source" => "camera",
       "enabled" => enabled,
       "publication_id" => publication_id
@@ -254,7 +254,7 @@ defmodule ChalkSync.Live.ProjectionTest do
 
   defp media_item_for(participant, source, enabled, publication_id) do
     %{
-      "participant_session_id" => participant,
+      "participant_id" => participant,
       "source" => source,
       "enabled" => enabled,
       "publication_id" => publication_id
@@ -263,7 +263,7 @@ defmodule ChalkSync.Live.ProjectionTest do
 
   defp presence_item(state, speaking, active_speaker) do
     %{
-      "participant_session_id" => @participant,
+      "participant_id" => @participant,
       "state" => state,
       "speaking" => speaking,
       "active_speaker" => active_speaker
@@ -272,7 +272,7 @@ defmodule ChalkSync.Live.ProjectionTest do
 
   defp presence_item_for(participant, state, speaking, active_speaker) do
     %{
-      "participant_session_id" => participant,
+      "participant_id" => participant,
       "state" => state,
       "speaking" => speaking,
       "active_speaker" => active_speaker

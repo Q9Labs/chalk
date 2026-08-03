@@ -29,7 +29,7 @@ type Job struct {
 	ID                   utilities.ID
 	IdempotencyKey       string
 	TenantID             utilities.ID
-	SessionID            utilities.ID
+	EpisodeID            utilities.ID
 	RecordingID          utilities.ID
 	TranscriptID         utilities.ID
 	ChunkID              utilities.ID

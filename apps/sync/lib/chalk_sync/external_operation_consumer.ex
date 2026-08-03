@@ -16,8 +16,8 @@ defmodule ChalkSync.ExternalOperationConsumer do
   alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
   alias ChalkSync.ProviderBridge.RecordingPlane, as: ProviderBridgeRecordingPlane
   alias ChalkSync.Stateholder
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
-  alias ChalkSync.Stateholder.SessionKey
   alias ChalkSync.Telemetry
 
   @default_page_size 32
@@ -30,12 +30,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
     :admit_participant,
     :deny_admission,
     :admission_request_expired,
-    :tenant_transfer_host,
     :tenant_set_deadline
   ]
-  @end_session_operations [
-    :end_session,
-    :tenant_end_session,
+  @end_episode_operations [
+    :end_episode,
+    :tenant_end_episode,
     :maximum_duration_expired
   ]
 
@@ -132,15 +131,15 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   @doc false
   @spec execute_operation(
-          SessionKey.t(),
+          EpisodeKey.t(),
           ExternalOperation.t(),
           {module(), term()} | nil,
           {module(), term()} | nil,
-          (SessionKey.t(), String.t(), tuple() -> term()),
+          (EpisodeKey.t(), String.t(), tuple() -> term()),
           pos_integer()
         ) :: :confirmed | :terminal_failure | :pending | :finalization_failure
   def execute_operation(
-        session,
+        episode,
         operation,
         media_plane,
         recording_plane,
@@ -151,7 +150,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
              adapter_timeout_ms > 0 do
     result =
       dispatch_with_context(
-        session,
+        episode,
         operation,
         media_plane,
         recording_plane,
@@ -160,16 +159,16 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
     case result do
       {:confirmed, authority} ->
-        execution_checkpoint(:after_provider_confirmation_before_finalize, session, operation)
-        finalize_confirmed(session, operation, authority, finalize)
+        execution_checkpoint(:after_provider_confirmation_before_finalize, episode, operation)
+        finalize_confirmed(episode, operation, authority, finalize)
 
       {:terminal_failure, reason} ->
-        execution_checkpoint(:after_provider_terminal_failure_before_finalize, session, operation)
-        finalize_terminal_failure(session, operation, reason, finalize)
+        execution_checkpoint(:after_provider_terminal_failure_before_finalize, episode, operation)
+        finalize_terminal_failure(episode, operation, reason, finalize)
 
       :pending ->
         if operation.attempt_count >= @max_attempts,
-          do: finalize_terminal_failure(session, operation, :retry_exhausted, finalize),
+          do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize),
           else: :pending
     end
   end
@@ -210,12 +209,12 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   defp execute_page(operations, state) do
     Enum.reduce(operations, {%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
-      {session, operation}, {counts, failures} ->
+      {episode, operation}, {counts, failures} ->
         started_at = System.monotonic_time()
 
         result =
           execute_operation(
-            session,
+            episode,
             operation,
             state.media_plane,
             state.recording_plane,
@@ -241,16 +240,16 @@ defmodule ChalkSync.ExternalOperationConsumer do
     end)
   end
 
-  defp dispatch(_session, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
+  defp dispatch(_episode, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
        when name in @local_operations,
        do: {:confirmed, :local}
 
-  defp dispatch(session, %{name: name} = operation, media_plane, recording_plane, timeout_ms)
-       when name in @end_session_operations do
-    invoke_end_cleanup(media_plane, recording_plane, session, operation, timeout_ms)
+  defp dispatch(episode, %{name: name} = operation, media_plane, recording_plane, timeout_ms)
+       when name in @end_episode_operations do
+    invoke_end_cleanup(media_plane, recording_plane, episode, operation, timeout_ms)
   end
 
-  defp dispatch(session, %{name: name} = operation, media_plane, _recording_plane, timeout_ms)
+  defp dispatch(episode, %{name: name} = operation, media_plane, _recording_plane, timeout_ms)
        when name in [
               :mute_participant,
               :stop_participant_camera,
@@ -259,60 +258,60 @@ defmodule ChalkSync.ExternalOperationConsumer do
               :participant_leave,
               :role_transition_source_stop
             ] do
-    invoke_media_plane(media_plane, session, operation, timeout_ms)
+    invoke_media_plane(media_plane, episode, operation, timeout_ms)
   end
 
-  defp dispatch(session, %{name: name} = operation, _media_plane, recording_plane, timeout_ms)
+  defp dispatch(episode, %{name: name} = operation, _media_plane, recording_plane, timeout_ms)
        when name in [:start_recording, :stop_recording] do
-    invoke_recording_plane(recording_plane, session, operation, timeout_ms)
+    invoke_recording_plane(recording_plane, episode, operation, timeout_ms)
   end
 
-  defp invoke_media_plane(nil, _session, _operation, _timeout_ms), do: :pending
+  defp invoke_media_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
-  defp invoke_media_plane({module, adapter}, session, operation, timeout_ms) do
-    arguments = media_arguments(adapter, session, operation)
+  defp invoke_media_plane({module, adapter}, episode, operation, timeout_ms) do
+    arguments = media_arguments(adapter, episode, operation)
     invoke_adapter(module, arguments, :provider, timeout_ms)
   end
 
-  defp media_arguments(adapter, session, %{name: :mute_participant} = operation),
-    do: revoke_arguments(adapter, session, operation, :microphone)
+  defp media_arguments(adapter, episode, %{name: :mute_participant} = operation),
+    do: revoke_arguments(adapter, episode, operation, :microphone)
 
-  defp media_arguments(adapter, session, %{name: :stop_participant_camera} = operation),
-    do: revoke_arguments(adapter, session, operation, :camera)
+  defp media_arguments(adapter, episode, %{name: :stop_participant_camera} = operation),
+    do: revoke_arguments(adapter, episode, operation, :camera)
 
-  defp media_arguments(adapter, session, %{name: :stop_participant_screen_share} = operation),
-    do: revoke_arguments(adapter, session, operation, :screen)
+  defp media_arguments(adapter, episode, %{name: :stop_participant_screen_share} = operation),
+    do: revoke_arguments(adapter, episode, operation, :screen)
 
-  defp media_arguments(adapter, session, %{name: :role_transition_source_stop} = operation),
-    do: revoke_arguments(adapter, session, operation, operation.source)
+  defp media_arguments(adapter, episode, %{name: :role_transition_source_stop} = operation),
+    do: revoke_arguments(adapter, episode, operation, operation.source)
 
-  defp media_arguments(adapter, session, %{name: name} = operation)
+  defp media_arguments(adapter, episode, %{name: name} = operation)
        when name in [:remove_participant, :participant_leave] do
     {:remove_participant,
-     [adapter, operation.external_operation_id, session, operation.target_participant_session_id]}
+     [adapter, operation.external_operation_id, episode, operation.target_participant_id]}
   end
 
-  defp media_arguments(adapter, session, %{name: name} = operation)
-       when name in @end_session_operations,
-       do: {:end_session, [adapter, operation.external_operation_id, session]}
+  defp media_arguments(adapter, episode, %{name: name} = operation)
+       when name in @end_episode_operations,
+       do: {:end_episode, [adapter, operation.external_operation_id, episode]}
 
-  defp revoke_arguments(adapter, session, operation, source) do
+  defp revoke_arguments(adapter, episode, operation, source) do
     {:revoke_publication,
      [
        adapter,
        operation.external_operation_id,
-       session,
-       operation.target_participant_session_id,
+       episode,
+       operation.target_participant_id,
        source
      ]}
   end
 
-  defp invoke_recording_plane(nil, _session, _operation, _timeout_ms), do: :pending
+  defp invoke_recording_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
-  defp invoke_recording_plane({module, adapter}, session, operation, timeout_ms) do
+  defp invoke_recording_plane({module, adapter}, episode, operation, timeout_ms) do
     arguments =
       {operation.name,
-       [adapter, operation.external_operation_id, session, operation.recording_id]}
+       [adapter, operation.external_operation_id, episode, operation.recording_id]}
 
     invoke_adapter(module, arguments, :recording, timeout_ms)
   end
@@ -320,16 +319,16 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp invoke_end_cleanup(
          media_plane,
          _recording_plane,
-         session,
+         episode,
          %{recording_id: nil} = operation,
          timeout_ms
        ),
-       do: invoke_media_plane(media_plane, session, operation, timeout_ms)
+       do: invoke_media_plane(media_plane, episode, operation, timeout_ms)
 
-  defp invoke_end_cleanup(media_plane, recording_plane, session, operation, timeout_ms) do
+  defp invoke_end_cleanup(media_plane, recording_plane, episode, operation, timeout_ms) do
     calls = [
-      end_media_call(media_plane, session, operation),
-      end_recording_call(recording_plane, session, operation)
+      end_media_call(media_plane, episode, operation),
+      end_recording_call(recording_plane, episode, operation)
     ]
 
     results =
@@ -341,18 +340,18 @@ defmodule ChalkSync.ExternalOperationConsumer do
     combine_end_cleanup(List.duplicate(:pending, missing_count) ++ results)
   end
 
-  defp end_media_call(nil, _session, _operation), do: nil
+  defp end_media_call(nil, _episode, _operation), do: nil
 
-  defp end_media_call({module, adapter}, session, operation) do
-    {function, arguments} = media_arguments(adapter, session, operation)
+  defp end_media_call({module, adapter}, episode, operation) do
+    {function, arguments} = media_arguments(adapter, episode, operation)
     {module, function, arguments, :provider}
   end
 
-  defp end_recording_call(nil, _session, _operation), do: nil
+  defp end_recording_call(nil, _episode, _operation), do: nil
 
-  defp end_recording_call({module, adapter}, session, operation) do
+  defp end_recording_call({module, adapter}, episode, operation) do
     {module, :stop_recording,
-     [adapter, operation.external_operation_id, session, operation.recording_id], :recording}
+     [adapter, operation.external_operation_id, episode, operation.recording_id], :recording}
   end
 
   defp combine_end_cleanup(results) do
@@ -424,26 +423,26 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   defp adapter_outcome(_outcome, _authority), do: :pending
 
-  defp finalize_confirmed(session, operation, authority, finalize) do
-    case finalize.(session, operation.external_operation_id, {:confirmed, authority}) do
+  defp finalize_confirmed(episode, operation, authority, finalize) do
+    case finalize.(episode, operation.external_operation_id, {:confirmed, authority}) do
       {:ok, _decision} -> :confirmed
       result -> finalization_failure(operation.name, result)
     end
   end
 
-  defp finalize_terminal_failure(session, operation, reason, finalize) do
-    case finalize.(session, operation.external_operation_id, {:failed, reason}) do
+  defp finalize_terminal_failure(episode, operation, reason, finalize) do
+    case finalize.(episode, operation.external_operation_id, {:failed, reason}) do
       {:ok, _decision} -> :terminal_failure
       result -> finalization_failure(operation.name, result)
     end
   end
 
-  defp execution_checkpoint(point, session, operation) do
+  defp execution_checkpoint(point, episode, operation) do
     case Application.get_env(:chalk_sync, :external_operation_fault_hook) do
       hook when is_function(hook, 2) ->
         hook.(point, %{
-          tenant_id: session.tenant_id,
-          session_id: session.session_id,
+          tenant_id: episode.tenant_id,
+          episode_id: episode.episode_id,
           external_operation_id: operation.external_operation_id,
           operation: operation.name
         })
@@ -478,7 +477,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
     )
   end
 
-  defp dispatch_with_context(session, operation, media_plane, recording_plane, timeout_ms) do
+  defp dispatch_with_context(episode, operation, media_plane, recording_plane, timeout_ms) do
     if provider_bridge_adapter?(media_plane) or provider_bridge_adapter?(recording_plane) do
       Observability.with_worker_span(
         persisted_provider_context(operation),
@@ -488,7 +487,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
           headers = Observability.frame_fields(worker_context)
 
           dispatch(
-            session,
+            episode,
             operation,
             contextual_adapter(media_plane, operation, headers),
             contextual_adapter(recording_plane, operation, headers),
@@ -497,7 +496,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
         end
       )
     else
-      dispatch(session, operation, media_plane, recording_plane, timeout_ms)
+      dispatch(episode, operation, media_plane, recording_plane, timeout_ms)
     end
   end
 
@@ -514,7 +513,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
       adapter
       |> ProviderBridgeMediaPlane.with_context(headers)
       |> ProviderBridgeMediaPlane.with_participant_generation(
-        operation.target_participant_session_id,
+        operation.target_participant_id,
         operation.target_participant_generation
       )
 

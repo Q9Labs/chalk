@@ -3,36 +3,29 @@ defmodule ChalkSync.Auth.DevTokenVerifierTest do
 
   alias ChalkSync.Auth.DevTokenVerifier
 
-  test "accepts role envelopes without token capabilities" do
+  test "accepts role and capability claims" do
     assert {:ok, claims} =
              %{
                "tenant_id" => uuid(1),
-               "room_id" => uuid(2),
+               "space_id" => uuid(2),
                "participant_id" => uuid(3),
-               "initial_role" => "participant",
-               "eligible_roles" => ["participant", "cohost"]
+               "role" => "observer",
+               "capabilities" => ["subscribe"]
              }
              |> DevTokenVerifier.token()
              |> DevTokenVerifier.verify()
 
-    assert claims.initial_role == "participant"
-    assert claims.eligible_roles == ["participant", "cohost"]
+    assert claims.role == "observer"
+    assert claims.capabilities == ["subscribe"]
   end
 
-  test "rejects malformed and mixed role envelopes" do
+  test "rejects malformed role and capability claims" do
     invalid = [
-      %{"initial_role" => "participant"},
-      %{"initial_role" => "participant", "eligible_roles" => ["cohost"]},
-      %{
-        "initial_role" => "participant",
-        "eligible_roles" => ["participant", "participant"]
-      },
-      %{"initial_role" => "host", "eligible_roles" => ["host"]},
-      %{
-        "initial_role" => "participant",
-        "eligible_roles" => ["participant"],
-        "capabilities" => ["control:hand"]
-      }
+      %{"role" => "observer"},
+      %{"role" => "observer", "capabilities" => ["subscribe", "subscribe"]},
+      %{"role" => "observer", "capabilities" => ["not-a-capability"]},
+      %{"role" => "", "capabilities" => ["subscribe"]},
+      %{"role" => "observer", "capabilities" => "subscribe"}
     ]
 
     Enum.each(invalid, fn envelope ->
@@ -40,7 +33,7 @@ defmodule ChalkSync.Auth.DevTokenVerifierTest do
         Map.merge(
           %{
             "tenant_id" => uuid(1),
-            "room_id" => uuid(2),
+            "space_id" => uuid(2),
             "participant_id" => uuid(3)
           },
           envelope

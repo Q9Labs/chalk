@@ -21,7 +21,7 @@ func TestCreateReturnsRawKeyOnceAndStoresHash(t *testing.T) {
 
 	result, err := service.Create(context.Background(), apikeys.CreateInput{
 		TenantID: tenantID, Name: " Backend ",
-		Scopes:    []authentication.Scope{authentication.ScopeSessionsWrite, authentication.ScopeRoomsRead},
+		Scopes:    []authentication.Scope{authentication.ScopeEpisodesWrite, authentication.ScopeSpacesRead},
 		ExpiresAt: testNow.Add(24 * time.Hour),
 	})
 	if err != nil {
@@ -39,7 +39,7 @@ func TestCreateReturnsRawKeyOnceAndStoresHash(t *testing.T) {
 	if result.Key.Name != "Backend" {
 		t.Fatalf("name = %q, want Backend", result.Key.Name)
 	}
-	if result.Key.Scopes[0] != authentication.ScopeRoomsRead || result.Key.Scopes[1] != authentication.ScopeSessionsWrite {
+	if result.Key.Scopes[0] != authentication.ScopeEpisodesWrite || result.Key.Scopes[1] != authentication.ScopeSpacesRead {
 		t.Fatalf("scopes = %v, want sorted concrete scopes", result.Key.Scopes)
 	}
 
@@ -74,10 +74,10 @@ func TestCreateRequiresConcreteScopesAndBoundedExpiry(t *testing.T) {
 	}{
 		{name: "no scopes", expiry: testNow.Add(time.Hour), want: apikeys.ErrInvalidScopes},
 		{name: "wildcard", scopes: []authentication.Scope{"*"}, expiry: testNow.Add(time.Hour), want: apikeys.ErrInvalidScopes},
-		{name: "duplicate", scopes: []authentication.Scope{authentication.ScopeRoomsRead, authentication.ScopeRoomsRead}, expiry: testNow.Add(time.Hour), want: apikeys.ErrInvalidScopes},
-		{name: "missing expiry", scopes: []authentication.Scope{authentication.ScopeRoomsRead}, want: apikeys.ErrInvalidExpiry},
-		{name: "expired", scopes: []authentication.Scope{authentication.ScopeRoomsRead}, expiry: testNow, want: apikeys.ErrInvalidExpiry},
-		{name: "over one year", scopes: []authentication.Scope{authentication.ScopeRoomsRead}, expiry: testNow.Add(apikeys.MaxTTL + time.Nanosecond), want: apikeys.ErrInvalidExpiry},
+		{name: "duplicate", scopes: []authentication.Scope{authentication.ScopeSpacesRead, authentication.ScopeSpacesRead}, expiry: testNow.Add(time.Hour), want: apikeys.ErrInvalidScopes},
+		{name: "missing expiry", scopes: []authentication.Scope{authentication.ScopeSpacesRead}, want: apikeys.ErrInvalidExpiry},
+		{name: "expired", scopes: []authentication.Scope{authentication.ScopeSpacesRead}, expiry: testNow, want: apikeys.ErrInvalidExpiry},
+		{name: "over one year", scopes: []authentication.Scope{authentication.ScopeSpacesRead}, expiry: testNow.Add(apikeys.MaxTTL + time.Nanosecond), want: apikeys.ErrInvalidExpiry},
 	}
 
 	for _, test := range tests {
@@ -118,7 +118,7 @@ func TestCreateStopsAfterBoundedPrefixCollisions(t *testing.T) {
 	service := newService(repository, nil)
 
 	_, err := service.Create(context.Background(), apikeys.CreateInput{
-		TenantID: tenantID, Name: "Backend", Scopes: []authentication.Scope{authentication.ScopeRoomsRead},
+		TenantID: tenantID, Name: "Backend", Scopes: []authentication.Scope{authentication.ScopeSpacesRead},
 		ExpiresAt: testNow.Add(time.Hour),
 	})
 	if !errors.Is(err, apikeys.ErrPrefixConflict) {

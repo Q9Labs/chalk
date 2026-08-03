@@ -30,14 +30,14 @@ type Config struct {
 
 type Input struct {
 	TenantID                   utilities.ID
-	RoomID                     utilities.ID
-	SessionID                  utilities.ID
+	SpaceID                    utilities.ID
+	EpisodeID                  utilities.ID
 	ParticipantID              utilities.ID
 	ParticipantGeneration      int64
 	AdmissionLifecycleIntentID utilities.ID
 	DisplayName                string
-	InitialRole                string
-	EligibleRoles              []string
+	Role                       string
+	Capabilities               []string
 }
 
 type Token struct {
@@ -47,8 +47,8 @@ type Token struct {
 
 type SubjectKey struct {
 	TenantID      utilities.ID
-	RoomID        utilities.ID
-	SessionID     utilities.ID
+	SpaceID       utilities.ID
+	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
 }
 
@@ -87,7 +87,7 @@ func (b Broker) Issue(ctx context.Context, input Input) (Token, error) {
 }
 
 func (b Broker) IssueForParticipant(ctx context.Context, key SubjectKey) (Token, error) {
-	if key.TenantID.IsZero() || key.RoomID.IsZero() || key.SessionID.IsZero() || key.ParticipantID.IsZero() {
+	if key.TenantID.IsZero() || key.SpaceID.IsZero() || key.EpisodeID.IsZero() || key.ParticipantID.IsZero() {
 		return Token{}, ErrInvalidInput
 	}
 	input, err := b.repository.GetSyncTokenSubject(ctx, key)
@@ -98,11 +98,9 @@ func (b Broker) IssueForParticipant(ctx context.Context, key SubjectKey) (Token,
 }
 
 func (s Service) Issue(_ context.Context, input Input) (Token, error) {
-	eligibleRoles, ok := canonicalAuthorityEnvelope(input.InitialRole, input.EligibleRoles)
-	if input.TenantID.IsZero() || input.RoomID.IsZero() || input.SessionID.IsZero() || input.ParticipantID.IsZero() || input.AdmissionLifecycleIntentID.IsZero() || input.ParticipantGeneration <= 0 || !validDisplayName(input.DisplayName) || !ok {
+	if input.TenantID.IsZero() || input.SpaceID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.AdmissionLifecycleIntentID.IsZero() || input.ParticipantGeneration <= 0 || !validDisplayName(input.DisplayName) || !validRole(input.Role) || !validCapabilities(input.Capabilities) {
 		return Token{}, ErrInvalidInput
 	}
-	input.EligibleRoles = eligibleRoles
 
 	now := s.config.Now().UTC().Truncate(time.Second)
 	expiresAt := now.Add(Lifetime)
@@ -116,23 +114,22 @@ func (s Service) Issue(_ context.Context, input Input) (Token, error) {
 		return Token{}, fmt.Errorf("encode sync token header: %w", err)
 	}
 	claims, err := encode(map[string]any{
-		"iss":                            s.config.Issuer,
-		"aud":                            s.config.Audience,
-		"sub":                            input.ParticipantID.String(),
-		"jti":                            jti,
-		"iat":                            now.Unix(),
-		"nbf":                            now.Unix(),
-		"exp":                            expiresAt.Unix(),
-		"tenant_id":                      input.TenantID.String(),
-		"room_id":                        input.RoomID.String(),
-		"session_id":                     input.SessionID.String(),
-		"participant_id":                 input.ParticipantID.String(),
-		"participant_session_id":         input.ParticipantID.String(),
-		"participant_session_generation": input.ParticipantGeneration,
-		"admission_lifecycle_intent_id":  input.AdmissionLifecycleIntentID.String(),
-		"display_name":                   input.DisplayName,
-		"initial_role":                   input.InitialRole,
-		"eligible_roles":                 append([]string(nil), input.EligibleRoles...),
+		"iss":                           s.config.Issuer,
+		"aud":                           s.config.Audience,
+		"sub":                           input.ParticipantID.String(),
+		"jti":                           jti,
+		"iat":                           now.Unix(),
+		"nbf":                           now.Unix(),
+		"exp":                           expiresAt.Unix(),
+		"tenant_id":                     input.TenantID.String(),
+		"space_id":                      input.SpaceID.String(),
+		"episode_id":                    input.EpisodeID.String(),
+		"participant_id":                input.ParticipantID.String(),
+		"participant_generation":        input.ParticipantGeneration,
+		"admission_lifecycle_intent_id": input.AdmissionLifecycleIntentID.String(),
+		"display_name":                  input.DisplayName,
+		"role":                          input.Role,
+		"capabilities":                  append([]string{}, input.Capabilities...),
 	})
 	if err != nil {
 		return Token{}, fmt.Errorf("encode sync token claims: %w", err)
@@ -147,35 +144,32 @@ func validDisplayName(value string) bool {
 	return value != "" && utf8.ValidString(value) && len(value) <= 256
 }
 
-func canonicalAuthorityEnvelope(initialRole string, eligibleRoles []string) ([]string, bool) {
-	roles := map[string]struct{}{"host": {}, "cohost": {}, "participant": {}}
-	if _, ok := roles[initialRole]; !ok || len(eligibleRoles) == 0 || len(eligibleRoles) > len(roles) {
-		return nil, false
-	}
-	seen := make(map[string]struct{}, len(eligibleRoles))
-	for _, role := range eligibleRoles {
-		if _, ok := roles[role]; !ok {
-			return nil, false
+func validRole(value string) bool {
+	return value != "" && strings.TrimSpace(value) == value && utf8.ValidString(value) && len(value) <= 128
+}
+
+var validCapabilityNames = map[string]struct{}{
+	"publishAudio": {}, "publishVideo": {}, "publishScreen": {}, "subscribe": {}, "raiseHand": {}, "renameSelf": {},
+	"sendChat": {}, "sendReaction": {}, "drawWhiteboard": {}, "manageWhiteboard": {}, "manageAdmission": {}, "assignRoles": {},
+	"muteOthers": {}, "stopVideoOthers": {}, "stopScreenOthers": {}, "requestMediaOthers": {}, "removeParticipant": {},
+	"manageRecording": {}, "startEpisode": {}, "extendEpisode": {}, "endEpisode": {}, "manageMembers": {}, "clearSpaceContent": {},
+}
+
+func validCapabilities(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" || strings.TrimSpace(value) != value || !utf8.ValidString(value) || len(value) > 128 {
+			return false
 		}
-		if _, exists := seen[role]; exists {
-			return nil, false
+		if _, known := validCapabilityNames[value]; !known {
+			return false
 		}
-		seen[role] = struct{}{}
-	}
-	if _, ok := seen[initialRole]; !ok {
-		return nil, false
-	}
-	_, cohostEligible := seen["cohost"]
-	if initialRole == "host" && !cohostEligible {
-		return nil, false
-	}
-	result := make([]string, 0, len(seen))
-	for _, role := range []string{"host", "cohost", "participant"} {
-		if _, ok := seen[role]; ok {
-			result = append(result, role)
+		if _, exists := seen[value]; exists {
+			return false
 		}
+		seen[value] = struct{}{}
 	}
-	return result, true
+	return true
 }
 
 func encode(value any) (string, error) {

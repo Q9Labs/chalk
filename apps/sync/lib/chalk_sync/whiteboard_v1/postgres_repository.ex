@@ -144,7 +144,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   defp transaction(identity, callback) do
-    connection = Database.connection(identity.session)
+    connection = Database.connection(identity.episode)
 
     case Postgrex.transaction(connection, &run_transaction(&1, callback)) do
       {:ok, result} ->
@@ -173,8 +173,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
   defp read_after_rows(connection, identity, scene_id, revision) do
     params = [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
       uuid(scene_id),
       revision
     ]
@@ -197,11 +197,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   defp authority(connection, identity) do
     params =
       context(identity) ++
-        [uuid(identity.participant_session_id), identity.participant_session_generation]
+        [uuid(identity.participant_id), identity.participant_generation]
 
     case Postgrex.query(connection, SQL.lock_authority(), params) do
-      {:ok, %Postgrex.Result{rows: [[role, capabilities, can_draw]]}} ->
-        role_capabilities = Map.get(capabilities, role, [])
+      {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw]]}} ->
+        role_capabilities = capabilities
 
         participant_capabilities =
           if can_draw,
@@ -210,7 +210,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
         {:ok,
          %{
-           capabilities: Enum.uniq(Enum.flat_map(Map.values(capabilities), & &1)),
+           capabilities: participant_capabilities,
            participant_capabilities: participant_capabilities,
            can_draw: can_draw
          }}
@@ -236,16 +236,19 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
            Postgrex.query(connection, SQL.lock_scene(), context(identity)) do
       {:ok, %{scene_id: UUID.load!(scene_id), revision: revision, app_state: app_state}}
     else
-      {:ok, %Postgrex.Result{rows: []}} -> {:retryable, :storage_unavailable}
-      {:error, _error} -> {:retryable, :storage_unavailable}
+      {:ok, %Postgrex.Result{rows: []}} ->
+        {:retryable, :storage_unavailable}
+
+      {:error, _error} ->
+        {:retryable, :storage_unavailable}
     end
   end
 
   defp receipt(connection, identity, operation_id, fingerprint) do
     params = [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.session_id),
-      uuid(identity.participant_session_id),
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.participant_id),
       operation_id
     ]
 
@@ -314,8 +317,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     params =
       context(identity) ++
         [
-          uuid(identity.participant_session_id),
-          identity.participant_session_generation,
+          uuid(identity.participant_id),
+          identity.participant_generation,
           operation_id,
           fingerprint,
           operation_name,
@@ -350,9 +353,9 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     params =
       context(identity) ++
         [
-          uuid(operation.participant_session_id),
+          uuid(operation.participant_id),
           operation.can_draw,
-          uuid(identity.participant_session_id)
+          uuid(identity.participant_id)
         ]
 
     case Postgrex.query(connection, SQL.upsert_permission(), params) do
@@ -363,7 +366,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   defp snapshot_elements(connection, identity, scene_id) do
-    params = [uuid(identity.session.tenant_id), uuid(identity.session.session_id), uuid(scene_id)]
+    params = [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id), uuid(scene_id)]
 
     case Postgrex.query(connection, SQL.snapshot_elements(), params) do
       {:ok, %Postgrex.Result{rows: rows}} when length(rows) <= 10_000 ->
@@ -393,9 +396,9 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     payload =
       Enum.join(
         [
-          identity.session.tenant_id,
-          identity.session.room_id,
-          identity.session.session_id,
+          identity.episode.tenant_id,
+          identity.episode.space_id,
+          identity.episode.episode_id,
           scene_id,
           revision
         ],
@@ -431,9 +434,9 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
   defp context(identity),
     do: [
-      uuid(identity.session.tenant_id),
-      uuid(identity.session.room_id),
-      uuid(identity.session.session_id)
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.episode.episode_id)
     ]
 
   defp uuid(value), do: UUID.dump!(value)

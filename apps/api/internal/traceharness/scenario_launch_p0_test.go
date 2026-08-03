@@ -46,8 +46,8 @@ func TestParticipantMediaTraceAcceptsCredentialBeforeSFUAdapter(t *testing.T) {
 	if result.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusOK)
 	}
-	assertEvent(t, result.Events, "auth", "participantaccess.Verifier.Verify")
-	assertEvent(t, result.Events, "policy", "participantaccess.ActiveAuthorizer")
+	assertEvent(t, result.Events, "auth", "accessgrants.Verifier.Verify")
+	assertEvent(t, result.Events, "policy", "accessgrants.ActiveAuthorizer")
 	assertEvent(t, result.Events, "resolver", "MediaPlaneResolver.Resolve")
 	assertEvent(t, result.Events, "adapter", "cloudflare.sfu.Adapter.AddTracks")
 	assertEvent(t, result.Events, "provider", "POST Cloudflare SFU tracks/new")
@@ -66,8 +66,8 @@ func TestParticipantMediaWrongAudienceStopsBeforeAdapter(t *testing.T) {
 	if result.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", result.StatusCode, http.StatusUnauthorized)
 	}
-	assertEvent(t, result.Events, "auth", "participantaccess.Verifier.Verify")
-	assertNoEvent(t, result.Events, "policy", "participantaccess.ActiveAuthorizer")
+	assertEvent(t, result.Events, "auth", "accessgrants.Verifier.Verify")
+	assertNoEvent(t, result.Events, "policy", "accessgrants.ActiveAuthorizer")
 	assertNoEvent(t, result.Events, "resolver", "MediaPlaneResolver.Resolve")
 	assertNoEvent(t, result.Events, "adapter", "cloudflare.sfu.Adapter.AddTracks")
 	assertLaunchTraceRedaction(t, result)
@@ -92,7 +92,7 @@ func assertLaunchTraceRedaction(t *testing.T, result ScenarioResult) {
 	for _, forbidden := range []string{
 		"chalk_sk_",
 		"AAAAAAAAAAAA",
-		"rooms:read",
+		"spaces:read",
 		"tenants:read",
 		"eyJ",
 		"v=0",

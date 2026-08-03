@@ -9,8 +9,7 @@ defmodule ChalkSync.Stateholder.Command do
     "set_hand_raised" => :set_hand_raised,
     "set_display_name" => :set_display_name,
     "set_admission_policy" => :set_admission_policy,
-    "set_participant_role" => :set_participant_role,
-    "transfer_host" => :transfer_host
+    "assign_roles" => :assign_roles
   }
 
   @enforce_keys [:id, :name, :payload, :fingerprint, :normalized_bytes]
@@ -22,8 +21,7 @@ defmodule ChalkSync.Stateholder.Command do
             :set_hand_raised
             | :set_display_name
             | :set_admission_policy
-            | :set_participant_role
-            | :transfer_host,
+            | :assign_roles,
           payload: map(),
           fingerprint: binary(),
           normalized_bytes: pos_integer()
@@ -85,23 +83,19 @@ defmodule ChalkSync.Stateholder.Command do
   end
 
   defp validate_payload(:set_admission_policy, %{"policy" => policy} = payload)
-       when map_size(payload) == 1 and policy in ["open", "approval", "closed"],
+       when map_size(payload) == 1 and policy in ["open", "knock", "members_only"],
        do: :ok
 
   defp validate_payload(
-         :set_participant_role,
-         %{
-           "participantSessionId" => participant_id,
-           "role" => role
-         } = payload
+         :assign_roles,
+         %{"participantId" => participant_id, "role" => role} = payload
        )
-       when map_size(payload) == 2 and is_binary(participant_id) and
-              role in ["cohost", "participant"],
-       do: :ok
-
-  defp validate_payload(:transfer_host, %{"participantSessionId" => participant_id} = payload)
-       when map_size(payload) == 1 and is_binary(participant_id),
-       do: :ok
+       when map_size(payload) == 2 and is_binary(participant_id) and is_binary(role) do
+    if byte_size(participant_id) in 1..128 and String.valid?(role) and
+         role == String.trim(role) and byte_size(role) in 1..64,
+       do: :ok,
+       else: {:error, :invalid_payload}
+  end
 
   defp validate_payload(_name, _payload), do: {:error, :invalid_payload}
 end

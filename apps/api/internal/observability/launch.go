@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -19,12 +19,12 @@ const noRejectionReason = "none"
 
 var launchTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/observability/launch")
 
-type participantAccessIssuer interface {
-	Issue(context.Context, participantaccess.Subject) (participantaccess.MediaCredential, error)
+type accessGrantIssuer interface {
+	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
 }
 
 type participantMediaVerifier interface {
-	Verify(context.Context, string) (participantaccess.Subject, error)
+	Verify(context.Context, string) (accessgrants.Subject, error)
 }
 
 // LaunchTelemetry owns bounded signals for API-key and participant-media authentication.
@@ -56,8 +56,8 @@ func newLaunchTelemetry(logger *slog.Logger, now func() time.Time) *LaunchTeleme
 	apiKeyAuthentication, _ := meter.Int64Counter("chalk.api.api_key.authentication", otelmetric.WithDescription("Bounded API-key authentication outcomes"))
 	apiKeyAuthenticationDuration, _ := meter.Float64Histogram("chalk.api.api_key.authentication.duration_seconds", otelmetric.WithDescription("API-key authentication latency by bounded outcome"), otelmetric.WithUnit("s"))
 	apiKeyUsageTouch, _ := meter.Int64Counter("chalk.api.api_key.usage_touch", otelmetric.WithDescription("Best-effort API-key usage telemetry updates by bounded outcome"))
-	participantIssuance, _ := meter.Int64Counter("chalk.api.participant_access.issuance", otelmetric.WithDescription("Participant media credential issuance outcomes"))
-	participantIssuanceDuration, _ := meter.Float64Histogram("chalk.api.participant_access.issuance.duration_seconds", otelmetric.WithDescription("Participant media credential issuance latency by bounded outcome"), otelmetric.WithUnit("s"))
+	participantIssuance, _ := meter.Int64Counter("chalk.api.access_grant.issuance", otelmetric.WithDescription("Participant media credential issuance outcomes"))
+	participantIssuanceDuration, _ := meter.Float64Histogram("chalk.api.access_grant.issuance.duration_seconds", otelmetric.WithDescription("Participant media credential issuance latency by bounded outcome"), otelmetric.WithUnit("s"))
 	participantAuthentication, _ := meter.Int64Counter("chalk.api.participant_media.authentication", otelmetric.WithDescription("Participant media credential authentication outcomes"))
 	participantAuthenticationDelay, _ := meter.Float64Histogram("chalk.api.participant_media.authentication.duration_seconds", otelmetric.WithDescription("Participant media credential authentication latency by bounded outcome"), otelmetric.WithUnit("s"))
 	return &LaunchTelemetry{
@@ -93,24 +93,24 @@ func (t *LaunchTelemetry) RecordUsageTouch(ctx context.Context, outcome apikeys.
 	t.logger.Log(ctx, launchLogLevel(bounded, "succeeded"), "api key usage touch", "event", "api_key.usage_touch", "outcome", bounded)
 }
 
-type ParticipantAccessIssuer struct {
-	next      participantAccessIssuer
+type AccessGrantIssuer struct {
+	next      accessGrantIssuer
 	telemetry *LaunchTelemetry
 }
 
-func InstrumentParticipantAccessIssuer(next participantAccessIssuer, telemetry *LaunchTelemetry) ParticipantAccessIssuer {
-	return ParticipantAccessIssuer{next: next, telemetry: telemetry}
+func InstrumentAccessGrantIssuer(next accessGrantIssuer, telemetry *LaunchTelemetry) AccessGrantIssuer {
+	return AccessGrantIssuer{next: next, telemetry: telemetry}
 }
 
-func (i ParticipantAccessIssuer) Issue(ctx context.Context, subject participantaccess.Subject) (participantaccess.MediaCredential, error) {
+func (i AccessGrantIssuer) Issue(ctx context.Context, subject accessgrants.Subject) (accessgrants.MediaCredential, error) {
 	if i.next == nil {
-		return participantaccess.MediaCredential{}, participantaccess.ErrInvalidConfig
+		return accessgrants.MediaCredential{}, accessgrants.ErrInvalidConfig
 	}
 	if i.telemetry == nil {
 		return i.next.Issue(ctx, subject)
 	}
 	startedAt := i.telemetry.now()
-	ctx, span := launchTracer.Start(ctx, "participant_access.issue")
+	ctx, span := launchTracer.Start(ctx, "access_grant.issue")
 	credential, err := i.next.Issue(ctx, subject)
 	outcome, reason := participantIssuanceResult(err)
 	i.telemetry.recordParticipantIssuance(ctx, outcome, reason, i.telemetry.now().Sub(startedAt))
@@ -127,9 +127,9 @@ func InstrumentParticipantMediaVerifier(next participantMediaVerifier, telemetry
 	return ParticipantMediaVerifier{next: next, telemetry: telemetry}
 }
 
-func (v ParticipantMediaVerifier) Verify(ctx context.Context, credential string) (participantaccess.Subject, error) {
+func (v ParticipantMediaVerifier) Verify(ctx context.Context, credential string) (accessgrants.Subject, error) {
 	if v.next == nil {
-		return participantaccess.Subject{}, participantaccess.ErrInvalidConfig
+		return accessgrants.Subject{}, accessgrants.ErrInvalidConfig
 	}
 	if v.telemetry == nil {
 		return v.next.Verify(ctx, credential)
@@ -147,7 +147,7 @@ func (t *LaunchTelemetry) recordParticipantIssuance(ctx context.Context, outcome
 	attributes := otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason))
 	t.participantIssuance.Add(ctx, 1, attributes)
 	t.participantIssuanceDuration.Record(ctx, nonNegative(duration).Seconds(), attributes)
-	t.logger.Log(ctx, launchLogLevel(outcome, "issued"), "participant access issuance", "event", "participant_access.issuance", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(duration)))
+	t.logger.Log(ctx, launchLogLevel(outcome, "issued"), "access grant issuance", "event", "access_grant.issuance", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(duration)))
 }
 
 func (t *LaunchTelemetry) recordParticipantAuthentication(ctx context.Context, outcome, reason string, duration time.Duration) {
@@ -188,9 +188,9 @@ func participantIssuanceResult(err error) (string, string) {
 	switch {
 	case err == nil:
 		return "issued", noRejectionReason
-	case errors.Is(err, participantaccess.ErrInvalidSubject):
+	case errors.Is(err, accessgrants.ErrInvalidSubject):
 		return "rejected", "invalid_subject"
-	case errors.Is(err, participantaccess.ErrInvalidConfig):
+	case errors.Is(err, accessgrants.ErrInvalidConfig):
 		return "failed", "invalid_configuration"
 	default:
 		return "failed", "signing_failed"
@@ -201,27 +201,27 @@ func participantAuthenticationResult(err error) (string, string) {
 	switch {
 	case err == nil:
 		return "accepted", noRejectionReason
-	case errors.Is(err, participantaccess.ErrMalformedCredential):
+	case errors.Is(err, accessgrants.ErrMalformedCredential):
 		return "rejected", "malformed"
-	case errors.Is(err, participantaccess.ErrInvalidHeader):
+	case errors.Is(err, accessgrants.ErrInvalidHeader):
 		return "rejected", "invalid_header"
-	case errors.Is(err, participantaccess.ErrUnknownKey):
+	case errors.Is(err, accessgrants.ErrUnknownKey):
 		return "rejected", "unknown_key"
-	case errors.Is(err, participantaccess.ErrInvalidSignature):
+	case errors.Is(err, accessgrants.ErrInvalidSignature):
 		return "rejected", "invalid_signature"
-	case errors.Is(err, participantaccess.ErrInvalidIssuer):
+	case errors.Is(err, accessgrants.ErrInvalidIssuer):
 		return "rejected", "invalid_issuer"
-	case errors.Is(err, participantaccess.ErrInvalidAudience):
+	case errors.Is(err, accessgrants.ErrInvalidAudience):
 		return "rejected", "invalid_audience"
-	case errors.Is(err, participantaccess.ErrInvalidTimeClaims):
+	case errors.Is(err, accessgrants.ErrInvalidTimeClaims):
 		return "rejected", "invalid_time_claims"
-	case errors.Is(err, participantaccess.ErrNotYetValid):
+	case errors.Is(err, accessgrants.ErrNotYetValid):
 		return "rejected", "not_yet_valid"
-	case errors.Is(err, participantaccess.ErrExpired):
+	case errors.Is(err, accessgrants.ErrExpired):
 		return "rejected", "expired"
-	case errors.Is(err, participantaccess.ErrLifetimeExceeded):
+	case errors.Is(err, accessgrants.ErrLifetimeExceeded):
 		return "rejected", "lifetime_exceeded"
-	case errors.Is(err, participantaccess.ErrInvalidSubject), errors.Is(err, participantaccess.ErrSubjectMismatch):
+	case errors.Is(err, accessgrants.ErrInvalidSubject), errors.Is(err, accessgrants.ErrSubjectMismatch):
 		return "rejected", "invalid_subject"
 	default:
 		return "failed", "verification_failed"

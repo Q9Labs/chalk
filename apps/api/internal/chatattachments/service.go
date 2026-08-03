@@ -64,9 +64,9 @@ var allowedMIMETypes = map[string]struct{}{
 
 type Subject struct {
 	TenantID              utilities.ID
-	RoomID                utilities.ID
-	SessionID             utilities.ID
-	ParticipantSessionID  utilities.ID
+	SpaceID               utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 }
 
@@ -410,8 +410,8 @@ func validFileName(value string) (string, bool) {
 }
 
 func invalidSubject(subject Subject) bool {
-	return subject.TenantID.IsZero() || subject.RoomID.IsZero() || subject.SessionID.IsZero() ||
-		subject.ParticipantSessionID.IsZero() || subject.ParticipantGeneration <= 0
+	return subject.TenantID.IsZero() || subject.SpaceID.IsZero() || subject.EpisodeID.IsZero() ||
+		subject.ParticipantID.IsZero() || subject.ParticipantGeneration <= 0
 }
 
 func previewable(mimeType string) bool {
@@ -422,7 +422,7 @@ func previewable(mimeType string) bool {
 func objectKey(subject Subject, uploadID utilities.ID) string {
 	return strings.Join([]string{
 		"chat-attachments-v1", "tenants", subject.TenantID.String(),
-		"sessions", subject.SessionID.String(), "uploads", uploadID.String(),
+		"episodes", subject.EpisodeID.String(), "uploads", uploadID.String(),
 	}, "/")
 }
 

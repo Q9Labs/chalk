@@ -27,25 +27,25 @@ func TestNewAdapterRejectsMissingConfig(t *testing.T) {
 	}
 }
 
-func TestEnsureSessionReturnsBootstrapMetadata(t *testing.T) {
+func TestEnsureEpisodeReturnsBootstrapMetadata(t *testing.T) {
 	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK})
 
-	session, err := adapter.EnsureSession(context.Background(), mediaplane.EnsureSessionInput{
+	episode, err := adapter.EnsureEpisode(context.Background(), mediaplane.EnsureEpisodeInput{
 		Provider:   mediaplane.ProviderCloudflareSFU,
-		SessionKey: "session_123",
+		EpisodeKey: "episode_123",
 	})
 	if err != nil {
-		t.Fatalf("ensure session: %v", err)
+		t.Fatalf("ensure episode: %v", err)
 	}
 
-	if session.Ref != "session_123" {
-		t.Fatalf("session ref = %q, want session_123", session.Ref)
+	if episode.Ref != "episode_123" {
+		t.Fatalf("episode ref = %q, want episode_123", episode.Ref)
 	}
-	if session.Metadata["sync_owner"] != syncOwner {
-		t.Fatalf("metadata = %#v, want sync owner", session.Metadata)
+	if episode.Metadata["sync_owner"] != syncOwner {
+		t.Fatalf("metadata = %#v, want sync owner", episode.Metadata)
 	}
-	if session.Metadata["api_base"] != "https://rtc.test/v1/apps/sfu-app-id" {
-		t.Fatalf("api base = %q, want configured app base", session.Metadata["api_base"])
+	if episode.Metadata["api_base"] != "https://rtc.test/v1/apps/sfu-app-id" {
+		t.Fatalf("api base = %q, want configured app base", episode.Metadata["api_base"])
 	}
 }
 
@@ -55,9 +55,9 @@ func TestCreateJoinReturnsSyncBootstrapPayload(t *testing.T) {
 
 	join, err := adapter.CreateJoin(context.Background(), mediaplane.CreateJoinInput{
 		Provider: mediaplane.ProviderCloudflareSFU,
-		Session: mediaplane.Session{
+		Episode: mediaplane.Episode{
 			Provider: mediaplane.ProviderCloudflareSFU,
-			Ref:      "session_123",
+			Ref:      "episode_123",
 		},
 		ParticipantName:       "Ada",
 		ExternalParticipantID: "participant_123",
@@ -77,7 +77,7 @@ func TestCreateJoinReturnsSyncBootstrapPayload(t *testing.T) {
 		t.Fatalf("client payload = %#v, want Cloudflare connection id", join.ClientPayload)
 	}
 	if client.path != "/v1/apps/sfu-app-id/sessions/new" {
-		t.Fatalf("path = %q, want session creation path", client.path)
+		t.Fatalf("path = %q, want episode creation path", client.path)
 	}
 	if _, ok := join.ClientPayload["appSecret"]; ok {
 		t.Fatal("client payload leaked app secret")
@@ -90,9 +90,9 @@ func TestResumeJoinReconstructsExactBootstrapWithoutProviderCall(t *testing.T) {
 
 	join, err := adapter.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{
 		Provider: mediaplane.ProviderCloudflareSFU,
-		Session: mediaplane.Session{
+		Episode: mediaplane.Episode{
 			Provider: mediaplane.ProviderCloudflareSFU,
-			Ref:      "session_123",
+			Ref:      "episode_123",
 		},
 		ExternalParticipantID: "participant_123",
 		ConnectionRef:         "connection_123",
@@ -103,7 +103,7 @@ func TestResumeJoinReconstructsExactBootstrapWithoutProviderCall(t *testing.T) {
 	if client.calls != 0 {
 		t.Fatalf("provider calls = %d, want 0", client.calls)
 	}
-	if join.ParticipantRef != "participant_123" || join.ClientPayload["connectionId"] != "connection_123" || join.ClientPayload["sessionRef"] != "session_123" {
+	if join.ParticipantRef != "participant_123" || join.ClientPayload["connectionId"] != "connection_123" || join.ClientPayload["episodeRef"] != "episode_123" {
 		t.Fatalf("join = %#v, want exact verified refs", join)
 	}
 	if join.ClientPayload["stunServer"] != stunServer || join.ClientPayload["syncOwner"] != syncOwner {
@@ -285,7 +285,7 @@ func TestAddTracksRejectsProviderFailuresAndInvalidLocalResults(t *testing.T) {
 		{
 			name:       "too early remains a provider failure",
 			statusCode: http.StatusTooEarly,
-			body:       `{"errors":[{"message":"private provider session state"}]}`,
+			body:       `{"errors":[{"message":"private provider episode state"}]}`,
 		},
 		{
 			name:       "top level provider error",
@@ -451,16 +451,16 @@ func TestCloseTracksRejectsProviderFailuresAndUnexpectedResults(t *testing.T) {
 		want       error
 	}{
 		{
-			name:       "missing session status is not idempotent",
+			name:       "missing episode status is not idempotent",
 			statusCode: http.StatusNotFound,
-			body:       `{"errors":[{"message":"session not found"}]}`,
-			want:       mediaplane.ErrSessionNotFound,
+			body:       `{"errors":[{"message":"episode not found"}]}`,
+			want:       mediaplane.ErrEpisodeNotFound,
 		},
 		{
-			name:       "expired session status",
+			name:       "expired episode status",
 			statusCode: http.StatusGone,
-			body:       `{"errorCode":"session_error","errorDescription":"could not find session","tracks":[]}`,
-			want:       mediaplane.ErrSessionNotFound,
+			body:       `{"errorCode":"session_error","errorDescription":"could not find episode","tracks":[]}`,
+			want:       mediaplane.ErrEpisodeNotFound,
 		},
 		{
 			name:       "unrelated provider status",
@@ -637,9 +637,9 @@ func TestSFULifecycleOperationsStayOutOfGoMediaPlane(t *testing.T) {
 		t.Fatalf("remove participant error = %v, want %v", err, mediaplane.ErrUnsupportedOperation)
 	}
 
-	err = adapter.EndSession(context.Background(), mediaplane.EndSessionInput{})
+	err = adapter.EndEpisode(context.Background(), mediaplane.EndEpisodeInput{})
 	if !errors.Is(err, mediaplane.ErrUnsupportedOperation) {
-		t.Fatalf("end session error = %v, want %v", err, mediaplane.ErrUnsupportedOperation)
+		t.Fatalf("end episode error = %v, want %v", err, mediaplane.ErrUnsupportedOperation)
 	}
 }
 
@@ -647,32 +647,32 @@ func TestVerifySessionMetadata(t *testing.T) {
 	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
 	adapter := testAdapter(t, client)
 
-	metadata, err := adapter.VerifySessionMetadata(context.Background(), "session_123")
+	metadata, err := adapter.VerifySessionMetadata(context.Background(), "episode_123")
 	if err != nil {
-		t.Fatalf("verify session metadata: %v", err)
+		t.Fatalf("verify episode metadata: %v", err)
 	}
 
-	if metadata.Ref != "session_123" {
-		t.Fatalf("session ref = %q, want session_123", metadata.Ref)
+	if metadata.Ref != "episode_123" {
+		t.Fatalf("episode ref = %q, want episode_123", metadata.Ref)
 	}
 	if client.method != http.MethodGet {
 		t.Fatalf("method = %q, want GET", client.method)
 	}
-	if client.path != "/v1/apps/sfu-app-id/sessions/session_123" {
-		t.Fatalf("path = %q, want session lookup path", client.path)
+	if client.path != "/v1/apps/sfu-app-id/sessions/episode_123" {
+		t.Fatalf("path = %q, want episode lookup path", client.path)
 	}
 }
 
-func TestVerifySessionMetadataEscapesSessionRef(t *testing.T) {
+func TestVerifySessionMetadataEscapesEpisodeRef(t *testing.T) {
 	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
 	adapter := testAdapter(t, client)
 
-	_, err := adapter.VerifySessionMetadata(context.Background(), "../session/123?x=1#frag")
+	_, err := adapter.VerifySessionMetadata(context.Background(), "../episode/123?x=1#frag")
 	if err != nil {
-		t.Fatalf("verify session metadata: %v", err)
+		t.Fatalf("verify episode metadata: %v", err)
 	}
 
-	want := "/v1/apps/sfu-app-id/sessions/..%2Fsession%2F123%3Fx=1%23frag"
+	want := "/v1/apps/sfu-app-id/sessions/..%2Fepisode%2F123%3Fx=1%23frag"
 	if client.path != want {
 		t.Fatalf("path = %q, want %q", client.path, want)
 	}
@@ -685,8 +685,8 @@ func TestVerifySessionMetadataMapsProviderErrors(t *testing.T) {
 		want       error
 	}{
 		{name: "unauthorized", statusCode: http.StatusForbidden, want: mediaplane.ErrProviderUnauthorized},
-		{name: "not found", statusCode: http.StatusNotFound, want: mediaplane.ErrSessionNotFound},
-		{name: "gone", statusCode: http.StatusGone, want: mediaplane.ErrSessionNotFound},
+		{name: "not found", statusCode: http.StatusNotFound, want: mediaplane.ErrEpisodeNotFound},
+		{name: "gone", statusCode: http.StatusGone, want: mediaplane.ErrEpisodeNotFound},
 		{name: "rate limited", statusCode: http.StatusTooManyRequests, want: mediaplane.ErrProviderRateLimited},
 		{name: "provider failed", statusCode: http.StatusBadGateway, want: mediaplane.ErrProviderFailed},
 	}
@@ -698,7 +698,7 @@ func TestVerifySessionMetadataMapsProviderErrors(t *testing.T) {
 				body:       `{"errors":[{"message":"request rejected"}]}`,
 			})
 
-			_, err := adapter.VerifySessionMetadata(context.Background(), "session_123")
+			_, err := adapter.VerifySessionMetadata(context.Background(), "episode_123")
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("error = %v, want %v", err, tt.want)
 			}

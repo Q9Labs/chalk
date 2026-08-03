@@ -14,6 +14,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Reworked the server contract around durable Spaces, live Episodes, and
+  per-Episode Participants, including Space-owned membership, roles, chat, and
+  whiteboard state plus Episode-owned coordination and artifacts.
+- Replaced the historical role grids with one closed 23-capability vocabulary
+  and customer-defined Space roles, seeded with owner, collaborator, and
+  observer defaults.
+- Squashed the unreleased control-plane database history into a clean
+  Space/Episode baseline and renamed the fixture-proof contract tool to match
+  its actual responsibility.
 - Added independently composable palette and texture options to the React
   `ConferenceView`, including seven dark palettes plus clean, paper, and slate
   materials, and made the SDK preview open the active collaboration surface
@@ -23,6 +32,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   watercolor, and chalk-stick design language.
 
 ### Breaking
+
+- Renamed the Go, OpenAPI, webhook v1, Sync v1, and Whiteboard v1 wire
+  vocabulary from rooms and sessions to Spaces, Episodes, and Participants.
+  Lifecycle routes now use plural `/spaces/{space_id}/episodes` resources, and
+  participant credentials are returned as `AccessGrant`.
+- Removed built-in host/cohost authority, host-exit behavior, and legacy role
+  grids. Episode admission now resolves a single customer-defined role and its
+  frozen capabilities.
 
 Phase 1 unifies the published TypeScript SDK vocabulary. Historical names are
 removed without compatibility aliases.

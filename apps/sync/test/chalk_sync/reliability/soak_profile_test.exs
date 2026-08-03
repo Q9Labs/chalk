@@ -35,11 +35,11 @@ defmodule ChalkSync.Reliability.SoakProfileTest do
 
     fixtures =
       Enum.map(1..@client_count, fn _index ->
-        SyncPostgres.seed_session(connection, 1)
+        SyncPostgres.seed_episode(connection, 1)
       end)
 
     on_exit(fn ->
-      Enum.each(fixtures, &SyncPostgres.cleanup(connection, &1.session))
+      Enum.each(fixtures, &SyncPostgres.cleanup(connection, &1.episode))
       stop_connection(connection)
     end)
 

@@ -75,10 +75,20 @@ function countChunk(text, counts, absoluteStart, minimumEnd, maximumEnd) {
   }
 }
 
+async function isRegularFile(filePath) {
+  try {
+    return (await lstat(filePath)).isFile();
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+// Streaming overlap state stays cohesive so term matches crossing chunk boundaries are counted once.
+// fallow-ignore-next-line complexity
 async function countTrackedFile(repositoryRoot, relativePath) {
   const filePath = path.join(repositoryRoot, relativePath);
-  const fileStats = await lstat(filePath);
-  if (!fileStats.isFile()) return null;
+  if (!(await isRegularFile(filePath))) return null;
 
   const counts = emptyTermCounts();
   const decoder = new StringDecoder("utf8");

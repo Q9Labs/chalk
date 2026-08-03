@@ -20,28 +20,30 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       folded_state,
       state_schema_version,
       state_digest,
-      snapshot_bytes,
-      host_participant_session_id
-    from sync_session_control
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+      snapshot_bytes
+    from sync_episode_control
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
     for update
     """
   end
 
-  def lock_session do
+  def lock_episode do
     """
-    select status, host_exit_policy, role_capabilities
-    from room_sessions
-    where tenant_id = $1 and room_id = $2 and id = $3
+    select status, config_snapshot, deadline_at, deadline_generation, created_at
+    from episodes
+    where tenant_id = $1 and space_id = $2 and id = $3
     for update
     """
   end
 
   def lock_participant do
     """
-    select generation, status, role, eligible_roles
+    select generation, status, role, capabilities
     from participants
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
+    where participants.tenant_id = $1
+      and participants.space_id = $2
+      and participants.episode_id = $3
+      and participants.id = $4
     for update
     """
   end
@@ -57,13 +59,13 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       receipt.resulting_state_digest,
       receipt.external_operation_id
     from sync_command_receipts receipt
-    join sync_session_control control
+    join sync_episode_control control
       on control.tenant_id = receipt.tenant_id
-      and control.session_id = receipt.session_id
+      and control.episode_id = receipt.episode_id
     where receipt.tenant_id = $1
-      and control.room_id = $2
-      and receipt.session_id = $3
-      and receipt.participant_session_id = $4
+      and control.space_id = $2
+      and receipt.episode_id = $3
+      and receipt.participant_id = $4
       and receipt.command_id = $5
     """
   end
@@ -72,8 +74,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     insert into sync_command_receipts (
       tenant_id,
-      session_id,
-      participant_session_id,
+      episode_id,
+      participant_id,
       submitted_generation,
       command_id,
       request_fingerprint,
@@ -87,14 +89,14 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def increment_rejected_receipt_capacity do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       receipt_count = receipt_count + 1,
       receipt_bytes = receipt_bytes + $4,
       updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and receipt_count < 500000
       and receipt_bytes + $4 <= 4294967296
     returning control_revision
@@ -109,14 +111,14 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     insert into sync_control_events (
       tenant_id,
-      room_id,
-      session_id,
+      space_id,
+      episode_id,
       event_id,
       base_revision,
       revision,
       event_name,
       payload,
-      actor_participant_session_id,
+      actor_participant_id,
       actor_generation,
       command_id,
       event_schema_version,
@@ -128,22 +130,21 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def update_committed_control do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       control_revision = $4,
       folded_state = $5,
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      host_participant_session_id = $11,
       participant_event_count = participant_event_count + 1,
       participant_event_bytes = participant_event_bytes + $9,
       receipt_count = receipt_count + 1,
       receipt_bytes = receipt_bytes + $10,
       updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and control_revision = $4 - 1
       and $8 + snapshot_reserved_bytes <= 1048576
       and participant_event_count < 250000
@@ -158,8 +159,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     insert into sync_command_receipts (
       tenant_id,
-      session_id,
-      participant_session_id,
+      episode_id,
+      participant_id,
       submitted_generation,
       command_id,
       request_fingerprint,
@@ -177,8 +178,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     insert into sync_command_receipts (
       tenant_id,
-      session_id,
-      participant_session_id,
+      episode_id,
+      participant_id,
       submitted_generation,
       command_id,
       request_fingerprint,
@@ -194,35 +195,26 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def update_participant_role do
     """
     update participants
-    set role = $5, updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
-      and status = 'active' and $5 = any(eligible_roles)
-    returning id
-    """
-  end
-
-  def transfer_host do
-    """
-    with old_host as (
-      update participants
-      set role = 'cohost', updated_at = now()
-      where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
-        and status in ('active', 'leaving') and role = 'host' and 'cohost' = any(eligible_roles)
-      returning id
-    ), new_host as (
-      update participants
-      set role = 'host', updated_at = now()
-      where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $5
-        and status = 'active' and role <> 'host' and 'host' = any(eligible_roles)
-        and exists (select 1 from old_host)
-      returning id
-    )
-    update sync_session_control
-    set host_participant_session_id = $5, updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
-      and host_participant_session_id = $4
-      and exists (select 1 from new_host)
-    returning host_participant_session_id
+    set
+      role = $5,
+      capabilities = coalesce(
+        (
+          select array_agg(value order by value)
+          from jsonb_array_elements_text(episodes.config_snapshot -> 'roles' -> $5) values(value)
+        ),
+        '{}'::text[]
+      ),
+      updated_at = now()
+    from episodes
+    where participants.tenant_id = $1
+      and participants.space_id = $2
+      and participants.episode_id = $3
+      and participants.id = $4
+      and episodes.tenant_id = participants.tenant_id
+      and episodes.space_id = participants.space_id
+      and episodes.id = participants.episode_id
+      and participants.status = 'active'
+    returning participants.id
     """
   end
 
@@ -234,8 +226,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     select
       status,
       intent_name,
-      participant_session_id,
-      participant_session_generation,
+      participant_id,
+      participant_generation,
       payload,
       terminal_reason,
       applied_event_id,
@@ -246,8 +238,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       producing_span_id
     from sync_lifecycle_intents
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and lifecycle_intent_id = $4
     for update
     """
@@ -258,8 +250,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     select status, terminal_reason, applied_event_id, applied_revision
     from sync_lifecycle_intents
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and lifecycle_intent_id = $4
     """
   end
@@ -272,7 +264,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       revision,
       event_name,
       payload,
-      actor_participant_session_id,
+      actor_participant_id,
       command_id,
       lifecycle_intent_id,
       external_operation_id,
@@ -280,7 +272,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       resulting_state_digest,
       encoded_bytes
     from sync_control_events
-    where tenant_id = $1 and session_id = $2 and lifecycle_intent_id = $3
+    where tenant_id = $1 and episode_id = $2 and lifecycle_intent_id = $3
     """
   end
 
@@ -288,8 +280,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     insert into sync_control_events (
       tenant_id,
-      room_id,
-      session_id,
+      space_id,
+      episode_id,
       event_id,
       base_revision,
       revision,
@@ -305,14 +297,13 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def update_join_control do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       control_revision = $4,
       folded_state = $5,
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      host_participant_session_id = $10,
       snapshot_reserved_bytes = snapshot_reserved_bytes - 2048,
       lifecycle_event_count = lifecycle_event_count + 1,
       lifecycle_event_bytes = lifecycle_event_bytes + $9,
@@ -320,8 +311,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       lifecycle_reserved_bytes = lifecycle_reserved_bytes - 16384,
       updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and control_revision = $4 - 1
       and snapshot_reserved_bytes >= 2048
       and $8 + snapshot_reserved_bytes - 2048 <= 1048576
@@ -335,22 +326,21 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def update_generic_lifecycle_control do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       control_revision = $4,
       folded_state = $5,
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      host_participant_session_id = $10,
       lifecycle_event_count = lifecycle_event_count + 1,
       lifecycle_event_bytes = lifecycle_event_bytes + $9,
       lifecycle_reserved_events = lifecycle_reserved_events - 1,
       lifecycle_reserved_bytes = lifecycle_reserved_bytes - 16384,
       updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and control_revision = $4 - 1
       and $8 + snapshot_reserved_bytes <= 1048576
       and lifecycle_reserved_events >= 1
@@ -363,14 +353,13 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def update_end_control do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       control_revision = $4,
       folded_state = $5,
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      host_participant_session_id = $10,
       snapshot_reserved_bytes = 0,
       lifecycle_event_count = lifecycle_event_count + 1,
       lifecycle_event_bytes = lifecycle_event_bytes + $9,
@@ -380,8 +369,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       lifecycle_reserved_intent_bytes = 0,
       updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and control_revision = $4 - 1
       and $8 <= 1048576
       and lifecycle_reserved_events >= 1
@@ -397,12 +386,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     update participants
     set status = 'active', joined_at = now(), updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and id = $4
       and generation = $5
       and status = 'joining'
-    returning id, user_id, room_id, session_id, name, status, joined_at, left_at, updated_at
+    returning id, identity_id, space_id, episode_id, name, status, joined_at, left_at, updated_at
     """
   end
 
@@ -411,42 +400,24 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     update participants
     set status = 'left', left_at = now(), updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and id = $4
       and generation = $5
       and status = 'leaving'
-    returning id, user_id, room_id, session_id, name, status, joined_at, left_at, updated_at
+    returning id, identity_id, space_id, episode_id, name, status, joined_at, left_at, updated_at
     """
   end
 
-  def promote_host_after_leave do
+  def complete_lifecycle_episode do
     """
-    with old_host as (
-      update participants
-      set role = 'cohost', updated_at = now()
-      where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
-        and status = 'leaving' and role = 'host' and 'cohost' = any(eligible_roles)
-      returning id
-    )
-    update participants
-    set role = 'host', updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $5
-      and status = 'active' and role = 'cohost' and 'host' = any(eligible_roles)
-      and exists (select 1 from old_host)
-    returning id
-    """
-  end
-
-  def complete_lifecycle_session do
-    """
-    update room_sessions
+    update episodes
     set status = 'ended', ended_at = now(), updated_at = now()
     where tenant_id = $1
-      and room_id = $2
+      and space_id = $2
       and id = $3
       and status = 'ending'
-    returning id, room_id, status, started_at, ended_at, created_at, updated_at
+    returning id, space_id, status, started_at, ended_at, created_at, updated_at
     """
   end
 
@@ -455,25 +426,25 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     update sync_lifecycle_intents
     set
       status = 'superseded',
-      terminal_reason = 'superseded_by_session_end',
+      terminal_reason = 'superseded_by_episode_end',
       completed_at = now(),
       attempt_count = least(attempt_count::bigint + 1, 2147483647)::integer,
       last_error_code = null
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and lifecycle_intent_id != $4
       and status = 'pending'
     """
   end
 
-  def complete_all_session_participants do
+  def complete_all_episode_participants do
     """
     update participants
     set status = 'left', left_at = coalesce(left_at, now()), updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and status != 'left'
     """
   end
@@ -489,8 +460,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       attempt_count = least(attempt_count::bigint + 1, 2147483647)::integer,
       last_error_code = null
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and lifecycle_intent_id = $4
       and status = 'pending'
     returning applied_revision
@@ -516,8 +487,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
         else interval '30 seconds'
       end
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and lifecycle_intent_id = $4
       and status = 'pending'
     """
@@ -525,7 +496,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def discover_pending_lifecycle_intents do
     """
-    select tenant_id, room_id, session_id, lifecycle_intent_id
+    select tenant_id, space_id, episode_id, lifecycle_intent_id
     from sync_lifecycle_intents
     where status = 'pending' and next_attempt_at <= now()
     order by next_attempt_at, attempt_count, created_at, lifecycle_intent_id
@@ -540,18 +511,17 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       folded_state,
       state_schema_version,
       state_digest,
-      room_id,
-      host_participant_session_id
-    from sync_session_control
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+      space_id
+    from sync_episode_control
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
     """
   end
 
-  def read_session_status do
+  def read_episode_status do
     """
     select status
-    from room_sessions
-    where tenant_id = $1 and room_id = $2 and id = $3
+    from episodes
+    where tenant_id = $1 and space_id = $2 and id = $3
     """
   end
 
@@ -559,7 +529,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select generation, status
     from participants
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4
     """
   end
 
@@ -568,14 +538,14 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     select status
     from sync_lifecycle_intents
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
-      and participant_session_id = $4
+      and space_id = $2
+      and episode_id = $3
+      and participant_id = $4
       and lifecycle_intent_id = $5
-      and participant_session_generation = (
+      and participant_generation = (
         select generation
         from participants
-        where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
+        where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4
       )
       and intent_name = 'participant_joined'
     """
@@ -585,7 +555,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select resulting_state_digest
     from sync_control_events
-    where tenant_id = $1 and session_id = $2 and revision = $3
+    where tenant_id = $1 and episode_id = $2 and revision = $3
     """
   end
 
@@ -594,7 +564,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     select count(*), coalesce(sum(encoded_bytes), 0)
     from sync_control_events
     where tenant_id = $1
-      and session_id = $2
+      and episode_id = $2
       and revision > $3
       and revision <= $4
     """
@@ -609,7 +579,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
         revision,
         event_name,
         payload,
-        actor_participant_session_id,
+        actor_participant_id,
         command_id,
         lifecycle_intent_id,
         external_operation_id,
@@ -619,7 +589,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
         sum(encoded_bytes) over (order by revision) as running_encoded_bytes
       from sync_control_events
       where tenant_id = $1
-        and session_id = $2
+        and episode_id = $2
         and revision > $3
         and revision <= $4
       order by revision
@@ -631,7 +601,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       revision,
       event_name,
       payload,
-      actor_participant_session_id,
+      actor_participant_id,
       command_id,
       lifecycle_intent_id,
       external_operation_id,
@@ -644,18 +614,16 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
   end
 
-  def lock_operation_session do
+  def lock_operation_episode do
     """
     select
       status,
-      host_exit_policy,
-      role_capabilities,
+      config_snapshot,
       deadline_at,
       deadline_generation,
-      maximum_duration_ceiling_seconds,
       created_at
-    from room_sessions
-    where tenant_id = $1 and room_id = $2 and id = $3
+    from episodes
+    where tenant_id = $1 and space_id = $2 and id = $3
     for update
     """
   end
@@ -671,13 +639,13 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       receipt.resulting_state_digest,
       receipt.external_operation_id
     from sync_command_receipts receipt
-    join sync_session_control control
+    join sync_episode_control control
       on control.tenant_id = receipt.tenant_id
-      and control.session_id = receipt.session_id
+      and control.episode_id = receipt.episode_id
     where receipt.tenant_id = $1
-      and control.room_id = $2
-      and receipt.session_id = $3
-      and receipt.participant_session_id = $4
+      and control.space_id = $2
+      and receipt.episode_id = $3
+      and receipt.participant_id = $4
       and receipt.command_id = $5
     """
   end
@@ -687,8 +655,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     select #{external_operation_columns()}
     from sync_external_operations
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and operation_name = $4
       and request_key = $5
     """
@@ -698,16 +666,16 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select count(*)
     from sync_external_operations
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and status = 'pending'
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and status = 'pending'
     """
   end
 
   def insert_external_operation do
     """
     insert into sync_external_operations (
-      tenant_id, room_id, session_id, external_operation_id, request_key,
-      request_fingerprint, operation_name, actor_participant_session_id,
-      actor_generation, target_participant_session_id, target_participant_generation,
+      tenant_id, space_id, episode_id, external_operation_id, request_key,
+      request_fingerprint, operation_name, actor_participant_id,
+      actor_generation, target_participant_id, target_participant_generation,
       source, recording_id, deadline_generation, journey_id, parent_journey_event_id,
       producing_trace_id, producing_span_id, payload, fence_active
     ) values (
@@ -735,7 +703,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def insert_pending_operation_receipt do
     """
     insert into sync_command_receipts (
-      tenant_id, session_id, participant_session_id, submitted_generation,
+      tenant_id, episode_id, participant_id, submitted_generation,
       command_id, request_fingerprint, command_name, outcome, external_operation_id
     ) values ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
     """
@@ -743,14 +711,14 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def increment_pending_operation_capacity do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       receipt_count = receipt_count + 1,
       receipt_bytes = receipt_bytes + $4,
       updated_at = now()
     where tenant_id = $1
-      and room_id = $2
-      and session_id = $3
+      and space_id = $2
+      and episode_id = $3
       and receipt_count < 500000
       and receipt_bytes + $4 <= 4294967296
     returning control_revision
@@ -761,7 +729,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select #{external_operation_columns()}
     from sync_external_operations
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4
     """
   end
@@ -773,28 +741,28 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def participant_authority do
     """
     select
-      session.status,
+      episode.status,
       participant.generation,
       participant.status,
       participant.role,
-      session.role_capabilities
-    from room_sessions session
+      participant.capabilities
+    from episodes episode
     left join participants participant
-      on participant.tenant_id = session.tenant_id
-     and participant.room_id = session.room_id
-     and participant.session_id = session.id
+      on participant.tenant_id = episode.tenant_id
+     and participant.space_id = episode.space_id
+     and participant.episode_id = episode.id
      and participant.id = $4
-    where session.tenant_id = $1 and session.room_id = $2 and session.id = $3
-    for share of session
+    where episode.tenant_id = $1 and episode.space_id = $2 and episode.id = $3
+    for share of episode
     """
   end
 
   def select_publication_grant_reservation do
     """
-    select reservation_id, operation_id, participant_session_id,
+    select reservation_id, operation_id, participant_id,
       participant_generation, source, status, failure_code, expires_at
     from sync_publication_grant_reservations
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and operation_id = $4
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and operation_id = $4
     """
   end
 
@@ -804,28 +772,28 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def read_publication_grant_reservation do
     """
-    select reservation_id, operation_id, participant_session_id,
+    select reservation_id, operation_id, participant_id,
       participant_generation, source, status, failure_code, expires_at
     from sync_publication_grant_reservations
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and reservation_id = $4
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and reservation_id = $4
     """
   end
 
   def insert_publication_grant_reservation do
     """
     insert into sync_publication_grant_reservations (
-      tenant_id, room_id, session_id, reservation_id, operation_id,
-      participant_session_id, participant_generation, source, expires_at
+      tenant_id, space_id, episode_id, reservation_id, operation_id,
+      participant_id, participant_generation, source, expires_at
     ) values ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '30 seconds')
-    on conflict (tenant_id, session_id, participant_session_id, source)
+    on conflict (tenant_id, episode_id, participant_id, source)
       where status in ('pending', 'ambiguous') do update
-    set room_id = excluded.room_id, reservation_id = excluded.reservation_id,
+    set space_id = excluded.space_id, reservation_id = excluded.reservation_id,
       operation_id = excluded.operation_id,
       participant_generation = excluded.participant_generation,
       status = 'pending', failure_code = null,
       expires_at = excluded.expires_at, created_at = now(), completed_at = null
     where sync_publication_grant_reservations.expires_at <= now()
-    returning reservation_id, operation_id, participant_session_id,
+    returning reservation_id, operation_id, participant_id,
       participant_generation, source, status, failure_code, expires_at
     """
   end
@@ -836,20 +804,20 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     set status = $5, failure_code = $6,
       completed_at = case when $5 in ('confirmed', 'failed') then now() else null end,
       expires_at = greatest(expires_at, now() + interval '5 minutes')
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and reservation_id = $4 and status in ('pending', 'ambiguous')
-    returning reservation_id, operation_id, participant_session_id,
+    returning reservation_id, operation_id, participant_id,
       participant_generation, source, status, failure_code, expires_at
     """
   end
 
   def lock_active_publication_reservations do
     """
-    select reservation_id, operation_id, participant_session_id,
+    select reservation_id, operation_id, participant_id,
       participant_generation, source, status, failure_code, expires_at
     from sync_publication_grant_reservations
-    where tenant_id = $1 and room_id = $2 and session_id = $3
-      and participant_session_id = $4 and participant_generation = $5
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and participant_id = $4 and participant_generation = $5
       and expires_at > now()
     order by source
     for update
@@ -860,7 +828,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select external_operation_id
     from sync_publication_fences
-    where tenant_id = $1 and session_id = $2 and participant_session_id = $3
+    where tenant_id = $1 and episode_id = $2 and participant_id = $3
       and participant_generation = $4 and source = $5 and expires_at > now()
     for update
     """
@@ -870,7 +838,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select count(*)
     from sync_publication_grant_reservations
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and expires_at > now()
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and expires_at > now()
     """
   end
 
@@ -878,9 +846,9 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select external_operation_id
     from sync_external_operations
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and operation_name = 'role_transition_source_stop' and status = 'pending'
-      and target_participant_session_id = $4 and target_participant_generation = $5
+      and target_participant_id = $4 and target_participant_generation = $5
       and source = $6
     order by created_at, external_operation_id
     for update
@@ -897,7 +865,6 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     operation_name in (
       'deny_admission',
       'admission_request_expired',
-      'tenant_transfer_host',
       'tenant_set_deadline'
     )
     """)
@@ -919,8 +886,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
               select 1
               from sync_publication_grant_reservations reservation
               where reservation.tenant_id = sync_external_operations.tenant_id
-                and reservation.session_id = sync_external_operations.session_id
-                and reservation.participant_session_id = sync_external_operations.target_participant_session_id
+                and reservation.episode_id = sync_external_operations.episode_id
+                and reservation.participant_id = sync_external_operations.target_participant_id
                 and reservation.participant_generation = sync_external_operations.target_participant_generation
                 and reservation.source = sync_external_operations.source
                 and reservation.status in ('pending', 'ambiguous')
@@ -933,20 +900,20 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
               select 1
               from sync_publication_grant_reservations reservation
               where reservation.tenant_id = sync_external_operations.tenant_id
-                and reservation.session_id = sync_external_operations.session_id
-                and reservation.participant_session_id = sync_external_operations.target_participant_session_id
+                and reservation.episode_id = sync_external_operations.episode_id
+                and reservation.participant_id = sync_external_operations.target_participant_id
                 and reservation.participant_generation = sync_external_operations.target_participant_generation
                 and reservation.status in ('pending', 'ambiguous')
                 and reservation.expires_at > now()
             )
           )
           or (
-            operation_name in ('end_session', 'tenant_end_session', 'maximum_duration_expired')
+            operation_name in ('end_episode', 'tenant_end_episode', 'maximum_duration_expired')
             and not exists (
               select 1
               from sync_publication_grant_reservations reservation
               where reservation.tenant_id = sync_external_operations.tenant_id
-                and reservation.session_id = sync_external_operations.session_id
+                and reservation.episode_id = sync_external_operations.episode_id
                 and reservation.status in ('pending', 'ambiguous')
                 and reservation.expires_at > now()
             )
@@ -955,7 +922,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
             source is null
             and operation_name not in (
               'remove_participant', 'participant_leave',
-              'end_session', 'tenant_end_session', 'maximum_duration_expired'
+              'end_episode', 'tenant_end_episode', 'maximum_duration_expired'
             )
           )
         )
@@ -980,9 +947,9 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def insert_role_transition_parent do
     """
     insert into sync_external_operations (
-      tenant_id, room_id, session_id, external_operation_id, request_key,
-      request_fingerprint, operation_name, actor_participant_session_id,
-      actor_generation, target_participant_session_id, target_participant_generation,
+      tenant_id, space_id, episode_id, external_operation_id, request_key,
+      request_fingerprint, operation_name, actor_participant_id,
+      actor_generation, target_participant_id, target_participant_generation,
       payload, fence_active
     ) values ($1, $2, $3, $4, $5, $6, 'role_transition_cleanup', $7, $8, $9, $10, $11, true)
     """
@@ -991,9 +958,9 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def insert_role_transition_child do
     """
     insert into sync_external_operations (
-      tenant_id, room_id, session_id, external_operation_id, parent_external_operation_id,
+      tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id,
       request_key, request_fingerprint, operation_name,
-      target_participant_session_id, target_participant_generation, source, payload
+      target_participant_id, target_participant_generation, source, payload
     ) values ($1, $2, $3, $4, $5, $6, $7, 'role_transition_source_stop', $8, $9, $10, $11)
     """
   end
@@ -1001,7 +968,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def insert_pending_role_transition_receipt do
     """
     insert into sync_command_receipts (
-      tenant_id, session_id, participant_session_id, submitted_generation,
+      tenant_id, episode_id, participant_id, submitted_generation,
       command_id, request_fingerprint, command_name, outcome, external_operation_id,
       event_id, resulting_revision, resulting_state_digest
     ) values ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11)
@@ -1012,7 +979,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_external_operations
     set status = 'applied', completed_at = now(), last_error_code = null
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4 and operation_name = 'role_transition_source_stop'
       and status = 'pending'
     returning parent_external_operation_id
@@ -1023,7 +990,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_external_operations
     set status = 'failed', completed_at = now(), last_error_code = $5
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4 and operation_name = 'role_transition_source_stop'
       and status = 'pending'
     returning parent_external_operation_id
@@ -1034,7 +1001,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select #{external_operation_columns()}
     from sync_external_operations
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4 and operation_name = 'role_transition_cleanup'
     for update
     """
@@ -1044,7 +1011,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select status
     from sync_external_operations
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and parent_external_operation_id = $4
     order by source
     for update
@@ -1055,7 +1022,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_external_operations
     set status = 'applied', fence_active = false, completed_at = now(), last_error_code = null
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4 and operation_name = 'role_transition_cleanup'
       and status = 'pending'
     returning external_operation_id
@@ -1066,7 +1033,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_external_operations
     set status = 'failed', last_error_code = $5, completed_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4 and operation_name = 'role_transition_cleanup'
       and status = 'pending'
     returning external_operation_id
@@ -1077,7 +1044,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_command_receipts
     set outcome = 'committed', completed_at = now()
-    where tenant_id = $1 and session_id = $2 and external_operation_id = $3
+    where tenant_id = $1 and episode_id = $2 and external_operation_id = $3
       and outcome = 'pending'
     returning command_id
     """
@@ -1087,7 +1054,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_command_receipts
     set outcome = 'rejected', rejection_reason = 'external_operation_failed', completed_at = now()
-    where tenant_id = $1 and session_id = $2 and external_operation_id = $3
+    where tenant_id = $1 and episode_id = $2 and external_operation_id = $3
       and outcome = 'pending'
     returning command_id
     """
@@ -1097,15 +1064,14 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select
       admission_request_id,
-      participant_session_id,
+      participant_id,
       display_name,
-      initial_role,
-      eligible_roles,
+      role,
       status,
       expires_at,
       decision_external_operation_id
     from sync_admission_requests
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and admission_request_id = $4
     for update
     """
@@ -1113,19 +1079,19 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def lock_admission_participant do
     """
-    select generation, status, name, role, eligible_roles
+    select generation, status, name, role, capabilities
     from participants
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4
     for update
     """
   end
 
   def lock_admission_lifecycle_intent do
     """
-    select lifecycle_intent_id, status, participant_session_generation
+    select lifecycle_intent_id, status, participant_generation
     from sync_lifecycle_intents
-    where tenant_id = $1 and room_id = $2 and session_id = $3
-      and participant_session_id = $4
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and participant_id = $4
       and intent_name = 'participant_joined'
     for update
     """
@@ -1135,10 +1101,10 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_admission_requests
     set decision_external_operation_id = $5
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and admission_request_id = $4 and status = 'pending'
       and decision_external_operation_id is null
-    returning participant_session_id
+    returning participant_id
     """
   end
 
@@ -1146,10 +1112,10 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_admission_requests
     set decision_external_operation_id = null
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and admission_request_id = $4 and status = 'pending'
       and decision_external_operation_id = $5
-    returning participant_session_id
+    returning participant_id
     """
   end
 
@@ -1157,10 +1123,10 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_admission_requests
     set status = $5, completed_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and admission_request_id = $4 and status = 'pending'
       and decision_external_operation_id = $6
-    returning participant_session_id
+    returning participant_id
     """
   end
 
@@ -1170,8 +1136,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     set
       status = 'superseded', terminal_reason = 'participant_already_terminal',
       completed_at = now(), last_error_code = null
-    where tenant_id = $1 and room_id = $2 and session_id = $3
-      and participant_session_id = $4 and intent_name = 'participant_joined'
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and participant_id = $4 and intent_name = 'participant_joined'
       and status = 'pending'
     """
   end
@@ -1180,7 +1146,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update participants
     set status = 'left', left_at = now(), updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and status = 'joining'
     """
   end
@@ -1188,12 +1154,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def insert_publication_fence do
     """
     insert into sync_publication_fences (
-      tenant_id, room_id, session_id, participant_session_id,
+      tenant_id, space_id, episode_id, participant_id,
       participant_generation, source, external_operation_id, expires_at
     ) values ($1, $2, $3, $4, $5, $6, $7, now() + interval '5 minutes')
-    on conflict (tenant_id, session_id, participant_session_id, source) do update
+    on conflict (tenant_id, episode_id, participant_id, source) do update
     set
-      room_id = excluded.room_id,
+      space_id = excluded.space_id,
       participant_generation = excluded.participant_generation,
       external_operation_id = excluded.external_operation_id,
       expires_at = excluded.expires_at,
@@ -1206,16 +1172,16 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def delete_operation_fences do
     """
     delete from sync_publication_fences
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4
     """
   end
 
   def lock_active_participants do
     """
-    select id, generation, role, eligible_roles
+    select id, generation, role, capabilities
     from participants
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and status in ('active', 'leaving')
     order by id
     for update
@@ -1226,7 +1192,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update participants
     set status = 'leaving', updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'active'
     returning id
     """
@@ -1236,7 +1202,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update participants
     set status = 'active', updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'leaving'
     returning id
     """
@@ -1246,60 +1212,60 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update participants
     set status = 'left', left_at = now(), updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'leaving'
-    returning id, user_id, room_id, session_id, name, status, joined_at, left_at, updated_at
+    returning id, identity_id, space_id, episode_id, name, status, joined_at, left_at, updated_at
     """
   end
 
-  def mark_session_ending do
+  def mark_episode_ending do
     """
-    update room_sessions
+    update episodes
     set status = 'ending', updated_at = now()
-    where tenant_id = $1 and room_id = $2 and id = $3 and status = 'active'
+    where tenant_id = $1 and space_id = $2 and id = $3 and status = 'active'
     returning id
     """
   end
 
-  def restore_session_active do
+  def restore_episode_active do
     """
-    update room_sessions
+    update episodes
     set status = 'active', updated_at = now()
-    where tenant_id = $1 and room_id = $2 and id = $3 and status = 'ending'
+    where tenant_id = $1 and space_id = $2 and id = $3 and status = 'ending'
     returning id
     """
   end
 
-  def complete_external_session do
+  def complete_external_episode do
     """
-    update room_sessions
+    update episodes
     set status = 'ended', ended_at = now(), updated_at = now()
-    where tenant_id = $1 and room_id = $2 and id = $3 and status = 'ending'
-    returning id, room_id, status, started_at, ended_at, created_at, updated_at
+    where tenant_id = $1 and space_id = $2 and id = $3 and status = 'ending'
+    returning id, space_id, status, started_at, ended_at, created_at, updated_at
     """
   end
 
-  def complete_external_session_participants do
+  def complete_external_episode_participants do
     """
     update participants
     set status = 'left', left_at = coalesce(left_at, now()), updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and status <> 'left'
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and status <> 'left'
     """
   end
 
-  def complete_external_session_admissions do
+  def complete_external_episode_admissions do
     """
     update sync_admission_requests
     set status = 'expired', decision_external_operation_id = $4, completed_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and status = 'pending'
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and status = 'pending'
     """
   end
 
-  def complete_external_session_recordings do
+  def complete_external_episode_recordings do
     """
     update sync_recordings
     set status = 'stopped', completed_at = now(), updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and status in ('starting', 'recording', 'stopping')
     """
   end
@@ -1307,8 +1273,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def insert_recording_reservation do
     """
     insert into sync_recordings (
-      tenant_id, room_id, session_id, recording_id, status, generation,
-      started_by_participant_session_id, started_by_generation,
+      tenant_id, space_id, episode_id, recording_id, status, generation,
+      started_by_participant_id, started_by_generation,
       start_external_operation_id
     ) values ($1, $2, $3, $4, 'starting', 1, $5, $6, $7)
     returning recording_id
@@ -1319,7 +1285,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select status, generation, start_external_operation_id, stop_external_operation_id
     from sync_recordings
-    where tenant_id = $1 and room_id = $2 and session_id = $3 and recording_id = $4
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and recording_id = $4
     for update
     """
   end
@@ -1328,7 +1294,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     select recording_id
     from sync_recordings
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and status in ('starting', 'recording', 'stopping')
     for update
     """
@@ -1338,7 +1304,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     """
     update sync_recordings
     set status = 'stopping', stop_external_operation_id = $5, updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and recording_id = $4 and status = 'recording'
       and stop_external_operation_id is null
     returning recording_id
@@ -1353,7 +1319,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       failure_code = $6,
       completed_at = case when $5 in ('stopped', 'failed') then now() else null end,
       updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and recording_id = $4 and status in ('starting', 'stopping')
     returning recording_id
     """
@@ -1362,8 +1328,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
   def insert_external_event do
     """
     insert into sync_control_events (
-      tenant_id, room_id, session_id, event_id, base_revision, revision,
-      event_name, payload, actor_participant_session_id, actor_generation,
+      tenant_id, space_id, episode_id, event_id, base_revision, revision,
+      event_name, payload, actor_participant_id, actor_generation,
       external_operation_id, event_schema_version, resulting_state_digest, encoded_bytes
     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     """
@@ -1371,18 +1337,17 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def update_external_control do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       control_revision = $4,
       folded_state = $5,
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      host_participant_session_id = $10,
       participant_event_count = participant_event_count + 1,
       participant_event_bytes = participant_event_bytes + $9,
       updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and control_revision = $4 - 1
       and $8 + snapshot_reserved_bytes <= 1048576
       and participant_event_count < 250000
@@ -1393,14 +1358,13 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def update_external_end_control do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       control_revision = $4,
       folded_state = $5,
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      host_participant_session_id = $10,
       snapshot_reserved_bytes = 0,
       lifecycle_reserved_events = 0,
       lifecycle_reserved_bytes = 0,
@@ -1409,7 +1373,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       participant_event_count = participant_event_count + 1,
       participant_event_bytes = participant_event_bytes + $9,
       updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and control_revision = $4 - 1
       and $8 <= 1048576
       and participant_event_count < 250000
@@ -1420,21 +1384,20 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
 
   def update_external_admission_control do
     """
-    update sync_session_control
+    update sync_episode_control
     set
       control_revision = $4,
       folded_state = $5,
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      host_participant_session_id = $10,
       snapshot_reserved_bytes = greatest(snapshot_reserved_bytes - 2048, 0),
       lifecycle_reserved_events = greatest(lifecycle_reserved_events - 1, 0),
       lifecycle_reserved_bytes = greatest(lifecycle_reserved_bytes - 16384, 0),
       participant_event_count = participant_event_count + 1,
       participant_event_bytes = participant_event_bytes + $9,
       updated_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and control_revision = $4 - 1
       and $8 + greatest(snapshot_reserved_bytes - 2048, 0) <= 1048576
       and participant_event_count < 250000
@@ -1449,7 +1412,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     set
       status = 'applied', fence_active = false, last_error_code = null,
       applied_event_id = $5, applied_revision = $6, completed_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4 and status = 'pending'
     returning external_operation_id
     """
@@ -1461,7 +1424,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     set
       status = 'failed', fence_active = false, last_error_code = $5,
       applied_event_id = null, applied_revision = null, completed_at = now()
-    where tenant_id = $1 and room_id = $2 and session_id = $3
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
       and external_operation_id = $4 and status = 'pending'
     returning external_operation_id
     """
@@ -1473,7 +1436,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     set
       outcome = 'committed', event_id = $6, resulting_revision = $7,
       resulting_state_digest = $8, completed_at = now()
-    where tenant_id = $1 and session_id = $2 and participant_session_id = $3
+    where tenant_id = $1 and episode_id = $2 and participant_id = $3
       and command_id = $4 and external_operation_id = $5 and outcome = 'pending'
     returning command_id
     """
@@ -1485,73 +1448,50 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
     set
       outcome = 'rejected', rejection_reason = 'external_operation_failed',
       completed_at = now()
-    where tenant_id = $1 and session_id = $2 and participant_session_id = $3
+    where tenant_id = $1 and episode_id = $2 and participant_id = $3
       and command_id = $4 and external_operation_id = $5 and outcome = 'pending'
     returning command_id
     """
   end
 
-  def update_session_deadline do
+  def update_episode_deadline do
     """
-    update room_sessions
+    update episodes
     set
       deadline_at = to_timestamp($4::double precision / 1000.0),
-      maximum_duration_seconds = least(
-        maximum_duration_ceiling_seconds,
-        greatest(60, ceil($4::double precision / 1000.0 - extract(epoch from created_at))::integer)
-      ),
       deadline_generation = $5,
       updated_at = now()
-    where tenant_id = $1 and room_id = $2 and id = $3
+    where tenant_id = $1 and space_id = $2 and id = $3
       and status = 'active' and deadline_generation = $5 - 1
       and to_timestamp($4::double precision / 1000.0)
-          <= created_at + make_interval(secs => maximum_duration_ceiling_seconds)
+          <= created_at + make_interval(
+            secs => (config_snapshot ->> 'maximum_episode_duration_seconds')::integer
+          )
     returning id
-    """
-  end
-
-  def transfer_host_products do
-    """
-    with old_host as (
-      update participants
-      set role = 'cohost', updated_at = now()
-      where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $4
-        and status in ('active', 'leaving') and role = 'host'
-        and 'cohost' = any(eligible_roles)
-      returning id
-    ), new_host as (
-      update participants
-      set role = 'host', updated_at = now()
-      where tenant_id = $1 and room_id = $2 and session_id = $3 and id = $5
-        and status = 'active' and role <> 'host' and 'host' = any(eligible_roles)
-        and exists (select 1 from old_host)
-      returning id
-    )
-    select id from new_host
     """
   end
 
   def release_screen_share_lease do
     """
     delete from sync_screen_share_leases
-    where tenant_id = $1 and room_id = $2 and session_id = $3
-      and owner_participant_session_id = $4 and owner_generation = $5
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and owner_participant_id = $4 and owner_generation = $5
     """
   end
 
   defp external_operation_columns(prefix \\ nil) do
     columns = [
       "tenant_id",
-      "room_id",
-      "session_id",
+      "space_id",
+      "episode_id",
       "external_operation_id",
       "parent_external_operation_id",
       "request_key",
       "request_fingerprint",
       "operation_name",
-      "actor_participant_session_id",
+      "actor_participant_id",
       "actor_generation",
-      "target_participant_session_id",
+      "target_participant_id",
       "target_participant_generation",
       "source",
       "recording_id",

@@ -34,10 +34,10 @@ test("Chalk adapter wires the core DAG and bootstrap boundaries without logging 
     const url = new URL(input);
     if (url.pathname.endsWith("/readyz")) return response(200, { status: "ready" });
     if (init.method === "POST" && url.pathname === "/v1/tenants") return response(201, { id: "tenant-1", name: "Chalk local dev runtime" });
-    if (init.method === "POST" && url.pathname.endsWith("/rooms")) return response(201, { id: "space-1", slug: "chalk-local-runtime" });
+    if (init.method === "POST" && url.pathname.endsWith("/spaces")) return response(201, { id: "space-1", slug: "chalk-local-runtime" });
     if (init.method === "POST" && url.pathname.endsWith("/api-keys")) return response(201, { api_key: { id: "key-1" }, secret: "broker-secret-value" });
     if (url.pathname.endsWith("/tenants")) return response(200, { tenants: [] });
-    if (url.pathname.endsWith("/rooms")) return response(200, { rooms: [] });
+    if (url.pathname.endsWith("/spaces")) return response(200, { spaces: [] });
     if (url.pathname.endsWith("/api-keys")) return response(200, { api_keys: [] });
     return response(404, {});
   };

@@ -9,15 +9,15 @@ import (
 
 var (
 	ErrInvalidProvider          = errors.New("invalid media plane provider")
-	ErrInvalidSessionKey        = errors.New("invalid media session key")
-	ErrInvalidSessionRef        = errors.New("invalid media session ref")
+	ErrInvalidEpisodeKey        = errors.New("invalid media episode key")
+	ErrInvalidEpisodeRef        = errors.New("invalid media episode ref")
 	ErrInvalidParticipantName   = errors.New("invalid media participant name")
 	ErrInvalidParticipantRef    = errors.New("invalid media participant ref")
 	ErrInvalidParticipantPreset = errors.New("invalid media participant preset")
 	ErrInvalidConnectionRef     = errors.New("invalid media connection ref")
 	ErrPlaneUnavailable         = errors.New("media plane unavailable")
 	ErrUnsupportedOperation     = errors.New("media plane operation unsupported")
-	ErrSessionNotFound          = errors.New("media session not found")
+	ErrEpisodeNotFound          = errors.New("media episode not found")
 	ErrParticipantNotFound      = errors.New("media participant not found")
 	ErrProviderUnauthorized     = errors.New("media provider unauthorized")
 	ErrProviderRateLimited      = errors.New("media provider rate limited")
@@ -34,11 +34,11 @@ const (
 )
 
 type Plane interface {
-	EnsureSession(ctx context.Context, input EnsureSessionInput) (Session, error)
+	EnsureEpisode(ctx context.Context, input EnsureEpisodeInput) (Episode, error)
 	CreateJoin(ctx context.Context, input CreateJoinInput) (Join, error)
 	RemoveParticipant(ctx context.Context, input RemoveParticipantInput) error
-	EndSession(ctx context.Context, input EndSessionInput) error
-	SessionUsage(ctx context.Context, input SessionUsageInput) (Usage, error)
+	EndEpisode(ctx context.Context, input EndEpisodeInput) error
+	EpisodeUsage(ctx context.Context, input EpisodeUsageInput) (Usage, error)
 }
 
 type JoinResumer interface {
@@ -50,16 +50,16 @@ type Service struct {
 	provider Provider
 }
 
-type EnsureSessionInput struct {
+type EnsureEpisodeInput struct {
 	Provider   Provider
-	SessionKey string
+	EpisodeKey string
 	Title      string
 	Metadata   map[string]string
 }
 
 type CreateJoinInput struct {
 	Provider              Provider
-	Session               Session
+	Episode               Episode
 	ParticipantName       string
 	ExternalParticipantID string
 	ParticipantPreset     string
@@ -68,28 +68,28 @@ type CreateJoinInput struct {
 
 type ResumeJoinInput struct {
 	Provider              Provider
-	Session               Session
+	Episode               Episode
 	ExternalParticipantID string
 	ConnectionRef         string
 }
 
 type RemoveParticipantInput struct {
 	Provider       Provider
-	SessionRef     string
+	EpisodeRef     string
 	ParticipantRef string
 }
 
-type EndSessionInput struct {
+type EndEpisodeInput struct {
 	Provider   Provider
-	SessionRef string
+	EpisodeRef string
 }
 
-type SessionUsageInput struct {
+type EpisodeUsageInput struct {
 	Provider   Provider
-	SessionRef string
+	EpisodeRef string
 }
 
-type Session struct {
+type Episode struct {
 	Provider Provider
 	Ref      string
 	Metadata map[string]string
@@ -122,15 +122,15 @@ func (s Service) Provider() Provider {
 	return s.provider
 }
 
-func (s Service) EnsureSession(ctx context.Context, input EnsureSessionInput) (Session, error) {
+func (s Service) EnsureEpisode(ctx context.Context, input EnsureEpisodeInput) (Episode, error) {
 	if s.plane == nil {
-		return Session{}, ErrPlaneUnavailable
+		return Episode{}, ErrPlaneUnavailable
 	}
-	if err := requireSessionBootstrapInput(&input); err != nil {
-		return Session{}, err
+	if err := requireEpisodeBootstrapInput(&input); err != nil {
+		return Episode{}, err
 	}
 
-	return s.plane.EnsureSession(ctx, input)
+	return s.plane.EnsureEpisode(ctx, input)
 }
 
 func (s Service) CreateJoin(ctx context.Context, input CreateJoinInput) (Join, error) {
@@ -170,43 +170,43 @@ func (s Service) RemoveParticipant(ctx context.Context, input RemoveParticipantI
 	return s.plane.RemoveParticipant(ctx, input)
 }
 
-func (s Service) EndSession(ctx context.Context, input EndSessionInput) error {
+func (s Service) EndEpisode(ctx context.Context, input EndEpisodeInput) error {
 	if s.plane == nil {
 		return ErrPlaneUnavailable
 	}
-	if err := requireSessionEndInput(&input); err != nil {
+	if err := requireEpisodeEndInput(&input); err != nil {
 		return err
 	}
 
-	return s.plane.EndSession(ctx, input)
+	return s.plane.EndEpisode(ctx, input)
 }
 
-func (s Service) SessionUsage(ctx context.Context, input SessionUsageInput) (Usage, error) {
+func (s Service) EpisodeUsage(ctx context.Context, input EpisodeUsageInput) (Usage, error) {
 	if s.plane == nil {
 		return Usage{}, ErrPlaneUnavailable
 	}
-	if err := requireSessionUsageInput(&input); err != nil {
+	if err := requireEpisodeUsageInput(&input); err != nil {
 		return Usage{}, err
 	}
 
-	return s.plane.SessionUsage(ctx, input)
+	return s.plane.EpisodeUsage(ctx, input)
 }
 
-func requireSessionBootstrapInput(input *EnsureSessionInput) error {
+func requireEpisodeBootstrapInput(input *EnsureEpisodeInput) error {
 	if !validProvider(input.Provider) {
 		return ErrInvalidProvider
 	}
 
-	key, err := requiredString(input.SessionKey)
+	key, err := requiredString(input.EpisodeKey)
 	if err != nil {
-		return ErrInvalidSessionKey
+		return ErrInvalidEpisodeKey
 	}
-	input.SessionKey = key
+	input.EpisodeKey = key
 
 	if input.Title != "" {
 		title, err := requiredString(input.Title)
 		if err != nil {
-			return ErrInvalidSessionKey
+			return ErrInvalidEpisodeKey
 		}
 		input.Title = title
 	}
@@ -215,15 +215,15 @@ func requireSessionBootstrapInput(input *EnsureSessionInput) error {
 }
 
 func requireJoinInput(input *CreateJoinInput) error {
-	if !validProvider(input.Provider) || input.Session.Provider != input.Provider {
+	if !validProvider(input.Provider) || input.Episode.Provider != input.Provider {
 		return ErrInvalidProvider
 	}
 
-	sessionRef, err := requiredString(input.Session.Ref)
+	episodeRef, err := requiredString(input.Episode.Ref)
 	if err != nil {
-		return ErrInvalidSessionRef
+		return ErrInvalidEpisodeRef
 	}
-	input.Session.Ref = sessionRef
+	input.Episode.Ref = episodeRef
 
 	name, err := requiredString(input.ParticipantName)
 	if err != nil {
@@ -249,15 +249,15 @@ func requireJoinInput(input *CreateJoinInput) error {
 }
 
 func requireResumeJoinInput(input *ResumeJoinInput, provider Provider) error {
-	if !validProvider(input.Provider) || input.Session.Provider != input.Provider || (provider != "" && input.Provider != provider) {
+	if !validProvider(input.Provider) || input.Episode.Provider != input.Provider || (provider != "" && input.Provider != provider) {
 		return ErrInvalidProvider
 	}
 
-	sessionRef, err := requiredString(input.Session.Ref)
+	episodeRef, err := requiredString(input.Episode.Ref)
 	if err != nil {
-		return ErrInvalidSessionRef
+		return ErrInvalidEpisodeRef
 	}
-	input.Session.Ref = sessionRef
+	input.Episode.Ref = episodeRef
 
 	participantID, err := requiredString(input.ExternalParticipantID)
 	if err != nil {
@@ -279,11 +279,11 @@ func requireParticipantRemovalInput(input *RemoveParticipantInput) error {
 		return ErrInvalidProvider
 	}
 
-	sessionRef, err := requiredString(input.SessionRef)
+	episodeRef, err := requiredString(input.EpisodeRef)
 	if err != nil {
-		return ErrInvalidSessionRef
+		return ErrInvalidEpisodeRef
 	}
-	input.SessionRef = sessionRef
+	input.EpisodeRef = episodeRef
 
 	participantRef, err := requiredString(input.ParticipantRef)
 	if err != nil {
@@ -294,30 +294,30 @@ func requireParticipantRemovalInput(input *RemoveParticipantInput) error {
 	return nil
 }
 
-func requireSessionEndInput(input *EndSessionInput) error {
+func requireEpisodeEndInput(input *EndEpisodeInput) error {
 	if !validProvider(input.Provider) {
 		return ErrInvalidProvider
 	}
 
-	sessionRef, err := requiredString(input.SessionRef)
+	episodeRef, err := requiredString(input.EpisodeRef)
 	if err != nil {
-		return ErrInvalidSessionRef
+		return ErrInvalidEpisodeRef
 	}
-	input.SessionRef = sessionRef
+	input.EpisodeRef = episodeRef
 
 	return nil
 }
 
-func requireSessionUsageInput(input *SessionUsageInput) error {
+func requireEpisodeUsageInput(input *EpisodeUsageInput) error {
 	if !validProvider(input.Provider) {
 		return ErrInvalidProvider
 	}
 
-	sessionRef, err := requiredString(input.SessionRef)
+	episodeRef, err := requiredString(input.EpisodeRef)
 	if err != nil {
-		return ErrInvalidSessionRef
+		return ErrInvalidEpisodeRef
 	}
-	input.SessionRef = sessionRef
+	input.EpisodeRef = episodeRef
 
 	return nil
 }

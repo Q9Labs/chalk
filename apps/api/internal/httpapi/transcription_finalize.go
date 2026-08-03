@@ -68,7 +68,7 @@ type finalizerClaimResponse struct {
 type finalizerAssignmentResponse struct {
 	JobID                 string                   `json:"job_id"`
 	TranscriptID          string                   `json:"transcript_id"`
-	SessionID             string                   `json:"session_id"`
+	EpisodeID             string                   `json:"episode_id"`
 	Attempt               int                      `json:"attempt"`
 	LeaseToken            string                   `json:"lease_token"`
 	LeaseExpiresAt        string                   `json:"lease_expires_at"`
@@ -84,19 +84,19 @@ type finalizerChunkResponse struct {
 	InputContentType  string `json:"input_content_type"`
 	InputSizeBytes    int64  `json:"input_size_bytes"`
 	InputSHA256       string `json:"input_sha256"`
-	MeetingStartMS    int64  `json:"meeting_start_ms"`
-	MeetingEndMS      int64  `json:"meeting_end_ms"`
+	EpisodeStartMS    int64  `json:"episode_start_ms"`
+	EpisodeEndMS      int64  `json:"episode_end_ms"`
 }
 
 func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth WorkloadAuthorizer, authority FinalizerAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		var body finalizerClaimBody
 		if err := decodeJSON(r, &body); err != nil || body.BatchSize < 1 || body.BatchSize > 100 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid finalizer batch size")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid finalizer batch size")
 			return
 		}
 		assignments := make([]finalizerAssignmentResponse, 0, body.BatchSize)
@@ -115,10 +115,10 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 			for _, chunk := range assignment.Chunks {
 				url, urlErr := authority.CreateResultGETURL(r.Context(), FinalizerChunkGETURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: chunk.ResultKey, ExpiresIn: ttl})
 				if urlErr != nil {
-					writeError(w, http.StatusServiceUnavailable, "workload_authority_unavailable", "Finalizer authority unavailable")
+					writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Finalizer authority unavailable")
 					return
 				}
-				chunks = append(chunks, finalizerChunkResponse{ChunkID: chunk.ID.String(), InputURL: url, InputURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), InputContentType: chunk.ResultContentType, InputSizeBytes: chunk.ResultSize, InputSHA256: hex.EncodeToString(chunk.ResultSHA256), MeetingStartMS: chunk.StartMS, MeetingEndMS: chunk.EndMS})
+				chunks = append(chunks, finalizerChunkResponse{ChunkID: chunk.ID.String(), InputURL: url, InputURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), InputContentType: chunk.ResultContentType, InputSizeBytes: chunk.ResultSize, InputSHA256: hex.EncodeToString(chunk.ResultSHA256), EpisodeStartMS: chunk.StartMS, EpisodeEndMS: chunk.EndMS})
 			}
 			lease := transcripts.LeaseInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: assignment.LeaseToken, Now: now}
 			key, keyErr := service.FinalizerKey(r.Context(), lease)
@@ -128,14 +128,14 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 			}
 			outputURL, err := authority.CreateFinalArtifactPUTURL(r.Context(), FinalizerPUTURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: key, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: ttl})
 			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "workload_authority_unavailable", "Finalizer authority unavailable")
+				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Finalizer authority unavailable")
 				return
 			}
 			leaseExpiresAt := ""
 			if assignment.Job.LeaseExpiresAt != nil {
 				leaseExpiresAt = utilities.FormatTimestamp(*assignment.Job.LeaseExpiresAt)
 			}
-			assignments = append(assignments, finalizerAssignmentResponse{JobID: assignment.Job.ID.String(), TranscriptID: assignment.Transcript.ID.String(), SessionID: assignment.Transcript.SessionID.String(), Attempt: assignment.Job.Attempt, LeaseToken: assignment.LeaseToken, LeaseExpiresAt: leaseExpiresAt, Chunks: chunks, OutputPutURL: outputURL, OutputPutURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), OutputContentType: "application/json"})
+			assignments = append(assignments, finalizerAssignmentResponse{JobID: assignment.Job.ID.String(), TranscriptID: assignment.Transcript.ID.String(), EpisodeID: assignment.Transcript.EpisodeID.String(), Attempt: assignment.Job.Attempt, LeaseToken: assignment.LeaseToken, LeaseExpiresAt: leaseExpiresAt, Chunks: chunks, OutputPutURL: outputURL, OutputPutURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), OutputContentType: "application/json"})
 		}
 		writeJSON(w, http.StatusOK, finalizerClaimResponse{Assignments: assignments})
 	}
@@ -160,22 +160,22 @@ type finalizerCompleteBody struct {
 func finalizerCompleteHandler(service TranscriptFinalizerWorkerService, auth WorkloadAuthorizer, authority FinalizerAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		var body finalizerCompleteBody
 		if err := decodeJSON(r, &body); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid finalizer completion")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid finalizer completion")
 			return
 		}
 		jobID, err := utilities.ParseID(body.JobID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid finalizer job id")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid finalizer job id")
 			return
 		}
 		checksum, err := decodeChecksum(body.ResultSHA256)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid finalizer checksum")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid finalizer checksum")
 			return
 		}
 		lease := transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}
@@ -185,7 +185,7 @@ func finalizerCompleteHandler(service TranscriptFinalizerWorkerService, auth Wor
 			return
 		}
 		if err := authority.VerifyFinalArtifact(r.Context(), FinalizerObjectVerification{JobID: jobID, Attempt: body.Attempt, Key: key, ContentType: body.ContentType, Size: body.ResultSizeBytes, SHA256: checksum}); err != nil {
-			writeError(w, http.StatusBadGateway, "final_artifact_verification_failed", "Final artifact verification failed")
+			writeError(w, http.StatusBadGateway, "artifact.verification_failed", "Final artifact verification failed")
 			return
 		}
 		transcript, err := service.CompleteFinalizer(r.Context(), transcripts.FinalizerCompleteInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Provider: body.Provider, Model: body.Model, VersionContract: body.VersionContract, ExecutionIdentity: body.ExecutionIdentity, ProviderRequestID: body.ProviderRequestID, Languages: body.Languages, ArtifactSHA256: checksum, ArtifactSize: body.ResultSizeBytes, ArtifactContentType: body.ContentType, Quality: body.Quality, Now: time.Now()})
@@ -209,24 +209,24 @@ type finalizerRetryBody struct {
 func finalizerRetryHandler(service TranscriptFinalizerWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload_unauthorized", "Workload authorization failed")
+			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 			return
 		}
 		var body finalizerRetryBody
 		if err := decodeJSON(r, &body); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid finalizer retry")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid finalizer retry")
 			return
 		}
 		jobID, err := utilities.ParseID(body.JobID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid finalizer job id")
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid finalizer job id")
 			return
 		}
 		dueAt := time.Now()
 		if body.RetryAt != "" {
 			dueAt, err = time.Parse(time.RFC3339Nano, body.RetryAt)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", "Invalid retry time")
+				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid retry time")
 				return
 			}
 		}

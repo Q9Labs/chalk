@@ -38,30 +38,30 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	}
 
 	tenantID := mustProviderOperationID(t)
-	roomID := mustProviderOperationID(t)
-	sessionID := mustProviderOperationID(t)
+	spaceID := mustProviderOperationID(t)
+	episodeID := mustProviderOperationID(t)
 	if _, err := pool.Exec(ctx, `insert into tenants (id, name) values ($1, 'provider operation integration')`, tenantID.Bytes()); err != nil {
 		t.Fatalf("seed tenant: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `insert into rooms (id, name, tenant_id, status, slug, media_plane) values ($1, 'provider operation integration', $2, 'active', $3, 'cf_sfu')`, roomID.Bytes(), tenantID.Bytes(), "provider-operation-"+roomID.String()[:8]); err != nil {
-		t.Fatalf("seed room: %v", err)
+	if _, err := pool.Exec(ctx, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, 'provider operation integration', $2, $3, 'cf_sfu')`, spaceID.Bytes(), tenantID.Bytes(), "provider-operation-"+spaceID.String()[:8]); err != nil {
+		t.Fatalf("seed space: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `insert into room_sessions (id, status, room_id, tenant_id) values ($1, 'active', $2, $3)`, sessionID.Bytes(), roomID.Bytes(), tenantID.Bytes()); err != nil {
-		t.Fatalf("seed session: %v", err)
+	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb)`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
+		t.Fatalf("seed episode: %v", err)
 	}
 	defer func() {
 		_, _ = pool.Exec(ctx, `delete from provider_operation_observations where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from provider_operation_observation_heads where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from provider_operation_receipts where tenant_id = $1`, tenantID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from room_sessions where id = $1`, sessionID.Bytes())
-		_, _ = pool.Exec(ctx, `delete from rooms where id = $1`, roomID.Bytes())
+		_, _ = pool.Exec(ctx, `delete from episodes where id = $1`, episodeID.Bytes())
+		_, _ = pool.Exec(ctx, `delete from spaces where id = $1`, spaceID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from tenants where id = $1`, tenantID.Bytes())
 	}()
 
 	repository := NewProviderOperationRepositoryWithPool(pool)
 	input := provideroperations.OperationInput{
 		OperationID: "provider-operation-0001", Effect: provideroperations.EffectGrantPublication,
-		TenantID: tenantID, SessionID: sessionID, ParticipantSessionID: mustProviderOperationID(t), PublicationSource: "camera",
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: mustProviderOperationID(t), PublicationSource: "camera",
 	}
 	prepared, err := repository.Prepare(ctx, input)
 	if err != nil {
@@ -95,7 +95,7 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 		t.Fatalf("ambiguous completion = %v", err)
 	}
 
-	observationInput := provideroperations.ObservationInput{TenantID: tenantID, SessionID: sessionID, Incarnation: 1, Sequence: 1, Publications: []provideroperations.Publication{{ParticipantSessionID: input.ParticipantSessionID, Source: "camera", Enabled: true, PublicationID: "session-1|camera-track"}}}
+	observationInput := provideroperations.ObservationInput{TenantID: tenantID, EpisodeID: episodeID, Incarnation: 1, Sequence: 1, Publications: []provideroperations.Publication{{ParticipantID: input.ParticipantID, Source: "camera", Enabled: true, PublicationID: "episode-1|camera-track"}}}
 	if _, err := repository.AppendObservation(ctx, observationInput); err != nil {
 		t.Fatalf("append observation: %v", err)
 	}
@@ -121,11 +121,11 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	}
 	removedObservation := observationInput
 	removedObservation.Sequence = 2
-	removedObservation.Publications = []provideroperations.Publication{{ParticipantSessionID: input.ParticipantSessionID, Source: "camera", Enabled: false, PublicationID: ""}}
+	removedObservation.Publications = []provideroperations.Publication{{ParticipantID: input.ParticipantID, Source: "camera", Enabled: false, PublicationID: ""}}
 	if _, err := repository.AppendObservation(ctx, removedObservation); err != nil {
 		t.Fatalf("append publication removal: %v", err)
 	}
-	page, err := repository.ListObservations(ctx, tenantID, sessionID, nil, 10)
+	page, err := repository.ListObservations(ctx, tenantID, episodeID, nil, 10)
 	if err != nil || len(page.Observations) != 2 {
 		t.Fatalf("list observations = %+v, err=%v", page, err)
 	}

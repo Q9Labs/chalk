@@ -142,9 +142,9 @@ async function issueAccess(request, response, url) {
 function participantAccess(user, body) {
   const { connectionId, expiresAt } = recordAccessRequest(user, body);
   return {
-    subject: { tenantId: "fixture-tenant", roomId: "fixture-room", sessionId: "fixture-session", participantSessionId: user, participantGeneration: 1 },
-    sync: { token: token("chalk-sync", user), expiresAt },
-    media: { token: token("chalk-media", user), expiresAt, provider: "cloudflare_sfu", clientPayload: { connectionId, stunServer: "stun:localhost:9" } },
+    subject: { tenant_id: "fixture-tenant", space_id: "fixture-space", episode_id: "fixture-episode", participant_id: user, participant_generation: 1 },
+    sync: { token: token("chalk-sync", user), expires_at: expiresAt },
+    media: { token: token("chalk-media", user), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:localhost:9" } },
   };
 }
 
@@ -208,7 +208,7 @@ function handleCommandMessage(socket, actor, message) {
 }
 
 function handleDirectedRequest(socket, actor, message) {
-  const target = syncSockets.get(message.participantSessionId);
+  const target = syncSockets.get(message.target_participant_id ?? message.participantSessionId);
   if (!target || target.readyState !== target.OPEN) {
     socket.send(JSON.stringify({ type: "directed_request_result", id: message.id, result: { type: "directed_request_result", request_id: message.id, result: "target_unavailable" } }));
     return;
@@ -220,7 +220,7 @@ function handleDirectedRequest(socket, actor, message) {
         type: "directed_request",
         request_id: message.id,
         name: message.name,
-        actor_participant_session_id: actor,
+        actor_participant_id: actor,
         expires_at_ms: Date.now() + 30_000,
       },
     }),
@@ -294,10 +294,19 @@ function leaveParticipant(socket, actor, message) {
   broadcastPeers();
 }
 
-function removeParticipant(socket, _actor, message) {
-  const target = message.payload?.participantSessionId;
-  if (typeof target === "string") removeParticipantState(target);
-  acknowledgeCommand(socket, _actor, message);
+function removeParticipant(socket, actor, message) {
+  const target = removedParticipantID(message);
+  if (target !== null) removeParticipantState(target);
+  acknowledgeCommand(socket, actor, message);
+}
+
+function removedParticipantID(message) {
+  const payload = message.payload;
+  if (!payload) return null;
+  for (const candidate of [payload.participant_id, payload.participantSessionId]) {
+    if (typeof candidate === "string") return candidate;
+  }
+  return null;
 }
 
 function removeParticipantState(target) {

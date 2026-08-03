@@ -8,7 +8,7 @@
   },
   "identity": {
     "credential": "participant-access-token",
-    "authorityKey": ["tenant_id", "room_id", "session_id"],
+    "authorityKey": ["tenant_id", "space_id", "episode_id"],
     "generationFenced": true
   },
   "capabilities": ["drawWhiteboard", "manageWhiteboard"],
@@ -90,14 +90,14 @@
       "exactFields": ["type", "operation_id", "scene_id"]
     },
     "setDrawPermission": {
-      "exactFields": ["type", "operation_id", "participant_session_id", "can_draw"]
+      "exactFields": ["type", "operation_id", "participant_id", "can_draw"]
     },
     "cursor": {
       "clientExactFields": ["type", "x", "y"],
-      "serverExactFields": ["type", "participant_session_id", "display_name", "x", "y", "occurred_at"]
+      "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
     },
     "welcome": {
-      "exactFields": ["type", "protocol", "participant_session_id", "participant_session_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"]
+      "exactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"]
     },
     "snapshotPage": {
       "exactFields": ["type", "request_id", "scene_id", "revision", "page", "page_count", "elements", "app_state"]
@@ -112,7 +112,7 @@
       "exactFields": ["type", "operation_id", "outcome", "scene_id", "revision"]
     },
     "permissionUpdated": {
-      "exactFields": ["type", "participant_session_id", "can_draw"]
+      "exactFields": ["type", "participant_id", "can_draw"]
     },
     "resetRequired": {
       "exactFields": ["type", "scene_id", "reason"]

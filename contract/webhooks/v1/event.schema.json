@@ -14,12 +14,10 @@
   },
   "additionalProperties": true,
   "oneOf": [
-    { "$ref": "#/$defs/roomCreated" },
-    { "$ref": "#/$defs/roomUpdated" },
-    { "$ref": "#/$defs/roomArchived" },
-    { "$ref": "#/$defs/roomRestored" },
-    { "$ref": "#/$defs/sessionStarted" },
-    { "$ref": "#/$defs/sessionEnded" },
+    { "$ref": "#/$defs/spaceCreated" },
+    { "$ref": "#/$defs/spaceUpdated" },
+    { "$ref": "#/$defs/episodeStarted" },
+    { "$ref": "#/$defs/episodeEnded" },
     { "$ref": "#/$defs/participantJoined" },
     { "$ref": "#/$defs/participantLeft" },
     { "$ref": "#/$defs/recordingStarted" },
@@ -60,26 +58,25 @@
         }
       ]
     },
-    "roomObject": {
+    "spaceObject": {
       "type": "object",
-      "required": ["id", "name", "slug", "status", "media_plane", "created_at", "updated_at"],
+      "required": ["id", "name", "slug", "media_plane", "created_at", "updated_at"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
         "name": { "type": "string" },
         "slug": { "type": "string" },
-        "status": { "enum": ["active", "archived"] },
         "media_plane": { "type": "string" },
         "created_at": { "$ref": "#/$defs/timestamp" },
         "updated_at": { "$ref": "#/$defs/timestamp" }
       },
       "additionalProperties": true
     },
-    "sessionObject": {
+    "episodeObject": {
       "type": "object",
-      "required": ["id", "room_id", "status", "started_at", "ended_at", "created_at", "updated_at"],
+      "required": ["id", "space_id", "status", "started_at", "ended_at", "created_at", "updated_at"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
-        "room_id": { "$ref": "#/$defs/uuid" },
+        "space_id": { "$ref": "#/$defs/uuid" },
         "status": { "enum": ["active", "ended"] },
         "started_at": { "$ref": "#/$defs/timestamp" },
         "ended_at": { "$ref": "#/$defs/nullableTimestamp" },
@@ -90,12 +87,12 @@
     },
     "participantObject": {
       "type": "object",
-      "required": ["id", "user_id", "room_id", "session_id", "name", "status", "joined_at", "left_at"],
+      "required": ["id", "identity_id", "space_id", "episode_id", "name", "status", "joined_at", "left_at"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
-        "user_id": { "$ref": "#/$defs/nullableUUID" },
-        "room_id": { "$ref": "#/$defs/uuid" },
-        "session_id": { "$ref": "#/$defs/uuid" },
+        "identity_id": { "$ref": "#/$defs/nullableUUID" },
+        "space_id": { "$ref": "#/$defs/uuid" },
+        "episode_id": { "$ref": "#/$defs/uuid" },
         "name": { "type": ["string", "null"] },
         "status": { "enum": ["active", "left"] },
         "joined_at": { "$ref": "#/$defs/timestamp" },
@@ -105,11 +102,11 @@
     },
     "recordingObject": {
       "type": "object",
-      "required": ["id", "room_id", "session_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      "required": ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
-        "room_id": { "$ref": "#/$defs/uuid" },
-        "session_id": { "$ref": "#/$defs/uuid" },
+        "space_id": { "$ref": "#/$defs/uuid" },
+        "episode_id": { "$ref": "#/$defs/uuid" },
         "status": { "enum": ["started", "completed", "failed"] },
         "started_at": { "$ref": "#/$defs/timestamp" },
         "completed_at": { "$ref": "#/$defs/nullableTimestamp" },
@@ -122,12 +119,12 @@
     },
     "transcriptObject": {
       "type": "object",
-      "required": ["id", "recording_id", "room_id", "session_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
+      "required": ["id", "recording_id", "space_id", "episode_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
         "recording_id": { "$ref": "#/$defs/uuid" },
-        "room_id": { "$ref": "#/$defs/uuid" },
-        "session_id": { "$ref": "#/$defs/uuid" },
+        "space_id": { "$ref": "#/$defs/uuid" },
+        "episode_id": { "$ref": "#/$defs/uuid" },
         "status": { "enum": ["started", "completed", "failed"] },
         "languages": {
           "type": "array",
@@ -143,30 +140,30 @@
       },
       "additionalProperties": true
     },
-    "roomData": {
+    "spaceData": {
       "type": "object",
       "required": ["object"],
-      "properties": { "object": { "$ref": "#/$defs/roomObject" } },
+      "properties": { "object": { "$ref": "#/$defs/spaceObject" } },
       "additionalProperties": true
     },
-    "roomUpdatedData": {
+    "spaceUpdatedData": {
       "type": "object",
       "required": ["object", "changed_fields"],
       "properties": {
-        "object": { "$ref": "#/$defs/roomObject" },
+        "object": { "$ref": "#/$defs/spaceObject" },
         "changed_fields": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["media_plane", "metadata", "name", "recurring_policy", "slug"] }
+          "items": { "enum": ["admission_policy", "default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "metadata", "name", "recurring_policy", "slug"] }
         }
       },
       "additionalProperties": true
     },
-    "sessionData": {
+    "episodeData": {
       "type": "object",
       "required": ["object"],
-      "properties": { "object": { "$ref": "#/$defs/sessionObject" } },
+      "properties": { "object": { "$ref": "#/$defs/episodeObject" } },
       "additionalProperties": true
     },
     "participantData": {
@@ -187,42 +184,26 @@
       "properties": { "object": { "$ref": "#/$defs/transcriptObject" } },
       "additionalProperties": true
     },
-    "roomCreated": { "$ref": "#/$defs/roomCreatedShape" },
-    "roomCreatedShape": {
-      "properties": { "event": { "const": "room.created" }, "data": { "$ref": "#/$defs/roomData" } }
+    "spaceCreated": { "$ref": "#/$defs/spaceCreatedShape" },
+    "spaceCreatedShape": {
+      "properties": { "event": { "const": "space.created" }, "data": { "$ref": "#/$defs/spaceData" } }
     },
-    "roomUpdated": {
-      "properties": { "event": { "const": "room.updated" }, "data": { "$ref": "#/$defs/roomUpdatedData" } }
+    "spaceUpdated": {
+      "properties": { "event": { "const": "space.updated" }, "data": { "$ref": "#/$defs/spaceUpdatedData" } }
     },
-    "roomArchived": {
+    "episodeStarted": {
       "properties": {
-        "event": { "const": "room.archived" },
+        "event": { "const": "episode.started" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/roomData" }, { "properties": { "object": { "properties": { "status": { "const": "archived" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/episodeData" }, { "properties": { "object": { "properties": { "status": { "const": "active" }, "ended_at": { "type": "null" } } } } }]
         }
       }
     },
-    "roomRestored": {
+    "episodeEnded": {
       "properties": {
-        "event": { "const": "room.restored" },
+        "event": { "const": "episode.ended" },
         "data": {
-          "allOf": [{ "$ref": "#/$defs/roomData" }, { "properties": { "object": { "properties": { "status": { "const": "active" } } } } }]
-        }
-      }
-    },
-    "sessionStarted": {
-      "properties": {
-        "event": { "const": "session.started" },
-        "data": {
-          "allOf": [{ "$ref": "#/$defs/sessionData" }, { "properties": { "object": { "properties": { "status": { "const": "active" }, "ended_at": { "type": "null" } } } } }]
-        }
-      }
-    },
-    "sessionEnded": {
-      "properties": {
-        "event": { "const": "session.ended" },
-        "data": {
-          "allOf": [{ "$ref": "#/$defs/sessionData" }, { "properties": { "object": { "properties": { "status": { "const": "ended" }, "ended_at": { "$ref": "#/$defs/timestamp" } } } } }]
+          "allOf": [{ "$ref": "#/$defs/episodeData" }, { "properties": { "object": { "properties": { "status": { "const": "ended" }, "ended_at": { "$ref": "#/$defs/timestamp" } } } } }]
         }
       }
     },

@@ -8,7 +8,7 @@ defmodule ChalkSync.Operations.Metrics do
 
   use GenServer
 
-  alias ChalkSync.Sessions.CommandAdmission
+  alias ChalkSync.Episodes.CommandIntake
 
   @events [
     [:chalk, :sync, :command, :admission],
@@ -36,7 +36,7 @@ defmodule ChalkSync.Operations.Metrics do
   @external_operations ~w(
     mute_participant stop_participant_camera stop_participant_screen_share
     remove_participant participant_leave role_transition_source_stop
-    end_session tenant_end_session maximum_duration_expired
+    end_episode tenant_end_episode maximum_duration_expired
     start_recording stop_recording
   )
   @handler_id __MODULE__
@@ -99,14 +99,14 @@ defmodule ChalkSync.Operations.Metrics do
   end
 
   defp resources do
-    admission = CommandAdmission.stats()
-    supervisor = DynamicSupervisor.count_children(ChalkSync.Sessions.Supervisor)
+    admission = CommandIntake.stats()
+    supervisor = DynamicSupervisor.count_children(ChalkSync.Episodes.Supervisor)
 
     %{
       admitted_command_bytes: admission.node_bytes,
       admitted_commands: admission.node_commands,
-      command_admission_draining: admission.draining?,
-      local_session_coordinators: supervisor.active
+      command_intake_draining: admission.draining?,
+      local_episode_coordinators: supervisor.active
     }
   catch
     :exit, _reason -> %{"status" => "unavailable"}
@@ -125,7 +125,7 @@ defmodule ChalkSync.Operations.Metrics do
        when event in [
               [:chalk, :sync, :webhook, :production],
               [:chalk, :sync, :webhook, :fanout]
-            ] and event_name in ["participant.joined", "participant.left", "session.ended"] and
+            ] and event_name in ["participant.joined", "participant.left", "episode.ended"] and
               api_version == 1,
        do: [String.replace(event_name, ".", "_"), "v1"]
 

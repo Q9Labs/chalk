@@ -2,9 +2,9 @@ defmodule ChalkSync.ProtocolV1Test do
   use ExUnit.Case, async: true
 
   alias ChalkSync.ProtocolV1
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Recovery
-  alias ChalkSync.Stateholder.SessionKey
 
   test "decodes the control stream on a strict delivery acknowledgement" do
     digest = String.duplicate("a", 64)
@@ -20,7 +20,7 @@ defmodule ChalkSync.ProtocolV1Test do
              )
   end
 
-  test "decodes the exact room-actions extension" do
+  test "decodes the exact space-actions extension" do
     streams = %{
       "control" => %{"cursor" => nil},
       "media" => %{"cursor" => nil},
@@ -43,7 +43,7 @@ defmodule ChalkSync.ProtocolV1Test do
              %{
                token: "token",
                cursor: nil,
-               room_actions: %{
+               collaboration: %{
                  after_sequence: "12",
                  retained_floor_sequence: "4"
                }
@@ -56,7 +56,7 @@ defmodule ChalkSync.ProtocolV1Test do
                  "streams" => streams,
                  "extensions" => [
                    %{
-                     "name" => "room_actions_v2",
+                     "name" => "collaboration_v1",
                      "chat_cursor" => %{
                        "after_sequence" => "12",
                        "retained_floor_sequence" => "4"
@@ -67,15 +67,15 @@ defmodule ChalkSync.ProtocolV1Test do
              )
   end
 
-  test "adds the negotiated room-actions policy only to an extended welcome" do
+  test "adds the negotiated space-actions policy only to an extended welcome" do
     identity = %Identity{
-      session: %SessionKey{
+      episode: %EpisodeKey{
         tenant_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c20",
-        room_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
-        session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22"
+        space_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        episode_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22"
       },
-      participant_session_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
-      participant_session_generation: 1
+      participant_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
+      participant_generation: 1
     }
 
     recovery = %Recovery{
@@ -100,10 +100,10 @@ defmodule ChalkSync.ProtocolV1Test do
     refute Map.has_key?(legacy, "extensions")
 
     extension = %{
-      "name" => "room_actions_v2",
+      "name" => "collaboration_v1",
       "capabilities" => ["sendReaction", "sendChat"],
       "participant_capabilities" => %{
-        identity.participant_session_id => ["sendReaction", "sendChat"]
+        identity.participant_id => ["sendReaction", "sendChat"]
       },
       "chat_head_sequence" => "8",
       "retained_floor_sequence" => "2",
@@ -115,7 +115,7 @@ defmodule ChalkSync.ProtocolV1Test do
       |> ProtocolV1.recovery_welcome(
         recovery,
         "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24",
-        %{room_actions_extension: extension}
+        %{collaboration_extension: extension}
       )
       |> JSON.decode!()
 

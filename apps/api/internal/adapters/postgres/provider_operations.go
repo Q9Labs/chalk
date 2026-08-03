@@ -38,16 +38,16 @@ func (r ProviderOperationRepository) Prepare(ctx context.Context, input provider
 		return provideroperations.PrepareResult{}, err
 	}
 	row, err := r.queries.InsertProviderOperationReceipt(ctx, insertProviderOperationReceiptParams{
-		OperationID:                  canonical.Input.OperationID,
-		Effect:                       string(canonical.Input.Effect),
-		TenantID:                     uuid(canonical.Input.TenantID),
-		SessionID:                    uuid(canonical.Input.SessionID),
-		ParticipantSessionID:         uuid(canonical.Input.ParticipantSessionID),
-		ParticipantSessionGeneration: providerOptionalInt8(canonical.Input.ParticipantSessionGeneration),
-		PublicationSource:            providerText(canonical.Input.PublicationSource),
-		RecordingID:                  uuid(canonical.Input.RecordingID),
-		RequestFingerprint:           canonical.Fingerprint[:],
-		RequestPayload:               []byte(canonical.Payload),
+		OperationID:           canonical.Input.OperationID,
+		Effect:                string(canonical.Input.Effect),
+		TenantID:              uuid(canonical.Input.TenantID),
+		EpisodeID:             uuid(canonical.Input.EpisodeID),
+		ParticipantID:         uuid(canonical.Input.ParticipantID),
+		ParticipantGeneration: providerOptionalInt8(canonical.Input.ParticipantGeneration),
+		PublicationSource:     providerText(canonical.Input.PublicationSource),
+		RecordingID:           uuid(canonical.Input.RecordingID),
+		RequestFingerprint:    canonical.Fingerprint[:],
+		RequestPayload:        []byte(canonical.Payload),
 	})
 	if err == nil {
 		return provideroperations.PrepareResult{Receipt: mapProviderOperationReceipt(row)}, nil
@@ -145,7 +145,7 @@ func (r ProviderOperationRepository) AppendObservation(ctx context.Context, inpu
 	}
 	var result provideroperations.Observation
 	err = r.transaction(ctx, func(queries providerOperationQuerier) error {
-		params := providerObservationIdentityParams{TenantID: uuid(canonical.TenantID), SessionID: uuid(canonical.SessionID)}
+		params := providerObservationIdentityParams{TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID)}
 		if err := queries.EnsureProviderObservationHead(ctx, params); err != nil {
 			return fmt.Errorf("ensure provider observation head: %w", err)
 		}
@@ -158,11 +158,11 @@ func (r ProviderOperationRepository) AppendObservation(ctx context.Context, inpu
 		}
 		if sameObservationCursor(canonical.Cursor(), provideroperationsCursor(head)) {
 			existing, getErr := queries.GetProviderObservation(ctx, getProviderObservationParams{
-				TenantID: uuid(canonical.TenantID), SessionID: uuid(canonical.SessionID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence,
+				TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence,
 			})
 			if errors.Is(getErr, pgx.ErrNoRows) {
 				row, insertErr := queries.InsertProviderObservation(ctx, insertProviderObservationParams{
-					TenantID: uuid(canonical.TenantID), SessionID: uuid(canonical.SessionID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, Publications: []byte(payload), ObservationFingerprint: fingerprint[:],
+					TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, Publications: []byte(payload), ObservationFingerprint: fingerprint[:],
 				})
 				if insertErr != nil {
 					return fmt.Errorf("insert provider observation replay: %w", insertErr)
@@ -180,12 +180,12 @@ func (r ProviderOperationRepository) AppendObservation(ctx context.Context, inpu
 			return err
 		}
 		if _, err := queries.UpdateProviderObservationHead(ctx, updateProviderObservationHeadParams{
-			TenantID: uuid(canonical.TenantID), SessionID: uuid(canonical.SessionID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, ObservationFingerprint: fingerprint[:],
+			TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, ObservationFingerprint: fingerprint[:],
 		}); err != nil {
 			return fmt.Errorf("advance provider observation head: %w", err)
 		}
 		row, err := queries.InsertProviderObservation(ctx, insertProviderObservationParams{
-			TenantID: uuid(canonical.TenantID), SessionID: uuid(canonical.SessionID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, Publications: []byte(payload), ObservationFingerprint: fingerprint[:],
+			TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, Publications: []byte(payload), ObservationFingerprint: fingerprint[:],
 		})
 		if err != nil {
 			return fmt.Errorf("insert provider observation: %w", err)
@@ -199,12 +199,12 @@ func (r ProviderOperationRepository) AppendObservation(ctx context.Context, inpu
 	return result, nil
 }
 
-func (r ProviderOperationRepository) ListObservations(ctx context.Context, tenantID, sessionID utilities.ID, after *provideroperations.Cursor, limit int) (provideroperations.ObservationPage, error) {
+func (r ProviderOperationRepository) ListObservations(ctx context.Context, tenantID, episodeID utilities.ID, after *provideroperations.Cursor, limit int) (provideroperations.ObservationPage, error) {
 	if tenantID.IsZero() {
 		return provideroperations.ObservationPage{}, provideroperations.ErrInvalidTenantID
 	}
-	if sessionID.IsZero() {
-		return provideroperations.ObservationPage{}, provideroperations.ErrInvalidSessionID
+	if episodeID.IsZero() {
+		return provideroperations.ObservationPage{}, provideroperations.ErrInvalidEpisodeID
 	}
 	if after != nil && (after.Incarnation < 0 || after.Sequence < 0) {
 		return provideroperations.ObservationPage{}, provideroperations.ErrInvalidObservationCursor
@@ -215,7 +215,7 @@ func (r ProviderOperationRepository) ListObservations(ctx context.Context, tenan
 	if limit > 100 {
 		limit = 100
 	}
-	params := listProviderObservationsParams{TenantID: uuid(tenantID), SessionID: uuid(sessionID), PageLimit: int32(limit + 1)}
+	params := listProviderObservationsParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID), PageLimit: int32(limit + 1)}
 	if after != nil {
 		params.AfterIncarnation = pgtype.Int8{Int64: after.Incarnation, Valid: true}
 		params.AfterSequence = pgtype.Int8{Int64: after.Sequence, Valid: true}
@@ -276,8 +276,8 @@ func mapProviderOperationReceipt(row providerOperationReceiptRow) provideroperat
 	var fingerprint [32]byte
 	copy(fingerprint[:], row.RequestFingerprint)
 	return provideroperations.Receipt{
-		OperationID: row.OperationID, Effect: provideroperations.Effect(row.Effect), TenantID: utilities.IDFromBytes(row.TenantID.Bytes), SessionID: utilities.IDFromBytes(row.SessionID.Bytes),
-		ParticipantSessionID: nullableID(row.ParticipantSessionID), ParticipantSessionGeneration: providerNullableInt64(row.ParticipantSessionGeneration), PublicationSource: providerNullableTextValue(row.PublicationSource), RecordingID: nullableID(row.RecordingID),
+		OperationID: row.OperationID, Effect: provideroperations.Effect(row.Effect), TenantID: utilities.IDFromBytes(row.TenantID.Bytes), EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes),
+		ParticipantID: nullableID(row.ParticipantID), ParticipantGeneration: providerNullableInt64(row.ParticipantGeneration), PublicationSource: providerNullableTextValue(row.PublicationSource), RecordingID: nullableID(row.RecordingID),
 		Fingerprint: fingerprint, Payload: jsonRaw(row.RequestPayload), State: provideroperations.ReceiptState(row.State), Outcome: nullableOutcome(row.Outcome), Reason: providerNullableTextPointer(row.Reason), CreatedAt: timestamp(row.CreatedAt), DispatchingAt: nullableTimestamp(row.DispatchingAt), CompletedAt: nullableTimestamp(row.CompletedAt),
 	}
 }
@@ -286,17 +286,17 @@ func mapProviderObservation(row providerOperationObservationRow) (provideroperat
 	var fingerprint [32]byte
 	copy(fingerprint[:], row.ObservationFingerprint)
 	var publications []struct {
-		ParticipantSessionID string  `json:"participant_session_id"`
-		Source               string  `json:"source"`
-		Enabled              bool    `json:"enabled"`
-		PublicationID        *string `json:"publication_id"`
+		ParticipantID string  `json:"participant_id"`
+		Source        string  `json:"source"`
+		Enabled       bool    `json:"enabled"`
+		PublicationID *string `json:"publication_id"`
 	}
 	if err := json.Unmarshal(row.Publications, &publications); err != nil {
 		return provideroperations.Observation{}, fmt.Errorf("decode provider observation: %w", err)
 	}
-	result := provideroperations.Observation{TenantID: utilities.IDFromBytes(row.TenantID.Bytes), SessionID: utilities.IDFromBytes(row.SessionID.Bytes), Incarnation: row.Incarnation, Sequence: row.Sequence, Fingerprint: fingerprint, CreatedAt: timestamp(row.CreatedAt), Publications: make([]provideroperations.Publication, 0, len(publications))}
+	result := provideroperations.Observation{TenantID: utilities.IDFromBytes(row.TenantID.Bytes), EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), Incarnation: row.Incarnation, Sequence: row.Sequence, Fingerprint: fingerprint, CreatedAt: timestamp(row.CreatedAt), Publications: make([]provideroperations.Publication, 0, len(publications))}
 	for _, publication := range publications {
-		id, err := utilities.ParseID(publication.ParticipantSessionID)
+		id, err := utilities.ParseID(publication.ParticipantID)
 		if err != nil {
 			return provideroperations.Observation{}, fmt.Errorf("decode provider observation participant id: %w", err)
 		}
@@ -304,7 +304,7 @@ func mapProviderObservation(row providerOperationObservationRow) (provideroperat
 		if publication.PublicationID != nil {
 			publicationID = *publication.PublicationID
 		}
-		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantSessionID: id, Source: publication.Source, Enabled: publication.Enabled, PublicationID: publicationID})
+		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantID: id, Source: publication.Source, Enabled: publication.Enabled, PublicationID: publicationID})
 	}
 	return result, nil
 }

@@ -6,7 +6,14 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const fetch = options.fetch ?? globalThis.fetch;
   const credential = requireCredential(options);
   const base = options.apiBaseURL.replace(/\/$/, "");
-  const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/rooms/${encodeURIComponent(options.roomId)}/sessions/${encodeURIComponent(options.sessionId)}/participants/${encodeURIComponent(options.participantSessionId)}/media/sfu`;
+  const canonical = options.spaceId !== undefined || options.episodeId !== undefined || options.participantId !== undefined;
+  const spaceId = options.spaceId ?? options.roomId;
+  const episodeId = options.episodeId ?? options.sessionId;
+  const participantId = options.participantId ?? options.participantSessionId;
+  if (!spaceId || !episodeId || !participantId) throw new CloudflareSFUError("Space, episode, and participant identifiers are required", "signaling_failed");
+  const mediaPath = canonical
+    ? `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(spaceId)}/episodes/${encodeURIComponent(episodeId)}/participants/${encodeURIComponent(participantId)}/media/sfu`
+    : `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/rooms/${encodeURIComponent(spaceId)}/sessions/${encodeURIComponent(episodeId)}/participants/${encodeURIComponent(participantId)}/media/sfu`;
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const token = await credential();
     if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
@@ -52,13 +59,13 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       const response = await request<{
         incarnation: number;
         sequence: number;
-        publications: readonly { participant_session_id: string; source: V1MediaSource; publication_id: string }[];
+        publications: readonly { participant_id?: string; participant_session_id?: string; source: V1MediaSource; publication_id: string }[];
       }>("publications");
       return {
         incarnation: response.incarnation,
         sequence: response.sequence,
         publications: response.publications.map((publication) => ({
-          participantSessionId: publication.participant_session_id,
+          participantSessionId: publication.participant_id ?? publication.participant_session_id ?? "",
           source: publication.source,
           publicationId: publication.publication_id,
         })),

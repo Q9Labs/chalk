@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -28,6 +29,45 @@ func TestIntegrationSchemasPreserveWireSemantics(t *testing.T) {
 	executeRequired := stringSlice(t, doc.Components.Schemas["ExecuteIntegrationActionRequest"]["required"])
 	if slices.Contains(executeRequired, "arguments") || slices.Contains(executeRequired, "text") {
 		t.Fatalf("text and arguments are alternative optional inputs, required = %v", executeRequired)
+	}
+}
+
+func TestIDSchemaMappingsUseSpaceEpisodeVocabulary(t *testing.T) {
+	names := idSchemaNames()
+	for _, want := range []string{"SpaceId", "EpisodeId", "ParticipantId"} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("id schema names = %v, missing %s", names, want)
+		}
+	}
+	for _, old := range []string{"RoomId", "RoomSessionId"} {
+		if slices.Contains(names, old) {
+			t.Fatalf("id schema names = %v, unexpectedly contains %s", names, old)
+		}
+	}
+
+	for _, test := range []struct {
+		field string
+		want  string
+	}{
+		{field: "space_id", want: "SpaceId"},
+		{field: "episode_id", want: "EpisodeId"},
+		{field: "participant_id", want: "ParticipantId"},
+		{field: "target_participant_episode_id", want: "ParticipantId"},
+	} {
+		got, ok := idSchemaName("", test.field)
+		if !ok || got != test.want {
+			t.Fatalf("id schema for %s = %q/%t, want %q/true", test.field, got, ok, test.want)
+		}
+	}
+}
+
+func TestErrorCodesPreserveNounConditionWireNames(t *testing.T) {
+	codes := errorCodes([]httpapi.APIError{
+		{Status: http.StatusBadRequest, Code: "space.invalid_id"},
+		{Status: http.StatusForbidden, Code: "access.forbidden"},
+	})
+	if !slices.Equal(codes, []string{"access.forbidden", "space.invalid_id"}) {
+		t.Fatalf("error codes = %v, want noun.condition codes preserved", codes)
 	}
 }
 
@@ -187,7 +227,7 @@ func TestParticipantMediaOperationsUseDedicatedCredentialScheme(t *testing.T) {
 		t.Fatalf("participant media security scheme = %#v", scheme)
 	}
 
-	mediaOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/media/sfu/tracks"]["post"])
+	mediaOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks"]["post"])
 	mediaSecurity, ok := mediaOperation["security"].([]map[string][]string)
 	if !ok || len(mediaSecurity) != 1 || mediaSecurity[0]["participantMediaBearer"] == nil {
 		t.Fatalf("participant media security = %#v, want dedicated media bearer", mediaOperation["security"])
@@ -196,7 +236,7 @@ func TestParticipantMediaOperationsUseDedicatedCredentialScheme(t *testing.T) {
 		t.Fatalf("participant media route must not accept general auth: %#v", mediaSecurity)
 	}
 
-	accessOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/rooms/{room_id}/sessions/{session_id}/participants/{participant_session_id}/access"]["post"])
+	accessOperation := mapValue(t, doc.Paths["/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant"]["post"])
 	accessSecurity, ok := accessOperation["security"].([]map[string][]string)
 	if !ok || len(accessSecurity) != 1 || accessSecurity[0]["sessionOrBearer"] == nil {
 		t.Fatalf("participant access security = %#v, want session or API-key auth", accessOperation["security"])

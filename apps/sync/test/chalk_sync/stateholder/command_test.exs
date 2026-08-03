@@ -26,13 +26,12 @@ defmodule ChalkSync.Stateholder.CommandTest do
     targets = [
       {:set_hand_raised, %{"raised" => true}},
       {:set_display_name, %{"displayName" => "Ada"}},
-      {:set_admission_policy, %{"policy" => "approval"}},
-      {:set_participant_role,
+      {:set_admission_policy, %{"policy" => "knock"}},
+      {:assign_roles,
        %{
-         "participantSessionId" => "55555555-5555-4555-8555-555555555555",
+         "participantId" => "55555555-5555-4555-8555-555555555555",
          "role" => "cohost"
-       }},
-      {:transfer_host, %{"participantSessionId" => "55555555-5555-4555-8555-555555555555"}}
+       }}
     ]
 
     Enum.each(targets, fn {name, payload} ->
@@ -42,9 +41,9 @@ defmodule ChalkSync.Stateholder.CommandTest do
     assert Command.new("declarative_cmd1", :set_display_name, %{"displayName" => " Ada "}) ==
              {:error, :invalid_payload}
 
-    assert Command.new("declarative_cmd1", :set_participant_role, %{
-             "participantSessionId" => "55555555-5555-4555-8555-555555555555",
-             "role" => "host"
+    assert Command.new("declarative_cmd1", :assign_roles, %{
+             "participantId" => "55555555-5555-4555-8555-555555555555",
+             "role" => " observer "
            }) == {:error, :invalid_payload}
   end
 end

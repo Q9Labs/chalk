@@ -59,10 +59,9 @@ try {
   let calls = await apiCalls();
   assert.deepEqual(
     calls.map((call) => call.path.split("/").at(-1)),
-    ["sessions", "participants"],
+    ["episodes", "participants"],
   );
-  assert.equal(calls[0].body.maximum_duration_seconds <= 3_600, true);
-  assert.equal(calls[1].body.initial_role, "host");
+  assert.equal(calls[1].body.role, "host");
   assert.equal(
     calls.every((call) => call.authorization === "Bearer local-api-key"),
     true,
@@ -78,7 +77,7 @@ try {
   const refreshed = await post("/local-chalk/access", { currentMediaToken: "media-token", replaceMediaConnection: false }, host.cookie);
   assert.equal(refreshed.response.status, 201);
   calls = await apiCalls();
-  assert.equal(calls.at(-1).path.endsWith("/access"), true);
+  assert.equal(calls.at(-1).path.endsWith("/access-grant"), true);
 
   const guest = await post("/local-chalk/browser-session", { displayName: "Grace", inviteToken: host.body.inviteToken });
   assert.equal(guest.response.status, 201);
@@ -86,8 +85,7 @@ try {
   const guestAccess = await post("/local-chalk/access", {}, guest.cookie);
   assert.equal(guestAccess.response.status, 201);
   calls = await apiCalls();
-  assert.equal(calls.at(-1).body.initial_role, "participant");
-  assert.deepEqual(calls.at(-1).body.eligible_roles, ["host", "cohost", "participant"]);
+  assert.equal(calls.at(-1).body.role, "participant");
 
   const nativeGuest = await nativePost("/local-chalk/client-session", { displayName: "Lin", inviteToken: host.body.inviteToken });
   assert.equal(nativeGuest.response.status, 201);
@@ -113,7 +111,7 @@ try {
   assert.equal((await post("/local-chalk/cleanup", {}, guest.cookie)).response.status, 204);
   calls = await apiCalls();
   assert.equal(calls.at(-1).path.endsWith("/remove"), true);
-  assert.equal(calls.at(-1).body.participant_session_generation, 1);
+  assert.equal(calls.at(-1).body.participant_generation, 1);
   assert.equal((await post("/local-chalk/access", {}, guest.cookie)).response.status, 401);
   assert.equal((await post("/local-chalk/cleanup", {}, host.cookie)).response.status, 204);
   calls = await apiCalls();

@@ -21,17 +21,17 @@ defmodule ChalkSync.Live.DirectedRequests do
   def new, do: %__MODULE__{connections: %{}, pending: %{}, recent: %{}, rates: %{}}
 
   @spec register(t(), String.t(), pid()) :: {:ok, t()} | {:error, atom()}
-  def register(%__MODULE__{} = state, participant_session_id, connection)
-      when is_binary(participant_session_id) and is_pid(connection) do
-    if canonical_uuid?(participant_session_id) do
-      register_connection(prune_connections(state), participant_session_id, connection)
+  def register(%__MODULE__{} = state, participant_id, connection)
+      when is_binary(participant_id) and is_pid(connection) do
+    if canonical_uuid?(participant_id) do
+      register_connection(prune_connections(state), participant_id, connection)
     else
       {:error, :invalid_participant}
     end
   end
 
-  defp register_connection(state, participant_session_id, connection) do
-    existing = Map.get(state.connections, participant_session_id, MapSet.new())
+  defp register_connection(state, participant_id, connection) do
+    existing = Map.get(state.connections, participant_id, MapSet.new())
 
     cond do
       connection_count(state) >= @max_connections and not MapSet.member?(existing, connection) ->
@@ -42,20 +42,20 @@ defmodule ChalkSync.Live.DirectedRequests do
         {:error, :participant_connection_limit}
 
       true ->
-        {:ok, put_in(state.connections[participant_session_id], MapSet.put(existing, connection))}
+        {:ok, put_in(state.connections[participant_id], MapSet.put(existing, connection))}
     end
   end
 
   @spec unregister(t(), String.t(), pid()) :: t()
-  def unregister(%__MODULE__{} = state, participant_session_id, connection) do
+  def unregister(%__MODULE__{} = state, participant_id, connection) do
     remaining =
       state.connections
-      |> Map.get(participant_session_id, MapSet.new())
+      |> Map.get(participant_id, MapSet.new())
       |> MapSet.delete(connection)
 
     if MapSet.size(remaining) == 0,
-      do: %{state | connections: Map.delete(state.connections, participant_session_id)},
-      else: put_in(state.connections[participant_session_id], remaining)
+      do: %{state | connections: Map.delete(state.connections, participant_id)},
+      else: put_in(state.connections[participant_id], remaining)
   end
 
   @spec deliver(t(), map(), integer()) :: {t(), result()}
@@ -78,11 +78,11 @@ defmodule ChalkSync.Live.DirectedRequests do
   end
 
   @spec acknowledge(t(), String.t(), String.t(), integer()) :: {:ok, t()} | {:error, atom(), t()}
-  def acknowledge(%__MODULE__{} = state, participant_session_id, request_id, now_ms) do
+  def acknowledge(%__MODULE__{} = state, participant_id, request_id, now_ms) do
     state = prune(state, now_ms)
 
     case Map.get(state.pending, request_id) do
-      %{target: ^participant_session_id} ->
+      %{target: ^participant_id} ->
         {:ok, %{state | pending: Map.delete(state.pending, request_id)}}
 
       nil ->
@@ -106,7 +106,7 @@ defmodule ChalkSync.Live.DirectedRequests do
 
       result = %{
         request_id: request_id,
-        actor_participant_session_id: item.actor,
+        actor_participant_id: item.actor,
         result: :expired
       }
 
@@ -127,7 +127,7 @@ defmodule ChalkSync.Live.DirectedRequests do
 
   defp deliver_new(state, request, now_ms) do
     state = record_rate(state, request, now_ms)
-    connections = active_connections(state, request.target_participant_session_id)
+    connections = active_connections(state, request.target_participant_id)
 
     if connections == [] do
       remember(state, request, :target_unavailable, now_ms)
@@ -138,7 +138,7 @@ defmodule ChalkSync.Live.DirectedRequests do
         "type" => "directed_request",
         "request_id" => request.request_id,
         "name" => Atom.to_string(request.name),
-        "actor_participant_session_id" => request.actor_participant_session_id,
+        "actor_participant_id" => request.actor_participant_id,
         "expires_at_ms" => expires_at_ms
       }
 
@@ -198,9 +198,9 @@ defmodule ChalkSync.Live.DirectedRequests do
     %{state | recent: recent, rates: rates}
   end
 
-  defp active_connections(state, participant_session_id) do
+  defp active_connections(state, participant_id) do
     state.connections
-    |> Map.get(participant_session_id, MapSet.new())
+    |> Map.get(participant_id, MapSet.new())
     |> Enum.filter(&Process.alive?/1)
   end
 
@@ -241,16 +241,15 @@ defmodule ChalkSync.Live.DirectedRequests do
   end
 
   defp pair(request),
-    do: {request.actor_participant_session_id, request.target_participant_session_id}
+    do: {request.actor_participant_id, request.target_participant_id}
 
   defp fingerprint(request),
-    do:
-      {request.name, request.actor_participant_session_id, request.target_participant_session_id}
+    do: {request.name, request.actor_participant_id, request.target_participant_id}
 
   defp pending(request, expires_at_ms, recent) do
     %{
-      actor: request.actor_participant_session_id,
-      target: request.target_participant_session_id,
+      actor: request.actor_participant_id,
+      target: request.target_participant_id,
       expires_at_ms: expires_at_ms,
       recent: recent
     }
@@ -260,8 +259,8 @@ defmodule ChalkSync.Live.DirectedRequests do
     cond do
       not request_id?(request[:request_id]) -> {:error, :invalid_request_id}
       request[:name] not in [:request_unmute, :request_start_camera] -> {:error, :invalid_name}
-      not canonical_uuid?(request[:actor_participant_session_id]) -> {:error, :invalid_actor}
-      not canonical_uuid?(request[:target_participant_session_id]) -> {:error, :invalid_target}
+      not canonical_uuid?(request[:actor_participant_id]) -> {:error, :invalid_actor}
+      not canonical_uuid?(request[:target_participant_id]) -> {:error, :invalid_target}
       true -> :ok
     end
   end

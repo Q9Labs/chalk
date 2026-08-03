@@ -30,8 +30,8 @@ type transcriptArtifactResponse struct {
 	ID                  string   `json:"id"`
 	TenantID            string   `json:"tenant_id"`
 	RecordingID         string   `json:"recording_id"`
-	RoomID              string   `json:"room_id"`
-	SessionID           string   `json:"session_id"`
+	SpaceID             string   `json:"space_id"`
+	EpisodeID           string   `json:"episode_id"`
 	Status              string   `json:"status"`
 	Languages           []string `json:"languages"`
 	Provider            string   `json:"provider,omitempty"`
@@ -242,7 +242,7 @@ func decodeCreateTranscriptDownloadRequest(r *http.Request) (createTranscriptDow
 }
 
 func newTranscriptArtifactResponse(value transcripts.Transcript) transcriptArtifactResponse {
-	return transcriptArtifactResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), RoomID: value.RoomID.String(), SessionID: value.SessionID.String(), Status: value.Status, Languages: value.Languages, Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
+	return transcriptArtifactResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), Status: value.Status, Languages: value.Languages, Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
 }
 
 func decodeChecksum(value string) ([]byte, error) {

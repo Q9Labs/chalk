@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -18,8 +19,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
-	"github.com/q9labs/chalk/apps/api/internal/rooms"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -36,7 +36,7 @@ func runRouteAPIKeyCustomerFlow(ctx context.Context) (ScenarioResult, error) {
 }
 
 func runEdgeAPIKeyRejectedScope(ctx context.Context) (ScenarioResult, error) {
-	return runAPIKeyRoute(ctx, EdgeAPIKeyRejectedScopeScenario, []authentication.Scope{authentication.ScopeRoomsRead}, http.StatusForbidden)
+	return runAPIKeyRoute(ctx, EdgeAPIKeyRejectedScopeScenario, []authentication.Scope{authentication.ScopeSpacesRead}, http.StatusForbidden)
 }
 
 func runAPIKeyRoute(ctx context.Context, name string, scopes []authentication.Scope, expectedStatus int) (ScenarioResult, error) {
@@ -103,9 +103,10 @@ func runParticipantMediaRoute(ctx context.Context, name string, wrongAudience bo
 	publications := &tracedMediaPublicationRegistry{recorder: recorder}
 	handler := httpapi.NewRouter(httpapi.Options{
 		RateLimit: noRateLimits(now),
-		Rooms: participantMediaRoomService{tracedRoomService: tracedRoomService{
-			recorder: recorder, next: rooms.NewService(tracedRoomRepository{recorder: recorder, now: now}),
+		Spaces: participantMediaSpaceService{tracedSpaceService: tracedSpaceService{
+			recorder: recorder, next: spaces.NewService(tracedSpaceRepository{recorder: recorder, now: now}),
 		}, now: now},
+		Episodes:               newTracedEpisodeLifecycleService(recorder, now),
 		Tenants:                tracedTenantService{recorder: recorder, next: tenants.NewService(tracedTenantRepository{recorder: recorder, now: now})},
 		MediaPlane:             resolver,
 		MediaPublications:      publications,
@@ -116,7 +117,7 @@ func runParticipantMediaRoute(ctx context.Context, name string, wrongAudience bo
 	result, runErr := runRouteTrace(ctx, routeTraceConfig{
 		Name: name, Recorder: recorder, Handler: handler,
 		Method: http.MethodPost,
-		Path:   "/v1/tenants/" + tenantID().String() + "/rooms/" + roomID().String() + "/sessions/" + roomSessionID().String() + "/participants/" + participantID().String() + "/media/sfu/tracks",
+		Path:   "/v1/tenants/" + tenantID().String() + "/spaces/" + spaceID().String() + "/episodes/" + episodeID().String() + "/participants/" + participantID().String() + "/media/sfu/tracks",
 		Body:   body, DisplayBody: json.RawMessage(`{"connection_id":"[bound]","track_count":1,"session_description":"[absent]"}`), Authorization: "Bearer " + credential.Token,
 		Headers: map[string]string{
 			"x-chalk-journey-id": "88888888-8888-4888-8888-888888888888",
@@ -216,29 +217,29 @@ func (*tracedAPIKeyRepository) Revoke(context.Context, utilities.ID, utilities.I
 
 type tracedParticipantMediaVerifier struct {
 	recorder *Recorder
-	next     participantaccess.Verifier
+	next     accessgrants.Verifier
 }
 
-type participantMediaRoomService struct {
-	tracedRoomService
+type participantMediaSpaceService struct {
+	tracedSpaceService
 	now func() time.Time
 }
 
-func (s participantMediaRoomService) GetRoom(context.Context, utilities.ID, utilities.ID) (rooms.Room, error) {
-	room := roomFixture(s.now)
-	room.MediaPlane = string(mediaplane.ProviderCloudflareSFU)
-	s.recorder.Add("service", "rooms.Service.GetRoom", "load the room configured for Cloudflare SFU", map[string]any{"media_plane": room.MediaPlane})
-	return room, nil
+func (s participantMediaSpaceService) GetSpace(context.Context, utilities.ID, utilities.ID) (spaces.Space, error) {
+	space := spaceFixture(s.now)
+	space.MediaPlane = string(mediaplane.ProviderCloudflareSFU)
+	s.recorder.Add("service", "spaces.Service.GetSpace", "load the Space configured for Cloudflare SFU", map[string]any{"media_plane": space.MediaPlane})
+	return space, nil
 }
 
-func (v tracedParticipantMediaVerifier) Verify(ctx context.Context, credential string) (participantaccess.Subject, error) {
-	span := v.recorder.Start("auth", "participantaccess.Verifier.Verify", "verify EdDSA signature and exact chalk-media audience without recording the credential", map[string]any{
-		"credential": "[redacted]", "required_audience": participantaccess.Audience,
+func (v tracedParticipantMediaVerifier) Verify(ctx context.Context, credential string) (accessgrants.Subject, error) {
+	span := v.recorder.Start("auth", "accessgrants.Verifier.Verify", "verify EdDSA signature and exact chalk-media audience without recording the credential", map[string]any{
+		"credential": "[redacted]", "required_audience": accessgrants.Audience,
 	})
 	subject, err := v.next.Verify(ctx, credential)
 	outcome := "accepted"
 	reason := "none"
-	if errors.Is(err, participantaccess.ErrInvalidAudience) {
+	if errors.Is(err, accessgrants.ErrInvalidAudience) {
 		outcome = "rejected"
 		reason = "invalid_audience"
 	} else if err != nil {
@@ -254,9 +255,9 @@ type tracedActiveParticipant struct {
 	calls    int
 }
 
-func (a *tracedActiveParticipant) AuthorizeActiveParticipant(context.Context, participantaccess.Subject) (bool, error) {
+func (a *tracedActiveParticipant) AuthorizeActiveParticipant(context.Context, accessgrants.Subject) (bool, error) {
 	a.calls++
-	a.recorder.Add("policy", "participantaccess.ActiveAuthorizer", "confirm the exact participant generation is active and admitted", map[string]any{"decision": "allow"})
+	a.recorder.Add("policy", "accessgrants.ActiveAuthorizer", "confirm the exact participant generation is active and admitted", map[string]any{"decision": "allow"})
 	return true, nil
 }
 
@@ -267,7 +268,7 @@ type tracedSFUResolver struct {
 	addTrackCalls int
 }
 
-func (r *tracedSFUResolver) Resolve(context.Context, tenants.Tenant, rooms.Room) (*mediaplane.Service, error) {
+func (r *tracedSFUResolver) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
 	r.calls++
 	r.recorder.Add("resolver", "MediaPlaneResolver.Resolve", "select the configured Cloudflare SFU adapter after media authentication", map[string]any{"provider": mediaplane.ProviderCloudflareSFU})
 	plane := &tracedSFUSignalingPlane{tracedMediaPlane: tracedMediaPlane{recorder: r.recorder, now: r.now}, recorder: r.recorder, calls: &r.addTrackCalls}
@@ -337,21 +338,21 @@ func traceAPIKey(now time.Time, scopes []authentication.Scope) (string, apikeys.
 	}
 }
 
-func participantMediaFixtures(now func() time.Time) (participantaccess.Issuer, participantaccess.Verifier, participantaccess.Subject) {
+func participantMediaFixtures(now func() time.Time) (accessgrants.Issuer, accessgrants.Verifier, accessgrants.Subject) {
 	privateKey := traceParticipantPrivateKey()
-	issuer, err := participantaccess.NewIssuer(participantaccess.IssuerConfig{Issuer: "https://api.chalk.test", KeyID: "trace-media-key", PrivateKey: privateKey, Now: now})
+	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: "https://api.chalk.test", KeyID: "trace-media-key", PrivateKey: privateKey, Now: now})
 	if err != nil {
 		panic(err)
 	}
-	verifier, err := participantaccess.NewVerifier(participantaccess.VerifierConfig{
+	verifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{
 		Issuer: "https://api.chalk.test", VerificationKeys: map[string]ed25519.PublicKey{"trace-media-key": privateKey.Public().(ed25519.PublicKey)}, Now: now,
 	})
 	if err != nil {
 		panic(err)
 	}
-	return issuer, verifier, participantaccess.Subject{
-		TenantID: tenantID(), RoomID: roomID(), SessionID: roomSessionID(), ParticipantSessionID: participantID(), ParticipantGeneration: 1,
-		Provider: participantaccess.ProviderCloudflareSFU, CloudflareConnectionID: "connection_trace",
+	return issuer, verifier, accessgrants.Subject{
+		TenantID: tenantID(), SpaceID: spaceID(), EpisodeID: episodeID(), ParticipantID: participantID(), ParticipantGeneration: 1,
+		Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: "connection_trace",
 	}
 }
 

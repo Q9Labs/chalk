@@ -12,15 +12,15 @@ import (
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/rooms"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 )
 
 const (
-	RoomProviderCloudflareRTK = "cf_rtk"
-	RoomProviderCloudflareSFU = "cf_sfu"
-	ModeChalkManaged          = "chalk_managed"
-	ModeTenantManaged         = "tenant_managed"
+	SpaceProviderCloudflareRTK = "cf_rtk"
+	SpaceProviderCloudflareSFU = "cf_sfu"
+	ModeChalkManaged           = "chalk_managed"
+	ModeTenantManaged          = "tenant_managed"
 )
 
 var (
@@ -32,7 +32,7 @@ var (
 )
 
 type Resolver interface {
-	Resolve(context.Context, tenants.Tenant, rooms.Room) (*mediaplane.Service, error)
+	Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error)
 }
 
 type Registry struct {
@@ -68,8 +68,8 @@ func NewRegistry(processConfig config.CloudflareRealtimeConfig) Registry {
 	return Registry{processConfig: processConfig}
 }
 
-func (r Registry) Resolve(_ context.Context, tenant tenants.Tenant, room rooms.Room) (*mediaplane.Service, error) {
-	providerName := selectedProvider(tenant, room)
+func (r Registry) Resolve(_ context.Context, tenant tenants.Tenant, space spaces.Space) (*mediaplane.Service, error) {
+	providerName := selectedProvider(tenant, space)
 	if providerName == "" {
 		return nil, nil
 	}
@@ -87,7 +87,7 @@ func (r Registry) Resolve(_ context.Context, tenant tenants.Tenant, room rooms.R
 		return nil, err
 	}
 	if configuredProvider := strings.TrimSpace(providerConfig.Provider); configuredProvider != "" && configuredProvider != providerName {
-		return nil, fmt.Errorf("%w: provider does not match room", ErrInvalidProviderConfig)
+		return nil, fmt.Errorf("%w: provider does not match space", ErrInvalidProviderConfig)
 	}
 
 	mode := strings.TrimSpace(providerConfig.Mode)
@@ -105,8 +105,8 @@ func (r Registry) Resolve(_ context.Context, tenant tenants.Tenant, room rooms.R
 	}
 }
 
-func selectedProvider(tenant tenants.Tenant, room rooms.Room) string {
-	if provider := strings.TrimSpace(room.MediaPlane); provider != "" {
+func selectedProvider(tenant tenants.Tenant, space spaces.Space) string {
+	if provider := strings.TrimSpace(space.MediaPlane); provider != "" {
 		return provider
 	}
 	if tenant.DefaultMediaPlane == nil {
@@ -130,9 +130,9 @@ func parseProviderConfig(raw json.RawMessage) (providerConfig, error) {
 
 func providerForName(name string) (mediaplane.Provider, error) {
 	switch name {
-	case RoomProviderCloudflareRTK:
+	case SpaceProviderCloudflareRTK:
 		return mediaplane.ProviderCloudflareRTK, nil
-	case RoomProviderCloudflareSFU:
+	case SpaceProviderCloudflareSFU:
 		return mediaplane.ProviderCloudflareSFU, nil
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnknownProvider, name)
@@ -149,7 +149,7 @@ func (r Registry) tenantManagedConfig(providerName string, providerConfig provid
 	resolved.RealtimeBaseURL = r.processConfig.RealtimeBaseURL
 	resolved.AccountID = providerConfig.Cloudflare.AccountID
 	resolved.APIToken = providerConfig.Cloudflare.APIToken
-	if providerName == RoomProviderCloudflareRTK {
+	if providerName == SpaceProviderCloudflareRTK {
 		if providerConfig.Cloudflare.RTK == nil {
 			return config.CloudflareRealtimeConfig{}, ErrMissingProviderConfig
 		}
@@ -158,7 +158,7 @@ func (r Registry) tenantManagedConfig(providerName string, providerConfig provid
 		resolved.RTKPresetContributor = providerConfig.Cloudflare.RTK.ParticipantPreset
 		return resolved, nil
 	}
-	if providerName == RoomProviderCloudflareSFU {
+	if providerName == SpaceProviderCloudflareSFU {
 		if providerConfig.Cloudflare.SFU == nil {
 			return config.CloudflareRealtimeConfig{}, ErrMissingProviderConfig
 		}

@@ -15,8 +15,8 @@ func TestServiceCreateRejectsUnsupportedStorageProvider(t *testing.T) {
 
 	_, err := service.Create(context.Background(), recordings.CreateInput{
 		TenantID:        mustID(t, "11111111-1111-4111-8111-111111111111"),
-		RoomID:          mustID(t, "22222222-2222-4222-8222-222222222222"),
-		SessionID:       mustID(t, "33333333-3333-4333-8333-333333333333"),
+		SpaceID:         mustID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID:       mustID(t, "33333333-3333-4333-8333-333333333333"),
 		Status:          recordings.StatusCompleted,
 		StorageProvider: "s3",
 	})
@@ -31,8 +31,8 @@ func TestServiceCreateRejectsStorageKeyOutsideTenantPrefix(t *testing.T) {
 
 	_, err := service.Create(context.Background(), recordings.CreateInput{
 		TenantID:        mustID(t, "11111111-1111-4111-8111-111111111111"),
-		RoomID:          mustID(t, "22222222-2222-4222-8222-222222222222"),
-		SessionID:       mustID(t, "33333333-3333-4333-8333-333333333333"),
+		SpaceID:         mustID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID:       mustID(t, "33333333-3333-4333-8333-333333333333"),
 		Status:          recordings.StatusCompleted,
 		StorageProvider: recordings.StorageProviderR2,
 		StorageKey:      &storageKey,
@@ -59,8 +59,8 @@ func TestServiceCreateRejectsUnusableStorageKey(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := service.Create(context.Background(), recordings.CreateInput{
 				TenantID:        tenantID,
-				RoomID:          mustID(t, "22222222-2222-4222-8222-222222222222"),
-				SessionID:       mustID(t, "33333333-3333-4333-8333-333333333333"),
+				SpaceID:         mustID(t, "22222222-2222-4222-8222-222222222222"),
+				EpisodeID:       mustID(t, "33333333-3333-4333-8333-333333333333"),
 				Status:          recordings.StatusCompleted,
 				StorageProvider: recordings.StorageProviderR2,
 				StorageKey:      &test.key,
@@ -126,7 +126,7 @@ func TestServiceUpdateRejectsUnusableStorageKey(t *testing.T) {
 
 func TestTenantStorageKeyAcceptsTenantRecordingPrefix(t *testing.T) {
 	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
-	storageKey := recordings.TenantStorageKeyPrefix(tenantID) + "room-session.webm"
+	storageKey := recordings.TenantStorageKeyPrefix(tenantID) + "space-episode.webm"
 
 	if !recordings.TenantStorageKey(tenantID, &storageKey) {
 		t.Fatalf("tenant storage key %q was rejected", storageKey)

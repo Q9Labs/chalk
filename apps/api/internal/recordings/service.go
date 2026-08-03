@@ -15,13 +15,13 @@ import (
 var (
 	ErrInvalidRecordingID     = errors.New("invalid recording id")
 	ErrInvalidTenantID        = errors.New("invalid tenant id")
-	ErrInvalidRoomID          = errors.New("invalid room id")
-	ErrInvalidSessionID       = errors.New("invalid session id")
+	ErrInvalidSpaceID         = errors.New("invalid space id")
+	ErrInvalidEpisodeID       = errors.New("invalid episode id")
 	ErrInvalidRecordingStatus = errors.New("invalid recording status")
 	ErrInvalidStorageProvider = errors.New("invalid storage provider")
 	ErrInvalidStorageKey      = errors.New("invalid storage key")
 	ErrInvalidRecordingField  = errors.New("invalid recording field")
-	ErrSessionNotFound        = errors.New("room session not found")
+	ErrEpisodeNotFound        = errors.New("episode not found")
 	ErrRecordingNotFound      = errors.New("recording not found")
 )
 
@@ -37,8 +37,8 @@ const (
 type Recording struct {
 	ID              utilities.ID
 	TenantID        utilities.ID
-	RoomID          utilities.ID
-	SessionID       utilities.ID
+	SpaceID         utilities.ID
+	EpisodeID       utilities.ID
 	Status          string
 	StorageProvider string
 	StorageKey      *string
@@ -50,7 +50,7 @@ type Recording struct {
 type Repository interface {
 	Create(ctx context.Context, input CreateInput) (Recording, error)
 	Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (Recording, error)
-	List(ctx context.Context, tenantID utilities.ID, sessionID utilities.ID, page pagination.PageRequest) (RecordingList, error)
+	List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (RecordingList, error)
 	Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input UpdateInput) (Recording, error)
 }
 
@@ -61,8 +61,8 @@ type Service struct {
 type CreateInput struct {
 	ID              utilities.ID
 	TenantID        utilities.ID
-	RoomID          utilities.ID
-	SessionID       utilities.ID
+	SpaceID         utilities.ID
+	EpisodeID       utilities.ID
 	Status          string
 	StorageProvider string
 	StorageKey      *string
@@ -109,12 +109,12 @@ func (s Service) Get(ctx context.Context, tenantID utilities.ID, recordingID uti
 	return s.repository.Get(ctx, tenantID, recordingID)
 }
 
-func (s Service) List(ctx context.Context, tenantID utilities.ID, sessionID utilities.ID, page pagination.PageRequest) (RecordingList, error) {
+func (s Service) List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (RecordingList, error) {
 	if tenantID.IsZero() {
 		return RecordingList{}, ErrInvalidTenantID
 	}
 
-	return s.repository.List(ctx, tenantID, sessionID, page)
+	return s.repository.List(ctx, tenantID, episodeID, page)
 }
 
 func (s Service) Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input UpdateInput) (Recording, error) {
@@ -135,11 +135,11 @@ func prepareCreateRecordingInput(input *CreateInput) error {
 	if input.TenantID.IsZero() {
 		return ErrInvalidTenantID
 	}
-	if input.RoomID.IsZero() {
-		return ErrInvalidRoomID
+	if input.SpaceID.IsZero() {
+		return ErrInvalidSpaceID
 	}
-	if input.SessionID.IsZero() {
-		return ErrInvalidSessionID
+	if input.EpisodeID.IsZero() {
+		return ErrInvalidEpisodeID
 	}
 
 	status, err := recordingStatus(input.Status)

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
-	"github.com/q9labs/chalk/apps/api/internal/participantaccess"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 )
 
@@ -109,8 +109,8 @@ func writeRateLimitHeaders(w http.ResponseWriter, policy ratelimit.Policy, decis
 }
 
 func rateLimitKey(r *http.Request, options ClientIPOptions) string {
-	if subject, ok := participantaccess.SubjectFromContext(r.Context()); ok {
-		return "participant:" + subject.TenantID.String() + ":" + subject.ParticipantSessionID.String()
+	if subject, ok := accessgrants.SubjectFromContext(r.Context()); ok {
+		return "participant:" + subject.TenantID.String() + ":" + subject.ParticipantID.String()
 	}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok {
 		return "principal:" + principalRateLimitKey(principal)

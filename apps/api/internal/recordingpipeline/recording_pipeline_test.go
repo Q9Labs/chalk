@@ -10,21 +10,21 @@ import (
 
 func TestValidateReservationLimits(t *testing.T) {
 	tenant := utilities.IDFromBytes([16]byte{1})
-	room := utilities.IDFromBytes([16]byte{2})
-	session := utilities.IDFromBytes([16]byte{3})
+	space := utilities.IDFromBytes([16]byte{2})
+	episode := utilities.IDFromBytes([16]byte{3})
 	base := ReservationInput{
-		TenantID: tenant, RoomID: room, SessionID: session,
+		TenantID: tenant, SpaceID: space, EpisodeID: episode,
 		IdempotencyKey: "recording-test-key", ParticipantCount: 3,
 		MaxDuration: time.Hour, InputBitrateBPS: 3_000_000,
 	}
 	if err := ValidateReservationInput(base); err != nil {
 		t.Fatalf("valid reservation: %v", err)
 	}
-	base.ParticipantCount = MaximumMeetingParticipants + 1
+	base.ParticipantCount = MaximumEpisodeParticipants + 1
 	if !errors.Is(ValidateReservationInput(base), ErrInvalidParticipantCount) {
 		t.Fatal("expected participant limit error")
 	}
-	base = ReservationInput{TenantID: tenant, RoomID: room, SessionID: session, IdempotencyKey: "recording-test-key", ParticipantCount: 1, MaxDuration: MaximumRecordingDuration + time.Second, InputBitrateBPS: 1}
+	base = ReservationInput{TenantID: tenant, SpaceID: space, EpisodeID: episode, IdempotencyKey: "recording-test-key", ParticipantCount: 1, MaxDuration: MaximumRecordingDuration + time.Second, InputBitrateBPS: 1}
 	if !errors.Is(ValidateReservationInput(base), ErrInvalidDuration) {
 		t.Fatal("expected duration limit error")
 	}
@@ -36,7 +36,7 @@ func TestValidateReservationLimits(t *testing.T) {
 }
 
 func TestCapturePlacementUsesMaximumDimension(t *testing.T) {
-	placement := CapturePlacement{MeetingsPerNode: 4, ParticipantsPerNode: 40, InputMbpsPerNode: 16, ReadySpare: 1}
+	placement := CapturePlacement{EpisodesPerNode: 4, ParticipantsPerNode: 40, InputMbpsPerNode: 16, ReadySpare: 1}
 	if got := DesiredCaptureNodes(20, 100, 80_000_000, placement); got != 6 {
 		t.Fatalf("desired nodes = %d, want 6", got)
 	}
@@ -52,11 +52,11 @@ func TestRecordingStateTransitionsAreExact(t *testing.T) {
 	if err := ValidateTransition(StateCommitted, StateRendering); !errors.Is(err, ErrInvalidStateTransition) {
 		t.Fatalf("committed to rendering error = %v", err)
 	}
-	if !CanAdmit(MaximumMeetings, MaximumParticipants, MaximumInputBitrateTotalBPS) {
+	if !CanAdmit(MaximumEpisodes, MaximumParticipants, MaximumInputBitrateTotalBPS) {
 		t.Fatal("qualified ceiling should be admitted")
 	}
-	if CanAdmit(MaximumMeetings+1, 0, 0) {
-		t.Fatal("meeting ceiling should be closed")
+	if CanAdmit(MaximumEpisodes+1, 0, 0) {
+		t.Fatal("episode ceiling should be closed")
 	}
 }
 

@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	apiErrorWhiteboardInvalidFile        = APIError{Status: http.StatusBadRequest, Code: "invalid_whiteboard_file", Message: "Invalid whiteboard file request"}
-	apiErrorWhiteboardSceneChanged       = APIError{Status: http.StatusConflict, Code: "whiteboard_scene_changed", Message: "Whiteboard scene changed"}
-	apiErrorWhiteboardFileExists         = APIError{Status: http.StatusConflict, Code: "whiteboard_file_exists", Message: "Whiteboard file already exists"}
-	apiErrorWhiteboardUploadNotFound     = APIError{Status: http.StatusNotFound, Code: "whiteboard_upload_not_found", Message: "Whiteboard upload not found"}
-	apiErrorWhiteboardUploadExpired      = APIError{Status: http.StatusGone, Code: "whiteboard_upload_expired", Message: "Whiteboard upload expired"}
-	apiErrorWhiteboardUploadNotReady     = APIError{Status: http.StatusConflict, Code: "whiteboard_upload_not_ready", Message: "Whiteboard upload is not ready"}
-	apiErrorWhiteboardFileNotFound       = APIError{Status: http.StatusNotFound, Code: "whiteboard_file_not_found", Message: "Whiteboard file not found"}
-	apiErrorWhiteboardFileTransfer       = APIError{Status: http.StatusBadGateway, Code: "whiteboard_file_transfer_failed", Message: "Whiteboard file transfer failed"}
-	apiErrorWhiteboardStorageUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "whiteboard_storage_unavailable", Message: "Whiteboard file storage unavailable"}
+	apiErrorWhiteboardInvalidFile        = APIError{Status: http.StatusBadRequest, Code: "whiteboard.invalid_file", Message: "Invalid whiteboard file request"}
+	apiErrorWhiteboardSceneChanged       = APIError{Status: http.StatusConflict, Code: "whiteboard.scene_changed", Message: "Whiteboard scene changed"}
+	apiErrorWhiteboardFileExists         = APIError{Status: http.StatusConflict, Code: "whiteboard.file_exists", Message: "Whiteboard file already exists"}
+	apiErrorWhiteboardUploadNotFound     = APIError{Status: http.StatusNotFound, Code: "whiteboard.upload_not_found", Message: "Whiteboard upload not found"}
+	apiErrorWhiteboardUploadExpired      = APIError{Status: http.StatusGone, Code: "whiteboard.upload_expired", Message: "Whiteboard upload expired"}
+	apiErrorWhiteboardUploadNotReady     = APIError{Status: http.StatusConflict, Code: "whiteboard.upload_not_ready", Message: "Whiteboard upload is not ready"}
+	apiErrorWhiteboardFileNotFound       = APIError{Status: http.StatusNotFound, Code: "whiteboard.file_not_found", Message: "Whiteboard file not found"}
+	apiErrorWhiteboardFileTransfer       = APIError{Status: http.StatusBadGateway, Code: "whiteboard.file_transfer_failed", Message: "Whiteboard file transfer failed"}
+	apiErrorWhiteboardStorageUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "whiteboard.storage_unavailable", Message: "Whiteboard file storage unavailable"}
 )
 
 type WhiteboardFileService interface {

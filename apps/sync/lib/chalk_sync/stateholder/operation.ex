@@ -18,10 +18,12 @@ defmodule ChalkSync.Stateholder.Operation do
     "start_recording" => :start_recording,
     "stop_recording" => :stop_recording,
     "participant_leave" => :participant_leave,
-    "end_session" => :end_session,
-    "tenant_transfer_host" => :tenant_transfer_host,
+    "start_episode" => :start_episode,
+    "extend_episode" => :extend_episode,
+    "end_episode" => :end_episode,
     "tenant_set_deadline" => :tenant_set_deadline,
-    "tenant_end_session" => :tenant_end_session,
+    "tenant_end_episode" => :tenant_end_episode,
+    "maximum_episode_duration_expired" => :maximum_duration_expired,
     "maximum_duration_expired" => :maximum_duration_expired
   }
 
@@ -39,10 +41,11 @@ defmodule ChalkSync.Stateholder.Operation do
           | :start_recording
           | :stop_recording
           | :participant_leave
-          | :end_session
-          | :tenant_transfer_host
+          | :start_episode
+          | :extend_episode
+          | :end_episode
           | :tenant_set_deadline
-          | :tenant_end_session
+          | :tenant_end_episode
           | :maximum_duration_expired
 
   @type t :: %__MODULE__{
@@ -102,9 +105,13 @@ defmodule ChalkSync.Stateholder.Operation do
   defp normalize_name(_name), do: {:error, :unknown_operation}
 
   defp validate_payload(name, payload)
-       when name in [:participant_leave, :end_session, :tenant_end_session] do
+       when name in [:participant_leave, :start_episode, :end_episode, :tenant_end_episode] do
     if map_size(payload) == 0, do: :ok, else: {:error, :invalid_payload}
   end
+
+  defp validate_payload(:extend_episode, %{"extensionSeconds" => seconds} = payload)
+       when map_size(payload) == 1 and is_integer(seconds) and seconds > 0,
+       do: :ok
 
   defp validate_payload(
          :maximum_duration_expired,
@@ -118,7 +125,7 @@ defmodule ChalkSync.Stateholder.Operation do
               map_size(payload) == 1,
        do: validate_uuid(id)
 
-  defp validate_payload(name, %{"participantSessionId" => id} = payload)
+  defp validate_payload(name, %{"participantId" => id} = payload)
        when name in [
               :mute_participant,
               :stop_participant_camera,
@@ -129,10 +136,6 @@ defmodule ChalkSync.Stateholder.Operation do
 
   defp validate_payload(name, %{"recordingId" => id} = payload)
        when name in [:start_recording, :stop_recording] and map_size(payload) == 1,
-       do: validate_uuid(id)
-
-  defp validate_payload(:tenant_transfer_host, %{"participantSessionId" => id} = payload)
-       when map_size(payload) == 1,
        do: validate_uuid(id)
 
   defp validate_payload(

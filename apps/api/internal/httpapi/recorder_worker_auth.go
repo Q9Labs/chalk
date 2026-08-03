@@ -16,13 +16,13 @@ type recorderWorkerIdentityContextKey struct{}
 func requireRecorderWorker(verifier RecorderWorkerVerifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if verifier == nil {
-			writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Service is unavailable")
+			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Service is unavailable")
 			return
 		}
 
 		identity, err := verifier.Verify(request)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "worker_unauthorized", "Worker authentication required")
+			writeError(w, http.StatusUnauthorized, "worker.unauthorized", "Worker authentication required")
 			return
 		}
 

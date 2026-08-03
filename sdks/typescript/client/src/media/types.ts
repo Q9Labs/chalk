@@ -102,9 +102,16 @@ export type CloudflareSFUHTTPTransportOptions = {
   /** @deprecated Use credential so refreshed media access is read before every request. */
   readonly bearerToken?: string;
   readonly tenantId: string;
-  readonly roomId: string;
-  readonly sessionId: string;
-  readonly participantSessionId: string;
+  /** Canonical Space/Episode/Participant route identifiers. */
+  readonly spaceId?: string;
+  readonly episodeId?: string;
+  readonly participantId?: string;
+  /** @deprecated Use spaceId, episodeId, and participantId. */
+  readonly roomId?: string;
+  /** @deprecated Use episodeId. */
+  readonly sessionId?: string;
+  /** @deprecated Use participantId. */
+  readonly participantSessionId?: string;
   readonly fetch?: typeof globalThis.fetch;
 };
 

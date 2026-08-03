@@ -3,7 +3,7 @@ defmodule ChalkSync.Database do
 
   use Supervisor
 
-  alias ChalkSync.Stateholder.SessionKey
+  alias ChalkSync.Stateholder.EpisodeKey
 
   @registry __MODULE__.Registry
   @default_pool_size 8
@@ -13,18 +13,18 @@ defmodule ChalkSync.Database do
     Supervisor.start_link(__MODULE__, options, name: __MODULE__)
   end
 
-  @spec connection(SessionKey.t(), non_neg_integer()) :: GenServer.server()
-  def connection(%SessionKey{} = session, offset \\ 0) do
+  @spec connection(EpisodeKey.t(), non_neg_integer()) :: GenServer.server()
+  def connection(%EpisodeKey{} = episode, offset \\ 0) do
     case Application.get_env(:chalk_sync, :database_connections) do
       selector when is_function(selector, 2) ->
-        selector.(session, offset)
+        selector.(episode, offset)
 
       connections when is_list(connections) and connections != [] ->
-        Enum.at(connections, index(session, length(connections), offset))
+        Enum.at(connections, index(episode, length(connections), offset))
 
       _ ->
         pool_size = Application.get_env(:chalk_sync, :database_pool_size, @default_pool_size)
-        via(index(session, pool_size, offset))
+        via(index(episode, pool_size, offset))
     end
   end
 
@@ -78,8 +78,8 @@ defmodule ChalkSync.Database do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  defp index(session, pool_size, offset) do
-    rem(:erlang.phash2(SessionKey.authority_key(session), pool_size) + offset, pool_size)
+  defp index(episode, pool_size, offset) do
+    rem(:erlang.phash2(EpisodeKey.authority_key(episode), pool_size) + offset, pool_size)
   end
 
   defp via(index), do: {:via, Registry, {@registry, index}}

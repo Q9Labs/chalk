@@ -9,12 +9,12 @@ import (
 
 func TestCanonicalizeOperationUsesProviderNeutralFields(t *testing.T) {
 	tenant := testID(t, "10000000-0000-4000-8000-000000000001")
-	session := testID(t, "10000000-0000-4000-8000-000000000002")
+	episode := testID(t, "10000000-0000-4000-8000-000000000002")
 	participant := testID(t, "10000000-0000-4000-8000-000000000003")
 	base := OperationInput{
 		OperationID: "provider-operation-0001",
-		Effect:      EffectGrantPublication, TenantID: tenant, SessionID: session,
-		ParticipantSessionID: participant, PublicationSource: " CAMERA ",
+		Effect:      EffectGrantPublication, TenantID: tenant, EpisodeID: episode,
+		ParticipantID: participant, PublicationSource: " CAMERA ",
 	}
 	first, err := Canonicalize(base)
 	if err != nil {
@@ -30,7 +30,7 @@ func TestCanonicalizeOperationUsesProviderNeutralFields(t *testing.T) {
 	if first.Input.PublicationSource != "camera" {
 		t.Fatalf("source = %q, want camera", first.Input.PublicationSource)
 	}
-	if string(first.Payload) != `{"effect":"media.grant_publication","tenant_id":"10000000-0000-4000-8000-000000000001","session_id":"10000000-0000-4000-8000-000000000002","participant_session_id":"10000000-0000-4000-8000-000000000003","publication_source":"camera"}` {
+	if string(first.Payload) != `{"effect":"media.grant_publication","tenant_id":"10000000-0000-4000-8000-000000000001","episode_id":"10000000-0000-4000-8000-000000000002","participant_id":"10000000-0000-4000-8000-000000000003","publication_source":"camera"}` {
 		t.Fatalf("canonical payload = %s", first.Payload)
 	}
 
@@ -47,19 +47,19 @@ func TestCanonicalizeOperationUsesProviderNeutralFields(t *testing.T) {
 func TestCanonicalizeOperationAllowsUnknownParticipantGeneration(t *testing.T) {
 	input := OperationInput{
 		OperationID: "provider-operation-0002", Effect: EffectRemoveParticipant,
-		TenantID:             testID(t, "10000000-0000-4000-8000-000000000001"),
-		SessionID:            testID(t, "10000000-0000-4000-8000-000000000002"),
-		ParticipantSessionID: testID(t, "10000000-0000-4000-8000-000000000003"),
+		TenantID:      testID(t, "10000000-0000-4000-8000-000000000001"),
+		EpisodeID:     testID(t, "10000000-0000-4000-8000-000000000002"),
+		ParticipantID: testID(t, "10000000-0000-4000-8000-000000000003"),
 	}
 	canonical, err := Canonicalize(input)
 	if err != nil {
 		t.Fatalf("canonicalize without generation: %v", err)
 	}
-	if string(canonical.Payload) != `{"effect":"media.remove_participant","tenant_id":"10000000-0000-4000-8000-000000000001","session_id":"10000000-0000-4000-8000-000000000002","participant_session_id":"10000000-0000-4000-8000-000000000003"}` {
+	if string(canonical.Payload) != `{"effect":"media.remove_participant","tenant_id":"10000000-0000-4000-8000-000000000001","episode_id":"10000000-0000-4000-8000-000000000002","participant_id":"10000000-0000-4000-8000-000000000003"}` {
 		t.Fatalf("payload = %s", canonical.Payload)
 	}
-	input.ParticipantSessionID = utilities.ID{}
-	input.ParticipantSessionGeneration = 1
+	input.ParticipantID = utilities.ID{}
+	input.ParticipantGeneration = 1
 	if _, err := Canonicalize(input); !errors.Is(err, ErrInvalidParticipantGeneration) {
 		t.Fatalf("generation without participant error = %v", err)
 	}
@@ -67,21 +67,21 @@ func TestCanonicalizeOperationAllowsUnknownParticipantGeneration(t *testing.T) {
 
 func TestCanonicalizeObservationSortsAndRejectsConflicts(t *testing.T) {
 	input := ObservationInput{
-		TenantID: testID(t, "10000000-0000-4000-8000-000000000001"), SessionID: testID(t, "10000000-0000-4000-8000-000000000002"),
+		TenantID: testID(t, "10000000-0000-4000-8000-000000000001"), EpisodeID: testID(t, "10000000-0000-4000-8000-000000000002"),
 		Incarnation: 7, Sequence: 2,
 		Publications: []Publication{
-			{ParticipantSessionID: testID(t, "10000000-0000-4000-8000-000000000004"), Source: "screen", Enabled: true, PublicationID: "cf:session-1:screen-track"},
-			{ParticipantSessionID: testID(t, "10000000-0000-4000-8000-000000000003"), Source: "camera", Enabled: false},
+			{ParticipantID: testID(t, "10000000-0000-4000-8000-000000000004"), Source: "screen", Enabled: true, PublicationID: "cf:episode-1:screen-track"},
+			{ParticipantID: testID(t, "10000000-0000-4000-8000-000000000003"), Source: "camera", Enabled: false},
 		},
 	}
 	canonical, _, payload, err := CanonicalizeObservation(input)
 	if err != nil {
 		t.Fatalf("canonicalize observation: %v", err)
 	}
-	if canonical.Publications[0].ParticipantSessionID.String() != "10000000-0000-4000-8000-000000000003" {
-		t.Fatalf("first participant = %s", canonical.Publications[0].ParticipantSessionID)
+	if canonical.Publications[0].ParticipantID.String() != "10000000-0000-4000-8000-000000000003" {
+		t.Fatalf("first participant = %s", canonical.Publications[0].ParticipantID)
 	}
-	if string(payload) != `[{"participant_session_id":"10000000-0000-4000-8000-000000000003","source":"camera","enabled":false,"publication_id":null},{"participant_session_id":"10000000-0000-4000-8000-000000000004","source":"screen","enabled":true,"publication_id":"cf:session-1:screen-track"}]` {
+	if string(payload) != `[{"participant_id":"10000000-0000-4000-8000-000000000003","source":"camera","enabled":false,"publication_id":null},{"participant_id":"10000000-0000-4000-8000-000000000004","source":"screen","enabled":true,"publication_id":"cf:episode-1:screen-track"}]` {
 		t.Fatalf("payload = %s", payload)
 	}
 	input.Publications = append(input.Publications, input.Publications[0])

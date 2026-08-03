@@ -167,7 +167,7 @@ func TestDispatcherCompletionUsesInjectedLoggerWithContextAndRedaction(t *testin
 		DeliveryID:    mustDispatcherID(t, "33333333-3333-4333-8333-333333333333"),
 		AttemptID:     mustDispatcherID(t, "44444444-4444-4444-8444-444444444444"),
 		AttemptNumber: 1,
-		EventName:     "session.ended",
+		EventName:     "episode.ended",
 		APIVersion:    APIVersion,
 		Body:          []byte("private-webhook-body"),
 	}

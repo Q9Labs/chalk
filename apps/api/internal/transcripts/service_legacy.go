@@ -13,8 +13,8 @@ type CreateInput struct {
 	ID          utilities.ID
 	TenantID    utilities.ID
 	RecordingID utilities.ID
-	RoomID      utilities.ID
-	SessionID   utilities.ID
+	SpaceID     utilities.ID
+	EpisodeID   utilities.ID
 	Status      string
 	Provider    string
 	Model       string

@@ -294,14 +294,14 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   const canChat = props.chatEnabled !== false && (props.canSendChat ?? (snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendChat")));
   const canReact = props.reactionsEnabled !== false && (props.canReact ?? (snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendReaction")));
   const canRequestMedia = localCapabilities.includes("requestMediaOthers");
-  const canManageParticipants = props.canManageParticipants ?? localCapabilities.some((capability) => ["muteOthers", "stopVideoOthers", "removeParticipant", "promoteDemote", "transferHost"].includes(capability));
+  const canManageParticipants = props.canManageParticipants ?? localCapabilities.some((capability) => ["muteOthers", "stopVideoOthers", "removeParticipant", "assignRoles"].includes(capability));
   const canShareScreen = props.screenShareEnabled !== false && (props.canShareScreen ?? localCapabilities.includes("publishScreen"));
   const canRaiseHand = props.handRaiseEnabled !== false && (props.canRaiseHand ?? localCapabilities.includes("raiseHand"));
   const canUseWhiteboard = props.whiteboardEnabled !== false && (props.canUseWhiteboard ?? session.whiteboard !== null);
   const canInvite = props.canInvite ?? Boolean(props.meetingLink);
   const canLeave = props.canLeave !== false;
   const canAdmit = props.admissionEnabled !== false && (props.canAdmit ?? localCapabilities.includes("manageAdmission"));
-  const chatFiles = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.version === 2 ? session.chatFiles : null;
+  const chatFiles = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.version === 1 ? session.chatFiles : null;
   const incomingRequest = snapshot.incomingMediaRequests[0];
   const remoteScreenShare = tiles.find((participant) => participant.isScreenSharing && participant.screenShareTrack);
   const screenShare = remoteScreenShare?.screenShareTrack
@@ -421,8 +421,8 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
               onStopParticipantCamera: localCapabilities.includes("stopVideoOthers") ? (id) => void runCommand(() => actions.stopParticipantCamera(id), "Camera stop failed") : undefined,
               onRequestStartCamera: canRequestMedia ? (id) => void runCommand(() => actions.requestStartCamera(id), "Camera request failed") : undefined,
               onRemoveParticipant: localCapabilities.includes("removeParticipant") ? (id) => void runCommand(() => actions.removeParticipant(id), "Remove failed") : undefined,
-              onMakeHost: localCapabilities.includes("transferHost") ? (id) => void runCommand(() => actions.transferHost(id), "Host transfer failed") : undefined,
-              onMakeCoHost: localCapabilities.includes("promoteDemote") ? (id) => void runCommand(() => actions.setParticipantRole(id, "cohost"), "Role update failed") : undefined,
+              onMakeHost: localCapabilities.includes("assignRoles") ? (id) => void runCommand(() => actions.transferHost(id), "Host transfer failed") : undefined,
+              onMakeCoHost: localCapabilities.includes("assignRoles") ? (id) => void runCommand(() => actions.setParticipantRole(id, "cohost"), "Role update failed") : undefined,
             }
           : undefined,
       admission: canAdmit
