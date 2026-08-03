@@ -313,6 +313,18 @@ noisy terms call/host/peer/bot/ai deliberately excluded from v1. The
 sync-renumber worker (max) is still running; expect to commit for it too
 when its report lands at /tmp/codex-sync-renumber.md.
 
+**Worker-survival lesson (2026-08-03 night):** the third sync-renumber run
+died silently ~13:15 — background tasks launched via relay-agent
+run_in_background die when the launching session compacts. Fourth run
+launched DETACHED from the main agent: `nohup codex exec … > stream.log
+2>&1 < /dev/null & disown` — survives compaction, zero context bloat since
+all output goes to disk. This is now the launch pattern for long workers;
+relays (Haiku) remain for short-lived delegation. Worker prompts now also
+say DO NOT git commit (sandbox can't write worktree git metadata; the
+orchestrator reviews and commits). Report → /tmp/codex-sync-renumber.md,
+stream → /tmp/codex-sync-renumber-stream.log; on pickup, check pgrep
+'gpt-5.6-luna' — a missing process with no report means it died again.
+
 **Corrections + rulings (Hasan, 2026-08-03 late evening):**
 
 - Model roles corrected: **Sol high is the MOST capable Codex model; Luna
