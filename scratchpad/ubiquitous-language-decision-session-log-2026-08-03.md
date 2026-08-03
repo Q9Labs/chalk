@@ -67,11 +67,81 @@ agents, and coherent language.
 Trunk sentence: **a Space where Users and Agents participate; each bounded run
 of activity is an Episode, and Episodes leave artifacts.**
 
+## Rulings continued — 2026-08-03 (morning session)
+
+- **§8 Depth of rename: LOCKED — all the way down, no mercy.** Same canonical
+  roots to wire frames, DB tables/columns, env vars, span names, infra stack
+  names. Nothing survives. Only the previously ruled vendored-term exception
+  (WebRTC/CallKit/Cloudflare vocabulary at adapter seams) stands.
+- **Legacy protocol versions: LOCKED — delete entirely.** The Elixir sync
+  service still ships the whole legacy V1 architecture (`rooms/room.ex`,
+  `rooms/room_server.ex`, `transport/socket.ex`) alongside V3; disabled in
+  production, pure clutter. Remove it and any client remnants outright.
+  Renumbering current v3 → v1 (or dropping version segments) is directionally
+  approved by Hasan; exact form awaits the version-archaeology report.
+
+### Boundary rulings (Hasan ratified the Codex boundary-survey findings)
+
+Hasan reviewed the full boundary audit and agreed with all findings. Locked:
+
+- **ChalkSession split**: it is a god object fusing ~6 concerns (connection/
+  access lifecycle, media session, sync replica, room-control facade,
+  chat/reaction state machine, snapshot store + diagnostics). Split into a
+  narrow connection coordinator plus feature controllers (chat, room actions,
+  whiteboard) composed into one UI-facing store. Name the pieces, not the
+  fusion. Part of the SDK rename wave.
+- **The five "session" concepts get true names**: Go `sessionlifecycle`
+  (→ Episode), broker `MeetingSession` (edge lease), RN `ClientSession`
+  (pre-join credential client), Elixir `Live.Session` (media/presence
+  process), Elixir `Sessions.Coordinator` (socket delivery). One word was
+  carrying five abstractions; this coupling is the core disease.
+- **Media-plane contract ownership**: wrong today — media's own interface
+  lives in `sync/v3-types.ts`. Media gets a neutral contract of its own.
+- **UI primitive double-ownership**: React SDK must import from
+  `packages/ui`; its local duplicate primitives (`react/src/components/ui`)
+  are wrong and go away. Hasan: "super sad… not good."
+- **Forwarding disease is layered and must be cured**: sync client (~22-method
+  flat mirror) → ChalkSession one-line forwards → React hooks and RN hooks
+  each hand-mirroring the entire action surface. One command currently means
+  four synchronized edits. Hasan is "especially not happy" with this.
+- **`tools/contract-codegen` renamed to its real role** (it validates a proof
+  fixture; HTTP contracts come from Go OpenAPI, sync/whiteboard from
+  checked-in JSON schemas). Folded into the SDK rename wave.
+- Remaining survey suspects (httpapi composition god package,
+  ParticipantAccess envelope fusion, room-actions four-owner split, whiteboard
+  vocabulary overlap) ratified as valid; fix order decided during execution
+  planning.
+- **Method consequence**: rename waves and boundary redraws are the same
+  waves — never touch the system twice.
+
+## Space durability decision sheet (open — D1–D5, recs on the table)
+
+Context: schema audit shows the durable shell exists but is empty. `rooms` has
+id/slug/status/metadata/recurring_policy; ALL policy (role capability grids,
+host-exit, durations) lives per-`room_sessions` (immutable via trigger); chat
+streams and whiteboard scenes are keyed per session and die with it;
+`memberships` are tenant-level only; participants are per-session seats.
+
+- **D1 Config home** (rec: Roles/Capabilities/admission defined on Space;
+  Episode snapshots them immutably at start; edits take effect next Episode).
+- **D2 Membership** (rec: un-park Member — durable User/Agent assignment to a
+  Space with a Role; guests stay Episode-scoped; durability is the forcing
+  function).
+- **D3 Content** (rec: whiteboard → Space scope; chat stream keyed by Space
+  with Episode boundary markers so meeting-chat vs continuous-chat stays a
+  presentation choice, not an architecture fork).
+- **D4 Emergent Episodes** (rec: first join starts the Episode, last leave or
+  explicit end closes it; kills "create meeting → join" provisioning and most
+  of the broker's MeetingSession lease machinery).
+- **D5 Presence without Episode** (rec: not now; that is the parked Pulse).
+
+Trunk sentence v2: **Space = identity + config + members + persistent
+content; Episode = an immutable-policy run that emerges on join and leaves
+artifacts.**
+
 ## Open decisions (sheet items not yet ruled)
 
-- **§8 Depth of rename**: same canonical roots down to wire frames, DB
-  tables/columns, env vars, span names (rec: yes — cheapest day ever) vs
-  codegen seam tolerating legacy names underneath.
+- **D1–D5** above (Space durability).
 - **§9 `Chalk` prefix in symbols** (`ChalkSession`, `createChalkServerClient`):
   rec: nowhere (package provides namespace), pragmatic exception for Go/Elixir
   internals where collisions are real. Note `<Chalk />` is a full name, not a
@@ -79,9 +149,10 @@ of activity is an Episode, and Episodes leave artifacts.**
 - **§10 Grammar ratification**: closed command-verb set, past-tense
   `<Subject><Verb>Event`, `<Noun>Snapshot`, `noun.condition` error codes,
   UI shape suffixes — ratify the v4 doc's grammar half on its merits.
-- **SDK runtime handle name**: `ChalkSession` must be renamed (word freed by
-  Episode ruling; prefix question pending §9). Candidate direction:
-  `SpaceClient` or similar — undecided.
+- **SDK runtime handle name**: superseded by the ChalkSession split ruling —
+  the pieces get named (connection coordinator + feature controllers), not
+  the fusion. Coordinator candidates: `SpaceConnection` / `SpaceClient`;
+  final names decided with §9 during the SDK wave design.
 - Host/guest words in UI copy of the `<Chalk />` turnkey: turnkey defines its
   own product copy; specifics undecided.
 
@@ -120,7 +191,11 @@ of activity is an Episode, and Episodes leave artifacts.**
 - `c21e8f54` — `sdk-generator-proof` experiment deleted (Hasan: concluded
   experiment) + `route-workflow.md` reference removed;
   `docs/chalk-mobile-whiteboard/` deleted (stale placeholder doc).
-- **In flight**: Effect `4.0.0-beta.94 → beta.102` upgrade (v4 is NOT GA —
-  npm latest is 3.22.1, beta tag is 4.0.0-beta.102) running via Codex in
-  `.worktrees/effect-v4`, branch `effect-v4-beta102`: version bumps applied,
-  `telemetry/delivery.ts` touched, uncommitted at time of writing.
+- `43a86326` — Effect `4.0.0-beta.94 → beta.102` upgrade landed on master
+  (v4 is NOT GA — npm latest 3.22.1). One real migration: removed
+  `Schedule.take(1)` → `Schedule.upTo({ times: 1 })` in telemetry retry.
+  Verified independently (client 325 tests + tsc, codegen 33 tests, full
+  gate). Worktree and branch removed. Incident during landing: failed hook
+  runs in the linked worktree set `core.bare=true` on the MAIN repo config
+  (Mix `git init` under hook `GIT_DIR` suspected); fixed with
+  `git config core.bare false`; complaints #3305/#3306 filed.
