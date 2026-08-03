@@ -405,27 +405,6 @@ describe("ChalkSession", () => {
     await harness.session.leave();
   });
 
-  it("provides the media client a JIT replacement for a dormant zero-media connection", async () => {
-    const initial = participantAccess("connection-1", "initial");
-    const replacement = participantAccess("connection-2", "replacement");
-    const harness = createHarness({
-      access: [initial, replacement],
-      initialMicrophoneEnabled: false,
-      initialCameraEnabled: false,
-    });
-    await harness.session.join();
-
-    await expect(harness.media.callbacks.replaceDormantConnection()).resolves.toEqual(replacement.media.clientPayload);
-
-    expect(harness.access.mock.calls[1]?.[0]).toMatchObject({
-      reason: "media_recovery",
-      replaceMediaConnection: true,
-      currentMediaToken: initial.media.token,
-    } satisfies Partial<ChalkSessionAccessRequest>);
-    expect(harness.media.restart).not.toHaveBeenCalled();
-    await harness.session.leave();
-  });
-
   it("handles one failed immutable media snapshot once when subscription and onFailure both deliver it", async () => {
     const { harness } = await joinedRecoveryHarness();
 

@@ -66,7 +66,6 @@ export type ChalkSessionMediaClient = V3ClientMediaPlane & {
 export type ChalkSessionMediaFactoryInput = {
   readonly access: ParticipantAccess;
   readonly credential: () => Promise<string>;
-  readonly replaceDormantConnection: () => Promise<CloudflareSFUBootstrap>;
   readonly onFailure: (error: unknown) => void;
   readonly onScreenEnded: () => void;
 };

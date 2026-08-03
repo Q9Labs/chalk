@@ -400,7 +400,6 @@ export class ChalkSession implements ChalkSessionStore {
           this.#dependencies.createMediaClient({
             access,
             credential: () => this.#access.getMediaToken(),
-            replaceDormantConnection: async () => (await this.#access.refresh("media_recovery", true)).media.clientPayload,
             onFailure: () => this.#handleMediaFailure(),
             onScreenEnded: () => this.#handleScreenEnded(),
           }),

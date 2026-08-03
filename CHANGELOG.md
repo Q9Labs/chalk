@@ -393,12 +393,6 @@ ordinary join attempt. Host admission remains available through
 - Gave React Native Sync startup a 30-second budget while preserving the
   10-second web and client default, allowing Android to retry after its native
   WebSocket connection attempt times out.
-- Replaced a dormant Cloudflare SFU connection immediately before the first
-  later media publication when a participant joined with microphone and camera
-  disabled. Empty joins no longer reuse an unnegotiated provider session for a
-  delayed screen-share, microphone, or camera offer, and remote-track discovery
-  now waits for that first negotiation. Already-negotiated sessions keep their
-  current connection and reusable transceivers.
 - Kept incremental screen-share publication and remote-track discovery failures
   scoped to the affected media operation so an SFU signaling rejection no
   longer forces every participant into whole-session recovery. Screen retries
