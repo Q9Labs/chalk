@@ -141,14 +141,16 @@ streams and whiteboard scenes are keyed per session and die with it;
   never automatic. Open corollary (minor, decide during design): whether
   _posting_ chat requires a live Episode (rec: initially yes — read anytime,
   write while joined — to stay out of async-messaging scope for now).
-- **D4 Episode start model: OPEN — under active discussion.** Hasan pushed
-  back on pure emergent join-starts-episode: products may want to create the
-  room ahead of time (warm start, "created five minutes before"), possibly
-  via scheduled rooms. Claude's refined proposal on the table: emergent
-  _semantics_ (join always works; starts an Episode if none is live) PLUS an
-  optional explicit start/warm API and rrule-driven scheduled starts — since
-  invite links target the durable Space slug, distribution never needs a
-  pre-provisioned Episode; only infra warm-up does.
+- **D4 Episode start model: LOCKED (Hasan: "pretty sound")** — emergent
+  semantics with explicit start as an option. Join always works: if no
+  Episode is live and the joiner holds the start capability, joining starts
+  one. An explicit `start episode` API remains as a ceremony/warm-up hook,
+  never a prerequisite. Scheduled/warmed starts ride the Space
+  `recurring_policy` rrule. Invite links target the durable Space slug, so
+  distribution never needs pre-provisioning. Invariant: no one who is allowed
+  in is ever turned away because nobody ran a create call. Derived law
+  (entailed by "join targets the Space"): **at most one live Episode per
+  Space** — otherwise "join the Space" is ambiguous.
 - **D5 Presence without Episode: OPEN** — awaiting ruling now that it has
   been explained (can someone be visibly "in" a Space when no Episode is
   live; rec: no for now, that is the parked Pulse).
