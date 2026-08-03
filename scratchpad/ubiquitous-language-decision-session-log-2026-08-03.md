@@ -151,9 +151,8 @@ streams and whiteboard scenes are keyed per session and die with it;
   in is ever turned away because nobody ran a create call. Derived law
   (entailed by "join targets the Space"): **at most one live Episode per
   Space** — otherwise "join the Space" is ambiguous.
-- **D5 Presence without Episode: OPEN** — awaiting ruling now that it has
-  been explained (can someone be visibly "in" a Space when no Episode is
-  live; rec: no for now, that is the parked Pulse).
+- **D5 Presence without Episode: LOCKED — no.** See "Later rulings" below;
+  Pulse demoted to consideration-only.
 
 Trunk sentence v2: **Space = identity + config + members + persistent
 content; Episode = an immutable-policy run that emerges on join and leaves
@@ -164,23 +163,71 @@ past-tense `<Subject><Verb>Event`, `<Noun>Snapshot`, UI shape suffixes all
 ratified. Error codes are `noun.condition` with **underscores in the
 condition**: `episode.not_found`, `space.access_denied` (Hasan: no dashes).
 
-## Open decisions (sheet items not yet ruled)
+## Later rulings — 2026-08-03 (continued)
 
-- **D4** (Episode start model) — under discussion, see sheet above.
-- **D5** (presence without Episode) — awaiting ruling.
+- **D5: LOCKED — no ambient presence.** A dormant Space is readable data;
+  you become visible only by joining (which starts/enters an Episode).
+  Important amendment: Pulse is demoted from "build later" to a mere
+  consideration — Hasan is not sure he wants that direction at all.
+- **End policy: LOCKED — mechanism from platform, strictness from customer.**
+  Three ends: explicit `end_episode` (capability-gated); natural (last leave +
+  configurable linger window so blips/rejoins continue the same Episode);
+  deadline (Space-config default duration, capability-gated live extensions,
+  hard tenant ceiling). Keep the existing deadline-generation machinery.
+- **Link policy (clarification, entailed by §2)**: join links target the
+  Space slug only; Episodes are addressable read-only for history/artifacts
+  ("Tuesday's recording"), never joinable.
+- **Content canonicality (clarification of D3, Hasan confirmed)**: Space
+  chat stream and whiteboard scene are the canonical single copies; Episodes
+  write INTO them while live and reference ranges/captures afterward. Space
+  content is never derived by merging per-episode copies.
+- **Metrics**: Episode records are per-participant (join/leave, role,
+  published media), not just aggregates; observability carries both episode
+  and participant dimensions. Hasan agreed.
+- **One live Episode per Space confirmed by Hasan** ("just creating new
+  space"); parallel tracks are separate Spaces.
+
+## Open decisions (not yet ruled)
+
+- **Member/guest identity direction** (discussed, mechanics clarified, not
+  yet explicitly locked): Chalk never owns end-user identity; embedding app
+  is the identity authority. Two integration depths: ephemeral guest grant
+  (drop-in path) vs registered identity keyed by the customer's external id
+  (Stripe-customer pattern; external_id is a unique reference per tenant,
+  NEVER the primary key — Chalk mints its own ids). Members then attach
+  Space+Role to registered identities.
+- **Guest→Member promotion paths** (proposed, awaiting Hasan's taste):
+  (a) backend API call (register identity + add membership); (b) in-UI
+  promotion by a holder of `manage_members` — requires resolving the guest to
+  a registered identity via a handshake with the customer's identity system
+  (callback/webhook), since anonymous guests have nothing durable to attach
+  membership to; (c) self-serve request + owner approval (admission-like
+  flow). Auto-enroll policies deliberately not proposed for now.
 - **SDK piece names** from the ChalkSession split: coordinator candidates
   `SpaceConnection` / `SpaceClient` + controller names — decided during SDK
   wave design under §9 (no Chalk prefix).
 - Host/guest words in UI copy of the `<Chalk />` turnkey: turnkey defines its
   own product copy; specifics undecided.
+- **`state_schema_version: 3` / `chalk-sync-state-v3`** (from archaeology
+  report): internal durable-state schema counter — reset to 1 with the
+  protocol renumber, or keep as an internal migration counter exempt from
+  §8? Awaiting ruling.
 
-## Parked concepts (deliberate, revisit later)
+## Parked concepts and considerations (revisit only deliberately)
 
-- **Member** — durable belonging of a User/Agent to a Space (rosters, standing
-  access, "assign an agent to your Space"). Shelved by Hasan for now.
-- **Pulse** — Space-level ambient-activity aggregate, product name, built on
-  Presence.
+- **Pulse** — Space-level ambient-activity aggregate. A consideration only;
+  Hasan explicitly unsure he wants this direction at all (2026-08-03).
 - **"Pass the chalk"** — floor-control product feature name.
+- **Breakout/station concept** — if it ever exists it is a product-layer
+  arrangement of multiple Spaces (never multiple Episodes in one Space) and
+  gets a fresh name. Whether to build it at all is undecided.
+- **Agent integration standards** (Hasan, 2026-08-03, "write it down"):
+  beyond the native path (Agents join as first-class participants through the
+  same SDK), consider supporting external agent standards so customers can
+  bring their own agents — candidates: MCP (tools layer), A2A, ACP. Landscape
+  still churning in 2026; native-first, adapters later, proper research pass
+  before any commitment.
+- (Member left the parked list — un-parked and LOCKED as D2.)
 
 ## After the rulings close: execution plan
 
