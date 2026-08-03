@@ -78,6 +78,23 @@ verify_version() {
   echo "Postgres ${server_version} is ready."
 }
 
+verify_data_checksums() {
+  local data_checksums
+
+  if ! data_checksums="$(docker exec "${container}" psql -U "${user}" -d "${db}" -tAc "show data_checksums" | tr -d '[:space:]')"; then
+    echo "Could not verify Postgres data checksums." >&2
+    echo "Run 'apps/api/scripts/dev-postgres.sh wipe' explicitly, then rerun start. The volume will not be wiped automatically." >&2
+    exit 1
+  fi
+  if [[ "${data_checksums}" != "on" ]]; then
+    echo "Existing Postgres volume is incompatible: data_checksums=${data_checksums:-unknown}." >&2
+    echo "Run 'apps/api/scripts/dev-postgres.sh wipe' explicitly, then rerun start. The volume will not be wiped automatically." >&2
+    exit 1
+  fi
+
+  echo "Postgres data checksums are enabled."
+}
+
 case "${cmd}" in
   start)
     require_docker
@@ -90,6 +107,7 @@ case "${cmd}" in
         -e "POSTGRES_DB=${db}" \
         -e "POSTGRES_USER=${user}" \
         -e "POSTGRES_PASSWORD=${password}" \
+        -e "POSTGRES_INITDB_ARGS=--data-checksums" \
         -p "127.0.0.1:${port}:5432" \
         -v "${volume}:/var/lib/postgresql" \
         -d "${image}" >/dev/null
@@ -97,6 +115,7 @@ case "${cmd}" in
 
     wait_until_ready
     verify_version
+    verify_data_checksums
     echo "CHALK_DATABASE_URL=${database_url}"
     ;;
   stop)
