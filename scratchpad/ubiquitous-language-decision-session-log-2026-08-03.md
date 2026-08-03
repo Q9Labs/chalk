@@ -398,3 +398,31 @@ their true names inside their waves' sheets.
   runs in the linked worktree set `core.bare=true` on the MAIN repo config
   (Mix `git init` under hook `GIT_DIR` suspected); fixed with
   `git config core.bare false`; complaints #3305/#3306 filed.
+
+## Model-assignment amendment (Hasan, 2026-08-03 evening)
+
+Hasan amended the wave assignments during the contract-wave approval:
+
+- **Contract wave AND client-SDK wave both go to GPT-5.6 Sol high** (not
+  just contract). Client SDK is a boundary redraw too, not pure mechanics.
+- **One attempt per worker, not two**: no Codex auto-review second pass on
+  these waves. The worker gets a single run; Claude's skeptical diff review
+  against the report is the gate.
+- Remaining waves (React/RN, apps, infra, observability) stay Luna max.
+- Isolation confirmed: every worker runs in its own `.worktrees/<name>` on
+  its own branch, launched detached (nohup pattern); waves run sequentially
+  because client SDK depends on the contract wave's regenerated types.
+
+## Public-surface co-design OPEN (Hasan, same message)
+
+Hasan: "I still want to discuss the public API surface/shape — the single
+component where the user is going to interact — we have to make sure it's
+good and coherent." This is a live co-design gate covering the developer
+ladder: `<Chalk />` turnkey component, provider+hooks, headless SpaceClient
+construction. NOT yet ruled; the SpaceClient construction/auth seam must be
+ruled BEFORE the client-SDK wave launches (the ratified split sheet covers
+the split, not how a SpaceClient is created or how access is supplied).
+Current reality being redesigned: `VideoConferenceProps` has ~45 props with
+a `createSession` factory prop, hard-coded `role: "host" | "participant"`,
+nine `*Enabled` toggles AND nine `can*` permission booleans (the `can*`
+family contradicts capability-driven UI once roles are customer-defined).
