@@ -95,6 +95,11 @@ state.
 - [ ] Run, Graph, Trace, and Flame views update while the Episode is live without
       a manual refresh and resume after a browser reconnect from the last
       confirmed cursor.
+- [ ] The complete debugger uses the new Chalk design system shown in
+      `docs/redesign/chalk-design-system-board.png` and implemented through the
+      canonical shared tokens and primitives. It ships as a polished Chalk
+      product surface, not a generic observability dashboard, dark trace console,
+      wireframe, or Reading Room-themed page.
 - [ ] The Issues feed shows explicit failures, missed required confirmations,
       deadline overruns, recovery exhaustion, unexpected state transitions, and
       telemetry gaps.
@@ -177,6 +182,12 @@ state.
 - [ ] A real-browser localhost proof covers two Participants, successful join,
       chat, reaction, screen share, one moderation action, Sync reconnect,
       Episode end, and linked epilogue completion.
+- [ ] Real-browser visual proof covers Run, Graph, Trace, Flame, Issues, details,
+      Participants, and Epilogue at 1440, 1280, and 1024 CSS pixels, plus loading,
+      empty, live, stalled, failed, disconnected, reconnecting, ended, export-in-
+      progress, export-failed, and permission-denied states. Approved screenshots
+      show no overflow, clipped controls, unreadable density, token drift, or
+      unfinished placeholder treatment.
 - [ ] Separate proofs force an SFU or Sync failure, a silent missing
       confirmation, exporter loss, SSE reconnect, and an unauthorized query.
       The debugger shows the right issue and the product remains safe.
@@ -900,11 +911,30 @@ terminal states, or gap records.
 
 ## UI and experience
 
-The debugger uses Chalk's internal application language: Inter or the existing
-body family, semantic teal for selected and live state, green only for confirmed
-success, amber for stalls and degraded visibility, red for hard failure, dark
-slate for the instrument canvas, ten-pixel radii, and the existing control
-shapes. It must not reuse the Reading Room visual language.
+The new Chalk design system is the UI contract. The design board at
+`docs/redesign/chalk-design-system-board.png` defines the visual direction, and
+the canonical code tokens and shared primitives define the implementation. The
+debugger uses Paper `#f7f6f2`, white and tonal surfaces, Ink `#0c0e12`, the
+documented line colors, six/eight/twelve/sixteen-pixel radius scale, restrained
+elevation, Bricolage Grotesque for display text, Figtree for interface and body
+text, and Spline Sans Mono for IDs, time, cursors, and numeric evidence.
+
+State colors follow the same semantic palette: blue or Blue Wash for selected
+and live focus, green or Green Wash only for confirmed success, yellow or Yellow
+Wash for stalls and degraded visibility, and pink or Pink Wash for failures and
+destructive outcomes. Dense timelines may use Ink for the plotting field only
+when a shared design-system component defines that treatment; the debugger must
+not invent a dark trace-console theme. It must not reuse the Reading Room visual
+language or the older Inter/teal SDK preview theme.
+
+The UI lane consumes design tokens and primitives from `packages/ui`. Where the
+new implementation still exists only in `apps/web/src/styles/tokens.css`, the
+design-system lane hoists the needed token or primitive into `packages/ui` first.
+The debugger cannot copy hex values or one-off controls into its route. The app
+may add diagnostic-specific compositions—timeline lane, checkpoint chain, issue
+card, trace row, graph node, evidence field, stream-status badge—but each must be
+built from the shared typography, surface, border, button, input, tab, badge,
+popover, toast, skeleton, and focus behavior.
 
 The desktop layout has four stable regions:
 
@@ -932,6 +962,21 @@ labels for state that do not rely on color, and a table alternative for graphs
 and the waterfall. At one million Events it renders only the visible window.
 Zoom, filters, and selected focus survive stream reconnects.
 
+“Polished” is observable. The final UI has a clear information hierarchy at high
+density, consistent spacing and alignment, deliberate empty space, no placeholder
+copy or raw browser controls, complete hover/pressed/focus/disabled states, calm
+design-system motion, useful skeletons, plain error recovery, and stable layout
+as live data arrives. Copy and export actions use Chalk buttons and toasts. Every
+view has intentional loading, empty, partial-evidence, disconnected, and terminal
+states. Long identifiers truncate visually without losing their copy target, and
+the details drawer keeps labels aligned across unknown and populated values.
+
+The acceptance fixture captures the debugger beside the design-system board and
+the current Chalk meeting surfaces for review. A visual-regression suite locks the
+approved desktop states. Review rejects a screen that is merely functional: it
+must look like the same product family as the board's lobby, meeting room, panels,
+buttons, tags, and notifications.
+
 ## Implementation route
 
 ### Package and service ownership
@@ -942,6 +987,9 @@ Zoom, filters, and selected focus survive stream reconnects.
   render-observed adapter checkpoints only.
 - `packages/diagnostics-contracts` owns the v1 schemas, action set, expectations,
   Safe ID Class Registry, fixtures, generators, and verification ledger format.
+- `packages/ui` owns the new-design-system tokens and reusable debugger
+  primitives. It must expose compositions needed by the web route without
+  pulling debugger semantics into the UI package.
 - `apps/api` owns authenticated binding, after-commit lifecycle observation,
   reconciliation, Postgres storage, projection, expectation deadlines, retention,
   internal query and stream, export jobs, operator authorization, and audit.
@@ -1021,6 +1069,13 @@ Journey, release, and source commit propagate through the access request, V3
 hello, Sync command, Space action, and SFU HTTP boundary without one Episode-long
 span.
 
+The UI proof imports the canonical `packages/ui` theme, renders the full named
+state and width matrix, and compares approved screenshots with a fixed browser,
+font load, viewport, and seeded Event fixture. The threshold catches pixel drift,
+while a human design pass checks hierarchy, density, legibility, copy, interaction
+states, and parity with `docs/redesign/chalk-design-system-board.png`. A passing
+pixel diff cannot approve a visually poor baseline.
+
 The one-million-Event capacity proof runs on `agents-macmini` in a uniquely named
 temporary checkout. It measures append throughput, projector lag, p95 event-to-
 stream latency, snapshot and page latency, memory, reconnect catch-up, and
@@ -1034,8 +1089,9 @@ flowchart TD
   A["P0 · Contract owner: freeze shared v1 schemas, actions, fixtures"]
   B["P1 · API owner: schema, lifecycle, storage, generated queries"]
   C["P1 · SDK owner: Event runtime, redaction, action wrapper"]
-  D["P1 · UI owner: fixture model and debugger shell"]
-  G1{"Gate 1 · contracts compile and migration parity passes"}
+  DS["P1 · Design system owner: shared tokens and debugger primitives"]
+  D["P1 · UI owner: fixture model and polished debugger shell"]
+  G1{"Gate 1 · contracts, migrations, and design foundations pass"}
   E["P2 · API owner: projection, deadlines, retention, query, SSE"]
   F["P2 · Sync owner: command, chat, moderation, recovery checkpoints"]
   G["P2 · SDK owner: media, Sync, chat, action checkpoints"]
@@ -1053,7 +1109,8 @@ flowchart TD
 
   A --> B
   A --> C
-  A --> D
+  A --> DS
+  DS --> D
   B --> G1
   C --> G1
   D --> G1
@@ -1095,11 +1152,21 @@ flowchart TD
 - [ ] **P1 SDK lane.** Owner: SDK worker. Deliver framework-neutral contracts,
       bounded runtime, approved attributes, redaction, and an action wrapper with
       fixtures. Scope fence: `sdks/typescript/client` only; no app wiring.
+- [ ] **P1 design-system lane.** Owner: UI-system worker. Reconcile the board and
+      `apps/web/src/styles/tokens.css` into canonical `packages/ui` tokens and
+      primitives needed by the debugger, including typography, surfaces, tabs,
+      buttons, fields, badges, toasts, skeletons, status treatments, focus, and
+      diagnostic compositions. Add Storybook or focused visual fixtures and
+      interaction tests. Scope fence: `packages/ui`, font/brand assets, and the
+      smallest required token import wiring only; no debugger data or routing.
 - [ ] **P1 UI lane.** Owner: web worker. Deliver typed fixtures and an internal
-      route shell that renders no invented product state. Scope fence: `apps/web`
-      only and no production route mounting.
+      route shell that renders no invented product state and uses only the new
+      shared design-system surface. Scope fence: `apps/web` only and no production
+      route mounting, copied token sheet, old Inter/teal styling, or one-off base
+      controls.
 - [ ] **Gate 1.** Owner: orchestrator. Reconcile generated types, migration
-      parity, glossary names, fixture compatibility, and package exports before
+      parity, glossary names, fixture compatibility, package exports, board/token
+      parity, primitive interaction proof, and UI shell visual proof before
       service behavior branches.
 - [ ] **P2 API lane.** Owner: API worker. Deliver durable append, projection,
       issue deadlines, retention, alternate references, snapshot/query/SSE,
@@ -1114,7 +1181,8 @@ flowchart TD
 - [ ] **P2 UI lane.** Owner: web worker. Deliver the four views, Issues,
       Participant and Epilogue lanes, details, filters, resume, Copy for agent,
       Copy all, JSON export-job flow, virtualization, and accessibility against
-      fixtures. Scope fence: `apps/web` and shared UI primitives only.
+      fixtures. Deliver approved visual-regression fixtures for every named state
+      and desktop width. Scope fence: `apps/web` and shared UI primitives only.
 - [ ] **P2 Agent lane.** Owner: tooling worker. Deliver the resolver CLI,
       machine shapes, bounded agent output, follow-up paging, tests, and the
       repository skill. Scope fence: tools/scripts and the new skill only.
@@ -1134,7 +1202,9 @@ flowchart TD
       diagnostic failures do not alter product outcomes.
 - [ ] **P4 browser proof.** Owner: orchestrator. Run the complete two-Participant
       success path, explicit failure, silent stall, reconnect, end, epilogue,
-      copy, and CLI-resolution stories in a real browser.
+      copy, and CLI-resolution stories in a real browser. Capture the required
+      desktop/state matrix and reject any screen that drifts from the new Chalk
+      design system or lacks production-level finish.
 - [ ] **P4 capacity proof.** Owner: capacity worker. Run the isolated M4 load,
       catch-up, and retention proof; return measurements and cleanup evidence,
       not generated data.
@@ -1156,6 +1226,12 @@ flowchart TD
 - Do not overload the product Sync WebSocket with debugger traffic.
 - Do not make `apps/web` own diagnostic semantics that belong in the client
   package, API, or Sync.
+- Do not ship the debugger in a generic dark observability theme, the old
+  Inter/teal SDK theme, or a close-enough set of copied colors. Use the new Chalk
+  design system and shared primitives.
+- Do not call a functional wireframe polished. Missing empty/loading/error/
+  reconnect/export states, raw controls, clipped data, weak hierarchy, and
+  unreviewed visual baselines are release failures.
 - Do not record content to make the demo look complete. Safe absence is a tested
   feature.
 - Do not interpret a missing client or provider signal as success. Emit a gap or
