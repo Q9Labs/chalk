@@ -301,6 +301,22 @@ ratified design doc (Luna at max), then client SDK wave (ChalkSession
 split), React/RN `<Chalk />`, apps, infra, observability, marketing, DB
 last. Reports land at /tmp/codex-*.md. Nothing awaits a Hasan decision.
 
+**Design-sheet rule (Hasan raised, 2026-08-03, pre-compaction): abstractions
+are designed, never just renamed.** Every wave carrying a boundary redraw
+gets a code-grounded design sheet with DECIDE items ruled by Hasan BEFORE its
+worker launches; Luna implements ratified designs, it never designs.
+`space-episode-schema-design-2026-08-03.md` is the template. Design status:
+contract wave designed+ratified; **client SDK split is the next sheet to
+draft** (coordinator responsibility line, controller set + boundaries, single
+UI-facing store shape, snapshot/subscription contract, the forwarding cure so
+one command ≠ four edits, §9 piece names, media contract extraction) — draft
+it while the contract-wave worker runs. React/RN wave is half-designed (the
+ratified UI-shape grammar of the superseded SDK doc is component canon; delta
+= Space/Episode mapping + hooks-derive-from-store strategy). Go API redraws
+(httpapi god package, ParticipantAccess fusion, room-actions four-owner
+split) get short sheets folded into their waves. The five "sessions" get
+their true names inside their waves' sheets.
+
 ## Work landed this session (already on master)
 
 - `35427f71` — API scratchpad consolidated into root scratchpad; empty `hey.md`
