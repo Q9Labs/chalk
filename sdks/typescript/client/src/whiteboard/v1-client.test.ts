@@ -195,6 +195,38 @@ describe("ChalkWhiteboardV1Client", () => {
     client.stopSceneSubscription();
     await expect(updatePromise).rejects.toMatchObject({ code: "unavailable", operation: "submit_update" });
   });
+
+  it("uses the canonical participant wire field and public event name", async () => {
+    const { client, socket, started } = await connectingClient();
+    welcome(socket);
+    await finishInitialSnapshot(socket, started);
+
+    const events: unknown[] = [];
+    client.subscribe((event) => events.push(event));
+    socket.receive({
+      type: "cursor",
+      participant_id: participantId,
+      display_name: "Ada",
+      x: 1,
+      y: 2,
+      occurred_at: "2026-08-04T12:00:00.000Z",
+    });
+    const permission = client.setDrawPermission(participantId, false);
+    await settle();
+    const permissionFrame = socket.frames().at(-1)!;
+    socket.receive({
+      type: "commit",
+      operation_id: permissionFrame.operation_id,
+      outcome: "committed",
+      scene_id: sceneId,
+      revision: "4",
+    });
+    await permission;
+
+    expect(events).toContainEqual({ type: "cursor", participantId, displayName: "Ada", x: 1, y: 2, occurredAt: "2026-08-04T12:00:00.000Z" });
+    expect(permissionFrame).toEqual(expect.objectContaining({ type: "set_draw_permission", participant_id: participantId, can_draw: false }));
+    client.stopSceneSubscription();
+  });
 });
 
 async function connectingClient(overrides: Partial<ConstructorParameters<typeof ChalkWhiteboardV1Client>[0]> = {}) {

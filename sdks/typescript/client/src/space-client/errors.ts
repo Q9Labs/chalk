@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import type { ConnectionError } from "../session/types";
+import type { ConnectionError } from "../connection/types";
 import type { ClientFailure, ErrorCode } from "./types";
 
 export class SpaceClientError extends Data.TaggedError("SpaceClientError")<ClientFailure> {}
@@ -14,7 +14,7 @@ const CONNECTION_ERROR_CODE_MAP = {
   sync_recovery_exhausted: "connection.sync_recovery_exhausted",
   media_recovery_exhausted: "connection.media_recovery_exhausted",
   leave_unconfirmed: "connection.leave_unconfirmed",
-  session_ended: "episode.ended",
+  episode_ended: "episode.ended",
   unsupported_environment: "environment.unsupported",
   collaboration_unavailable: "collaboration.unavailable",
   chat_cursor_reset_required: "chat.cursor_reset_required",

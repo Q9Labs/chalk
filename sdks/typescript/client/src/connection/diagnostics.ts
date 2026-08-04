@@ -60,7 +60,7 @@ export class ConnectionDiagnostics {
     try {
       this.#onEvent?.(event);
     } catch {
-      // Diagnostics callbacks cannot affect session state or cleanup.
+      // Diagnostics callbacks cannot affect Connection state or cleanup.
     }
   }
 

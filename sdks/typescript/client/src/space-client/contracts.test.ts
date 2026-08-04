@@ -1,7 +1,7 @@
 import { Effect, Scope } from "effect";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as rootSurface from "../index";
-import { ConnectionError } from "../session/types";
+import { ConnectionError } from "../connection/types";
 import { createEffectSpaceClient, type EffectSpaceClient } from "./effect";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import type { AccessGrant } from "./index";
@@ -41,7 +41,7 @@ describe("SpaceClient public contract", () => {
 
   it("maps internal failures to noun.condition codes", () => {
     const access = normalizeClientError(new ConnectionError({ code: "invalid_access", action: "join", recoverable: true, message: "rejected" }));
-    const ended = normalizeClientError(new ConnectionError({ code: "session_ended", action: null, recoverable: false, message: "ended" }));
+    const ended = normalizeClientError(new ConnectionError({ code: "episode_ended", action: null, recoverable: false, message: "ended" }));
 
     expect(access).toMatchObject({ _tag: "SpaceClientError", code: "access.invalid", recoverable: true });
     expect(ended).toMatchObject({ _tag: "SpaceClientError", code: "episode.ended", recoverable: false });

@@ -1,7 +1,7 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChalkChatFileTransport } from "../chat-files";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { ChatControllerService, makeChatController } from "./chat-controller";
 import { SpaceStore } from "./store";
 

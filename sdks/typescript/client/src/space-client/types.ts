@@ -2,7 +2,7 @@ import type { TelemetryClientOptions } from "../telemetry/client";
 import type { MediaSource } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkDirectedRequestResult, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardV1Failure, ChalkWhiteboardV1Transport } from "../whiteboard/types";
-import type { AccessGrant } from "../session/access-grant";
+import type { AccessGrant } from "../access/grant";
 
 export type AccessReason = "join" | "refresh" | "retry";
 

@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
-import type { ConnectionLifecycleSnapshot } from "../session/connection";
+import type { ConnectionLifecycleSnapshot } from "../connection";
 import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
 
 const empty = <T>(value: T): T => Object.freeze(value);
@@ -92,7 +92,7 @@ export const makeSpaceStoreLayer = Layer.effect(SpaceStoreService, SpaceStore.ma
 export const makeFakeSpaceStoreLayer = (store = new SpaceStore()) => Layer.succeed(SpaceStoreService, store);
 
 function mapCode(code: string): ConnectionSlice["lastError"] extends infer T ? (T extends { readonly code: infer C } ? C : never) : never {
-  return ({ invalid_access: "access.invalid", session_ended: "episode.ended", invalid_payload: "chat.payload_invalid", permission_denied: "media.permission_denied", unsupported_environment: "environment.unsupported", rate_limited: "command.rate_limited", command_rejected: "command.rejected" }[
+  return ({ invalid_access: "access.invalid", episode_ended: "episode.ended", invalid_payload: "chat.payload_invalid", permission_denied: "media.permission_denied", unsupported_environment: "environment.unsupported", rate_limited: "command.rate_limited", command_rejected: "command.rejected" }[
     code
   ] ?? "client.internal_error") as never;
 }

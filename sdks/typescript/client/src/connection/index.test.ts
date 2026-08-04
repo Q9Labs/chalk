@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  ConnectionLifecycleFailure as LifecycleFailureImplementation,
-  ConnectionLifecycleService as LifecycleServiceImplementation,
-  makeConnectionLifecycleLayer as makeLifecycleLayerImplementation,
-  makeFakeConnectionLifecycleLayer as makeFakeLifecycleLayerImplementation,
-} from "./connection-lifecycle";
-import { ConnectionLifecycleFailure, ConnectionLifecycleService, makeConnectionLifecycleLayer, makeFakeConnectionLifecycleLayer } from "./connection";
+import { ConnectionLifecycleFailure as LifecycleFailureImplementation, ConnectionLifecycleService as LifecycleServiceImplementation, makeConnectionLifecycleLayer as makeLifecycleLayerImplementation, makeFakeConnectionLifecycleLayer as makeFakeLifecycleLayerImplementation } from "./lifecycle";
+import { ConnectionLifecycleFailure, ConnectionLifecycleService, makeConnectionLifecycleLayer, makeFakeConnectionLifecycleLayer } from ".";
 
 describe("Connection lifecycle contract", () => {
   it("re-exports the single lifecycle service and layer implementations", () => {

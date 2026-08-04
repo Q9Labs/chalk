@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import type { ChalkChatFileTransport } from "../chat-files";
-import type { ConnectionLifecycleCapability } from "../session/connection";
+import type { ConnectionLifecycleCapability } from "../connection";
 import { uploadFileEffect } from "./controller-effects";
 
 describe("chat.files.upload", () => {

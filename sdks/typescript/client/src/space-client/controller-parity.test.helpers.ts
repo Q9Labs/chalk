@@ -2,7 +2,7 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import type { ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { V1Capability, V1ControlState, V1EpisodeSnapshot, V1Participant } from "../sync";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import { makeParticipantsController, ParticipantsControllerService } from "./participants-controller";
@@ -118,8 +118,6 @@ export function snapshot(input: { readonly media?: V1EpisodeSnapshot["media"] } 
     stateDigest: "a".repeat(64),
     status: "active",
     admissionPolicy: "knock",
-    hostExitPolicy: "require_transfer",
-    hostParticipantId: null,
     deadlineAtMs: Date.parse("2026-08-04T06:00:00.000Z"),
     deadlineGeneration: 1,
     roleCapabilities: { owner: ["publishAudio"], observer: ["subscribe"] },

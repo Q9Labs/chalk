@@ -1,4 +1,4 @@
-import type { AccessSubject } from "./access-grant";
+import type { AccessSubject } from "../access/grant";
 import type {
   ChalkChatMessage,
   ChalkChatPageResult,
@@ -98,7 +98,7 @@ export const CONNECTION_ERROR_CODES = [
   "media_recovery_exhausted",
   "command_rejected",
   "leave_unconfirmed",
-  "session_ended",
+  "episode_ended",
   "unsupported_environment",
   "internal_error",
   "collaboration_unavailable",

@@ -1,8 +1,8 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
-import { ConnectionAccessService, makeConnectionAccessLayer } from "./access-manager";
-import { ACCESS_SUBJECT, accessGrant } from "./access-grant.test.helpers";
+import { ConnectionAccessService, makeConnectionAccessLayer } from "./manager";
+import { ACCESS_SUBJECT, accessGrant } from "./grant.test.helpers";
 
 const START = Date.parse("2026-07-21T12:00:00.000Z");
 describe("ConnectionAccessService", () => {

@@ -34,7 +34,7 @@ describe("Connection snapshot projection", () => {
     expect(snapshot.failure).toMatchObject({ code: "permission_denied" });
   });
 
-  it("projects authoritative participant media and deeply freezes room-action state", () => {
+  it("projects authoritative participant media and deeply freezes command state", () => {
     const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
     const sync = {
       connection: { phase: "live" },
@@ -46,11 +46,9 @@ describe("Connection snapshot projection", () => {
         stateDigest: "a".repeat(64),
         status: "active",
         admissionPolicy: "open",
-        hostExitPolicy: "require_transfer",
-        hostParticipantId: participantId,
         deadlineAtMs: 1,
         deadlineGeneration: 1,
-        roleCapabilities: { host: ["publishAudio"], cohost: [], participant: [] },
+        roleCapabilities: { owner: ["publishAudio"], collaborator: [], observer: [] },
         recording: null,
         participants: [
           {
@@ -58,8 +56,8 @@ describe("Connection snapshot projection", () => {
             displayName: "Ada",
             handRaised: false,
             admissionRevision: 1,
-            role: "host",
-            eligibleRoles: ["host", "cohost"],
+            role: "owner",
+            eligibleRoles: ["owner", "collaborator"],
             capabilities: ["publishAudio"],
           },
         ],

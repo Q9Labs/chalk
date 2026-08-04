@@ -1,8 +1,8 @@
 import { Clock, Duration, Effect, Layer, ManagedRuntime } from "effect";
 import { vi } from "vitest";
 import type { CloudflareSFUSnapshot } from "../media";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
-import { ConnectionError } from "../session/types";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
+import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import { MediaControllerService, makeMediaController } from "./media-controller";
 import { MediaDeviceSelection } from "./media-device-selection";

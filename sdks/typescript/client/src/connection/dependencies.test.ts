@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ParsedAccessGrant } from "./access-grant";
+import type { ParsedAccessGrant } from "../access/grant";
 import type { ConnectionAccessProvider, ConnectionAccessRequest, ConnectionClock } from "./dependencies";
 
 describe("Connection dependency contracts", () => {

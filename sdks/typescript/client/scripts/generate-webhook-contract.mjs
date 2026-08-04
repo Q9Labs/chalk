@@ -50,8 +50,6 @@ type SchemaAllOf<Schema> = Schema extends { readonly allOf: readonly [infer Firs
 export type SchemaType<Schema> = SchemaBase<Schema> & SchemaBranches<Schema> & SchemaAllOf<Schema>;
 
 export type KnownWebhookEventV1 = SchemaType<typeof webhookEventSchemaV1>;
-export type RoomWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: \`room.\${string}\` }>;
-export type SessionWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: \`session.\${string}\` }>;
 export type ParticipantWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: \`participant.\${string}\` }>;
 export type RecordingWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: \`recording.\${string}\` }>;
 export type TranscriptWebhookEvent = Extract<KnownWebhookEventV1, { readonly event: \`transcript.\${string}\` }>;

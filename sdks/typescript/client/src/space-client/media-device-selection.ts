@@ -1,4 +1,4 @@
-import type { ConnectionMediaDevices } from "../session/dependencies";
+import type { ConnectionMediaDevices } from "../connection/dependencies";
 import { SpaceClientError } from "./errors";
 
 type CaptureSource = "microphone" | "camera";

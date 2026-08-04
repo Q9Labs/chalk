@@ -1,6 +1,6 @@
-import type { AccessGrant } from "../session/access-grant.js";
+import type { AccessGrant } from "../access/grant.js";
 
-export type { AccessGrant } from "../session/access-grant.js";
+export type { AccessGrant } from "../access/grant.js";
 
 export type ChalkServerHeaders = Readonly<Record<string, string>>;
 

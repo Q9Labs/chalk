@@ -66,8 +66,6 @@ export type V1ControlState = {
   readonly stateDigest: string;
   readonly status: "active" | "ended";
   readonly admissionPolicy: V1AdmissionPolicy;
-  readonly hostExitPolicy: "require_transfer" | "promote_cohost";
-  readonly hostParticipantId: string | null;
   readonly deadlineAtMs: number;
   readonly deadlineGeneration: number;
   readonly roleCapabilities: Readonly<Record<string, readonly V1Capability[]>>;

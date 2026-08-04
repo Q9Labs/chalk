@@ -32,5 +32,15 @@ export function toWhiteboardCollaborationEvent(event: ChalkWhiteboardV1Event): W
       elements: event.elements.map(toWhiteboardWireElement),
     };
   }
+  if (event.type === "cursor") {
+    return {
+      type: "cursor",
+      participantId: event.participantId,
+      displayName: event.displayName,
+      x: event.x,
+      y: event.y,
+      occurredAt: event.occurredAt,
+    };
+  }
   return event;
 }

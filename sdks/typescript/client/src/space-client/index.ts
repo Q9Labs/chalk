@@ -1,6 +1,6 @@
 export { SpaceClientError } from "./errors";
 export { createSpaceClient } from "./space-client";
-export type { AccessGrant } from "../session/access-grant";
+export type { AccessGrant } from "../access/grant";
 export type {
   AccessContext,
   AccessReason,

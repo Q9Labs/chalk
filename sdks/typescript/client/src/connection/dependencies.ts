@@ -3,7 +3,7 @@ import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
-import type { ParsedAccessGrant, ParticipantMediaCredential } from "./access-grant";
+import type { ParsedAccessGrant, ParticipantMediaCredential } from "../access/grant";
 import { Context, Layer } from "effect";
 
 export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery" | "access_retry";
@@ -29,7 +29,7 @@ export type ConnectionMediaDevices = {
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
   /**
    * An application-provided output sink selector. Browser capture APIs have no
-   * global speaker switch, so a host that renders remote audio supplies the
+   * global speaker switch, so an application that renders remote audio supplies the
    * element-specific implementation here.
    */
   readonly selectSpeaker?: (deviceId: string) => Promise<void>;
@@ -117,5 +117,5 @@ export class ConnectionPlatformService extends Context.Service<ConnectionPlatfor
 
 export const makeConnectionPlatformLayer = (dependencies: ConnectionDependencies) => Layer.succeed(ConnectionPlatformService, dependencies);
 
-/** A named alias makes fake platform Layers self-documenting in host tests. */
+/** A named alias makes fake platform Layers self-documenting in tests. */
 export const makeFakeConnectionPlatformLayer = makeConnectionPlatformLayer;

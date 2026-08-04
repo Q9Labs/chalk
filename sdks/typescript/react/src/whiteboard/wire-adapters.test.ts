@@ -45,7 +45,7 @@ describe("whiteboard wire adapters", () => {
   it("passes cursor events through with their presence coordinates", () => {
     const cursor: ChalkWhiteboardV1Event = {
       type: "cursor",
-      participantSessionId: "participant-1",
+      participantId: "participant-1",
       displayName: "Grace",
       x: 24,
       y: 48,

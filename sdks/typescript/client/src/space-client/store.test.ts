@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { initialConnectionSnapshot } from "../session/snapshot";
+import { initialConnectionSnapshot } from "../connection/snapshot";
 import { SpaceStore } from "./store";
 
 describe("SpaceStore", () => {

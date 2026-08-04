@@ -1,4 +1,4 @@
-import type { ParsedAccessGrant } from "./access-grant";
+import type { ParsedAccessGrant } from "./grant";
 
 export const ACCESS_SUBJECT = {
   tenantId: "tenant-1",

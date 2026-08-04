@@ -27,4 +27,15 @@ describe("whiteboard-v1 codec", () => {
       ),
     ).toThrow();
   });
+
+  it("rejects the legacy participant wire field", () => {
+    expect(() =>
+      decodeWhiteboardV1ClientFrame({
+        type: "set_draw_permission",
+        operation_id: "operation-000001",
+        participant_session_id: sceneId,
+        can_draw: true,
+      }),
+    ).toThrow();
+  });
 });

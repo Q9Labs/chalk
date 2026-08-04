@@ -1,6 +1,6 @@
 import type { CloudflareSFUSnapshot } from "../media";
 import type { V1Capability, V1EpisodeSnapshot } from "../sync";
-import type { AccessSubject } from "./access-grant";
+import type { AccessSubject } from "../access/grant";
 import type {
   ChalkChatState,
   ChalkCollaborationCapability,
@@ -241,14 +241,14 @@ function localMediaState(state: ConnectionState, published: boolean, hasTrack: b
 function intendedLocalMediaState(state: ConnectionState, hasTrack: boolean): ChalkLocalMedia["state"] {
   if (state === "joining") return "requesting";
   if (state === "failed") return "failed";
-  return sessionMediaIsActive(state) ? activeIntentState(hasTrack) : "unavailable";
+  return connectionMediaIsActive(state) ? activeIntentState(hasTrack) : "unavailable";
 }
 
 function unintendedLocalMediaState(state: ConnectionState, hasTrack: boolean): ChalkLocalMedia["state"] {
-  return sessionMediaIsActive(state) || hasTrack ? "disabled" : "unavailable";
+  return connectionMediaIsActive(state) || hasTrack ? "disabled" : "unavailable";
 }
 
-function sessionMediaIsActive(state: ConnectionState): boolean {
+function connectionMediaIsActive(state: ConnectionState): boolean {
   return state === "live" || state === "reconnecting";
 }
 

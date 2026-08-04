@@ -1,8 +1,8 @@
 import { Context, Effect, Layer } from "effect";
 import { sha256 } from "@noble/hashes/sha2.js";
 import type { ChalkChatFileTransport } from "../chat-files";
-import type { ConnectionLifecycleCapability } from "../session/connection";
-import type { ConnectionDependencies } from "../session/dependencies";
+import type { ConnectionLifecycleCapability } from "../connection";
+import type { ConnectionDependencies } from "../connection/dependencies";
 import { makeChatController, type ChatControllerEffects } from "./chat-controller";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { makeMediaController, type MediaControllerEffects } from "./media-controller";

@@ -3,9 +3,9 @@ import { TestClock } from "effect/testing";
 import type { CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import { describe, expect, it } from "vitest";
-import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "./access-manager";
-import { accessGrant } from "./access-grant.test.helpers";
-import { ConnectionLifecycleService, makeConnectionLifecycleLayerFromServices } from "./connection-lifecycle";
+import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
+import { accessGrant } from "../access/grant.test.helpers";
+import { ConnectionLifecycleService, makeConnectionLifecycleLayerFromServices } from "./lifecycle";
 import { makeConnectionPlatformLayer, type ConnectionAccessRequest, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { ConnectionError } from "./types";
 
@@ -127,7 +127,7 @@ describe("ConnectionLifecycleService", () => {
     expect(unconfirmed.lifecycle.getSnapshot()).toMatchObject({ state: "left", failure: { code: "leave_unconfirmed" } });
     await unconfirmed.runtime.dispose();
 
-    const endedSync = fakeSync({ leaveError: new Error("must not call leave") });
+    const endedSync = fakeSync({ leaveError: new Error("must not invoke leave") });
     const ended = makeHarness(() => Effect.succeed(accessGrant(START + 300_000, "episode-ended")), { syncFactory: () => endedSync });
 
     await ended.runtime.runPromise(ended.lifecycle.join());

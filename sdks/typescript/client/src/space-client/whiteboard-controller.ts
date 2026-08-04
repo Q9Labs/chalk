@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
-import type { ConnectionWhiteboardFactoryInput } from "../session/dependencies";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
+import type { ConnectionWhiteboardFactoryInput } from "../connection/dependencies";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import { SpaceStore } from "./store";
 import type { WhiteboardSlice } from "./types";

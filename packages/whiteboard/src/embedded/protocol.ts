@@ -46,7 +46,7 @@ export type ChalkEmbeddedWhiteboardHostMessage =
   | {
       readonly type: "apply_cursor";
       readonly payload: {
-        readonly participantSessionId: string;
+        readonly participantId: string;
         readonly displayName: string;
         readonly x: number;
         readonly y: number;

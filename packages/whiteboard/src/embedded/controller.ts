@@ -49,7 +49,7 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
     }
   | {
       readonly type: "cursor";
-      readonly participantSessionId: string;
+      readonly participantId: string;
       readonly displayName: string;
       readonly x: number;
       readonly y: number;

@@ -1,9 +1,9 @@
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
 import type { CloudflareSFUSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
-import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "./access-manager";
-import { AccessGrantError, type ParsedAccessGrant } from "./access-grant";
-import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./connection";
+import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
+import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
+import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./index";
 import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { stopStream, streamFromTracks } from "./media-devices";
@@ -519,7 +519,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (!isCurrentSyncSnapshot(sync, snapshot)) return;
           model.syncSnapshot = snapshot;
           if (syncSubjectMismatched(access.currentUnsafe()?.subject ?? null, snapshot)) return yield* failForSnapshot(lifecycleFailure("invalid_access", false, "Sync authenticated a different participant subject"));
-          if (episodeEnded(snapshot)) return yield* failForSnapshot(lifecycleFailure("session_ended", false, "The Episode has ended"));
+          if (episodeEnded(snapshot)) return yield* failForSnapshot(lifecycleFailure("episode_ended", false, "The Episode has ended"));
           if (syncNeedsRecovery(snapshot)) yield* recover("sync");
           yield* publish();
         });

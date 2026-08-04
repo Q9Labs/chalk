@@ -1,32 +1,15 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { AccessGrantError, isParsedAccessGrant, parseParsedAccessGrant, requireParsedAccessGrant, type ParsedAccessGrant, type ParticipantMediaCredential, type ParticipantSyncCredential } from "../access/grant";
 import * as effectSurface from "../effect";
 import * as rootSurface from "../index";
-import {
-  CONNECTION_ACTIONS,
-  CONNECTION_ERROR_CODES,
-  CONNECTION_STATES,
-  AccessGrantError,
-  isParsedAccessGrant,
-  parseParsedAccessGrant,
-  requireParsedAccessGrant,
-  type ConnectionActionName,
-  type ConnectionActions,
-  type ChalkChatFileTransport,
-  type ConnectionErrorCode,
-  type ConnectionSnapshot,
-  type ConnectionStore,
-  type ChalkWhiteboardV1Transport,
-  type ParsedAccessGrant,
-  type ParticipantMediaCredential,
-  type ParticipantSyncCredential,
-} from ".";
+import { CONNECTION_ACTIONS, CONNECTION_ERROR_CODES, CONNECTION_STATES, type ConnectionActionName, type ConnectionActions, type ChalkChatFileTransport, type ConnectionErrorCode, type ConnectionSnapshot, type ConnectionStore, type ChalkWhiteboardV1Transport } from "./types";
 
 describe("ParsedAccessGrant", () => {
   it("accepts distinct Sync and media credentials", () => {
     const access = validAccess();
     const parsed = parseParsedAccessGrant(access);
 
-    expect(parsed.subject).toEqual({ tenantId: "tenant-1", spaceId: "room-1", episodeId: "session-1", participantId: "participant-1", participantGeneration: 1 });
+    expect(parsed.subject).toEqual({ tenantId: "tenant-1", spaceId: "space-1", episodeId: "episode-1", participantId: "participant-1", participantGeneration: 1 });
     expect(isParsedAccessGrant(access)).toBe(true);
   });
 
@@ -56,7 +39,7 @@ describe("ParsedAccessGrant", () => {
   });
 });
 
-describe("public session contract", () => {
+describe("Connection contract", () => {
   it("keeps generated Effect contracts on the Effect entry point", () => {
     expectTypeOf<"ChalkApi" extends keyof typeof rootSurface ? true : false>().toEqualTypeOf<false>();
     expectTypeOf<"TenantIdSchema" extends keyof typeof rootSurface ? true : false>().toEqualTypeOf<false>();
@@ -117,7 +100,7 @@ describe("public session contract", () => {
       "media_recovery_exhausted",
       "command_rejected",
       "leave_unconfirmed",
-      "session_ended",
+      "episode_ended",
       "unsupported_environment",
       "internal_error",
       "collaboration_unavailable",
@@ -166,8 +149,8 @@ function validAccess() {
   return {
     subject: {
       tenant_id: "tenant-1",
-      space_id: "room-1",
-      episode_id: "session-1",
+      space_id: "space-1",
+      episode_id: "episode-1",
       participant_id: "participant-1",
       participant_generation: 1,
     },

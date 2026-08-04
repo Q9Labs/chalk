@@ -1,4 +1,4 @@
-import type { AccessSubject } from "./access-grant";
+import type { AccessSubject } from "../access/grant";
 import type { ConnectionDiagnostic } from "./diagnostics";
 import type { ConnectionAccessProvider, ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "./dependencies";
 import type { ConnectionConnectionPhase, ConnectionFailure, ConnectionState } from "./types";
@@ -27,5 +27,5 @@ export type ConnectionOptions = {
   readonly dependencies?: Partial<ConnectionDependencies>;
 };
 
-export { ConnectionLifecycleFailure, ConnectionLifecycleService, makeConnectionLifecycleLayer, makeFakeConnectionLifecycleLayer } from "./connection-lifecycle";
-export type { ConnectionLifecycleCapability } from "./connection-lifecycle";
+export { ConnectionLifecycleFailure, ConnectionLifecycleService, makeConnectionLifecycleLayer, makeFakeConnectionLifecycleLayer } from "./lifecycle";
+export type { ConnectionLifecycleCapability } from "./lifecycle";

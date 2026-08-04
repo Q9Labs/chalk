@@ -1,6 +1,6 @@
 import { Clock, Context, Data, Effect, Layer, SynchronizedRef } from "effect";
-import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCredential } from "./access-grant";
-import type { ConnectionAccessReason, ConnectionAccessRequest } from "./dependencies";
+import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCredential } from "./grant";
+import type { ConnectionAccessReason, ConnectionAccessRequest } from "../connection/dependencies";
 
 const DEFAULT_REFRESH_WINDOW_MS = 60_000;
 

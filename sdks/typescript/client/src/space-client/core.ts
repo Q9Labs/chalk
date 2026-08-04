@@ -1,9 +1,9 @@
 import { Clock, Context, Duration, Effect, Layer } from "effect";
-import { parseParsedAccessGrant, type AccessGrant } from "../session/access-grant";
-import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../session/connection";
-import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../session/dependencies";
-import type { ConnectionDiagnostic } from "../session/diagnostics";
-import { createDefaultConnectionDependencies } from "../session/production";
+import { parseParsedAccessGrant, type AccessGrant } from "../access/grant";
+import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../connection";
+import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../connection/dependencies";
+import type { ConnectionDiagnostic } from "../connection/diagnostics";
+import { createDefaultConnectionDependencies } from "../connection/production";
 import { makeControllerEffects, type ControllerEffects } from "./controller-effects";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";

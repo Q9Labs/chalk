@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isParsedAccessGrant, parseAccessGrant, parseParsedAccessGrant, requireParsedAccessGrant } from "./access-grant";
+import { isParsedAccessGrant, parseAccessGrant, parseParsedAccessGrant, requireParsedAccessGrant } from "./grant";
 
 describe("access grant parsing", () => {
   it("brands distinct audiences and preserves the participant subject", async () => {

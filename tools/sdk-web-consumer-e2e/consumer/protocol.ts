@@ -45,8 +45,6 @@ export function episodeSnapshot(previous: V1EpisodeSnapshot, state: SpaceState):
     stateDigest: `fixture-${state.revision}`,
     status: "active" as const,
     admissionPolicy: "open" as const,
-    hostExitPolicy: "promote_cohost" as const,
-    hostParticipantId: null,
     deadlineAtMs: Date.now() + 3_600_000,
     deadlineGeneration: 1,
     roleCapabilities,

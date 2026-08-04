@@ -1,8 +1,8 @@
 import { Clock, Context, Effect, Layer, Scope, Semaphore } from "effect";
 import type { CloudflareSFUSnapshot, MediaSource } from "../media";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
-import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "../session/media-devices";
-import { ConnectionError } from "../session/types";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
+import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
+import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";

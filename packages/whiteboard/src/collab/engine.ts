@@ -39,7 +39,7 @@ export type WhiteboardCollaborationEvent =
     }
   | {
       readonly type: "cursor";
-      readonly participantSessionId: string;
+      readonly participantId: string;
       readonly displayName: string;
       readonly x: number;
       readonly y: number;
@@ -176,7 +176,7 @@ export class ExcalidrawCollabEngine {
         return;
       case "cursor":
         this.handleRemoteCursor({
-          participantId: event.participantSessionId,
+          participantId: event.participantId,
           displayName: event.displayName,
           x: event.x,
           y: event.y,

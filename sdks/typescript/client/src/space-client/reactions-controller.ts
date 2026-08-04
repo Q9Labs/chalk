@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Layer, Scope } from "effect";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
 import type { ActiveReaction, Reaction } from "./types";

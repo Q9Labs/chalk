@@ -1,4 +1,4 @@
-import { WhiteboardV1ProtocolLimits, WhiteboardV1ProtocolMetadata, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
+import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import {
   ChalkWhiteboardV1Error,
@@ -64,7 +64,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #started = false;
   #startupGeneration = 0;
   #phase: "idle" | "connecting" | "authenticating" | "live" | "stopped" = "idle";
-  #participantSessionId: string | null = null;
+  #participantId: string | null = null;
   #sceneId: string | null;
   #revision: string | null;
   #capabilities: readonly ChalkWhiteboardV1Capability[] = [];
@@ -122,7 +122,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#initialSnapshot) rejectDeferred(this.#initialSnapshot, error(failure("start_scene_subscription", "unavailable", true, "Whiteboard subscription stopped.")));
     this.#initialSnapshot = null;
     this.#startPromise = null;
-    this.#participantSessionId = null;
+    this.#participantId = null;
     this.#capabilities = [];
     this.#canDraw = false;
     this.#publishSummary("unsubscribed", null);
@@ -172,7 +172,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     return this.#queueOperation({ type: "clear", operation_id: operationId, scene_id: this.#sceneId });
   }
 
-  async setDrawPermission(participantSessionId: string, canDraw: boolean): Promise<void> {
+  async setDrawPermission(participantId: string, canDraw: boolean): Promise<void> {
     this.#assertLive("set_draw_permission");
     if (!this.#capabilities.includes("manageWhiteboard")) {
       throw error(failure("set_draw_permission", "permission_denied", false, "Whiteboard management permission is required."));
@@ -181,7 +181,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const frame = {
       type: "set_draw_permission",
       operation_id: operationId,
-      ...whiteboardParticipantIdField(participantSessionId),
+      participant_id: participantId,
       can_draw: canDraw,
     } as Extract<WhiteboardV1ClientFrame, { readonly type: "set_draw_permission" }>;
     await this.#queueOperation(frame);
@@ -295,7 +295,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         this.#requireLive();
         this.#emit({
           type: "cursor",
-          participantSessionId: whiteboardParticipantId(frame),
+          participantId: frame.participant_id,
           displayName: frame.display_name,
           x: frame.x,
           y: frame.y,
@@ -304,7 +304,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         return;
       case "permission_updated":
         this.#requireLive();
-        if (whiteboardParticipantId(frame) === this.#participantSessionId) this.#canDraw = frame.can_draw;
+        if (frame.participant_id === this.#participantId) this.#canDraw = frame.can_draw;
         this.#publishSummary("ready", null);
         return;
       case "reset_required":
@@ -364,7 +364,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
-    this.#participantSessionId = whiteboardParticipantId(frame);
+    this.#participantId = frame.participant_id;
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#capabilities = [...frame.capabilities];
@@ -529,7 +529,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearHeartbeat();
     this.#clearUpdateAssemblies();
     this.#phase = "connecting";
-    this.#participantSessionId = null;
+    this.#participantId = null;
     this.#capabilities = [];
     this.#canDraw = false;
     this.#rejectSnapshots(failure("request_snapshot", "unavailable", true, "Whiteboard connection interrupted."));
@@ -734,21 +734,6 @@ function elementFromFrame(element: WhiteboardV1Element): ChalkWhiteboardV1Elemen
     isDeleted: element.is_deleted,
     payload: element.payload,
   };
-}
-
-type WhiteboardParticipantIdField = "participant_id" | "participant_session_id";
-
-const whiteboardParticipantIdFieldName: WhiteboardParticipantIdField = (WhiteboardV1ProtocolMetadata.frames.setDrawPermission.exactFields as readonly string[]).includes("participant_id") ? "participant_id" : "participant_session_id";
-
-function whiteboardParticipantIdField(participantId: string): Record<WhiteboardParticipantIdField, string> {
-  return { [whiteboardParticipantIdFieldName]: participantId } as Record<WhiteboardParticipantIdField, string>;
-}
-
-function whiteboardParticipantId(frame: unknown): string {
-  if (typeof frame !== "object" || frame === null) throw new Error("invalid whiteboard participant identity");
-  const participantId = (frame as Record<string, unknown>)[whiteboardParticipantIdFieldName];
-  if (typeof participantId !== "string" || participantId.length === 0) throw new Error("invalid whiteboard participant identity");
-  return participantId;
 }
 
 function operationName(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" }>): ChalkWhiteboardV1Operation {

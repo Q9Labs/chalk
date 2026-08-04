@@ -48,9 +48,6 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
     stateDigest: snapshot.state_digest,
     status: snapshot.status,
     admissionPolicy: snapshot.admission_policy,
-    // The wire no longer carries host authority; role projection remains canonical.
-    hostExitPolicy: "require_transfer",
-    hostParticipantId: null,
     deadlineAtMs: snapshot.deadline_at_ms,
     deadlineGeneration: snapshot.deadline_generation,
     roleCapabilities,
@@ -86,12 +83,6 @@ export function assertV1ControlSemantics(state: V1ControlState): void {
     if (!capabilities) throw new V1ReplicaError("participant role has no capability bundle");
     if (!sameStrings(participant.capabilities, capabilities)) throw new V1ReplicaError("participant capabilities do not match the durable role map");
     if (participant.displayName !== participant.displayName.trim() || participant.displayName.length === 0) throw new V1ReplicaError("participant display name has surrounding whitespace");
-  }
-  // Host authority is not part of the canonical Episode snapshot, but when
-  // present it must not silently disagree with the role projection.
-  if (state.hostParticipantId !== null) {
-    const hosts = state.participants.filter((participant) => participant.role === "host");
-    if (hosts.length !== 1 || hosts[0]?.participantId !== state.hostParticipantId) throw new V1ReplicaError("host authority does not match role projection");
   }
   if (state.status === "ended" && (state.participants.length !== 0 || state.admissionRequests.length !== 0 || state.recording !== null)) {
     throw new V1ReplicaError("ended control state retains active Episode state");

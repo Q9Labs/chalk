@@ -208,8 +208,6 @@ function baseState(): V1ControlState {
     stateDigest: "0".repeat(64),
     status: "active",
     admissionPolicy: "open",
-    hostExitPolicy: "require_transfer",
-    hostParticipantId: null,
     deadlineAtMs: 99_999,
     deadlineGeneration: 1,
     roleCapabilities: { owner: ["publishAudio", "subscribe", "endEpisode"], collaborator: ["publishAudio"], observer: ["subscribe"] },
@@ -217,7 +215,7 @@ function baseState(): V1ControlState {
     participants: [
       {
         participantId: participantId,
-        displayName: "Host",
+        displayName: "Owner",
         handRaised: false,
         admissionRevision: 1,
         role: "owner",
@@ -262,7 +260,7 @@ function reactionEvent(id: string) {
     type: "reaction",
     event_id: id,
     participant_id: participantId,
-    display_name: "Host",
+    display_name: "Owner",
     reaction: "🎉",
     occurred_at: "2026-07-29T12:00:00.000Z",
     expires_at: "2026-07-29T12:00:05.000Z",
@@ -276,7 +274,7 @@ function chatMessage(sequence: string, clientMessageId: string, attachments: rea
     client_message_id: clientMessageId,
     sequence,
     participant_id: participantId,
-    display_name: "Host",
+    display_name: "Owner",
     text: attachments.length === 0 ? "Hello" : "",
     attachments: attachments.map((attachment) => ({
       attachment_id: attachment.attachmentId,

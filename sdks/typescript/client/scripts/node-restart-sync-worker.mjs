@@ -83,7 +83,7 @@ async function resumePendingCommand(client) {
   await client.start();
   const snapshot = await waitFor(() => {
     const next = client.getSnapshot();
-    const participant = next.control?.participants.find((item) => item.participantSessionId === next.participantSessionId);
+    const participant = next.control?.participants.find((item) => item.participantId === next.participantId);
     return next.connection.phase === "live" && next.media && next.presence && next.pendingCommandCount === 0 && next.control?.revision === 2 && participant?.handRaised ? next : null;
   }, "restarted process did not converge the persisted command");
 

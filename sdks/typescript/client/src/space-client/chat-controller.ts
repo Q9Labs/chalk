@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Scope } from "effect";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { ChalkChatPageResult } from "../collaboration/types";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";

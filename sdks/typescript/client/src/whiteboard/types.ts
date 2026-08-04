@@ -36,7 +36,7 @@ export type ChalkWhiteboardV1Event =
     }
   | {
       readonly type: "cursor";
-      readonly participantSessionId: string;
+      readonly participantId: string;
       readonly displayName: string;
       readonly x: number;
       readonly y: number;
@@ -102,7 +102,7 @@ export type ChalkWhiteboardV1Transport = {
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
-  readonly setDrawPermission: (participantSessionId: string, canDraw: boolean) => Promise<void>;
+  readonly setDrawPermission: (participantId: string, canDraw: boolean) => Promise<void>;
   readonly files: ChalkWhiteboardV1FileTransport;
 };
 

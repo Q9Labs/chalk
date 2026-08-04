@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../session/connection";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ChalkParticipantMediaState } from "../collaboration/types";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";

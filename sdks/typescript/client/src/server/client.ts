@@ -1,6 +1,6 @@
 import { ChalkAPIError } from "./errors.js";
 import { createServerRequester } from "./transport.js";
-import { parseAccessGrant } from "../session/access-grant.js";
+import { parseAccessGrant } from "../access/grant.js";
 import type {
   APIKeyList,
   APIKeyWithSecret,
