@@ -1,5 +1,5 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { normalizeTelemetryAttributes } from "./attributes";
+import { normalizeTelemetryAttributes, type TelemetryAttributeNormalizationOptions } from "./attributes";
 import { TelemetryDeliveryService, makeTelemetryDeliveryLayer, type TelemetryDeliveryEffectService, type TelemetryExporterHealth, type TelemetryTimelineEntry } from "./delivery";
 import { createJourneyIntakeExporter, MAX_JOURNEY_INTAKE_EVENTS_PER_BATCH, type TelemetryExporter, type TelemetryExportOptions } from "./exporter";
 import { TelemetryJourney, type StartJourneyOptions } from "./journey";
@@ -111,10 +111,10 @@ export class TelemetryClient {
   }
 
   /** Internal for TelemetryJourney. Event construction remains synchronous and never waits for storage or network I/O. */
-  emit(context: JourneyTelemetryContext, sequence: number, draft: TelemetryEventDraft): TelemetryEvent {
+  emit(context: JourneyTelemetryContext, sequence: number, draft: TelemetryEventDraft, options?: TelemetryAttributeNormalizationOptions): TelemetryEvent {
     const trace = traceContextFromJourney(context);
     const { attributes: draftAttributes, ...eventDraft } = draft;
-    const attributes = normalizeTelemetryAttributes(draftAttributes);
+    const attributes = normalizeTelemetryAttributes(draftAttributes, options);
     const event: TelemetryEvent = {
       ...eventDraft,
       version: TELEMETRY_EVENT_VERSION,

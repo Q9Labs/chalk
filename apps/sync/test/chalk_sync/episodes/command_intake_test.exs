@@ -3,6 +3,7 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
 
   alias ChalkSync.Episodes.CommandIntake
   alias ChalkSync.Live.MediaPlaneTestAdapter
+  alias ChalkSync.Observability
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -128,6 +129,52 @@ defmodule ChalkSync.Episodes.CommandIntakeTest do
     assert CommandIntake.stats(admission_name).node_commands == 16
     Enum.each(tasks, &send(&1, :finish))
     eventually(fn -> CommandIntake.stats(admission_name).node_commands == 0 end)
+  end
+
+  test "supervised command work retains unsampled W3C context and tracestate" do
+    parent = self()
+    task_supervisor = start_supervised!({Task.Supervisor, name: unique_name("Tasks")})
+    admission_name = unique_name("Admission")
+
+    decision_fun = fn _identity, command ->
+      send(parent, {:worker_observed_context, command.observed_context})
+
+      {:ok,
+       %{
+         result: :committed,
+         delivery: :original,
+         event: %{"name" => "hand_raised"}
+       }}
+    end
+
+    start_supervised!(
+      {CommandIntake,
+       name: admission_name, task_supervisor: task_supervisor, decision_fun: decision_fun},
+      id: admission_name
+    )
+
+    traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+    tracestate = "acme=first"
+
+    observed =
+      Observability.context(%{
+        "journey_id" => uuid(8),
+        "traceparent" => traceparent,
+        "tracestate" => tracestate
+      })
+      |> Observability.observed_operation_context()
+
+    {:ok, command} = Command.new("w3c-command-0001", :set_hand_raised, %{"raised" => true})
+    command = Command.observe(command, observed)
+
+    assert {:ok, lease} = CommandIntake.submit(admission_name, identity(8), command, self())
+    assert_receive {:worker_observed_context, ^observed}
+
+    assert_receive {:sync_command_result, ^lease, "w3c-command-0001",
+                    {:ok, %{result: :committed, delivery: :original}}}
+
+    assert observed.producing_traceparent == traceparent
+    assert observed.producing_tracestate == tracestate
   end
 
   test "draining rejects new commands without reserving bytes or tasks" do

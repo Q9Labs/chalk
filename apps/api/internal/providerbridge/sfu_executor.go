@@ -82,7 +82,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		_, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
 			Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
 		})
-		if errors.Is(err, mediaplane.ErrEpisodeNotFound) {
+		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
 			err = nil
 		}
 		if err != nil {

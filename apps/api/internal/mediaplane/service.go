@@ -18,6 +18,7 @@ var (
 	ErrPlaneUnavailable         = errors.New("media plane unavailable")
 	ErrUnsupportedOperation     = errors.New("media plane operation unsupported")
 	ErrEpisodeNotFound          = errors.New("media episode not found")
+	ErrConnectionNotFound       = errors.New("media connection not found")
 	ErrParticipantNotFound      = errors.New("media participant not found")
 	ErrProviderUnauthorized     = errors.New("media provider unauthorized")
 	ErrProviderRateLimited      = errors.New("media provider rate limited")

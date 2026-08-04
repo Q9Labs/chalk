@@ -120,8 +120,8 @@ eight-second durable-operation consumer budget.
 `ChalkSync.Observability` provides the observability boundary. It emits stable
 `:telemetry` events, correlated Logger metadata, and
 short OpenTelemetry spans. It does not retain a connection-long span. Socket
-work uses root, phase, and terminal events; space-writer work links back to the
-originating socket span after crossing the OTP process boundary.
+work uses root, phase, and terminal events; Episode-coordinator work links back
+to the originating socket span after crossing the OTP process boundary.
 
 Set `CHALK_SYNC_OTLP_ENDPOINT` to enable OTLP HTTP/protobuf export. The
 service resource name is `chalk-sync`; the exporter is otherwise disabled.

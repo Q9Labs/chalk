@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createSpaceClientForPlatform = vi.hoisted(() => vi.fn());
 const addAppStateListener = vi.hoisted(() => vi.fn());
+const createV1SyncClient = vi.hoisted(() => vi.fn());
 
 vi.mock("@q9labsai/chalk-client", () => ({
   AsyncStorageV1PendingTargetStore: vi.fn(),
@@ -12,7 +13,7 @@ vi.mock("@q9labsai/chalk-client", () => ({
   createCloudflareSFUHTTPTransport: vi.fn(),
   createReactNativeSyncLifecycle: vi.fn(() => ({})),
   createReactNativeWebSocketFactory: vi.fn(() => ({})),
-  createV1SyncClient: vi.fn(),
+  createV1SyncClient,
 }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({
@@ -57,7 +58,7 @@ describe("native client creation", () => {
     expect(createSpaceClientForPlatform.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ getAccess }));
   });
 
-  it("forwards join spans into the correlated diagnostic timeline", () => {
+  it("forwards Space join spans into the correlated diagnostic timeline", () => {
     const journey = {
       context: { journeyId: "journey", rootJourneyId: "journey", traceparent: "00-11111111111111111111111111111111-2222222222222222-01" },
       headers: {},
@@ -69,12 +70,12 @@ describe("native client creation", () => {
     createNativeSpaceClient({ ...options(), telemetry: journey });
     const platform = createSpaceClientForPlatform.mock.calls[0]?.[1] as { readonly onConnectionDiagnostic: (event: unknown) => void };
     platform.onConnectionDiagnostic({
-      event: "join_span",
+      event: "space_join_span",
       state: "live",
       epoch: 2,
       step: "start_media",
-      spanId: "join-span-2",
-      parentSpanId: "join-span-1",
+      spanId: "space-join-span-2",
+      parentSpanId: "space-join-span-1",
       outcome: "succeeded",
       durationMs: 12,
       code: "media_start_failed",
@@ -82,19 +83,49 @@ describe("native client creation", () => {
 
     expect(journey.recordDiagnostic).toHaveBeenCalledWith({
       category: "connection",
-      code: "join.start_media.succeeded",
+      code: "space.join.start_media.succeeded",
       phase: "media",
       state: "succeeded",
       metricValue: 12,
       attributes: {
-        span_id: "join-span-2",
-        parent_span_id: "join-span-1",
+        span_id: "space-join-span-2",
+        parent_span_id: "space-join-span-1",
         step: "start_media",
         outcome: "succeeded",
         epoch: 2,
         failure_code: "media_start_failed",
       },
     });
+  });
+
+  it("passes telemetry context into the production Sync constructor", () => {
+    const journey = {
+      context: {
+        journeyId: "journey",
+        rootJourneyId: "journey",
+        traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+        tracestate: "chalk=native",
+      },
+      headers: {},
+      recordDiagnostic: vi.fn(),
+      recordRtcSummary: vi.fn(),
+      recordSyncFrame: vi.fn(),
+    };
+
+    createNativeSpaceClient({ ...options(), telemetry: journey });
+    const platform = createSpaceClientForPlatform.mock.calls[0]?.[1] as {
+      readonly telemetry: typeof journey.context;
+      readonly dependencies: { readonly createSyncClient: (input: unknown) => unknown };
+    };
+    expect(platform.telemetry).toEqual(journey.context);
+    platform.dependencies.createSyncClient({
+      access: { subject: { tenantId: "tenant", episodeId: "episode", participantId: "participant" } },
+      token: async () => "token",
+      media: {},
+      telemetry: platform.telemetry,
+    });
+
+    expect(createV1SyncClient).toHaveBeenCalledWith(expect.objectContaining({ telemetry: journey.context }));
   });
 
   it("revalidates access when the app returns to the foreground", () => {

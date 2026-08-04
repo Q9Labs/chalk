@@ -216,13 +216,13 @@ func run() error {
 	auditLogService := auditlogs.NewService(auditLogRepository)
 	journeyRepository := postgres.NewJourneyRepository(pool)
 	journeyService := journeys.NewService(journeyRepository)
-	var meetingCredentials httpapi.MeetingCredentialVerifier
+	var episodeCredentials httpapi.EpisodeCredentialVerifier
 	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
 		verifier, err := rtkadapter.NewCredentialVerifier(cfg.CloudflareRealtime)
 		if err != nil {
-			return fmt.Errorf("configure realtimekit meeting credential verifier: %w", err)
+			return fmt.Errorf("configure realtimekit Episode-scoped media credential verifier: %w", err)
 		}
-		meetingCredentials = verifier
+		episodeCredentials = verifier
 	}
 	mediaPlaneRegistry := mediaplaneproviders.NewRegistry(cfg.CloudflareRealtime)
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
@@ -362,7 +362,7 @@ func run() error {
 		Integrations:           integrationService,
 		Journeys:               journeyService,
 		LocalTelemetry:         cfg.Observability.Environment == config.DefaultEnvironment,
-		MeetingCredentials:     meetingCredentials,
+		EpisodeCredentials:     episodeCredentials,
 		MediaPlane:             mediaPlaneRegistry,
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,

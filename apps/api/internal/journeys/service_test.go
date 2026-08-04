@@ -241,7 +241,7 @@ func TestWebhookBranchTerminalDoesNotTerminateMultiEndpointJourney(t *testing.T)
 		t.Fatal("queued webhook branch was terminal")
 	}
 	aggregate := fixtureEvent(4)
-	aggregate.Name = "room.create.completed"
+	aggregate.Name = "space.create.completed"
 	aggregate.Phase = "terminal"
 	aggregate.State = "succeeded"
 	if !journeys.IsTerminalEvent(aggregate) {

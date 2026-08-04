@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Command do
   @moduledoc "Validated command intent with its stable idempotency fingerprint."
 
   alias ChalkSync.CanonicalJSON
+  alias ChalkSync.Stateholder.ObservedContext
 
   @command_id ~r/\A[A-Za-z0-9_-]{16,64}\z/
   @max_payload_bytes 16 * 1024
@@ -13,7 +14,7 @@ defmodule ChalkSync.Stateholder.Command do
   }
 
   @enforce_keys [:id, :name, :payload, :fingerprint, :normalized_bytes]
-  defstruct [:id, :name, :payload, :fingerprint, :normalized_bytes]
+  defstruct [:id, :name, :payload, :fingerprint, :normalized_bytes, :observed_context]
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -24,8 +25,13 @@ defmodule ChalkSync.Stateholder.Command do
             | :assign_roles,
           payload: map(),
           fingerprint: binary(),
-          normalized_bytes: pos_integer()
+          normalized_bytes: pos_integer(),
+          observed_context: ObservedContext.t() | nil
         }
+
+  @spec observe(t(), ObservedContext.t()) :: t()
+  def observe(%__MODULE__{} = command, %ObservedContext{} = context),
+    do: %{command | observed_context: context}
 
   @spec new(String.t(), atom() | String.t(), map()) :: {:ok, t()} | {:error, atom()}
   def new(id, name, payload) when is_binary(id) and is_map(payload) do

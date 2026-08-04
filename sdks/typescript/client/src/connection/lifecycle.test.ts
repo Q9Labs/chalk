@@ -2,6 +2,7 @@ import { Deferred, Effect, Fiber, Layer, ManagedRuntime } from "effect";
 import { TestClock } from "effect/testing";
 import type { CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
+import type { JourneyTelemetryContext } from "../telemetry/types";
 import { describe, expect, it } from "vitest";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { accessGrant } from "../access/grant.test.helpers";
@@ -22,6 +23,21 @@ describe("ConnectionLifecycleService", () => {
 
     expect(harness.requests).toHaveLength(2);
     expect(harness.lifecycle.getSnapshot()).toMatchObject({ state: "live", subject: { participantId: "participant-1" } });
+    await harness.runtime.dispose();
+  });
+
+  it("passes the active journey context through the Sync factory seam", async () => {
+    const telemetry: JourneyTelemetryContext = {
+      journeyId: "00000000-0000-4000-8000-000000000001",
+      rootJourneyId: "00000000-0000-4000-8000-000000000001",
+      traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+      tracestate: "chalk=sync",
+    };
+    const harness = makeHarness(() => Effect.succeed(accessGrant(START + 300_000, "telemetry")), { telemetry });
+
+    await startHarness(harness);
+
+    expect(harness.syncTelemetries[0]).toEqual(telemetry);
     await harness.runtime.dispose();
   });
 
@@ -306,6 +322,7 @@ describe("ConnectionLifecycleService", () => {
 type HarnessOptions = {
   readonly mediaFactory?: (index: number) => FakeMedia;
   readonly syncFactory?: (index: number) => FakeSync;
+  readonly telemetry?: JourneyTelemetryContext;
   readonly recovery?: { readonly budgetMs?: number; readonly maxAttempts?: number; readonly backoffMs?: readonly number[] };
 };
 
@@ -313,6 +330,7 @@ type Harness = {
   readonly requests: ConnectionAccessRequest[];
   readonly medias: FakeMedia[];
   readonly syncs: FakeSync[];
+  readonly syncTelemetries: (JourneyTelemetryContext | undefined)[];
   readonly access: ContextService<ConnectionAccessService>;
   readonly lifecycle: ContextService<ConnectionLifecycleService>;
   readonly runtime: ManagedRuntime.ManagedRuntime<ConnectionAccessService | ConnectionLifecycleService, never>;
@@ -325,6 +343,7 @@ function makeHarness(provider: Parameters<typeof makeConnectionAccessLayer>[0], 
   const requests: ConnectionAccessRequest[] = [];
   const medias: FakeMedia[] = [];
   const syncs: FakeSync[] = [];
+  const syncTelemetries: (JourneyTelemetryContext | undefined)[] = [];
   let foregroundListener: (() => void) | undefined;
   const dependencies: ConnectionDependencies = {
     clock: { now: () => START, setTimeout: (callback, milliseconds) => setTimeout(callback, milliseconds), clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
@@ -334,7 +353,8 @@ function makeHarness(provider: Parameters<typeof makeConnectionAccessLayer>[0], 
       medias.push(media);
       return media.client;
     },
-    createSyncClient: () => {
+    createSyncClient: (input) => {
+      syncTelemetries.push(input.telemetry);
       const sync = options.syncFactory?.(syncs.length) ?? fakeSync();
       syncs.push(sync);
       return sync.client;
@@ -351,7 +371,7 @@ function makeHarness(provider: Parameters<typeof makeConnectionAccessLayer>[0], 
     requests.push(request);
     return provider(request);
   });
-  const lifecycleLayer = makeConnectionLifecycleLayerFromServices({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1", ...(options.recovery ? { recovery: options.recovery } : {}) }).pipe(
+  const lifecycleLayer = makeConnectionLifecycleLayerFromServices({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1", telemetry: options.telemetry, ...(options.recovery ? { recovery: options.recovery } : {}) }).pipe(
     Layer.provideMerge(Layer.mergeAll(accessLayer, makeConnectionPlatformLayer(dependencies), TestClock.layer({ warningDelay: "1 hour" }))),
   );
   const runtime = ManagedRuntime.make(lifecycleLayer);
@@ -359,6 +379,7 @@ function makeHarness(provider: Parameters<typeof makeConnectionAccessLayer>[0], 
     requests,
     medias,
     syncs,
+    syncTelemetries,
     access: runtime.runSync(Effect.service(ConnectionAccessService)),
     lifecycle: runtime.runSync(Effect.service(ConnectionLifecycleService)),
     runtime,

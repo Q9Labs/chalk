@@ -6,7 +6,7 @@ const port = requiredPort("CHALK_CLOUDFLARE_SFU_STUB_PORT");
 const appId = required("CHALK_CLOUDFLARE_SFU_STUB_APP_ID");
 const appSecret = required("CHALK_CLOUDFLARE_SFU_STUB_APP_SECRET");
 const requestLog = required("CHALK_CLOUDFLARE_SFU_STUB_REQUEST_LOG");
-let nextSession = 1;
+let nextConnection = 1;
 
 const server = createServer(async (request, response) => {
   try {
@@ -28,33 +28,33 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === `${appPrefix}/sessions/new`) {
       await readJSON(request);
-      return json(response, 200, { sessionId: `local-sfu-session-${nextSession++}` });
+      return json(response, 200, { sessionId: `local-sfu-connection-${nextConnection++}` });
     }
 
-    const sessionPath = url.pathname.slice(`${appPrefix}/sessions/`.length);
-    if (request.method === "GET" && sessionPath && !sessionPath.includes("/")) {
+    const providerPath = url.pathname.slice(`${appPrefix}/sessions/`.length);
+    if (request.method === "GET" && providerPath && !providerPath.includes("/")) {
       return json(response, 200, {});
     }
-    if (request.method === "POST" && sessionPath.endsWith("/tracks/new")) {
+    if (request.method === "POST" && providerPath.endsWith("/tracks/new")) {
       const body = await readJSON(request);
       return json(response, 200, {
         sessionDescription: body.sessionDescription ? { type: "answer", sdp: "local-observability-answer" } : undefined,
         tracks: Array.isArray(body.tracks) ? body.tracks : [],
       });
     }
-    if (request.method === "PUT" && sessionPath.endsWith("/tracks/close")) {
+    if (request.method === "PUT" && providerPath.endsWith("/tracks/close")) {
       const body = await readJSON(request);
       return json(response, 200, {
         tracks: Array.isArray(body.tracks) ? body.tracks.map(({ mid }) => ({ mid })) : [],
         requiresImmediateRenegotiation: false,
       });
     }
-    if (request.method === "PUT" && sessionPath.endsWith("/renegotiate")) {
+    if (request.method === "PUT" && providerPath.endsWith("/renegotiate")) {
       await readJSON(request);
       return json(response, 200, {});
     }
 
-    return json(response, 404, { errors: [{ message: "session operation not found" }] });
+    return json(response, 404, { errors: [{ message: "connection operation not found" }] });
   } catch (error) {
     return json(response, error?.code === "PAYLOAD_TOO_LARGE" ? 413 : 400, {
       errors: [{ message: "invalid request" }],

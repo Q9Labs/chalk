@@ -5,10 +5,9 @@ middleware, and domain packages under `internal/*`. Follow
 `docs/redesign/north-star.md`: composable hexagonal boundaries, swappable
 `MediaPlane` / `SyncEngine` ports, provider details in adapters, public REST
 routes under one `/v1` boundary while operational routes like `/healthz` stay
-unversioned. Existing domains include identity, tenancy, rooms, session
+unversioned. Existing domains include identity, tenancy, Spaces, Episode
 lifecycle, recordings, transcripts, integrations, audit logs, and webhooks.
-Vocabulary follows the repo-root `GLOSSARY.md` (rooms and sessions are being
-renamed to Spaces and Episodes in waves); read it before naming anything.
+Vocabulary follows the repo-root `GLOSSARY.md`; read it before naming anything.
 
 ## Working Here
 

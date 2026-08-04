@@ -76,6 +76,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       apiBaseUrl: apiBaseURL,
       syncUrl: syncURL,
       whiteboardUrl: options.whiteboardURL,
+      telemetry: journey?.context,
       dependencies,
       fetch,
       syncStartupTimeoutMs: options.syncStartupTimeoutMs ?? 30_000,
@@ -89,10 +90,10 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
 type PlatformDiagnostic = Parameters<NonNullable<SpaceClientPlatform["onConnectionDiagnostic"]>>[0];
 
 function connectionDiagnostic(event: PlatformDiagnostic): DiagnosticObservation {
-  if (event.event === "join_span" && event.step && event.spanId && event.outcome) {
+  if (event.event === "space_join_span" && event.step && event.spanId && event.outcome) {
     return {
       category: "connection",
-      code: `join.${event.step}.${event.outcome}`,
+      code: `space.join.${event.step}.${event.outcome}`,
       phase: joinTracePhase(event.step),
       state: event.outcome === "succeeded" ? "succeeded" : event.outcome === "failed" ? "failed" : "observed",
       ...(event.durationMs === undefined ? {} : { metricValue: event.durationMs }),
@@ -158,6 +159,7 @@ function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: R
     mediaPlane: input.media,
     lifecycle,
     webSocket,
+    telemetry: input.telemetry,
     ...(storage ? { pendingStore: new AsyncStorageV1PendingTargetStore({ scope, storage }) } : {}),
   });
 }

@@ -133,14 +133,14 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:sync_v1_live_frame, coordinator, frame},
         %{coordinator: coordinator} = state
       ) do
-    {:push, {:text, ProtocolV1.encode!(frame)}, mark_control_checked(state)}
+    {:push, {:text, encode_with_context(state, frame)}, mark_control_checked(state)}
   end
 
   def handle_info(
         {:directed_request, frame},
         %{phase: :live} = state
       ) do
-    {:push, {:text, ProtocolV1.encode!(frame)}, mark_control_checked(state)}
+    {:push, {:text, encode_with_context(state, frame)}, mark_control_checked(state)}
   end
 
   def handle_info(
@@ -235,6 +235,8 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:hello, %{token: token, cursor: cursor} = hello},
          %{phase: :awaiting_hello} = state
        ) do
+    state = merge_hello_observability(state, Map.get(hello, :correlation, %{}))
+
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
          {:ok, _lifecycle} <-
@@ -338,16 +340,25 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: protocol_error(:recovery_required, state)
 
   defp handle_frame({:command, command}, %{phase: :live, identity: identity} = state) do
+    observed = Observability.observed_operation_context(state.observability)
+
     with {:ok, durable_command} <-
            Command.new(command.command_id, command.name, command.payload),
+         durable_command = Command.observe(durable_command, observed),
          {:ok, lease} <- CommandIntake.submit(identity, durable_command) do
       {:ok, %{state | commands: Map.put(state.commands, lease, command.command_id)}}
     else
       {:error, :overloaded} ->
-        {:push, {:text, ProtocolV1.retryable(command.command_id, :overloaded)}, state}
+        {:push,
+         {:text,
+          encode_with_context(state, ProtocolV1.retryable(command.command_id, :overloaded))},
+         state}
 
       {:error, :server_draining} ->
-        {:push, {:text, ProtocolV1.retryable(command.command_id, :server_draining)}, state}
+        {:push,
+         {:text,
+          encode_with_context(state, ProtocolV1.retryable(command.command_id, :server_draining))},
+         state}
 
       {:error, reason} ->
         protocol_error(reason, state)
@@ -362,10 +373,12 @@ defmodule ChalkSync.Transport.SocketV1 do
     with {:ok, durable} <- Operation.new(operation.command_id, operation.name, operation.payload),
          durable = Operation.observe(durable, observed),
          {:ok, decision} <- Stateholder.begin_operation(identity, durable) do
-      {:push, {:text, ProtocolV1.operation_decision(decision)}, state}
+      {:push, {:text, encode_with_context(state, ProtocolV1.operation_decision(decision))}, state}
     else
       {:retryable, reason} ->
-        {:push, {:text, ProtocolV1.retryable(operation.command_id, reason)}, state}
+        {:push,
+         {:text, encode_with_context(state, ProtocolV1.retryable(operation.command_id, reason))},
+         state}
 
       {:error, reason} ->
         protocol_error(reason, state)
@@ -384,7 +397,7 @@ defmodule ChalkSync.Transport.SocketV1 do
          } = state
        ) do
     case Coordinator.live_target(coordinator, identity, target, self()) do
-      {:ok, result} -> {:push, {:text, ProtocolV1.encode!(result)}, state}
+      {:ok, result} -> {:push, {:text, encode_with_context(state, result)}, state}
       {:error, reason} -> protocol_error(reason, state)
     end
   end
@@ -401,7 +414,7 @@ defmodule ChalkSync.Transport.SocketV1 do
          } = state
        ) do
     case Coordinator.directed_request(coordinator, identity, request, self()) do
-      {:ok, result} -> {:push, {:text, ProtocolV1.encode!(result)}, state}
+      {:ok, result} -> {:push, {:text, encode_with_context(state, result)}, state}
       {:error, reason} -> protocol_error(reason, state)
     end
   end
@@ -481,7 +494,8 @@ defmodule ChalkSync.Transport.SocketV1 do
        when name in [:reaction_send, :chat_send, :chat_page_request, :chat_read_set],
        do: protocol_error(:collaboration_not_negotiated, state)
 
-  defp handle_frame(:ping, state), do: {:push, {:text, ProtocolV1.pong()}, state}
+  defp handle_frame(:ping, state),
+    do: {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
 
   defp start_registered_recovery(
          state,
@@ -535,10 +549,11 @@ defmodule ChalkSync.Transport.SocketV1 do
 
       {:ok, decision} ->
         if is_map(decision.event), do: Coordinator.publish(state.identity.episode, decision.event)
-        {:push, {:text, ProtocolV1.ack(decision)}, state}
+        {:push, {:text, encode_with_context(state, ProtocolV1.ack(decision))}, state}
 
       {:retryable, reason} ->
-        {:push, {:text, ProtocolV1.retryable(command_id, reason)}, state}
+        {:push, {:text, encode_with_context(state, ProtocolV1.retryable(command_id, reason))},
+         state}
     end
   end
 
@@ -546,15 +561,52 @@ defmodule ChalkSync.Transport.SocketV1 do
     case Coordinator.publish_pending(state.identity.episode, event, self()) do
       {:ok, event_frames} ->
         pending = ProtocolV1.operation_pending(command_id)
-        {:push, Enum.map(event_frames ++ [pending], &{:text, &1}), state}
+        frames = Enum.map(event_frames ++ [pending], &encode_with_context(state, &1))
+        {:push, Enum.map(frames, &{:text, &1}), state}
 
       {:error, _reason} ->
-        {:push, {:text, ProtocolV1.retryable(command_id, :dependency_unavailable)}, state}
+        {:push,
+         {:text,
+          encode_with_context(state, ProtocolV1.retryable(command_id, :dependency_unavailable))},
+         state}
+    end
+  end
+
+  defp merge_hello_observability(state, correlation) when is_map(correlation) do
+    %{
+      state
+      | observability:
+          Observability.merge(state.observability, Observability.context(correlation))
+    }
+  end
+
+  defp merge_hello_observability(state, _correlation), do: state
+
+  defp encode_with_context(state, frame) when is_map(frame) do
+    frame
+    |> Map.merge(Observability.frame_fields(state.observability))
+    |> ProtocolV1.encode!()
+  end
+
+  defp encode_with_context(state, encoded) when is_binary(encoded) do
+    fields = Observability.frame_fields(state.observability)
+
+    if fields == %{} do
+      encoded
+    else
+      encoded
+      |> JSON.decode!()
+      |> Map.merge(fields)
+      |> ProtocolV1.encode!()
     end
   end
 
   defp protocol_error(reason, state),
-    do: {:push, {:text, ProtocolV1.error(:protocol_error, Atom.to_string(reason))}, state}
+    do:
+      {:push,
+       {:text,
+        encode_with_context(state, ProtocolV1.error(:protocol_error, Atom.to_string(reason)))},
+       state}
 
   defp close_invalid_frame(reason, state) do
     detail =
@@ -562,7 +614,8 @@ defmodule ChalkSync.Transport.SocketV1 do
 
     code = if(reason == :unsupported_protocol, do: :unsupported_protocol, else: :invalid_frame)
 
-    {:stop, :normal, {1009, detail}, {:text, ProtocolV1.error(code, detail)}, state}
+    {:stop, :normal, {1009, detail},
+     {:text, encode_with_context(state, ProtocolV1.error(code, detail))}, state}
   end
 
   defp identity(%Claims{} = claims) do
@@ -604,13 +657,13 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp pop_outbound(%{coordinator: coordinator} = state) do
     case Coordinator.pop(coordinator, self()) do
       {:ok, encoded, false} ->
-        {:push, {:text, encoded}, mark_control_checked(state)}
+        {:push, {:text, encode_with_context(state, encoded)}, mark_control_checked(state)}
 
       {:ok, encoded, {:terminal, revision, state_digest}} ->
         cancel_timer(state.heartbeat_timer)
         timer = Process.send_after(self(), :terminal_ack_timeout, @terminal_ack_timeout_ms)
 
-        {:push, {:text, encoded},
+        {:push, {:text, encode_with_context(state, encoded)},
          %{
            state
            | phase: :terminal,
@@ -659,7 +712,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp enqueue_collaboration(frame, state, kind \\ :frame) do
-    encoded = ProtocolV1.encode!(frame)
+    encoded = encode_with_context(state, frame)
 
     case CollaborationQueue.push(state.collaboration_queue, encoded, kind: kind) do
       :ok ->
@@ -671,7 +724,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp buffer_collaboration(frame, state) do
-    encoded = ProtocolV1.encode!(frame)
+    encoded = encode_with_context(state, frame)
 
     case CollaborationQueue.push(state.collaboration_queue, encoded) do
       :ok ->

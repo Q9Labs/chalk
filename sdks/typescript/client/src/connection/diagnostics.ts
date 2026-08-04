@@ -1,13 +1,13 @@
 import type { ConnectionErrorCode, ConnectionState } from "./types";
 
-export type ConnectionDiagnosticEventName = "state_changed" | "access_refreshed" | "access_refresh_failed" | "recovery_attempt" | "recovery_succeeded" | "recovery_exhausted" | "cleanup_completed" | "cleanup_unconfirmed" | "join_span";
+export type ConnectionDiagnosticEventName = "state_changed" | "access_refreshed" | "access_refresh_failed" | "recovery_attempt" | "recovery_succeeded" | "recovery_exhausted" | "cleanup_completed" | "cleanup_unconfirmed" | "space_join_span";
 
 export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live";
 
 export type ConnectionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
 
 export type ConnectionJoinTraceEvent = ConnectionDiagnostic & {
-  readonly event: "join_span";
+  readonly event: "space_join_span";
   readonly step: ConnectionJoinTraceStep;
   readonly spanId: string;
   readonly parentSpanId?: string;
@@ -69,10 +69,10 @@ export class ConnectionDiagnostics {
   }
 
   startSpan(input: { readonly step: ConnectionJoinTraceStep; readonly state: ConnectionState; readonly epoch: number; readonly parentSpanId?: string }): ConnectionJoinTraceSpan {
-    const spanId = `join-span-${++this.#spanSequence}`;
+    const spanId = `space-join-span-${++this.#spanSequence}`;
     const startedAt = this.#now();
     let ended = false;
-    this.record({ event: "join_span", state: input.state, epoch: input.epoch, step: input.step, spanId, ...(input.parentSpanId ? { parentSpanId: input.parentSpanId } : {}), outcome: "started" });
+    this.record({ event: "space_join_span", state: input.state, epoch: input.epoch, step: input.step, spanId, ...(input.parentSpanId ? { parentSpanId: input.parentSpanId } : {}), outcome: "started" });
 
     return {
       spanId,
@@ -80,7 +80,7 @@ export class ConnectionDiagnostics {
         if (ended) return;
         ended = true;
         this.record({
-          event: "join_span",
+          event: "space_join_span",
           state: end.state,
           epoch: end.epoch,
           step: input.step,
@@ -95,6 +95,6 @@ export class ConnectionDiagnostics {
   }
 
   joinTrace(): readonly ConnectionJoinTraceEvent[] {
-    return Object.freeze(this.#events.filter((event): event is ConnectionJoinTraceEvent => event.event === "join_span"));
+    return Object.freeze(this.#events.filter((event): event is ConnectionJoinTraceEvent => event.event === "space_join_span"));
   }
 }

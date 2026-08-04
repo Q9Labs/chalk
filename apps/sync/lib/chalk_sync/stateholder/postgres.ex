@@ -1521,16 +1521,21 @@ defmodule ChalkSync.Stateholder.Postgres do
       attempt_count: 0,
       actor_participant_id: identity && identity.participant_id,
       actor_generation: identity && identity.participant_generation,
-      target_participant_id: target && target.id,
-      target_participant_generation: target && target.generation,
+      target_participant_id: optional_field(target, :id),
+      target_participant_generation: optional_field(target, :generation),
       recording_id: context[:recording_id],
       deadline_generation: context[:deadline_generation],
-      journey_id: observed && observed.journey_id,
-      parent_journey_event_id: observed && observed.parent_journey_event_id,
-      producing_trace_id: observed && observed.producing_trace_id,
-      producing_span_id: observed && observed.producing_span_id
+      journey_id: optional_field(observed, :journey_id),
+      parent_journey_event_id: optional_field(observed, :parent_journey_event_id),
+      producing_trace_id: optional_field(observed, :producing_trace_id),
+      producing_span_id: optional_field(observed, :producing_span_id),
+      producing_traceparent: optional_field(observed, :producing_traceparent),
+      producing_tracestate: optional_field(observed, :producing_tracestate)
     }
   end
+
+  defp optional_field(nil, _field), do: nil
+  defp optional_field(value, field), do: Map.get(value, field)
 
   defp insert_external_operation(connection, episode, external, context, observed) do
     source = operation_source(external.name)
@@ -1555,6 +1560,8 @@ defmodule ChalkSync.Stateholder.Postgres do
       nullable_dump(external.parent_journey_event_id),
       external.producing_trace_id,
       external.producing_span_id,
+      external.producing_traceparent,
+      external.producing_tracestate,
       external.payload,
       fence_active
     ])
@@ -1879,6 +1886,8 @@ defmodule ChalkSync.Stateholder.Postgres do
          parent_journey_event_id,
          producing_trace_id,
          producing_span_id,
+         producing_traceparent,
+         producing_tracestate,
          payload,
          status,
          attempt_count,
@@ -1906,6 +1915,8 @@ defmodule ChalkSync.Stateholder.Postgres do
       parent_journey_event_id: nullable_uuid(parent_journey_event_id),
       producing_trace_id: producing_trace_id,
       producing_span_id: producing_span_id,
+      producing_traceparent: producing_traceparent,
+      producing_tracestate: producing_tracestate,
       applied_event_id: nullable_uuid(applied_event_id),
       applied_revision: applied_revision,
       last_error_code: failure_reason(last_error_code)

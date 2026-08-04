@@ -608,7 +608,9 @@ defmodule ChalkSync.Stateholder.Memory do
         journey_id: observed && observed.journey_id,
         parent_journey_event_id: observed && observed.parent_journey_event_id,
         producing_trace_id: observed && observed.producing_trace_id,
-        producing_span_id: observed && observed.producing_span_id
+        producing_span_id: observed && observed.producing_span_id,
+        producing_traceparent: observed && observed.producing_traceparent,
+        producing_tracestate: observed && observed.producing_tracestate
       }
 
       next = %{episode | operations: Map.put(episode.operations, external_operation_id, external)}

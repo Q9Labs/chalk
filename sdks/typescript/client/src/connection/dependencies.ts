@@ -4,6 +4,7 @@ import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSna
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaCredential } from "../access/grant";
+import type { JourneyTelemetryContext } from "../telemetry/types";
 import { Context, Layer } from "effect";
 
 export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery" | "access_retry";
@@ -82,6 +83,7 @@ export type ConnectionSyncFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
+  readonly telemetry?: JourneyTelemetryContext;
 };
 
 export type ConnectionWhiteboardFactoryInput = {

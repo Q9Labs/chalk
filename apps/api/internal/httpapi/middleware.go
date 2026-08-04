@@ -111,9 +111,10 @@ func requireTenantAuthentication(service AuthenticationService, apiKeys APIKeyAu
 	}
 }
 
-// requireTelemetryIntakeCredential accepts a verified Chalk meeting or API
-// session credential for the isolated append-only telemetry intake route.
-func requireTelemetryIntakeCredential(service AuthenticationService, verifier MeetingCredentialVerifier) func(http.Handler) http.Handler {
+// requireTelemetryIntakeCredential accepts a verified Episode-scoped media
+// credential or API session credential for the isolated append-only telemetry
+// intake route.
+func requireTelemetryIntakeCredential(service AuthenticationService, verifier EpisodeCredentialVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.IsAuthenticated() {

@@ -136,6 +136,58 @@ function validateFieldMap(value, message) {
 
 /**
  * @param {unknown} value
+ */
+function validateCorrelationDefinition(value) {
+  assertObject(value, "correlation must be an object");
+  const fields = requireObjectProperty(value, "optionalTopLevelFields", "correlation fields are required");
+  const expectedFieldNames = ["journey_id", "traceparent", "tracestate"];
+  if (JSON.stringify(Object.keys(fields)) !== JSON.stringify(expectedFieldNames)) {
+    throw new Error("Invalid sync v1 contract: correlation fields must be journey_id, traceparent, and tracestate");
+  }
+
+  const expectedFormats = /** @type {Record<string, string>} */ ({
+    journey_id: "chalk-journey-id",
+    traceparent: "w3c-traceparent",
+    tracestate: "w3c-tracestate",
+  });
+  const expectedBounds = /** @type {Record<string, [number, number]>} */ ({
+    journey_id: [36, 36],
+    traceparent: [55, 55],
+    tracestate: [1, 512],
+  });
+  for (const fieldName of expectedFieldNames) {
+    const field = /** @type {JsonObject} */ (fields[fieldName]);
+    validateField(field);
+    if (field.kind !== "string" || field.format !== expectedFormats[fieldName]) {
+      throw new Error(`Invalid sync v1 contract: correlation.${fieldName} must declare ${expectedFormats[fieldName]}`);
+    }
+    const bounds = expectedBounds[fieldName];
+    if (!bounds) throw new Error(`Invalid sync v1 contract: correlation.${fieldName} bounds are missing`);
+    const [minimum, maximum] = bounds;
+    if (field.minBytes !== minimum || field.maxBytes !== maximum || typeof field.pattern !== "string") {
+      throw new Error(`Invalid sync v1 contract: correlation.${fieldName} must declare its exact byte bounds and pattern`);
+    }
+    try {
+      new RegExp(field.pattern, "u");
+    } catch {
+      throw new Error(`Invalid sync v1 contract: correlation.${fieldName} pattern must be a valid regular expression`);
+    }
+  }
+
+  const acceptedOn = requireObjectProperty(value, "acceptedOn", "correlation acceptedOn is required");
+  if (acceptedOn.hello !== "client-to-server" || acceptedOn.serverFrames !== "server-to-client") {
+    throw new Error("Invalid sync v1 contract: correlation acceptedOn directions are invalid");
+  }
+  if (JSON.stringify(value.upgradeHeaders) !== JSON.stringify(["x-chalk-journey-id", "traceparent", "tracestate"])) {
+    throw new Error("Invalid sync v1 contract: correlation upgrade headers must be exhaustive");
+  }
+  if (value.rule !== "propagate_from_first_observed_layer_to_every_downstream_frame") {
+    throw new Error("Invalid sync v1 contract: correlation propagation rule is invalid");
+  }
+}
+
+/**
+ * @param {unknown} value
  * @param {number} version
  */
 function validateSyncContract(value, version) {
@@ -188,8 +240,13 @@ function validateSyncContractDocument(value) {
   }
 
   const limits = requireObjectProperty(value, "limits", "limits are required");
+  // Reserve the standalone JSON object size for the three optional correlation fields:
+  // 1,160 bytes at their declared maxima (36-byte journey ID, 55-byte traceparent,
+  // and a 512-byte W3C tracestate whose JSON-special characters may escape),
+  // conservatively covering the 1,159-byte merge delta.
   const expectedLimits = {
     decodedInboundFrameBytes: 65_536,
+    correlationReservedBytes: 1_160,
     tokenBytes: 8_192,
     commandIdMinBytes: 16,
     commandIdMaxBytes: 64,
@@ -291,6 +348,9 @@ function validateSyncContractDocument(value) {
     throw new Error("Invalid sync v1 contract: hello must declare exactly the four protocol streams");
   }
   validateField(hello.token);
+
+  const correlation = requireObjectProperty(value, "correlation", "correlation is required");
+  validateCorrelationDefinition(correlation);
 
   const commands = requireArrayProperty(value, "commands", "commands are required");
   const commandNames = commands.map((command) => {

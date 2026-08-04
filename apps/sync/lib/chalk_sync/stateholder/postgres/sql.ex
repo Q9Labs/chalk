@@ -677,10 +677,11 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       request_fingerprint, operation_name, actor_participant_id,
       actor_generation, target_participant_id, target_participant_generation,
       source, recording_id, deadline_generation, journey_id, parent_journey_event_id,
-      producing_trace_id, producing_span_id, payload, fence_active
+      producing_trace_id, producing_span_id, producing_traceparent, producing_tracestate,
+      payload, fence_active
     ) values (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-      $17, $18, $19, $20
+      $17, $18, $19, $20, $21, $22
     )
     """
   end
@@ -1500,6 +1501,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL do
       "parent_journey_event_id",
       "producing_trace_id",
       "producing_span_id",
+      "producing_traceparent",
+      "producing_tracestate",
       "payload",
       "status",
       "attempt_count",

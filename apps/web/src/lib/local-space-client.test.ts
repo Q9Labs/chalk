@@ -14,10 +14,11 @@ describe("local Space client", () => {
     const getAccess = vi.fn<GetAccess>();
     const client = fakeSpaceClient();
     const createSpaceClient = vi.fn<(_: SpaceClientOptions, __: SpaceClientPlatform) => SpaceClient>(() => client);
+    const operationJourney = journey();
 
-    createLocalSpaceClient({ credential, getAccess, journey: journey() }, { createSpaceClient });
+    createLocalSpaceClient({ credential, getAccess, journey: operationJourney }, { createSpaceClient });
 
-    expect(createSpaceClient).toHaveBeenCalledWith({ space: "local-space", getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL });
+    expect(createSpaceClient).toHaveBeenCalledWith({ space: "local-space", getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL, telemetry: operationJourney.context });
   });
 
   it("records SDK client operations on the page journey", async () => {
@@ -84,13 +85,21 @@ describe("local Space client", () => {
 });
 
 function journey() {
-  return { recordDiagnostic: vi.fn() };
+  return {
+    context: {
+      journeyId: "journey",
+      rootJourneyId: "journey",
+      traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+      tracestate: "chalk=web",
+    },
+    recordDiagnostic: vi.fn(),
+  };
 }
 
 function instrumentedSpaceClient(client = fakeSpaceClient()) {
   const recordDiagnostic = vi.fn();
   return {
-    client: createLocalSpaceClient({ credential, getAccess: vi.fn<GetAccess>(), journey: { recordDiagnostic } }, { createSpaceClient: () => client, now: () => 100 }),
+    client: createLocalSpaceClient({ credential, getAccess: vi.fn<GetAccess>(), journey: { context: journey().context, recordDiagnostic } }, { createSpaceClient: () => client, now: () => 100 }),
     recordDiagnostic,
   };
 }

@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.PostgresExternalOperationTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Stateholder.Command
+  alias ChalkSync.Stateholder.ObservedContext
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -9,6 +10,10 @@ defmodule ChalkSync.Stateholder.PostgresExternalOperationTest do
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
+  @trace_id "4bf92f3577b34da6a3ce929d0e0e4736"
+  @span_id "00f067aa0ba902b7"
+  @traceparent "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+  @tracestate "acme=deferred"
 
   if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
 
@@ -81,6 +86,41 @@ defmodule ChalkSync.Stateholder.PostgresExternalOperationTest do
              Postgres.read_operation(fixture.episode, pending.external_operation_id)
 
     assert event_id == applied.event_id
+  end
+
+  test "persists and reloads the complete producing W3C carrier", %{fixture: fixture} do
+    [host, guest] = fixture.identities
+
+    {:ok, observed} =
+      ObservedContext.new(
+        "44444444-4444-4444-8444-444444444444",
+        "77777777-7777-4777-8777-777777777777",
+        @trace_id,
+        @span_id,
+        DateTime.utc_now()
+      )
+
+    observed = ObservedContext.with_w3c(observed, @traceparent, @tracestate)
+
+    operation =
+      "deferred_carrier_01"
+      |> operation(:mute_participant, %{"participantId" => guest.participant_id})
+      |> Operation.observe(observed)
+
+    assert {:ok, %{result: :pending} = pending} = Postgres.begin_operation(host, operation)
+
+    assert {:ok, [{_episode, claimed}]} = Postgres.claim_operations(64)
+    assert claimed.external_operation_id == pending.external_operation_id
+    assert claimed.producing_traceparent == @traceparent
+    assert claimed.producing_tracestate == @tracestate
+
+    assert {:ok, reloaded} =
+             Postgres.read_operation(fixture.episode, pending.external_operation_id)
+
+    assert reloaded.producing_traceparent == @traceparent
+    assert reloaded.producing_tracestate == @tracestate
+    assert reloaded.producing_trace_id == @trace_id
+    assert reloaded.producing_span_id == @span_id
   end
 
   test "deduplicates keys, rejects conflicts, and authorizes from the locked role mapping", %{

@@ -12,14 +12,14 @@ const receiverSecretFile = required("CHALK_WEBHOOK_RECEIVER_SECRET_FILE");
 const receiverStateFile = required("CHALK_WEBHOOK_RECEIVER_STATE_FILE");
 const restartRequestFile = required("CHALK_E2E_RESTART_REQUEST_FILE");
 const restartCompleteFile = required("CHALK_E2E_RESTART_COMPLETE_FILE");
-const hostSeedRequestFile = required("CHALK_E2E_HOST_SEED_REQUEST_FILE");
-const hostSeedCompleteFile = required("CHALK_E2E_HOST_SEED_COMPLETE_FILE");
+const participantSeedRequestFile = required("CHALK_E2E_PARTICIPANT_SEED_REQUEST_FILE");
+const participantSeedCompleteFile = required("CHALK_E2E_PARTICIPANT_SEED_COMPLETE_FILE");
 const grafanaBaseUrl = process.env.CHALK_E2E_GRAFANA_URL ?? "http://127.0.0.1:3000";
 const tempoBaseUrl = process.env.CHALK_E2E_TEMPO_URL ?? "http://127.0.0.1:3200";
 const lokiBaseUrl = process.env.CHALK_E2E_LOKI_URL ?? "http://127.0.0.1:3100";
 const prometheusBaseUrl = process.env.CHALK_E2E_PROMETHEUS_URL ?? "http://127.0.0.1:9090";
 const runId = crypto.randomUUID();
-const coreEventTypes = ["room.created", "room.updated", "room.archived", "room.restored", "session.started", "session.ended", "participant.joined", "participant.left"];
+const coreEventTypes = ["space.created", "space.updated", "episode.started", "episode.ended", "participant.joined", "participant.left"];
 const telemetry = createTelemetryClient({ enabled: true });
 const journey = telemetry.startJourney({ kind: "observability.webhook_canary", attributes: { surface: "local_e2e" } });
 const client = await Effect.runPromise(createChalkEffectClient({ baseUrl: apiBaseUrl, auth: { type: "bearer", token }, telemetry: journey.context }));
@@ -34,10 +34,18 @@ const endpoint = await Effect.runPromise(
 );
 await writeFile(receiverSecretFile, `${JSON.stringify({ secret: endpoint.secret })}\n`, { mode: 0o600 });
 
-const room = await Effect.runPromise(
-  client.rooms.createRoom({
+const space = await Effect.runPromise(
+  client.spaces.createSpace({
     params: { tenant_id: tenant.id },
-    payload: { name: "Webhook source", slug: `webhook-${runId}`, status: "active", media_plane: "cf_sfu" },
+    payload: {
+      name: "Webhook source",
+      slug: `webhook-${runId}`,
+      media_plane: "cf_sfu",
+      admission_policy: { mode: "open" },
+      default_episode_duration_seconds: 3600,
+      linger_window_seconds: 120,
+      maximum_episode_duration_seconds: 3600,
+    },
   }),
 );
 
@@ -46,9 +54,9 @@ await waitFor(
   "webhook first retryable Attempt",
   async () => {
     const listed = await Effect.runPromise(client.default.listWebhookDeliveries({ params: { tenant_id: tenant.id, endpoint_id: endpoint.id }, query: { page_size: 100 } }));
-    const roomDelivery = listed.deliveries.find((candidate) => candidate.event_type === "room.created");
-    if (!roomDelivery) return false;
-    delivery = await Effect.runPromise(client.default.getWebhookDelivery({ params: { tenant_id: tenant.id, endpoint_id: endpoint.id, delivery_id: roomDelivery.id } }));
+    const spaceDelivery = listed.deliveries.find((candidate) => candidate.event_type === "space.created");
+    if (!spaceDelivery) return false;
+    delivery = await Effect.runPromise(client.default.getWebhookDelivery({ params: { tenant_id: tenant.id, endpoint_id: endpoint.id, delivery_id: spaceDelivery.id } }));
     return delivery.state === "retry_wait" && delivery.attempts.length === 1 && delivery.attempts[0]?.outcome === "retryable_failure" && delivery.attempts[0]?.http_status === 503;
   },
   30,
@@ -108,47 +116,34 @@ if (finalReceiverState.side_effect_count !== 1 || finalReceiverState.handled_eve
   throw new Error(`Manual redelivery changed the idempotent side effect: ${JSON.stringify(finalReceiverState)}`);
 }
 
-await Effect.runPromise(client.rooms.updateRoom({ params: { tenant_id: tenant.id, room_id: room.id }, payload: { name: "Webhook source updated" } }));
-await Effect.runPromise(client.rooms.updateRoom({ params: { tenant_id: tenant.id, room_id: room.id }, payload: { status: "archived" } }));
-await Effect.runPromise(client.rooms.updateRoom({ params: { tenant_id: tenant.id, room_id: room.id }, payload: { status: "active" } }));
-const session = await Effect.runPromise(
-  client.roomSessions.createRoomSession({
-    params: { tenant_id: tenant.id, room_id: room.id },
-    headers: { "Idempotency-Key": idempotencyKey("session") },
+await Effect.runPromise(client.spaces.updateSpace({ params: { tenant_id: tenant.id, space_id: space.id }, payload: { name: "Webhook source updated" } }));
+const episode = await Effect.runPromise(
+  client.episodes.createEpisode({
+    params: { tenant_id: tenant.id, space_id: space.id },
+    headers: { "Idempotency-Key": idempotencyKey("episode") },
+    payload: { started_at: new Date().toISOString(), metadata: { source: "webhook" } },
+  }),
+);
+const ownerParticipantId = crypto.randomUUID();
+const ownerAdmission = await Effect.runPromise(
+  client.episodes.admitEpisodeParticipant({
+    params: { tenant_id: tenant.id, space_id: space.id, episode_id: episode.id },
+    headers: { "Idempotency-Key": idempotencyKey("owner-admit") },
     payload: {
-      started_at: new Date().toISOString(),
-      admission_policy: "open",
-      host_exit_policy: "require_transfer",
-      role_capabilities: {
-        host: ["publishAudio", "subscribe", "transferHost", "endMeeting"],
-        cohost: ["publishAudio", "subscribe"],
-        participant: ["subscribe"],
-      },
-      maximum_duration_seconds: 3600,
+      participant_id: ownerParticipantId,
+      name: "Webhook owner",
+      role: "owner",
     },
   }),
 );
-const hostParticipantSessionId = crypto.randomUUID();
-const hostAdmission = await Effect.runPromise(
-  client.default.admitSessionParticipant({
-    params: { tenant_id: tenant.id, room_id: room.id, session_id: session.id },
-    headers: { "Idempotency-Key": idempotencyKey("host-admit") },
-    payload: {
-      participant_session_id: hostParticipantSessionId,
-      name: "Webhook host",
-      initial_role: "host",
-      eligible_roles: ["host", "cohost", "participant"],
-    },
-  }),
-);
-await writeFile(hostSeedRequestFile, `${JSON.stringify({ tenant_id: tenant.id, room_id: room.id, session_id: session.id, participant_session_id: hostParticipantSessionId })}\n`, { mode: 0o600 });
-let hostSeed;
+await writeFile(participantSeedRequestFile, `${JSON.stringify({ tenant_id: tenant.id, space_id: space.id, episode_id: episode.id, participant_id: ownerAdmission.participant.id, participant_generation: ownerAdmission.participant.generation })}\n`, { mode: 0o600 });
+let participantSeed;
 await waitFor(
-  "public Session bootstrap verification and production-mode Sync startup",
+  "public Episode bootstrap verification and production-mode Sync startup",
   async () => {
     try {
-      hostSeed = JSON.parse(await readFile(hostSeedCompleteFile, "utf8"));
-      return hostSeed.api_created_host_role === true && hostSeed.api_created_v1_control_policy === true;
+      participantSeed = JSON.parse(await readFile(participantSeedCompleteFile, "utf8"));
+      return participantSeed.api_created_owner_role === true && participantSeed.api_created_v1_control_policy === true;
     } catch {
       return false;
     }
@@ -163,22 +158,21 @@ let endpointSubscription = await Effect.runPromise(
     payload: { event_types: coreEventTypes.filter((eventType) => eventType !== "participant.joined") },
   }),
 );
-const guestParticipantSessionId = crypto.randomUUID();
-const guestAdmission = await Effect.runPromise(
-  client.default.admitSessionParticipant({
-    params: { tenant_id: tenant.id, room_id: room.id, session_id: session.id },
-    headers: { "Idempotency-Key": idempotencyKey("guest-admit") },
+const secondaryOwnerParticipantId = crypto.randomUUID();
+const secondaryOwnerAdmission = await Effect.runPromise(
+  client.episodes.admitEpisodeParticipant({
+    params: { tenant_id: tenant.id, space_id: space.id, episode_id: episode.id },
+    headers: { "Idempotency-Key": idempotencyKey("secondary-owner-admit") },
     payload: {
-      participant_session_id: guestParticipantSessionId,
-      name: "Webhook guest",
-      initial_role: "participant",
-      eligible_roles: ["participant"],
+      participant_id: secondaryOwnerParticipantId,
+      name: "Webhook secondary owner",
+      role: "owner",
     },
   }),
 );
-const hostSync = await startV1Client(hostAdmission.sync_token, "host");
-const guestSync = await startV1Client(guestAdmission.sync_token, "guest");
-guestSync.leave({ commandId: crypto.randomUUID() }).catch(() => undefined);
+const ownerSync = await startV1Client(ownerAdmission.sync_token, "owner");
+const secondaryOwnerSync = await startV1Client(secondaryOwnerAdmission.sync_token, "secondary-owner");
+secondaryOwnerSync.leave({ commandId: crypto.randomUUID() }).catch(() => undefined);
 await waitForCoreDelivery("participant.left");
 endpointSubscription = await Effect.runPromise(
   client.default.updateWebhookEndpoint({
@@ -187,10 +181,10 @@ endpointSubscription = await Effect.runPromise(
     payload: { event_types: coreEventTypes.filter((eventType) => eventType !== "participant.joined" && eventType !== "participant.left") },
   }),
 );
-hostSync.endSession({ commandId: crypto.randomUUID() }).catch(() => undefined);
-await waitForCoreDelivery("session.ended");
-guestSync.stop();
-hostSync.stop();
+ownerSync.endEpisode({ commandId: crypto.randomUUID() }).catch(() => undefined);
+await waitForCoreDelivery("episode.ended");
+secondaryOwnerSync.stop();
+ownerSync.stop();
 const coreDeliveries = Object.fromEntries(await Promise.all(coreEventTypes.map(async (eventType) => [eventType, await waitForCoreDelivery(eventType)])));
 const coreReceiverState = await receiverState();
 for (const eventType of coreEventTypes) {
@@ -242,9 +236,9 @@ await waitFor("content-free webhook completion logs in Loki", async () => {
 });
 await waitFor("webhook metrics in Prometheus", async () => {
   const queries = [
-    'chalk_webhook_events_committed_total{event_name="room.created",api_version="1"}',
-    'chalk_webhook_delivery_attempts_total{event_name="room.created",outcome="retryable_failure"}',
-    'chalk_webhook_delivery_attempts_total{event_name="room.created",outcome="succeeded"}',
+    'chalk_webhook_events_committed_total{event_name="space.created",api_version="1"}',
+    'chalk_webhook_delivery_attempts_total{event_name="space.created",outcome="retryable_failure"}',
+    'chalk_webhook_delivery_attempts_total{event_name="space.created",outcome="succeeded"}',
     'chalk_webhook_redelivery_results_total{outcome="accepted"}',
   ];
   const values = await Promise.all(queries.map(prometheusValue));
@@ -273,8 +267,8 @@ console.log(
       processor_verified_retry: true,
       first_failure_signature_verified: firstReceiverState.first_failure_signature_verified,
       processor_diagnostic_phases: [...processorPhases],
-      api_created_host_role: hostSeed.api_created_host_role,
-      api_created_v1_control_policy: hostSeed.api_created_v1_control_policy,
+      api_created_owner_role: participantSeed.api_created_owner_role,
+      api_created_v1_control_policy: participantSeed.api_created_v1_control_policy,
       surfaces: ["receiver", "public_sdk", "postgres", "tempo", "prometheus", "loki", "grafana"],
     },
     null,

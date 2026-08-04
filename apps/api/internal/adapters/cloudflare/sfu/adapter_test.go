@@ -201,7 +201,7 @@ func TestAddTracksReturnsBoundedProviderFailureClassifications(t *testing.T) {
 			wantStage:  failureStageHTTPStatus,
 			wantStatus: http.StatusTooEarly,
 			wantClass:  "4xx",
-			wantCode:   "session_not_connected",
+			wantCode:   "connection_not_connected",
 		},
 		{
 			name:       "top-level error",
@@ -451,16 +451,16 @@ func TestCloseTracksRejectsProviderFailuresAndUnexpectedResults(t *testing.T) {
 		want       error
 	}{
 		{
-			name:       "missing episode status is not idempotent",
+			name:       "missing connection status is not idempotent",
 			statusCode: http.StatusNotFound,
 			body:       `{"errors":[{"message":"episode not found"}]}`,
-			want:       mediaplane.ErrEpisodeNotFound,
+			want:       mediaplane.ErrConnectionNotFound,
 		},
 		{
-			name:       "expired episode status",
+			name:       "expired connection status",
 			statusCode: http.StatusGone,
 			body:       `{"errorCode":"session_error","errorDescription":"could not find episode","tracks":[]}`,
-			want:       mediaplane.ErrEpisodeNotFound,
+			want:       mediaplane.ErrConnectionNotFound,
 		},
 		{
 			name:       "unrelated provider status",
@@ -608,7 +608,7 @@ func TestAddTracksFailureTelemetryIsBounded(t *testing.T) {
 		"http_status",
 		"425",
 		"4xx",
-		"session_not_connected",
+		"connection_not_connected",
 		"chalk.api.cloudflare_sfu.failures",
 	} {
 		if !strings.Contains(telemetry, required) {
@@ -643,50 +643,59 @@ func TestSFULifecycleOperationsStayOutOfGoMediaPlane(t *testing.T) {
 	}
 }
 
-func TestVerifySessionMetadata(t *testing.T) {
+func TestVerifyConnectionMetadata(t *testing.T) {
 	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
 	adapter := testAdapter(t, client)
 
-	metadata, err := adapter.VerifySessionMetadata(context.Background(), "episode_123")
+	metadata, err := adapter.VerifyConnectionMetadata(context.Background(), "connection_123")
 	if err != nil {
-		t.Fatalf("verify episode metadata: %v", err)
+		t.Fatalf("verify connection metadata: %v", err)
 	}
 
-	if metadata.Ref != "episode_123" {
-		t.Fatalf("episode ref = %q, want episode_123", metadata.Ref)
+	if metadata.Ref != "connection_123" {
+		t.Fatalf("connection ref = %q, want connection_123", metadata.Ref)
 	}
 	if client.method != http.MethodGet {
 		t.Fatalf("method = %q, want GET", client.method)
 	}
-	if client.path != "/v1/apps/sfu-app-id/sessions/episode_123" {
-		t.Fatalf("path = %q, want episode lookup path", client.path)
+	if client.path != "/v1/apps/sfu-app-id/sessions/connection_123" {
+		t.Fatalf("path = %q, want connection lookup path", client.path)
 	}
 }
 
-func TestVerifySessionMetadataEscapesEpisodeRef(t *testing.T) {
+func TestVerifyConnectionMetadataRejectsEmptyConnectionRef(t *testing.T) {
+	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK, body: `{}`})
+
+	_, err := adapter.VerifyConnectionMetadata(context.Background(), " ")
+	if !errors.Is(err, mediaplane.ErrInvalidConnectionRef) {
+		t.Fatalf("error = %v, want %v", err, mediaplane.ErrInvalidConnectionRef)
+	}
+}
+
+func TestVerifyConnectionMetadataEscapesConnectionRef(t *testing.T) {
 	client := &roundTripStub{statusCode: http.StatusOK, body: `{}`}
 	adapter := testAdapter(t, client)
 
-	_, err := adapter.VerifySessionMetadata(context.Background(), "../episode/123?x=1#frag")
+	_, err := adapter.VerifyConnectionMetadata(context.Background(), "../connection/123?x=1#frag")
 	if err != nil {
-		t.Fatalf("verify episode metadata: %v", err)
+		t.Fatalf("verify connection metadata: %v", err)
 	}
 
-	want := "/v1/apps/sfu-app-id/sessions/..%2Fepisode%2F123%3Fx=1%23frag"
+	want := "/v1/apps/sfu-app-id/sessions/..%2Fconnection%2F123%3Fx=1%23frag"
 	if client.path != want {
 		t.Fatalf("path = %q, want %q", client.path, want)
 	}
 }
 
-func TestVerifySessionMetadataMapsProviderErrors(t *testing.T) {
+func TestVerifyConnectionMetadataMapsProviderErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		statusCode int
 		want       error
 	}{
 		{name: "unauthorized", statusCode: http.StatusForbidden, want: mediaplane.ErrProviderUnauthorized},
-		{name: "not found", statusCode: http.StatusNotFound, want: mediaplane.ErrEpisodeNotFound},
-		{name: "gone", statusCode: http.StatusGone, want: mediaplane.ErrEpisodeNotFound},
+		{name: "not found", statusCode: http.StatusNotFound, want: mediaplane.ErrConnectionNotFound},
+		{name: "gone", statusCode: http.StatusGone, want: mediaplane.ErrConnectionNotFound},
 		{name: "rate limited", statusCode: http.StatusTooManyRequests, want: mediaplane.ErrProviderRateLimited},
 		{name: "provider failed", statusCode: http.StatusBadGateway, want: mediaplane.ErrProviderFailed},
 	}
@@ -698,11 +707,63 @@ func TestVerifySessionMetadataMapsProviderErrors(t *testing.T) {
 				body:       `{"errors":[{"message":"request rejected"}]}`,
 			})
 
-			_, err := adapter.VerifySessionMetadata(context.Background(), "episode_123")
+			_, err := adapter.VerifyConnectionMetadata(context.Background(), "connection_123")
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("error = %v, want %v", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestVerifyConnectionMetadataNormalizesProviderErrorCodes(t *testing.T) {
+	tests := []struct {
+		name             string
+		statusCode       int
+		body             string
+		wantProviderCode string
+	}{
+		{name: "not found status", statusCode: http.StatusNotFound, wantProviderCode: "connection_not_found"},
+		{name: "session not found", statusCode: http.StatusBadRequest, body: `{"errorCode":"SESSION_NOT_FOUND"}`, wantProviderCode: "connection_not_found"},
+		{name: "session not connected", statusCode: http.StatusBadRequest, body: `{"errorCode":"SESSION_NOT_CONNECTED"}`, wantProviderCode: "connection_not_connected"},
+		{name: "session not ready", statusCode: http.StatusBadRequest, body: `{"errorCode":"SESSION_NOT_READY"}`, wantProviderCode: "connection_not_connected"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := testAdapter(t, &roundTripStub{statusCode: tt.statusCode, body: tt.body})
+			_, err := adapter.VerifyConnectionMetadata(context.Background(), "connection_123")
+			if err == nil {
+				t.Fatal("verify connection metadata succeeded")
+			}
+			want := "provider_code=" + tt.wantProviderCode
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestVerifyConnectionMetadataUsesConnectionTelemetryNames(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	originalTracer := sfuTracer
+	sfuTracer = tracerProvider.Tracer("cloudflare-sfu-connection-telemetry-test")
+	t.Cleanup(func() {
+		sfuTracer = originalTracer
+		_ = tracerProvider.Shutdown(context.Background())
+	})
+
+	adapter := testAdapter(t, &roundTripStub{statusCode: http.StatusOK, body: `{}`})
+	if _, err := adapter.VerifyConnectionMetadata(context.Background(), "connection_123"); err != nil {
+		t.Fatalf("verify connection metadata: %v", err)
+	}
+
+	spans := spanRecorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(spans))
+	}
+	if got := spans[0].Name(); got != "mediaplane.cloudflare.sfu.verify_connection" {
+		t.Fatalf("span name = %q, want connection-named operation", got)
 	}
 }
 

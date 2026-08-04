@@ -67,6 +67,31 @@ describe("sync v1 contract generation", () => {
     fixtures.server_frames.forEach((frame) => expect(encodeV1SyncFrame(decodeServer(frame))).toBe(JSON.stringify(frame)));
     expect(fixtures.client_frames.filter((frame) => frame.type === "operation").map((frame) => frame.name)).toEqual(contract.operations.map((operation) => operation.name));
     expect(fixtures.server_frames.filter((frame) => frame.type === "event").map((frame) => frame.name)).toEqual(contract.events.map((event) => event.name));
+    const hello = fixtures.client_frames.find((frame) => frame.type === "hello");
+    if (!hello) throw new Error("golden v1 fixtures require a hello frame");
+    const partialHello = structuredClone(hello);
+    delete partialHello.tracestate;
+    expect(decodeClient(partialHello)).toMatchObject({ journey_id: hello.journey_id, traceparent: hello.traceparent });
+    expect(() => decodeClient({ ...partialHello, unexpected: true })).toThrow();
+    expect(decodeServer({ type: "pong", journey_id: hello.journey_id })).toEqual({ type: "pong", journey_id: hello.journey_id });
+    expect(() => decodeServer({ type: "pong", tracestate: "x".repeat(513) })).toThrow();
+  });
+
+  it("reserves the escaped maximum correlation object for near-limit chat pages", () => {
+    const limits = SyncV1ProtocolMetadata.limits;
+    const correlation = maximumCorrelation();
+    const producerLimit = limits.chatPageEncodedBytes - limits.correlationReservedBytes;
+    const frame = nearLimitChatPage(producerLimit);
+    const correlated = { ...frame, ...correlation };
+    const oversized = nearLimitChatPage(producerLimit + 1);
+    const decodeServer = Schema.decodeUnknownSync(ServerV1FrameSchema);
+
+    expect(new TextEncoder().encode(JSON.stringify(correlation)).byteLength).toBe(limits.correlationReservedBytes);
+    expect(new TextEncoder().encode(JSON.stringify(frame)).byteLength).toBe(producerLimit);
+    expect(new TextEncoder().encode(JSON.stringify(correlated)).byteLength).toBeLessThanOrEqual(limits.chatPageEncodedBytes);
+    expect(decodeServer(frame)).toEqual(frame);
+    expect(decodeServer(correlated)).toEqual(correlated);
+    expect(() => decodeServer(oversized)).toThrow();
   });
 
   it("retains the control stream in the generated Elixir delivery acknowledgement", async () => {
@@ -85,6 +110,12 @@ describe("sync v1 contract generation", () => {
     const decodeServer = Schema.decodeUnknownSync(ServerV1FrameSchema);
     fixtures.client_frames.forEach((frame) => expect(() => decodeClient(frame)).toThrow());
     fixtures.server_frames.forEach((frame) => expect(() => decodeServer(frame)).toThrow());
+    const zeroParentTraceHello = fixtures.client_frames.find((frame) => frame.traceparent === "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01");
+    expect(zeroParentTraceHello).toBeDefined();
+    if (zeroParentTraceHello) expect(() => decodeClient(zeroParentTraceHello)).toThrow();
+    const nonHelloCorrelationFrame = fixtures.client_frames.find((frame) => frame.type === "ping" && frame.journey_id === "00000000-0000-4000-8000-000000000042");
+    expect(nonHelloCorrelationFrame).toBeDefined();
+    if (nonHelloCorrelationFrame) expect(() => decodeClient(nonHelloCorrelationFrame)).toThrow();
     expect(fixtures.snapshot_mutations.map((fixture) => fixture.name)).toEqual(expectedSnapshotMutationNames);
     snapshotMutationFrames(golden, fixtures).forEach((frame) => expect(() => decodeServer(frame)).toThrow());
   });
@@ -266,6 +297,48 @@ function snapshotMutationFrames(golden, invalid) {
     fixture.changes.forEach((change) => setPath(frame.snapshot, change.path, change.value));
     return frame;
   });
+}
+
+function maximumCorrelation() {
+  return {
+    journey_id: "00000000-0000-4000-8000-000000000042",
+    traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00",
+    tracestate: `a=${"\\".repeat(256)},b=${"\\".repeat(251)}`,
+  };
+}
+
+/** @param {number} targetBytes @returns {JsonMap} */
+function nearLimitChatPage(targetBytes) {
+  const messages = Array.from({ length: 31 }, (_, index) => chatMessage(index, index === 30 ? 0 : 4_000));
+  const frame = {
+    type: "chat_page",
+    request_id: "chat-page-request-01",
+    outcome: "loaded",
+    messages,
+    has_more: false,
+    head_sequence: "8",
+    retained_floor_sequence: "1",
+  };
+  const baseBytes = new TextEncoder().encode(JSON.stringify(frame)).byteLength;
+  const lastMessage = frame.messages.at(-1);
+  if (!lastMessage) throw new Error("near-limit chat page requires a last message");
+  lastMessage.text = "x".repeat(targetBytes - baseBytes);
+  return frame;
+}
+
+/** @param {number} index @param {number} textLength @returns {JsonMap} */
+function chatMessage(index, textLength) {
+  return {
+    type: "chat_message",
+    message_id: `018f2f65-2a77-7a44-8e9a-5b0b6f8d4c${String(index + 23).padStart(2, "0")}`,
+    client_message_id: `chat-message-id-${String(index).padStart(2, "0")}`,
+    sequence: String(index + 1),
+    participant_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4cff",
+    display_name: "name",
+    text: "x".repeat(textLength),
+    attachments: [],
+    created_at: "2026-08-05T00:00:00Z",
+  };
 }
 
 /**

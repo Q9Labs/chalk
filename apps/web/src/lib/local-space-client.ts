@@ -6,7 +6,7 @@ import type { ParticipantCredential } from "./chalk-access";
 
 const localSpace = "local-space";
 
-type SpaceOperationJourney = Pick<TelemetryJourney, "recordDiagnostic">;
+type SpaceOperationJourney = Pick<TelemetryJourney, "recordDiagnostic"> & { readonly context?: TelemetryJourney["context"] };
 type CreateSpaceClient = (options: SpaceClientOptions, platform: SpaceClientPlatform) => SpaceClient;
 
 export type LocalSpaceClientOptions = {
@@ -22,7 +22,7 @@ type LocalSpaceClientDependencies = {
 
 /** Creates the app-owned public client so its broker-selected API and sync endpoints stay paired. */
 export function createLocalSpaceClient({ credential, getAccess, journey }: LocalSpaceClientOptions, dependencies: LocalSpaceClientDependencies = {}): SpaceClient {
-  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)({ space: localSpace, getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL });
+  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)({ space: localSpace, getAccess, baseUrl: credential.apiBaseURL }, { syncUrl: credential.syncURL, telemetry: journey.context });
   return instrumentSpaceClient(client, journey, dependencies.now ?? Date.now);
 }
 

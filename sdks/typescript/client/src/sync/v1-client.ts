@@ -2,6 +2,7 @@ import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } fr
 import type { ClientMediaPlane, MediaPlaneResult } from "../media/plane";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { chatMessageFromFrame, chatReadReceiptFromFrame, reactionFromFrame } from "../collaboration/wire";
+import { syncTelemetryCorrelation } from "../telemetry/sync";
 import { canonicalJsonBytesFromUnknown } from "./canonical";
 import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
 import { InMemoryV1PendingTargetStore, compareV1PendingTargets } from "./v1-persistence";
@@ -512,6 +513,7 @@ export class V1SyncClient implements V1CollaborationClient {
           presence: { cursor: null },
           requests: { cursor: null },
         },
+        ...(this.#options.telemetry ? syncTelemetryCorrelation(this.#options.telemetry) : {}),
       } as const;
       if (this.#requestedCollaborationVersion === 0) {
         this.#send(hello);

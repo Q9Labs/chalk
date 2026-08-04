@@ -28,7 +28,7 @@ var (
 
 type Client interface {
 	CreateJoin(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error)
-	VerifySessionMetadata(context.Context, string) (sfuadapter.SessionMetadata, error)
+	VerifyConnectionMetadata(context.Context, string) (sfuadapter.ConnectionMetadata, error)
 }
 
 type Result struct {
@@ -115,7 +115,7 @@ func (p Probe) Run(parent context.Context) (Result, error) {
 		return Result{}, ProbeError{Stage: "create_connection", Class: FailureInvalidResponse}
 	}
 
-	_, err = p.client.VerifySessionMetadata(ctx, connectionID)
+	_, err = p.client.VerifyConnectionMetadata(ctx, connectionID)
 	connectionID = ""
 	if err != nil {
 		return Result{}, classifyProbeError(ctx, "verify_connection", err)
@@ -150,7 +150,7 @@ func classifyProbeError(ctx context.Context, stage string, err error) ProbeError
 		class = FailureAuthentication
 	case errors.Is(err, mediaplane.ErrProviderRateLimited):
 		class = FailureRateLimited
-	case errors.Is(err, mediaplane.ErrInvalidProvider), errors.Is(err, mediaplane.ErrInvalidEpisodeRef):
+	case errors.Is(err, mediaplane.ErrInvalidProvider), errors.Is(err, mediaplane.ErrInvalidConnectionRef):
 		class = FailureContract
 	case errors.Is(err, mediaplane.ErrPlaneUnavailable):
 		class = FailureUnavailable

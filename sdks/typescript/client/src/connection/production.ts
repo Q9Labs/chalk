@@ -76,6 +76,7 @@ function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
     url: syncURL,
     token: input.token,
     mediaPlane: input.media,
+    telemetry: input.telemetry,
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
   });
 }

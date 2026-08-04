@@ -12,10 +12,12 @@ defmodule ChalkSync.Episodes.CommandIntake do
 
   alias ChalkSync.DeliveryGate
   alias ChalkSync.Live.MediaPlaneCall
+  alias ChalkSync.Observability
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.ObservedContext
   alias ChalkSync.Telemetry
 
   @episode_command_limit 32
@@ -155,6 +157,7 @@ defmodule ChalkSync.Episodes.CommandIntake do
     case Task.Supervisor.start_child(task_supervisor, fn ->
            try do
              result = decide_safely(decision_fun, identity, command)
+             emit_episode_event(command, result)
 
              DeliveryGate.emit(
                :command_result,
@@ -192,6 +195,29 @@ defmodule ChalkSync.Episodes.CommandIntake do
   defp command_result_outcome({:error, reason}), do: reason
   defp command_result_outcome({:retryable, reason}), do: reason
   defp command_result_outcome(_result), do: :unknown
+
+  defp emit_episode_event(
+         %Command{observed_context: %ObservedContext{} = observed},
+         {:ok, %{delivery: :original, event: event}}
+       )
+       when is_map(event) do
+    # Stateholder has returned only after the durable receipt/event commit. Emit
+    # before the volatile result delivery so a dropped frame cannot hide it.
+    context =
+      Observability.persisted_context(
+        observed.journey_id,
+        observed.producing_trace_id,
+        observed.producing_span_id,
+        observed.producing_traceparent,
+        observed.producing_tracestate
+      )
+
+    Observability.episode_event(context, event)
+
+    :ok
+  end
+
+  defp emit_episode_event(_command, _result), do: :ok
 
   defp decide_command(
          %Identity{protocol_version: 1} = identity,
