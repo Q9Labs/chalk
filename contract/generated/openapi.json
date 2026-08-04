@@ -11867,7 +11867,7 @@
             "$ref": "#/components/schemas/ParticipantId"
           },
           "role": {
-            "enum": ["owner", "admin", "member", "viewer"],
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -12382,7 +12382,7 @@
         "additionalProperties": false,
         "properties": {
           "role": {
-            "enum": ["owner", "admin", "member", "viewer"],
+            "enum": ["owner", "collaborator", "observer"],
             "type": "string"
           },
           "user_id": {
@@ -13298,7 +13298,7 @@
             "$ref": "#/components/schemas/MembershipId"
           },
           "role": {
-            "enum": ["owner", "admin", "member", "viewer"],
+            "enum": ["owner", "collaborator", "observer"],
             "type": "string"
           },
           "tenant_id": {
@@ -13474,7 +13474,6 @@
                 ]
               },
               "role": {
-                "enum": ["owner", "admin", "member", "viewer"],
                 "type": "string"
               },
               "space_id": {
@@ -13567,7 +13566,6 @@
                 ]
               },
               "role": {
-                "enum": ["owner", "admin", "member", "viewer"],
                 "type": "string"
               },
               "space_id": {
@@ -14347,7 +14345,7 @@
         "additionalProperties": false,
         "properties": {
           "role": {
-            "enum": ["owner", "admin", "member", "viewer"],
+            "enum": ["owner", "collaborator", "observer"],
             "type": "string"
           }
         },

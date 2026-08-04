@@ -3,11 +3,15 @@ package traceharness
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 )
 
@@ -365,6 +369,39 @@ func TestRunExecuteIntegrationActionScenario(t *testing.T) {
 	assertEvent(t, result.Events, "provider", "composio.ExecuteAction")
 	assertEvent(t, result.Events, "repository", "IntegrationRepository.MarkConnectionUsed")
 	assertEvent(t, result.Events, "audit", "CreateAuditLog")
+}
+
+func TestTracedTenantAuthorizerKeepsCollaboratorActionAndOwnerCheckDistinct(t *testing.T) {
+	authorizer := tracedTenantAuthorizer{recorder: NewRecorder(deterministicClock())}
+	principal := authentication.Principal{
+		Kind:   authentication.PrincipalUser,
+		UserID: mustID("11111111-1111-4111-8111-111111111111"),
+	}
+	tenantID := mustID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+	if err := authorizer.AuthorizeTenant(context.Background(), principal, tenantID, authorization.TenantPermission{
+		Scope:       authentication.ScopeIntegrationsWrite,
+		MinimumRole: memberships.RoleCollaborator,
+	}); err != nil {
+		t.Fatalf("collaborator action authorization = %v, want allow", err)
+	}
+	if err := authorizer.AuthorizeTenant(context.Background(), principal, tenantID, authorization.TenantPermission{
+		Scope:       authentication.ScopeTenantsWrite,
+		MinimumRole: memberships.RoleOwner,
+	}); !errors.Is(err, authorization.ErrForbidden) {
+		t.Fatalf("owner-only authorization = %v, want forbidden", err)
+	}
+
+	events := authorizer.recorder.Events()
+	if len(events) != 2 {
+		t.Fatalf("authorization events = %d, want 2", len(events))
+	}
+	if events[0].Fields["decision"] != "allow" {
+		t.Fatalf("collaborator decision = %v, want allow", events[0].Fields["decision"])
+	}
+	if events[1].Fields["decision"] != "deny_owner_check" {
+		t.Fatalf("owner decision = %v, want deny_owner_check", events[1].Fields["decision"])
+	}
 }
 
 func TestRunRejectsUnknownScenario(t *testing.T) {

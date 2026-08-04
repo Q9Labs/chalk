@@ -19,7 +19,7 @@ func TestServiceCreateMembership(t *testing.T) {
 	membership, err := service.CreateMembership(context.Background(), memberships.CreateMembershipInput{
 		TenantID: tenantID,
 		UserID:   userID,
-		Role:     memberships.RoleAdmin,
+		Role:     memberships.RoleCollaborator,
 	})
 	if err != nil {
 		t.Fatalf("create membership: %v", err)
@@ -31,8 +31,8 @@ func TestServiceCreateMembership(t *testing.T) {
 	if repository.createInput.TenantID.String() != tenantID.String() {
 		t.Fatalf("tenant id = %q, want %q", repository.createInput.TenantID.String(), tenantID.String())
 	}
-	if repository.createInput.Role != memberships.RoleAdmin {
-		t.Fatalf("role = %q, want admin", repository.createInput.Role)
+	if repository.createInput.Role != memberships.RoleCollaborator {
+		t.Fatalf("role = %q, want collaborator", repository.createInput.Role)
 	}
 }
 
@@ -58,7 +58,7 @@ func TestServiceUpdateMembershipRejectsZeroMembershipID(t *testing.T) {
 	service := memberships.NewService(repository)
 
 	_, err := service.UpdateTenantMembership(context.Background(), mustID(t, "11111111-1111-1111-1111-111111111111"), utilities.ID{}, memberships.UpdateMembershipInput{
-		Role: memberships.RoleMember,
+		Role: memberships.RoleCollaborator,
 	})
 	if !errors.Is(err, memberships.ErrInvalidMembershipID) {
 		t.Fatalf("error = %v, want %v", err, memberships.ErrInvalidMembershipID)
@@ -118,7 +118,7 @@ func (r *membershipRepository) GetTenantMembershipForUser(ctx context.Context, t
 	return memberships.Membership{
 		TenantID: tenantID,
 		UserID:   userID,
-		Role:     memberships.RoleMember,
+		Role:     memberships.RoleCollaborator,
 	}, nil
 }
 

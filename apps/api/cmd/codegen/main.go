@@ -548,7 +548,14 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 func fieldEnum(schemaName string, fieldName string) []string {
 	switch fieldName {
 	case "role":
-		return []string{"owner", "admin", "member", "viewer"}
+		switch schemaName {
+		case "Membership", "MembershipList", "CreateMembershipRequest", "UpdateMembershipRequest":
+			return []string{"owner", "collaborator", "observer"}
+		default:
+			// Episode participant roles are customer-defined space roles. They
+			// must remain open strings in the generated API contract.
+			return nil
+		}
 	case "storage_provider":
 		return []string{"r2"}
 	case "status":

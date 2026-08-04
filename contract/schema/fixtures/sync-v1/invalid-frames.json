@@ -121,7 +121,7 @@
       },
       "extensions": [
         {
-          "name": "room_actions_legacy",
+          "name": "obsolete_actions",
           "chat_cursor": {
             "after_sequence": null,
             "retained_floor_sequence": null

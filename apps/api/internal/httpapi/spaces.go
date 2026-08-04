@@ -17,11 +17,11 @@ import (
 var (
 	readSpacesPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeSpacesRead,
-		MinimumRole: memberships.RoleViewer,
+		MinimumRole: memberships.RoleObserver,
 	}
 	writeSpacesPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeSpacesWrite,
-		MinimumRole: memberships.RoleMember,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 )
 

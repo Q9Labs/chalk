@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chalk Lobby — Blinds</title>
+    <title>Chalk Entrance — Curtains</title>
     <style>
       :root {
         --green: #3e7a5a;
         --green-deep: #2c5a42;
         --cream: #f6f1e8;
         --ink: #2a2622;
+        --dur: 2600ms;
       }
       * {
         margin: 0;
@@ -36,8 +37,8 @@
         overflow: hidden;
       }
 
-      /* ---------- Lobby scene behind the blinds ---------- */
-      .lobby {
+      /* ---------- Entrance scene behind the curtains ---------- */
+      .entrance {
         position: absolute;
         inset: 0;
         background: radial-gradient(120% 90% at 50% 0%, #fdf8ee 0%, var(--cream) 45%, #e9e0d0 100%);
@@ -141,6 +142,7 @@
       body.open .welcome {
         opacity: 1;
         transform: translate(-50%, 0);
+        transition-delay: calc(var(--dur) * 0.55);
       }
       .welcome h1 {
         font-size: clamp(26px, 5vmin, 52px);
@@ -152,71 +154,103 @@
         color: #6c6154;
       }
 
+      /* Space stays dim until the curtains part */
       .dimmer {
         position: absolute;
         inset: 0;
         background: #14110d;
         opacity: 0.5;
-        transition: opacity 2000ms ease;
+        transition: opacity var(--dur) ease;
         pointer-events: none;
       }
       body.open .dimmer {
         opacity: 0;
       }
 
-      /* ---------- Blinds ---------- */
-      .blind {
+      /* ---------- Curtains ---------- */
+      .curtains {
         position: absolute;
         inset: 0;
-        transform-origin: 50% 0;
       }
-      .cord {
+      .panel {
         position: absolute;
         top: 0;
         bottom: 0;
-        width: 3px;
-        background: var(--green-deep);
-        transform-origin: 50% 0;
-        opacity: 0.85;
-      }
-      .cord.c1 {
-        left: 20%;
-      }
-      .cord.c2 {
-        right: 20%;
-      }
-      .slat {
-        position: absolute;
-        left: 0;
-        right: 0;
-        perspective: 900px;
+        width: 52%;
+        transition: transform var(--dur) cubic-bezier(0.5, 0.08, 0.35, 1);
         will-change: transform;
       }
-      .face {
+      body.open .panel {
+        transition-timing-function: cubic-bezier(0.6, 0.04, 0.22, 1);
+      }
+      .panel.left {
+        left: 0;
+        transform-origin: left center;
+        --dir: 1;
+      }
+      .panel.right {
+        right: 0;
+        transform-origin: right center;
+        --dir: -1;
+      }
+      body.open .panel.left {
+        transform: scaleX(0.15);
+      }
+      body.open .panel.right {
+        transform: scaleX(0.15);
+      }
+
+      .fabric {
         position: absolute;
         inset: 0;
-        background: linear-gradient(180deg, #f7f0e1 0%, #e7dcc4 70%, #cfc2a5 100%);
-        border-bottom: 1px solid rgba(90, 75, 50, 0.35);
-        transform-origin: 50% 50%;
-        backface-visibility: visible;
-        will-change: transform;
+        transform-origin: 50% 0;
+        background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0) 18%, rgba(0, 0, 0, 0.16) 82%, rgba(0, 0, 0, 0.38)), repeating-linear-gradient(90deg, #1f3f2f 0px, #35624a 16px, #4c8264 32px, #35624a 48px, #1f3f2f 66px);
+        box-shadow: inset 0 -10px 18px -8px rgba(0, 0, 0, 0.5);
       }
-      .rail {
+      /* soft sheen so the velvet catches the Entrance light */
+      .fabric::before {
+        content: "";
         position: absolute;
-        left: 0;
-        right: 0;
-        height: 16px;
-        background: linear-gradient(180deg, #4a8763, var(--green-deep));
-        border-radius: 0 0 6px 6px;
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
-        will-change: transform;
+        inset: 0;
+        background: linear-gradient(100deg, transparent 30%, rgba(255, 244, 214, 0.1) 50%, transparent 70%);
       }
-      .headrail {
+      .panel.left .fabric {
+        box-shadow: 8px 0 22px -6px rgba(0, 0, 0, 0.55);
+      }
+      .panel.right .fabric {
+        box-shadow: -8px 0 22px -6px rgba(0, 0, 0, 0.55);
+      }
+
+      /* cloth sway while the panel travels */
+      .fabric.moving {
+        animation: sway var(--dur) ease-in-out;
+      }
+      .panel.right .fabric.moving {
+        animation-delay: 90ms;
+      }
+      @keyframes sway {
+        0%,
+        100% {
+          transform: skewY(0deg);
+        }
+        22% {
+          transform: skewY(calc(var(--dir) * 0.8deg));
+        }
+        52% {
+          transform: skewY(calc(var(--dir) * -0.5deg));
+        }
+        78% {
+          transform: skewY(calc(var(--dir) * 0.25deg));
+        }
+      }
+
+      .rod {
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
-        height: 26px;
+        height: 3.2vmin;
+        min-height: 22px;
         background: linear-gradient(180deg, #4a4239, #262019);
         box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
         z-index: 5;
@@ -269,7 +303,7 @@
   </head>
   <body>
     <div class="stage">
-      <div class="lobby" aria-hidden="true">
+      <div class="entrance" aria-hidden="true">
         <div class="glow"></div>
         <div class="floor"></div>
         <div class="rug"></div>
@@ -278,130 +312,44 @@
         <div class="plant p1"></div>
         <div class="plant p2"></div>
         <div class="welcome">
-          <h1>Welcome to the lobby</h1>
+          <h1>Welcome to the Entrance</h1>
           <p>Come on in — we saved you a seat.</p>
         </div>
       </div>
       <div class="dimmer"></div>
-      <div class="blind" id="blind" aria-hidden="true">
-        <div class="cord c1"></div>
-        <div class="cord c2"></div>
+      <div class="curtains" aria-hidden="true">
+        <div class="panel left"><div class="fabric"></div></div>
+        <div class="panel right"><div class="fabric"></div></div>
       </div>
-      <div class="headrail"></div>
+      <div class="rod"></div>
     </div>
 
-    <a class="chip" href="curtains.html">Curtains version →</a>
+    <a class="chip" href="blinds.html">Blinds version →</a>
     <div class="controls">
-      <button id="toggle" type="button">Enter the lobby</button>
+      <button id="toggle" type="button">Enter the Entrance</button>
     </div>
 
     <script>
-      const blind = document.getElementById("blind");
       const btn = document.getElementById("toggle");
-      const cords = blind.querySelectorAll(".cord");
+      const fabrics = document.querySelectorAll(".fabric");
       const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const speed = reduced ? 0.3 : 1;
-
-      const SLATS = 16;
-      const HEADRAIL = 26;
-      const STACK_GAP = 7;
-      const TILT_OPEN = "rotateX(66deg)";
-      const TILT_CLOSED = "rotateX(0deg)";
-
-      let slats = [],
-        faces = [],
-        rail,
-        slatH;
-
-      function build() {
-        slats.forEach((s) => s.remove());
-        if (rail) rail.remove();
-        slats = [];
-        faces = [];
-        const drop = blind.clientHeight - HEADRAIL - 16;
-        slatH = drop / SLATS;
-        for (let i = 0; i < SLATS; i++) {
-          const slat = document.createElement("div");
-          slat.className = "slat";
-          slat.style.top = HEADRAIL + i * slatH + "px";
-          slat.style.height = slatH + 3 + "px";
-          const face = document.createElement("div");
-          face.className = "face";
-          face.style.transform = TILT_CLOSED;
-          slat.appendChild(face);
-          blind.appendChild(slat);
-          slats.push(slat);
-          faces.push(face);
-        }
-        rail = document.createElement("div");
-        rail.className = "rail";
-        rail.style.top = HEADRAIL + SLATS * slatH + "px";
-        blind.appendChild(rail);
-        cords.forEach((c) => {
-          c.style.transform = "scaleY(1)";
-        });
-      }
-
-      // Animate transform to a target, then bake it into inline style.
-      async function moveTo(el, target, duration, easing, delay = 0) {
-        const anim = el.animate([{ transform: el.style.transform || "none" }, { transform: target }], { duration: duration * speed, delay: delay * speed, easing, fill: "forwards" });
-        await anim.finished;
-        el.style.transform = target;
-        anim.cancel();
-      }
-
-      function tilt(open) {
-        const target = open ? TILT_OPEN : TILT_CLOSED;
-        // The tilt cord turns the slats in a ripple: top-first opening, bottom-first closing.
-        return Promise.all(
-          faces.map((face, i) => {
-            const order = open ? i : SLATS - 1 - i;
-            return moveTo(face, target, 750, "cubic-bezier(.4, 0, .3, 1)", order * 18);
-          }),
-        );
-      }
-
-      function lift(up) {
-        const liftEase = "cubic-bezier(.55, .05, .3, 1)";
-        const dropEase = "cubic-bezier(.4, .1, .55, 1)";
-        const moves = slats.map((slat, i) => {
-          const target = up ? `translateY(${i * (STACK_GAP - slatH)}px)` : "translateY(0px)";
-          // Raising gathers from the bottom up; lowering settles from the top down.
-          const delay = up ? (SLATS - 1 - i) * 14 : i * 10;
-          return moveTo(slat, target, up ? 1700 : 1500, up ? liftEase : dropEase, delay);
-        });
-        const railTarget = up ? `translateY(${SLATS * (STACK_GAP - slatH)}px)` : "translateY(0px)";
-        moves.push(moveTo(rail, railTarget, up ? 1700 : 1500, up ? liftEase : dropEase));
-        const stackH = HEADRAIL + SLATS * STACK_GAP + 16;
-        cords.forEach((c) => {
-          moves.push(moveTo(c, up ? `scaleY(${stackH / blind.clientHeight})` : "scaleY(1)", up ? 1700 : 1500, up ? liftEase : dropEase));
-        });
-        return Promise.all(moves);
-      }
-
-      function settle() {
-        // A light pendulum wobble once the stack reaches the headrail.
-        return blind.animate({ transform: ["rotate(0deg)", "rotate(.4deg)", "rotate(-.25deg)", "rotate(.1deg)", "rotate(0deg)"] }, { duration: 900 * speed, easing: "ease-in-out" }).finished;
-      }
+      const DUR = reduced ? 700 : 2600;
+      document.documentElement.style.setProperty("--dur", DUR + "ms");
 
       let busy = false;
-      async function toggle() {
+      function toggle() {
         if (busy) return;
         busy = true;
         btn.disabled = true;
         const opening = !document.body.classList.contains("open");
         document.body.classList.toggle("open", opening);
-        if (opening) {
-          await tilt(true);
-          await lift(true);
-          await settle();
-        } else {
-          await lift(false);
-          await tilt(false);
-        }
-        btn.textContent = opening ? "Step out of the room" : "Enter the lobby";
-        btn.disabled = false;
-        busy = false;
+        fabrics.forEach((f) => f.classList.add("moving"));
+        setTimeout(() => {
+          fabrics.forEach((f) => f.classList.remove("moving"));
+          btn.textContent = opening ? "Step out of the Space" : "Enter the Entrance";
+          btn.disabled = false;
+          busy = false;
+        }, DUR + 120);
       }
 
       btn.addEventListener("click", toggle);
@@ -411,16 +359,6 @@
           toggle();
         }
       });
-      window.addEventListener("resize", () => {
-        if (busy) return;
-        const wasOpen = document.body.classList.contains("open");
-        document.body.classList.remove("open");
-        build();
-        btn.textContent = "Enter the lobby";
-        if (wasOpen) toggle();
-      });
-
-      build();
     </script>
   </body>
 </html>

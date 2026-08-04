@@ -109,11 +109,11 @@ Example:
 
 ```sql
 -- +goose Up
-alter table rooms
+alter table episodes
     add column revision bigint not null default 1;
 
 -- +goose Down
-alter table rooms
+alter table episodes
     drop column revision;
 ```
 

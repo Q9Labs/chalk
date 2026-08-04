@@ -25,11 +25,11 @@ import (
 var (
 	readTranscriptsPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeTranscriptionsRead,
-		MinimumRole: memberships.RoleViewer,
+		MinimumRole: memberships.RoleObserver,
 	}
 	writeTranscriptsPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeTranscriptionsWrite,
-		MinimumRole: memberships.RoleMember,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 )
 

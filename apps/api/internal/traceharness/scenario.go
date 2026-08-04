@@ -435,8 +435,8 @@ type tracedTenantAuthorizer struct {
 func (a tracedTenantAuthorizer) AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
 	decision := "allow"
 	var err error
-	if permission.MinimumRole == memberships.RoleAdmin {
-		decision = "deny_admin_check"
+	if permission.MinimumRole == memberships.RoleOwner {
+		decision = "deny_owner_check"
 		err = authorization.ErrForbidden
 	}
 	a.recorder.Add("authorization", "AuthorizeTenant", "evaluate tenant permission", map[string]any{

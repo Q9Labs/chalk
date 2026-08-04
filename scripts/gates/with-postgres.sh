@@ -138,7 +138,15 @@ export_database_url() {
   local database_url
   database_url="postgres://postgres:postgres@127.0.0.1:${port}/chalk_gate?sslmode=disable"
 
-  CHALK_DATABASE_URL="${database_url}" "${repository_root}/apps/api/scripts/db-migrate.sh" up
+  if [[ -n "${CHALK_GATE_POSTGRES_MIGRATION_TARGET:-}" ]]; then
+    if [[ ! "${CHALK_GATE_POSTGRES_MIGRATION_TARGET}" =~ ^[0-9]+$ ]]; then
+      echo "CHALK_GATE_POSTGRES_MIGRATION_TARGET must be a numeric Goose version" >&2
+      exit 2
+    fi
+    CHALK_DATABASE_URL="${database_url}" "${repository_root}/apps/api/scripts/db-migrate.sh" up-to "${CHALK_GATE_POSTGRES_MIGRATION_TARGET}"
+  else
+    CHALK_DATABASE_URL="${database_url}" "${repository_root}/apps/api/scripts/db-migrate.sh" up
+  fi
 
   export CHALK_DATABASE_URL="${database_url}"
   export CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL="${database_url}"

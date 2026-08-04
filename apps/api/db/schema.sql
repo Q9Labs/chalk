@@ -70,7 +70,7 @@ create table memberships (
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
     user_id uuid not null references users(id),
-    -- owner, admin, member, viewer
+    -- owner, collaborator, observer
     role text not null,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),

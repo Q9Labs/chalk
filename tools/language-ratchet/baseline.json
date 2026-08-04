@@ -1,10 +1,10 @@
 {
   "apps/api": {
-    "meeting": 17,
+    "meeting": 14,
     "conference": 0,
     "videoconference": 0,
-    "room": 31,
-    "session": 1044,
+    "room": 2,
+    "session": 1006,
     "attendee": 0,
     "lobby": 0,
     "waitingroom": 0,
@@ -63,7 +63,7 @@
     "meeting": 0,
     "conference": 0,
     "videoconference": 0,
-    "room": 3,
+    "room": 1,
     "session": 61,
     "attendee": 0,
     "lobby": 0,
@@ -144,15 +144,15 @@
     "waiting-room": 0
   },
   "root": {
-    "meeting": 36,
-    "conference": 7,
+    "meeting": 0,
+    "conference": 0,
     "videoconference": 0,
-    "room": 52,
-    "session": 55,
+    "room": 3,
+    "session": 12,
     "attendee": 0,
-    "lobby": 19,
+    "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
-    "waiting-room": 1
+    "waiting-room": 0
   }
 }

@@ -1167,8 +1167,7 @@ export interface components {
         | null;
       name: string;
       participant_id?: components["schemas"]["ParticipantId"];
-      /** @enum {string} */
-      role: "owner" | "admin" | "member" | "viewer";
+      role: string;
     };
     AuditLog: {
       action: string;
@@ -1342,7 +1341,7 @@ export interface components {
     };
     CreateMembershipRequest: {
       /** @enum {string} */
-      role: "owner" | "admin" | "member" | "viewer";
+      role: "owner" | "collaborator" | "observer";
       user_id: components["schemas"]["UserId"];
     };
     CreateRecordingDownloadURLRequest: {
@@ -1644,7 +1643,7 @@ export interface components {
       created_at: components["schemas"]["DateTimeString"];
       id: components["schemas"]["MembershipId"];
       /** @enum {string} */
-      role: "owner" | "admin" | "member" | "viewer";
+      role: "owner" | "collaborator" | "observer";
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
       user_id: components["schemas"]["UserId"];
@@ -1699,8 +1698,7 @@ export interface components {
         generation: number;
         id: components["schemas"]["ParticipantId"];
         identity_id?: components["schemas"]["UUID"] | null;
-        /** @enum {string} */
-        role: "owner" | "admin" | "member" | "viewer";
+        role: string;
         space_id: components["schemas"]["SpaceId"];
         status: string;
         tenant_id: components["schemas"]["TenantId"];
@@ -1724,8 +1722,7 @@ export interface components {
         generation: number;
         id: components["schemas"]["UUID"];
         identity_id?: components["schemas"]["UUID"] | null;
-        /** @enum {string} */
-        role: "owner" | "admin" | "member" | "viewer";
+        role: string;
         space_id: components["schemas"]["SpaceId"];
         status: string;
         tenant_id: components["schemas"]["TenantId"];
@@ -1968,7 +1965,7 @@ export interface components {
     UUID: string;
     UpdateMembershipRequest: {
       /** @enum {string} */
-      role: "owner" | "admin" | "member" | "viewer";
+      role: "owner" | "collaborator" | "observer";
     };
     UpdateRecordingRequest: {
       metadata?:

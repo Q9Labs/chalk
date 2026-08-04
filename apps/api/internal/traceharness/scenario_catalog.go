@@ -286,7 +286,7 @@ func runRouteTenantGetAuthorized(ctx context.Context) (ScenarioResult, error) {
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Principal:  userPrincipal(),
-			PolicyRole: memberships.RoleViewer,
+			PolicyRole: memberships.RoleObserver,
 		}),
 		Method:         http.MethodGet,
 		Path:           "/v1/tenants/" + tenantID().String(),
@@ -305,7 +305,7 @@ func runRouteTenantUpdateAuthorized(ctx context.Context) (ScenarioResult, error)
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Principal:  userPrincipal(),
-			PolicyRole: memberships.RoleAdmin,
+			PolicyRole: memberships.RoleCollaborator,
 		}),
 		Method:         http.MethodPatch,
 		Path:           "/v1/tenants/" + tenantID().String(),
@@ -388,7 +388,7 @@ func runRouteUserGet(ctx context.Context) (ScenarioResult, error) {
 func runRouteMembershipCreateOwner(ctx context.Context) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
-	body := json.RawMessage(`{"user_id":"` + userID().String() + `","role":"member"}`)
+	body := json.RawMessage(`{"user_id":"` + userID().String() + `","role":"collaborator"}`)
 
 	return runRouteTrace(ctx, routeTraceConfig{
 		Name:     RouteMembershipCreateOwnerScenario,
@@ -414,7 +414,7 @@ func runRouteMembershipListViewer(ctx context.Context) (ScenarioResult, error) {
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Principal:  userPrincipal(),
-			PolicyRole: memberships.RoleViewer,
+			PolicyRole: memberships.RoleObserver,
 		}),
 		Method:         http.MethodGet,
 		Path:           "/v1/tenants/" + tenantID().String() + "/memberships?page_size=2",
@@ -426,7 +426,7 @@ func runRouteMembershipListViewer(ctx context.Context) (ScenarioResult, error) {
 func runRouteMembershipUpdateOwner(ctx context.Context) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
-	body := json.RawMessage(`{"role":"admin"}`)
+	body := json.RawMessage(`{"role":"collaborator"}`)
 
 	return runRouteTrace(ctx, routeTraceConfig{
 		Name:     RouteMembershipUpdateOwnerScenario,
@@ -453,7 +453,7 @@ func runRouteSpaceCreateMember(ctx context.Context) (ScenarioResult, error) {
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Principal:  userPrincipal(),
-			PolicyRole: memberships.RoleMember,
+			PolicyRole: memberships.RoleCollaborator,
 		}),
 		Method:         http.MethodPost,
 		Path:           "/v1/tenants/" + tenantID().String() + "/spaces",
@@ -482,7 +482,7 @@ func runRouteRecordingTranscribe(ctx context.Context) (ScenarioResult, error) {
 			TenantAuthz: authorization.NewTenantPolicy(tracedMembershipRepository{
 				recorder:   recorder,
 				now:        now,
-				policyRole: memberships.RoleMember,
+				policyRole: memberships.RoleCollaborator,
 			}),
 			TranscriptArtifacts: tracedTranscriptArtifactService{recorder: recorder, now: now},
 		}),
@@ -498,7 +498,7 @@ func runPolicyTenantSystemAllow(ctx context.Context) (ScenarioResult, error) {
 	now := deterministicClock()
 	recorder := NewRecorder(now)
 	policy := authorization.NewTenantPolicy(tracedMembershipRepository{recorder: recorder, now: now})
-	permission := authorization.TenantPermission{Scope: authentication.ScopeTenantsWrite, MinimumRole: memberships.RoleAdmin}
+	permission := authorization.TenantPermission{Scope: authentication.ScopeTenantsWrite, MinimumRole: memberships.RoleCollaborator}
 	span := recorder.Start("policy", "TenantPolicy.AuthorizeTenant", "authorize system principal for tenant write", map[string]any{
 		"principal":  principalFields(systemPrincipal()),
 		"tenant_id":  tenantID().String(),
@@ -519,7 +519,7 @@ func runPolicyTenantAPIKeyScope(ctx context.Context) (ScenarioResult, error) {
 		Scopes:   []authentication.Scope{authentication.ScopeTenantsRead},
 	}
 	policy := authorization.NewTenantPolicy(nil)
-	permission := authorization.TenantPermission{Scope: authentication.ScopeTenantsRead, MinimumRole: memberships.RoleViewer}
+	permission := authorization.TenantPermission{Scope: authentication.ScopeTenantsRead, MinimumRole: memberships.RoleObserver}
 	span := recorder.Start("policy", "TenantPolicy.AuthorizeTenant", "authorize tenant api key by tenant and scope", map[string]any{
 		"principal":  principalFields(principal),
 		"tenant_id":  tenantID().String(),
@@ -536,9 +536,9 @@ func runPolicyTenantUserRole(ctx context.Context) (ScenarioResult, error) {
 	policy := authorization.NewTenantPolicy(tracedMembershipRepository{
 		recorder:   recorder,
 		now:        now,
-		policyRole: memberships.RoleAdmin,
+		policyRole: memberships.RoleCollaborator,
 	})
-	permission := authorization.TenantPermission{Scope: authentication.ScopeTenantsWrite, MinimumRole: memberships.RoleAdmin}
+	permission := authorization.TenantPermission{Scope: authentication.ScopeTenantsWrite, MinimumRole: memberships.RoleCollaborator}
 	span := recorder.Start("policy", "TenantPolicy.AuthorizeTenant", "authorize user by tenant membership role", map[string]any{
 		"principal":  principalFields(userPrincipal()),
 		"tenant_id":  tenantID().String(),
@@ -721,7 +721,7 @@ func runEdgeUnauthenticatedRoute(ctx context.Context) (ScenarioResult, error) {
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Auth:       auth,
 			Principal:  userPrincipal(),
-			PolicyRole: memberships.RoleViewer,
+			PolicyRole: memberships.RoleObserver,
 		}),
 		Method:         http.MethodGet,
 		Path:           "/v1/tenants/" + tenantID().String(),
@@ -739,7 +739,7 @@ func runEdgeForbiddenTenantRoute(ctx context.Context) (ScenarioResult, error) {
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Principal:  userPrincipal(),
-			PolicyRole: memberships.RoleViewer,
+			PolicyRole: memberships.RoleObserver,
 		}),
 		Method:         http.MethodPatch,
 		Path:           "/v1/tenants/" + tenantID().String(),
@@ -758,7 +758,7 @@ func runEdgeInvalidRouteID(ctx context.Context) (ScenarioResult, error) {
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
 			Principal:  userPrincipal(),
-			PolicyRole: memberships.RoleViewer,
+			PolicyRole: memberships.RoleObserver,
 		}),
 		Method:         http.MethodGet,
 		Path:           "/v1/tenants/not-a-uuid",
@@ -867,7 +867,7 @@ func routerWithCoreServices(recorder *Recorder, now func() time.Time, options co
 		policyRole: options.PolicyRole,
 	}
 	if membershipRepository.policyRole == "" {
-		membershipRepository.policyRole = memberships.RoleViewer
+		membershipRepository.policyRole = memberships.RoleObserver
 	}
 
 	return httpapi.NewRouter(httpapi.Options{
@@ -1361,7 +1361,7 @@ func (r tracedMembershipRepository) GetTenantMembershipForUser(ctx context.Conte
 	})
 	role := r.policyRole
 	if role == "" {
-		role = memberships.RoleViewer
+		role = memberships.RoleObserver
 	}
 	membership := memberships.Membership{ID: membershipID(), TenantID: tenantID, UserID: userID, Role: role, CreatedAt: r.now(), UpdatedAt: r.now()}
 	span.End("repository returned membership for policy", map[string]any{"membership": membershipFields(membership)}, nil)
@@ -1378,7 +1378,7 @@ func (r tracedMembershipRepository) ListTenantMemberships(ctx context.Context, t
 		"params": map[string]any{"tenant_id": tenantID.String(), "limit": page.Size()},
 	})
 	list := memberships.MembershipList{
-		Memberships: []memberships.Membership{membershipFixture(r.now, memberships.RoleOwner), membershipFixture(r.now, memberships.RoleViewer)},
+		Memberships: []memberships.Membership{membershipFixture(r.now, memberships.RoleOwner), membershipFixture(r.now, memberships.RoleObserver)},
 		Page:        pagination.Page{PageSize: page.Size(), HasMore: false},
 	}
 	span.End("map database rows to membership list", map[string]any{"list": membershipListFields(list)}, nil)

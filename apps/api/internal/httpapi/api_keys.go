@@ -20,15 +20,15 @@ import (
 var (
 	readAPIKeysPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeAPIKeysRead,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	writeAPIKeysPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeAPIKeysWrite,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	deleteAPIKeysPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeAPIKeysDelete,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	apiErrorInvalidAPIKeyID = APIError{
 		Status: http.StatusBadRequest, Code: "api_key.invalid_id", Message: "Invalid API key id",

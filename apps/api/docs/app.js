@@ -3,7 +3,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
 const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const STORE = "chalk.api.design.v2";
+const STORE = "chalk.api.design.v3";
 const SCALARS = ["string", "text", "uuid", "integer", "number", "boolean", "timestamptz", "inet", "url", "enum", "jsonb"];
 const TYPES = [...SCALARS, "object", "array", "$ref"];
 const ARRAY_OF = ["string", "uuid", "integer", "number", "boolean", "timestamptz", "object", "$ref"];
@@ -13,196 +13,122 @@ const AUTHS = ["API key", "Bearer (user)", "Public"];
 let uid = 0; const nid = p => p + "_" + (++uid).toString(36);
 const splitEnum = s => (s || "").split("|").map(x => x.trim()).filter(Boolean);
 
-/* ---------- seed (shorthand) ---------- */
+/* ---------- canonical OpenAPI contract adapter ---------- */
+const CANONICAL_OPENAPI = globalThis.CHALK_API_DESIGN_OPENAPI;
 const J = o => JSON.stringify(o, null, 2);
-const E = (code, message, field) => J({ error: field ? { code, message, field } : { code, message } });
-const ts = "2026-06-26T09:30:00Z";
-const idem = { in: "header", n: "Idempotency-Key", t: "uuid", r: false, d: "Unique key to make a create safe to retry." };
-const F = (n, t, r, d, x) => ({ n, t, r, d, ...x }); // field shorthand helper
-
-const COMPONENTS = [
-  { n: "Error", d: "Standard error envelope returned by every 4xx/5xx response.", f: [
-    F("error", "object", true, "Error details.", { ch: [
-      F("code", "string", true, "Stable, machine-readable error code."),
-      F("message", "string", true, "Human-readable explanation."),
-      F("field", "string", false, "Offending field, when the error is a validation failure.") ] }) ] },
-  { n: "Tenant", d: "A workspace — the root boundary for every other resource.", f: [
-    F("id", "uuid", true, "Tenant id."), F("name", "string", true, "Display name."),
-    F("default_region", "string", false, "Preferred edge region."),
-    F("default_media_plane", "enum", false, "Media transport for new rooms.", { e: "cf_sfu | cf_rtk | mediasoup" }),
-    F("website", "url", false, "Public website."), F("created_at", "timestamptz", true, "Creation time."),
-    F("updated_at", "timestamptz", true, "Last update time.") ] },
-  { n: "Room", d: "A durable meeting space.", f: [
-    F("id", "uuid", true, "Room id."), F("tenant_id", "uuid", true, "Owning tenant."),
-    F("name", "string", true, "Display name."), F("slug", "string", true, "URL slug, unique per tenant."),
-    F("status", "enum", true, "Lifecycle status.", { e: "active | archived" }),
-    F("media_plane", "enum", true, "Media transport.", { e: "cf_sfu | cf_rtk | mediasoup" }),
-    F("metadata", "jsonb", false, "Arbitrary key/value data."),
-    F("recurring_policy", "object", false, "RRULE schedule, or null for one-off rooms.", { ch: [
-      F("timezone", "string", true, "IANA timezone, e.g. Asia/Dubai."),
-      F("dtstart", "string", true, "Local start datetime."),
-      F("rrule", "string", true, "RFC 5545 recurrence rule.") ] }),
-    F("created_at", "timestamptz", true, "Creation time.") ] },
-  { n: "Session", d: "A single live occurrence inside a room.", f: [
-    F("id", "uuid", true, "Session id."), F("room_id", "uuid", true, "Parent room."),
-    F("status", "enum", true, "Status.", { e: "active | ended" }),
-    F("started_at", "timestamptz", false, "When it went live."),
-    F("ended_at", "timestamptz", false, "When it closed.") ] },
-  { n: "Participant", d: "Someone present in a session.", f: [
-    F("id", "uuid", true, "Participant id."), F("session_id", "uuid", true, "Session."),
-    F("name", "string", false, "Display name."),
-    F("capabilities", "array", true, "Granted capabilities.", { of: "string" }),
-    F("user_id", "uuid", false, "Linked user, if any."),
-    F("metadata", "jsonb", false, "Arbitrary data.") ] },
-  { n: "Recording", d: "A capture of a session in object storage.", f: [
-    F("id", "uuid", true, "Recording id."), F("session_id", "uuid", true, "Session."),
-    F("status", "enum", true, "Status.", { e: "pending | processing | completed | failed" }),
-    F("storage_provider", "enum", true, "Where the file lives.", { e: "s3 | cf | do" }),
-    F("storage_key", "string", false, "Object key once complete."),
-    F("created_at", "timestamptz", true, "Creation time.") ] },
-  { n: "Transcription", d: "Text derived from a completed recording.", f: [
-    F("id", "uuid", true, "Transcription id."), F("recording_id", "uuid", true, "Source recording."),
-    F("status", "enum", true, "Status.", { e: "pending | processing | completed | failed" }),
-    F("provider", "enum", true, "Provider.", { e: "cf | openrouter | openai | groq" }),
-    F("model", "string", true, "Provider model id."),
-    F("languages", "array", true, "Expected languages (BCP-47).", { of: "string" }),
-    F("text", "string", false, "Transcript, once completed."),
-    F("completed_at", "timestamptz", false, "Completion time.") ] }
-];
-
-const PAGE = [{ in: "query", n: "limit", t: "integer", r: false, d: "Page size, 1–100. Default 20." },
-              { in: "query", n: "cursor", t: "string", r: false, d: "Opaque cursor from a previous page." }];
-
-const SEED = { meta: {
-    name: "Chalk API", baseUrl: "https://api.chalk.dev", version: "v1",
-    description: "Draft design board for the Chalk HTTP API — tenants, rooms, real-time sessions, participant tokens, recordings and transcriptions. The implemented API remains the source of truth." },
-  components: COMPONENTS,
-  categories: [
-  { n: "Tenants", d: "Workspaces — the root every other resource hangs off.", e: [
-    { m: "POST", p: "/v1/tenants", a: "API key", bf: "application/json", s: "Create a tenant",
-      d: "Provision a new workspace. Defaults here apply to rooms created under the tenant.",
-      prm: [idem],
-      f: [F("name", "string", true, "Display name."), F("default_region", "string", false, "Preferred edge region."),
-          F("default_media_plane", "enum", false, "Media transport for new rooms.", { e: "cf_sfu | cf_rtk | mediasoup" }),
-          F("website", "url", false, "Public website URL.")],
-      r: [{ s: 201, l: "Created", d: "The tenant.", ref: "Tenant", j: J({ id: "7c1f…a9", name: "Lumen Labs", default_media_plane: "cf_sfu", created_at: ts }) },
-          { s: 400, l: "Bad request", d: "Validation failed.", ref: "Error", j: E("invalid_request", "name is required", "name") },
-          { s: 401, l: "Unauthorized", d: "Missing or invalid API key.", ref: "Error", j: E("unauthorized", "API key required") }] },
-    { m: "GET", p: "/v1/tenants/{id}", a: "API key", bf: "none", s: "Get a tenant", d: "Fetch a single tenant by id.",
-      r: [{ s: 200, l: "OK", d: "The tenant.", ref: "Tenant", j: J({ id: "7c1f…a9", name: "Lumen Labs", created_at: ts }) },
-          { s: 404, l: "Not found", d: "No tenant with that id.", ref: "Error", j: E("not_found", "tenant not found") }] },
-    { m: "PATCH", p: "/v1/tenants/{id}", a: "API key", bf: "application/json", s: "Update a tenant", d: "Update one or more fields. All optional.",
-      f: [F("name", "string", false, "New display name."),
-          F("default_media_plane", "enum", false, "New default media plane.", { e: "cf_sfu | cf_rtk | mediasoup" }),
-          F("website", "url", false, "New website URL.")],
-      r: [{ s: 200, l: "OK", d: "The updated tenant.", ref: "Tenant", j: J({ id: "7c1f…a9", default_media_plane: "cf_rtk", updated_at: ts }) }] },
-    { m: "GET", p: "/v1/tenants", a: "API key", bf: "none", s: "List tenants", d: "List tenants visible to the caller.",
-      prm: PAGE,
-      r: [{ s: 200, l: "OK", d: "A page of tenants.", j: J({ data: [{ id: "7c1f…a9", name: "Lumen Labs" }], next_cursor: null }) }] } ] },
-
-  { n: "Auth", d: "Sign in, refresh, and manage device sessions.", e: [
-    { m: "POST", p: "/v1/auth/register", a: "Public", bf: "application/json", s: "Register with password", d: "Create a user and password identity, returning a session.",
-      f: [F("name", "string", true, "Full name."), F("email", "string", true, "Email address."),
-          F("password", "string", true, "Plaintext password, hashed server-side. Min 10 chars.")],
-      r: [{ s: 201, l: "Created", d: "User created and signed in.", j: J({ user: { id: "u_18b…", email: "mara@lumen.io" }, session: { token: "sess_live_…", expires_at: ts } }) }] },
-    { m: "POST", p: "/v1/auth/login", a: "Public", bf: "application/json", s: "Sign in", d: "Exchange email + password for a session token.",
-      f: [F("email", "string", true, "Email address."), F("password", "string", true, "Account password."),
-          F("device_name", "string", false, "Label shown in the session list.")],
-      r: [{ s: 200, l: "OK", d: "Signed in.", j: J({ session: { token: "sess_live_…", expires_at: ts } }) },
-          { s: 401, l: "Unauthorized", d: "Wrong email or password.", ref: "Error", j: E("invalid_credentials", "email or password is incorrect") }] },
-    { m: "GET", p: "/v1/auth/sessions", a: "Bearer (user)", bf: "none", s: "List devices", d: "List the signed-in user's active sessions.",
-      r: [{ s: 200, l: "OK", d: "The sessions.", j: J({ data: [{ id: "ls_9…", device_name: "MacBook Pro", ip_address: "203.0.113.4", created_at: ts }] }) }] },
-    { m: "DELETE", p: "/v1/auth/sessions/{id}", a: "Bearer (user)", bf: "none", s: "Revoke a device", d: "Revoke a specific session by id.",
-      r: [{ s: 204, l: "No content", d: "The session was revoked.", j: "" },
-          { s: 404, l: "Not found", d: "No such session.", ref: "Error", j: E("not_found", "session not found") }] } ] },
-
-  { n: "Access keys", d: "API keys and tenant signing keys.", e: [
-    { m: "POST", p: "/v1/tenants/{tenantId}/api-keys", a: "API key", bf: "application/json", s: "Create an API key", d: "Mint a tenant-scoped key. The secret is returned only once.",
-      f: [F("name", "string", true, "Human label."),
-          F("scopes", "array", true, "Permitted scopes, e.g. rooms:write.", { of: "string" }),
-          F("expires_at", "timestamptz", false, "Optional expiry.")],
-      r: [{ s: 201, l: "Created", d: "Store the key now — not retrievable again.", j: J({ id: "ak_2f…", name: "Backend", key_prefix: "ck_live_2f", key: "ck_live_2f8b…<once>", scopes: ["rooms:write"], created_at: ts }) }] },
-    { m: "POST", p: "/v1/tenants/{tenantId}/signing-keys", a: "API key", bf: "application/json", s: "Register a signing key", d: "Register a tenant public key (EdDSA / Ed25519) used to verify participant tokens.",
-      f: [F("key_id", "string", true, "Unique kid referenced by tokens."),
-          F("algorithm", "enum", true, "Signature algorithm.", { e: "EdDSA" }),
-          F("public_key_jwk", "object", true, "Public key as a JWK.", { ch: [
-            F("kty", "string", true, "Key type, e.g. OKP."),
-            F("crv", "string", true, "Curve, e.g. Ed25519."),
-            F("x", "string", true, "Base64url public key.") ] }),
-          F("expires_at", "timestamptz", true, "When this key stops being trusted.")],
-      r: [{ s: 201, l: "Created", d: "The registered key.", j: J({ id: "sk_7…", key_id: "2026-06", algorithm: "EdDSA", expires_at: ts }) }] },
-    { m: "DELETE", p: "/v1/api-keys/{id}", a: "API key", bf: "none", s: "Revoke an API key", d: "Immediately revoke a key.",
-      r: [{ s: 204, l: "No content", d: "The key was revoked.", j: "" }] } ] },
-
-  { n: "Rooms", d: "Durable meeting spaces; each hosts many sessions.", e: [
-    { m: "POST", p: "/v1/rooms", a: "API key", bf: "application/json", s: "Create a room", d: "Create a room. Omit media_plane to inherit the tenant default.",
-      prm: [idem],
-      f: [F("name", "string", true, "Display name."),
-          F("slug", "string", false, "URL slug, unique per tenant. Auto-generated if omitted."),
-          F("media_plane", "enum", false, "Media transport.", { e: "cf_sfu | cf_rtk | mediasoup" }),
-          F("metadata", "jsonb", false, "Arbitrary key/value data echoed back."),
-          F("recurring_policy", "object", false, "RRULE schedule. Null for one-off rooms.", { ch: [
-            F("timezone", "string", true, "IANA timezone, e.g. Asia/Dubai."),
-            F("dtstart", "string", true, "Local start datetime."),
-            F("rrule", "string", true, "RFC 5545 recurrence rule.") ] })],
-      r: [{ s: 201, l: "Created", d: "The room.", ref: "Room", j: J({ id: "rm_5d…", name: "Weekly Standup", slug: "weekly-standup", status: "active", media_plane: "cf_sfu", created_at: ts }) },
-          { s: 409, l: "Conflict", d: "Slug already taken for this tenant.", ref: "Error", j: E("conflict", "slug already in use", "slug") }] },
-    { m: "GET", p: "/v1/rooms", a: "API key", bf: "none", s: "List rooms", d: "List rooms for the tenant. Filter by status or search.",
-      prm: [{ in: "query", n: "status", t: "enum", r: false, d: "Filter by room status.", e: "active | archived" },
-            { in: "query", n: "q", t: "string", r: false, d: "Search by name or slug." }, ...PAGE],
-      r: [{ s: 200, l: "OK", d: "A page of rooms.", j: J({ data: [{ id: "rm_5d…", name: "Weekly Standup", status: "active" }], next_cursor: null }) }] },
-    { m: "GET", p: "/v1/rooms/{id}", a: "API key", bf: "none", s: "Get a room", d: "Fetch a single room by id.",
-      r: [{ s: 200, l: "OK", d: "The room.", ref: "Room", j: J({ id: "rm_5d…", name: "Weekly Standup", status: "active", media_plane: "cf_sfu", created_at: ts }) }] },
-    { m: "PATCH", p: "/v1/rooms/{id}", a: "API key", bf: "application/json", s: "Update a room", d: "Update room fields. Set status to archived to retire it.",
-      f: [F("name", "string", false, "New name."), F("status", "enum", false, "Lifecycle status.", { e: "active | archived" }),
-          F("metadata", "jsonb", false, "Replace metadata.")],
-      r: [{ s: 200, l: "OK", d: "The updated room.", ref: "Room", j: J({ id: "rm_5d…", status: "archived" }) }] },
-    { m: "DELETE", p: "/v1/rooms/{id}", a: "API key", bf: "none", s: "Delete a room", d: "Permanently delete a room and its sessions.",
-      r: [{ s: 204, l: "No content", d: "The room was deleted.", j: "" }] } ] },
-
-  { n: "Sessions", d: "Live occurrences inside a room — start, read, end.", e: [
-    { m: "POST", p: "/v1/rooms/{roomId}/sessions", a: "API key", bf: "application/json", s: "Start a session", d: "Open a live session in a room.",
-      prm: [idem], f: [F("metadata", "jsonb", false, "Arbitrary data attached to the session.")],
-      r: [{ s: 201, l: "Created", d: "The session is live.", ref: "Session", j: J({ id: "ses_aa…", room_id: "rm_5d…", status: "active", started_at: ts }) }] },
-    { m: "GET", p: "/v1/sessions/{id}", a: "API key", bf: "none", s: "Get a session", d: "Fetch a session, including timing and status.",
-      r: [{ s: 200, l: "OK", d: "The session.", ref: "Session", j: J({ id: "ses_aa…", room_id: "rm_5d…", status: "active", started_at: ts }) }] },
-    { m: "POST", p: "/v1/sessions/{id}/end", a: "API key", bf: "none", s: "End a session", d: "Close the live session and disconnect participants.",
-      r: [{ s: 200, l: "OK", d: "The ended session.", ref: "Session", j: J({ id: "ses_aa…", status: "ended", ended_at: ts }) }] } ] },
-
-  { n: "Participants", d: "Mint join tokens and read who is in a session.", e: [
-    { m: "POST", p: "/v1/rooms/{roomId}/tokens", a: "API key", bf: "application/json", s: "Mint a participant token", d: "Issue a short-lived EdDSA-signed JWT a client uses to join.",
-      f: [F("identity", "string", true, "Stable participant identity."),
-          F("name", "string", false, "Display name shown to others."),
-          F("capabilities", "array", true, "Granted capabilities, e.g. publish, subscribe.", { of: "string" }),
-          F("ttl_seconds", "integer", false, "Token lifetime. Default 900."),
-          F("metadata", "jsonb", false, "Data embedded in the token.")],
-      r: [{ s: 201, l: "Created", d: "The join token.", j: J({ token: "eyJhbGciOiJFZERTQ…", expires_at: ts, capabilities: ["publish", "subscribe"] }) }] },
-    { m: "GET", p: "/v1/sessions/{sessionId}/participants", a: "API key", bf: "none", s: "List participants", d: "List everyone currently in a session.",
-      r: [{ s: 200, l: "OK", d: "The participants.", j: J({ data: [{ id: "par_3…", name: "Mara", capabilities: ["publish", "subscribe"] }] }) }] },
-    { m: "GET", p: "/v1/participants/{id}", a: "API key", bf: "none", s: "Get a participant", d: "Fetch a single participant by id.",
-      r: [{ s: 200, l: "OK", d: "The participant.", ref: "Participant", j: J({ id: "par_3…", session_id: "ses_aa…", name: "Mara", capabilities: ["publish", "subscribe"] }) }] } ] },
-
-  { n: "Recordings", d: "Capture a session and track its status.", e: [
-    { m: "POST", p: "/v1/sessions/{sessionId}/recordings", a: "API key", bf: "application/json", s: "Start a recording", d: "Begin recording a live session. Processing is async.",
-      f: [F("storage_provider", "enum", true, "Where the file is written.", { e: "s3 | cf | do" }),
-          F("metadata", "jsonb", false, "Arbitrary data.")],
-      r: [{ s: 201, l: "Created", d: "Recording started.", ref: "Recording", j: J({ id: "rec_6…", session_id: "ses_aa…", status: "processing", storage_provider: "s3", created_at: ts }) }] },
-    { m: "GET", p: "/v1/recordings/{id}", a: "API key", bf: "none", s: "Get a recording", d: "Fetch a recording, including its storage key once complete.",
-      r: [{ s: 200, l: "OK", d: "The recording.", ref: "Recording", j: J({ id: "rec_6…", status: "completed", storage_provider: "s3", storage_key: "rec/2026/06/rec_6.mp4" }) }] },
-    { m: "GET", p: "/v1/recordings", a: "API key", bf: "none", s: "List recordings", d: "List recordings for the tenant, newest first.",
-      prm: [{ in: "query", n: "status", t: "enum", r: false, d: "Filter by status.", e: "pending | processing | completed | failed" },
-            { in: "query", n: "room_id", t: "uuid", r: false, d: "Only recordings for this room." }, ...PAGE],
-      r: [{ s: 200, l: "OK", d: "The recordings.", j: J({ data: [{ id: "rec_6…", status: "completed" }], next_cursor: null }) }] } ] },
-
-  { n: "Transcriptions", d: "Turn a finished recording into searchable text.", e: [
-    { m: "POST", p: "/v1/recordings/{recordingId}/transcriptions", a: "API key", bf: "application/json", s: "Start a transcription", d: "Queue a transcription for a completed recording.",
-      f: [F("provider", "enum", true, "Provider.", { e: "cf | openrouter | openai | groq" }),
-          F("model", "string", true, "Provider model id, e.g. whisper-large-v3."),
-          F("languages", "array", true, "Expected languages (BCP-47).", { of: "string" })],
-      r: [{ s: 201, l: "Created", d: "Transcription queued.", ref: "Transcription", j: J({ id: "tr_8…", recording_id: "rec_6…", status: "pending", provider: "groq", model: "whisper-large-v3", languages: ["en", "ar"] }) }] },
-    { m: "GET", p: "/v1/transcriptions/{id}", a: "API key", bf: "none", s: "Get a transcription", d: "Fetch a transcription. text is populated once completed.",
-      r: [{ s: 200, l: "OK", d: "The transcription.", ref: "Transcription", j: J({ id: "tr_8…", status: "completed", provider: "groq", text: "Alright, let's get started…", completed_at: ts }) }] } ] }
-] };
+if (!CANONICAL_OPENAPI || typeof CANONICAL_OPENAPI !== "object") {
+  throw new Error("Canonical OpenAPI contract is required before loading the API design board.");
+}
+const canonicalRef = schema => schema?.$ref ? schema.$ref.split("/").pop() : "";
+const unwrapSchema = schema => {
+  if (!schema || typeof schema !== "object") return {};
+  if (schema.$ref || schema.type || schema.properties || schema.enum || schema.items || schema.additionalProperties) return schema;
+  const alternatives = [...(schema.anyOf || []), ...(schema.oneOf || [])].filter(item => item && item.type !== "null");
+  return alternatives[0] || schema;
+};
+const canonicalType = schema => {
+  const value = unwrapSchema(schema);
+  if (canonicalRef(value)) return "$ref";
+  if (Array.isArray(value.enum)) return "enum";
+  if (value.type === "array") return "array";
+  if (value.type === "object" || value.properties) return value.properties ? "object" : "jsonb";
+  if (value.type === "integer") return "integer";
+  if (value.type === "number") return "number";
+  if (value.type === "boolean") return "boolean";
+  if (value.format === "uuid") return "uuid";
+  if (value.format === "date-time") return "timestamptz";
+  if (value.format === "uri") return "url";
+  if (value.format === "ipv4") return "inet";
+  return "string";
+};
+function canonicalField(name, schema, required = false) {
+  const value = unwrapSchema(schema);
+  const type = canonicalType(value);
+  const field = { n: name, t: type, r: required, d: value.description || "" };
+  if (type === "enum") field.e = value.enum.join(" | ");
+  if (type === "$ref") field.ref = canonicalRef(value);
+  if (type === "object") field.ch = canonicalFields(value);
+  if (type === "array") {
+    const item = unwrapSchema(value.items);
+    field.of = canonicalType(item);
+    if (field.of === "$ref") field.ref = canonicalRef(item);
+    if (field.of === "object") field.ch = canonicalFields(item);
+  }
+  return field;
+}
+function canonicalFields(schema) {
+  const value = unwrapSchema(schema);
+  const required = new Set(value.required || []);
+  return Object.entries(value.properties || {}).map(([name, property]) => canonicalField(name, property, required.has(name)));
+}
+function canonicalParam(parameter) {
+  const value = unwrapSchema(parameter.schema);
+  return { in: parameter.in, n: parameter.name, t: canonicalType(value), r: !!parameter.required, d: parameter.description || "", ...(Array.isArray(value.enum) ? { e: value.enum.join(" | ") } : {}) };
+}
+function canonicalAuth(operation) {
+  const security = operation.security || [];
+  if (!security.length) return "Public";
+  if (security.some(item => Object.hasOwn(item, "apiKeyAuth"))) return "API key";
+  if (security.some(item => Object.hasOwn(item, "sessionOrBearer") || Object.hasOwn(item, "userAuth"))) return "Bearer (user)";
+  return "API key";
+}
+function canonicalCategory(pathname, operation) {
+  if (operation.tags?.[0]) return operation.tags[0];
+  if (pathname.startsWith("/v1/auth/")) return "Auth";
+  if (pathname.startsWith("/v1/chat/")) return "Chat";
+  if (pathname.startsWith("/v1/telemetry/")) return "Telemetry";
+  if (pathname.startsWith("/v1/whiteboard/")) return "Whiteboard";
+  if (pathname.startsWith("/v1/regions")) return "Regions";
+  if (pathname.startsWith("/v1/users")) return "Users";
+  if (pathname.includes("/spaces/{space_id}/episodes/{episode_id}/participants")) return "Participants";
+  if (pathname.includes("/spaces/{space_id}/episodes/{episode_id}/recordings")) return "Recordings";
+  if (pathname.includes("/spaces/{space_id}/episodes/{episode_id}")) return "Episodes";
+  if (pathname.includes("/spaces/{space_id}/episodes")) return "Episodes";
+  const tenantResource = pathname.match(/^\/v1\/tenants\/\{tenant_id\}\/([^/]+)/)?.[1];
+  const rootResource = pathname.match(/^\/v1\/([^/]+)/)?.[1];
+  const resource = tenantResource || rootResource || "Other";
+  const labels = { "api-keys": "API keys", spaces: "Spaces", episodes: "Episodes", memberships: "Memberships", recordings: "Recordings", transcripts: "Transcripts", "webhook-endpoints": "Webhooks", integrations: "Integrations", "recording-reservations": "Recordings" };
+  return labels[resource] || resource.replace(/(^|-)([a-z])/g, (_, prefix, letter) => `${prefix ? " " : ""}${letter.toUpperCase()}`);
+}
+function statusLabel(status) {
+  return { "200": "OK", "201": "Created", "202": "Accepted", "204": "No content" }[String(status)] || String(status);
+}
+function canonicalSeed(document) {
+  const categoryMap = new Map();
+  for (const [pathname, pathItem] of Object.entries(document.paths || {})) {
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!/^(get|post|put|patch|delete|head|options|trace)$/i.test(method)) continue;
+      const categoryName = canonicalCategory(pathname, operation);
+      if (!categoryMap.has(categoryName)) categoryMap.set(categoryName, { n: categoryName, d: "", e: [] });
+      const requestContent = operation.requestBody?.content || {};
+      const bodyFormat = Object.keys(requestContent)[0] || "none";
+      const requestSchema = bodyFormat === "none" ? null : requestContent[bodyFormat]?.schema;
+      const responses = Object.entries(operation.responses || {}).map(([status, response]) => {
+        const media = Object.values(response.content || {})[0] || {};
+        const example = media.example ?? response.example;
+        const schema = unwrapSchema(media.schema);
+        return { s: Number(status) || status, l: statusLabel(status), d: response.description || "", ...(canonicalRef(schema) ? { ref: canonicalRef(schema) } : {}), ...(example === undefined ? {} : { j: J(example) }) };
+      });
+      categoryMap.get(categoryName).e.push({
+        m: method.toUpperCase(), p: pathname, a: canonicalAuth(operation), bf: bodyFormat,
+        s: operation.summary || operation.operationId || pathname, d: operation.description || "",
+        prm: (operation.parameters || []).map(canonicalParam), f: requestSchema ? canonicalFields(requestSchema) : [], r: responses,
+      });
+    }
+  }
+  const components = Object.entries(document.components?.schemas || {}).map(([name, schema]) => ({ n: name, d: schema.description || "", f: canonicalFields(schema) }));
+  return {
+    meta: {
+      name: document.info?.title || "Chalk API",
+      baseUrl: document.servers?.[0]?.url || "/",
+      version: document.info?.version || "v1",
+      description: document.info?.description || "Canonical Chalk HTTP API contract.",
+    },
+    components,
+    categories: [...categoryMap.values()],
+  };
+}
+const SEED = canonicalSeed(CANONICAL_OPENAPI);
 
 /* ---------- normalize ---------- */
 function normField(f) {
@@ -671,46 +597,8 @@ function opId(e, used) {
   base = base || "op"; let id = base, i = 2; while (used.has(id)) id = base + i++; used.add(id); return id;
 }
 function buildOpenAPI() {
-  const paths = {}, usedSec = {}, ids = new Set();
-  spec.categories.forEach(cat => cat.endpoints.forEach(e => {
-    const op = { tags: [cat.name], operationId: opId(e, ids) };
-    if (e.summary) op.summary = e.summary;
-    if (e.description) op.description = e.description;
-    const prm = (e.params || []).map(p => { const o = { name: p.name, in: p.in, required: p.in === "path" ? true : !!p.required, schema: p.type === "enum" ? { type: "string", enum: splitEnum(p.enumVals) } : scalarSchema(p.type) }; if (p.desc) o.description = p.desc; return o; });
-    if (prm.length) op.parameters = prm;
-    if (e.bodyFormat !== "none" && (e.fields || []).length) op.requestBody = { required: true, content: { [e.bodyFormat]: { schema: objSchema(e.fields) } } };
-    const responses = {};
-    (e.responses || []).forEach(r => {
-      const ro = { description: r.desc || r.label || String(r.status) };
-      if (String(r.status) !== "204") {
-        const media = {};
-        if (r.schemaRef) media.schema = { $ref: "#/components/schemas/" + r.schemaRef };
-        const ex = parseEx(r.json);
-        if (!media.schema && ex !== undefined) media.schema = Array.isArray(ex) ? { type: "array" } : { type: "object" };
-        if (ex !== undefined) media.example = ex;
-        ro.content = { "application/json": media };
-      }
-      responses[String(r.status)] = ro;
-    });
-    op.responses = responses;
-    if (e.auth === "API key") { op.security = [{ apiKeyAuth: [] }]; usedSec.apiKeyAuth = 1; }
-    else if (e.auth === "Bearer (user)") { op.security = [{ userAuth: [] }]; usedSec.userAuth = 1; }
-    else op.security = [];
-    paths[e.path] = paths[e.path] || {};
-    paths[e.path][e.method.toLowerCase()] = op;
-  }));
-  const schemas = {};
-  spec.components.forEach(c => { schemas[c.name] = objSchema(c.fields, c.description); });
-  const securitySchemes = {};
-  if (usedSec.apiKeyAuth) securitySchemes.apiKeyAuth = { type: "http", scheme: "bearer", description: "Tenant API key, sent as a Bearer token." };
-  if (usedSec.userAuth) securitySchemes.userAuth = { type: "http", scheme: "bearer", description: "User session token." };
-  const components = { schemas };
-  if (Object.keys(securitySchemes).length) components.securitySchemes = securitySchemes;
-  const info = { title: spec.meta.name || "API", version: spec.meta.version || "v1" };
-  if (spec.meta.description) info.description = spec.meta.description;
-  return { openapi: "3.1.0", info, servers: [{ url: spec.meta.baseUrl || "/" }],
-    tags: spec.categories.map(c => c.desc ? { name: c.name, description: c.desc } : { name: c.name }),
-    paths, components };
+  // OpenAPI exports are the checked-in Go contract, never a second hand-authored schema.
+  return JSON.parse(JSON.stringify(CANONICAL_OPENAPI));
 }
 
 /* ---------- minimal YAML emitter ---------- */

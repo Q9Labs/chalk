@@ -1248,8 +1248,8 @@ func TestProtectedResourceRoutesRejectAnonymous(t *testing.T) {
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/33333333-3333-3333-3333-333333333333/actions", body: `{"action":"send_message","arguments":{}}`},
 		{method: http.MethodDelete, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/integrations/connections/33333333-3333-3333-3333-333333333333"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships"},
-		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", body: `{"user_id":"22222222-2222-2222-2222-222222222222","role":"admin"}`},
-		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships/33333333-3333-3333-3333-333333333333", body: `{"role":"member"}`},
+		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", body: `{"user_id":"22222222-2222-2222-2222-222222222222","role":"collaborator"}`},
+		{method: http.MethodPatch, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships/33333333-3333-3333-3333-333333333333", body: `{"role":"collaborator"}`},
 		{method: http.MethodPost, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces", body: `{"name":"Daily","slug":"daily","media_plane":"cf_rtk"}`},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces"},
 		{method: http.MethodGet, path: "/v1/tenants/11111111-1111-1111-1111-111111111111/spaces/22222222-2222-2222-2222-222222222222"},
@@ -2122,7 +2122,7 @@ func TestStartIntegrationConnectionRejectsSystemPrincipal(t *testing.T) {
 func TestListIntegrationConnectionsFiltersToUserPrincipal(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/integrations/connections?provider=composio&service=slack&status=active&page_size=10", httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			listConnections: func(ctx context.Context, input integrations.ListConnectionsInput) (integrations.ConnectionList, error) {
 				if input.TenantID.String() != tenantID {
@@ -2240,7 +2240,7 @@ func TestGetIntegrationConnectionPassesActorUserID(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	res := authenticatedRequestWithOptions(t, http.MethodGet, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String(), httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			getConnection: func(ctx context.Context, gotTenantID utilities.ID, actorUserID utilities.ID, gotConnectionID utilities.ID) (integrations.Connection, error) {
 				if gotTenantID.String() != tenantID {
@@ -2266,7 +2266,7 @@ func TestRefreshIntegrationConnectionReturnsConnectURL(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	res := authenticatedRequestWithOptions(t, http.MethodPost, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String()+"/refresh", httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			refreshConnection: func(ctx context.Context, gotTenantID utilities.ID, ownerScopeUserID utilities.ID, actorUserID utilities.ID, actorType string, gotConnectionID utilities.ID) (integrations.RefreshConnectionResult, error) {
 				if gotTenantID.String() != tenantID {
@@ -2366,7 +2366,7 @@ func TestExecuteIntegrationAction(t *testing.T) {
 	tenantID := "11111111-1111-1111-1111-111111111111"
 	connectionID := mustTenantID(t, "33333333-3333-4333-8333-333333333333")
 	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/integrations/connections/"+connectionID.String()+"/actions", `{"action":"send_message","arguments":{"channel":"C123"}}`, httpapi.Options{
-		TenantAuthz: integrationMemberAuthorizer(),
+		TenantAuthz: integrationCollaboratorAuthorizer(),
 		Integrations: integrationService{
 			executeAction: func(ctx context.Context, input integrations.ExecuteActionInput) (integrations.ExecuteActionResult, error) {
 				if input.TenantID.String() != tenantID {
@@ -2499,13 +2499,13 @@ func TestDisableIntegrationConnectionUsesDeletePermission(t *testing.T) {
 				}
 				switch authorizationCalls {
 				case 1:
-					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleMember {
-						t.Fatalf("permission = %s/%s, want integrations:delete/member", permission.Scope, permission.MinimumRole)
+					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleCollaborator {
+						t.Fatalf("permission = %s/%s, want integrations:delete/collaborator", permission.Scope, permission.MinimumRole)
 					}
 					return nil
 				case 2:
-					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleAdmin {
-						t.Fatalf("permission = %s/%s, want integrations:delete/admin", permission.Scope, permission.MinimumRole)
+					if permission.Scope != authentication.ScopeIntegrationsDelete || permission.MinimumRole != memberships.RoleOwner {
+						t.Fatalf("permission = %s/%s, want integrations:delete/owner", permission.Scope, permission.MinimumRole)
 					}
 					return authorization.ErrForbidden
 				default:
@@ -3333,7 +3333,7 @@ func TestCreateMembership(t *testing.T) {
 	const userID = "22222222-2222-2222-2222-222222222222"
 	const membershipID = "33333333-3333-3333-3333-333333333333"
 
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/memberships", `{"user_id":"`+userID+`","role":"admin"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/"+tenantID+"/memberships", `{"user_id":"`+userID+`","role":"collaborator"}`, httpapi.Options{
 		Memberships: membershipService{
 			createMembership: func(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
 				if input.TenantID.String() != tenantID {
@@ -3342,8 +3342,8 @@ func TestCreateMembership(t *testing.T) {
 				if input.UserID.String() != userID {
 					t.Fatalf("user id = %q, want %q", input.UserID.String(), userID)
 				}
-				if input.Role != memberships.RoleAdmin {
-					t.Fatalf("role = %q, want admin", input.Role)
+				if input.Role != memberships.RoleCollaborator {
+					t.Fatalf("role = %q, want collaborator", input.Role)
 				}
 
 				return memberships.Membership{
@@ -3371,14 +3371,14 @@ func TestCreateMembership(t *testing.T) {
 	if body.ID != membershipID {
 		t.Fatalf("membership id = %q, want %q", body.ID, membershipID)
 	}
-	if body.Role != "admin" {
-		t.Fatalf("role = %q, want admin", body.Role)
+	if body.Role != "collaborator" {
+		t.Fatalf("role = %q, want collaborator", body.Role)
 	}
 }
 
 func TestCreateMembershipRejectsInvalidUserID(t *testing.T) {
 	called := false
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", `{"user_id":"not-a-uuid","role":"admin"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPost, "/v1/tenants/11111111-1111-1111-1111-111111111111/memberships", `{"user_id":"not-a-uuid","role":"collaborator"}`, httpapi.Options{
 		Memberships: membershipService{
 			createMembership: func(context.Context, memberships.CreateMembershipInput) (memberships.Membership, error) {
 				called = true
@@ -3417,7 +3417,7 @@ func TestListTenantMemberships(t *testing.T) {
 							ID:       mustTenantID(t, membershipID),
 							TenantID: id,
 							UserID:   mustTenantID(t, userID),
-							Role:     memberships.RoleViewer,
+							Role:     memberships.RoleObserver,
 						},
 					},
 					Page: pagination.Page{PageSize: page.Size()},
@@ -3447,8 +3447,8 @@ func TestListTenantMemberships(t *testing.T) {
 	if body.Memberships[0].UserID != userID {
 		t.Fatalf("user id = %q, want %q", body.Memberships[0].UserID, userID)
 	}
-	if body.Memberships[0].Role != "viewer" {
-		t.Fatalf("role = %q, want viewer", body.Memberships[0].Role)
+	if body.Memberships[0].Role != "observer" {
+		t.Fatalf("role = %q, want observer", body.Memberships[0].Role)
 	}
 	if body.Pagination.PageSize != 10 {
 		t.Fatalf("page size = %d, want 10", body.Pagination.PageSize)
@@ -3459,7 +3459,7 @@ func TestUpdateTenantMembership(t *testing.T) {
 	const tenantID = "11111111-1111-1111-1111-111111111111"
 	const membershipID = "33333333-3333-3333-3333-333333333333"
 
-	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID+"/memberships/"+membershipID, `{"role":"member"}`, httpapi.Options{
+	res := authenticatedRequestWithOptionsAndBody(t, http.MethodPatch, "/v1/tenants/"+tenantID+"/memberships/"+membershipID, `{"role":"collaborator"}`, httpapi.Options{
 		Memberships: membershipService{
 			updateTenantMembership: func(ctx context.Context, tenant utilities.ID, membership utilities.ID, input memberships.UpdateMembershipInput) (memberships.Membership, error) {
 				if tenant.String() != tenantID {
@@ -3468,8 +3468,8 @@ func TestUpdateTenantMembership(t *testing.T) {
 				if membership.String() != membershipID {
 					t.Fatalf("membership id = %q, want %q", membership.String(), membershipID)
 				}
-				if input.Role != memberships.RoleMember {
-					t.Fatalf("role = %q, want member", input.Role)
+				if input.Role != memberships.RoleCollaborator {
+					t.Fatalf("role = %q, want collaborator", input.Role)
 				}
 
 				return memberships.Membership{
@@ -3490,8 +3490,8 @@ func TestUpdateTenantMembership(t *testing.T) {
 	}
 	decodeJSON(t, res, &body)
 
-	if body.Role != "member" {
-		t.Fatalf("role = %q, want member", body.Role)
+	if body.Role != "collaborator" {
+		t.Fatalf("role = %q, want collaborator", body.Role)
 	}
 }
 
@@ -3610,10 +3610,10 @@ func assertErrorCode(t *testing.T, res *httptest.ResponseRecorder, want string) 
 	}
 }
 
-func integrationMemberAuthorizer() tenantAuthorizer {
+func integrationCollaboratorAuthorizer() tenantAuthorizer {
 	return tenantAuthorizer{
-		authorizeTenant: func(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error {
-			if permission.MinimumRole == memberships.RoleAdmin {
+		authorizeTenant: func(_ context.Context, _ authentication.Principal, _ utilities.ID, permission authorization.TenantPermission) error {
+			if permission.MinimumRole == memberships.RoleOwner {
 				return authorization.ErrForbidden
 			}
 			return nil

@@ -79,7 +79,7 @@ func runEpisodeRoute(ctx context.Context, recorder *Recorder, service httpapi.Ep
 	config.Handler = httpapi.NewRouter(httpapi.Options{
 		RateLimit:      noRateLimits(deterministicClock()),
 		Authentication: staticAuthentication{recorder: recorder, now: deterministicClock(), principal: userPrincipal(), sessionUser: sessionUserFixture(deterministicClock())},
-		TenantAuthz:    authorization.NewTenantPolicy(tracedMembershipRepository{recorder: recorder, now: deterministicClock(), policyRole: memberships.RoleMember}),
+		TenantAuthz:    authorization.NewTenantPolicy(tracedMembershipRepository{recorder: recorder, now: deterministicClock(), policyRole: memberships.RoleCollaborator}),
 		Episodes:       service,
 	})
 	return runRouteTrace(ctx, config)

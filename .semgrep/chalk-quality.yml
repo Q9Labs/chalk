@@ -112,7 +112,6 @@ rules:
         - "**/*.test.*"
         - "**/*.spec.*"
         - "/sdks/typescript/client/src/token-provider.ts"
-        - "/sdks/typescript/react/src/hooks/useMeetingRoomSettings.ts"
 
   - id: chalk.forbid-placeholder-scripts
     message: Package scripts must not be placeholders or use --passWithNoTests.

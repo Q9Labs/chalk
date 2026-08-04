@@ -1847,7 +1847,7 @@
     {
       "id": "chalk.UserRole",
       "kind": "enum",
-      "values": ["admin", "member", "owner"]
+      "values": ["collaborator", "observer", "owner"]
     },
     {
       "fields": [

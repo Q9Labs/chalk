@@ -69,14 +69,14 @@ func TestTenantPolicyRejectsAPIKeyForDifferentTenant(t *testing.T) {
 func TestTenantPolicyAllowsUserWithEnoughRole(t *testing.T) {
 	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
 	userID := mustID(t, "22222222-2222-2222-2222-222222222222")
-	reader := &membershipReader{role: memberships.RoleAdmin}
+	reader := &membershipReader{role: memberships.RoleCollaborator}
 	policy := authorization.NewTenantPolicy(reader)
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
 		Kind:   authentication.PrincipalUser,
 		UserID: userID,
 	}, tenantID, authorization.TenantPermission{
-		MinimumRole: memberships.RoleMember,
+		MinimumRole: memberships.RoleCollaborator,
 	})
 	if err != nil {
 		t.Fatalf("authorize tenant: %v", err)
@@ -92,13 +92,13 @@ func TestTenantPolicyAllowsUserWithEnoughRole(t *testing.T) {
 func TestTenantPolicyRejectsUserWithWeakRole(t *testing.T) {
 	tenantID := mustID(t, "11111111-1111-1111-1111-111111111111")
 	userID := mustID(t, "22222222-2222-2222-2222-222222222222")
-	policy := authorization.NewTenantPolicy(&membershipReader{role: memberships.RoleViewer})
+	policy := authorization.NewTenantPolicy(&membershipReader{role: memberships.RoleObserver})
 
 	err := policy.AuthorizeTenant(context.Background(), authentication.Principal{
 		Kind:   authentication.PrincipalUser,
 		UserID: userID,
 	}, tenantID, authorization.TenantPermission{
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleCollaborator,
 	})
 	if !errors.Is(err, authorization.ErrForbidden) {
 		t.Fatalf("error = %v, want forbidden", err)
@@ -121,13 +121,13 @@ func TestTenantPolicyAllowsSystemPrincipal(t *testing.T) {
 }
 
 func TestRoleAllows(t *testing.T) {
-	if !authorization.RoleAllows(memberships.RoleOwner, memberships.RoleViewer) {
-		t.Fatal("owner should allow viewer permission")
+	if !authorization.RoleAllows(memberships.RoleOwner, memberships.RoleObserver) {
+		t.Fatal("owner should allow observer permission")
 	}
-	if authorization.RoleAllows(memberships.RoleMember, memberships.RoleAdmin) {
-		t.Fatal("member should not allow admin permission")
+	if authorization.RoleAllows(memberships.RoleObserver, memberships.RoleCollaborator) {
+		t.Fatal("observer should not allow collaborator permission")
 	}
-	if authorization.RoleAllows(memberships.RoleAdmin, "") {
+	if authorization.RoleAllows(memberships.RoleCollaborator, "") {
 		t.Fatal("empty minimum role should not be allowed")
 	}
 }

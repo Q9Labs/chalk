@@ -96,12 +96,10 @@ func RoleAllows(actual memberships.Role, minimum memberships.Role) bool {
 func roleRank(role memberships.Role) int {
 	switch role {
 	case memberships.RoleOwner:
-		return 4
-	case memberships.RoleAdmin:
 		return 3
-	case memberships.RoleMember:
+	case memberships.RoleCollaborator:
 		return 2
-	case memberships.RoleViewer:
+	case memberships.RoleObserver:
 		return 1
 	default:
 		return 0

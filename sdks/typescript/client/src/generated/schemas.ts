@@ -112,7 +112,7 @@ export const AdmitEpisodeParticipantRequestSchema = Schema.Struct({
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.String.check(Schema.isMinLength(1)),
   participant_id: Schema.optional(ParticipantIdSchema),
-  role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+  role: Schema.String.check(Schema.isMinLength(1)),
 });
 export type AdmitEpisodeParticipantRequest = typeof AdmitEpisodeParticipantRequestSchema.Type;
 
@@ -319,7 +319,7 @@ export const CreateEpisodeRequestSchema = Schema.Struct({
 export type CreateEpisodeRequest = typeof CreateEpisodeRequestSchema.Type;
 
 export const CreateMembershipRequestSchema = Schema.Struct({
-  role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+  role: Schema.Literals(["owner", "collaborator", "observer"]),
   user_id: UserIdSchema,
 });
 export type CreateMembershipRequest = typeof CreateMembershipRequestSchema.Type;
@@ -626,7 +626,7 @@ export type MembershipId = typeof MembershipIdSchema.Type;
 export const MembershipSchema = Schema.Struct({
   created_at: DateTimeStringSchema,
   id: MembershipIdSchema,
-  role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+  role: Schema.Literals(["owner", "collaborator", "observer"]),
   tenant_id: TenantIdSchema,
   updated_at: DateTimeStringSchema,
   user_id: UserIdSchema,
@@ -674,7 +674,7 @@ export const ParticipantLifecycleSchema = Schema.Struct({
     generation: Schema.Number,
     id: ParticipantIdSchema,
     identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
-    role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+    role: Schema.String,
     space_id: SpaceIdSchema,
     status: Schema.String,
     tenant_id: TenantIdSchema,
@@ -700,7 +700,7 @@ export const ParticipantRemovalSchema = Schema.Struct({
     generation: Schema.Number,
     id: UUIDSchema,
     identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
-    role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+    role: Schema.String,
     space_id: SpaceIdSchema,
     status: Schema.String,
     tenant_id: TenantIdSchema,
@@ -938,7 +938,7 @@ export const TranscriptRequestAcceptedResponseSchema = Schema.Struct({
 export type TranscriptRequestAcceptedResponse = typeof TranscriptRequestAcceptedResponseSchema.Type;
 
 export const UpdateMembershipRequestSchema = Schema.Struct({
-  role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+  role: Schema.Literals(["owner", "collaborator", "observer"]),
 });
 export type UpdateMembershipRequest = typeof UpdateMembershipRequestSchema.Type;
 

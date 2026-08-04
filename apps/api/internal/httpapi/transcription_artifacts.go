@@ -82,7 +82,7 @@ func requestTranscriptEndpoint(service TranscriptArtifactService, authorizer Ten
 		if service == nil {
 			return requestTranscriptResponse{}, apiErrorServiceUnavailable
 		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsWrite, MinimumRole: memberships.RoleMember}); err != nil {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsWrite, MinimumRole: memberships.RoleCollaborator}); err != nil {
 			return requestTranscriptResponse{}, err
 		}
 		input, err := request.Body.input(request.TenantID, request.RecordingID)
@@ -133,7 +133,7 @@ func listTranscriptArtifactEndpoint(service TranscriptArtifactService, authorize
 		if service == nil {
 			return transcriptArtifactListResponse{}, apiErrorServiceUnavailable
 		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleViewer}); err != nil {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
 			return transcriptArtifactListResponse{}, err
 		}
 		list, err := service.List(ctx, request.TenantID, request.RecordingID, request.Page)
@@ -157,7 +157,7 @@ func getTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer
 		if service == nil {
 			return transcriptArtifactResponse{}, apiErrorServiceUnavailable
 		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleViewer}); err != nil {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
 			return transcriptArtifactResponse{}, err
 		}
 		transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
@@ -173,7 +173,7 @@ func deleteTranscriptArtifactEndpoint(service TranscriptArtifactService, authori
 		if service == nil {
 			return struct{}{}, apiErrorServiceUnavailable
 		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsDelete, MinimumRole: memberships.RoleMember}); err != nil {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsDelete, MinimumRole: memberships.RoleCollaborator}); err != nil {
 			return struct{}{}, err
 		}
 		if _, err := service.Delete(ctx, request.TenantID, request.TranscriptID); err != nil {
@@ -198,7 +198,7 @@ func transcriptArtifactDownloadEndpoint(service TranscriptArtifactService, downl
 		if service == nil || downloads == nil {
 			return transcriptDownloadResponse{}, apiErrorServiceUnavailable
 		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleViewer}); err != nil {
+		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
 			return transcriptDownloadResponse{}, err
 		}
 		transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)

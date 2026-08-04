@@ -32,8 +32,8 @@ scalar ParticipantId extends string;
 model OpaqueJson is Record<unknown>;
 
 enum UserRole {
-  admin: "admin",
-  member: "member",
+  collaborator: "collaborator",
+  observer: "observer",
   owner: "owner",
 }
 

@@ -1078,37 +1078,37 @@
       const rulesList = (items) => `<ul class="rules">${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`;
 
       const PARTIAL_GAPS = {
-        "Experience surfaces": ["The hosted web app is still a local proof surface, not the complete first-party meeting product.", "Cross-platform release proof for every hosted web and native meeting flow is still outstanding."],
+        "Experience surfaces": ["The hosted web app is still a local proof surface, not the complete first-party Space product.", "Cross-platform release proof for every hosted web and native Episode flow is still outstanding."],
         "Web app": [
-          "The room route proves a local API, Sync, and Cloudflare media path, but the public create-room flow and hosted meeting experience are not complete.",
+          "The Space route proves a local API, Sync, and Cloudflare media path, but the public create-Space flow and hosted Episode experience are not complete.",
           "The iframe embed, public status, privacy, terms, and documentation app are also not implemented; managed deployment qualification and hosted end-to-end release proof are absent.",
         ],
-        "Public product surfaces": ["Public create-room, iframe embed, status, privacy, terms, and product documentation routes are not implemented.", "The local room route and deployable seams do not establish hosted end-to-end or production proof."],
+        "Public product surfaces": ["Public create-Space, iframe embed, status, privacy, terms, and product documentation routes are not implemented.", "The local Space route and deployable seams do not establish hosted end-to-end or production proof."],
         "Embedding & generated SDK coverage": ["Layered React components are not a turnkey React web provider or join flow; not all public API routes are generated.", "Swift, Kotlin, Python, and Go SDKs are not present in this repository."],
-        "Mobile app": ["Invite-link joining is implemented, but meeting creation is not enabled consistently in release builds.", "Real-device native media end-to-end proof is not present in the repository; this card does not claim a release-ready mobile meeting product."],
+        "Mobile app": ["Invite-link joining is implemented, but Space creation is not enabled consistently in release builds.", "Real-device native media end-to-end proof is not present in the repository; this card does not claim a release-ready mobile product."],
         Integrations: ["The API catalog, connection lifecycle, action policy, and audit path exist, but there is no complete first-party integration UI.", "A managed Composio connection and action flow has not yet been proven end to end in a release environment."],
         "Media plane": ["The Cloudflare SFU adapter is implemented; native RealtimeKit parity and its observability contract remain incomplete.", "Production provider-account, usage, and egress visibility still requires deployment proof."],
         "RealtimeKit path": ["The React Native RealtimeKit adapter and lifecycle are implemented, but real-device native media end-to-end proof is not present.", "Opaque provider SDK background work remains an explicit observability blind spot."],
-        "Real-network browser media suite": ["The local room path and Cloudflare adapter exist, but no real-network browser media end-to-end suite is implemented in the repository.", "Network failure, provider-account, and recovery evidence remain outstanding."],
+        "Real-network browser media suite": ["The local Space path and Cloudflare adapter exist, but no real-network browser media end-to-end suite is implemented in the repository.", "Network failure, provider-account, and recovery evidence remain outstanding."],
         "Real-device native media suite": ["The React Native media adapter exists, but no real-device native media end-to-end suite is implemented in the repository.", "Release-build device coverage and failure-path evidence remain outstanding."],
-        Collaboration: ["A complete durable chat stream, retention path, and delivery contract are not implemented.", "Live captions and their in-room consent/privacy lifecycle are not yet complete."],
+        Collaboration: ["A complete durable chat stream, retention path, and delivery contract are not implemented.", "Live captions and their in-Space consent/privacy lifecycle are not yet complete."],
         "Chat & reactions": ["Presentation surfaces exist, but the durable server-owned chat stream, delivery acknowledgements, and retention are not implemented.", "A server-owned persistence and cleanup path remains outstanding."],
         "Whiteboard web wiring": [
           "The whiteboard engine and React canvas are implemented, but the public web app does not wire them into a complete product flow.",
           "Whiteboard file sync is not the missing product-level file-attachment and tenant-retention flow; a live multi-client browser test is also not present.",
         ],
-        "Transcripts in-room": ["Post-meeting transcript artifacts exist, but a live caption source and in-room lifecycle are not complete.", "Consent, privacy state, and failure behavior still need end-to-end product proof."],
+        "Transcripts in-Space": ["Post-Episode transcript artifacts exist, but a live caption source and in-Space lifecycle are not complete.", "Consent, privacy state, and failure behavior still need end-to-end product proof."],
         "Recording & artifacts": ["The control and infrastructure contracts exist, but real recorder pools have not completed staging qualification and failure-to-recovery proof.", "Production R2/KMS adoption and a real capture-to-render artifact proof remain outstanding."],
         "Recorder admission & reconciliation": ["The external reconciler still needs a real staging deployment with qualified nodes.", "Capacity exhaustion, replacement, fencing, and recovery must be observed against actual provider inventory."],
-        "Capture pool": ["The SGP1 pool contract is defined, but the release image and bootstrap path are not qualified under the documented meeting, participant, and bitrate limits.", "Node loss and replacement have not been proven in staging."],
+        "Capture pool": ["The SGP1 pool contract is defined, but the release image and bootstrap path are not qualified under the documented Episode, Participant, and bitrate limits.", "Node loss and replacement have not been proven in staging."],
         "Render pool": ["The TOR1 GPU pool contract and scaler policy exist, but a real deadline-aware render and recovery run is not yet proven.", "The worker image and zero-to-ready path still require staging qualification."],
         "AWS KMS envelope boundary": ["The key policy and encryption-context contract exist, but production key adoption and control-plane data-key use are not yet proven end to end.", "Rotation and rejected-context behavior still require live staging evidence."],
         "Operations & trust": ["The local observability stack is proven, but managed telemetry backends, notification routing, and retention are deployment work.", "Every user-visible service still needs a live synthetic failure-to-recovery proof before the plane is complete."],
-        "Tenant administration & enterprise identity": ["Tenant and membership APIs are implemented, but complete first-party administration UI and SSO, SAML, or OIDC are not.", "Enterprise identity and administrative release proof remain absent."],
+        "Tenant management & enterprise identity": ["Tenant and membership APIs are implemented, but complete first-party management UI and SSO, SAML, or OIDC are not.", "Enterprise identity and management release proof remain absent."],
         "Security & compliance gaps": ["End-to-end encryption and legal hold are not implemented; scoped auth, tenant isolation, audit APIs, and webhook secret rotation do not imply them.", "These canonical false capabilities require separate design and evidence."],
         "Uptime & public status": ["The registry and public-safe projection exist, but the public status page, real deployment targets, and notification recipients are not configured in this public tree.", "A live dependency failure and subsequent recovery have not yet been observed end to end."],
         "Audit & erasure": ["An external durable deletion-tombstone reconciler is still required.", "Backup restoration is not complete until tombstones are replayed and that recovery path is proven."],
-        "Hosted surfaces": ["The local web room is a real-call proof, not the complete hosted meeting product; public create-room and production-readiness claims remain open.", "Mobile joining exists, while release-build meeting creation and real-device media proof remain outstanding."],
+        "Hosted surfaces": ["The local web Space is a real Episode proof, not the complete hosted product; public create-Space and production-readiness claims remain open.", "Mobile joining exists, while release-build Space creation and real-device media proof remain outstanding."],
         "Chalk platform": ["Hosted web, durable chat/live captions, recorder staging qualification, and managed operations retain incomplete work.", "The platform remains partial until every partial plane has its release and failure-recovery proof."],
         "Elastic artifact compute": ["The DigitalOcean recorder reconciler and real capture/render pools are not yet qualified in staging.", "The complete recording-to-transcription chain still needs a managed release proof."],
         "Managed recording": ["The durable intent, job, fencing, and artifact contracts are implemented, but a real staging capture-to-render journey is not yet proven.", "Capacity failure, worker loss, retry, and recovery still require live evidence."],
@@ -1116,12 +1116,15 @@
         "Capture sequenced bundles": ["The capture contract exists, but the SGP1 worker image and bootstrap path are not yet qualified against real provider inventory.", "Bundle continuity through worker loss, replacement, and retry still needs staging proof."],
         "Claim and render artifact": ["The render contract exists, but the TOR1 GPU image and zero-to-ready path are not yet qualified in staging.", "Deadline, worker-loss, retry, and compare-and-set recovery still need a real render proof."],
         "Recording becomes available": ["No staging journey has yet produced and verified a downloadable final artifact through the complete managed pipeline.", "The capacity-failure and worker-recovery paths must reach a correct terminal participant-visible state."],
-        "Post-meeting transcription": ["The API and Lambda dispatcher are implemented, but the full path from a real managed recording through the AI provider to a final artifact is not yet proven in staging.", "Provider failure, chunk retry, and cleanup recovery still require live evidence."],
+        "Post-Episode transcription": [
+          "The API and Lambda dispatcher are implemented, but the full path from a real managed recording through the transcription provider to a final artifact is not yet proven in staging.",
+          "Provider failure, chunk retry, and cleanup recovery still require live evidence.",
+        ],
         "Verify committed recorder source": ["A real managed recording has not yet been accepted as a transcription source in staging.", "Invalid manifests and incomplete recorder artifacts still need live rejection-path evidence."],
         "Invoke one pinned provider": ["The provider boundary is implemented, but a real staging source has not completed the pinned-provider path.", "Provider timeout, rejection, and retry behavior still need end-to-end evidence."],
         "Finalize and clean temporary objects": ["A real staging transcript has not yet reached deterministic finalization through the complete recording-to-provider path.", "Temporary-object cleanup and independently verified recovery after partial failure remain unproven."],
         "End-to-end observability": ["Local correlated telemetry and the durable journey ledger are proven; managed backends and independently tested human notification are not configured here.", "Provider blind spots and live deployed failure-to-recovery checks remain incomplete."],
-        "Hosted web edge": ["The current web room is a local repository proof surface; it is not the public create-room flow, iframe embed, or complete production meeting experience.", "Deployment verification and hosted end-to-end release proof are not finished."],
+        "Hosted web edge": ["The current web Space is a local repository proof surface; it is not the public create-Space flow, iframe embed, or complete production Episode experience.", "Deployment verification and hosted end-to-end release proof are not finished."],
         "Cloudflare media + R2": ["The adapters and infrastructure boundary are implemented, but managed production qualification and real-network browser media proof are not present.", "Cloudflare-owned internals remain intentionally unobservable."],
         "DigitalOcean recorder pools": ["Policy-only OpenTofu is present; the external reconciler still must create and qualify real capture/render nodes.", "Scale-up, fencing, replacement, and scale-to-zero recovery have not been proven in staging."],
         "AWS KMS + SSM": ["Infrastructure contracts exist, but real workload secret injection and context-bound data-key use are not yet proven in staging.", "Production adoption remains fail-closed until those proofs exist."],
@@ -1141,25 +1144,25 @@
           y: 130,
           tagline: "Standalone web and mobile apps stay thin over package-owned behavior.",
           source: "apps/web · apps/mobile · sdks/typescript/react(-native)",
-          detail: "Chalk has two first-class front doors: the hosted application and embeddable SDK surfaces. Web, Android, iOS, iPadOS, and macOS can make different presentation choices while agreeing on room, participant, permission, recording, and failure semantics.",
+          detail: "Chalk has two first-class front doors: the hosted application and embeddable SDK surfaces. Web, Android, iOS, iPadOS, and macOS can make different presentation choices while agreeing on Space, Participant, capability, Recording, and failure semantics.",
           rules: [
-            "Apps consume real SDK state; they do not become the source of meeting truth.",
+            "Apps consume real SDK state; they do not become the source of Episode truth.",
             "React stays presentational. React Native owns platform UI, secure persistence, CallKit/ConnectionService seams, and native device behavior.",
             "Anonymous joining remains first-class; native Chalk identity is additive.",
           ],
           components: [
             { name: "Web app", status: "partial", desc: "Vite, React 19, and TanStack Router surface for the public site and hosted web experience.", rules: ["The app consumes @q9labsai/chalk-client.", "Cloudflare Vite integration keeps the hosted edge surface deployable."] },
-            { name: "Mobile app", status: "partial", desc: "Expo 55 and React Native 0.83 surface with an implemented invite-link join flow.", rules: ["Meeting creation is not enabled consistently in release builds.", "Real-device native media qualification remains a separate open capability."] },
+            { name: "Mobile app", status: "partial", desc: "Expo 55 and React Native 0.83 surface with an implemented invite-link join flow.", rules: ["Space creation is not enabled consistently in release builds.", "Real-device native media qualification remains a separate open capability."] },
             {
               name: "Public product surfaces",
               status: "partial",
-              desc: "The repository does not yet provide the public create-room flow, iframe embed, status, privacy, terms, or product documentation app.",
-              rules: ["A local room route is not a hosted product qualification.", "These are distinct canonical false capabilities, not implied by the SDK or Cloudflare deployment seams."],
+              desc: "The repository does not yet provide the public create-Space flow, iframe embed, status, privacy, terms, or product documentation app.",
+              rules: ["A local Space route is not a hosted product qualification.", "These are distinct canonical false capabilities, not implied by the SDK or Cloudflare deployment seams."],
             },
             {
               name: "Deferred product surface",
               status: "planned",
-              desc: "Webinar/viewer roles, desktop, AI tutoring, and tenant-selectable sound packs remain deferred product work.",
+              desc: "Webinar/observer roles, desktop, Agent tutoring, and tenant-selectable sound packs remain deferred product work.",
               rules: ["No deferred surface is represented as shipped capability.", "The planned styling marks an intentional missing seam, not an implementation claim."],
             },
             {
@@ -1171,7 +1174,7 @@
             {
               name: "React Native platform surfaces",
               status: "built",
-              desc: "Native pre-join, room, panels, end screens, multitasking, CallKit, and Android connection services.",
+              desc: "Native Entrance, Space, panels, end screens, multitasking, CallKit, and Android connection services.",
               rules: ["Platform variants share core meaning without hiding native differences.", "Adapters inject device and transport behavior."],
             },
           ],
@@ -1184,7 +1187,7 @@
           status: "built",
           x: 470,
           y: 130,
-          tagline: "Provider-neutral meeting state, HTTP contracts, telemetry, media, and server-only webhooks.",
+          tagline: "Provider-neutral Space/Episode state, HTTP contracts, telemetry, media, and server-only webhooks.",
           source: "sdks/typescript/client",
           detail: "The TypeScript client is the shared behavioral boundary for apps and embedders. Generated HTTP and sync types sit beside the hand-authored V1 sync client, Cloudflare media adapter, telemetry runtime, and webhook consumer helpers.",
           rules: ["Language-neutral schemas generate wire types; TypeScript is one target, not the protocol authority.", "Canonical control state is separate from optimistic state.", "Server-only webhook code is blocked from browser and React Native bundles."],
@@ -1221,19 +1224,24 @@
           status: "built",
           x: 850,
           y: 130,
-          tagline: "Go HTTP service for tenancy, rooms, admission, artifacts, providers, and webhooks.",
+          tagline: "Go HTTP service for tenancy, Spaces, admission, artifacts, providers, and webhooks.",
           source: "apps/api",
           detail: "The Go service owns the durable product/control plane. Thin HTTP adapters call domain services behind ports, while Postgres, Redis, Cloudflare, R2, Composio, and worker integrations remain adapters.",
           rules: ["Public REST lives under /v1; /healthz and /readyz remain operational.", "Config is environment-only and non-local startup fails closed when required dependencies or secrets are absent.", "Every capability propagates journey and W3C trace context."],
           components: [
-            { name: "Identity & tenancy", status: "built", desc: "Users, memberships, tenant roots, API keys, auth sessions, signing keys, and authorization.", rules: ["Tenant is the isolation and billing root.", "User identity stays separate from per-session participation."] },
-            { name: "Room & Session lifecycle", status: "built", desc: "Reusable Rooms, time-bounded Sessions, participant admission, token refresh, deadlines, and provider bootstrap.", rules: ["Room is not Session.", "Session creation and revision-zero sync state commit together."] },
+            { name: "Identity & tenancy", status: "built", desc: "Users, memberships, tenant roots, API keys, auth sessions, signing keys, and authorization.", rules: ["Tenant is the isolation and billing root.", "User identity stays separate from per-Episode participation."] },
+            {
+              name: "Space & Episode lifecycle",
+              status: "built",
+              desc: "Durable Spaces, time-bounded Episodes, Participant admission, AccessGrant refresh, deadlines, and provider bootstrap.",
+              rules: ["A Space owns durable identity and content.", "Episode creation and revision-zero sync state commit together."],
+            },
             { name: "Media provider ports", status: "built", desc: "Cloudflare provider adapter plus opaque provider-operation receipts and observations.", rules: ["Core rows do not depend on Cloudflare-specific IDs.", "Uncertain effects reconcile through stable operation identity."] },
             {
               name: "Recording control",
               status: "built",
               desc: "Recording resources, download authority, capacity admission, fenced pipeline jobs, bundles, and artifacts.",
-              rules: ["One active recording per Session.", "Workers receive job-scoped authority rather than reusable storage credentials."],
+              rules: ["One active recording per Episode.", "Workers receive job-scoped authority rather than reusable storage credentials."],
             },
             {
               name: "Transcription control",
@@ -1249,10 +1257,10 @@
             },
             { name: "Integrations", status: "partial", desc: "Tenant integration connections and audited Composio-backed catalog surfaces.", rules: ["Provider credentials remain outside domain types.", "Connection state is tenant scoped."] },
             {
-              name: "Tenant administration & enterprise identity",
+              name: "Tenant management & enterprise identity",
               status: "partial",
-              desc: "Tenant and membership APIs exist, but complete first-party administration UI and SSO, SAML, or OIDC are not implemented.",
-              rules: ["Server authorization is built; an administration UI is not implied.", "Enterprise identity remains a canonical open capability."],
+              desc: "Tenant and membership APIs exist, but complete first-party management UI and SSO, SAML, or OIDC are not implemented.",
+              rules: ["Server authorization is built; a management UI is not implied.", "Enterprise identity remains a canonical open capability."],
             },
             {
               name: "Operational shell",
@@ -1272,8 +1280,8 @@
           y: 130,
           tagline: "Elixir/OTP WebSocket service with Postgres-authoritative Sync v1.",
           source: "apps/sync · contract/schema/sync-v1.json",
-          detail: "The sync service turns meeting commands into one canonical, recoverable conference state. Postgres serializes each Session; BEAM processes, ETS, notifications, and socket queues are disposable projections.",
-          rules: ["The authority key is {tenant_id, session_id}.", "A semantic transaction returns a committed exact-next event and receipt or a stable rejected receipt.", "Socket loss changes live presence; it never invents a durable leave."],
+          detail: "The sync service turns Episode commands into one canonical, recoverable Space state. Postgres serializes each Episode; BEAM processes, ETS, notifications, and socket queues are disposable projections.",
+          rules: ["The authority key is {tenant_id, episode_id}.", "A semantic transaction returns a committed exact-next event and receipt or a stable rejected receipt.", "Socket loss changes live Presence; it never invents a durable leave."],
           components: [
             {
               name: "Transport & token verifier",
@@ -1282,8 +1290,8 @@
               rules: ["Protocol v1 is the production surface.", "Key rotation accepts overlapping public keys before the API signs with the new kid."],
             },
             { name: "Command admission", status: "built", desc: "Bounded command intake validates identity, generation, phase, authority, and payload before execution.", rules: ["Stable command IDs make retries safe.", "Backpressure rejects work before unbounded queues form."] },
-            { name: "Pure Session reducer", status: "built", desc: "Deterministic state transitions for roles, hand raise, display name, admission, host transfer, deadlines, and recording.", rules: ["Role capability mapping is immutable per Session.", "One screen-share lease is serialized."] },
-            { name: "Postgres stateholder", status: "built", desc: "Session-row lock, folded state, exact-next event, command receipt, recovery, and uncertain-COMMIT resolution.", rules: ["A fresh writable-primary read resolves uncertain commits.", "Redis is absent from the correctness path."] },
+            { name: "Pure Episode reducer", status: "built", desc: "Deterministic state transitions for roles, hand raise, display name, admission, capability handoff, deadlines, and recording.", rules: ["Role capability mapping is immutable per Episode.", "One screen-share lease is serialized."] },
+            { name: "Postgres stateholder", status: "built", desc: "Episode-row lock, folded state, exact-next event, command receipt, recovery, and uncertain-COMMIT resolution.", rules: ["A fresh writable-primary read resolves uncertain commits.", "Redis is absent from the correctness path."] },
             {
               name: "Coordinator & fanout",
               status: "built",
@@ -1299,13 +1307,13 @@
             {
               name: "External operations",
               status: "built",
-              desc: "Idempotent lifecycle, media, recording, and Session-end intents executed outside the transaction and finalized after confirmation.",
-              rules: ["Provider effects never run while holding the Session lock.", "Late or stale observations cannot overwrite newer truth."],
+              desc: "Idempotent lifecycle, media, recording, and Episode-end intents executed outside the transaction and finalized after confirmation.",
+              rules: ["Provider effects never run while holding the Episode lock.", "Late or stale observations cannot overwrite newer truth."],
             },
             {
               name: "Retention & operations",
               status: "built",
-              desc: "Ended-session folding/checkpoints, seven-day bounded cleanup, readiness hysteresis, metrics, drain, and failure scheduler.",
+              desc: "Ended-Episode folding/checkpoints, seven-day bounded cleanup, readiness hysteresis, metrics, drain, and failure scheduler.",
               rules: ["Production boot rejects non-writable or incompatible storage.", "Accepted decisions resolve before shutdown completes."],
             },
           ],
@@ -1320,10 +1328,10 @@
           y: 420,
           tagline: "Swappable real-time media behind a stable contract; Cloudflare is the current adapter.",
           source: "sdks/typescript/client/src/media · apps/api/internal/mediaplane",
-          detail: "Audio, camera, and screen-share packets travel through a provider adapter that stays independent from durable conference control. Chalk can observe its requests, responses, webhooks, and endpoint RTC summaries but cannot instrument Cloudflare internals.",
-          rules: ["Media truth is provider observation; durable permission truth remains sync control state.", "Provider references are opaque outside adapters.", "Usage and egress signals must stay visible per tenant and Session."],
+          detail: "Audio, camera, and screen-share packets travel through a provider adapter that stays independent from durable Episode control. Chalk can observe its requests, responses, webhooks, and endpoint RTC summaries but cannot instrument Cloudflare internals.",
+          rules: ["Media truth is provider observation; durable capability truth remains sync control state.", "Provider references are opaque outside adapters.", "Usage and egress metrics must stay visible per tenant and Episode."],
           components: [
-            { name: "MediaPlane contract", status: "built", desc: "Provider-neutral Session, publication, moderation, observation, and usage boundaries.", rules: ["Control decisions authorize provider effects.", "Provider identity never becomes the domain model."] },
+            { name: "MediaPlane contract", status: "built", desc: "Provider-neutral Episode, publication, moderation, observation, and usage boundaries.", rules: ["Control decisions authorize provider effects.", "Provider identity never becomes the domain model."] },
             { name: "Cloudflare SFU adapter", status: "built", desc: "Direct WebRTC signaling, publication snapshots, track requests, and endpoint observations.", rules: ["Glass-to-glass latency remains physics-bound.", "Chalk measures both adapter calls and endpoint symptoms."] },
             {
               name: "RealtimeKit path",
@@ -1334,8 +1342,8 @@
             {
               name: "Real-network browser media suite",
               status: "partial",
-              desc: "The local room path exists, but a real-network browser media end-to-end suite is not present.",
-              rules: ["A Cloudflare adapter and local call do not substitute for real-network browser coverage.", "Provider-account, network failure, and recovery evidence remain separate from repository implementation."],
+              desc: "The local Space path exists, but a real-network browser media end-to-end suite is not present.",
+              rules: ["A Cloudflare adapter and local Episode do not substitute for real-network browser coverage.", "Provider-account, network failure, and recovery evidence remain separate from repository implementation."],
             },
             {
               name: "Real-device native media suite",
@@ -1354,10 +1362,10 @@
           status: "partial",
           x: 660,
           y: 420,
-          tagline: "Shared whiteboard, chat-shaped UI, reactions, transcripts, and live meeting signals.",
+          tagline: "Shared whiteboard, chat-shaped UI, reactions, transcripts, and live Episode updates.",
           source: "packages/whiteboard · sdks/typescript/react(-native) · contract/schema/sync-v1.json",
-          detail: "Collaboration is split by authority: durable conference facts use sync control state, replace-latest signals use live projections, whiteboard behavior lives in its own package, and presentational components never fabricate backend state.",
-          rules: ["Each collaboration stream owns its own permission surface.", "Volatile signals never become durable simply for convenience.", "Shared UI remains reusable across hosted and embedded front doors."],
+          detail: "Collaboration is split by authority: durable Episode facts use sync control state, replace-latest updates use live projections, whiteboard behavior lives in its own package, and presentational components never fabricate backend state.",
+          rules: ["Each collaboration stream owns its own permission surface.", "Volatile updates never become durable simply for convenience.", "Shared UI remains reusable across hosted and embedded front doors."],
           components: [
             {
               name: "Whiteboard engine",
@@ -1379,9 +1387,9 @@
               rules: ["The package implementation does not imply first-party app wiring.", "A browser test must exercise more than one client."],
             },
             {
-              name: "Transcripts in-room",
+              name: "Transcripts in-Space",
               status: "partial",
-              desc: "Transcript stores and panels consume real state while the artifact pipeline owns post-meeting transcription.",
+              desc: "Transcript stores and panels consume real state while the artifact pipeline owns post-Episode transcription.",
               rules: ["Live captions and durable artifacts are separate lifecycles.", "Privacy and recording consent stay visible to participants."],
             },
           ],
@@ -1405,7 +1413,7 @@
               desc: "Public-safe health gates, qualified pool policy, reservations, prewarm, fencing, replacement, and zero-idle targets.",
               rules: ["Infrastructure policy is implemented; real staging failure/recovery qualification is still a deployment proof.", "Global capture plus render capacity is capped at 21 nodes."],
             },
-            { name: "Capture pool", status: "partial", desc: "SGP1 CPU pool produces encrypted, temporary, sequenced capture bundles.", rules: ["Four meetings, forty participants, or sixteen Mbps per qualified node.", "Bundles expire from private R2 after 24 hours."] },
+            { name: "Capture pool", status: "partial", desc: "SGP1 CPU pool produces encrypted, temporary, sequenced capture bundles.", rules: ["Four Episodes, forty Participants, or sixteen Mbps per qualified node.", "Bundles expire from private R2 after 24 hours."] },
             { name: "Render pool", status: "partial", desc: "TOR1 GPU pool composes final recording artifacts under a deadline-aware scaler.", rules: ["Render capacity is capped at ten nodes.", "Workers get one-time bootstrap and job-scoped object authority."] },
             { name: "AWS KMS envelope boundary", status: "partial", desc: "Singapore KEK issues and decrypts data keys only for the control-plane role and exact recording context.", rules: ["Workers receive neither KMS nor DigitalOcean credentials.", "Key rotation is automatic."] },
             {
@@ -1434,8 +1442,8 @@
             {
               name: "Service telemetry",
               status: "built",
-              desc: "SDK, Go API, Elixir sync, webhook dispatcher, data adapters, RTC summaries, runtime health, and failure signals.",
-              rules: ["No tokens, room IDs, participant IDs, or operation payloads become metric dimensions.", "Provider callbacks may start linked roots."],
+              desc: "SDK, Go API, Elixir sync, webhook dispatcher, data adapters, RTC summaries, runtime health, and failure telemetry.",
+              rules: ["No tokens, Space IDs, Participant IDs, or operation payloads become metric dimensions.", "Provider callbacks may start linked roots."],
             },
             {
               name: "Local observability stack",
@@ -1479,7 +1487,7 @@
           tagline: "Web, Android, iOS, iPadOS, macOS",
           chips: ["standalone", "anonymous-first"],
           detail: "First-party Chalk applications exercise the same client and platform contracts available to embedders.",
-          rules: ["Apps stay thin over package-owned behavior.", "Platform-native UI may differ while conference meaning stays shared."],
+          rules: ["Apps stay thin over package-owned behavior.", "Platform-native UI may differ while Episode meaning stays shared."],
           source: "apps/web · apps/mobile",
         },
         {
@@ -1494,7 +1502,7 @@
           h: 160,
           tagline: "Web, React, React Native, and future generated SDK targets",
           chips: ["embedded", "tenant signed"],
-          detail: "Embedding customers assert external identity and initial meeting authority through scoped, signed tokens.",
+          detail: "Embedding customers assert external identity and initial Episode authority through scoped, signed tokens.",
           rules: ["External identity is accepted only after signature verification.", "Customer receivers consume signed, versioned webhooks."],
           source: "docs/redesign/north-star.md",
         },
@@ -1508,7 +1516,7 @@
           y: 330,
           w: 460,
           h: 245,
-          tagline: "Correct conference truth, low-latency media, portable deployment.",
+          tagline: "Correct Episode truth, low-latency media, portable deployment.",
           chips: ["8 planes", "7 journeys", "2 swappable ports"],
           detail: "Chalk separates durable product control, real-time sync, provider media, collaboration, artifact processing, and operations behind explicit contracts.",
           rules: ["Correctness gates speed; speed gates flexibility.", "Postgres is durable authority; provider observations own actual publications.", "Hosted and embedded front doors remain first-class."],
@@ -1578,19 +1586,19 @@
           icon: "route",
           color: COLORS.green,
           status: "built",
-          tagline: "HTTP identity → durable Session → sync recovery → media flowing",
+          tagline: "HTTP identity → durable Episode → sync recovery → media flowing",
           source: "apps/api/internal/httpapi · apps/sync · sdks/typescript/client",
-          actors: ["Surface / SDK", "Go API", "Elixir sync", "Media plane"],
+          lanes: ["Surface / SDK", "Go API", "Elixir sync", "Media plane"],
           steps: [
-            { id: "join-invite", lane: 0, row: 0, kind: "start", title: "Resolve room or invite", sub: "Anonymous, native, or external identity" },
-            { id: "join-admit", lane: 1, row: 1, title: "Authorize tenant + room", sub: "Create or load Room and Session" },
-            { id: "join-session", lane: 1, row: 2, state: true, title: "Commit Session + revision zero", sub: "One Postgres transaction" },
+            { id: "join-invite", lane: 0, row: 0, kind: "start", title: "Resolve Space or invite", sub: "Anonymous, native, or external identity" },
+            { id: "join-admit", lane: 1, row: 1, title: "Authorize tenant + Space", sub: "Create or load Space and Episode" },
+            { id: "join-episode", lane: 1, row: 2, state: true, title: "Commit Episode + revision zero", sub: "One Postgres transaction" },
             { id: "join-token", lane: 1, row: 3, title: "Issue 5-minute sync JWT", sub: "Ed25519 · generation · capabilities" },
             { id: "join-hello", lane: 0, row: 4, title: "Open /v1/sync + hello", sub: "Cursor and trace context" },
             { id: "join-recover", lane: 2, row: 5, title: "Verify + recover canonical state", sub: "Snapshot, replay, up-to-date, or terminal" },
             { id: "join-ack", lane: 0, row: 6, title: "Apply state + recovery_ack", sub: "Exact revision and digest" },
             { id: "join-media", lane: 3, row: 7, title: "Establish WebRTC publications", sub: "Provider observation becomes media truth" },
-            { id: "join-live", lane: 0, row: 8, kind: "end", title: "Meeting is live", sub: "Control and media agree" },
+            { id: "join-live", lane: 0, row: 8, kind: "end", title: "Episode is live", sub: "Control and media agree" },
           ],
         },
         command: {
@@ -1600,11 +1608,11 @@
           status: "built",
           tagline: "Stable intent → semantic transaction → exact event → canonical replica",
           source: "apps/sync/README.md · contract/schema/sync-v1.json",
-          actors: ["V1 client", "WebSocket node", "Postgres", "Other clients"],
+          lanes: ["V1 client", "WebSocket node", "Postgres", "Other clients"],
           steps: [
-            { id: "cmd-intent", lane: 0, row: 0, kind: "start", title: "Create stable command ID", sub: "Hand, name, admission, role, host" },
+            { id: "cmd-intent", lane: 0, row: 0, kind: "start", title: "Create stable command ID", sub: "Hand, name, admission, role, capability" },
             { id: "cmd-admit", lane: 1, row: 1, title: "Bounded command admission", sub: "Phase, identity, generation, capability" },
-            { id: "cmd-lock", lane: 2, row: 2, state: true, title: "Lock Session control row", sub: "Serialize {tenant, Session}" },
+            { id: "cmd-lock", lane: 2, row: 2, state: true, title: "Lock Episode control row", sub: "Serialize {tenant, Episode}" },
             { id: "cmd-reduce", lane: 2, row: 3, title: "Apply pure reducer", sub: "Validate semantic transition" },
             { id: "cmd-commit", lane: 2, row: 4, state: true, title: "Commit state + event + receipt", sub: "Exact-next revision and digest" },
             { id: "cmd-hint", lane: 1, row: 5, title: "Fan out head notification", sub: "Hint plus periodic repair" },
@@ -1619,7 +1627,7 @@
           status: "built",
           tagline: "Disposable node loss → authoritative digest-checked recovery",
           source: "apps/sync/lib/chalk_sync/transport/socket.ex · sdks/typescript/client/src/sync",
-          actors: ["Client", "New sync node", "Postgres"],
+          lanes: ["Client", "New sync node", "Postgres"],
           steps: [
             { id: "rec-loss", lane: 0, row: 0, kind: "start", title: "Socket or node disappears", sub: "No durable leave is invented" },
             { id: "rec-reconnect", lane: 0, row: 1, title: "Reconnect with token + cursor", sub: "Revision, schema version, digest" },
@@ -1635,12 +1643,12 @@
           icon: "media",
           color: COLORS.pink,
           status: "partial",
-          tagline: "Host intent → durable operation → capture bundles → rendered artifact",
+          tagline: "Owner intent → durable operation → capture bundles → rendered artifact",
           source: "apps/sync/lib/chalk_sync/recording_plane.ex · apps/api/internal/recordingpipeline · infrastructure/recorder",
-          actors: ["Host + sync", "Control API", "Capture pool", "Render pool", "R2 + KMS"],
+          lanes: ["Owner + sync", "Control API", "Capture pool", "Render pool", "R2 + KMS"],
           steps: [
             { id: "r-intent", lane: 0, row: 0, kind: "start", title: "Start recording command", sub: "manageRecording capability" },
-            { id: "r-reserve", lane: 0, row: 1, state: true, title: "Reserve external operation", sub: "Same Session control lock" },
+            { id: "r-reserve", lane: 0, row: 1, state: true, title: "Reserve external operation", sub: "Same Episode control lock" },
             { id: "r-admit", lane: 1, row: 2, decision: true, title: "Check public-safe admission", sub: "Capacity, health, qualification" },
             { id: "r-pipeline", lane: 1, row: 3, state: true, title: "Create fenced pipeline jobs", sub: "Generation and deadline" },
             { id: "r-key", lane: 4, row: 4, status: "partial", title: "Issue contextual data key", sub: "Control-plane role only" },
@@ -1651,13 +1659,13 @@
           ],
         },
         transcription: {
-          name: "Post-meeting transcription",
+          name: "Post-Episode transcription",
           icon: "artifact",
           color: COLORS.blue,
           status: "partial",
           tagline: "Recorder source → fenced chunk jobs → normalized final transcript → cleanup",
           source: "apps/transcription-dispatcher/README.md · apps/api/internal/transcripts",
-          actors: ["Client", "Control API", "Lambda dispatcher", "AI provider", "Private R2"],
+          lanes: ["Client", "Control API", "Lambda dispatcher", "Transcription provider", "Private R2"],
           steps: [
             { id: "t-request", lane: 0, row: 0, kind: "start", title: "Request transcript", sub: "No provider or object-key controls" },
             { id: "t-source", lane: 1, row: 1, decision: true, title: "Verify committed recorder source", sub: "Manifest and audio facts" },
@@ -1678,9 +1686,9 @@
           status: "built",
           tagline: "Business commit → immutable event branches → signed attempts → terminal history",
           source: "apps/api/internal/webhooks · sdks/typescript/client/src/webhooks",
-          actors: ["Domain transaction", "Postgres", "Dispatcher", "Customer receiver"],
+          lanes: ["Domain transaction", "Postgres", "Dispatcher", "Customer receiver"],
           steps: [
-            { id: "w-fact", lane: 0, row: 0, kind: "start", title: "Commit customer-visible fact", sub: "Room, Session, participant, artifact" },
+            { id: "w-fact", lane: 0, row: 0, kind: "start", title: "Commit customer-visible fact", sub: "Space, Episode, Participant, artifact" },
             { id: "w-event", lane: 1, row: 1, state: true, title: "Store immutable Event + branches", sub: "Producer journey and trace reference" },
             { id: "w-claim", lane: 2, row: 2, title: "Claim Delivery lease", sub: "Queue age and recovery visible" },
             { id: "w-sign", lane: 2, row: 3, title: "Sign raw body", sub: "Standard Webhooks headers" },
@@ -1696,7 +1704,7 @@
           status: "partial",
           tagline: "Journey origin → propagated context → durable ledger + telemetry → one operator surface",
           source: "docs/observability.md · infrastructure/observability",
-          actors: ["Origin", "Chalk services", "Collector + stores", "Operator"],
+          lanes: ["Origin", "Chalk services", "Collector + stores", "Operator"],
           steps: [
             { id: "o-origin", lane: 0, row: 0, kind: "start", title: "First observer creates context", sub: "Journey ID + W3C trace when absent" },
             { id: "o-propagate", lane: 1, row: 1, title: "Propagate every boundary", sub: "HTTP, WS frames, OTP links, jobs, callbacks" },
@@ -1744,7 +1752,7 @@
           h: 125,
           tagline: "Vite + TanStack + Cloudflare adapter",
           chips: ["static/SSR seam"],
-          detail: "The web surface has a Cloudflare Vite deployment seam and consumes the same client contracts as embedded applications; this is not proof of a production-ready hosted meeting experience.",
+          detail: "The web surface has a Cloudflare Vite deployment seam and consumes the same client contracts as embedded applications; this is not proof of a production-ready hosted Episode experience.",
           rules: ["Marketing deployments keep client telemetry off unless explicitly authenticated and enabled."],
           source: "apps/web",
         },
@@ -1808,7 +1816,7 @@
           h: 150,
           tagline: "Product, sync, jobs, events, audit, journey ledger",
           chips: ["sole durable authority"],
-          detail: "Postgres holds product truth and serializes each Session. Managed and self-hosted deployments must use portable PostgreSQL semantics.",
+          detail: "Postgres holds product truth and serializes each Episode. Managed and self-hosted deployments must use portable PostgreSQL semantics.",
           rules: ["Notifications are hints.", "Redis never enters the correctness path.", "Schema migrations are release blockers."],
           source: "apps/api/db/migrations",
         },
@@ -1824,7 +1832,7 @@
           h: 125,
           tagline: "Rate limiting and optional ephemeral acceleration",
           chips: ["non-authoritative"],
-          detail: "Redis supports rate limits and may later accelerate presence or head hints, but loss of Redis cannot lose acknowledged conference truth.",
+          detail: "Redis supports rate limits and may later accelerate presence or head hints, but loss of Redis cannot lose acknowledged Episode truth.",
           rules: ["Non-local public rate limits require Redis."],
           source: "apps/api/internal/ratelimit",
         },
@@ -1905,7 +1913,7 @@
           tagline: "Recording KEK + workload parameters",
           chips: ["context-bound", "least authority"],
           detail: "KMS protects recording data keys in Singapore; SSM injects transcription provider and workload secrets into Lambda memory.",
-          rules: ["KMS grants require the exact environment, tenant, Session, job, and bundle schema context."],
+          rules: ["KMS grants require the exact environment, tenant, Episode, job, and bundle schema context."],
           source: "infrastructure/opentofu",
         },
         {
@@ -1937,7 +1945,7 @@
           tagline: "OTel Collector · Tempo · Prometheus · Loki · Grafana",
           chips: ["durable ledger", "canary"],
           detail: "Local proof sends and queries one correlated trace, metric, and log, then verifies dashboards and critical alert rules.",
-          rules: ["Production retention and backend choices are deployment decisions.", "Collector failure is isolated from conference work."],
+          rules: ["Production retention and backend choices are deployment decisions.", "Collector failure is isolated from Episode work."],
           source: "infrastructure/observability",
         },
         {
@@ -1996,7 +2004,7 @@
         { a: "rt-users", b: "rt-cf", label: "WebRTC", hot: true },
         { a: "rt-web", b: "rt-api", label: "SDK requests" },
         { a: "rt-api", b: "rt-pg", label: "transactions", hot: true },
-        { a: "rt-sync", b: "rt-pg", label: "semantic Session lock", hot: true },
+        { a: "rt-sync", b: "rt-pg", label: "semantic Episode lock", hot: true },
         { a: "rt-api", b: "rt-redis", label: "rate limits" },
         { a: "rt-api", b: "rt-cf", label: "provider + object authority" },
         { a: "rt-sync", b: "rt-cf", label: "confirmed media effects" },
@@ -2021,27 +2029,27 @@
           status: "built",
           tables: ["tenants", "users", "memberships", "auth_identities", "login_sessions", "api_keys", "tenant_signing_keys"],
           detail: "Tenant is the isolation and billing root; global Users join tenants through Memberships. Authentication, API authority, and participant-token signing keys rotate independently.",
-          rules: ["Participant identity remains a per-Session fact.", "Signing key overlap enables zero-downtime rotation."],
+          rules: ["Participant identity remains a per-Episode fact.", "Signing key overlap enables zero-downtime rotation."],
           source: "20260629143000_initial_schema.sql · 20260706142000_add_tenant_provider_configs.sql",
         },
         {
-          id: "data-meetings",
-          name: "Rooms & Sessions",
+          id: "data-spaces",
+          name: "Spaces & Episodes",
           color: COLORS.blue,
           status: "built",
-          tables: ["rooms", "room_sessions", "participants", "session_create_requests", "provider_operation_receipts", "provider_operation_observation_heads", "provider_operation_observations"],
-          detail: "A reusable Room contains many time-bounded Sessions; Participants are per-Session presence records that may point to a User.",
-          rules: ["Room is not Session.", "Participant is not User.", "Provider identity stays opaque in core facts."],
-          source: "initial_schema.sql · add_session_create_idempotency.sql · add_provider_operations.sql",
+          tables: ["spaces", "episodes", "participants", "episode_create_requests", "provider_operation_receipts", "provider_operation_observation_heads", "provider_operation_observations"],
+          detail: "A durable Space contains time-bounded Episodes; Participants are per-Episode attendance records that may point to a User.",
+          rules: ["Space is not Episode.", "Participant is not User.", "Provider identity stays opaque in core facts."],
+          source: "20260629143000_initial_schema.sql · add_episode_create_idempotency.sql · add_provider_operations.sql",
         },
         {
           id: "data-sync",
           name: "Sync authority",
           color: COLORS.violet,
           status: "built",
-          tables: ["sync_session_control", "sync_control_events", "sync_command_receipts", "sync_lifecycle_intents", "sync_external_operations", "sync_admission_requests", "sync_screen_share_leases", "sync_publication_fences", "sync_publication_grant_reservations", "sync_recordings"],
-          detail: "One Session control row serializes semantic changes. Folded state, exact-next events, receipts, lifecycle intents, provider operations, and reservations form the durable Sync v1 truth.",
-          rules: ["Notifications and BEAM state are disposable projections.", "Exactly one active host and screen-share lease are database-enforced."],
+          tables: ["sync_episode_control", "sync_control_events", "sync_command_receipts", "sync_lifecycle_intents", "sync_external_operations", "sync_admission_requests", "sync_screen_share_leases", "sync_publication_fences", "sync_publication_grant_reservations", "sync_recordings"],
+          detail: "One Episode control row serializes semantic changes. Folded state, exact-next events, receipts, lifecycle intents, provider operations, and reservations form the durable Sync v1 truth.",
+          rules: ["Notifications and BEAM state are disposable projections.", "Exactly one active capability and screen-share lease are database-enforced."],
           source: "20260712113000_add_sync_production_schema.sql · 20260713130000_add_declarative_sync_v3.sql",
         },
         {
@@ -2051,7 +2059,7 @@
           status: "built",
           tables: ["recordings", "recording_capacity", "recording_pool_health", "recording_reservations", "recording_pipelines", "recording_jobs", "recording_bundles", "recording_artifacts"],
           detail: "Recording resources connect user-visible state to admission, pool health, fenced jobs, temporary bundles, and final artifacts.",
-          rules: ["One active recording exists per Session.", "Jobs are lease-recoverable and dead-letter visible."],
+          rules: ["One active recording exists per Episode.", "Jobs are lease-recoverable and dead-letter visible."],
           source: "20260713100000_add_recording_pipeline.sql",
         },
         {
@@ -2086,11 +2094,11 @@
         },
       ];
       const DATA_EDGES = [
-        { a: "data-identity", b: "data-meetings", label: "tenant + optional user" },
-        { a: "data-meetings", b: "data-sync", label: "Session authority", hot: true },
-        { a: "data-meetings", b: "data-recording", label: "records" },
+        { a: "data-identity", b: "data-spaces", label: "tenant + optional user" },
+        { a: "data-spaces", b: "data-sync", label: "Episode authority", hot: true },
+        { a: "data-spaces", b: "data-recording", label: "records" },
         { a: "data-recording", b: "data-transcript", label: "source artifacts", hot: true },
-        { a: "data-meetings", b: "data-webhooks", label: "domain events" },
+        { a: "data-spaces", b: "data-webhooks", label: "domain events" },
         { a: "data-sync", b: "data-webhooks", label: "lifecycle facts" },
         { a: "data-identity", b: "data-ops", label: "attribution" },
         { a: "data-webhooks", b: "data-ops", label: "journey + audit" },
@@ -2272,7 +2280,7 @@
             node = { ...journey, id, x: x0 + column * (cardW + gapX), y: 160 + row * (cardH + gapY), w: cardW, h: cardH };
           nodes += nodeHTML(
             node,
-            `<div class="head"><div class="icon">${icon(journey.icon)}</div><div><h3>${esc(journey.name)}</h3><div class="tag">${esc(journey.tagline)}</div></div></div><div class="meta"><span class="chip acc">${journey.actors.length} lanes</span><span class="chip">${journey.steps.length} steps</span></div><div class="enter">Follow journey ${icon("play", 11)}</div>`,
+            `<div class="head"><div class="icon">${icon(journey.icon)}</div><div><h3>${esc(journey.name)}</h3><div class="tag">${esc(journey.tagline)}</div></div></div><div class="meta"><span class="chip acc">${journey.lanes.length} lanes</span><span class="chip">${journey.steps.length} steps</span></div><div class="enter">Follow journey ${icon("play", 11)}</div>`,
             index * 50,
           );
           if (journey.status === "partial") registerDrawer(node, "L1 · ARCHITECTURE JOURNEY", { label: "Follow this journey", run: () => go({ type: "journey", id }) });
@@ -2294,10 +2302,10 @@
           maxRow = Math.max(maxRow, step.row);
           geometry[step.id] = { x: laneX(step.lane), y: top + step.row * rowHeight, w: nodeW, h: nodeH };
         });
-        state.width = 100 + journey.actors.length * laneWidth;
+        state.width = 100 + journey.lanes.length * laneWidth;
         state.height = top + (maxRow + 1) * rowHeight + 80;
         let backgrounds = "";
-        journey.actors.forEach((actor, index) => {
+        journey.lanes.forEach((laneLabel, index) => {
           backgrounds += `<rect class="lane-bg" x="${55 + index * laneWidth}" y="74" width="${laneWidth - 10}" height="${state.height - 130}" rx="15"/>`;
         });
         let edges = "";
@@ -2317,15 +2325,15 @@
         };
         let nodes = nodeHTML(summaryNode, `<div class="head"><div class="icon">${icon(journey.icon, 16)}</div><div><h3>${esc(journey.name)}</h3><div class="tag">${esc(journey.tagline)}</div></div></div><div class="enter">Open journey status ${icon("play", 11)}</div>`, 0, "journey-summary");
         registerDrawer(summaryNode, `JOURNEY · ${journey.name}`);
-        journey.actors.forEach((actor, index) => {
-          nodes += `<div class="lane-head" style="left:${laneX(index)}px;top:92px;width:${nodeW}px">${esc(actor)}</div>`;
+        journey.lanes.forEach((laneLabel, index) => {
+          nodes += `<div class="lane-head" style="left:${laneX(index)}px;top:92px;width:${nodeW}px">${esc(laneLabel)}</div>`;
         });
         journey.steps.forEach((step, index) => {
           const g = geometry[step.id],
-            node = { ...step, ...g, status: step.status || "built", color: journey.color, name: step.title, detail: step.sub, source: journey.source, rules: [`This step is owned by ${journey.actors[step.lane]}.`, `Its output is accepted only by the next explicit boundary in this journey.`] };
+            node = { ...step, ...g, status: step.status || "built", color: journey.color, name: step.title, detail: step.sub, source: journey.source, rules: [`This step is owned by ${journey.lanes[step.lane]}.`, `Its output is accepted only by the next explicit boundary in this journey.`] };
           const kindLabel = step.kind === "start" ? "START" : step.kind === "end" ? "OUTCOME" : step.decision ? "DECISION" : step.state ? "DURABLE STATE" : "";
           nodes += nodeHTML(node, `${kindLabel ? `<span class="kind">${kindLabel}</span>` : ""}<h3>${esc(step.title)}</h3><div class="tag">${esc(step.sub)}</div>`, index * 35, `step ${step.kind || ""} ${step.decision ? "decision" : ""} ${step.state ? "state" : ""}`);
-          registerDrawer(node, `JOURNEY · ${journey.name} · ${journey.actors[step.lane]}`);
+          registerDrawer(node, `JOURNEY · ${journey.name} · ${journey.lanes[step.lane]}`);
         });
         return svgOpen(state.width, state.height, backgrounds + edges) + "</svg>" + nodes;
       }

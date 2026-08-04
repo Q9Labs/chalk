@@ -63,7 +63,7 @@ periodic authoritative head read repairs every dropped hint.
 
 Episode creation writes the product Episode and revision-zero control row in
 one synchronous Postgres transaction. Admission produces bounded lifecycle
-intents. Removal, explicit Leave, host recovery, deadline expiry, Recording,
+intents. Removal, explicit Leave, capability recovery, deadline expiry, Recording,
 and Episode end reserve idempotent external operations under the same Episode
 control lock, execute provider effects outside the transaction, and finalize
 durable facts only after confirmation. Opening or losing a socket never creates

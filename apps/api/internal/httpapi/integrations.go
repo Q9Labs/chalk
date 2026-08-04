@@ -20,27 +20,27 @@ import (
 var (
 	readIntegrationPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeIntegrationsRead,
-		MinimumRole: memberships.RoleViewer,
+		MinimumRole: memberships.RoleObserver,
 	}
 	writeIntegrationPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeIntegrationsWrite,
-		MinimumRole: memberships.RoleMember,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	deleteIntegrationPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeIntegrationsDelete,
-		MinimumRole: memberships.RoleMember,
+		MinimumRole: memberships.RoleCollaborator,
 	}
 	readIntegrationAdminPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeIntegrationsRead,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleOwner,
 	}
 	writeIntegrationAdminPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeIntegrationsWrite,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleOwner,
 	}
 	deleteIntegrationAdminPermission = authorization.TenantPermission{
 		Scope:       authentication.ScopeIntegrationsDelete,
-		MinimumRole: memberships.RoleAdmin,
+		MinimumRole: memberships.RoleOwner,
 	}
 )
 

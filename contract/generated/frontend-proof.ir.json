@@ -1867,8 +1867,8 @@
       "id": "chalk.UserRole",
       "kind": "enum",
       "values": [
-        "admin",
-        "member",
+        "collaborator",
+        "observer",
         "owner"
       ]
     },

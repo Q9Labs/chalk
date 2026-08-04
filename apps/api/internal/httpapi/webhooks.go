@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	readWebhooksPermission   = authorization.TenantPermission{Scope: authentication.ScopeWebhooksRead, MinimumRole: memberships.RoleAdmin}
-	writeWebhooksPermission  = authorization.TenantPermission{Scope: authentication.ScopeWebhooksWrite, MinimumRole: memberships.RoleAdmin}
-	deleteWebhooksPermission = authorization.TenantPermission{Scope: authentication.ScopeWebhooksDelete, MinimumRole: memberships.RoleAdmin}
+	readWebhooksPermission   = authorization.TenantPermission{Scope: authentication.ScopeWebhooksRead, MinimumRole: memberships.RoleCollaborator}
+	writeWebhooksPermission  = authorization.TenantPermission{Scope: authentication.ScopeWebhooksWrite, MinimumRole: memberships.RoleCollaborator}
+	deleteWebhooksPermission = authorization.TenantPermission{Scope: authentication.ScopeWebhooksDelete, MinimumRole: memberships.RoleCollaborator}
 )
 
 type WebhookService interface {

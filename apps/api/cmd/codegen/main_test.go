@@ -61,6 +61,29 @@ func TestIDSchemaMappingsUseSpaceEpisodeVocabulary(t *testing.T) {
 	}
 }
 
+func TestRoleSchemasKeepTenantDefaultsSeparateFromParticipantRoles(t *testing.T) {
+	doc := generatedDocument()
+
+	membership := mapValue(t, doc.Components.Schemas["CreateMembershipRequest"])
+	membershipRole := mapValue(t, mapValue(t, membership["properties"])["role"])
+	if got, want := stringSlice(t, membershipRole["enum"]), []string{"owner", "collaborator", "observer"}; !slices.Equal(got, want) {
+		t.Fatalf("membership role enum = %v, want %v", got, want)
+	}
+
+	participantRequest := mapValue(t, doc.Components.Schemas["AdmitEpisodeParticipantRequest"])
+	participantRole := mapValue(t, mapValue(t, participantRequest["properties"])["role"])
+	if _, exists := participantRole["enum"]; exists {
+		t.Fatalf("participant role schema = %#v, want customer-defined string without enum", participantRole)
+	}
+
+	participantLifecycle := mapValue(t, doc.Components.Schemas["ParticipantLifecycle"])
+	participant := mapValue(t, mapValue(t, participantLifecycle["properties"])["participant"])
+	lifecycleRole := mapValue(t, mapValue(t, participant["properties"])["role"])
+	if _, exists := lifecycleRole["enum"]; exists {
+		t.Fatalf("participant lifecycle role schema = %#v, want customer-defined string without enum", lifecycleRole)
+	}
+}
+
 func TestErrorCodesPreserveNounConditionWireNames(t *testing.T) {
 	codes := errorCodes([]httpapi.APIError{
 		{Status: http.StatusBadRequest, Code: "space.invalid_id"},

@@ -41,7 +41,7 @@ await client.join({
 ```
 
 `getAccess` receives `reason: "join" | "refresh" | "retry"`. `Connection`
-uses it for pre-join freshness, scheduled refresh, wake revalidation, and one
+uses it for Entrance freshness, scheduled refresh, wake revalidation, and one
 refresh-and-retry after an access rejection. Keep the callback available for
 the full lifetime of the client.
 

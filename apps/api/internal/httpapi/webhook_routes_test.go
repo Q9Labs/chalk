@@ -121,8 +121,8 @@ func TestWebhookRoutesRequireAuthenticationAndAdminAuthorization(t *testing.T) {
 				return authorization.ErrForbidden
 			}},
 			{name: "under role", authorize: func(_ context.Context, _ authentication.Principal, _ utilities.ID, permission authorization.TenantPermission) error {
-				if permission.MinimumRole != memberships.RoleAdmin {
-					t.Fatalf("minimum role = %q, want admin", permission.MinimumRole)
+				if permission.MinimumRole != memberships.RoleCollaborator {
+					t.Fatalf("minimum role = %q, want collaborator", permission.MinimumRole)
 				}
 				return authorization.ErrForbidden
 			}},
