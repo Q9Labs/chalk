@@ -6,16 +6,16 @@ import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
 import { clearJoinContext, getBrokerUrl, getMobileDebugContext, parseUrlLike, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
 import { MobileMeetingScreen } from "./src/meeting/MobileMeetingScreen";
-import { MobileWhiteboardPlayground } from "./src/meeting/MobileWhiteboardPlayground";
-import { shouldShowWhiteboardRendererPlayground } from "./src/meeting/mobile-whiteboard-playground-policy";
 import { HomeScreen } from "./src/screens/HomeScreen";
+import { OnboardingScreen } from "./src/screens/OnboardingScreen";
+import { loadOnboardingState, resolveOnboardingLaunchSurface } from "./src/screens/onboarding-store";
 
 export default function App(): React.JSX.Element {
   const brokerUrl = useMemo(() => getBrokerUrl(), []);
@@ -23,8 +23,9 @@ export default function App(): React.JSX.Element {
   const diagnosticsEnabled = diagnosticsMode.enabled;
   const [route, setRoute] = useState<MobileRoute>({ kind: "home" });
   const [isBooting, setIsBooting] = useState(true);
+  const [onboardingStatus, setOnboardingStatus] = useState<"loading" | "required" | "complete">("loading");
+  const [defaultDisplayName, setDefaultDisplayName] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const [whiteboardPlaygroundOpen, setWhiteboardPlaygroundOpen] = useState(false);
   const diagnosticsSessionRef = useRef<ChalkSessionStore | null>(null);
   const lastJoinErrorRef = useRef<string | null>(null);
 
@@ -43,7 +44,7 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     if (!diagnosticsEnabled) return;
-    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "lobby" ? `Meeting: ${route.roomId}` : undefined);
+    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "lobby" ? `Space route: ${route.roomId}` : undefined);
   }, [diagnosticsEnabled, route]);
 
   useEffect(() => {
@@ -62,6 +63,22 @@ export default function App(): React.JSX.Element {
     return () => {
       mounted = false;
       subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    void loadOnboardingState()
+      .then((state) => {
+        if (!mounted) return;
+        setDefaultDisplayName(state.displayName);
+        setOnboardingStatus(resolveOnboardingLaunchSurface(state) === "home" ? "complete" : "required");
+      })
+      .catch(() => {
+        if (mounted) setOnboardingStatus("required");
+      });
+    return () => {
+      mounted = false;
     };
   }, []);
 
@@ -124,37 +141,31 @@ export default function App(): React.JSX.Element {
     await syncStaticDiagnostics();
   }, [brokerUrl, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
 
-  const showWhiteboardPlaygroundEntry = shouldShowWhiteboardRendererPlayground({
-    isDevRuntime: __DEV__,
-    routeKind: route.kind,
-  });
+  const showDeveloperControls = onboardingStatus === "complete";
 
   return (
     <SafeAreaProvider>
       <View style={styles.appShell}>
-        <StatusBar style="light" />
-        {whiteboardPlaygroundOpen ? (
-          <MobileWhiteboardPlayground onClose={() => setWhiteboardPlaygroundOpen(false)} />
-        ) : (
-          renderContent({
-            brokerUrl,
-            handleConferenceDiagnostics,
-            isBooting,
-            onClose: goHome,
-            onDiagnosticsFailure: openDiagnosticsForFailure,
-            onNavigate: setRoute,
-            onSessionChange: (session) => {
-              diagnosticsSessionRef.current = session;
-            },
-            route,
-          })
-        )}
-        {showWhiteboardPlaygroundEntry && !whiteboardPlaygroundOpen ? (
-          <Pressable accessibilityRole="button" onPress={() => setWhiteboardPlaygroundOpen(true)} style={({ pressed }) => [styles.whiteboardPlaygroundButton, pressed && styles.whiteboardPlaygroundButtonPressed]}>
-            <Text style={styles.whiteboardPlaygroundButtonText}>Whiteboard renderer playground (local only)</Text>
-          </Pressable>
-        ) : null}
-        {diagnosticsEnabled ? (
+        <StatusBar backgroundColor={Theme.colors.background} style="dark" />
+        {renderContent({
+          brokerUrl,
+          defaultDisplayName,
+          handleConferenceDiagnostics,
+          isBooting,
+          onboardingStatus,
+          onClose: goHome,
+          onDiagnosticsFailure: openDiagnosticsForFailure,
+          onNavigate: setRoute,
+          onOnboardingComplete: (displayName) => {
+            setDefaultDisplayName(displayName || null);
+            setOnboardingStatus("complete");
+          },
+          onSessionChange: (session) => {
+            diagnosticsSessionRef.current = session;
+          },
+          route,
+        })}
+        {diagnosticsEnabled && showDeveloperControls ? (
           <>
             <Pressable hitSlop={16} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
               <HugeiconsIcon color={Theme.colors.primary} icon={Bug02Icon} size={18} />
@@ -169,28 +180,35 @@ export default function App(): React.JSX.Element {
 
 function renderContent({
   brokerUrl,
+  defaultDisplayName,
   handleConferenceDiagnostics,
   isBooting,
+  onboardingStatus,
   onClose,
   onDiagnosticsFailure,
   onNavigate,
+  onOnboardingComplete,
   onSessionChange,
   route,
 }: {
   readonly brokerUrl: string;
+  readonly defaultDisplayName: string | null;
   readonly handleConferenceDiagnostics: (snapshot: VideoConferenceDiagnosticsSnapshot) => void;
   readonly isBooting: boolean;
+  readonly onboardingStatus: "loading" | "required" | "complete";
   readonly onClose: () => Promise<void>;
   readonly onDiagnosticsFailure: (source: string, message: string) => void;
   readonly onNavigate: (route: LobbyRoute) => void;
+  readonly onOnboardingComplete: (displayName: string) => void;
   readonly onSessionChange: (session: ChalkSessionStore | null) => void;
   readonly route: MobileRoute;
 }): ReactElement {
-  if (isBooting) return <AppBootstrapScreen label="Starting Chalk..." />;
+  if (isBooting || onboardingStatus === "loading") return <AppBootstrapScreen label="Starting Chalk…" />;
+  if (onboardingStatus === "required") return <OnboardingScreen onComplete={onOnboardingComplete} />;
   if (route.kind === "home") {
     return <HomeScreen onDiagnosticsFailure={onDiagnosticsFailure} onNavigate={onNavigate} />;
   }
-  return <MobileMeetingScreen brokerUrl={brokerUrl} onClose={onClose} onDiagnosticsChange={handleConferenceDiagnostics} onDiagnosticsError={(error) => onDiagnosticsFailure("conference-error", error.message)} onSessionChange={onSessionChange} route={route} />;
+  return <MobileMeetingScreen brokerUrl={brokerUrl} defaultDisplayName={defaultDisplayName} onClose={onClose} onDiagnosticsChange={handleConferenceDiagnostics} onDiagnosticsError={(error) => onDiagnosticsFailure("conference-error", error.message)} onSessionChange={onSessionChange} route={route} />;
 }
 
 const styles = StyleSheet.create({
@@ -208,17 +226,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.colors.border,
   },
-  whiteboardPlaygroundButton: {
-    position: "absolute",
-    left: 16,
-    bottom: 24,
-    borderRadius: Theme.radius.full,
-    backgroundColor: Theme.colors.card,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
-  },
-  whiteboardPlaygroundButtonPressed: { opacity: 0.72 },
-  whiteboardPlaygroundButtonText: { ...Theme.typography.meta, color: Theme.colors.foreground },
 });

@@ -22,8 +22,10 @@ describe("createExpoConfig", () => {
     expect(config.expo.ios.associatedDomains).toEqual(["applinks:chalkmeet.com", "applinks:chalk.q9labs.ai"]);
     expect(config.expo.scheme).toBe("chalk");
     expect(config.expo.splash.image).toBe("./assets/splash-logo.png");
-    expect(config.expo.splash.backgroundColor).toBe("#0b0c14");
-    expect(config.expo.android.adaptiveIcon.backgroundColor).toBe("#0b0c14");
+    expect(config.expo.splash.backgroundColor).toBe("#F7F6F2");
+    expect(config.expo.android.adaptiveIcon.backgroundColor).toBe("#030303");
+    expect(config.expo.android.adaptiveIcon.foregroundImage).toBe("./assets/adaptive-icon.png");
+    expect(config.expo.ios.infoPlist.NSCameraUsageDescription).toContain("in a Space");
     expect(config.expo.android.intentFilters?.[0]?.data).toEqual([
       { scheme: "https", host: "chalkmeet.com", pathPrefix: "/j/" },
       { scheme: "https", host: "chalkmeet.com", path: "/room" },

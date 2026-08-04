@@ -24,6 +24,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Redesigned the React Native mobile experience around the Chalk Light system,
+  with first-run onboarding, a new Spaces home, a responsive Entrance, polished
+  live Space controls and progressive sheets, reduced-motion-aware transitions,
+  and the current gradient Chalk launcher icon.
 - Added independently composable palette and texture options to the React
   `ConferenceView` and `VideoConference`, including seven paired light and dark
   color families plus clean, paper, and slate materials. Appearance settings now

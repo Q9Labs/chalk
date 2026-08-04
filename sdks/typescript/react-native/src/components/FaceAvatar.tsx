@@ -1,9 +1,8 @@
-import { getParticipantAvatarRecipe } from "../ui/participant-avatar";
+import { getParticipantAvatarRecipe, getParticipantInitials } from "../ui/participant-avatar";
 import type { ParticipantGradientPreference } from "../ui/native-types";
-import { FacehashNative } from "@q9labsai/facehash/react-native";
-import { memo, useMemo, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
-import { GradientSurface } from "./GradientSurface";
+import { memo, useEffect, useMemo, useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
+import { Theme } from "../ui/theme";
 
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type AvatarStatus = "online" | "away" | "busy" | "offline";
@@ -18,10 +17,10 @@ const sizeMap: Record<AvatarSize, { size: number }> = {
 };
 
 const statusColorMap: Record<AvatarStatus, string> = {
-  online: "#22c55e",
-  away: "#f59e0b",
-  busy: "#ef4444",
-  offline: "#6b7280",
+  online: Theme.colors.success,
+  away: Theme.colors.warning,
+  busy: Theme.colors.error,
+  offline: Theme.colors.ink3,
 };
 
 export interface FaceAvatarProps {
@@ -34,9 +33,13 @@ export interface FaceAvatarProps {
   textSize?: number;
 }
 
-function FaceAvatarBase({ name, src, size = "md", status, gradientPreference, audioLevel = 0 }: FaceAvatarProps): React.JSX.Element {
+function FaceAvatarBase({ name, src, size = "md", status, gradientPreference, audioLevel = 0, textSize }: FaceAvatarProps): React.JSX.Element {
   const [imageError, setImageError] = useState(false);
   const hasUploadedImage = Boolean(src) && !imageError;
+
+  useEffect(() => {
+    setImageError(false);
+  }, [name, src]);
 
   const { pxSize } = useMemo(() => {
     if (typeof size === "number") {
@@ -47,6 +50,7 @@ function FaceAvatarBase({ name, src, size = "md", status, gradientPreference, au
   }, [size]);
 
   const avatarRecipe = useMemo(() => getParticipantAvatarRecipe(name || "unknown", gradientPreference), [gradientPreference, name]);
+  const initials = useMemo(() => getParticipantInitials(name), [name]);
 
   const wrapperStyle = useMemo(
     () => ({
@@ -72,14 +76,13 @@ function FaceAvatarBase({ name, src, size = "md", status, gradientPreference, au
     <View style={[styles.wrapper, wrapperStyle]}>
       <View style={[styles.avatar, avatarStyle]}>
         {hasUploadedImage ? (
-          <Image source={{ uri: src }} style={{ width: pxSize, height: pxSize, borderRadius: pxSize / 2 }} onError={() => setImageError(true)} />
+          <Image source={{ uri: src }} style={avatarStyle} onError={() => setImageError(true)} />
         ) : (
-          <>
-            <GradientSurface variant="avatar" participantId={name} gradientPreference={gradientPreference} borderRadius={pxSize / 2} />
-            <View style={StyleSheet.absoluteFillObject}>
-              <FacehashNative colors={avatarRecipe.facehashColors} enableBlink interactive name={name || "guest"} size={pxSize} testID="native-facehash" />
-            </View>
-          </>
+          <View style={[StyleSheet.absoluteFillObject, styles.initialsAvatar, { backgroundColor: avatarRecipe.colors.primary }]}>
+            <Text allowFontScaling={false} style={[styles.initials, { fontSize: textSize ?? Math.max(12, Math.round(pxSize * 0.34)) }]} testID="avatar-initials">
+              {initials}
+            </Text>
+          </View>
         )}
       </View>
       {status && (
@@ -92,7 +95,7 @@ function FaceAvatarBase({ name, src, size = "md", status, gradientPreference, au
               borderRadius: statusSize / 2,
               backgroundColor: statusColorMap[status],
               borderWidth: 2,
-              borderColor: "#000000",
+              borderColor: Theme.colors.surface,
             },
           ]}
         />
@@ -108,6 +111,16 @@ const styles = StyleSheet.create({
   },
   avatar: {
     overflow: "hidden",
+  },
+  initialsAvatar: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initials: {
+    color: Theme.colors.surface,
+    fontWeight: "600",
+    includeFontPadding: false,
+    textAlign: "center",
   },
   statusIndicator: {
     position: "absolute",

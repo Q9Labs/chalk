@@ -32,7 +32,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       splash: {
         image: "./assets/splash-logo.png",
         resizeMode: "contain",
-        backgroundColor: "#0b0c14",
+        backgroundColor: "#F7F6F2",
       },
       ios: {
         jsEngine: "jsc",
@@ -45,8 +45,8 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         },
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
-          NSCameraUsageDescription: "Chalk uses your camera so participants can see you during meetings.",
-          NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you during meetings.",
+          NSCameraUsageDescription: "Chalk uses your camera so Participants can see you in a Space.",
+          NSMicrophoneUsageDescription: "Chalk uses your microphone so Participants can hear you in a Space.",
           RTCAppScreenSharingExtension: "ai.q9labs.chalk.mobile.screenshare",
           UIBackgroundModes: ["audio", "voip"],
         },
@@ -55,8 +55,8 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         package: "ai.q9labs.chalk.mobile",
         versionCode: 28,
         adaptiveIcon: {
-          foregroundImage: "./assets/icon.png",
-          backgroundColor: "#0b0c14",
+          foregroundImage: "./assets/adaptive-icon.png",
+          backgroundColor: "#030303",
         },
         intentFilters: [
           {

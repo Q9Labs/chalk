@@ -43,6 +43,6 @@ describe("useConferenceViewPanels", () => {
     panels.openPanel("participants");
     expect(panels.openPanel).toBeTypeOf("function");
     panels.handleLeave();
-    expect(alert.alert).toHaveBeenCalledWith("Leave meeting?", "Choose how you want to leave.", expect.any(Array));
+    expect(alert.alert).toHaveBeenCalledWith("Leave Space?", "Choose how you want to leave this live Episode.", expect.any(Array));
   });
 });

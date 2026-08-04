@@ -18,9 +18,9 @@ describe("JoinFailedScreen", () => {
     const actionRow = children[3];
     const actions = Children.toArray(actionRow.props.children) as ReactElement[];
 
-    expect(children[0]?.props.children).toBe("Join failed");
+    expect(children[0]?.props.children).toBe("Couldn't enter");
     expect(children[1]?.props.children).toBe("Design review");
     expect(children[2]?.props.children).toBe("Sync unavailable");
-    expect(actions.map((action) => action.props.accessibilityLabel)).toEqual(["Retry joining", "Return home"]);
+    expect(actions.map((action) => action.props.accessibilityLabel)).toEqual(["Try entering the Space again", "Return home"]);
   });
 });

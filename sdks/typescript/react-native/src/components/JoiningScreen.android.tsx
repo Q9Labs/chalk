@@ -5,25 +5,16 @@ import type { JoiningScreenProps } from "./JoiningScreen";
 import { ChalkLogoElements } from "./ChalkLogoElements";
 import { createNativeJoiningLoadingAnimation, type NativeJoiningLoadingAnimation } from "./native-joining-loading-animation";
 
-export function JoiningScreenAndroid({ message = "Preparing meeting..." }: JoiningScreenProps): React.JSX.Element {
+export function JoiningScreenAndroid({ message = "Preparing Space…" }: JoiningScreenProps): React.JSX.Element {
   const animationRef = useRef<NativeJoiningLoadingAnimation | null>(null);
   const animation = animationRef.current ?? (animationRef.current = createNativeJoiningLoadingAnimation());
 
   return (
     <View style={styles.screen}>
       <Animated.View ref={animation.ref} style={[styles.content, { opacity: animation.fadeAnim }]}>
-        <View style={styles.illustrationFrame}>
-          <Animated.View
-            style={[
-              styles.glow,
-              {
-                transform: [{ scale: animation.pulseAnim }],
-                opacity: animation.pulseAnim.interpolate({ inputRange: [1, 1.1], outputRange: [0.12, 0.18] }),
-              },
-            ]}
-          />
+        <Animated.View style={[styles.illustrationFrame, { transform: [{ scale: animation.pulseAnim }] }]}>
           <ChalkLogoElements size={100} />
-        </View>
+        </Animated.View>
         <Text style={styles.brand}>chalk</Text>
         <Text style={styles.label}>{message}</Text>
       </Animated.View>
@@ -48,21 +39,15 @@ const styles = StyleSheet.create({
   illustrationFrame: {
     width: 180,
     height: 180,
-    borderRadius: 90,
-    backgroundColor: "rgba(27, 182, 166, 0.04)",
+    borderRadius: Theme.radius.lg,
+    backgroundColor: Theme.colors.surface,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "rgba(27, 182, 166, 0.08)",
-  },
-  glow: {
-    position: "absolute",
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: Theme.colors.primary,
+    borderColor: Theme.colors.border,
+    ...Theme.shadows.sm,
   },
   brand: {
     fontSize: 32,

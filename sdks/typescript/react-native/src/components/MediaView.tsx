@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
     height: "100%",
     overflow: "hidden",
     backgroundColor: Theme.colors.stageBackground,
-    borderRadius: 24,
+    borderRadius: Theme.radius.md,
     position: "relative",
   },
   fallback: {

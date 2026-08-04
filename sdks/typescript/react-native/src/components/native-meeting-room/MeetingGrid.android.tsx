@@ -60,9 +60,9 @@ export function MeetingGridAndroid({ participants, gridPages }: MeetingGridProps
   if (participants.length === 0) {
     return (
       <View ref={clampPageRef} style={styles.emptyState}>
-        <Text style={styles.emptyEyebrow}>Meeting ready</Text>
+        <Text style={styles.emptyEyebrow}>Space ready</Text>
         <Text style={styles.emptyTitle}>You're the first one here</Text>
-        <Text style={styles.emptyCopy}>Others will appear when they join. Invite someone to get started.</Text>
+        <Text style={styles.emptyCopy}>Other Participants will appear here when they join.</Text>
       </View>
     );
   }
@@ -211,17 +211,14 @@ const styles = StyleSheet.create({
   },
   singleTile: {
     flex: 1,
-    padding: 10,
   },
   compactTwoUp: {
     flex: 1,
-    gap: 10,
-    padding: 10,
+    gap: Theme.spacing.md,
   },
   compactThree: {
     flex: 1,
-    gap: 10,
-    padding: 10,
+    gap: Theme.spacing.md,
   },
   compactThreeTop: {
     flex: 3,
@@ -231,13 +228,12 @@ const styles = StyleSheet.create({
   compactThreeBottom: {
     flex: 2,
     flexDirection: "row",
-    gap: 10,
+    gap: Theme.spacing.md,
     minHeight: 0,
   },
   compactFour: {
     flex: 1,
-    gap: 10,
-    padding: 10,
+    gap: Theme.spacing.md,
   },
   pagedContainer: {
     flex: 1,
@@ -249,14 +245,13 @@ const styles = StyleSheet.create({
   },
   gridContainer: {
     flex: 1,
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: Theme.spacing.md,
+    paddingVertical: Theme.spacing.sm,
   },
   gridRow: {
     flex: 1,
     flexDirection: "row",
-    gap: 10,
+    gap: Theme.spacing.md,
   },
   gridTile: {
     flex: 1,
@@ -271,42 +266,36 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: Theme.colors.lineStrong,
   },
   pageIndicatorActive: {
     width: 18,
-    backgroundColor: Theme.colors.primary,
+    backgroundColor: Theme.colors.chalkBlue,
   },
   tile: {
-    borderRadius: 32,
+    borderRadius: Theme.radius.md,
     overflow: "hidden",
-    backgroundColor: "#0d0d0f",
+    backgroundColor: Theme.colors.tileBackground,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: Theme.colors.border,
     flex: 1,
   },
   identityPuck: {
     position: "absolute",
-    left: 16,
-    bottom: 16,
+    left: Theme.spacing.sm,
+    bottom: Theme.spacing.sm,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(10, 10, 12, 0.82)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 5,
     gap: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
   },
   participantName: {
     color: "white",
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
     maxWidth: 140,
   },
   muteDot: {

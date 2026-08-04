@@ -116,13 +116,13 @@ export function useConferenceViewPanels({ roomName, meetingLink, canWhiteboard, 
         onPress: () => void run(onEndForAll),
       });
     }
-    Alert.alert("Leave meeting?", "Choose how you want to leave.", buttons);
+    Alert.alert("Leave Space?", "Choose how you want to leave this live Episode.", buttons);
   }, [isHost, onEndForAll, onLeave, run]);
 
   const handleInviteParticipants = useCallback(() => {
     void run(async () => {
-      if (!meetingLink) throw new Error("The meeting invite is not ready yet.");
-      await Share.share({ message: meetingLink, title: roomName || room.roomId || "Chalk meeting", url: meetingLink });
+      if (!meetingLink) throw new Error("The Space invite is not ready yet.");
+      await Share.share({ message: meetingLink, title: roomName || room.roomId || "Chalk Space", url: meetingLink });
     });
   }, [meetingLink, room.roomId, roomName, run]);
 

@@ -17,7 +17,7 @@ export function EndScreenAndroid({ data, onRejoin, onGoHome }: EndScreenProps): 
           <View style={styles.iconCircle}>
             <HugeiconsIcon icon={CheckmarkCircle01Icon} size={40} color={Theme.colors.success} />
           </View>
-          <Text style={styles.eyebrow}>Meeting Complete</Text>
+          <Text style={styles.eyebrow}>Episode complete</Text>
           <Text style={styles.title} numberOfLines={2}>
             {data.roomName}
           </Text>
@@ -31,7 +31,7 @@ export function EndScreenAndroid({ data, onRejoin, onGoHome }: EndScreenProps): 
 
         <View style={styles.actions}>
           <Pressable onPress={onRejoin} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Rejoin Meeting</Text>
+            <Text style={styles.primaryButtonText}>Return to Space</Text>
             <HugeiconsIcon icon={ArrowRight01Icon} size={20} color="white" />
           </Pressable>
 
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    backgroundColor: Theme.colors.successBackground,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
@@ -110,19 +110,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    color: "white",
+    color: Theme.colors.foreground,
     fontSize: 32,
     fontWeight: "800",
     textAlign: "center",
     letterSpacing: -0.5,
   },
   statsContainer: {
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 24,
+    backgroundColor: Theme.colors.surface,
+    borderRadius: Theme.radius.lg,
     padding: 24,
     gap: 20,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: Theme.colors.border,
     marginBottom: 40,
   },
   statRow: {
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: "rgba(27, 182, 166, 0.1)",
+    backgroundColor: Theme.colors.washBlue,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statValue: {
-    color: "white",
+    color: Theme.colors.foreground,
     fontSize: 17,
     fontWeight: "700",
   },
@@ -157,17 +157,12 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: Theme.colors.primary,
-    height: 64,
-    borderRadius: 20,
+    height: 54,
+    borderRadius: Theme.radius.sm,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
   },
   primaryButtonText: {
     color: "white",
@@ -175,8 +170,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   secondaryButton: {
-    height: 60,
-    borderRadius: 20,
+    height: 50,
+    borderRadius: Theme.radius.sm,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

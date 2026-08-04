@@ -33,10 +33,10 @@
     "waiting-room": 0
   },
   "apps/mobile": {
-    "meeting": 155,
+    "meeting": 123,
     "conference": 15,
     "videoconference": 7,
-    "room": 56,
+    "room": 49,
     "session": 126,
     "attendee": 0,
     "waitingroom": 0,
@@ -77,11 +77,11 @@
     "waiting-room": 0
   },
   "sdks/typescript/react-native": {
-    "meeting": 260,
+    "meeting": 238,
     "conference": 455,
     "videoconference": 86,
-    "room": 429,
-    "session": 716,
+    "room": 413,
+    "session": 707,
     "attendee": 0,
     "waitingroom": 0,
     "waiting_room": 0,

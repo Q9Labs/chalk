@@ -14,12 +14,13 @@ export interface MeetingScreenProps {
   readonly route: LobbyRoute;
   readonly onClose: () => Promise<void>;
   readonly brokerUrl: string;
+  readonly defaultDisplayName?: string | null;
   readonly onDiagnosticsChange?: (snapshot: VideoConferenceDiagnosticsSnapshot) => void;
   readonly onDiagnosticsError?: (error: { message: string }) => void;
   readonly onSessionChange?: (session: ChalkSessionStore | null) => void;
 }
 
-export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsChange, onDiagnosticsError, onSessionChange }: MeetingScreenProps): React.JSX.Element {
+export function MobileMeetingScreen({ route, onClose, brokerUrl, defaultDisplayName, onDiagnosticsChange, onDiagnosticsError, onSessionChange }: MeetingScreenProps): React.JSX.Element {
   const telemetry = useMemo(() => createMobileTelemetry({ enabled: true }), []);
   const journeyRef = useRef<TelemetryJourney | undefined>(undefined);
   const clientSessionRef = useRef<ClientSession | null>(null);
@@ -148,7 +149,7 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
       roomName={route.roomName}
       role={route.role}
       telemetry={journey}
-      userName={route.role === "host" ? "Host" : "Guest"}
+      userName={defaultDisplayName || "Guest"}
     />
   );
 }

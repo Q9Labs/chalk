@@ -1,4 +1,5 @@
-import { Alert, StyleSheet, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { AccessibilityInfo, Alert, Animated, Easing, Platform, SafeAreaView, StyleSheet } from "react-native";
 
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
 import { ReactionPicker } from "./ReactionPicker";
@@ -10,9 +11,11 @@ import { MeetingStageAndroid } from "./native-meeting-room/MeetingStage.android"
 import { MeetingTopBarAndroid } from "./native-meeting-room/MeetingTopBar.android";
 import { MeetingWhiteboardSurface } from "./native-meeting-room/MeetingWhiteboardSurface";
 import { useConferenceViewController } from "./native-meeting-room/useConferenceViewController";
+import { Theme } from "../ui/theme";
 
 export function ConferenceViewShared(props: ConferenceViewProps): React.JSX.Element {
   const controller = useConferenceViewController(props);
+  const stageProgress = useRef(new Animated.Value(0)).current;
   const toggleMedia = (action: () => void) => {
     if (controller.simulatorMediaDisabled) {
       Alert.alert("Media unavailable", getIosSimulatorMediaMessage());
@@ -21,10 +24,32 @@ export function ConferenceViewShared(props: ConferenceViewProps): React.JSX.Elem
     action();
   };
 
+  useEffect(() => {
+    let mounted = true;
+    let animation: Animated.CompositeAnimation | undefined;
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduceMotion) => {
+      if (!mounted || reduceMotion) {
+        stageProgress.setValue(1);
+        return;
+      }
+      animation = Animated.timing(stageProgress, {
+        toValue: 1,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      });
+      animation.start();
+    });
+    return () => {
+      mounted = false;
+      animation?.stop();
+    };
+  }, [stageProgress]);
+
   return (
-    <View style={styles.room}>
+    <SafeAreaView style={styles.room}>
       <MeetingTopBarAndroid formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
-      <View style={styles.stage}>
+      <Animated.View style={[styles.stage, { opacity: stageProgress, transform: [{ translateY: stageProgress.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }]}>
         {controller.whiteboard.isOpen ? (
           <MeetingWhiteboardSurface whiteboard={controller.whiteboard} />
         ) : controller.derived.isStageMode ? (
@@ -51,12 +76,13 @@ export function ConferenceViewShared(props: ConferenceViewProps): React.JSX.Elem
         ) : (
           <MeetingGridAndroid gridPages={controller.derived.gridPages} participants={controller.derived.allParticipants} />
         )}
-      </View>
+      </Animated.View>
       <MeetingBottomDockAndroid
         isCameraOff={controller.isCameraOff}
         isMuted={controller.isMuted}
         onLeave={controller.handleLeave}
         onOpenChat={controller.canChat ? () => controller.openPanel("chat") : undefined}
+        onOpenParticipants={controller.canParticipants ? () => controller.openPanel("participants") : undefined}
         onOpenMore={() => controller.setActionsOpen(true)}
         onToggleAudio={() => toggleMedia(controller.toggleAudio)}
         onToggleVideo={() => toggleMedia(controller.toggleVideo)}
@@ -66,11 +92,11 @@ export function ConferenceViewShared(props: ConferenceViewProps): React.JSX.Elem
       <MeetingActionMenu controller={controller} />
       <MeetingPanel controller={controller} />
       <ReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={(reaction) => selectReaction(controller, reaction)} />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  room: { flex: 1, backgroundColor: "#000000" },
-  stage: { flex: 1, width: "100%", overflow: "hidden", justifyContent: "center" },
+  room: { backgroundColor: Theme.colors.background, flex: 1, paddingBottom: Platform.OS === "android" ? Theme.spacing.sm : 0, paddingTop: Platform.OS === "android" ? Theme.spacing["2xl"] : 0 },
+  stage: { flex: 1, width: "100%", overflow: "hidden", justifyContent: "center", padding: Theme.spacing.md },
 });

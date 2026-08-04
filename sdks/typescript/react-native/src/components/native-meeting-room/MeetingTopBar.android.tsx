@@ -1,7 +1,9 @@
+import SecurityCheckIcon from "@hugeicons/core-free-icons/dist/esm/SecurityCheckIcon";
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../../ui/theme";
+import { ChalkLogoElements } from "../ChalkLogoElements";
 
 export interface MeetingTopBarProps {
   roomName: string;
@@ -13,17 +15,22 @@ export function MeetingTopBarAndroid({ roomName, participantCount, formattedDura
   return (
     <View style={styles.topBar}>
       <View style={styles.topBarLeft}>
-        <View style={styles.connectionDot} />
+        <ChalkLogoElements size={28} />
+        <View style={styles.divider} />
         <Text style={styles.topBarRoomName} numberOfLines={1}>
           {roomName}
         </Text>
-        <View style={styles.timerBadge}>
-          <Text style={styles.timerText}>{formattedDuration}</Text>
-        </View>
+        <Text style={styles.timerText}>{formattedDuration}</Text>
       </View>
       <View style={styles.topBarRight}>
-        <HugeiconsIcon icon={UserGroupIcon} size={14} color="#ffffff" />
-        <Text style={styles.topBarCount}>{participantCount}</Text>
+        <View style={styles.secureState}>
+          <HugeiconsIcon color={Theme.colors.success} icon={SecurityCheckIcon} size={16} />
+          <Text style={styles.secureText}>Secure</Text>
+        </View>
+        <View style={styles.participantCount}>
+          <HugeiconsIcon color={Theme.colors.foreground} icon={UserGroupIcon} size={16} />
+          <Text style={styles.topBarCount}>{participantCount}</Text>
+        </View>
       </View>
     </View>
   );
@@ -33,60 +40,68 @@ export { MeetingTopBarAndroid as MeetingTopBar };
 
 const styles = StyleSheet.create({
   topBar: {
-    paddingTop: Platform.OS === "ios" ? 54 : 42,
-    paddingBottom: 14,
-    paddingHorizontal: 24,
-    backgroundColor: "#000000",
+    paddingTop: Platform.OS === "ios" ? 48 : 30,
+    paddingBottom: 12,
+    paddingHorizontal: Theme.spacing.lg,
+    backgroundColor: Theme.colors.surfaceMuted,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: Theme.colors.border,
     width: "100%",
   },
   topBarLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: Theme.spacing.sm,
     flex: 1,
+    minWidth: 0,
   },
-  connectionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Theme.colors.success,
+  divider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Theme.colors.border,
+    marginHorizontal: 2,
   },
   topBarRoomName: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "800",
+    color: Theme.colors.foreground,
+    fontSize: 15,
+    fontWeight: "700",
     letterSpacing: -0.2,
-  },
-  timerBadge: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 4,
+    flexShrink: 1,
   },
   timerText: {
-    color: "rgba(255,255,255,0.6)",
+    color: Theme.colors.inkTertiary,
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     fontVariant: ["tabular-nums"],
+    flexShrink: 0,
   },
   topBarRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    gap: Theme.spacing.sm,
+    marginLeft: Theme.spacing.sm,
+  },
+  secureState: { flexDirection: "row", alignItems: "center", gap: 4 },
+  secureText: { color: Theme.colors.success, fontSize: 11, fontWeight: "600" },
+  participantCount: {
+    minWidth: 40,
+    height: 36,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: Theme.radius.sm,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    backgroundColor: Theme.colors.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
   },
   topBarCount: {
-    color: "#ffffff",
+    color: Theme.colors.foreground,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
   },
 });

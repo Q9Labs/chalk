@@ -55,7 +55,7 @@ export function MeetingWhiteboardSurface({ whiteboard }: MeetingWhiteboardSurfac
       onError={handleError}
       onMetric={handleMetric}
       style={styles.surface}
-      theme="dark"
+      theme="light"
       transport={whiteboard.transport}
       {...(whiteboard.traceparent ? { traceparent: whiteboard.traceparent } : {})}
       {...(whiteboard.tracestate ? { tracestate: whiteboard.tracestate } : {})}

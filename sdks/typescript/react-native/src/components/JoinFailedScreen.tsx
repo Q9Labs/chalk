@@ -12,12 +12,12 @@ export interface JoinFailedScreenProps {
 export function JoinFailedScreen({ roomName, message, onRetry, onHome }: JoinFailedScreenProps): React.JSX.Element {
   return (
     <ScrollView contentContainerStyle={styles.errorScreen}>
-      <Text style={styles.eyebrow}>Join failed</Text>
+      <Text style={styles.eyebrow}>Couldn't enter</Text>
       <Text style={styles.title}>{roomName}</Text>
       <Text style={styles.body}>{message}</Text>
       <View style={styles.actionRow}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Retry joining" onPress={onRetry} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Retry</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Try entering the Space again" onPress={onRetry} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Try again</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Return home" onPress={onHome} style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>Home</Text>
@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Theme.radius.lg,
+    borderRadius: Theme.radius.sm,
     backgroundColor: Theme.colors.primary,
     paddingHorizontal: Theme.spacing.xl,
     paddingVertical: Theme.spacing.md,
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Theme.radius.lg,
+    borderRadius: Theme.radius.sm,
     borderWidth: 1,
     borderColor: Theme.colors.border,
     backgroundColor: Theme.colors.secondary,

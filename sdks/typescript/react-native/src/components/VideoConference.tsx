@@ -68,7 +68,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
   const simulatorMediaDisabled = isIosSimulator();
   const defaultSettings = useMemo(
     (): PreJoinSettings => ({
-      displayName: props.initialJoinSettings?.displayName?.trim() || props.userName?.trim() || (props.role === "host" ? "Host" : "Guest"),
+      displayName: props.initialJoinSettings?.displayName?.trim() || props.userName?.trim() || "Guest",
       microphoneEnabled: simulatorMediaDisabled ? false : (props.initialJoinSettings?.microphoneEnabled ?? false),
       cameraEnabled: simulatorMediaDisabled ? false : (props.initialJoinSettings?.cameraEnabled ?? false),
     }),
@@ -148,7 +148,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
   }
 
   if (phase === "joining" && !session) {
-    return <JoiningScreen displayName={settings.displayName} message={`Preparing ${props.roomName || props.roomId}`} supportingMessages={["Opening the meeting...", "Preparing participant access...", "Connecting to Chalk..."]} />;
+    return <JoiningScreen displayName={settings.displayName} message={`Preparing ${props.roomName || props.roomId}`} supportingMessages={["Opening the Space...", "Preparing Participant access...", "Connecting to Chalk..."]} />;
   }
 
   if (phase === "end" && endData) {
@@ -233,11 +233,11 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   }, [finish, session]);
 
   if (props.phase === "joining") {
-    return <JoiningScreen displayName={props.settings.displayName} message={`Joining ${props.roomName || props.roomId}`} supportingMessages={["Preparing your media...", "Syncing room settings...", "Picking the fastest route...", "Opening the room..."]} />;
+    return <JoiningScreen displayName={props.settings.displayName} message={`Entering ${props.roomName || props.roomId}`} supportingMessages={["Preparing your media...", "Syncing Space settings...", "Picking the fastest route...", "Opening the Space..."]} />;
   }
 
   if (snapshot.state === "failed") {
-    return <JoinFailedScreen roomName={props.roomName || props.roomId} message={snapshot.failure?.message ?? props.joinError ?? "Unable to join the meeting."} onRetry={() => void session.join().catch(props.onJoinFailure)} onHome={() => void session.leave().finally(() => props.onClose?.())} />;
+    return <JoinFailedScreen roomName={props.roomName || props.roomId} message={snapshot.failure?.message ?? props.joinError ?? "Unable to enter the Space."} onRetry={() => void session.join().catch(props.onJoinFailure)} onHome={() => void session.leave().finally(() => props.onClose?.())} />;
   }
 
   return (

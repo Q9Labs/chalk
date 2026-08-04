@@ -64,7 +64,7 @@ export function useConferenceViewController({ roomName, meetingLink, features, o
 
   return {
     simulatorMediaDisabled: isIosSimulator(),
-    roomName: roomName || room.roomName || "Meeting",
+    roomName: roomName || room.roomName || "Space",
     isHost: capabilities.isHost,
     panel: roomPanels.panel,
     selfName: roomParticipants.selfName,

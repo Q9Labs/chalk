@@ -52,13 +52,13 @@ function InfoChip({ icon, label, align = "left" }: { icon: React.ComponentProps<
 function NativeWhiteboardPlaceholder({ whiteboard }: Pick<MeetingStageProps, "whiteboard">): React.JSX.Element {
   return (
     <StageSurface>
-      <GradientSurface angle="diagonal" borderRadius={24} opacity={0.6} participantId="whiteboard-stage" />
+      <GradientSurface angle="diagonal" borderRadius={Theme.radius.md} opacity={0.6} participantId="whiteboard-stage" />
       <View style={styles.placeholderCenter}>
         <View style={styles.presentingIconCircle}>
-          <HugeiconsIcon color={Theme.colors.primary} icon={Presentation01Icon} size={32} />
+          <HugeiconsIcon color={Theme.colors.chalkBlue} icon={Presentation01Icon} size={30} />
         </View>
-        <Text style={styles.placeholderEyebrow}>SHARED CANVAS</Text>
-        <Text style={styles.placeholderTitle}>Whiteboard active</Text>
+        <Text style={styles.placeholderEyebrow}>SHARED BOARD</Text>
+        <Text style={styles.placeholderTitle}>Board active</Text>
         <Text style={styles.placeholderCopy}>{whiteboard.canDraw ? "Collaborative board is open." : "Board is open in view-only mode."}</Text>
       </View>
     </StageSurface>
@@ -68,10 +68,10 @@ function NativeWhiteboardPlaceholder({ whiteboard }: Pick<MeetingStageProps, "wh
 function NativeLocalSharePlaceholder(): React.JSX.Element {
   return (
     <StageSurface>
-      <GradientSurface angle="diagonal" borderRadius={24} opacity={0.4} participantId="local-presenting" />
+      <GradientSurface angle="diagonal" borderRadius={Theme.radius.md} opacity={0.4} participantId="local-presenting" />
       <View style={styles.placeholderCenter}>
         <View style={styles.presentingIconCircle}>
-          <HugeiconsIcon color={Theme.colors.primary} icon={ComputerScreenShareIcon} size={32} />
+          <HugeiconsIcon color={Theme.colors.chalkBlue} icon={ComputerScreenShareIcon} size={30} />
         </View>
         <Text style={styles.placeholderEyebrow}>YOU ARE PRESENTING</Text>
         <Text style={styles.placeholderTitle}>Screen sharing active</Text>
@@ -103,7 +103,7 @@ function NativeParticipantStrip({ participants, vertical }: { participants: read
   );
 }
 
-export function MeetingStageAndroid({ layoutMode, isCompactViewport, primaryContent, screenSharer, screenShareTrack, stripParticipants, isHost, selfName, isMuted, handRaised, raisedHandCount, activeReactions, whiteboard }: MeetingStageProps): React.JSX.Element {
+export function MeetingStageAndroid({ layoutMode, isCompactViewport, primaryContent, screenSharer, screenShareTrack, stripParticipants, selfName, isMuted, handRaised, raisedHandCount, activeReactions, whiteboard }: MeetingStageProps): React.JSX.Element {
   const verticalStrip = !isCompactViewport && layoutMode === "focus";
 
   let primaryStage: React.JSX.Element;
@@ -154,7 +154,7 @@ export function MeetingStageAndroid({ layoutMode, isCompactViewport, primaryCont
 
         <View style={styles.identityBar}>
           <Text style={styles.nameLabel} numberOfLines={1}>
-            {isHost ? "Host" : selfName}
+            {selfName}
           </Text>
           {isMuted ? (
             <View style={styles.muteIndicator}>
@@ -184,7 +184,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
-    paddingHorizontal: 12,
   },
   containerVertical: {
     flexDirection: "row",
@@ -199,13 +198,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.colors.stageBackground,
     width: "100%",
-    borderRadius: 24,
+    borderRadius: Theme.radius.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
     overflow: "hidden",
   },
   splitStage: {
     flex: 1,
     flexDirection: "row",
-    gap: 10,
+    gap: Theme.spacing.md,
   },
   splitPanel: {
     flex: 1,
@@ -218,32 +219,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   presentingIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Theme.colors.surface,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: Theme.colors.lineStrong,
     marginBottom: 8,
   },
   placeholderEyebrow: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.colors.primary,
+    color: Theme.colors.chalkBlue,
     letterSpacing: 1,
   },
   placeholderTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#ffffff",
+    color: Theme.colors.foreground,
     textAlign: "center",
     letterSpacing: -0.5,
   },
   placeholderCopy: {
     fontSize: 14,
-    color: "rgba(255,255,255,0.5)",
+    color: Theme.colors.mutedForeground,
     textAlign: "center",
     lineHeight: 20,
     paddingHorizontal: 20,
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: Theme.radius.full,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
@@ -284,7 +285,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 999,
+    borderRadius: Theme.radius.full,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
@@ -301,17 +302,15 @@ const styles = StyleSheet.create({
   },
   identityBar: {
     position: "absolute",
-    left: 20,
-    bottom: 20,
+    left: Theme.spacing.md,
+    bottom: Theme.spacing.md,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 5,
     maxWidth: "70%",
   },
   nameLabel: {
@@ -323,7 +322,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#ea4335",
+    backgroundColor: Theme.colors.error,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -346,7 +345,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   stripContent: {
-    gap: 10,
+    gap: Theme.spacing.md,
   },
   stripHorizontal: {
     paddingBottom: 8,
@@ -356,7 +355,7 @@ const styles = StyleSheet.create({
   },
   stripTile: {
     overflow: "hidden",
-    borderRadius: 18,
+    borderRadius: Theme.radius.md,
   },
   stripTileHorizontal: {
     width: 132,
