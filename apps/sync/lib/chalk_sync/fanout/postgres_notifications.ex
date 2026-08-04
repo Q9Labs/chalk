@@ -117,7 +117,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
   defp parse_payload(payload) do
     with [tenant_id, space_id, episode_id, encoded_revision] <- String.split(payload, ":"),
          {:ok, _tenant} <- UUID.dump(tenant_id),
-         {:ok, _room} <- UUID.dump(space_id),
+         {:ok, _space} <- UUID.dump(space_id),
          {:ok, _episode} <- UUID.dump(episode_id),
          {revision, ""} when revision >= 0 <- Integer.parse(encoded_revision) do
       {:ok,

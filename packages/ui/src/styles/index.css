@@ -133,10 +133,10 @@
   --chalk-ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Soft watercolor washes used by the paper surfaces. */
-  --chalk-lobby-gradient: radial-gradient(560px 340px at 88% 6%, rgba(127, 192, 216, 0.16), transparent 70%), radial-gradient(640px 380px at 6% 96%, rgba(127, 192, 216, 0.12), transparent 70%), #ffffff;
-  --chalk-lobby-glass-bg: rgba(255, 255, 255, 0.88);
-  --chalk-lobby-glass-border: #e7e9ec;
-  --chalk-lobby-avatar-glow: rgba(127, 192, 216, 0.3);
+  --chalk-entrance-gradient: radial-gradient(560px 340px at 88% 6%, rgba(127, 192, 216, 0.16), transparent 70%), radial-gradient(640px 380px at 6% 96%, rgba(127, 192, 216, 0.12), transparent 70%), #ffffff;
+  --chalk-entrance-glass-bg: rgba(255, 255, 255, 0.88);
+  --chalk-entrance-glass-border: #e7e9ec;
+  --chalk-entrance-avatar-glow: rgba(127, 192, 216, 0.3);
 
   /* Composable product appearance: palette and material are independent. */
   --chalk-app-canvas: #f7f6f2;
@@ -235,11 +235,11 @@
   /* Tile gradient: Dark mode - clean fade to black */
   --chalk-tile-gradient-end: #000000;
 
-  /* Lobby-specific - Dark mode */
-  --chalk-lobby-gradient: radial-gradient(560px 340px at 88% 6%, rgba(85, 170, 201, 0.18), transparent 70%), #1b2023;
-  --chalk-lobby-glass-bg: rgba(0, 0, 0, 0.6);
-  --chalk-lobby-glass-border: rgba(255, 255, 255, 0.12);
-  --chalk-lobby-avatar-glow: rgba(85, 170, 201, 0.5);
+  /* Entrance-specific - Dark mode */
+  --chalk-entrance-gradient: radial-gradient(560px 340px at 88% 6%, rgba(85, 170, 201, 0.18), transparent 70%), #1b2023;
+  --chalk-entrance-glass-bg: rgba(0, 0, 0, 0.6);
+  --chalk-entrance-glass-border: rgba(255, 255, 255, 0.12);
+  --chalk-entrance-avatar-glow: rgba(85, 170, 201, 0.5);
 }
 
 [data-chalk][data-chalk-palette="warm-charcoal"] {
@@ -551,7 +551,7 @@
    Animations
    ============================================================================= */
 
-@keyframes chalk-meeting-exit {
+@keyframes chalk-episode-exit {
   from {
     opacity: 1;
     transform: scale(1);
@@ -566,7 +566,7 @@
 }
 
 .chalk-animate-exit {
-  animation: chalk-meeting-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: chalk-episode-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes chalk-scale-in {

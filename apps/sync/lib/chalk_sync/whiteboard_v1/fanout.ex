@@ -143,7 +143,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
          "episode_id" => episode_id
        }) do
     with {:ok, _tenant} <- UUID.dump(tenant_id),
-         {:ok, _room} <- UUID.dump(space_id),
+         {:ok, _space} <- UUID.dump(space_id),
          {:ok, _episode} <- UUID.dump(episode_id) do
       {:ok,
        %EpisodeKey{

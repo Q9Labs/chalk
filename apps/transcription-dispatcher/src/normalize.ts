@@ -5,9 +5,9 @@ type CueTurn = Pick<SpeakerTurn, "identity" | "trackClass"> & Partial<Pick<Speak
 
 export function normalizeTranscriptChunk(input: {
   jobId: string;
-  sessionId: string;
-  meetingStartMs: number;
-  meetingEndMs: number;
+  episodeId: string;
+  episodeStartMs: number;
+  episodeEndMs: number;
   manifest: SpeakerTurnManifest;
   provider: ProviderResult;
   attempt: number;
@@ -15,11 +15,11 @@ export function normalizeTranscriptChunk(input: {
   sourceIdentity?: ManifestIdentity;
   sourceTrackClass?: TrackClass;
 }): NormalizedTranscriptDocument {
-  if (!Number.isInteger(input.meetingStartMs) || !Number.isInteger(input.meetingEndMs) || input.meetingEndMs <= input.meetingStartMs) throw new AssignmentError("chunk meeting range is invalid");
+  if (!Number.isInteger(input.episodeStartMs) || !Number.isInteger(input.episodeEndMs) || input.episodeEndMs <= input.episodeStartMs) throw new AssignmentError("chunk episode range is invalid");
   if (!Number.isInteger(input.measuredAudioMs) || input.measuredAudioMs < 0) throw new AssignmentError("measured duration is invalid");
   const cues = input.provider.segments.flatMap((segment) => {
-    const startMs = Math.max(input.meetingStartMs, input.meetingStartMs + Math.round(segment.startSeconds * 1_000));
-    const endMs = Math.min(input.meetingEndMs, input.meetingStartMs + Math.round(segment.endSeconds * 1_000));
+    const startMs = Math.max(input.episodeStartMs, input.episodeStartMs + Math.round(segment.startSeconds * 1_000));
+    const endMs = Math.min(input.episodeEndMs, input.episodeStartMs + Math.round(segment.endSeconds * 1_000));
     if (endMs <= startMs) return [];
     const allMatches = input.manifest.turns.filter((turn) => turn.endMs > startMs && turn.startMs < endMs);
     const authoritative = allMatches.filter((turn) => isAuthoritativeTurn(turn, input.sourceIdentity, input.sourceTrackClass));
@@ -31,7 +31,7 @@ export function normalizeTranscriptChunk(input: {
   return {
     schemaVersion: "transcript.v1",
     jobId: input.jobId,
-    sessionId: input.sessionId,
+    episodeId: input.episodeId,
     cues,
     ...(input.provider.language === undefined ? {} : { language: input.provider.language }),
     provider: input.provider.provider,
@@ -48,8 +48,8 @@ function cuesFromWords(segment: ProviderResult["segments"][number], segmentStart
   const words = input.provider.words?.filter((word) => word.endSeconds > segment.startSeconds && word.startSeconds < segment.endSeconds) ?? [];
   const groups: Array<{ turn: SpeakerTurn | undefined; words: typeof words }> = [];
   for (const word of words) {
-    const wordStartMs = input.meetingStartMs + Math.round(word.startSeconds * 1_000);
-    const wordEndMs = input.meetingStartMs + Math.round(word.endSeconds * 1_000);
+    const wordStartMs = input.episodeStartMs + Math.round(word.startSeconds * 1_000);
+    const wordEndMs = input.episodeStartMs + Math.round(word.endSeconds * 1_000);
     const matches = authoritative.filter((turn) => turn.endMs > wordStartMs && turn.startMs < wordEndMs);
     if (matches.length > 1) throw new AssignmentError("word crosses multiple source track epochs");
     const turn = matches[0];
@@ -62,8 +62,8 @@ function cuesFromWords(segment: ProviderResult["segments"][number], segmentStart
     const first = group.words[0];
     const last = group.words.at(-1);
     if (!first || !last) throw new AssignmentError("provider word timings are invalid");
-    const startMs = Math.max(segmentStartMs, input.meetingStartMs + Math.round(first.startSeconds * 1_000));
-    const endMs = Math.min(segmentEndMs, input.meetingStartMs + Math.round(last.endSeconds * 1_000));
+    const startMs = Math.max(segmentStartMs, input.episodeStartMs + Math.round(first.startSeconds * 1_000));
+    const endMs = Math.min(segmentEndMs, input.episodeStartMs + Math.round(last.endSeconds * 1_000));
     if (endMs <= startMs) throw new AssignmentError("provider word timing is invalid");
     if (!group.turn && input.sourceIdentity && input.sourceIdentity.kind !== "unknown") throw new AssignmentError("word has no unambiguous source turn");
     const cueTurn = group.turn;

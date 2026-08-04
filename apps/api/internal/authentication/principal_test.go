@@ -17,10 +17,10 @@ func TestPrincipalHasScope(t *testing.T) {
 	}
 
 	if !principal.HasScope(authentication.ScopeSpacesWrite) {
-		t.Fatal("principal missing rooms write scope")
+		t.Fatal("principal missing spaces write scope")
 	}
 	if principal.HasScope(authentication.ScopeSpacesDelete) {
-		t.Fatal("principal unexpectedly has rooms delete scope")
+		t.Fatal("principal unexpectedly has spaces delete scope")
 	}
 }
 

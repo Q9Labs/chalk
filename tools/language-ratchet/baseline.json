@@ -1,11 +1,12 @@
 {
   "apps/api": {
-    "meeting": 53,
+    "meeting": 51,
     "conference": 0,
     "videoconference": 0,
     "room": 33,
     "session": 1085,
     "attendee": 0,
+    "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -14,9 +15,10 @@
     "meeting": 1,
     "conference": 0,
     "videoconference": 0,
-    "room": 6,
+    "room": 0,
     "session": 2,
     "attendee": 0,
+    "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -28,6 +30,7 @@
     "room": 116,
     "session": 180,
     "attendee": 0,
+    "lobby": 5,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -39,6 +42,7 @@
     "room": 56,
     "session": 115,
     "attendee": 0,
+    "lobby": 36,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -50,6 +54,7 @@
     "room": 0,
     "session": 0,
     "attendee": 0,
+    "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -61,6 +66,7 @@
     "room": 3,
     "session": 61,
     "attendee": 0,
+    "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -72,6 +78,7 @@
     "room": 77,
     "session": 285,
     "attendee": 0,
+    "lobby": 2,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -83,17 +90,19 @@
     "room": 387,
     "session": 499,
     "attendee": 0,
+    "lobby": 16,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
   },
   "packages": {
-    "meeting": 2,
+    "meeting": 0,
     "conference": 0,
     "videoconference": 0,
     "room": 0,
     "session": 0,
     "attendee": 0,
+    "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -105,6 +114,7 @@
     "room": 54,
     "session": 104,
     "attendee": 0,
+    "lobby": 0,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
@@ -116,6 +126,7 @@
     "room": 18,
     "session": 8,
     "attendee": 1,
+    "lobby": 3,
     "waitingroom": 3,
     "waiting_room": 3,
     "waiting-room": 3
@@ -127,17 +138,19 @@
     "room": 40,
     "session": 67,
     "attendee": 0,
+    "lobby": 7,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 0
   },
   "root": {
-    "meeting": 136,
+    "meeting": 36,
     "conference": 7,
     "videoconference": 0,
     "room": 53,
-    "session": 119,
+    "session": 56,
     "attendee": 0,
+    "lobby": 19,
     "waitingroom": 0,
     "waiting_room": 0,
     "waiting-room": 1

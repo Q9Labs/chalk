@@ -84,8 +84,8 @@ export interface ChunkAssignment {
   inputContentType: string;
   inputSizeBytes: number;
   inputSha256: string;
-  meetingStartMs: number;
-  meetingEndMs: number;
+  episodeStartMs: number;
+  episodeEndMs: number;
   sourceIdentity: ManifestIdentity;
   sourceTrackClass: TrackClass;
 }
@@ -100,7 +100,7 @@ export interface ManifestAssignment {
 
 export interface TranscriptionAssignment {
   jobId: string;
-  sessionId: string;
+  episodeId: string;
   attempt: number;
   leaseToken: string;
   leaseExpiresAt: string;
@@ -128,15 +128,15 @@ export interface FinalizeChunkAssignment {
   inputContentType: "application/json";
   inputSizeBytes: number;
   inputSha256: string;
-  meetingStartMs: number;
-  meetingEndMs: number;
+  episodeStartMs: number;
+  episodeEndMs: number;
 }
 
 /** Fenced work to compose accepted chunk results into one final transcript. */
 export interface FinalizeAssignment {
   jobId: string;
   transcriptId: string;
-  sessionId?: string;
+  episodeId: string;
   attempt: number;
   leaseToken: string;
   leaseExpiresAt: string;
@@ -174,7 +174,7 @@ export interface NormalizedCue {
 export interface NormalizedTranscriptDocument {
   schemaVersion: "transcript.v1";
   jobId: string;
-  sessionId: string;
+  episodeId: string;
   cues: NormalizedCue[];
   language?: string;
   provider: TranscriptProviderSummary;

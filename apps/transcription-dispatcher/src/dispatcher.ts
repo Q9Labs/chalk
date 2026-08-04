@@ -99,7 +99,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
   const logger = dependencies.logger ?? DEFAULT_LOGGER;
   try {
     await dependencies.control.heartbeat({ assignment, context: journey });
-    const chunkDurationSeconds = (assignment.chunk.meetingEndMs - assignment.chunk.meetingStartMs) / 1_000;
+    const chunkDurationSeconds = (assignment.chunk.episodeEndMs - assignment.chunk.episodeStartMs) / 1_000;
     if (chunkDurationSeconds > dependencies.config.provider.maxAudioSeconds) throw new Error("audio duration bound exceeded");
     const audio = await fetchAudioChunk({
       fetch: dependencies.fetch,
@@ -137,13 +137,13 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     });
     const document = normalizeTranscriptChunk({
       jobId: assignment.jobId,
-      sessionId: assignment.sessionId,
-      meetingStartMs: assignment.chunk.meetingStartMs,
-      meetingEndMs: assignment.chunk.meetingEndMs,
+      episodeId: assignment.episodeId,
+      episodeStartMs: assignment.chunk.episodeStartMs,
+      episodeEndMs: assignment.chunk.episodeEndMs,
       manifest,
       provider: transcription.result,
       attempt: assignment.attempt,
-      measuredAudioMs: assignment.chunk.meetingEndMs - assignment.chunk.meetingStartMs,
+      measuredAudioMs: assignment.chunk.episodeEndMs - assignment.chunk.episodeStartMs,
       sourceIdentity: assignment.chunk.sourceIdentity,
       sourceTrackClass: assignment.chunk.sourceTrackClass,
     });
@@ -170,7 +170,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
       ...(transcription.result.executionIdentity === undefined ? {} : { executionIdentity: transcription.result.executionIdentity }),
       ...(transcription.result.providerIdentity?.requestId === undefined ? {} : { providerRequestId: transcription.result.providerIdentity.requestId }),
       ...(transcription.result.language === undefined ? {} : { language: transcription.result.language }),
-      measuredAudioMs: assignment.chunk.meetingEndMs - assignment.chunk.meetingStartMs,
+      measuredAudioMs: assignment.chunk.episodeEndMs - assignment.chunk.episodeStartMs,
       ...(transcription.result.durationMs === undefined ? {} : { providerObservedDurationMs: transcription.result.durationMs }),
       ...(transcription.result.quality === undefined ? {} : { quality: transcription.result.quality }),
       context: journey,

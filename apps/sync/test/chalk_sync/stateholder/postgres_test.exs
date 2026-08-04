@@ -257,16 +257,16 @@ defmodule ChalkSync.Stateholder.PostgresTest do
   test "does not leak a receipt through a mismatched Space authority key", %{fixture: fixture} do
     %Identity{} = identity = hd(fixture.identities)
     %EpisodeKey{} = episode = identity.episode
-    command = command("room_context_cmd1", :raise_hand)
+    command = command("space_context_cmd1", :raise_hand)
     assert {:ok, %{result: :committed}} = Postgres.decide_command(identity, command)
 
-    wrong_room = %Identity{
+    wrong_space = %Identity{
       identity
       | episode: %EpisodeKey{episode | space_id: UUID.generate()}
     }
 
-    assert Postgres.resolve_receipt(wrong_room, command) == :not_found
-    assert {:retryable, _reason} = Postgres.decide_command(wrong_room, command)
+    assert Postgres.resolve_receipt(wrong_space, command) == :not_found
+    assert {:retryable, _reason} = Postgres.decide_command(wrong_space, command)
   end
 
   test "persists participant-inactive rejection when the participant row is absent", %{

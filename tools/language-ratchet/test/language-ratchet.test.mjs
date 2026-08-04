@@ -14,7 +14,7 @@ function countsForSurface(surface, text) {
 }
 
 test("counts banned terms across prose and identifier boundaries", () => {
-  const counts = countText("RoomSession roomId room_sessions waiting-room waiting_room waitingroom VideoConference videoconference");
+  const counts = countText("RoomSession roomId room_sessions Lobby waiting-room waiting_room waitingroom VideoConference videoconference");
 
   assert.equal(counts.room, 5);
   assert.equal(counts.session, 1);
@@ -24,6 +24,7 @@ test("counts banned terms across prose and identifier boundaries", () => {
   assert.equal(counts.conference, 1);
   assert.equal(counts.videoconference, 2);
   assert.equal(counts.meeting, 0);
+  assert.equal(counts.lobby, 1);
   assert.deepEqual(Object.keys(counts), TERMS);
 });
 
