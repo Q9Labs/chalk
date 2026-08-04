@@ -36,10 +36,10 @@ const sizeMap = {
 };
 
 const statusColorMap = {
-  online: "var(--success)",
-  away: "var(--warning)",
-  busy: "var(--destructive)",
-  offline: "var(--muted-foreground)",
+  online: "var(--chalk-positive)",
+  away: "var(--chalk-accent)",
+  busy: "var(--chalk-danger)",
+  offline: "var(--chalk-muted-text)",
 };
 
 export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference, generated = true }: AvatarProps) => {
@@ -63,13 +63,13 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
           <GeneratedFacehash name={name || "guest"} size={pxSize} variant="flat" interactive={false} intensity3d="subtle" enableBlink colors={[...avatarRecipe.facehashColors]} />
         </div>
       ) : (
-        <div className="flex h-full w-full items-center justify-center rounded-full font-medium !text-[#fff]" style={{ fontSize, backgroundColor: avatarRecipe.color }}>
+        <div className="flex h-full w-full items-center justify-center rounded-full font-medium !text-[var(--chalk-accent-text)]" style={{ fontSize, backgroundColor: avatarRecipe.color }}>
           {avatarRecipe.initials}
         </div>
       )}
       {status && (
         <span
-          className="absolute bottom-0 right-0 block rounded-full ring-2 ring-background"
+          className="absolute bottom-0 right-0 block rounded-full ring-2 ring-[var(--chalk-surface)]"
           style={{
             width: Math.max(8, pxSize / 4),
             height: Math.max(8, pxSize / 4),

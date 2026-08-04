@@ -6,8 +6,8 @@ export type AndroidConnectionServiceDisconnectReason = "canceled" | "error" | "l
 
 export interface AndroidConnectionServiceCall {
   callId: string;
-  roomId: string;
-  roomName: string;
+  spaceId: string;
+  spaceName: string;
   displayName: string;
   hasVideo?: boolean;
 }

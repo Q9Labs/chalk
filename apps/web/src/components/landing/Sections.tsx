@@ -18,13 +18,13 @@ const STATS = [
 
 const STACK = [
   {
-    title: "Meeting surfaces",
-    body: "React and React Native components for lobby, room, participants, chat, and controls.",
+    title: "Space surfaces",
+    body: "React and React Native components for Entrance, Space, Participants, chat, and controls.",
     tone: "blue",
   },
   {
     title: "Portable core",
-    body: "Session, admission, roles, sync, telemetry, and provider-neutral media boundaries.",
+    body: "Episode, admission, roles, sync, telemetry, and provider-neutral media boundaries.",
     tone: "green",
   },
   {
@@ -39,8 +39,8 @@ export function FrontDoors() {
     <section className="section product-story" id="sdk">
       <div className="container">
         <header className="section-head section-head-wide">
-          <h2>One meeting core. Use it your way.</h2>
-          <p>The TypeScript client owns the hard realtime boundaries. React and React Native turn that core into product-ready meeting surfaces.</p>
+          <h2>One real-time core. Use it your way.</h2>
+          <p>The TypeScript client owns the hard real-time boundaries. React and React Native turn that core into product-ready Space surfaces.</p>
         </header>
 
         <div className="entry-list">
@@ -48,15 +48,15 @@ export function FrontDoors() {
             <span className="entry-index">01</span>
             <div>
               <h3>Start with the SDKs</h3>
-              <p>Bring Chalk into an existing product and keep control of identity, room creation, and the surrounding experience.</p>
+              <p>Bring Chalk into an existing product and keep control of identity, Space creation, and the surrounding experience.</p>
             </div>
             <code>pnpm add @q9labsai/chalk-react</code>
           </article>
           <article className="entry-row entry-row-green">
             <span className="entry-index">02</span>
             <div>
-              <h3>Shape the whole room</h3>
-              <p>Compose the lobby, video stage, participant tools, whiteboard, chat, and diagnostics without replacing the meeting core.</p>
+              <h3>Shape the whole Space</h3>
+              <p>Compose Entrance, the media stage, Participant tools, whiteboard, chat, and diagnostics without replacing the real-time core.</p>
             </div>
             <a href="/sdk-preview">Open the component preview</a>
           </article>

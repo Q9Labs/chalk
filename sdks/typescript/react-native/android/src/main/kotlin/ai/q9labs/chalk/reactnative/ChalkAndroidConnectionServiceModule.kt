@@ -56,13 +56,13 @@ class ChalkAndroidConnectionServiceModule(
     }
 
     val callId = options.getNullableString("callId")
-    val roomId = options.getNullableString("roomId")
-    val roomName = options.getNullableString("roomName")
+    val spaceId = options.getNullableString("spaceId")
+    val spaceName = options.getNullableString("spaceName")
     val displayName = options.getNullableString("displayName")
     val hasVideo = options.getNullableBoolean("hasVideo") ?: true
 
-    if (callId.isNullOrBlank() || roomId.isNullOrBlank() || roomName.isNullOrBlank() || displayName.isNullOrBlank()) {
-      promise.reject("E_CONNECTION_SERVICE_INVALID_CALL", "Android ConnectionService requires callId, roomId, roomName, and displayName.")
+    if (callId.isNullOrBlank() || spaceId.isNullOrBlank() || spaceName.isNullOrBlank() || displayName.isNullOrBlank()) {
+      promise.reject("E_CONNECTION_SERVICE_INVALID_CALL", "Android ConnectionService requires callId, spaceId, spaceName, and displayName.")
       return
     }
 
@@ -77,8 +77,8 @@ class ChalkAndroidConnectionServiceModule(
     ChalkConnectionRegistry.rememberPendingCall(
       ChalkConnectionRegistry.ChalkCallSpec(
         callId = callId,
-        roomId = roomId,
-        roomName = roomName,
+        spaceId = spaceId,
+        spaceName = spaceName,
         displayName = displayName,
         hasVideo = hasVideo,
       ),
@@ -92,13 +92,13 @@ class ChalkAndroidConnectionServiceModule(
           if (hasVideo) VideoProfile.STATE_BIDIRECTIONAL else VideoProfile.STATE_AUDIO_ONLY,
         )
         putString(ChalkConnectionRegistry.extraCallId, callId)
-        putString(ChalkConnectionRegistry.extraRoomId, roomId)
-        putString(ChalkConnectionRegistry.extraRoomName, roomName)
+        putString(ChalkConnectionRegistry.extraSpaceId, spaceId)
+        putString(ChalkConnectionRegistry.extraSpaceName, spaceName)
         putString(ChalkConnectionRegistry.extraDisplayName, displayName)
         putBoolean(ChalkConnectionRegistry.extraHasVideo, hasVideo)
       }
 
-    val uriToken = roomId.lowercase().replace("[^a-z0-9._-]".toRegex(), "-")
+    val uriToken = spaceId.lowercase().replace("[^a-z0-9._-]".toRegex(), "-")
 
     try {
       telecomManager.placeCall(Uri.fromParts(PhoneAccount.SCHEME_SIP, "$uriToken@chalkmeet.local", null), extras)

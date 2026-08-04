@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { ChatMessage } from "../../client-compat";
+import type { ChatMessage } from "@q9labsai/chalk-client";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

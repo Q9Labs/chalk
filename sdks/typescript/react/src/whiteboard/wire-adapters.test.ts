@@ -1,4 +1,4 @@
-import type { ChalkWhiteboardV1Element, ChalkWhiteboardV1Event } from "../client-compat";
+import type { ChalkWhiteboardV1Element, ChalkWhiteboardV1Event } from "@q9labsai/chalk-client";
 import type { WhiteboardWireElement } from "@q9labsai/chalk-whiteboard";
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +11,7 @@ const wireElement: WhiteboardWireElement = {
   version_nonce: 8,
   index: "a1",
   is_deleted: false,
-  payload: { text: "Hello", x: 12, tags: ["meeting"] },
+  payload: { text: "Hello", x: 12, tags: ["space"] },
 };
 
 const clientElement: ChalkWhiteboardV1Element = {
@@ -21,7 +21,7 @@ const clientElement: ChalkWhiteboardV1Element = {
   versionNonce: 8,
   index: "a1",
   isDeleted: false,
-  payload: { text: "Hello", x: 12, tags: ["meeting"] },
+  payload: { text: "Hello", x: 12, tags: ["space"] },
 };
 
 describe("whiteboard wire adapters", () => {

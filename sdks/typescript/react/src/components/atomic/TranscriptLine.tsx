@@ -13,7 +13,6 @@ export interface TranscriptLineProps {
   showTimestamp?: boolean;
   showSpeaker?: boolean;
   speakerColor?: string;
-  isHost?: boolean;
   isLocalParticipant?: boolean;
   showAvatar?: boolean;
   showHeader?: boolean;
@@ -44,7 +43,7 @@ function highlightText(text: string, query: string): React.ReactNode {
   return parts.map((part, i) => {
     if (part.toLowerCase() === query.toLowerCase()) {
       return (
-        <mark key={i} className="bg-warning/40 text-foreground rounded-sm px-0.5">
+        <mark key={i} className="bg-[var(--chalk-danger-surface)] text-[var(--chalk-text)] rounded-sm px-0.5">
           {part}
         </mark>
       );
@@ -54,7 +53,7 @@ function highlightText(text: string, query: string): React.ReactNode {
 }
 
 export const TranscriptLine = React.memo<TranscriptLineProps>(
-  ({ speaker, speakerId, text, timestamp, isInterim = false, confidence = 1.0, showTimestamp = true, showSpeaker = true, speakerColor, isHost = false, isLocalParticipant = false, showAvatar = true, showHeader = true, searchHighlight, isCurrentMatch = false, className }) => {
+  ({ speaker, speakerId, text, timestamp, isInterim = false, confidence = 1.0, showTimestamp = true, showSpeaker = true, speakerColor, isLocalParticipant = false, showAvatar = true, showHeader = true, searchHighlight, isCurrentMatch = false, className }) => {
     const prefersReducedMotion = usePrefersReducedMotion();
     const [copied, setCopied] = useState(false);
 
@@ -86,7 +85,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
 
     return (
       <div
-        className={cn("group relative rounded-lg transition-all duration-200", !prefersReducedMotion && !isInterim && "chalk-animate-transcript-in", isCurrentMatch && "ring-2 ring-primary/50 bg-primary/5", className)}
+        className={cn("group relative rounded-lg transition-all duration-200", !prefersReducedMotion && !isInterim && "chalk-animate-transcript-in", isCurrentMatch && "ring-2 ring-[var(--chalk-focus)] bg-[var(--chalk-accent)]", className)}
         style={speakerColor ? ({ "--primary": speakerColor } as React.CSSProperties) : undefined}
         role="listitem"
         aria-live={isInterim ? "off" : "polite"}
@@ -96,7 +95,7 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
         <div className="flex gap-3 p-3">
           {/* Avatar */}
           {showAvatar && showSpeaker && showHeader && (
-            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white" style={{ backgroundColor: "var(--primary)" }} aria-hidden="true">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-[var(--chalk-accent-text)]" style={{ backgroundColor: "var(--chalk-accent)" }} aria-hidden="true">
               {initials}
             </div>
           )}
@@ -105,17 +104,15 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
             {/* Header row: Name, Role Badge, Timestamp */}
             {showHeader && showSpeaker && (
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-semibold text-sm truncate" style={{ color: speakerColor || "var(--foreground)" }}>
+                <span className="font-semibold text-sm truncate" style={{ color: speakerColor || "var(--chalk-text)" }}>
                   {speaker}
                 </span>
 
-                {/* Role badges */}
-                {isHost && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary">Host</span>}
-                {isLocalParticipant && !isHost && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">You</span>}
+                {isLocalParticipant && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)]">You</span>}
 
                 {/* Timestamp - click to copy */}
                 {showTimestamp && (
-                  <button type="button" onClick={handleCopyTimestamp} className={cn("ml-auto text-xs transition-colors", copied ? "text-primary" : "text-muted-foreground hover:text-foreground")} title={copied ? "Copied!" : "Click to copy timestamp"}>
+                  <button type="button" onClick={handleCopyTimestamp} className={cn("ml-auto text-xs transition-colors", copied ? "text-[var(--chalk-accent)]" : "text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]")} title={copied ? "Copied!" : "Click to copy timestamp"}>
                     {copied ? "Copied!" : timeString}
                   </button>
                 )}
@@ -123,12 +120,12 @@ export const TranscriptLine = React.memo<TranscriptLineProps>(
             )}
 
             {/* Transcript text */}
-            <div className={cn("text-sm leading-relaxed break-words", isInterim ? "text-muted-foreground/70" : "text-foreground", isLowConfidence && !isInterim && "chalk-low-confidence")} title={isLowConfidence && !isInterim ? `Low confidence: ${confidencePercent}%` : undefined}>
+            <div className={cn("text-sm leading-relaxed break-words", isInterim ? "text-[var(--chalk-muted-text)]" : "text-[var(--chalk-text)]", isLowConfidence && !isInterim && "chalk-low-confidence")} title={isLowConfidence && !isInterim ? `Low confidence: ${confidencePercent}%` : undefined}>
               {renderedText}
 
               {/* Low confidence indicator */}
               {isLowConfidence && !isInterim && (
-                <span className="inline-flex items-center ml-1.5 text-warning" title={`Confidence: ${confidencePercent}%`}>
+                <span className="inline-flex items-center ml-1.5 text-[var(--chalk-danger)]" title={`Confidence: ${confidencePercent}%`}>
                   <Alert02Icon className="w-3.5 h-3.5" />
                 </span>
               )}

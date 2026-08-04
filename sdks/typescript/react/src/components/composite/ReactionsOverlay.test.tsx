@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { ActiveReaction } from "../../client-compat";
+import type { ActiveReaction } from "@q9labsai/chalk-client";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

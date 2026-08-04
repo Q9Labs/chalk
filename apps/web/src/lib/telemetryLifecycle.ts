@@ -1,4 +1,6 @@
-import type { TelemetryClient, TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
+import type { TelemetryClient } from "@q9labsai/chalk-client/telemetry";
+
+import type { WebTelemetryJourney } from "./telemetry";
 
 interface VisibilityChangeTarget {
   readonly visibilityState: DocumentVisibilityState;
@@ -17,7 +19,7 @@ export interface WebTelemetryLifecycleTargets {
 }
 
 /** Records the page journey's terminal state from browser lifecycle signals and delivers it with an unload-safe request. */
-export function installWebTelemetryLifecycle(telemetry: Pick<TelemetryClient, "flush">, journey: Pick<TelemetryJourney, "terminal">, targets: WebTelemetryLifecycleTargets = browserTelemetryLifecycleTargets()): () => void {
+export function installWebTelemetryLifecycle(telemetry: Pick<TelemetryClient, "flush">, journey: Pick<WebTelemetryJourney, "terminal">, targets: WebTelemetryLifecycleTargets = browserTelemetryLifecycleTargets()): () => void {
   let closed = false;
 
   const close = () => {

@@ -73,7 +73,7 @@ export interface ControlBarProps {
   isHandRaised?: boolean;
   isWhiteboardOpen?: boolean;
   isPictureInPictureActive?: boolean;
-  meetingDuration?: number;
+  duration?: number;
   unreadChatCount?: number;
   audioInputDevices?: readonly MediaDevice[];
   audioOutputDevices?: readonly MediaDevice[];
@@ -100,7 +100,7 @@ export interface ControlBarProps {
   onOpenDiagnostics?: () => void;
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
-  onLeave?: () => void;
+  onLeft?: () => void;
 
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
@@ -129,13 +129,13 @@ function FloatingControlBarButton({ icon, label, onClick, active = false, danger
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "chalk-textured-surface relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] transition hover:-translate-y-0.5 hover:border-[var(--chalk-app-line-strong)] hover:bg-[var(--chalk-app-control-hover)]",
-        active && "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]",
-        danger && "ml-2 border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] !text-white hover:border-[var(--chalk-app-danger-hover)] hover:bg-[var(--chalk-app-danger-hover)]",
+        "chalk-textured-surface relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] shadow-[var(--chalk-shadow)] transition hover:-translate-y-0.5 hover:border-[var(--chalk-line)] hover:bg-[var(--chalk-stage)]",
+        active && "border-[var(--chalk-line)] bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]",
+        danger && "ml-2 border-[var(--chalk-danger)] bg-[var(--chalk-danger)] !text-[var(--chalk-accent-text)] hover:border-[var(--chalk-danger)] hover:bg-[var(--chalk-danger)]",
       )}
     >
       {icon}
-      {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[#b94c4c] px-1 text-[10px] !text-[#fff]">{badge > 99 ? "99+" : badge}</span> : null}
+      {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--chalk-danger)] px-1 text-[10px] !text-[var(--chalk-accent-text)]">{badge > 99 ? "99+" : badge}</span> : null}
     </button>
   );
 }
@@ -152,7 +152,7 @@ export const ControlBar = React.memo(
     isHandRaised = false,
     isWhiteboardOpen = false,
     isPictureInPictureActive = false,
-    meetingDuration = 0,
+    duration = 0,
     unreadChatCount = 0,
     audioInputDevices,
     audioOutputDevices,
@@ -183,7 +183,7 @@ export const ControlBar = React.memo(
     onOpenDiagnostics,
     onOpenMore,
     onOpenInfo,
-    onLeave,
+    onLeft,
     participantColorSeed,
     participantGradientPreference,
 
@@ -229,9 +229,9 @@ export const ControlBar = React.memo(
     const renderButton = (type: ControlBarButtonName) => {
       switch (type) {
         case "mic":
-          return <ControlBarButton key="mic" icon={isMuted ? <MicrophoneOff01Icon className="text-[#dc2626]" /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} showLabel={showLabels} data-tour="controls-mic" />;
+          return <ControlBarButton key="mic" icon={isMuted ? <MicrophoneOff01Icon className="text-[var(--chalk-danger)]" /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} showLabel={showLabels} data-tour="controls-mic" />;
         case "video":
-          return <ControlBarButton key="video" icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[#dc2626]" />} label={isVideoEnabled ? "Stop Video" : "Start Video"} onClick={onToggleVideo} active={isVideoEnabled} showLabel={showLabels} data-tour="controls-video" />;
+          return <ControlBarButton key="video" icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[var(--chalk-danger)]" />} label={isVideoEnabled ? "Stop Video" : "Start Video"} onClick={onToggleVideo} active={isVideoEnabled} showLabel={showLabels} data-tour="controls-video" />;
         case "screenshare":
           return (
             <ControlBarButton
@@ -240,7 +240,7 @@ export const ControlBar = React.memo(
               label={isScreenSharing ? "Stop Share" : "Share Screen"}
               onClick={onToggleScreenShare}
               active={isScreenSharing}
-              activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+              activeClassName="bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]"
               showLabel={showLabels}
               data-tour="controls-screenshare"
             />
@@ -250,20 +250,35 @@ export const ControlBar = React.memo(
         case "chat":
           return (
             <div key="chat" className="relative">
-              <ControlBarButton icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} data-tour="controls-chat" />
-              {unreadChatCount > 0 && !isChatOpen && <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold text-white bg-[#dc2626] rounded-full shadow-sm">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>}
+              <ControlBarButton icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} activeClassName="bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]" showLabel={showLabels} data-tour="controls-chat" />
+              {unreadChatCount > 0 && !isChatOpen && (
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold text-[var(--chalk-accent-text)] bg-[var(--chalk-danger)] rounded-full shadow-sm">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
+              )}
             </div>
           );
         case "participants":
-          return <ControlBarButton key="participants" icon={<UserGroupIcon />} label="People" onClick={onToggleParticipants} active={isParticipantsOpen} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} data-tour="controls-participants" />;
+          return (
+            <ControlBarButton
+              key="participants"
+              icon={<UserGroupIcon />}
+              label="People"
+              onClick={onToggleParticipants}
+              active={isParticipantsOpen}
+              activeClassName="bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]"
+              showLabel={showLabels}
+              data-tour="controls-participants"
+            />
+          );
         case "transcription":
-          return <ControlBarButton key="transcription" icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} />;
+          return <ControlBarButton key="transcription" icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} activeClassName="bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]" showLabel={showLabels} />;
         case "handraise":
-          return <ControlBarButton key="handraise" icon={<HandIcon />} label={isHandRaised ? "Lower Hand" : "Raise Hand"} onClick={onToggleHandRaise} active={isHandRaised} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} />;
+          return (
+            <ControlBarButton key="handraise" icon={<HandIcon />} label={isHandRaised ? "Lower Hand" : "Raise Hand"} onClick={onToggleHandRaise} active={isHandRaised} activeClassName="bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]" showLabel={showLabels} />
+          );
         case "reactions":
           return <ControlBarButton key="reactions" icon={<SmileIcon />} label="Reactions" onClick={onOpenReactions} showLabel={showLabels} />;
         case "whiteboard":
-          return <ControlBarButton key="whiteboard" icon={<Edit02Icon />} label="Whiteboard" onClick={onToggleWhiteboard} active={isWhiteboardOpen} activeClassName="bg-primary text-primary-foreground hover:bg-primary/90" showLabel={showLabels} />;
+          return <ControlBarButton key="whiteboard" icon={<Edit02Icon />} label="Whiteboard" onClick={onToggleWhiteboard} active={isWhiteboardOpen} activeClassName="bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]" showLabel={showLabels} />;
         case "pip":
           if (!onTogglePictureInPicture) {
             return null;
@@ -281,7 +296,7 @@ export const ControlBar = React.memo(
                   : undefined
               }
               active={isPictureInPictureActive}
-              activeClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+              activeClassName="bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]"
               showLabel={showLabels}
             />
           );
@@ -299,7 +314,7 @@ export const ControlBar = React.memo(
         case "info":
           return <ControlBarButton key="info" icon={<InformationCircleIcon size={20} />} label="Info" onClick={onOpenInfo} noBorder />;
         case "thumbsup":
-          return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[#FFD700]" />} label="Reactions" onClick={onOpenReactions} />;
+          return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[var(--chalk-accent)]" />} label="Reactions" onClick={onOpenReactions} />;
         default:
           return null;
       }
@@ -315,15 +330,15 @@ export const ControlBar = React.memo(
             paddingBottom: "max(12px, env(safe-area-inset-bottom))",
           }}
           role="toolbar"
-          aria-label="Meeting controls"
+          aria-label="Space controls"
         >
           <div className="flex items-center justify-center gap-1.5 min-w-min mx-auto">
             {/* Group 1: Media Controls */}
-            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#202329] bg-[#202329] p-1 shadow-[0_5px_16px_rgba(12,14,18,0.18)]">
+            <div className="order-1 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-text)] bg-[var(--chalk-text)] p-1 shadow-[var(--chalk-shadow)]">
               <button
                 type="button"
                 onClick={onToggleMute}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-white" : "!text-[#f3a0a0]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", !isMuted ? "!text-[var(--chalk-accent-text)]" : "!text-[var(--chalk-danger-surface)]")}
                 aria-label={isMuted ? "Unmute" : "Mute"}
                 aria-pressed={!isMuted}
               >
@@ -333,7 +348,7 @@ export const ControlBar = React.memo(
               <button
                 type="button"
                 onClick={onToggleVideo}
-                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-white" : "!text-[#f3a0a0]")}
+                className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isVideoEnabled ? "!text-[var(--chalk-accent-text)]" : "!text-[var(--chalk-danger-surface)]")}
                 aria-label={isVideoEnabled ? "Stop Video" : "Start Video"}
                 aria-pressed={isVideoEnabled}
               >
@@ -342,12 +357,12 @@ export const ControlBar = React.memo(
             </div>
 
             {/* Group 2: Interactions */}
-            <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#deddd7] bg-white p-1 shadow-sm">
+            <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-1 shadow-sm">
               {buttonsToRender.includes("handraise") && onToggleHandRaise && (
                 <button
                   type="button"
                   onClick={onToggleHandRaise}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[#fceab3]" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[var(--chalk-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isHandRaised ? "bg-[var(--chalk-accent)]" : "")}
                   aria-label={isHandRaised ? "Lower hand" : "Raise hand"}
                   aria-pressed={isHandRaised}
                 >
@@ -355,7 +370,7 @@ export const ControlBar = React.memo(
                 </button>
               )}
               {buttonsToRender.includes("reactions") && onOpenReactions && (
-                <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#b18f22] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
+                <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[var(--chalk-accent)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
                   <ThumbsUpIcon className="w-5 h-5" />
                 </button>
               )}
@@ -363,7 +378,7 @@ export const ControlBar = React.memo(
                 <button
                   type="button"
                   onClick={onToggleWhiteboard}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isWhiteboardOpen ? "bg-[#eaf7fb]" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[var(--chalk-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isWhiteboardOpen ? "bg-[var(--chalk-danger-surface)]" : "")}
                   aria-label="Whiteboard"
                   aria-pressed={isWhiteboardOpen}
                 >
@@ -374,7 +389,7 @@ export const ControlBar = React.memo(
                 <button
                   type="button"
                   onClick={onToggleParticipants}
-                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isParticipantsOpen ? "bg-[#eaf7fb]" : "")}
+                  className={cn("flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[var(--chalk-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isParticipantsOpen ? "bg-[var(--chalk-danger-surface)]" : "")}
                   aria-label="People"
                   aria-pressed={isParticipantsOpen}
                 >
@@ -382,21 +397,29 @@ export const ControlBar = React.memo(
                 </button>
               )}
               {buttonsToRender.includes("chat") && onToggleChat && (
-                <button type="button" onClick={onToggleChat} className={cn("relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isChatOpen ? "bg-[#eaf7fb]" : "")} aria-label="Chat" aria-pressed={isChatOpen}>
+                <button
+                  type="button"
+                  onClick={onToggleChat}
+                  className={cn("relative flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[var(--chalk-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]", isChatOpen ? "bg-[var(--chalk-danger-surface)]" : "")}
+                  aria-label="Chat"
+                  aria-pressed={isChatOpen}
+                >
                   <Message01Icon className="w-5 h-5" />
-                  {unreadChatCount > 0 && !isChatOpen ? <span className="absolute -top-1 -right-1 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] font-semibold text-white">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span> : null}
+                  {unreadChatCount > 0 && !isChatOpen ? (
+                    <span className="absolute -top-1 -right-1 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-[var(--chalk-danger)] px-1 text-[10px] font-semibold text-[var(--chalk-accent-text)]">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
+                  ) : null}
                 </button>
               )}
             </div>
 
             {/* Group 3: More & Leave */}
-            <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[#deddd7] bg-white p-1 shadow-sm">
+            <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-1 shadow-sm">
               {buttonsToRender.includes("more") && (
-                <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[#0c0e12] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
+                <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] !text-[var(--chalk-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
                   <MoreHorizontalIcon className="w-5 h-5" />
                 </button>
               )}
-              <button type="button" onClick={onLeave} className="flex h-[44px] items-center justify-center rounded-[6px] border border-[#ef9b9b] bg-[#fdf0f0] px-4 !text-[#b94c4c] transition active:scale-95 sm:h-[46px]" aria-label="Leave meeting">
+              <button type="button" onClick={onLeft} className="flex h-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-danger-surface)] bg-[var(--chalk-danger-surface)] px-4 !text-[var(--chalk-danger)] transition active:scale-95 sm:h-[46px]" aria-label="Leave space">
                 <CallEnd01Icon className="w-5 h-5" />
               </button>
             </div>
@@ -446,7 +469,7 @@ export const ControlBar = React.memo(
 
       return (
         <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
-          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
+          <div className={cn("pointer-events-auto flex max-w-full items-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
             {buttonsToRender.includes("mic") ? (
               <DevicePopover
                 type="mic"
@@ -467,19 +490,19 @@ export const ControlBar = React.memo(
               <DevicePopover type="video" appearance="floating" isActive={isVideoEnabled} onToggle={onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={selectedVideoInput} onDeviceChange={onVideoInputChange ?? (() => {})} orientation="up" haptic="medium" />
             ) : null}
             {buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}
-            {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeave} danger /> : null}
+            {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger /> : null}
           </div>
         </div>
       );
     }
 
     return (
-      <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Meeting controls">
+      <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
         {/* Left: Timer section */}
-        <div className="flex items-center rounded-full px-5 py-2.5 bg-card border border-border shadow-md">
+        <div className="flex items-center rounded-full px-5 py-2.5 bg-[var(--chalk-surface)] border border-[var(--chalk-line)] shadow-md">
           <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-[0_0_14px_rgba(34,197,94,0.4)]" />
-            <span className="text-[14px] font-semibold tracking-wide tabular-nums text-foreground">{formatDuration(meetingDuration)}</span>
+            <div className="w-2.5 h-2.5 rounded-full bg-[var(--chalk-positive)] shadow-[0_0_14px_var(--chalk-positive)]" />
+            <span className="text-[14px] font-semibold tracking-wide tabular-nums text-[var(--chalk-text)]">{formatDuration(duration)}</span>
           </div>
         </div>
 
@@ -488,7 +511,7 @@ export const ControlBar = React.memo(
           {mediaButtons.map(renderButton)}
           {showLeave && (
             <div className="ml-2">
-              <ControlBarButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeave} danger data-tour="controls-leave" />
+              <ControlBarButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeft} danger data-tour="controls-leave" />
             </div>
           )}
         </div>

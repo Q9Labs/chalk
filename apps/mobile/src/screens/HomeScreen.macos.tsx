@@ -1,6 +1,4 @@
-import { ChalkLogoElements } from "@q9labsai/chalk-react-native";
 import { useClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/clipboard";
-import { getClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/invites";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
 import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
 import KeyboardIcon from "@hugeicons/core-free-icons/dist/esm/KeyboardIcon";
@@ -9,36 +7,36 @@ import * as Clipboard from "expo-clipboard";
 import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BrandMark } from "../components/BrandMark";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
-import { canCreateMeeting, createMeetingLobbyRoute, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
+import { enterLocalSpaceRoute, getClipboardSpaceSuggestion, parseSpaceLink, resolveSpaceInvite, type SpaceRoute } from "../lib/spaces";
 
 const PUBLIC_SITE_URL = "https://chalkmeet.com";
 const PUBLIC_PRIVACY_URL = "https://chalkmeet.com/privacy";
 
 interface HomeScreenProps {
-  onNavigate: (route: LobbyRoute) => void;
-  onDiagnosticsFailure?: (source: "resolve-join-link" | "create-meeting", message: string) => void;
+  onNavigate: (route: SpaceRoute) => void;
+  onDiagnosticsFailure?: (source: "resolve-space-link" | "enter-space", message: string) => void;
 }
 
 export function HomeScreenMacos({ onNavigate, onDiagnosticsFailure }: HomeScreenProps): React.JSX.Element {
-  const createEnabled = useMemo(() => canCreateMeeting(), []);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
-  const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
+  const [isEnteringSpace, setIsEnteringSpace] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
-  const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
-  const clipboardInviteLink = useClipboardInviteSuggestion(input, {
+  const spaceDestination = useMemo(() => parseSpaceLink(input), [input]);
+  const canOpenSpaceLink = Boolean(spaceDestination?.spaceInviteToken);
+  const clipboardSpaceLink = useClipboardInviteSuggestion(input, {
     clipboard: Clipboard,
-    getSuggestion: getClipboardInviteSuggestion,
+    getSuggestion: getClipboardSpaceSuggestion,
   });
 
-  const openInviteLink = async (inviteLink: string) => {
-    const destination = parseInputDestination(inviteLink);
-    const joinToken = destination?.joinToken;
-    if (!joinToken) {
-      setError("Please paste a valid invite link.");
+  const openSpaceLink = async (spaceLink: string) => {
+    const destination = parseSpaceLink(spaceLink);
+    const spaceInviteToken = destination?.spaceInviteToken;
+    if (!spaceInviteToken) {
+      setError("Paste a valid Space link.");
       return;
     }
 
@@ -46,46 +44,40 @@ export function HomeScreenMacos({ onNavigate, onDiagnosticsFailure }: HomeScreen
 
     try {
       setIsResolving(true);
-      onNavigate(await resolveJoinToken(joinToken));
+      onNavigate(await resolveSpaceInvite(spaceInviteToken));
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Invalid invite link";
+      const message = nextError instanceof Error ? nextError.message : "The Space link is invalid.";
       setError(message);
-      onDiagnosticsFailure?.("resolve-join-link", message);
+      onDiagnosticsFailure?.("resolve-space-link", message);
     } finally {
       setIsResolving(false);
     }
   };
 
   const handleOpenInput = async () => {
-    await openInviteLink(input);
+    await openSpaceLink(input);
   };
 
   const handleClipboardSuggestion = async () => {
-    if (!clipboardInviteLink) {
+    if (!clipboardSpaceLink) {
       return;
     }
 
-    setInput(clipboardInviteLink);
-    await openInviteLink(clipboardInviteLink);
+    setInput(clipboardSpaceLink);
+    await openSpaceLink(clipboardSpaceLink);
   };
 
-  const handleNewMeeting = async () => {
-    if (!createEnabled) {
-      setError(null);
-      void Linking.openURL(PUBLIC_SITE_URL);
-      return;
-    }
-
+  const handleEnterSpace = async () => {
     try {
       setError(null);
-      setIsCreatingMeeting(true);
-      onNavigate(await createMeetingLobbyRoute());
+      setIsEnteringSpace(true);
+      onNavigate(await enterLocalSpaceRoute());
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Unable to create meeting";
+      const message = nextError instanceof Error ? nextError.message : "Unable to open the Space.";
       setError(message);
-      onDiagnosticsFailure?.("create-meeting", message);
+      onDiagnosticsFailure?.("enter-space", message);
     } finally {
-      setIsCreatingMeeting(false);
+      setIsEnteringSpace(false);
     }
   };
 
@@ -96,21 +88,19 @@ export function HomeScreenMacos({ onNavigate, onDiagnosticsFailure }: HomeScreen
           <View style={styles.heroSection}>
             <View style={styles.illustrationFrame}>
               <View style={styles.glow} />
-              <ChalkLogoElements size={100} />
+              <BrandMark size={100} />
             </View>
-            <Text style={styles.heroTitle}>Video meetings for everyone</Text>
-            <Text style={styles.heroSubtitle}>Connect, collaborate, and celebrate from anywhere with Chalk.</Text>
+            <Text style={styles.heroTitle}>Spaces for live collaboration</Text>
+            <Text style={styles.heroSubtitle}>Join a Space to collaborate in real time with Chalk.</Text>
           </View>
 
           <View style={styles.actionSection}>
-            <Pressable disabled={isCreatingMeeting} onPress={() => void handleNewMeeting()} style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, isCreatingMeeting && styles.buttonDisabled]}>
+            <Pressable disabled={isEnteringSpace} onPress={() => void handleEnterSpace()} style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, isEnteringSpace && styles.buttonDisabled]}>
               <HugeiconsIcon icon={Add01Icon} size={20} color="white" />
-              <Text style={styles.primaryButtonText}>{isCreatingMeeting ? "Starting..." : createEnabled ? "New meeting" : "Create on web"}</Text>
+              <Text style={styles.primaryButtonText}>{isEnteringSpace ? "Preparing..." : "Enter Space"}</Text>
             </Pressable>
 
-            {!createEnabled ? <Text style={styles.helperText}>Invite links still work in mobile. This build opens the web app for creating a new hosted meeting.</Text> : null}
-
-            {clipboardInviteLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
+            {clipboardSpaceLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
 
             <View style={styles.inputWrapper}>
               <View style={[styles.inputContainer, isInputFocused && styles.inputContainerFocused]}>
@@ -126,12 +116,12 @@ export function HomeScreenMacos({ onNavigate, onDiagnosticsFailure }: HomeScreen
                       setError(null);
                     }
                   }}
-                  placeholder="Paste invite link"
+                  placeholder="Paste a Space link"
                   placeholderTextColor={Theme.colors.placeholder}
                   style={styles.input}
                   value={input}
                 />
-                <Pressable onPress={() => void handleOpenInput()} style={({ pressed }) => [styles.joinAction, pressed && !isResolving && canOpenInviteLink && styles.buttonPressed, (!canOpenInviteLink || isResolving) && styles.joinActionDisabled]} disabled={!canOpenInviteLink || isResolving}>
+                <Pressable onPress={() => void handleOpenInput()} style={({ pressed }) => [styles.joinAction, pressed && !isResolving && canOpenSpaceLink && styles.buttonPressed, (!canOpenSpaceLink || isResolving) && styles.joinActionDisabled]} disabled={!canOpenSpaceLink || isResolving}>
                   <Text style={styles.joinActionText}>{isResolving ? "..." : "Join"}</Text>
                 </Pressable>
               </View>

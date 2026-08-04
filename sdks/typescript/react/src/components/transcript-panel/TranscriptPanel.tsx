@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { Cancel01Icon, Search01Icon, ArrowDown01Icon, ArrowUp01Icon, Download01Icon, Copy01Icon, FileTextIcon } from "../../utils/icons";
-import { TranscriptLine, IconButton, Input } from "../atomic";
+import { TranscriptLine, IconButton } from "../atomic";
+import { Input } from "../atomic/Input";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantColor, getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
@@ -13,7 +14,6 @@ export interface TranscriptEntry {
   timestamp: Date;
   isInterim?: boolean;
   confidence?: number;
-  isHost?: boolean;
   isLocalParticipant?: boolean;
 }
 
@@ -39,7 +39,6 @@ interface GroupedTranscript {
   speakerId: string;
   speaker: string;
   speakerColor: string;
-  isHost?: boolean;
   isLocalParticipant?: boolean;
   entries: TranscriptEntry[];
 }
@@ -54,7 +53,6 @@ function groupTranscriptsBySpeaker(transcripts: TranscriptEntry[]): GroupedTrans
         speakerId: entry.speakerId,
         speaker: entry.speaker,
         speakerColor: getParticipantColor(entry.speaker || entry.speakerId).primary,
-        isHost: entry.isHost,
         isLocalParticipant: entry.isLocalParticipant,
         entries: [entry],
       });
@@ -112,34 +110,40 @@ function ExportDropdown({ onExport, onCopyAll }: { onExport?: (format: "txt" | "
 
   return (
     <div ref={dropdownRef} className="relative">
-      <button type="button" onClick={() => setIsOpen(!isOpen)} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors", "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground")} aria-expanded={isOpen} aria-haspopup="menu">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors", "bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)] hover:bg-[var(--chalk-stage)] hover:text-[var(--chalk-text)]")}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+      >
         <Download01Icon className="w-3.5 h-3.5" />
         Export
       </button>
 
       {isOpen && (
-        <div className={cn("absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-lg shadow-lg border", "bg-popover border-border", "animate-in fade-in-0 zoom-in-95 duration-150")} role="menu">
+        <div className={cn("absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-lg shadow-lg border", "bg-[var(--chalk-surface)] border-[var(--chalk-line)]", "animate-in fade-in-0 zoom-in-95 duration-150")} role="menu">
           <div className="p-1">
-            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Download</div>
-            <button type="button" onClick={() => handleExport("txt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <div className="px-2 py-1.5 text-xs font-medium text-[var(--chalk-muted-text)]">Download</div>
+            <button type="button" onClick={() => handleExport("txt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-[var(--chalk-stage)] text-left" role="menuitem">
               <FileTextIcon className="w-4 h-4" />
               TXT
             </button>
-            <button type="button" onClick={() => handleExport("srt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={() => handleExport("srt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-[var(--chalk-stage)] text-left" role="menuitem">
               <FileTextIcon className="w-4 h-4" />
               SRT
             </button>
-            <button type="button" onClick={() => handleExport("vtt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={() => handleExport("vtt")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-[var(--chalk-stage)] text-left" role="menuitem">
               <FileTextIcon className="w-4 h-4" />
               VTT
             </button>
-            <button type="button" onClick={() => handleExport("json")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+            <button type="button" onClick={() => handleExport("json")} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-[var(--chalk-stage)] text-left" role="menuitem">
               <span className="w-4 h-4 text-xs font-mono">{"{}"}</span>
               JSON
             </button>
           </div>
-          <div className="border-t border-border p-1">
-            <button type="button" onClick={handleCopy} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent text-left" role="menuitem">
+          <div className="border-t border-[var(--chalk-line)] p-1">
+            <button type="button" onClick={handleCopy} className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-[var(--chalk-stage)] text-left" role="menuitem">
               <Copy01Icon className="w-4 h-4" />
               Copy All
             </button>
@@ -154,15 +158,15 @@ function ExportDropdown({ onExport, onCopyAll }: { onExport?: (format: "txt" | "
 function EmptyState() {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 bg-primary/10">
-        <FileTextIcon className="w-8 h-8 text-primary" />
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 bg-[var(--chalk-accent)]">
+        <FileTextIcon className="w-8 h-8 text-[var(--chalk-accent)]" />
       </div>
-      <h3 className="text-sm font-medium text-foreground mb-1">No transcripts yet</h3>
-      <p className="text-sm text-muted-foreground max-w-[200px]">Transcription will appear as people speak</p>
+      <h3 className="text-sm font-medium text-[var(--chalk-text)] mb-1">No transcripts yet</h3>
+      <p className="text-sm text-[var(--chalk-muted-text)] max-w-[200px]">Transcription will appear as people speak</p>
       <div className="flex gap-1 mt-4">
-        <span className="w-2 h-2 rounded-full bg-muted-foreground/30 chalk-animate-typing-dot" style={{ animationDelay: "0ms" }} />
-        <span className="w-2 h-2 rounded-full bg-muted-foreground/30 chalk-animate-typing-dot" style={{ animationDelay: "150ms" }} />
-        <span className="w-2 h-2 rounded-full bg-muted-foreground/30 chalk-animate-typing-dot" style={{ animationDelay: "300ms" }} />
+        <span className="w-2 h-2 rounded-full bg-[var(--chalk-muted-text)] chalk-animate-typing-dot" style={{ animationDelay: "0ms" }} />
+        <span className="w-2 h-2 rounded-full bg-[var(--chalk-muted-text)] chalk-animate-typing-dot" style={{ animationDelay: "150ms" }} />
+        <span className="w-2 h-2 rounded-full bg-[var(--chalk-muted-text)] chalk-animate-typing-dot" style={{ animationDelay: "300ms" }} />
       </div>
     </div>
   );
@@ -173,7 +177,7 @@ function TurnSeparator() {
   return (
     <div className="flex items-center gap-3 py-2" aria-hidden="true">
       <div className="flex-1 h-px bg-border/50" />
-      <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Speaker changed</span>
+      <span className="text-[10px] text-[var(--chalk-muted-text)] uppercase tracking-wider">Speaker changed</span>
       <div className="flex-1 h-px bg-border/50" />
     </div>
   );
@@ -353,7 +357,6 @@ export const TranscriptPanel = React.memo(
                   showTimestamp={showTimestamps}
                   showSpeaker={showSpeakerNames}
                   speakerColor={group.speakerColor}
-                  isHost={entry.isHost}
                   isLocalParticipant={entry.isLocalParticipant || entry.speakerId === localParticipantId}
                   showAvatar={entryIndex === 0}
                   showHeader={entryIndex === 0}
@@ -374,17 +377,17 @@ export const TranscriptPanel = React.memo(
 
       return (
         <div className="relative flex-1">
-          <Search01Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Search01Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--chalk-muted-text)]" />
           <input
             ref={searchInputRef}
             type="text"
             placeholder="Search transcript..."
             value={searchQuery}
             onChange={handleSearchChange}
-            className={cn("w-full h-8 pl-8 pr-8 text-sm rounded-lg border bg-background/50", "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary", "placeholder:text-muted-foreground")}
+            className={cn("w-full h-8 pl-8 pr-8 text-sm rounded-lg border bg-[var(--chalk-canvas)]", "focus:outline-none focus:ring-2 focus:ring-[var(--chalk-focus)] focus:border-[var(--chalk-accent)]", "placeholder:text-[var(--chalk-muted-text)]")}
           />
           {searchQuery && (
-            <button type="button" onClick={handleClearSearch} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear search">
+            <button type="button" onClick={handleClearSearch} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]" aria-label="Clear search">
               <Cancel01Icon className="w-3.5 h-3.5" />
             </button>
           )}
@@ -397,14 +400,14 @@ export const TranscriptPanel = React.memo(
       if (!searchQuery || searchMatches.length === 0) return null;
 
       return (
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 text-xs text-[var(--chalk-muted-text)]">
           <span className="whitespace-nowrap">
             {currentMatchIndex + 1}/{searchMatches.length}
           </span>
-          <button type="button" onClick={() => navigateMatch("prev")} className="p-1 rounded hover:bg-muted hover:text-foreground" aria-label="Previous match">
+          <button type="button" onClick={() => navigateMatch("prev")} className="p-1 rounded hover:bg-[var(--chalk-stage)] hover:text-[var(--chalk-text)]" aria-label="Previous match">
             <ArrowUp01Icon className="w-3 h-3" />
           </button>
-          <button type="button" onClick={() => navigateMatch("next")} className="p-1 rounded hover:bg-muted hover:text-foreground" aria-label="Next match">
+          <button type="button" onClick={() => navigateMatch("next")} className="p-1 rounded hover:bg-[var(--chalk-stage)] hover:text-[var(--chalk-text)]" aria-label="Next match">
             <ArrowDown01Icon className="w-3 h-3" />
           </button>
         </div>
@@ -423,7 +426,7 @@ export const TranscriptPanel = React.memo(
               setAutoScroll(true);
               endRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth" });
             }}
-            className={cn("px-3 py-1.5 rounded-full text-xs font-medium shadow-lg flex items-center gap-1.5 pointer-events-auto transition-all", "bg-primary text-primary-foreground", "hover:bg-primary/90")}
+            className={cn("px-3 py-1.5 rounded-full text-xs font-medium shadow-lg flex items-center gap-1.5 pointer-events-auto transition-all", "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]", "hover:bg-[var(--chalk-accent)]")}
           >
             <ArrowDown01Icon className="w-3.5 h-3.5" />
             New content
@@ -435,20 +438,20 @@ export const TranscriptPanel = React.memo(
     // Mobile variant
     if (variant === "mobile") {
       return (
-        <div className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative", "bg-background", className)} data-tour="transcription-panel" role="complementary" aria-label="Live transcription" style={themeVariables as React.CSSProperties}>
+        <div className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative", "bg-[var(--chalk-canvas)]", className)} data-tour="transcription-panel" role="complementary" aria-label="Live transcription" style={themeVariables as React.CSSProperties}>
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--chalk-line)]">
             <div className="flex items-center gap-2">
               {onClose && (
-                <button type="button" onClick={onClose} className="p-1 -ml-1 text-muted-foreground hover:text-foreground" aria-label="Back">
+                <button type="button" onClick={onClose} className="p-1 -ml-1 text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]" aria-label="Back">
                   <Cancel01Icon className="w-5 h-5" />
                 </button>
               )}
-              <h2 className="text-base font-semibold text-foreground">Transcript</h2>
+              <h2 className="text-base font-semibold text-[var(--chalk-text)]">Transcript</h2>
             </div>
             {isLive && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/15 text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary chalk-animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--chalk-stage)] text-[var(--chalk-accent)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--chalk-accent)] chalk-animate-pulse" />
                 Live
               </span>
             )}
@@ -456,7 +459,7 @@ export const TranscriptPanel = React.memo(
 
           {/* Search */}
           {searchable && (
-            <div className="px-4 py-2 border-b border-border">
+            <div className="px-4 py-2 border-b border-[var(--chalk-line)]">
               <Input placeholder="Search transcript..." value={searchQuery} onChange={handleSearchChange} icon={<Search01Icon className="w-4 h-4" />} iconPosition="left" className="w-full" size="sm" />
             </div>
           )}
@@ -483,16 +486,16 @@ export const TranscriptPanel = React.memo(
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold tracking-tight text-card-foreground">Transcript</h2>
+              <h2 className="text-xl font-bold tracking-tight text-[var(--chalk-text)]">Transcript</h2>
               {isLive && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary chalk-animate-pulse" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--chalk-stage)] text-[var(--chalk-accent)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--chalk-accent)] chalk-animate-pulse" />
                   Live
                 </span>
               )}
             </div>
             {onClose && (
-              <button type="button" onClick={onClose} className="p-1 transition-colors text-muted-foreground hover:text-foreground" aria-label="Close">
+              <button type="button" onClick={onClose} className="p-1 transition-colors text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]" aria-label="Close">
                 <Cancel01Icon className="w-5 h-5" />
               </button>
             )}
@@ -507,7 +510,7 @@ export const TranscriptPanel = React.memo(
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col">
-            <div ref={containerRef} className={cn("rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px] flex-1", "bg-muted/50 border border-border/30")} onScroll={handleScroll}>
+            <div ref={containerRef} className={cn("rounded-2xl overflow-hidden p-4 space-y-1 relative min-h-[300px] flex-1", "bg-[var(--chalk-stage)] border border-[var(--chalk-line)]")} onScroll={handleScroll}>
               {renderTranscriptContent()}
               {renderNewContentIndicator()}
             </div>
@@ -521,8 +524,8 @@ export const TranscriptPanel = React.memo(
       <div
         className={cn(
           "flex flex-col shadow-xl",
-          "bg-card",
-          "border-border/50",
+          "bg-[var(--chalk-surface)]",
+          "border-[var(--chalk-line)]",
           position === "right" ? cn("h-full w-80 border-l", !prefersReducedMotion && "animate-in slide-in-from-right duration-300") : cn("w-full h-64 border-t", !prefersReducedMotion && "animate-in slide-in-from-bottom duration-300"),
           className,
         )}
@@ -532,12 +535,12 @@ export const TranscriptPanel = React.memo(
         style={themeVariables as React.CSSProperties}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b border-border/50">
+        <div className="flex items-center justify-between p-3 border-b border-[var(--chalk-line)]">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-card-foreground">Transcript</h2>
+            <h2 className="text-sm font-semibold text-[var(--chalk-text)]">Transcript</h2>
             {isLive && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary">
-                <span className="w-1 h-1 rounded-full bg-primary chalk-animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--chalk-stage)] text-[var(--chalk-accent)]">
+                <span className="w-1 h-1 rounded-full bg-[var(--chalk-accent)] chalk-animate-pulse" />
                 Live
               </span>
             )}

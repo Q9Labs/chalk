@@ -1,5 +1,7 @@
-import type { VideoConferenceDiagnosticsSnapshot } from "./components/VideoConference";
+import type { ConnectionSlice } from "@q9labsai/chalk-client";
 import type { DeviceInfo } from "./runtime";
+
+export type ConnectionDiagnosticsSnapshot = Pick<ConnectionSlice, "status" | "lastError">;
 
 export type DevDiagnosticsOutcome = "error" | "observed" | "success";
 
@@ -19,14 +21,11 @@ export interface DevDiagnosticsState {
     readonly brokerUrl: string | null;
     readonly target: "custom" | "local" | "production" | "unknown";
     readonly routeKind: string | null;
-    readonly routeRoomId: string | null;
+    readonly routeSpaceId: string | null;
     readonly routeSource: string | null;
   };
-  readonly clientSession: {
-    readonly inviteTokenPreview: string | null;
-  };
   readonly device: DeviceInfo | null;
-  readonly session: VideoConferenceDiagnosticsSnapshot | null;
+  readonly connection: ConnectionDiagnosticsSnapshot | null;
   readonly lastFailure: {
     readonly source: string;
     readonly message: string;
@@ -40,12 +39,6 @@ const isDevelopmentRuntime = typeof __DEV__ !== "undefined" ? __DEV__ : runtimeE
 const maximumTimelineItems = 120;
 const listeners = new Set<() => void>();
 let state = initialState();
-
-export function maskSecret(value: string | null | undefined): string | null {
-  if (!value) return null;
-  if (value.length <= 10) return `${value.slice(0, 2)}…${value.slice(-2)}`;
-  return `${value.slice(0, 6)}…${value.slice(-4)}`;
-}
 
 export function classifyTarget(brokerUrl: string | null | undefined): DevDiagnosticsState["environment"]["target"] {
   if (!brokerUrl) return "unknown";
@@ -89,25 +82,22 @@ export function setDevDiagnosticsEnvironment(next: Partial<DevDiagnosticsState["
   }));
 }
 
-export function setDevDiagnosticsClientSession(next: { readonly inviteTokenPreview?: string | null; readonly device?: DeviceInfo | null }): void {
+export function setDevDiagnosticsDevice(device: DeviceInfo | null): void {
   update((current) => ({
     ...current,
-    clientSession: {
-      inviteTokenPreview: next.inviteTokenPreview === undefined ? current.clientSession.inviteTokenPreview : next.inviteTokenPreview,
-    },
-    device: next.device === undefined ? current.device : next.device,
+    device,
   }));
 }
 
-export function setDevDiagnosticsSession(snapshot: VideoConferenceDiagnosticsSnapshot | null): void {
-  const previous = state.session;
-  update((current) => ({ ...current, session: snapshot }));
-  if (snapshot && (snapshot.phase !== previous?.phase || snapshot.connectionStatus !== previous?.connectionStatus)) {
+export function setDevDiagnosticsConnection(snapshot: ConnectionDiagnosticsSnapshot | null): void {
+  const previous = state.connection;
+  update((current) => ({ ...current, connection: snapshot }));
+  if (snapshot && snapshot.status !== previous?.status) {
     appendTimeline({
-      eventType: "session.state",
-      outcome: snapshot.session.failure ? "error" : "observed",
-      title: `${snapshot.phase} · ${snapshot.connectionStatus}`,
-      ...(snapshot.session.failure?.message ? { detail: snapshot.session.failure.message } : {}),
+      eventType: "connection.state",
+      outcome: snapshot.lastError ? "error" : "observed",
+      title: snapshot.status,
+      ...(snapshot.lastError?.message ? { detail: snapshot.lastError.message } : {}),
     });
   }
 }
@@ -159,12 +149,11 @@ function initialState(): DevDiagnosticsState {
       brokerUrl: null,
       target: "unknown",
       routeKind: null,
-      routeRoomId: null,
+      routeSpaceId: null,
       routeSource: null,
     },
-    clientSession: { inviteTokenPreview: null },
     device: null,
-    session: null,
+    connection: null,
     lastFailure: null,
     timeline: [],
   };

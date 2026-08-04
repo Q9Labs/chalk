@@ -12,8 +12,8 @@ describe("extractJoinTokenFromInviteLink", () => {
     expect(extractJoinTokenFromInviteLink(`https://chalkmeet.com/j/${inviteToken}`)).toBe(inviteToken);
   });
 
-  it("accepts the canonical meeting hash", () => {
-    expect(extractJoinTokenFromInviteLink(`https://chalkmeet.com/#meeting=${inviteToken}`)).toBe(inviteToken);
+  it("accepts the canonical access hash", () => {
+    expect(extractJoinTokenFromInviteLink(`https://chalkmeet.com/#access=${inviteToken}`)).toBe(inviteToken);
   });
 
   it("accepts bare Chalk invite hostnames", () => {
@@ -32,8 +32,8 @@ describe("extractJoinTokenFromInviteLink", () => {
     expect(extractJoinTokenFromInviteLink(`ai.q9labs.chalk.mobile://j/${inviteToken}`)).toBe(inviteToken);
   });
 
-  it("rejects direct room links and raw codes", () => {
-    expect(extractJoinTokenFromInviteLink("https://chalk.q9labs.ai/room/2f0b302b-2449-43f5-ae3b-de57decb9f09")).toBeNull();
+  it("rejects direct Space links and raw codes", () => {
+    expect(extractJoinTokenFromInviteLink("https://chalk.q9labs.ai/space/2f0b302b-2449-43f5-ae3b-de57decb9f09")).toBeNull();
     expect(extractJoinTokenFromInviteLink(`https://attacker.test/j/${inviteToken}`)).toBeNull();
     expect(extractJoinTokenFromInviteLink("ABC123")).toBeNull();
   });

@@ -27,7 +27,7 @@ export const Skeleton = React.memo<SkeletonProps>(({ width, height, variant = "t
 
   return (
     <div
-      className={cn("bg-muted", variantClasses[variant], animationClasses[animation], className)}
+      className={cn("bg-[var(--chalk-stage)]", variantClasses[variant], animationClasses[animation], className)}
       style={{
         width: width ?? (variant === "text" ? "100%" : undefined),
         height: height ?? (variant === "text" ? "1em" : undefined),

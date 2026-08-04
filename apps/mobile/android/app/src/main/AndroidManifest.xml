@@ -44,12 +44,8 @@
       </intent-filter>
       <intent-filter android:autoVerify="true" data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
-        <data android:scheme="https" android:host="chalkmeet.com" android:pathPrefix="/j/"/>
-        <data android:scheme="https" android:host="chalkmeet.com" android:path="/room"/>
-        <data android:scheme="https" android:host="chalkmeet.com" android:pathPrefix="/room/"/>
-        <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPrefix="/j/"/>
-        <data android:scheme="https" android:host="chalk.q9labs.ai" android:path="/room"/>
-        <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPrefix="/room/"/>
+        <data android:scheme="https" android:host="chalkmeet.com" android:path="/space"/>
+        <data android:scheme="https" android:host="chalk.q9labs.ai" android:path="/space"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>

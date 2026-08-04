@@ -14,7 +14,7 @@ export interface WhiteboardMetric {
   readonly attributes?: Readonly<Record<string, string | number | boolean>>;
 }
 
-export interface SessionTelemetry {
+export interface ConnectionTelemetry {
   readonly apiHeaders: Readonly<Record<string, string>>;
   readonly context: JourneyTelemetryContext;
   readonly syncCorrelation: ReturnType<typeof syncTelemetryCorrelation>;
@@ -34,7 +34,7 @@ type NativeRtcStateEvent = "connectionstatechange" | "iceconnectionstatechange" 
 const rtcStateEvents: readonly NativeRtcStateEvent[] = ["connectionstatechange", "iceconnectionstatechange", "signalingstatechange"];
 
 export interface Telemetry {
-  readonly session: SessionTelemetry;
+  readonly connection: ConnectionTelemetry;
   observePeerConnection(peerConnection: RtcPeerConnection): () => void;
   recordSyncFrame(observation: SyncFrameObservation): void;
   recordWhiteboardMetric(metric: WhiteboardMetric): void;
@@ -42,14 +42,14 @@ export interface Telemetry {
 
 /** Connects a typed journey to native API, WebSocket, and WebRTC boundaries without collecting raw media or network data. */
 export function createTelemetry(journey: TelemetryJourney): Telemetry {
-  const session: SessionTelemetry = {
+  const connection: ConnectionTelemetry = {
     apiHeaders: journey.headers,
     context: journey.context,
     syncCorrelation: syncTelemetryCorrelation(journey.context),
   };
 
   return {
-    session,
+    connection,
     observePeerConnection(peerConnection) {
       return observeNativeRtc(peerConnection, journey);
     },
@@ -86,7 +86,7 @@ function syncCloseReason(reason: string): string {
     case "hello timeout":
     case "invalid token":
     case "policy violation":
-    case "room actions unsupported":
+    case "space actions unsupported":
     case "text frames only":
     case "transport error":
       return reason.replaceAll(" ", "_");

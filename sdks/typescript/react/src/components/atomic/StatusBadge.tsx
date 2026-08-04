@@ -14,32 +14,32 @@ const config = {
   recording: {
     icon: CircleIcon,
     text: "REC",
-    colorClass: "text-destructive",
-    bgClass: "bg-destructive/10",
+    colorClass: "text-[var(--chalk-danger)]",
+    bgClass: "bg-[var(--chalk-danger)]",
   },
   live: {
     icon: Radio01Icon,
     text: "LIVE",
-    colorClass: "text-destructive",
-    bgClass: "bg-destructive/10",
+    colorClass: "text-[var(--chalk-danger)]",
+    bgClass: "bg-[var(--chalk-danger)]",
   },
   transcribing: {
     icon: TextIcon,
     text: "CC",
-    colorClass: "text-primary",
-    bgClass: "bg-primary/10",
+    colorClass: "text-[var(--chalk-accent)]",
+    bgClass: "bg-[var(--chalk-accent)]",
   },
   connecting: {
     icon: Alert02Icon,
     text: "CONNECTING...",
-    colorClass: "text-warning",
-    bgClass: "bg-warning/10",
+    colorClass: "text-[var(--chalk-danger)]",
+    bgClass: "bg-[var(--chalk-danger-surface)]",
   },
   reconnecting: {
     icon: Alert02Icon,
     text: "RECONNECTING...",
-    colorClass: "text-warning",
-    bgClass: "bg-warning/10",
+    colorClass: "text-[var(--chalk-danger)]",
+    bgClass: "bg-[var(--chalk-danger-surface)]",
   },
 };
 

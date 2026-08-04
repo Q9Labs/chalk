@@ -38,7 +38,7 @@ export const HandRaiseIndicator = React.memo(({ raised, animated = true, positio
   return (
     <div
       className={cn(
-        "absolute z-10 flex items-center justify-center rounded-full bg-[#e7a818] text-white shadow-sm ring-white",
+        "absolute z-10 flex items-center justify-center rounded-full bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] shadow-sm ring-[var(--chalk-surface)]",
         wrapperSizeMap[size],
         positionMap[position],
         !prefersReducedMotion && "chalk-animate-scale-in",

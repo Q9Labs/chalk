@@ -1,9 +1,8 @@
-export { ChalkProvider } from "./session/context";
-export type { ChalkProviderProps } from "./session/context";
-export { useChalkActions, useChalkSelector, useChalkSession, useChalkSnapshot, useChalkWhiteboardTransport, useLocalMedia, useParticipants, useRemoteMedia } from "./session/hooks";
-export type { ChalkSelectionEquality, ChalkSelector } from "./session/hooks";
-export { VideoConference } from "./components/video-conference/VideoConference";
-export type { VideoConferenceProps, VideoConferenceRole } from "./components/video-conference/VideoConference";
-export type { PreJoinSettings } from "./components/pre-join-screen/PreJoinScreen";
-export type { ConferenceEventHandlers, EpisodeEndedEvent, ParticipantJoinedEvent, ParticipantLeftEvent, ScreenShareStartedEvent, ScreenShareStoppedEvent } from "./session/use-conference-events";
-export type { SpacePhase } from "./client-compat";
+export { ChalkProvider } from "./bindings/context";
+export type { ChalkProviderProps } from "./bindings/context";
+export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
+export { Chalk } from "./components/chalk/Chalk";
+export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
+export { Entrance } from "./components/entrance/Entrance";
+export type { EntranceProps, EntranceSettings } from "./components/entrance/Entrance";
+export type { ChalkTheme, ChalkThemeTokens } from "./theme";

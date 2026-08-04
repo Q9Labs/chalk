@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
-import { Badge, IconButton, Input } from "../atomic";
+import { IconButton } from "../atomic";
+import { Badge } from "../atomic/Badge";
+import { Input } from "../atomic/Input";
 import { Button } from "@q9labsai/chalk-ui";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -14,7 +16,6 @@ export interface ParticipantListParticipant {
   isMuted?: boolean;
   isVideoEnabled?: boolean;
   isHandRaised?: boolean;
-  role?: "host" | "co-host" | "participant";
   avatarUrl?: string;
 }
 
@@ -27,8 +28,6 @@ export interface ParticipantsPanelProps {
   onStopParticipantCamera?: (id: string) => void;
   onRequestStartCamera?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
-  onMakeHost?: (id: string) => void;
-  onMakeCoHost?: (id: string) => void;
   onUpdateDisplayName?: (name: string) => void;
   onAddPeople?: () => void;
   canManageParticipants?: boolean;
@@ -57,8 +56,6 @@ export const ParticipantsPanel = React.memo(
     onStopParticipantCamera,
     onRequestStartCamera,
     onRemoveParticipant,
-    onMakeHost,
-    onMakeCoHost,
     onUpdateDisplayName,
     onAddPeople,
     participantVolumes,
@@ -81,11 +78,6 @@ export const ParticipantsPanel = React.memo(
       const uniqueParticipants = Array.from(new Map(participants.map((participant) => [getParticipantIdentity(participant), participant])).values());
 
       let sorted = [...uniqueParticipants].sort((a, b) => {
-        const aScore = a.role === "host" ? 2 : a.role === "co-host" ? 1 : 0;
-        const bScore = b.role === "host" ? 2 : b.role === "co-host" ? 1 : 0;
-
-        if (aScore !== bScore) return bScore - aScore;
-
         if (a.isLocal) return -1;
         if (b.isLocal) return 1;
 
@@ -99,8 +91,8 @@ export const ParticipantsPanel = React.memo(
       return sorted;
     }, [participants, searchQuery]);
 
-    const listSpacingClassName = variant === "sidebar" ? "divide-y divide-[#ecebe6]" : "space-y-1";
-    const emptyTextClassName = variant === "default" ? "text-chalk-text-muted" : "text-muted-foreground";
+    const listSpacingClassName = variant === "sidebar" ? "divide-y divide-[var(--chalk-line)]" : "space-y-1";
+    const emptyTextClassName = variant === "default" ? "text-[var(--chalk-muted-text)]" : "text-[var(--chalk-muted-text)]";
 
     const rows = (
       <div className={listSpacingClassName}>
@@ -118,8 +110,6 @@ export const ParticipantsPanel = React.memo(
               onStopParticipantCamera={onStopParticipantCamera}
               onRequestStartCamera={onRequestStartCamera}
               onRemoveParticipant={onRemoveParticipant}
-              onMakeHost={onMakeHost}
-              onMakeCoHost={onMakeCoHost}
               onUpdateDisplayName={onUpdateDisplayName}
               participantVolumes={participantVolumes}
               onParticipantVolumeChange={onParticipantVolumeChange}
@@ -133,13 +123,13 @@ export const ParticipantsPanel = React.memo(
       </div>
     );
 
-    // Mobile variant - fills container, no header (MobilePanel provides it)
+    // Mobile variant - fills container, no header (the parent provides it)
     if (variant === "mobile") {
       return (
-        <div className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative bg-card", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
+        <div className={cn("flex flex-col h-full w-full overflow-hidden font-sans relative bg-[var(--chalk-surface)]", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {onAddPeople && (
-              <Button onClick={onAddPeople} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-full py-3 px-4 mb-4 shadow-lg shadow-primary/25 min-h-[48px]">
+              <Button onClick={onAddPeople} className="w-full bg-[var(--chalk-accent)] hover:bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] rounded-full py-3 px-4 mb-4 shadow-lg shadow-[var(--chalk-shadow)] min-h-[48px]">
                 <UserGroupIcon className="w-4 h-4" />
                 <span>Add people</span>
               </Button>
@@ -147,7 +137,7 @@ export const ParticipantsPanel = React.memo(
 
             {/* Section Label */}
             <div className="mb-3 px-1">
-              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">IN THE MEETING ({participants.length})</p>
+              <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--chalk-muted-text)] font-semibold">IN THIS SPACE ({participants.length})</p>
             </div>
 
             {/* Participants List */}
@@ -159,22 +149,28 @@ export const ParticipantsPanel = React.memo(
 
     if (variant === "sidebar") {
       return (
-        <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-white font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
-          <div className="flex items-center justify-between border-b border-[#deddd7] px-5 py-[18px]">
+        <div
+          className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-surface)] font-sans", !prefersReducedMotion && "chalk-animate-slide-right", className)}
+          style={themeVariables as React.CSSProperties}
+          data-tour="participants-panel"
+          role="complementary"
+          aria-label="Participants list"
+        >
+          <div className="flex items-center justify-between border-b border-[var(--chalk-line)] px-5 py-[18px]">
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-[-0.025em] text-[#0c0e12]">{title === "Participants" ? "People" : title}</h2>
-              <span className="grid min-w-6 place-items-center rounded-full bg-[#eeede8] px-1.5 py-0.5 text-xs font-semibold text-[#555b65]">{participants.length}</span>
+              <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-text)]">{title === "Participants" ? "People" : title}</h2>
+              <span className="grid min-w-6 place-items-center rounded-full bg-[var(--chalk-stage)] px-1.5 py-0.5 text-xs font-semibold text-[var(--chalk-muted-text)]">{participants.length}</span>
             </div>
 
             <div className="flex items-center gap-2">
               {onAddPeople && (
-                <Button onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] border-0 bg-[#202329] px-3 text-sm font-semibold !text-white transition-colors hover:bg-[#343840]">
+                <Button onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] border-0 bg-[var(--chalk-text)] px-3 text-sm font-semibold !text-[var(--chalk-accent-text)] transition-colors hover:bg-[var(--chalk-text)]">
                   <UserGroupIcon className="w-4 h-4" />
                   <span>Invite</span>
                 </Button>
               )}
               {onClose && (
-                <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[#deddd7] text-[#555b65] transition-colors hover:bg-[#f7f6f2] hover:text-[#0c0e12]" aria-label="Close">
+                <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--chalk-line)] text-[var(--chalk-muted-text)] transition-colors hover:bg-[var(--chalk-canvas)] hover:text-[var(--chalk-text)]" aria-label="Close">
                   <Cancel01Icon className="w-5 h-5" />
                 </button>
               )}
@@ -187,9 +183,9 @@ export const ParticipantsPanel = React.memo(
                 placeholder="Search people"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search01Icon className="w-4 h-4 text-[#858a92]" />}
+                icon={<Search01Icon className="w-4 h-4 text-[var(--chalk-muted-text)]" />}
                 iconPosition="left"
-                className="w-full rounded-[7px] border-[#deddd7] bg-[#fbfaf7] transition-all placeholder:text-[#858a92] focus:border-[#9dcfe1] focus:bg-white"
+                className="w-full rounded-[7px] border-[var(--chalk-line)] bg-[var(--chalk-surface)] transition-all placeholder:text-[var(--chalk-muted-text)] focus:border-[var(--chalk-focus)] focus:bg-[var(--chalk-surface)]"
               />
             </div>
           )}
@@ -202,15 +198,15 @@ export const ParticipantsPanel = React.memo(
     // Default rendering (preserving exact existing structure/classes)
     return (
       <div
-        className={cn("flex flex-col h-full bg-chalk-bg-surface border-l border-chalk-border-subtle w-80 shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
+        className={cn("flex flex-col h-full bg-[var(--chalk-surface)] border-l border-[var(--chalk-line)] w-80 shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
         style={themeVariables as React.CSSProperties}
         data-tour="participants-panel"
         role="complementary"
         aria-label="Participants list"
       >
-        <div className="flex items-center justify-between p-4 border-b border-chalk-border-subtle">
+        <div className="flex items-center justify-between p-4 border-b border-[var(--chalk-line)]">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-chalk-text-primary">{title}</h2>
+            <h2 className="text-sm font-semibold text-[var(--chalk-accent)]">{title}</h2>
             <Badge variant="default" count={participants.length} />
           </div>
           {onClose && <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close participant list" />}

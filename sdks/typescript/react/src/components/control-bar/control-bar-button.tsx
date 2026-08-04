@@ -1,5 +1,5 @@
 import React from "react";
-import type { ChalkHapticInput } from "../../internal/useHaptics";
+import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 import { cn } from "../../utils/cn";
 import { Tooltip } from "../atomic/Tooltip";
@@ -17,7 +17,7 @@ interface ControlBarButtonProps {
   noBorder?: boolean;
   onClick?: () => void;
   className?: string;
-  haptic?: ChalkHapticInput | false;
+  haptic?: HapticInput | false;
   /** Custom styles when active (overrides default active styles) */
   activeClassName?: string;
   "data-tour"?: string;
@@ -48,22 +48,22 @@ export const ControlBarButton = React.memo(
         className={cn(
           "chalk-button-tactile group relative flex items-center justify-center transition-all duration-300 ease-out",
           inlineLabel && "gap-2.5",
-          "text-[var(--foreground)]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+          "text-[var(--chalk-text)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-canvas)]",
           size === "sm" && "h-9 w-9 rounded-full",
           size === "md" && "h-11 w-11 rounded-full",
           size === "lg" && "h-14 w-14 rounded-full",
           disabled && "cursor-not-allowed opacity-50",
           // Default state
-          !disabled && !active && !danger && !noBorder && "bg-[var(--secondary)] shadow-lg hover:brightness-110",
+          !disabled && !active && !danger && !noBorder && "bg-[var(--chalk-stage)] shadow-lg hover:brightness-110",
           // No Border state (Ghost)
-          !disabled && !active && !danger && noBorder && "bg-[var(--secondary)]",
+          !disabled && !active && !danger && noBorder && "bg-[var(--chalk-stage)]",
           // Active state
-          !disabled && active && !activeClassName && "bg-[var(--secondary)] border-transparent hover:bg-[var(--accent)]",
+          !disabled && active && !activeClassName && "bg-[var(--chalk-stage)] border-transparent hover:bg-[var(--chalk-focus)]",
           // Custom active state
           !disabled && active && activeClassName && activeClassName,
           // Danger state - vibrant red for visibility
-          danger && "bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]",
+          danger && "bg-[var(--chalk-danger)] text-[var(--chalk-accent-text)] border-transparent hover:bg-[var(--chalk-danger)]",
           className,
         )}
         aria-label={label}
@@ -78,7 +78,7 @@ export const ControlBarButton = React.memo(
       return (
         <div className="flex flex-col items-center gap-1">
           {button}
-          <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
+          <span className="text-xs text-[var(--chalk-muted-text)]">{label}</span>
         </div>
       );
     }

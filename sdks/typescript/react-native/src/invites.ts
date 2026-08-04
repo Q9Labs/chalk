@@ -20,7 +20,7 @@ export function extractJoinTokenFromInviteLink(input: string): string | null {
     }
     const pathSegments = CHALK_CUSTOM_PROTOCOLS.has(parsed.protocol) ? [parsed.hostname, ...parsed.pathname.split("/").filter(Boolean)] : parsed.pathname.split("/").filter(Boolean);
     const [head, tail] = pathSegments;
-    const hashInvite = new URLSearchParams(parsed.hash.replace(/^#/u, "")).get("meeting");
+    const hashInvite = new URLSearchParams(parsed.hash.replace(/^#/u, "")).get("access");
     const token = head === "j" && tail ? tail : hashInvite?.trim();
 
     return token && capabilityPattern.test(token) ? token : null;

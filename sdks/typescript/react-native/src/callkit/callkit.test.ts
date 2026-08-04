@@ -70,8 +70,8 @@ describe("callKit", () => {
 
     const { callKit } = await import("./callkit");
     const result = await callKit.startCall({
-      displayName: "Room",
-      handle: "room-123",
+      displayName: "Space",
+      handle: "space-123",
     });
 
     expect(callKit.isSupported).toBe(false);

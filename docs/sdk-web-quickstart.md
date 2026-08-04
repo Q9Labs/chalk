@@ -1,8 +1,8 @@
 # Chalk web SDK quickstart
 
-> Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
+> Descriptive snapshot, last verified against code on 2026-08-04. Not a source of truth.
 
-This flow keeps the tenant API key on your server and gives each browser a short-lived participant access bundle. It uses the framework-free `ChalkSession` runtime, while the React package subscribes to that same session instead of opening its own network connections.
+Keep the tenant API key on your server. Your server authenticates the application user, obtains an opaque `AccessGrant` for the target Space, and returns that grant unchanged to the browser. The browser passes a `getAccess` callback to Chalk; `SpaceClient` handles access refresh and recovery.
 
 ## Install
 
@@ -12,198 +12,144 @@ pnpm add @q9labsai/chalk-client @q9labsai/chalk-react react react-dom
 
 The server entry point requires Node.js 22 or later. Never import `@q9labsai/chalk-client/server` into browser code.
 
-## Create the server client
+## Expose an access endpoint
+
+Create an application-owned endpoint that authenticates the current user, checks their access to the Space, and asks your server-side Chalk integration for an `AccessGrant`. Return the grant as JSON without inspecting or reshaping it. Keep the tenant API key and any server-side identity records out of browser responses.
+
+The browser sends this small request body whenever Chalk needs access:
 
 ```ts
-// server/chalk.ts
-import { createChalkServerClient } from "@q9labsai/chalk-client/server";
-
-export const chalk = createChalkServerClient({
-  apiKey: process.env.CHALK_API_KEY!,
-  tenantId: process.env.CHALK_TENANT_ID!,
-  apiBaseURL: "https://api.chalkmeet.com",
-});
-```
-
-`CHALK_API_KEY` is tenant authority, so it belongs in server-side secret storage and must never enter HTML, browser environment variables, JSON responses, logs, or client bundles.
-
-## Admit the application user
-
-Authenticate the user with your application before creating Chalk membership. Store the returned identifiers and initial access bundle in server-side session state; later access requests must resolve this record instead of trusting room or participant IDs sent by the browser.
-
-```ts
-// POST /api/meetings/join
-const appUser = await requireApplicationUser(request);
-const membership = await resolveMeetingMembership(appUser.id);
-
-const admission = await chalk.participants.admit(
-  membership.roomId,
-  membership.sessionId,
-  {
-    participant_session_id: membership.participantSessionId,
-    name: appUser.displayName,
-    initial_role: "participant",
-    eligible_roles: ["participant"],
-  },
-  { idempotencyKey: membership.admissionKey },
-);
-
-if (!admission.access) {
-  return Response.json({ state: "awaiting_approval" }, { status: 202 });
-}
-
-await saveServerSideMembership(appUser.id, {
-  roomId: admission.participant.room_id,
-  sessionId: admission.participant.session_id,
-  participantSessionId: admission.participant.id,
-  participantGeneration: admission.participant.generation,
-  initialAccess: admission.access,
-});
-
-return Response.json({ state: "admitted" });
-```
-
-The example returns only application state from the admission endpoint. The participant access bundle is delivered through the dedicated endpoint below, after the same application authentication check.
-
-## Serve participant access
-
-`ChalkSession` calls its access provider for the initial join, scheduled refresh, Sync recovery, and SFU recovery. The endpoint below consumes the initial bundle once, then refreshes the same live participant. Ordinary refresh forwards the current signed media credential so Chalk can retain the provider connection; media recovery requests a replacement connection and does not accept a caller-supplied connection ID.
-
-```ts
-// POST /api/chalk/access
 type AccessRequest = {
-  reason: "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery";
-  replaceMediaConnection: boolean;
-  currentMediaToken?: string;
-  expectedParticipantGeneration?: number;
+  readonly space: string;
+  readonly reason: "join" | "refresh" | "retry";
 };
+```
 
-const appUser = await requireApplicationUser(request);
-const membership = await requireServerSideMembership(appUser.id);
-const input = (await request.json()) as AccessRequest;
+Return the grant with `cache-control: no-store`. Your endpoint owns admission and identity policy; `SpaceClient` only consumes the opaque grant it receives.
 
-if (membership.initialAccess) {
-  await clearInitialAccess(appUser.id);
-  return Response.json(membership.initialAccess);
-}
+## Create the access callback
 
-if (input.expectedParticipantGeneration !== membership.participantGeneration) {
-  return Response.json({ error: "membership_changed" }, { status: 409 });
-}
+`GetAccess` is exported by `@q9labsai/chalk-client`. The callback receives the Space slug and the reason for the request. The cast below is safe only because the authenticated endpoint returns a server-minted `AccessGrant` unchanged; do not construct one in browser code.
 
-const access = input.replaceMediaConnection
-  ? await chalk.participants.issueAccess(membership.roomId, membership.sessionId, membership.participantSessionId, {
-      participantSessionGeneration: membership.participantGeneration,
-      replaceMediaConnection: true,
-    })
-  : await chalk.participants.issueAccess(membership.roomId, membership.sessionId, membership.participantSessionId, {
-      participantSessionGeneration: membership.participantGeneration,
-      currentMediaToken: input.currentMediaToken!,
-    });
+```ts
+// browser/access.ts
+import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
 
-return Response.json(access, {
-  headers: { "cache-control": "no-store" },
+export const getAccess: GetAccess = async ({ space, reason }) => {
+  const response = await fetch("/api/chalk/access", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ space, reason }),
+  });
+
+  if (!response.ok) throw new Error(`Access request failed with HTTP ${response.status}`);
+  return (await response.json()) as AccessGrant;
+};
+```
+
+## Create a SpaceClient
+
+Use `createSpaceClient` when the application owns the client lifecycle or when a custom UI needs direct access to the snapshot and controllers.
+
+```ts
+// browser/space-client.ts
+import { createSpaceClient } from "@q9labsai/chalk-client";
+
+import { getAccess } from "./access";
+
+export const spaceClient = createSpaceClient({
+  space: "design-review",
+  getAccess,
 });
 ```
 
-Validate the request body with your server framework before calling the SDK. The browser may supply refresh context, but server-side membership remains the source of tenant, room, session, participant, and generation identity.
-
-## Create one browser session
+`SpaceClient` exposes a flat lifecycle and namespaced controllers. `join` accepts the optional `displayName`, `microphone`, and `camera` defaults; media, chat, participant, reaction, and whiteboard commands stay on their matching controllers.
 
 ```ts
-// browser/chalk-session.ts
-import { ChalkSession, requireParticipantAccess, type ChalkSessionAccessRequest } from "@q9labsai/chalk-client";
-
-export const chalkSession = new ChalkSession({
-  access: async (input?: ChalkSessionAccessRequest) => {
-    const response = await fetch("/api/chalk/access", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        reason: input?.reason ?? "join",
-        replaceMediaConnection: input?.replaceMediaConnection ?? false,
-        currentMediaToken: input?.currentMediaToken,
-        expectedParticipantGeneration: input?.expectedParticipantGeneration,
-      }),
-    });
-
-    return requireParticipantAccess(response);
-  },
-  syncURL: "wss://sync.chalkmeet.com/v1/sync",
-  apiBaseURL: "https://api.chalkmeet.com",
-});
-```
-
-Join and media operations resolve only after the owning Sync or media layer confirms them. Always call `leave()` when the meeting view closes so Chalk can acknowledge durable Leave before local sockets, peer connections, tracks, credentials, and timers are released.
-
-```ts
-await chalkSession.join();
-await chalkSession.setMicrophoneEnabled(false);
-await chalkSession.setCameraEnabled(false);
-await chalkSession.startScreenShare();
-await chalkSession.stopScreenShare();
-await chalkSession.leave();
-```
-
-## Render the turnkey conference
-
-`VideoConference` owns the pre-join, join, active, reconnecting, and end
-surfaces. Supply the session factory that already knows how to obtain the
-short-lived participant access bundle:
-
-```tsx
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
-import { VideoConference, type PreJoinSettings } from "@q9labsai/chalk-react";
-import { chalkSession } from "./chalk-session";
-
-const createSession = (_settings: PreJoinSettings): ChalkSessionStore => chalkSession;
-
-export function MeetingRoute() {
-  return <VideoConference roomId="design-review" roomName="Design review" createSession={createSession} />;
+await spaceClient.join({ displayName: "Taylor", microphone: true, camera: false });
+await spaceClient.media.setMicrophoneEnabled(false);
+await spaceClient.media.setCameraEnabled(true);
+await spaceClient.media.setScreenShareEnabled(true);
+await spaceClient.media.setScreenShareEnabled(false);
+try {
+  await spaceClient.leave();
+} finally {
+  spaceClient.dispose();
 }
 ```
 
-Applications can control `layout` and observe `phase`; feature availability is
-expressed with `<feature>Enabled` props and capability overrides with
-`can<Action>` props. The current client snapshot has no admission-wait status,
-so a `waiting` phase is rendered with `JoiningScreen` until the runtime exposes
-that fact.
+Call `leave()` before disposing an application-owned client so Chalk can finish the durable Leave operation. `dispose()` releases the client after the application is done with it.
 
-## Bind React to an existing session
+## Render the turnkey Chalk experience
+
+`<Chalk />` creates and owns a `SpaceClient` when given `space` and `getAccess`. It renders the `Entrance` by default, then the live Space surface and recovery or exit states. Lifecycle callbacks expose join, leave, and Episode events.
 
 ```tsx
-import { ChalkProvider, useChalkActions, useChalkSnapshot } from "@q9labsai/chalk-react";
-import { chalkSession } from "./chalk-session";
+// browser/SpaceRoute.tsx
+import { Chalk } from "@q9labsai/chalk-react";
 
-function Meeting() {
-  const snapshot = useChalkSnapshot();
-  const actions = useChalkActions();
+import { getAccess } from "./access";
+
+export function SpaceRoute() {
+  return (
+    <Chalk
+      space="design-review"
+      getAccess={getAccess}
+      displayName="Taylor"
+      defaults={{ microphone: true, camera: false }}
+      features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }}
+      spaceName="Design review"
+      onJoined={() => console.info("Joined the Space")}
+      onLeft={() => console.info("Left the Space")}
+      onEpisodeEnded={({ episode }) => console.info("Episode ended", episode?.id)}
+    />
+  );
+}
+```
+
+Set `entrance={false}` to enter directly with `displayName` and `defaults`. If the application already owns a client, pass `client={spaceClient}` instead of `space` and `getAccess`; `<Chalk />` uses that client and does not dispose it.
+
+```tsx
+<Chalk client={spaceClient} entrance={false} />
+```
+
+`<Entrance />` is the public component for a custom entry surface. It covers display-name and device setup as well as admission waiting. `theme` is the only styling door; size and position `<Chalk />` through its parent element.
+
+## Build custom UI with ChalkProvider
+
+`ChalkProvider` shares an existing `SpaceClient` with React. It does not join, leave, refresh access, or own the client. The public hooks are a closed set: `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and `useCan`.
+
+```tsx
+import type { SpaceClient } from "@q9labsai/chalk-client";
+import { ChalkProvider, useCan, useConnection, useParticipants, useSpaceClient } from "@q9labsai/chalk-react";
+
+function SpacePanel() {
+  const client = useSpaceClient();
+  const connection = useConnection();
+  const { roster } = useParticipants();
+  const canRaiseHand = useCan("raiseHand");
 
   return (
     <main>
-      <p>{snapshot.state}</p>
-      <button onClick={() => actions.setMicrophoneEnabled(false)}>Mute</button>
-      <button onClick={() => actions.leave()}>Leave</button>
+      <p>{connection.status}</p>
+      <p>{roster.length} participants</p>
+      {canRaiseHand ? <button onClick={() => void client.participants.raiseHand()}>Raise hand</button> : null}
+      <button onClick={() => void client.leave()}>Leave</button>
     </main>
   );
 }
 
-export function MeetingRoute() {
+export function CustomSpace({ client }: { readonly client: SpaceClient }) {
   return (
-    <ChalkProvider session={chalkSession}>
-      <Meeting />
+    <ChalkProvider client={client}>
+      <SpacePanel />
     </ChalkProvider>
   );
 }
 ```
 
-The provider and hooks project `ChalkSession`; they do not fetch credentials or
-create independent Sync, WebRTC, or lifecycle owners. Use this lower-level
-surface when the application needs to compose the active UI itself; turnkey
-consumers should use `VideoConference`.
+Use `useCan(capability)` for capability checks. Feature availability belongs in the single `features` object on `<Chalk />`; roles and capability decisions come from the `SpaceSnapshot`, not component props.
 
 ## Verified scope
 
-The repository's packed consumer fixture installs generated client and React tarballs into a clean directory, bundles only public package imports, and runs the lifecycle in real browser engines. Its localhost signaling service is a protocol-faithful mock used for deterministic recovery and leak checks, so it is not evidence of live Cloudflare network traffic.
-
-This launch contract covers managed web sessions, camera, microphone, screen video, refresh, recovery, remote media removal, and durable Leave. Recording, transcription, and React Native launch readiness are explicitly outside its scope.
+This quickstart covers managed web Spaces, camera, microphone, screen sharing, access refresh, recovery, remote media removal, and durable Leave. Recording, transcription, and React Native launch readiness are outside this document's scope.

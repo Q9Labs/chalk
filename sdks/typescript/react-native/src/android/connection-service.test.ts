@@ -49,14 +49,14 @@ describe("android connection service bridge", () => {
     expect(await ensureAndroidConnectionServiceRegistered()).toBe(false);
     expect(
       await startAndroidConnectionServiceCall({
-        callId: "room-1:1",
+        callId: "space-1:1",
         displayName: "Host",
-        roomId: "room-1",
-        roomName: "Daily Standup",
+        spaceId: "space-1",
+        spaceName: "Daily Standup",
       }),
     ).toBe(false);
-    expect(await setAndroidConnectionServiceActive("room-1:1")).toBe(false);
-    expect(await endAndroidConnectionServiceCall("room-1:1")).toBe(false);
+    expect(await setAndroidConnectionServiceActive("space-1:1")).toBe(false);
+    expect(await endAndroidConnectionServiceCall("space-1:1")).toBe(false);
 
     const unsubscribe = addAndroidConnectionServiceListener(() => {
       throw new Error("listener should not be called on iOS");
@@ -77,20 +77,20 @@ describe("android connection service bridge", () => {
     expect(await ensureAndroidConnectionServiceRegistered()).toBe(true);
     expect(
       await startAndroidConnectionServiceCall({
-        callId: "room-1:2",
+        callId: "space-1:2",
         displayName: "Guest",
         hasVideo: false,
-        roomId: "room-1",
-        roomName: "Board Review",
+        spaceId: "space-1",
+        spaceName: "Board Review",
       }),
     ).toBe(true);
-    expect(await setAndroidConnectionServiceActive("room-1:2")).toBe(true);
-    expect(await endAndroidConnectionServiceCall("room-1:2", { reason: "remote", label: "Meeting ended" })).toBe(true);
+    expect(await setAndroidConnectionServiceActive("space-1:2")).toBe(true);
+    expect(await endAndroidConnectionServiceCall("space-1:2", { reason: "remote", label: "Space ended" })).toBe(true);
 
     const listener = vi.fn();
     const unsubscribe = addAndroidConnectionServiceListener(listener);
     const disconnectPayload = {
-      callId: "room-1:2",
+      callId: "space-1:2",
       reason: "local",
       type: "disconnect",
     };
@@ -101,14 +101,14 @@ describe("android connection service bridge", () => {
     expect(nativeModule.isSupported).toHaveBeenCalledTimes(1);
     expect(nativeModule.registerPhoneAccount).toHaveBeenCalledTimes(1);
     expect(nativeModule.startCall).toHaveBeenCalledWith({
-      callId: "room-1:2",
+      callId: "space-1:2",
       displayName: "Guest",
       hasVideo: false,
-      roomId: "room-1",
-      roomName: "Board Review",
+      spaceId: "space-1",
+      spaceName: "Board Review",
     });
-    expect(nativeModule.setActive).toHaveBeenCalledWith("room-1:2");
-    expect(nativeModule.endCall).toHaveBeenCalledWith("room-1:2", "remote", "Meeting ended");
+    expect(nativeModule.setActive).toHaveBeenCalledWith("space-1:2");
+    expect(nativeModule.endCall).toHaveBeenCalledWith("space-1:2", "remote", "Space ended");
     expect(listener).toHaveBeenCalledWith(disconnectPayload);
   });
 });

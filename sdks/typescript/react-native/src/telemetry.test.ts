@@ -17,7 +17,7 @@ describe("createTelemetry", () => {
     const journey = createJourney();
     const telemetry = createTelemetry(journey);
 
-    expect(telemetry.session).toEqual({
+    expect(telemetry.connection).toEqual({
       apiHeaders: journey.headers,
       context: journey.context,
       syncCorrelation: {
@@ -27,8 +27,8 @@ describe("createTelemetry", () => {
       },
     });
 
-    telemetry.recordSyncFrame({ direction: "client_to_server", frameType: "room.join" });
-    expect(journey.recordSyncFrame).toHaveBeenCalledWith({ direction: "client_to_server", frameType: "room.join" });
+    telemetry.recordSyncFrame({ direction: "client_to_server", frameType: "space.join" });
+    expect(journey.recordSyncFrame).toHaveBeenCalledWith({ direction: "client_to_server", frameType: "space.join" });
   });
 
   it("records production whiteboard metrics without forwarding renderer attributes", () => {

@@ -1,4 +1,4 @@
-import type { ChatAttachment, ChatFilesController } from "../../client-compat";
+import type { ChatAttachment, ChatFilesController } from "@q9labsai/chalk-client";
 
 export interface UploadChatAttachmentOptions {
   readonly fetch?: typeof globalThis.fetch;

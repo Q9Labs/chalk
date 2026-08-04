@@ -7,7 +7,7 @@ describe("FeatureGrid", () => {
   it("renders capabilities without progress badges", () => {
     const markup = renderToStaticMarkup(<FeatureGrid />);
 
-    expect(markup).toContain("Meeting core");
+    expect(markup).toContain("Space core");
     expect(markup).toContain("Recording");
     expect(markup).toContain("Whiteboard");
     expect(markup).toContain("Webhooks");

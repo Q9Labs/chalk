@@ -19,11 +19,11 @@ export const Badge = React.memo<BadgeProps>(({ count, max = 99, variant = "defau
   }
 
   const variantClasses = {
-    default: "bg-muted text-foreground",
-    primary: "bg-primary text-primary-foreground",
-    success: "bg-success text-white",
-    warning: "bg-warning text-white",
-    danger: "bg-destructive text-white",
+    default: "bg-[var(--chalk-stage)] text-[var(--chalk-text)]",
+    primary: "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]",
+    success: "bg-[var(--chalk-positive)] text-[var(--chalk-accent-text)]",
+    warning: "bg-[var(--chalk-danger-surface)] text-[var(--chalk-accent-text)]",
+    danger: "bg-[var(--chalk-danger)] text-[var(--chalk-accent-text)]",
   };
 
   const badgeContent = dot ? "" : count !== undefined && count > max ? `${max}+` : count;

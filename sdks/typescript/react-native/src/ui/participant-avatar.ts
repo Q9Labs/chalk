@@ -1,13 +1,7 @@
 import type { ParticipantGradientPreference } from "./native-types";
+import { Theme } from "./theme";
 
-const palettes = [
-  ["#14b8a6", "#0f766e", "#99f6e4"],
-  ["#f59e0b", "#b45309", "#fde68a"],
-  ["#ec4899", "#be185d", "#fbcfe8"],
-  ["#8b5cf6", "#6d28d9", "#ddd6fe"],
-  ["#06b6d4", "#0e7490", "#cffafe"],
-  ["#22c55e", "#15803d", "#bbf7d0"],
-] as const;
+const palettes = Theme.avatarPalettes;
 
 export function getParticipantColor(seed = "guest", _preference?: ParticipantGradientPreference) {
   const palette = palettes[hashString(seed) % palettes.length] ?? palettes[0];

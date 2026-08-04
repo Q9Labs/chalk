@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { ChatFilesController } from "../../client-compat";
+import type { ChatFilesController } from "@q9labsai/chalk-client";
 import { describe, expect, it, vi } from "vitest";
 
 import { uploadChatAttachment } from "./chat-file-upload";

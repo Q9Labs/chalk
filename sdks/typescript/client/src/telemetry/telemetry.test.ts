@@ -209,6 +209,15 @@ describe("TelemetryClient", () => {
     expect(event.attributes?.metric_0).toHaveLength(256);
   });
 
+  it("records connection diagnostics for framework bindings", () => {
+    const telemetry = createClient();
+    const journey = telemetry.startJourney({ kind: "space.join" });
+
+    const event = journey.recordDiagnostic({ category: "connection", code: "join.media.succeeded", phase: "media", state: "succeeded" });
+
+    expect(event?.attributes).toMatchObject({ category: "connection", code: "join.media.succeeded" });
+  });
+
   it("records numeric diagnostics only while the journey is active", () => {
     const telemetry = createClient();
     const journey = telemetry.startJourney({ kind: "meeting.join" });

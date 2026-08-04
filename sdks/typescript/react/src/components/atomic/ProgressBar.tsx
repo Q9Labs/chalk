@@ -15,10 +15,10 @@ export const ProgressBar = React.memo<ProgressBarProps>(({ value, max = 100, sho
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
 
   const variantColors = {
-    default: "bg-primary",
-    success: "bg-success",
-    warning: "bg-warning",
-    danger: "bg-destructive",
+    default: "bg-[var(--chalk-accent)]",
+    success: "bg-[var(--chalk-positive)]",
+    warning: "bg-[var(--chalk-danger-surface)]",
+    danger: "bg-[var(--chalk-danger)]",
   };
 
   const sizeClasses = {
@@ -29,8 +29,8 @@ export const ProgressBar = React.memo<ProgressBarProps>(({ value, max = 100, sho
 
   return (
     <div className={cn("w-full", className)}>
-      <div className="flex justify-between mb-1">{showLabel && <span className="text-muted-foreground font-medium">{Math.round(percentage)}%</span>}</div>
-      <div className={cn("w-full bg-muted rounded-full overflow-hidden", sizeClasses[size])}>
+      <div className="flex justify-between mb-1">{showLabel && <span className="text-[var(--chalk-muted-text)] font-medium">{Math.round(percentage)}%</span>}</div>
+      <div className={cn("w-full bg-[var(--chalk-stage)] rounded-full overflow-hidden", sizeClasses[size])}>
         <div
           role="progressbar"
           aria-valuenow={value}
@@ -41,7 +41,7 @@ export const ProgressBar = React.memo<ProgressBarProps>(({ value, max = 100, sho
             width: `${percentage}%`,
             ...(animated
               ? {
-                  backgroundImage: "linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)",
+                  backgroundImage: "linear-gradient(45deg,var(--chalk-accent-text) 25%,transparent 25%,transparent 50%,var(--chalk-accent-text) 50%,var(--chalk-accent-text) 75%,transparent 75%,transparent)",
                   backgroundSize: "1rem 1rem",
                   animation: "chalk-progress-stripes 1s linear infinite",
                 }

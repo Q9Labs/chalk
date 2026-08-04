@@ -6,7 +6,7 @@ pnpm workspace, and bundles a browser application using package imports only.
 It never imports from the Chalk source tree. The fixture uses the root
 `createSpaceClient` signature and public `/effect` seam solely to inject its
 protocol-faithful local adapters, then passes the canonical `SpaceClient` to the
-packed root `VideoConference`; this exercises its internal client adapter. The
+packed root `Chalk`; this exercises the public SpaceClient integration. The
 access endpoint forwards an opaque `AccessGrant`; only the packed client
 validates it.
 

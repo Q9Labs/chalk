@@ -6,6 +6,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@q9labsai/chalk-react-native": ["../../sdks/typescript/react-native/src/index.ts"],
+      "@q9labsai/chalk-react-native/client": ["../../sdks/typescript/react-native/src/client.ts"],
       "@q9labsai/chalk-react-native/clipboard": ["../../sdks/typescript/react-native/src/clipboard.ts"],
       "@q9labsai/chalk-react-native/diagnostics": ["../../sdks/typescript/react-native/src/diagnostics.ts"],
       "@q9labsai/chalk-react-native/invites": ["../../sdks/typescript/react-native/src/invites.ts"],

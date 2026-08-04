@@ -10,7 +10,7 @@ export interface WaveformProps {
   className?: string;
 }
 
-export const Waveform = React.memo(({ levels, color = "var(--accent)", animated = true, barCount = 5, className }: WaveformProps) => {
+export const Waveform = React.memo(({ levels, color = "var(--chalk-focus)", animated = true, barCount = 5, className }: WaveformProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const displayLevels = React.useMemo(() => {
     if (levels.length === barCount) return levels;
