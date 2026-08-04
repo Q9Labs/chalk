@@ -15,4 +15,13 @@ describe("ScreenShareMock", () => {
     expect(screen.getByText("Today’s decisions")).toBeTruthy();
     expect(screen.getByText("42 ms")).toBeTruthy();
   });
+
+  it("collapses the workspace rail on narrow screens", () => {
+    const { container } = render(<ScreenShareMock />);
+
+    const stage = container.querySelector(".grid-cols-1.sm\\:grid-cols-\\[150px_minmax\\(0\\,1fr\\)\\]");
+    expect(stage).toBeTruthy();
+    expect(container.querySelector("aside")?.className).toContain("hidden");
+    expect(container.querySelector("aside")?.className).toContain("sm:block");
+  });
 });

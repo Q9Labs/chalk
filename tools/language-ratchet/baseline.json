@@ -22,10 +22,10 @@
     "waiting-room": 0
   },
   "apps/web": {
-    "meeting": 58,
-    "conference": 12,
+    "meeting": 57,
+    "conference": 10,
     "videoconference": 5,
-    "room": 120,
+    "room": 119,
     "session": 200,
     "attendee": 0,
     "waitingroom": 0,

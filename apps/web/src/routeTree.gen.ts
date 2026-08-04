@@ -16,7 +16,17 @@ import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
 import { Route as RoomRouteImport } from './routes/room'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as NewRouteImport } from './routes/new'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppTenantRouteImport } from './routes/_app.tenant'
+import { Route as AppSpacesRouteImport } from './routes/_app.spaces'
+import { Route as AppPeopleRouteImport } from './routes/_app.people'
+import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppEpisodesRouteImport } from './routes/_app.episodes'
+import { Route as AppDeveloperRouteImport } from './routes/_app.developer'
+import { Route as AppArtifactsRouteImport } from './routes/_app.artifacts'
+import { Route as AppActivityRouteImport } from './routes/_app.activity'
+import { Route as AppAccountRouteImport } from './routes/_app.account'
 
 const WhiteboardRoute = WhiteboardRouteImport.update({
   id: '/whiteboard',
@@ -37,7 +47,7 @@ const SdkPreviewRoute = SdkPreviewRouteImport.update({
   id: '/sdk-preview',
   path: '/sdk-preview',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/sdk-preview.lazy').then((d) => d.Route))
 const RoomRoute = RoomRouteImport.update({
   id: '/room',
   path: '/room',
@@ -53,10 +63,59 @@ const NewRoute = NewRouteImport.update({
   path: '/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppTenantRoute = AppTenantRouteImport.update({
+  id: '/tenant',
+  path: '/tenant',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSpacesRoute = AppSpacesRouteImport.update({
+  id: '/spaces',
+  path: '/spaces',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPeopleRoute = AppPeopleRouteImport.update({
+  id: '/people',
+  path: '/people',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHomeRoute = AppHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEpisodesRoute = AppEpisodesRouteImport.update({
+  id: '/episodes',
+  path: '/episodes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDeveloperRoute = AppDeveloperRouteImport.update({
+  id: '/developer',
+  path: '/developer',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppArtifactsRoute = AppArtifactsRouteImport.update({
+  id: '/artifacts',
+  path: '/artifacts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppActivityRoute = AppActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccountRoute = AppAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -68,6 +127,15 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
+  '/account': typeof AppAccountRoute
+  '/activity': typeof AppActivityRoute
+  '/artifacts': typeof AppArtifactsRoute
+  '/developer': typeof AppDeveloperRoute
+  '/episodes': typeof AppEpisodesRoute
+  '/home': typeof AppHomeRoute
+  '/people': typeof AppPeopleRoute
+  '/spaces': typeof AppSpacesRoute
+  '/tenant': typeof AppTenantRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,10 +146,20 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
+  '/account': typeof AppAccountRoute
+  '/activity': typeof AppActivityRoute
+  '/artifacts': typeof AppArtifactsRoute
+  '/developer': typeof AppDeveloperRoute
+  '/episodes': typeof AppEpisodesRoute
+  '/home': typeof AppHomeRoute
+  '/people': typeof AppPeopleRoute
+  '/spaces': typeof AppSpacesRoute
+  '/tenant': typeof AppTenantRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
   '/room': typeof RoomRoute
@@ -89,6 +167,15 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
+  '/_app/account': typeof AppAccountRoute
+  '/_app/activity': typeof AppActivityRoute
+  '/_app/artifacts': typeof AppArtifactsRoute
+  '/_app/developer': typeof AppDeveloperRoute
+  '/_app/episodes': typeof AppEpisodesRoute
+  '/_app/home': typeof AppHomeRoute
+  '/_app/people': typeof AppPeopleRoute
+  '/_app/spaces': typeof AppSpacesRoute
+  '/_app/tenant': typeof AppTenantRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +188,15 @@ export interface FileRouteTypes {
     | '/status'
     | '/terms'
     | '/whiteboard'
+    | '/account'
+    | '/activity'
+    | '/artifacts'
+    | '/developer'
+    | '/episodes'
+    | '/home'
+    | '/people'
+    | '/spaces'
+    | '/tenant'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,9 +207,19 @@ export interface FileRouteTypes {
     | '/status'
     | '/terms'
     | '/whiteboard'
+    | '/account'
+    | '/activity'
+    | '/artifacts'
+    | '/developer'
+    | '/episodes'
+    | '/home'
+    | '/people'
+    | '/spaces'
+    | '/tenant'
   id:
     | '__root__'
     | '/'
+    | '/_app'
     | '/new'
     | '/privacy'
     | '/room'
@@ -121,10 +227,20 @@ export interface FileRouteTypes {
     | '/status'
     | '/terms'
     | '/whiteboard'
+    | '/_app/account'
+    | '/_app/activity'
+    | '/_app/artifacts'
+    | '/_app/developer'
+    | '/_app/episodes'
+    | '/_app/home'
+    | '/_app/people'
+    | '/_app/spaces'
+    | '/_app/tenant'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
   NewRoute: typeof NewRoute
   PrivacyRoute: typeof PrivacyRoute
   RoomRoute: typeof RoomRoute
@@ -185,6 +301,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -192,11 +315,101 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/tenant': {
+      id: '/_app/tenant'
+      path: '/tenant'
+      fullPath: '/tenant'
+      preLoaderRoute: typeof AppTenantRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/spaces': {
+      id: '/_app/spaces'
+      path: '/spaces'
+      fullPath: '/spaces'
+      preLoaderRoute: typeof AppSpacesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/people': {
+      id: '/_app/people'
+      path: '/people'
+      fullPath: '/people'
+      preLoaderRoute: typeof AppPeopleRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/home': {
+      id: '/_app/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof AppHomeRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/episodes': {
+      id: '/_app/episodes'
+      path: '/episodes'
+      fullPath: '/episodes'
+      preLoaderRoute: typeof AppEpisodesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/developer': {
+      id: '/_app/developer'
+      path: '/developer'
+      fullPath: '/developer'
+      preLoaderRoute: typeof AppDeveloperRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/artifacts': {
+      id: '/_app/artifacts'
+      path: '/artifacts'
+      fullPath: '/artifacts'
+      preLoaderRoute: typeof AppArtifactsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/activity': {
+      id: '/_app/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof AppActivityRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/account': {
+      id: '/_app/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AppAccountRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppAccountRoute: typeof AppAccountRoute
+  AppActivityRoute: typeof AppActivityRoute
+  AppArtifactsRoute: typeof AppArtifactsRoute
+  AppDeveloperRoute: typeof AppDeveloperRoute
+  AppEpisodesRoute: typeof AppEpisodesRoute
+  AppHomeRoute: typeof AppHomeRoute
+  AppPeopleRoute: typeof AppPeopleRoute
+  AppSpacesRoute: typeof AppSpacesRoute
+  AppTenantRoute: typeof AppTenantRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAccountRoute: AppAccountRoute,
+  AppActivityRoute: AppActivityRoute,
+  AppArtifactsRoute: AppArtifactsRoute,
+  AppDeveloperRoute: AppDeveloperRoute,
+  AppEpisodesRoute: AppEpisodesRoute,
+  AppHomeRoute: AppHomeRoute,
+  AppPeopleRoute: AppPeopleRoute,
+  AppSpacesRoute: AppSpacesRoute,
+  AppTenantRoute: AppTenantRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
   NewRoute: NewRoute,
   PrivacyRoute: PrivacyRoute,
   RoomRoute: RoomRoute,

@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
+import { UserGroupIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
 import { useIsMobile } from "../../internal/useMediaQuery";
 
@@ -155,6 +156,20 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
       behavior: "smooth",
     });
   }, []);
+
+  if (participants.length === 0) {
+    return (
+      <div className={cn("flex h-full w-full items-center justify-center px-6 py-10", className)} data-tour="video-grid" role="status" aria-live="polite" aria-atomic="true">
+        <div className="flex w-full max-w-sm flex-col items-center rounded-[14px] border border-dashed border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-7 py-10 text-center shadow-[var(--chalk-app-shadow-xs)] sm:px-10">
+          <div aria-hidden="true" className="mb-5 grid h-12 w-12 place-items-center rounded-full bg-[var(--chalk-app-control)] text-[var(--chalk-app-text-muted)]">
+            <UserGroupIcon size={24} />
+          </div>
+          <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--chalk-app-text)]">The Space is quiet</h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--chalk-app-text-muted)]">No other Participants are here yet.</p>
+        </div>
+      </div>
+    );
+  }
 
   // ============================================
   // MOBILE LAYOUTS

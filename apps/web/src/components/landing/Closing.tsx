@@ -42,9 +42,11 @@ export function Closing() {
             <p>Explore the current React surface and the architecture around it.</p>
           </div>
           <div className="closing-actions">
-            <a href="/sdk-preview" className="btn btn-primary">
-              View SDK preview
-            </a>
+            {import.meta.env.DEV ? (
+              <a href="/sdk-preview" className="btn btn-primary">
+                View SDK preview
+              </a>
+            ) : null}
             <a href="#sdk" className="btn btn-secondary">
               Explore the SDKs
             </a>

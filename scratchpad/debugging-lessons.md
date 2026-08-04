@@ -132,3 +132,12 @@ decoded shape as well as fixture acceptance and generated-file drift. Real
 transport proofs should treat a protocol error after apparent convergence as a
 failure, because racing to stop after the event can hide a rejected delivery
 acknowledgement.
+
+## State Galleries Must Reach The Production Empty Boundary
+
+A fixture harness can label a route as empty while the production component
+still renders a blank surface. Drive zero-data scenarios through the same
+component used by the product, assert meaningful status semantics, and verify
+the result at desktop and mobile widths. Preview chrome also needs a tested
+restore affordance above product-owned mobile docks; DOM presence alone does
+not prove that the control is visible or usable.

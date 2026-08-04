@@ -142,7 +142,7 @@ export type {
 export { uploadChatAttachment } from "./composite/chat-file-upload";
 export type { UploadChatAttachmentOptions } from "./composite/chat-file-upload";
 
-export { EndScreen, GuidedTour, JoiningScreen, PreJoinScreen, ConferenceView, WhiteboardView } from "./full";
+export { EndScreen, GuidedTour, JoinFailedScreen, JoiningScreen, PreJoinScreen, ConferenceView, WhiteboardView } from "./full";
 export type {
   ConferenceLayout,
   ConferencePanel,
@@ -156,6 +156,7 @@ export type {
   ConferenceViewWhiteboard,
   EndScreenProps,
   GuidedTourProps,
+  JoinFailedScreenProps,
   JoiningScreenProps,
   PreJoinScreenProps,
   PreJoinSettings,

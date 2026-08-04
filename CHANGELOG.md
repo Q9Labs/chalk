@@ -12,6 +12,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added a development-only, URL-addressable SDK state gallery for the Entrance
+  and Space, including loading, waiting, empty, warning, retry, confirmation,
+  timeout, failure, recovery, and ended states built from production React SDK
+  components.
+- Added a web `JoinFailedScreen` with retry and Entrance actions, plus an
+  explicit zero-Participant state for `ParticipantGrid` across desktop and
+  mobile layouts.
+
 ### Changed
 
 - Added independently composable palette and texture options to the React

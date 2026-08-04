@@ -10,8 +10,8 @@ export function ScreenShareMock() {
         <div className="mx-auto max-w-[460px] flex-1 truncate rounded-[6px] border border-[#deddd7] bg-white px-3 py-1 text-center font-mono text-[10px] text-[#858a92]">chalk.team/docs/product-review</div>
         <span className="text-[10px] text-[#6d727b]">Shared by Nora</span>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[150px_minmax(0,1fr)] bg-[#fbfaf7]">
-        <aside className="border-r border-[#deddd7] p-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 bg-[#fbfaf7] sm:grid-cols-[150px_minmax(0,1fr)]">
+        <aside className="hidden border-r border-[#deddd7] p-4 sm:block">
           <p className="text-sm font-semibold">Workspace</p>
           <div className="mt-5 space-y-2 text-xs text-[#6d727b]">
             <p className="rounded-[6px] bg-[#eaf7fb] px-2.5 py-2 font-medium text-[#315f72]">Product review</p>
@@ -20,7 +20,7 @@ export function ScreenShareMock() {
             <p className="px-2.5 py-2">Open questions</p>
           </div>
         </aside>
-        <div className="min-w-0 overflow-auto px-[8%] py-8">
+        <div className="min-w-0 overflow-auto px-[6%] py-6 sm:px-[8%] sm:py-8">
           <div className="mx-auto max-w-[720px]">
             <div className="flex items-center justify-between border-b border-[#deddd7] pb-5">
               <div>
@@ -34,7 +34,7 @@ export function ScreenShareMock() {
             <div className="mt-7 grid gap-4 sm:grid-cols-3">
               {[
                 { value: "42 ms", label: "p95 join time" },
-                { value: "99.99%", label: "room availability" },
+                { value: "99.99%", label: "Space availability" },
                 { value: "5", label: "open decisions" },
               ].map((item) => (
                 <div key={item.label} className="rounded-[8px] border border-[#deddd7] bg-white p-4">
@@ -47,7 +47,7 @@ export function ScreenShareMock() {
               <div>
                 <h3 className="text-base font-semibold">Today’s decisions</h3>
                 <div className="mt-3 space-y-3">
-                  {["Keep meeting controls in reserved space below the stage", "Ship whiteboard as a first-class collaborative surface", "Use a single calm focus border across form controls"].map((text, index) => (
+                  {["Keep Space controls in reserved space below the stage", "Ship whiteboard as a first-class collaborative surface", "Use a single calm focus border across form controls"].map((text, index) => (
                     <div key={text} className="flex items-start gap-3 rounded-[8px] border border-[#deddd7] bg-white p-3 text-xs leading-5">
                       <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#e8f1e4] font-mono text-[10px] text-[#49645d]">{index + 1}</span>
                       {text}

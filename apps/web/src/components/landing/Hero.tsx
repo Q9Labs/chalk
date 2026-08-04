@@ -11,9 +11,11 @@ export function SiteNav() {
           <a href="#self-host">Self-host</a>
           <a href="#features">Features</a>
         </nav>
-        <a href="/sdk-preview" className="btn btn-primary nav-cta">
-          View SDK preview
-        </a>
+        {import.meta.env.DEV ? (
+          <a href="/sdk-preview" className="btn btn-primary nav-cta">
+            View SDK preview
+          </a>
+        ) : null}
       </div>
     </header>
   );
@@ -67,9 +69,11 @@ export function Hero() {
           </h1>
           <p className="hero-sub">Open-source video infrastructure for TypeScript, React, and React Native.</p>
           <div className="hero-ctas">
-            <a href="/sdk-preview" className="btn btn-primary">
-              View SDK preview
-            </a>
+            {import.meta.env.DEV ? (
+              <a href="/sdk-preview" className="btn btn-primary">
+                View SDK preview
+              </a>
+            ) : null}
             <a href="#sdk" className="btn btn-secondary">
               Explore the SDKs
             </a>

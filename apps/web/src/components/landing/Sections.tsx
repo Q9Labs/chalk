@@ -58,7 +58,7 @@ export function FrontDoors() {
               <h3>Shape the whole room</h3>
               <p>Compose the lobby, video stage, participant tools, whiteboard, chat, and diagnostics without replacing the meeting core.</p>
             </div>
-            <a href="/sdk-preview">Open the component preview</a>
+            {import.meta.env.DEV ? <a href="/sdk-preview">Open the component preview</a> : null}
           </article>
         </div>
       </div>
