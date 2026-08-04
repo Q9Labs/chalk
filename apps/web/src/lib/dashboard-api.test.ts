@@ -85,6 +85,26 @@ describe("dashboard API client", () => {
     expect(new Headers((fetcher.mock.calls[3]?.[1] as RequestInit).headers).get("x-chalk-csrf")).toBe("csrf-two");
   });
 
+  it("keeps journey and trace correlation across a CSRF recovery retry", async () => {
+    const account = { user: { id: "account-1", name: "Hasan", email: "hasan@example.com", updated_at: "2026-08-04T00:00:00Z", created_at: "2026-08-04T00:00:00Z" } };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrf_token: "csrf-stale" }))
+      .mockResolvedValueOnce(Response.json({ error: { code: "csrf_mismatch", message: "Refresh CSRF" } }, { status: 403 }))
+      .mockResolvedValueOnce(Response.json({ csrf_token: "csrf-fresh" }))
+      .mockResolvedValueOnce(Response.json(account));
+    vi.stubGlobal("fetch", fetcher);
+    const { loginAccount } = await import("./dashboard-api");
+
+    await expect(loginAccount({ email: "hasan@example.com", password: "password-1" })).resolves.toMatchObject({ id: "account-1" });
+
+    const firstHeaders = new Headers((fetcher.mock.calls[1]?.[1] as RequestInit).headers);
+    const retryHeaders = new Headers((fetcher.mock.calls[3]?.[1] as RequestInit).headers);
+    expect(retryHeaders.get("x-chalk-csrf")).toBe("csrf-fresh");
+    expect(retryHeaders.get("x-chalk-journey-id")).toBe(firstHeaders.get("x-chalk-journey-id"));
+    expect(retryHeaders.get("traceparent")).toBe(firstHeaders.get("traceparent"));
+  });
+
   it("carries Account Tenant pagination across every authorized page", async () => {
     const fetcher = vi
       .fn()

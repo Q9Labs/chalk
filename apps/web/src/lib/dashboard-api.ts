@@ -108,12 +108,17 @@ type DashboardRequestOptions = {
   headers?: HeadersInit;
 };
 
-async function dashboardRequest<T = unknown>(path: string, options: DashboardRequestOptions = {}, retryCSRF = true): Promise<T> {
+type DashboardRequestCorrelation = {
+  journeyID: string;
+  traceparent: string;
+};
+
+async function dashboardRequest<T = unknown>(path: string, options: DashboardRequestOptions = {}, retryCSRF = true, correlation: DashboardRequestCorrelation = newDashboardRequestCorrelation()): Promise<T> {
   const method = options.method ?? "GET";
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
-  headers.set("X-Chalk-Journey-ID", crypto.randomUUID());
-  headers.set("Traceparent", newTraceparent());
+  headers.set("X-Chalk-Journey-ID", correlation.journeyID);
+  headers.set("Traceparent", correlation.traceparent);
   if (method !== "GET") {
     headers.set("Content-Type", "application/json");
     headers.set("X-Chalk-CSRF", await getCSRFToken());
@@ -131,12 +136,16 @@ async function dashboardRequest<T = unknown>(path: string, options: DashboardReq
     if (retryCSRF && method !== "GET" && response.status === 403 && code === "csrf_mismatch") {
       csrfToken = undefined;
       csrfExpiresAt = 0;
-      return dashboardRequest(path, options, false);
+      return dashboardRequest(path, options, false, correlation);
     }
     throw new DashboardAPIError(response.status, code, stringValue(error.message) ?? "Request failed");
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+function newDashboardRequestCorrelation(): DashboardRequestCorrelation {
+  return { journeyID: crypto.randomUUID(), traceparent: newTraceparent() };
 }
 
 async function getCSRFToken(): Promise<string> {
