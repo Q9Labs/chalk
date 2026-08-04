@@ -33,6 +33,11 @@ Wave 7 (marketing/docs) is Claude's, running alongside: root README,
 belong to their code waves. Docs written from the ratified sheets are
 acceptance canon — waves make the documented code real.
 
+8. `scratchpad/wave-8-reconciliation-prompt-2026-08-04.md` — reconcile
+   local `master`, the completed rename tip, the dashboard completion tail,
+   and the dirty live Episode debugger work. After waves 6 and 7. This is an
+   extraction and adaptation wave, not a wholesale merge of stale trees.
+
 ## Rulings: all closed (2026-08-03 night)
 
 Every decision the prompts defer to Hasan is ruled and recorded in
