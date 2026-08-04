@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { resolveNativeAppearance, type NativeAppearance, type ThemeAppearance, type ThemePalette, type ThemeTexture } from "./appearance";
@@ -18,6 +18,16 @@ interface NativeAppearanceProviderProps extends PropsWithChildren {
 
 export function NativeAppearanceProvider({ children, initialAppearance, onAppearanceChange }: NativeAppearanceProviderProps): React.JSX.Element {
   const [selection, setSelection] = useState<ThemeAppearance>({ palette: initialAppearance?.palette ?? "light", texture: initialAppearance?.texture ?? "none" });
+  useEffect(() => {
+    if (initialAppearance?.palette === undefined && initialAppearance?.texture === undefined) return;
+    setSelection((current) => {
+      const next = {
+        palette: initialAppearance?.palette ?? current.palette,
+        texture: initialAppearance?.texture ?? current.texture,
+      } satisfies ThemeAppearance;
+      return next.palette === current.palette && next.texture === current.texture ? current : next;
+    });
+  }, [initialAppearance?.palette, initialAppearance?.texture]);
   const appearance = useMemo(() => resolveNativeAppearance(selection), [selection]);
 
   const updateSelection = useCallback(

@@ -13,6 +13,7 @@ export interface NativeRoomActionsProjection {
 }
 
 export interface NativeRoomActionCommands {
+  readonly retryConnection?: () => Promise<void>;
   readonly sendChatMessage: (text: string) => Promise<void>;
   readonly sendReaction: (reaction: string) => Promise<void>;
   readonly requestUnmute: (participantSessionId: string) => Promise<void>;
@@ -77,6 +78,7 @@ export function projectNativeRoomActions(snapshot: ChalkSessionSnapshot | null):
 
 export function createNativeRoomActionCommands(store: ChalkSessionStore): NativeRoomActionCommands {
   return {
+    retryConnection: () => store.join(),
     async sendChatMessage(text) {
       await store.sendChatMessage({ text });
     },

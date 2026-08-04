@@ -60,4 +60,21 @@ describe("createPreJoinPreviewStore", () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     unsubscribe();
   });
+
+  it("keeps the preview disabled without opening the camera or reporting an error", () => {
+    const getUserMedia = vi.fn(async () => createStream(true).stream);
+    const store = createPreJoinPreviewStore({
+      enabled: true,
+      previewMode: "disabled",
+      simulatorVideoDisabled: false,
+      simulatorVideoMessage: "simulator",
+      getUserMedia,
+    });
+
+    const unsubscribe = store.subscribe(() => {});
+
+    expect(store.getSnapshot()).toEqual({ previewStream: null, previewError: null });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    unsubscribe();
+  });
 });

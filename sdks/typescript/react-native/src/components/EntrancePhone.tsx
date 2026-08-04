@@ -14,8 +14,8 @@ import { FaceAvatar } from "./FaceAvatar";
 import type { PreJoinScreenProps } from "./PreJoinScreen";
 import { usePreJoinScreenController } from "./native-prejoin/usePreJoinScreenController";
 
-export function EntrancePhone({ roomName, error, joinDisabled = false, logo, onCancel, ...props }: PreJoinScreenProps): React.JSX.Element {
-  const controller = usePreJoinScreenController({ ...props, joinDisabled });
+export function EntrancePhone({ roomName, error, joinDisabled = false, logo, onCancel, previewMode = "device", ...props }: PreJoinScreenProps): React.JSX.Element {
+  const controller = usePreJoinScreenController({ ...props, joinDisabled, previewMode });
   const { height, width } = useWindowDimensions();
   const entranceProgress = useRef(new Animated.Value(0)).current;
   const previewHeight = Math.min(Math.max(width * 1.06, height * 0.44), height * 0.52, 560);

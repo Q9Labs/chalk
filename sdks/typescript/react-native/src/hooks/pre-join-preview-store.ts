@@ -1,4 +1,5 @@
 import type { NativeMediaStream } from "../media/native-webrtc";
+import type { PreJoinPreviewMode } from "../components/PreJoinScreen";
 import type { ExternalStore } from "./external-store";
 
 export interface PreviewSnapshot {
@@ -10,6 +11,7 @@ export type PreJoinPreviewStore = ExternalStore<PreviewSnapshot>;
 
 interface PreJoinPreviewStoreOptions {
   readonly enabled: boolean;
+  readonly previewMode?: PreJoinPreviewMode;
   readonly simulatorVideoDisabled: boolean;
   readonly simulatorVideoMessage: string;
   readonly getUserMedia: (constraints: unknown) => Promise<NativeMediaStream>;
@@ -26,9 +28,10 @@ function stopPreviewTracks(stream: NativeMediaStream | null): void {
 }
 
 export function createPreJoinPreviewStore(options: PreJoinPreviewStoreOptions): PreJoinPreviewStore {
+  const previewMode = options.previewMode ?? "device";
   const initialSnapshot: PreviewSnapshot = {
     previewStream: null,
-    previewError: options.enabled && options.simulatorVideoDisabled ? options.simulatorVideoMessage : null,
+    previewError: previewMode === "device" && options.enabled && options.simulatorVideoDisabled ? options.simulatorVideoMessage : null,
   };
   let snapshot = initialSnapshot;
   let activeStream: NativeMediaStream | null = null;
@@ -47,7 +50,7 @@ export function createPreJoinPreviewStore(options: PreJoinPreviewStoreOptions): 
   };
 
   const start = (): void => {
-    if (!options.enabled || options.simulatorVideoDisabled) return;
+    if (previewMode === "disabled" || !options.enabled || options.simulatorVideoDisabled) return;
 
     const generation = ++requestGeneration;
     void options

@@ -3,7 +3,7 @@
 import type { ChalkSessionStore } from "@q9labsai/chalk-client";
 import { describe, expect, it, vi } from "vitest";
 
-import { renderHook, waitFor } from "./test-renderer";
+import { renderHook, waitFor } from "../test-renderer";
 import { useJoinSession } from "./use-join-session";
 
 describe("useJoinSession", () => {

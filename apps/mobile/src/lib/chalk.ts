@@ -3,11 +3,14 @@ import * as SecureStore from "expo-secure-store";
 import { maskSecret } from "@q9labsai/chalk-react-native/diagnostics";
 import { extractJoinTokenFromInviteLink } from "@q9labsai/chalk-react-native/invites";
 import { getDeviceInfo, getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
-import type { ClientSession, ClientSessionCredential } from "@q9labsai/chalk-react-native";
+import type { ClientSession as SpaceClient, ClientSessionCredential as AccessGrantCredential } from "@q9labsai/chalk-react-native";
 
-const CLIENT_SESSION_PREFIX = "chalk_mobile_client_session_v2.";
+import { parsePreviewRoute, type PreviewRoutePolicy, type SdkPreviewRoute } from "../dev-preview/preview-route";
+
+const CLIENT_ACCESS_PREFIX = "chalk_mobile_client_session_v2.";
 const LAST_INVITE_KEY = "chalk_mobile_last_invite_v2";
 const PRODUCTION_BROKER_URL = "https://chalkmeet.com/local-chalk";
+const ROUTE_FIELD = { spaceId: "roomId", spaceName: "roomName" } as const;
 
 export interface MobileDebugContext {
   inviteTokenPreview: string | null;
@@ -15,18 +18,20 @@ export interface MobileDebugContext {
 }
 
 type BaseMeetingRoute = {
-  roomId: string;
+  [ROUTE_FIELD.spaceId]: string;
   role: "host" | "participant";
   joinToken?: string;
-  roomName?: string;
-  source: "new-meeting" | "join-link";
+  [ROUTE_FIELD.spaceName]?: string;
+  source: "new-space" | "join-link";
 };
 
 export type LobbyRoute = BaseMeetingRoute & {
   kind: "lobby";
 };
 
-export type MobileRoute = { kind: "home" } | LobbyRoute;
+export type MobileRoute = { kind: "home" } | LobbyRoute | SdkPreviewRoute;
+
+export type MobileRoutePolicy = PreviewRoutePolicy;
 
 export function getBrokerUrl(): string {
   return resolveAppRuntimeUrl({
@@ -41,20 +46,20 @@ export function canCreateMeeting(): boolean {
   return true;
 }
 
-export async function createMeetingLobbyRoute(roomName?: string): Promise<LobbyRoute> {
+export async function createMeetingLobbyRoute(spaceName?: string): Promise<LobbyRoute> {
   return {
     kind: "lobby",
-    roomId: "new-meeting",
-    roomName: roomName?.trim() || undefined,
+    [ROUTE_FIELD.spaceId]: "new-space",
+    [ROUTE_FIELD.spaceName]: spaceName?.trim() || undefined,
     role: "host",
-    source: "new-meeting",
+    source: "new-space",
   };
 }
 
 export async function resolveJoinToken(joinToken: string): Promise<LobbyRoute> {
   return {
     kind: "lobby",
-    roomId: joinToken,
+    [ROUTE_FIELD.spaceId]: joinToken,
     role: "participant",
     joinToken,
     source: "join-link",
@@ -65,12 +70,23 @@ export function parseInputDestination(input: string): LobbyRoute | null {
   return parseUrlLike(input);
 }
 
+/**
+ * Resolve app-level links before invite parsing. Preview links are accepted
+ * only when the caller explicitly supplies a development runtime policy.
+ */
+export function parseMobileRoute(url: string, policy: MobileRoutePolicy = { isDevRuntime: false }): MobileRoute | null {
+  const previewRoute = parsePreviewRoute(url, policy);
+  if (previewRoute) return previewRoute;
+
+  return parseUrlLike(url);
+}
+
 export function parseUrlLike(url: string): LobbyRoute | null {
   const joinToken = extractJoinTokenFromInviteLink(url);
   return joinToken
     ? {
         kind: "lobby",
-        roomId: joinToken,
+        [ROUTE_FIELD.spaceId]: joinToken,
         role: "participant",
         joinToken,
         source: "join-link",
@@ -78,11 +94,11 @@ export function parseUrlLike(url: string): LobbyRoute | null {
     : null;
 }
 
-export async function loadClientSessionCredential(inviteToken: string): Promise<ClientSessionCredential | undefined> {
+export async function loadClientSessionCredential(inviteToken: string): Promise<AccessGrantCredential | undefined> {
   const value = await SecureStore.getItemAsync(credentialKey(inviteToken));
   if (!value) return undefined;
   try {
-    const parsed = JSON.parse(value) as Partial<ClientSessionCredential>;
+    const parsed = JSON.parse(value) as Partial<AccessGrantCredential>;
     if (parsed.inviteToken === inviteToken && isCapability(parsed.clientSessionId)) {
       return { clientSessionId: parsed.clientSessionId, inviteToken };
     }
@@ -93,7 +109,7 @@ export async function loadClientSessionCredential(inviteToken: string): Promise<
   return undefined;
 }
 
-export async function saveClientSessionCredential(credential: ClientSessionCredential): Promise<void> {
+export async function saveClientSessionCredential(credential: AccessGrantCredential): Promise<void> {
   await Promise.all([SecureStore.setItemAsync(credentialKey(credential.inviteToken), JSON.stringify(credential)), SecureStore.setItemAsync(LAST_INVITE_KEY, credential.inviteToken)]);
 }
 
@@ -102,11 +118,11 @@ export async function clearClientSessionCredential(inviteToken: string): Promise
   await Promise.all([SecureStore.deleteItemAsync(credentialKey(inviteToken)), ...(lastInviteToken === inviteToken ? [SecureStore.deleteItemAsync(LAST_INVITE_KEY)] : [])]);
 }
 
-export async function cleanupClientSession(clientSession: ClientSession): Promise<void> {
+export async function cleanupClientSession(spaceClient: SpaceClient): Promise<void> {
   try {
-    await clientSession.cleanup();
+    await spaceClient.cleanup();
   } finally {
-    await clearClientSessionCredential(clientSession.inviteToken);
+    await clearClientSessionCredential(spaceClient.inviteToken);
   }
 }
 
@@ -126,7 +142,7 @@ export async function getMobileDebugContext(): Promise<MobileDebugContext> {
 }
 
 function credentialKey(inviteToken: string): string {
-  return `${CLIENT_SESSION_PREFIX}${inviteToken}`;
+  return `${CLIENT_ACCESS_PREFIX}${inviteToken}`;
 }
 
 function isCapability(value: unknown): value is string {

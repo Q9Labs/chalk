@@ -15,6 +15,7 @@ import type { ConferenceViewProps } from "../ConferenceView";
 import type { ConferenceViewAction } from "./types";
 import { useConferenceViewCapabilities } from "./useConferenceViewCapabilities";
 import { useConferenceViewChat } from "./useConferenceViewChat";
+import { deriveConnectionStatus } from "../ConnectionStatusBanner";
 import { useConferenceViewDiagnostics } from "./useConferenceViewDiagnostics";
 import { useConferenceViewDerived } from "./useConferenceViewDerived";
 import { useConferenceViewInteractions } from "./useConferenceViewInteractions";
@@ -22,7 +23,7 @@ import { useConferenceViewMedia } from "./useConferenceViewMedia";
 import { useConferenceViewPanels } from "./useConferenceViewPanels";
 import { useConferenceViewParticipants } from "./useConferenceViewParticipants";
 
-export function useConferenceViewController({ roomName, meetingLink, features, onLeave, onEndForAll, onDiagnosticsChange, pickChatAttachments }: ConferenceViewProps) {
+export function useConferenceViewController({ roomName, meetingLink, features, onLeave, onEndForAll, onDiagnosticsChange, pickChatAttachments, initialState, controlledState }: ConferenceViewProps) {
   const session = useChalkSession();
   const telemetry = useTelemetry();
   const snapshot = useChalkSnapshot();
@@ -44,14 +45,14 @@ export function useConferenceViewController({ roomName, meetingLink, features, o
   const capabilities = useConferenceViewCapabilities({ features, session, snapshot, chat, interactions });
   const roomMedia = useConferenceViewMedia({ media, screenShare, run });
   const roomInteractions = useConferenceViewInteractions({ interactions, run });
-  const roomPanels = useConferenceViewPanels({ roomName, meetingLink, canWhiteboard: capabilities.canWhiteboard, isHost: capabilities.isHost, session, room, telemetry, onLeave, onEndForAll, run });
+  const panels = useConferenceViewPanels({ roomName, meetingLink, canWhiteboard: capabilities.canWhiteboard, isHost: capabilities.isHost, session, room, telemetry, onLeave, onEndForAll, run, initialState, controlledState });
   const roomChat = useConferenceViewChat({ session, chat, pickChatAttachments, run });
   const roomParticipants = useConferenceViewParticipants({ isHost: capabilities.isHost, snapshot, session, participants, commands, run });
   const derived = useConferenceViewDerived({
     participants: participants.participants,
     localParticipant: participants.localParticipant,
     screenShare,
-    isWhiteboardOpen: roomPanels.whiteboard.isOpen,
+    isWhiteboardOpen: panels.whiteboard.isOpen,
   });
   const diagnostics = useConferenceViewDiagnostics({
     capabilities,
@@ -61,22 +62,27 @@ export function useConferenceViewController({ roomName, meetingLink, features, o
     screenShare,
     onDiagnosticsChange,
   });
+  const connectionStatus = deriveConnectionStatus(snapshot);
+  const retryConnection = useCallback(() => {
+    if (commands.retryConnection) void run(commands.retryConnection);
+  }, [commands, run]);
 
   return {
     simulatorMediaDisabled: isIosSimulator(),
     roomName: roomName || room.roomName || "Space",
     isHost: capabilities.isHost,
-    panel: roomPanels.panel,
+    panel: panels.panel,
     selfName: roomParticipants.selfName,
     isMuted: roomMedia.isMuted,
     isCameraOff: roomMedia.isCameraOff,
     handRaised: roomInteractions.handRaised,
     raisedHandCount: roomInteractions.raisedHandCount,
     activeReactions: roomInteractions.activeReactions,
-    secondsElapsed: roomPanels.secondsElapsed,
-    formattedDuration: roomPanels.formattedDuration,
-    actionsOpen: roomPanels.actionsOpen,
-    reactionPickerOpen: roomPanels.reactionPickerOpen,
+    secondsElapsed: panels.secondsElapsed,
+    formattedDuration: panels.formattedDuration,
+    actionsOpen: panels.actionsOpen,
+    reactionPickerOpen: panels.reactionPickerOpen,
+    settingsOpen: panels.settingsOpen,
     chatDraft: roomChat.chatDraft,
     chatAttachments: roomChat.chatAttachments,
     chatAttachmentsLoading: roomChat.chatAttachmentsLoading,
@@ -97,20 +103,23 @@ export function useConferenceViewController({ roomName, meetingLink, features, o
     canStopParticipantScreenShare: capabilities.canStopParticipantScreenShare,
     admissionRequests: roomParticipants.admissionRequests,
     roomDiagnostics: diagnostics.roomDiagnostics,
+    connectionStatus,
+    retryConnection,
     participants,
     chat,
     interactions,
     screenShare,
-    layout: roomPanels.layout,
-    whiteboard: roomPanels.whiteboard,
+    layout: panels.layout,
+    whiteboard: panels.whiteboard,
     derived,
-    setActionsOpen: roomPanels.setActionsOpen,
-    setReactionPickerOpen: roomPanels.setReactionPickerOpen,
+    setActionsOpen: panels.setActionsOpen,
+    setReactionPickerOpen: panels.setReactionPickerOpen,
+    setSettingsOpen: panels.setSettingsOpen,
     setChatDraft: roomChat.setChatDraft,
-    handleLeave: roomPanels.handleLeave,
-    openPanel: roomPanels.openPanel,
-    closePanel: roomPanels.closePanel,
-    handleInviteParticipants: roomPanels.handleInviteParticipants,
+    handleLeave: panels.handleLeave,
+    openPanel: panels.openPanel,
+    closePanel: panels.closePanel,
+    handleInviteParticipants: panels.handleInviteParticipants,
     toggleAudio: roomMedia.toggleAudio,
     toggleVideo: roomMedia.toggleVideo,
     toggleScreenShare: roomMedia.toggleScreenShare,

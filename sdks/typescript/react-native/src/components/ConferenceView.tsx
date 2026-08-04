@@ -7,6 +7,17 @@ import { ConferenceViewMacos } from "./ConferenceView.macos";
 import type { ConferenceViewDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
 import type { ThemeAppearance, ThemePalette, ThemeTexture } from "../ui/appearance";
 
+export interface SpaceViewInitialState {
+  readonly layout?: "grid" | "focus" | "presentation";
+  readonly panel?: "chat" | "participants" | null;
+  readonly actionsOpen?: boolean;
+  readonly reactionPickerOpen?: boolean;
+  readonly whiteboardOpen?: boolean;
+  readonly settingsOpen?: boolean;
+  readonly durationSeconds?: number;
+  readonly leaveConfirmationOpen?: boolean;
+}
+
 export interface ConferenceViewFeatures {
   chat?: boolean;
   participants?: boolean;
@@ -24,6 +35,12 @@ export interface ConferenceViewProps {
   onLeave: () => void | Promise<void>;
   onEndForAll?: () => void | Promise<void>;
   onDiagnosticsChange?: (snapshot: ConferenceViewDiagnosticsSnapshot) => void;
+  initialState?: SpaceViewInitialState;
+  /**
+   * Optional state synchronisation for development harnesses. Omitted in
+   * production callers, this preserves the existing initialState behaviour.
+   */
+  controlledState?: SpaceViewInitialState;
   initialPalette?: ThemePalette;
   initialTexture?: ThemeTexture;
   onAppearanceChange?: (appearance: ThemeAppearance) => void;

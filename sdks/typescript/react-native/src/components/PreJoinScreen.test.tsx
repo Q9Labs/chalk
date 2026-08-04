@@ -10,6 +10,6 @@ describe("PreJoinScreen", () => {
   it("selects the platform-specific pre-join lobby", async () => {
     const { PreJoinScreen } = await import("./PreJoinScreen");
 
-    expect(PreJoinScreen({ roomName: "Room", onJoin: vi.fn() })).toBeTruthy();
+    expect(PreJoinScreen({ roomName: "Room", onJoin: vi.fn(), previewMode: "disabled" })).toBeTruthy();
   });
 });

@@ -5,7 +5,7 @@ import { JoiningScreenIosPhone } from "./JoiningScreen.ios-phone";
 import { JoiningScreenMacos } from "./JoiningScreen.macos";
 
 export interface JoiningScreenProps {
-  displayName: string;
+  displayName?: string;
   message?: string;
   supportingMessages?: readonly string[];
 }

@@ -3,7 +3,7 @@
 import { StrictMode, createElement, type PropsWithChildren } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { renderHook } from "./test-renderer";
+import { renderHook } from "../test-renderer";
 import { useAutoJoin } from "./use-auto-join";
 
 describe("useAutoJoin", () => {

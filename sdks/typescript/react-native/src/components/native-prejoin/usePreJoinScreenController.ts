@@ -26,8 +26,9 @@ export function usePreJoinScreenController({
   initialAudioEnabled = false,
   initialVideoEnabled = false,
   joinDisabled = false,
+  previewMode = "device",
   onJoin,
-}: Pick<PreJoinScreenProps, "role" | "userName" | "initialAudioEnabled" | "initialVideoEnabled" | "joinDisabled" | "onJoin">): UsePreJoinScreenControllerResult {
+}: Pick<PreJoinScreenProps, "role" | "userName" | "initialAudioEnabled" | "initialVideoEnabled" | "joinDisabled" | "previewMode" | "onJoin">): UsePreJoinScreenControllerResult {
   const simulatorMediaDisabled = isIosSimulator();
   const store = useMemo(
     () =>
@@ -47,7 +48,7 @@ export function usePreJoinScreenController({
     onJoin,
   });
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const { previewError, previewStream } = usePreJoinPreview(snapshot.videoEnabled);
+  const { previewError, previewStream } = usePreJoinPreview(snapshot.videoEnabled, previewMode);
 
   return {
     displayName: snapshot.displayName,

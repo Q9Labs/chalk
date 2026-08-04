@@ -10,6 +10,7 @@ import { MeetingActionMenu, MeetingPanel, selectReaction } from "./native-meetin
 import { MeetingStageAndroid } from "./native-meeting-room/MeetingStage.android";
 import { MeetingTopBarAndroid } from "./native-meeting-room/MeetingTopBar.android";
 import { MeetingWhiteboardSurface } from "./native-meeting-room/MeetingWhiteboardSurface";
+import { ConnectionStatusBanner } from "./ConnectionStatusBanner";
 import { useConferenceViewController } from "./native-meeting-room/useConferenceViewController";
 import { Theme } from "../ui/theme";
 import { NativeAppearanceProvider, NativeTextureOverlay, useNativeAppearance } from "../ui/native-appearance-context";
@@ -60,6 +61,7 @@ function AppearanceAwareSpace(props: ConferenceViewProps): React.JSX.Element {
     <SafeAreaView style={[styles.room, { backgroundColor: appearance.tokens.canvas }]}>
       <NativeTextureOverlay />
       <MeetingTopBarAndroid formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
+      {controller.connectionStatus ? <ConnectionStatusBanner onRetry={controller.connectionStatus.kind === "recoverable-failure" ? controller.retryConnection : undefined} status={controller.connectionStatus} /> : null}
       <Animated.View style={[styles.stage, { backgroundColor: appearance.tokens.stage, opacity: stageProgress, transform: [{ translateY: stageProgress.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }]}>
         {controller.whiteboard.isOpen ? (
           <MeetingWhiteboardSurface whiteboard={controller.whiteboard} />

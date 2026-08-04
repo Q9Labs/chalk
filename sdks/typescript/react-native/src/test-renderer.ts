@@ -14,7 +14,7 @@ type RenderHookResult<Result, Props> = {
 };
 
 type RenderHook = <Result, Props = undefined>(callback: (props: Props) => Result, options?: RenderHookOptions<Props>) => RenderHookResult<Result, Props>;
-type Act = (callback: () => void) => void;
+type Act = (callback: () => void | Promise<void>) => void | Promise<void>;
 type WaitFor = (callback: () => void | Promise<void>) => Promise<void>;
 
 const testingLibrary = createRequire(import.meta.url)(join(process.cwd(), "../react/node_modules", "@" + "testing-library", "react")) as {

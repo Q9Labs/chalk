@@ -4,19 +4,23 @@ import { Theme } from "../ui/theme";
 import type { JoiningScreenProps } from "./JoiningScreen";
 import { ChalkLogoElements } from "./ChalkLogoElements";
 import { createNativeJoiningLoadingAnimation, type NativeJoiningLoadingAnimation } from "./native-joining-loading-animation";
+import { useJoiningScreenMessage } from "./joining-screen-message";
 
-export function JoiningScreenAndroid({ message = "Preparing Space…" }: JoiningScreenProps): React.JSX.Element {
+export function JoiningScreenAndroid({ displayName, message = "Preparing Space…", supportingMessages }: JoiningScreenProps): React.JSX.Element {
   const animationRef = useRef<NativeJoiningLoadingAnimation | null>(null);
   const animation = animationRef.current ?? (animationRef.current = createNativeJoiningLoadingAnimation());
+  const activeMessage = useJoiningScreenMessage(message, supportingMessages);
 
   return (
     <View style={styles.screen}>
-      <Animated.View ref={animation.ref} style={[styles.content, { opacity: animation.fadeAnim }]}>
+      <Animated.View accessible accessibilityLabel={displayName ? `${activeMessage} for ${displayName}` : activeMessage} accessibilityLiveRegion="polite" accessibilityRole="progressbar" ref={animation.ref} style={[styles.content, { opacity: animation.fadeAnim }]}>
         <Animated.View style={[styles.illustrationFrame, { transform: [{ scale: animation.pulseAnim }] }]}>
           <ChalkLogoElements size={100} />
         </Animated.View>
         <Text style={styles.brand}>chalk</Text>
-        <Text style={styles.label}>{message}</Text>
+        <Text accessibilityLiveRegion="polite" style={styles.label}>
+          {activeMessage}
+        </Text>
       </Animated.View>
     </View>
   );

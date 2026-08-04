@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../platform/platform", () => ({ resolvePlatformVariant: () => "android" }));

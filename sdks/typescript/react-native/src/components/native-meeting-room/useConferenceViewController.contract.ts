@@ -7,6 +7,7 @@ import type { UseLayoutReturn } from "../../hooks/useLayout";
 import type { UseMeetingParticipantsReturn } from "../../hooks/useMeetingParticipants";
 import type { UseScreenShareReturn } from "../../hooks/useScreenShare";
 import type { ConferenceViewDiagnosticsSnapshot } from "./diagnostics";
+import type { ConnectionStatusBannerState } from "../ConnectionStatusBanner";
 import type { MeetingPanelName } from "./types";
 import type { useConferenceViewController } from "./useConferenceViewController";
 import type { useConferenceViewDerived } from "./useConferenceViewDerived";
@@ -29,6 +30,7 @@ type ExpectedConferenceViewController = {
   readonly formattedDuration: string;
   readonly actionsOpen: boolean;
   readonly reactionPickerOpen: boolean;
+  readonly settingsOpen: boolean;
   readonly chatDraft: string;
   readonly chatAttachments: ConferenceViewChat["chatAttachments"];
   readonly chatAttachmentsLoading: boolean;
@@ -49,6 +51,8 @@ type ExpectedConferenceViewController = {
   readonly canStopParticipantScreenShare: boolean;
   readonly admissionRequests: ChalkSessionSnapshot["admissionRequests"];
   readonly roomDiagnostics: ConferenceViewDiagnosticsSnapshot;
+  readonly connectionStatus: ConnectionStatusBannerState | null;
+  readonly retryConnection: () => void;
   readonly participants: UseMeetingParticipantsReturn;
   readonly chat: UseChatReturn;
   readonly interactions: UseInteractionsReturn;
@@ -58,6 +62,7 @@ type ExpectedConferenceViewController = {
   readonly derived: ReturnType<typeof useConferenceViewDerived>;
   readonly setActionsOpen: Dispatch<SetStateAction<boolean>>;
   readonly setReactionPickerOpen: Dispatch<SetStateAction<boolean>>;
+  readonly setSettingsOpen: Dispatch<SetStateAction<boolean>>;
   readonly setChatDraft: Dispatch<SetStateAction<string>>;
   readonly handleLeave: () => void;
   readonly openPanel: (nextPanel: MeetingPanelName) => void;

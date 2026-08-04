@@ -14,7 +14,7 @@ import { isIosSimulator } from "../utils/ios-simulator";
 import { EndScreen, type MeetingEndData } from "./EndScreen";
 import { JoinFailedScreen } from "./JoinFailedScreen";
 import { JoiningScreen } from "./JoiningScreen";
-import { ConferenceView as SpaceView, type ConferenceViewFeatures } from "./ConferenceView";
+import { ConferenceView as SpaceView, type ConferenceViewFeatures, type SpaceViewInitialState } from "./ConferenceView";
 import { PreJoinScreen, type PreJoinSettings } from "./PreJoinScreen";
 import type { ConferenceViewDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
 import type { ThemeAppearance, ThemePalette, ThemeTexture } from "../ui/appearance";
@@ -51,6 +51,7 @@ export interface VideoConferenceProps {
   readonly role?: "host" | "participant";
   readonly autoJoin?: boolean;
   readonly initialPhase?: VideoConferencePhase;
+  readonly initialState?: SpaceViewInitialState;
   readonly initialJoinSettings?: Partial<PreJoinSettings>;
   readonly features?: ConferenceViewFeatures;
   readonly initialPalette?: ThemePalette;
@@ -247,6 +248,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   return (
     <SpaceView
       features={props.features}
+      initialState={props.initialState}
       initialPalette={props.initialPalette}
       initialTexture={props.initialTexture}
       meetingLink={props.meetingLink}

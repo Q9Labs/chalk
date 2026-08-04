@@ -18,7 +18,7 @@ export function EndScreenMacos({ data, onRejoin, onGoHome }: EndScreenProps): Re
             <HugeiconsIcon icon={CheckmarkCircle01Icon} size={40} color={Theme.colors.success} />
           </View>
           <Text style={styles.eyebrow}>Meeting Complete</Text>
-          <Text style={styles.title} numberOfLines={2}>
+          <Text accessibilityRole="header" style={styles.title} numberOfLines={2}>
             {data.roomName}
           </Text>
         </View>
@@ -30,12 +30,12 @@ export function EndScreenMacos({ data, onRejoin, onGoHome }: EndScreenProps): Re
         </View>
 
         <View style={styles.actions}>
-          <Pressable onPress={onRejoin} style={styles.primaryButton}>
+          <Pressable accessibilityLabel="Rejoin Space" accessibilityRole="button" onPress={onRejoin} style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Rejoin Meeting</Text>
             <HugeiconsIcon icon={ArrowRight01Icon} size={20} color="white" />
           </Pressable>
 
-          <Pressable onPress={onGoHome} style={styles.secondaryButton}>
+          <Pressable accessibilityLabel="Back to Home" accessibilityRole="button" onPress={onGoHome} style={styles.secondaryButton}>
             <HugeiconsIcon icon={Home01Icon} size={20} color={Theme.colors.mutedForeground} />
             <Text style={styles.secondaryButtonText}>Back to Home</Text>
           </Pressable>

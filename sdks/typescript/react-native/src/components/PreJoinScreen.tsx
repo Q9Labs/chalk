@@ -10,12 +10,15 @@ export type PreJoinSettings = {
   readonly cameraEnabled: boolean;
 };
 
+export type PreJoinPreviewMode = "device" | "disabled";
+
 export interface PreJoinScreenProps {
   roomName: string;
   role?: "host" | "participant";
   userName?: string;
   initialAudioEnabled?: boolean;
   initialVideoEnabled?: boolean;
+  previewMode?: PreJoinPreviewMode;
   error?: string | null;
   logo?: React.ReactNode;
   joinDisabled?: boolean;

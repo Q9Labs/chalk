@@ -1,5 +1,4 @@
 import type { ChalkReaction } from "@q9labsai/chalk-client";
-import { useState } from "react";
 
 import { SettingsSheet } from "./SettingsSheet";
 import { SpaceMoreSheet } from "./SpaceMoreSheet";
@@ -9,11 +8,10 @@ import type { SpaceController } from "./space-progressive-surface-types";
 export type { SpaceController } from "./space-progressive-surface-types";
 
 export function MeetingActionMenu({ controller }: { readonly controller: SpaceController }): React.JSX.Element {
-  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <>
-      <SpaceMoreSheet controller={controller} onOpenSettings={() => setSettingsOpen(true)} />
-      <SettingsSheet controller={controller} isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SpaceMoreSheet controller={controller} onOpenSettings={() => controller.setSettingsOpen(true)} />
+      <SettingsSheet controller={controller} isOpen={controller.settingsOpen} onClose={() => controller.setSettingsOpen(false)} />
     </>
   );
 }

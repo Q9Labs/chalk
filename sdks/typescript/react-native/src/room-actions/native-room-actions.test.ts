@@ -123,6 +123,7 @@ describe("native room-actions bridge", () => {
     await commands.muteParticipant("participant-2");
     await commands.stopParticipantCamera("participant-2");
     await commands.removeParticipant("participant-2");
+    await commands.retryConnection?.();
 
     expect(store.sendChatMessage).toHaveBeenCalledWith({ text: "Hello" });
     expect(store.sendReaction).toHaveBeenCalledWith("👍");
@@ -131,6 +132,7 @@ describe("native room-actions bridge", () => {
     expect(store.muteParticipant).toHaveBeenCalledWith("participant-2");
     expect(store.stopParticipantCamera).toHaveBeenCalledWith("participant-2");
     expect(store.removeParticipant).toHaveBeenCalledWith("participant-2");
+    expect(store.join).toHaveBeenCalledOnce();
   });
 
   it("maps incoming prompt buttons to accept and decline without legacy fallbacks", async () => {
@@ -161,6 +163,7 @@ describe("native room-actions bridge", () => {
 
 function actionStore(): ChalkSessionStore {
   return {
+    join: vi.fn(() => Promise.resolve()),
     sendChatMessage: vi.fn(() => Promise.resolve()),
     sendReaction: vi.fn(() => Promise.resolve()),
     requestUnmute: vi.fn(() => Promise.resolve()),

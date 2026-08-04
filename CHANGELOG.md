@@ -20,6 +20,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and Space, including loading, waiting, empty, warning, retry, confirmation,
   timeout, failure, recovery, and ended states built from production React SDK
   components.
+- Added a development-only, deep-linkable React Native mobile gallery that
+  mounts the production `PreJoinScreen`, `JoiningScreen`, `JoinFailedScreen`,
+  `EndScreen`, and `ConferenceView` surfaces over a local deterministic
+  `ChalkProvider` fixture; its permission-free, network-free Entrance and Space
+  fixtures expose only supported native state knobs with lifecycle surface
+  parity.
 - Added a web `JoinFailedScreen` with retry and Entrance actions, plus an
   explicit zero-Participant state for `ParticipantGrid` across desktop and
   mobile layouts.

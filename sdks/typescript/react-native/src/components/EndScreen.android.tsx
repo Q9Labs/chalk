@@ -18,7 +18,7 @@ export function EndScreenAndroid({ data, onRejoin, onGoHome }: EndScreenProps): 
             <HugeiconsIcon icon={CheckmarkCircle01Icon} size={40} color={Theme.colors.success} />
           </View>
           <Text style={styles.eyebrow}>Episode complete</Text>
-          <Text style={styles.title} numberOfLines={2}>
+          <Text accessibilityRole="header" style={styles.title} numberOfLines={2}>
             {data.roomName}
           </Text>
         </View>
@@ -30,12 +30,12 @@ export function EndScreenAndroid({ data, onRejoin, onGoHome }: EndScreenProps): 
         </View>
 
         <View style={styles.actions}>
-          <Pressable onPress={onRejoin} style={styles.primaryButton}>
+          <Pressable accessibilityLabel="Return to Space" accessibilityRole="button" onPress={onRejoin} style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Return to Space</Text>
             <HugeiconsIcon icon={ArrowRight01Icon} size={20} color="white" />
           </Pressable>
 
-          <Pressable onPress={onGoHome} style={styles.secondaryButton}>
+          <Pressable accessibilityLabel="Back to Home" accessibilityRole="button" onPress={onGoHome} style={styles.secondaryButton}>
             <HugeiconsIcon icon={Home01Icon} size={20} color={Theme.colors.mutedForeground} />
             <Text style={styles.secondaryButtonText}>Back to Home</Text>
           </Pressable>

@@ -3,7 +3,7 @@
 import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
 import { describe, expect, it, vi } from "vitest";
 
-import { act, renderHook, waitFor } from "./test-renderer";
+import { act, renderHook, waitFor } from "../test-renderer";
 import { useVideoConferenceDiagnostics } from "./use-video-conference-diagnostics";
 
 type ConferenceSnapshot = Pick<ChalkSessionSnapshot, "state" | "failure" | "connection">;
