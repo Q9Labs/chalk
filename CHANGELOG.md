@@ -21,6 +21,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added a web `JoinFailedScreen` with retry and Entrance actions, plus an
   explicit zero-Participant state for `ParticipantGrid` across desktop and
   mobile layouts.
+- Added the first fixture-backed Chalk dashboard slice in `apps/web`, with a
+  responsive general-product shell, Home and Spaces routes, the New Space
+  dialog, and routed foundations for Episodes, Artifacts, People, Developer,
+  Activity, Tenant settings, and Account.
+- Added the dashboard Account/Tenant foundation: self-scoped Tenant discovery,
+  atomic idempotent owner onboarding, a hardened same-origin account boundary,
+  sign-in and sign-up, resumable Tenant selection, Account and Tenant reads,
+  generated client contracts, trace proof, and public boundary monitoring.
 
 ### Changed
 

@@ -188,6 +188,14 @@ function serviceMonitorDefinitions(env: Env): readonly MonitorDefinition[] {
       expectedStatusCodes: [200],
     },
     {
+      key: "web.account_boundary",
+      method: "GET",
+      url: monitorURL(webBaseURL, "/api/healthz", "WEB_BASE_URL"),
+      severity: "major",
+      expectedStatusCodes: [200],
+      requiredResponseHeaders: ["cache-control", "x-chalk-journey-id"],
+    },
+    {
       key: "api.health",
       method: "GET",
       url: monitorURL(apiBaseURL, "/healthz", "API_MONITOR_BASE_URL"),

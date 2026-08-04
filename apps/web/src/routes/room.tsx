@@ -3,7 +3,7 @@ import { VideoConference, type PreJoinSettings } from "@q9labsai/chalk-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { cleanupLocalBrowserSession, createLocalAccessProvider, createLocalBrowserSession } from "../lib/chalk-access";
+import { cleanupLocalBrowserSession, createLocalAccessProvider, createLocalBrowserAccess } from "../lib/chalk-access";
 
 export const Route = createFileRoute("/room")({ component: LocalRoomPage });
 
@@ -12,16 +12,16 @@ function LocalRoomPage() {
   const [meetingLink, setMeetingLink] = useState(() => globalThis.location?.href);
 
   const createSession = async (settings: PreJoinSettings) => {
-    const browserSession = await createLocalBrowserSession(settings.displayName, meetingInviteToken());
-    if (browserSession.inviteToken) {
-      setMeetingInviteToken(browserSession.inviteToken);
+    const browserAccess = await createLocalBrowserAccess(settings.displayName, meetingInviteToken());
+    if (browserAccess.inviteToken) {
+      setMeetingInviteToken(browserAccess.inviteToken);
       setMeetingLink(globalThis.location?.href);
     }
 
     return new ChalkSession({
       access: createLocalAccessProvider(),
-      apiBaseURL: browserSession.apiBaseURL,
-      syncURL: browserSession.syncURL,
+      apiBaseURL: browserAccess.apiBaseURL,
+      syncURL: browserAccess.syncURL,
       initialMicrophoneEnabled: settings.microphoneEnabled,
       initialCameraEnabled: settings.cameraEnabled,
     });

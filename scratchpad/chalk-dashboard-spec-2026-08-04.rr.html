@@ -1,0 +1,170 @@
+<rr-doc title="Chalk dashboard" register="spec" project="Chalk" verdict="active" risk="major" summary="Track Chalk’s general-product dashboard, completed Account and Tenant foundation, canonical contract prerequisites, and implementation seams through launch.">
+  <style>
+    @media (max-width: 900px) {
+      .deck-spine,
+      .deck .corner {
+        display: none !important;
+      }
+      .deck .hud {
+        left: 0 !important;
+      }
+    }
+    .product-map {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .product-map article {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      background: var(--surface);
+    }
+    .product-map small {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font:
+        11px ui-monospace,
+        monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .product-map b {
+      font-size: 18px;
+    }
+    .product-map p {
+      margin: 6px 0 0;
+      font-size: 13px;
+    }
+    .direction-image {
+      display: block;
+      width: 100%;
+      max-height: 590px;
+      object-fit: contain;
+      object-position: center;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #f7f6f2;
+    }
+    @media (max-width: 760px) {
+      .product-map {
+        grid-template-columns: 1fr;
+      }
+      .direction-image {
+        max-height: 430px;
+      }
+    }
+  </style>
+  <rr-deck id="chalk-dashboard-spec">
+    <rr-slide spine="Start">
+      <h1>Chalk dashboard</h1>
+      <p class="lede">
+        A general collaboration product centered on durable <rr-term def="A durable place with identity, configuration, Members, schedule, and living content.">Spaces</rr-term>, the <rr-term def="One bounded run of activity inside a Space.">Episodes</rr-term> inside them, and the context people
+        leave behind.
+      </p>
+      <rr-tiles>
+        <rr-tile icon="route" label="Core first run" value="4 states" caption="Account → Tenant → Space → invite or join"></rr-tile>
+        <rr-tile icon="layers" label="Product center" value="Collaboration" caption="Developer is a secondary branch"></rr-tile>
+        <rr-tile icon="shield" label="Browser boundary" value="Same origin" caption="No raw account token in the browser"></rr-tile>
+        <rr-tile icon="check" label="Build status" value="S1 complete" caption="Account, Tenant, boundary, and shell gate passed" tone="green"></rr-tile>
+      </rr-tiles>
+      <p><a href="./chalk-dashboard-spec-2026-08-04.md">Read the executor specification</a></p>
+    </rr-slide>
+
+    <rr-slide spine="States" title="The trusted Account and Tenant path now exists">
+      <rr-panes>
+        <rr-before label="Current state">
+          <h3>Capabilities without a trusted path</h3>
+          <p>The web app began without a protected shell, Dashboard Account client, authorized Tenant context, or customer dashboard routes.</p>
+          <p>Registration could not lead into atomic owner onboarding, and a normal Account could not discover its authorized Tenants.</p>
+        </rr-before>
+        <rr-after label="Desired state">
+          <h3>One recoverable collaboration product</h3>
+          <p>An Account now signs in behind a same-origin boundary, creates and owns a Tenant atomically, reloads an authorized Tenant, and signs out cleanly.</p>
+          <p>S2 continues from authoritative onboarding state into the first Space. Developer setup still branches later.</p>
+        </rr-after>
+      </rr-panes>
+      <rr-callout tone="blue"><b>Gate proof:</b> the browser journey and the real boundary-to-Go-API journey passed, including idempotent replay and cookie-clearing logout.</rr-callout>
+    </rr-slide>
+
+    <rr-slide spine="Direction" title="The product feels like a collaboration studio">
+      <img class="direction-image" src="../docs/redesign/dashboard-mockups/00-image1-general-product-home-concept-v3.png" alt="Selected general-product Chalk dashboard direction with recent Spaces, Episodes, and Artifacts" />
+      <rr-beat><p>Home answers “where do I continue?” It does not lead with usage KPIs, infrastructure health, or credential management.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Map" title="One shell, nine clear customer jobs">
+      <div class="product-map">
+        <article>
+          <small>Continue</small><b>Home</b>
+          <p>Recent Spaces, Episodes, Artifacts, and Quick join.</p>
+        </article>
+        <article>
+          <small>Gather</small><b>Spaces</b>
+          <p>Durable places, their Members, settings, and history.</p>
+        </article>
+        <article>
+          <small>Remember</small><b>Episodes</b>
+          <p>Tenant-wide immutable history and attendance.</p>
+        </article>
+        <article>
+          <small>Use context</small><b>Artifacts</b>
+          <p>Recordings and Transcripts with processing states.</p>
+        </article>
+        <article>
+          <small>Collaborate</small><b>People</b>
+          <p>Backed customer identities and Space assignments.</p>
+        </article>
+        <article>
+          <small>Build</small><b>Developer</b>
+          <p>API keys, SDK setup, webhooks, and integrations.</p>
+        </article>
+        <article>
+          <small>Understand</small><b>Activity</b>
+          <p>Authorized, redacted audit history.</p>
+        </article>
+        <article>
+          <small>Configure</small><b>Tenant</b>
+          <p>Identity, access, region, and supported defaults.</p>
+        </article>
+        <article>
+          <small>Be yourself</small><b>Account</b>
+          <p>Dashboard identity and authentication state.</p>
+        </article>
+      </div>
+    </rr-slide>
+
+    <rr-slide spine="Boundary" title="Three prerequisites make private UI trustworthy">
+      <rr-callout tone="green"><b>Tenant ownership landed:</b> one idempotent transaction creates the Tenant and owner-level Tenant access. Replay, conflict, rollback, isolation, and concurrency are proved.</rr-callout>
+      <rr-callout tone="green"><b>Same-origin boundary landed:</b> the web origin owns hardened cookies, CSRF and Origin checks, safe OAuth returns, cache policy, token stripping, trace propagation, and health.</rr-callout>
+      <rr-callout tone="red"><b>Canonical contracts:</b> Space, Episode, Role, Capability, Participant, Artifact, and Dashboard Account semantics land before private pages consume production data.</rr-callout>
+      <rr-beat><p>S2 carries authoritative onboarding state into idempotent first-Space creation, but general resource pages stay fixture-backed until S3 closes the canonical contract gate.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Route" title="The execution path is gated at real seams">
+      <rr-phases>
+        <rr-phase label="S0 · Visual foundation" caption="Shell, Home, Spaces, dialogs, mockup index, and responsive proof" state="done"></rr-phase>
+        <rr-phase label="S1 · Account and Tenant" caption="Atomic onboarding, same-origin boundary, protected identity path, and full seam gate" state="done"></rr-phase>
+        <rr-phase label="S2 · First-Space onboarding" caption="Authoritative resume state, idempotent creation, invite, and Quick join" state="now"></rr-phase>
+        <rr-phase label="S3 · Canonical contracts" caption="Space, Episode, Capability, lifecycle, history, and generated client migration"></rr-phase>
+        <rr-phase label="S4–6 · Product depth" caption="Spaces; Episodes, Artifacts, People; then Developer and Tenant administration"></rr-phase>
+        <rr-phase label="S7–8 · Prove and launch" caption="Resilience, operations, acceptance, release gates, and approved production launch"></rr-phase>
+      </rr-phases>
+      <rr-beat><p>Only independent UI-primitives and browser-boundary work run in parallel. Contract choices, integration, and release sign-off remain orchestrator-owned.</p></rr-beat>
+    </rr-slide>
+
+    <rr-slide spine="Done" title="Completion is observable, not decorative">
+      <rr-checklist label="Release checks">
+        <rr-todo>Core onboarding reaches a first Space without forcing an API key</rr-todo>
+        <rr-todo>Every private request rechecks authorized Tenant context</rr-todo>
+        <rr-todo>Space and Episode lifecycle laws survive concurrency, reload, and recovery</rr-todo>
+        <rr-todo>One-time secrets never enter browser storage, URLs, logs, telemetry, or caches</rr-todo>
+        <rr-todo>Desktop and mobile cover loading, empty, stale, forbidden, offline, and failure states</rr-todo>
+        <rr-todo>Journey and W3C trace context reach the API and downstream boundaries</rr-todo>
+        <rr-todo>Focused gates and <code>pnpm run gate</code> pass before release</rr-todo>
+      </rr-checklist>
+      <rr-callout tone="amber"><b>Out of scope:</b> billing, plans, SSO, legal hold, Team or Workspace grouping, incident administration, and internal operations tools.</rr-callout>
+    </rr-slide>
+  </rr-deck>
+</rr-doc>

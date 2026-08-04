@@ -3514,8 +3514,12 @@ func authenticatedRequestWithOptions(t *testing.T, method string, path string, o
 func authenticatedRequestWithOptionsAndBody(t *testing.T, method string, path string, body string, options httpapi.Options) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := bearerRequestWithBody(method, path, "raw-session-token", body)
+	req := bearerRequestWithBody(method, path, authenticatedFixtureToken(), body)
 	return requestWithOptionsAndRequest(t, req, authenticatedOptions(t, options))
+}
+
+func authenticatedFixtureToken() string {
+	return "raw-session-token"
 }
 
 func systemRequestWithOptions(t *testing.T, method string, path string, options httpapi.Options) *httptest.ResponseRecorder {

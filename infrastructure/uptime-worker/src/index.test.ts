@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { __internal, runMonitorCycle, type Env } from "./index";
 
 function createResponse(status: number, body = "", headers?: HeadersInit): Response {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("cache-control", responseHeaders.get("cache-control") ?? "no-store");
+  responseHeaders.set("x-chalk-journey-id", responseHeaders.get("x-chalk-journey-id") ?? "test-journey");
   return new Response(body, {
     status,
-    headers,
+    headers: responseHeaders,
   });
 }
 
@@ -85,6 +88,7 @@ describe("chalk ops monitor worker", () => {
   it("checks the launch surfaces and supports environment-specific target overrides", () => {
     expect(__internal.DEFAULT_MONITORS).toEqual([
       expect.objectContaining({ key: "web.room", url: "https://chalkmeet.com/room", method: "GET" }),
+      expect.objectContaining({ key: "web.account_boundary", url: "https://chalkmeet.com/api/healthz", method: "GET" }),
       expect.objectContaining({ key: "api.health", url: "https://api.chalkmeet.com/healthz", method: "GET" }),
       expect.objectContaining({ key: "api.readiness", url: "https://api.chalkmeet.com/readyz", method: "GET" }),
       expect.objectContaining({ key: "sync.health", url: "https://sync.chalkmeet.com/healthz", method: "GET" }),
@@ -100,6 +104,7 @@ describe("chalk ops monitor worker", () => {
     });
     expect(overridden.map(({ key, url }) => ({ key, url }))).toEqual([
       { key: "web.room", url: "https://web.staging.example/room" },
+      { key: "web.account_boundary", url: "https://web.staging.example/api/healthz" },
       { key: "api.health", url: "https://api.staging.example/healthz" },
       { key: "api.readiness", url: "https://api.staging.example/readyz" },
       { key: "sync.health", url: "https://sync.staging.example/healthz" },
@@ -126,13 +131,13 @@ describe("chalk ops monitor worker", () => {
 
     const env = createEnv({ CHECK_RETRIES: "0" });
     const failed = await runMonitorCycle(env, new Date("2026-04-14T12:00:00Z"));
-    expect(failed).toMatchObject({ checked_count: 6, healthy_count: 5, failed_count: 1 });
+    expect(failed).toMatchObject({ checked_count: 7, healthy_count: 6, failed_count: 1 });
     expect(ingestedStatuses).toContainEqual(expect.objectContaining({ monitor_key: "sync.readiness", status: "failed", error_code: "unexpected_status" }));
 
     syncReady = true;
     ingestedStatuses.length = 0;
     const recovered = await runMonitorCycle(env, new Date("2026-04-14T12:05:00Z"));
-    expect(recovered).toMatchObject({ checked_count: 6, healthy_count: 6, failed_count: 0 });
+    expect(recovered).toMatchObject({ checked_count: 7, healthy_count: 7, failed_count: 0 });
     expect(ingestedStatuses).toContainEqual(expect.objectContaining({ monitor_key: "sync.readiness", status: "healthy" }));
 
     const publicResponse = await worker.fetch(new Request("https://chalk-uptime-worker.example/"), env);
@@ -155,6 +160,7 @@ describe("chalk ops monitor worker", () => {
     const summary = await runMonitorCycle(
       createEnv({
         OPS_FALLBACK_BUFFER_BUCKET: bucket,
+        RETRY_BACKOFF_MS: "0",
       }),
       new Date("2026-04-14T12:01:00Z"),
     );

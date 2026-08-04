@@ -1457,6 +1457,19 @@ const tenantsGroup = HttpApiGroup.make("tenants")
     }),
   )
   .add(
+    HttpApiEndpoint.get("listMyTenants", "/v1/me/tenants", {
+      query: S.ListMyTenantsQueryParamsSchema,
+      success: S.ListMyTenantsResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.InvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listTenants", "/v1/tenants", {
       query: S.ListTenantsQueryParamsSchema,
       success: S.ListTenantsResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -1465,6 +1478,25 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.InvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
         S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.ForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("onboardTenant", "/v1/me/tenants", {
+      headers: S.OnboardTenantRequestHeadersSchema,
+      payload: S.OnboardTenantRequestBodySchema,
+      success: S.OnboardTenantResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.InvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantNameErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.InvalidTenantRegionErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.UnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.IdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.InternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],

@@ -29,7 +29,7 @@ func meEndpoint(service AuthenticationService) Endpoint[noRequest, authUserRespo
 
 		return newAuthUserResponse(sessionUser.User), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		UserAuth().
 		Middleware(requireAuthentication(service)).
 		RateLimit(authMeRateLimit).
 		Responds(http.StatusOK, "AuthUser", authUserResponse{}).

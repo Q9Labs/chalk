@@ -46,6 +46,7 @@ type Options struct {
 	Readiness              ReadinessChecker
 	RecorderHealth         RecorderHealthChecker
 	Authentication         AuthenticationService
+	AccountTenants         AccountTenantService
 	APIKeys                APIKeyService
 	APIKeyAuthentication   APIKeyAuthenticator
 	APIKeyAudits           APIKeyAuditWriter
@@ -219,6 +220,7 @@ func mountV1Routes(r chi.Router, options Options) {
 		r.Group(func(r chi.Router) {
 			r.Use(requireSessionAuthentication(options.Authentication))
 			mountMeRoutes(r, options.Authentication, options.RateLimit)
+			mountAccountTenantRoutes(r, options.AccountTenants, options.RateLimit)
 			if options.LocalTelemetry {
 				mountLocalJourneyQueryRoutes(r, options.Journeys, options.RateLimit)
 			}

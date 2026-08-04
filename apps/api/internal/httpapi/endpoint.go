@@ -66,6 +66,10 @@ func (e Endpoint[Request, Response]) Auth(auth APIAuth) Endpoint[Request, Respon
 	return e
 }
 
+func (e Endpoint[Request, Response]) UserAuth() Endpoint[Request, Response] {
+	return e.Auth(APIAuthSessionOrBearer)
+}
+
 func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint[Request, Response] {
 	e.contract.RateLimit = policy
 	return e

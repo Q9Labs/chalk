@@ -2,18 +2,20 @@ import type { ChalkSessionAccessProvider, ChalkSessionAccessRequest, Participant
 
 const localBackendPath = "/local-chalk";
 
-export type LocalBrowserSession = {
+export type LocalBrowserAccess = {
   readonly apiBaseURL: string;
   readonly inviteToken?: string;
   readonly syncURL: string;
 };
 
-export async function createLocalBrowserSession(displayName: string, inviteToken?: string): Promise<LocalBrowserSession> {
-  return request<LocalBrowserSession>("/browser-session", {
+export async function createLocalBrowserAccess(displayName: string, inviteToken?: string): Promise<LocalBrowserAccess> {
+  return request<LocalBrowserAccess>("/browser-session", {
     displayName,
     ...(inviteToken ? { inviteToken } : {}),
   });
 }
+
+export const createLocalBrowserSession = createLocalBrowserAccess;
 
 export function createLocalAccessProvider(): ChalkSessionAccessProvider {
   return async (input?: ChalkSessionAccessRequest) => {

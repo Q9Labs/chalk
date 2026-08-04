@@ -25,6 +25,11 @@ it("accepts only the branded architecture denial boundary", async () => {
   const fetchMock = vi.fn(async (input: string | URL | Request) => {
     const url = requestedURL(input);
     if (url.pathname === ingestPath) return new Response("accepted", { status: 202 });
+    if (url.pathname === "/api/healthz") {
+      return new Response("ok", {
+        headers: { "cache-control": "no-store", "x-chalk-journey-id": "test-journey" },
+      });
+    }
     if (url.origin !== new URL(atlasURL).origin) return new Response("ok");
     const headers = includeBoundaryHeaders
       ? {

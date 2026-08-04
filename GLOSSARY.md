@@ -32,6 +32,23 @@ Episode ends? Yes means it belongs to the Space, no means the Episode.
 
 ## Core nouns
 
+### Tenant, Dashboard Account, and Tenant access
+
+A **Tenant** is Chalk's customer, deployment, isolation, authorization, and
+billing boundary. One Dashboard Account may access several Tenants. A Tenant is
+not a Space, Team, Workspace, or customer application's end-user directory.
+
+A **Dashboard Account** is a person who signs in to Chalk's first-party control
+plane. It is distinct from a customer application's User, Agent, Guest,
+Participant, or Space Member. Product copy may shorten it to Account when the
+dashboard context is unambiguous.
+
+**Tenant access** is a Dashboard Account's assignment to a Tenant, including its
+control-plane Role. It is not Space membership and never makes the Account a
+Space Member or Episode Participant. The existing `memberships` persistence and
+route names are legacy implementation vocabulary; customer-facing contracts use
+Tenant access until that storage rename wave lands.
+
 ### Space
 
 The durable place where collaboration happens. Replaces Room.

@@ -51,6 +51,10 @@ func Run(ctx context.Context, name string) (ScenarioResult, error) {
 		return runRouteAuthGoogleCallback(ctx)
 	case RouteMeScenario:
 		return runRouteMe(ctx)
+	case RouteTenantOnboardScenario:
+		return runRouteTenantOnboard(ctx, false)
+	case EdgeTenantOnboardConflictScenario:
+		return runRouteTenantOnboard(ctx, true)
 	case RouteTenantCreateScenario:
 		return runCreateTenant(ctx, RouteTenantCreateScenario)
 	case RouteTenantListSystemScenario:

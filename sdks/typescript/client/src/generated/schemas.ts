@@ -77,6 +77,68 @@ export const APIKeyWithSecretSchema = Schema.Struct({
 });
 export type APIKeyWithSecret = typeof APIKeyWithSecretSchema.Type;
 
+export const MediaPlaneProviderConfigSchema = Schema.StructWithRest(
+  Schema.Struct({
+    enabled: Schema.optional(Schema.Boolean),
+    mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
+    provider: Schema.optional(Schema.String),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+export type MediaPlaneProviderConfig = typeof MediaPlaneProviderConfigSchema.Type;
+
+export const StorageProviderConfigSchema = Schema.StructWithRest(
+  Schema.Struct({
+    access_key_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    bucket: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    enabled: Schema.optional(Schema.Boolean),
+    mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
+    prefix: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    provider: Schema.optional(Schema.Literals(["cloudflare_r2", "aws_s3"])),
+    secret_access_key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+export type StorageProviderConfig = typeof StorageProviderConfigSchema.Type;
+
+export const TenantSchema = Schema.Struct({
+  ai_provider_config: Schema.NullOr(AIProviderConfigSchema),
+  created_at: DateTimeStringSchema,
+  default_media_plane: Schema.NullOr(Schema.String),
+  default_region: Schema.NullOr(Schema.String),
+  id: TenantIdSchema,
+  logo_key: Schema.NullOr(Schema.String),
+  media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
+  name: Schema.String,
+  storage_provider_config: Schema.NullOr(StorageProviderConfigSchema),
+  updated_at: DateTimeStringSchema,
+  website: Schema.NullOr(URLStringSchema),
+});
+export type Tenant = typeof TenantSchema.Type;
+
+export const AccountTenantListSchema = Schema.Struct({
+  pagination: PaginationSchema,
+  tenants: Schema.Array(
+    Schema.Struct({
+      access: Schema.Struct({
+        account_id: UUIDSchema,
+        created_at: DateTimeStringSchema,
+        id: UUIDSchema,
+        role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+        tenant_id: TenantIdSchema,
+        updated_at: DateTimeStringSchema,
+      }),
+      tenant: TenantSchema,
+    }),
+  ),
+});
+export type AccountTenantList = typeof AccountTenantListSchema.Type;
+
+export const AccountTenantOnboardingResponseSchema = Schema.Struct({
+  replayed: Schema.Boolean,
+});
+export type AccountTenantOnboardingResponse = typeof AccountTenantOnboardingResponseSchema.Type;
+
 export const RoomSessionIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomSessionId"));
 export type RoomSessionId = typeof RoomSessionIdSchema.Type;
 
@@ -332,30 +394,6 @@ export const CreateRoomSessionRequestSchema = Schema.Struct({
 });
 export type CreateRoomSessionRequest = typeof CreateRoomSessionRequestSchema.Type;
 
-export const MediaPlaneProviderConfigSchema = Schema.StructWithRest(
-  Schema.Struct({
-    enabled: Schema.optional(Schema.Boolean),
-    mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
-    provider: Schema.optional(Schema.String),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
-export type MediaPlaneProviderConfig = typeof MediaPlaneProviderConfigSchema.Type;
-
-export const StorageProviderConfigSchema = Schema.StructWithRest(
-  Schema.Struct({
-    access_key_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    bucket: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    enabled: Schema.optional(Schema.Boolean),
-    mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
-    prefix: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    provider: Schema.optional(Schema.Literals(["cloudflare_r2", "aws_s3"])),
-    secret_access_key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
-export type StorageProviderConfig = typeof StorageProviderConfigSchema.Type;
-
 export const CreateTenantRequestSchema = Schema.Struct({
   ai_provider_config: Schema.optional(Schema.NullOr(AIProviderConfigSchema)),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
@@ -570,6 +608,12 @@ export const MembershipListSchema = Schema.Struct({
   pagination: PaginationSchema,
 });
 export type MembershipList = typeof MembershipListSchema.Type;
+
+export const OnboardTenantRequestSchema = Schema.Struct({
+  default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+  name: Schema.String.check(Schema.isMinLength(1)),
+});
+export type OnboardTenantRequest = typeof OnboardTenantRequestSchema.Type;
 
 export const RoomIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RoomId"));
 export type RoomId = typeof RoomIdSchema.Type;
@@ -868,21 +912,6 @@ export const SyncTokenSchema = Schema.Struct({
   sync_token: Schema.String,
 });
 export type SyncToken = typeof SyncTokenSchema.Type;
-
-export const TenantSchema = Schema.Struct({
-  ai_provider_config: Schema.NullOr(AIProviderConfigSchema),
-  created_at: DateTimeStringSchema,
-  default_media_plane: Schema.NullOr(Schema.String),
-  default_region: Schema.NullOr(Schema.String),
-  id: TenantIdSchema,
-  logo_key: Schema.NullOr(Schema.String),
-  media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
-  name: Schema.String,
-  storage_provider_config: Schema.NullOr(StorageProviderConfigSchema),
-  updated_at: DateTimeStringSchema,
-  website: Schema.NullOr(URLStringSchema),
-});
-export type Tenant = typeof TenantSchema.Type;
 
 export const TenantListSchema = Schema.Struct({
   pagination: PaginationSchema,
@@ -1879,6 +1908,15 @@ export type ListMembershipsQueryParams = typeof ListMembershipsQueryParamsSchema
 export const ListMembershipsResponseSchema = MembershipListSchema;
 export type ListMembershipsResponse = typeof ListMembershipsResponseSchema.Type;
 
+export const ListMyTenantsQueryParamsSchema = Schema.Struct({
+  cursor: Schema.optional(Schema.String),
+  page_size: Schema.optional(Schema.NumberFromString),
+});
+export type ListMyTenantsQueryParams = typeof ListMyTenantsQueryParamsSchema.Type;
+
+export const ListMyTenantsResponseSchema = AccountTenantListSchema;
+export type ListMyTenantsResponse = typeof ListMyTenantsResponseSchema.Type;
+
 export const ListRecordingsPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -2039,6 +2077,24 @@ export type Login429ResponseHeaders = typeof Login429ResponseHeadersSchema.Type;
 
 export const LogoutResponseSchema = StatusSchema;
 export type LogoutResponse = typeof LogoutResponseSchema.Type;
+
+export const OnboardTenantRequestHeadersSchema = Schema.Struct({
+  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+});
+export type OnboardTenantRequestHeaders = typeof OnboardTenantRequestHeadersSchema.Type;
+
+export const OnboardTenantRequestBodySchema = OnboardTenantRequestSchema;
+export type OnboardTenantRequestBody = typeof OnboardTenantRequestBodySchema.Type;
+
+export const OnboardTenantResponseSchema = AccountTenantOnboardingResponseSchema;
+export type OnboardTenantResponse = typeof OnboardTenantResponseSchema.Type;
+
+export const OnboardTenant429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type OnboardTenant429ResponseHeaders = typeof OnboardTenant429ResponseHeadersSchema.Type;
 
 export const RecoverRoomSessionHostPathParamsSchema = Schema.Struct({
   room_id: RoomIdSchema,
@@ -5099,6 +5155,9 @@ export type ListIntegrationServicesError = typeof ListIntegrationServicesErrorSc
 export const ListMembershipsErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, InvalidTenantIdErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type ListMembershipsError = typeof ListMembershipsErrorSchema.Type;
 
+export const ListMyTenantsErrorSchema = Schema.Union([InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
+export type ListMyTenantsError = typeof ListMyTenantsErrorSchema.Type;
+
 export const ListRecordingsErrorSchema = Schema.Union([ForbiddenErrorSchema, InternalErrorSchema, InvalidCursorErrorSchema, InvalidPageSizeErrorSchema, InvalidSessionIdErrorSchema, InvalidTenantIdErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
 
@@ -5159,6 +5218,20 @@ export type LoginError = typeof LoginErrorSchema.Type;
 
 export const LogoutErrorSchema = Schema.Union([InternalErrorSchema, ServiceUnavailableErrorSchema, UnauthenticatedErrorSchema]);
 export type LogoutError = typeof LogoutErrorSchema.Type;
+
+export const OnboardTenantErrorSchema = Schema.Union([
+  IdempotencyConflictErrorSchema,
+  InternalErrorSchema,
+  InvalidIdempotencyKeyErrorSchema,
+  InvalidRequestErrorSchema,
+  InvalidTenantNameErrorSchema,
+  InvalidTenantRegionErrorSchema,
+  PayloadTooLargeErrorSchema,
+  RateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UnauthenticatedErrorSchema,
+]);
+export type OnboardTenantError = typeof OnboardTenantErrorSchema.Type;
 
 export const RecoverRoomSessionHostErrorSchema = Schema.Union([
   ForbiddenErrorSchema,
@@ -5568,6 +5641,7 @@ export const ChalkOperationPolicies = {
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
+  onboardTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   recoverRoomSessionHost: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

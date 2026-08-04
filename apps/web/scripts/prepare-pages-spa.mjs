@@ -151,7 +151,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate" || (!ASSET_EXT_RE.test(url.pathname) && !url.pathname.startsWith("/api/"))) {
+  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  if (request.mode === "navigate" || !ASSET_EXT_RE.test(url.pathname)) {
     event.respondWith(handleNavigation(request));
     return;
   }

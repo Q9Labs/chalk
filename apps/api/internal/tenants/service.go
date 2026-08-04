@@ -2,13 +2,22 @@ package tenants
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
+	"regexp"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/regions"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var (
@@ -17,6 +26,17 @@ var (
 	ErrInvalidTenantRegion = errors.New("invalid tenant region")
 	ErrInvalidTenantField  = errors.New("invalid tenant field")
 	ErrTenantNotFound      = errors.New("tenant not found")
+	ErrInvalidAccountID    = errors.New("invalid dashboard account id")
+	ErrInvalidRequestKey   = errors.New("invalid tenant onboarding request key")
+	ErrIdempotencyConflict = errors.New("tenant onboarding idempotency conflict")
+)
+
+const accountTenantInstrumentationScope = "github.com/q9labs/chalk/apps/api/internal/tenants"
+
+var (
+	onboardingRequestKeyPattern      = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
+	accountTenantTracer              = otel.Tracer(accountTenantInstrumentationScope)
+	accountTenantOperationCounter, _ = otel.Meter(accountTenantInstrumentationScope).Int64Counter("chalk.api.tenant_access.operations", metric.WithUnit("{operation}"))
 )
 
 type Tenant struct {
@@ -72,8 +92,128 @@ type TenantList struct {
 	Page    pagination.Page
 }
 
+type TenantAccess struct {
+	ID        utilities.ID
+	TenantID  utilities.ID
+	AccountID utilities.ID
+	Role      memberships.Role
+	UpdatedAt time.Time
+	CreatedAt time.Time
+}
+
+type AccountTenant struct {
+	Tenant Tenant
+	Access TenantAccess
+}
+
+type AccountTenantList struct {
+	Tenants []AccountTenant
+	Page    pagination.Page
+}
+
+type AccountTenantRepository interface {
+	ListAccountTenants(context.Context, utilities.ID, pagination.PageRequest) (AccountTenantList, error)
+	OnboardTenant(context.Context, OnboardTenantRecordInput) (OnboardTenantResult, error)
+}
+
+type AccountService struct {
+	repository AccountTenantRepository
+}
+
+type OnboardTenantInput struct {
+	AccountID     utilities.ID
+	RequestKey    string
+	Name          string
+	DefaultRegion *string
+}
+
+type OnboardTenantRecordInput struct {
+	AccountID          utilities.ID
+	RequestKey         string
+	RequestFingerprint [32]byte
+	Tenant             CreateTenantInput
+	AccessID           utilities.ID
+}
+
+type OnboardTenantResult struct {
+	AccountTenant AccountTenant
+	Replayed      bool
+}
+
 func NewService(repository TenantRepository) Service {
 	return Service{repository: repository}
+}
+
+func NewAccountService(repository AccountTenantRepository) AccountService {
+	return AccountService{repository: repository}
+}
+
+func (s AccountService) ListAccountTenants(ctx context.Context, accountID utilities.ID, page pagination.PageRequest) (result AccountTenantList, resultErr error) {
+	ctx, finish := startAccountTenantOperation(ctx, "list")
+	defer func() { finish(resultErr, false) }()
+	if accountID.IsZero() {
+		return AccountTenantList{}, ErrInvalidAccountID
+	}
+	return s.repository.ListAccountTenants(ctx, accountID, page)
+}
+
+func (s AccountService) OnboardTenant(ctx context.Context, input OnboardTenantInput) (result OnboardTenantResult, resultErr error) {
+	ctx, finish := startAccountTenantOperation(ctx, "onboard")
+	defer func() { finish(resultErr, result.Replayed) }()
+	if input.AccountID.IsZero() {
+		return OnboardTenantResult{}, ErrInvalidAccountID
+	}
+	if !onboardingRequestKeyPattern.MatchString(input.RequestKey) {
+		return OnboardTenantResult{}, ErrInvalidRequestKey
+	}
+
+	tenantID, err := utilities.NewID()
+	if err != nil {
+		return OnboardTenantResult{}, fmt.Errorf("generate tenant id: %w", err)
+	}
+	accessID, err := utilities.NewID()
+	if err != nil {
+		return OnboardTenantResult{}, fmt.Errorf("generate tenant access id: %w", err)
+	}
+	tenantInput := CreateTenantInput{ID: tenantID, Name: input.Name, DefaultRegion: input.DefaultRegion}
+	if err := prepareCreateTenantInput(&tenantInput); err != nil {
+		return OnboardTenantResult{}, err
+	}
+	fingerprintPayload, err := json.Marshal(struct {
+		Name          string  `json:"name"`
+		DefaultRegion *string `json:"default_region"`
+	}{Name: tenantInput.Name, DefaultRegion: tenantInput.DefaultRegion})
+	if err != nil {
+		return OnboardTenantResult{}, fmt.Errorf("fingerprint tenant onboarding: %w", err)
+	}
+
+	return s.repository.OnboardTenant(ctx, OnboardTenantRecordInput{
+		AccountID: input.AccountID, RequestKey: input.RequestKey,
+		RequestFingerprint: sha256.Sum256(fingerprintPayload), Tenant: tenantInput, AccessID: accessID,
+	})
+}
+
+func startAccountTenantOperation(ctx context.Context, operation string) (context.Context, func(error, bool)) {
+	startedAt := time.Now()
+	ctx, span := accountTenantTracer.Start(ctx, "tenant_access."+operation)
+	return ctx, func(err error, replayed bool) {
+		outcome := "succeeded"
+		logLevel := slog.LevelInfo
+		if err != nil {
+			outcome = "failed"
+			logLevel = slog.LevelError
+			if errors.Is(err, ErrInvalidAccountID) || errors.Is(err, ErrInvalidRequestKey) || errors.Is(err, ErrIdempotencyConflict) || errors.Is(err, ErrInvalidTenantName) || errors.Is(err, ErrInvalidTenantRegion) {
+				outcome = "rejected"
+				logLevel = slog.LevelWarn
+			}
+			span.SetStatus(codes.Error, outcome)
+		}
+		attrs := []attribute.KeyValue{attribute.String("operation", operation), attribute.String("outcome", outcome), attribute.Bool("replayed", replayed)}
+		span.SetAttributes(attrs...)
+		accountTenantOperationCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+		slog.Default().Log(ctx, logLevel, "tenant access operation", "event", "tenant_access.operation", "operation", operation, "outcome", outcome, "replayed", replayed, "duration_ms", float64(time.Since(startedAt).Microseconds())/1000)
+		span.End()
+	}
 }
 
 func (s Service) CreateTenant(ctx context.Context, input CreateTenantInput) (Tenant, error) {

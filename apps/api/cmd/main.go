@@ -157,6 +157,8 @@ func run() error {
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	tenantService := tenants.NewService(tenantRepository)
+	accountTenantRepository := postgres.NewAccountTenantRepository(operationQueries, pool, diagnostics.Queries)
+	accountTenantService := tenants.NewAccountService(accountTenantRepository)
 	userRepository := postgres.NewUserRepository(operationQueries)
 	userService := users.NewService(userRepository)
 	membershipRepository := postgres.NewMembershipRepository(operationQueries)
@@ -356,6 +358,7 @@ func run() error {
 		RateLimit:              rateLimitOptions,
 		Readiness:              postgres.Readiness{Pool: pool},
 		Authentication:         authenticationService,
+		AccountTenants:         accountTenantService,
 		APIKeys:                apiKeyService,
 		APIKeyAuthentication:   apiKeyService,
 		APIKeyAudits:           auditLogService,

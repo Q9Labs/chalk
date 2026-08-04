@@ -35,6 +35,7 @@ const (
 	RouteAuthGoogleStartScenario        = "route:auth-google-start"
 	RouteAuthGoogleCallbackScenario     = "route:auth-google-callback"
 	RouteMeScenario                     = "route:me"
+	RouteTenantOnboardScenario          = "route:tenant-onboard"
 	RouteTenantCreateScenario           = "route:tenant-create"
 	RouteTenantListSystemScenario       = "route:tenant-list-system"
 	RouteTenantGetAuthorizedScenario    = "route:tenant-get-authorized"
@@ -68,9 +69,10 @@ const (
 	AdapterCloudflareRTKJoinScenario      = "adapter:cloudflare-rtk-join"
 	AdapterResendSendEmailScenario        = "adapter:resend-send-email"
 
-	EdgeUnauthenticatedRouteScenario = "edge:unauthenticated-route"
-	EdgeForbiddenTenantRouteScenario = "edge:forbidden-tenant-route"
-	EdgeInvalidRouteIDScenario       = "edge:invalid-route-id"
+	EdgeUnauthenticatedRouteScenario  = "edge:unauthenticated-route"
+	EdgeForbiddenTenantRouteScenario  = "edge:forbidden-tenant-route"
+	EdgeInvalidRouteIDScenario        = "edge:invalid-route-id"
+	EdgeTenantOnboardConflictScenario = "edge:tenant-onboard-idempotency-conflict"
 )
 
 // ScenarioNames returns every scenario accepted by Run, in review order.
@@ -84,6 +86,7 @@ func ScenarioNames() []string {
 		RouteAuthGoogleStartScenario,
 		RouteAuthGoogleCallbackScenario,
 		RouteMeScenario,
+		RouteTenantOnboardScenario,
 		RouteTenantCreateScenario,
 		RouteTenantListSystemScenario,
 		RouteTenantGetAuthorizedScenario,
@@ -122,6 +125,7 @@ func ScenarioNames() []string {
 		EdgeUnauthenticatedRouteScenario,
 		EdgeForbiddenTenantRouteScenario,
 		EdgeInvalidRouteIDScenario,
+		EdgeTenantOnboardConflictScenario,
 		WebhookDeliveryAttemptScenario,
 	}
 }
@@ -253,6 +257,28 @@ func runRouteMe(ctx context.Context) (ScenarioResult, error) {
 		Path:           "/v1/me",
 		Authorization:  "Bearer trace-session-token",
 		ExpectedStatus: http.StatusOK,
+	})
+}
+
+func runRouteTenantOnboard(ctx context.Context, conflict bool) (ScenarioResult, error) {
+	now := deterministicClock()
+	recorder := NewRecorder(now)
+	auth := staticAuthentication{recorder: recorder, now: now, principal: userPrincipal()}
+	name := RouteTenantOnboardScenario
+	wantStatus := http.StatusCreated
+	if conflict {
+		name = EdgeTenantOnboardConflictScenario
+		wantStatus = http.StatusConflict
+	}
+	return runRouteTrace(ctx, routeTraceConfig{
+		Name: name, Recorder: recorder,
+		Handler: httpapi.NewRouter(httpapi.Options{
+			RateLimit: noRateLimits(now), Authentication: auth,
+			AccountTenants: tracedAccountTenantService{recorder: recorder, now: now, conflict: conflict},
+		}),
+		Method: http.MethodPost, Path: "/v1/me/tenants", Authorization: "Bearer trace-account-token",
+		Headers: map[string]string{"Idempotency-Key": "tenant-onboard-trace-0001"},
+		Body:    json.RawMessage(`{"name":" Trace studio ","default_region":"us"}`), ExpectedStatus: wantStatus,
 	})
 }
 

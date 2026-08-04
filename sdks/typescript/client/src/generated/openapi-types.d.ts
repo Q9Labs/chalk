@@ -157,6 +157,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/me/tenants": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List my tenants */
+    get: operations["listMyTenants"];
+    put?: never;
+    /** Onboard tenant */
+    post: operations["onboardTenant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/regions": {
     parameters: {
       query?: never;
@@ -1143,6 +1161,24 @@ export interface components {
       };
       secret: string;
     };
+    AccountTenantList: {
+      pagination: components["schemas"]["Pagination"];
+      tenants: {
+        access: {
+          account_id: components["schemas"]["UUID"];
+          created_at: components["schemas"]["DateTimeString"];
+          id: components["schemas"]["UUID"];
+          /** @enum {string} */
+          role: "owner" | "admin" | "member" | "viewer";
+          tenant_id: components["schemas"]["TenantId"];
+          updated_at: components["schemas"]["DateTimeString"];
+        };
+        tenant: components["schemas"]["Tenant"];
+      }[];
+    };
+    AccountTenantOnboardingResponse: {
+      replayed: boolean;
+    };
     AdmitSessionParticipantRequest: {
       eligible_roles: string[];
       initial_role: string;
@@ -1585,6 +1621,10 @@ export interface components {
     MembershipList: {
       memberships: components["schemas"]["Membership"][];
       pagination: components["schemas"]["Pagination"];
+    };
+    OnboardTenantRequest: {
+      default_region?: string | null;
+      name: string;
     };
     Pagination: {
       has_more: boolean;
@@ -2853,6 +2893,157 @@ export interface operations {
       };
       /** @description Unauthorized */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listMyTenants: {
+    parameters: {
+      query?: {
+        page_size?: number;
+        cursor?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountTenantList"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  onboardTenant: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OnboardTenantRequest"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountTenantOnboardingResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
         headers: {
           [name: string]: unknown;
         };

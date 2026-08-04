@@ -39,6 +39,8 @@ func TestPreviewRouteContracts(t *testing.T) {
 		{http.MethodPost, "/v1/auth/logout"},
 		{http.MethodPost, "/v1/auth/register"},
 		{http.MethodGet, "/v1/me"},
+		{http.MethodGet, "/v1/me/tenants"},
+		{http.MethodPost, "/v1/me/tenants"},
 		{http.MethodPost, "/v1/telemetry/journey-events"},
 		{http.MethodGet, "/v1/regions"},
 		{http.MethodPost, "/v1/chat/attachments/uploads"},

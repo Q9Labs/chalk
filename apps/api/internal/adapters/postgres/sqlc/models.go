@@ -781,6 +781,15 @@ type Tenant struct {
 	StorageProviderConfig    []byte             `json:"storage_provider_config"`
 }
 
+type TenantOnboardingRequest struct {
+	AccountID          pgtype.UUID        `json:"account_id"`
+	RequestKey         string             `json:"request_key"`
+	RequestFingerprint []byte             `json:"request_fingerprint"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	TenantAccessID     pgtype.UUID        `json:"tenant_access_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type TenantSigningKey struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
