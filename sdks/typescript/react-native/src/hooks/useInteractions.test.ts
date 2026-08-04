@@ -1,9 +1,9 @@
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { NativeSpaceSnapshot, SpaceClientStore } from "../client-compat";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
-  snapshot: null as ChalkSessionSnapshot | null,
-  store: null as ChalkSessionStore | null,
+  snapshot: null as NativeSpaceSnapshot | null,
+  store: null as SpaceClientStore | null,
 }));
 
 vi.mock("react", () => ({
@@ -33,12 +33,12 @@ describe("useInteractions canonical room actions", () => {
 
   it("projects raised hands and delegates toggles to the canonical store", async () => {
     const setHandRaised = vi.fn(async () => undefined);
-    state.store = { setHandRaised } as unknown as ChalkSessionStore;
+    state.store = { setHandRaised } as unknown as SpaceClientStore;
     state.snapshot = snapshot({
       localParticipantId: "participant-1",
       participants: [
-        { participantSessionId: "participant-1", handRaised: true },
-        { participantSessionId: "participant-2", handRaised: true },
+        { participantId: "participant-1", handRaised: true },
+        { participantId: "participant-2", handRaised: true },
       ],
     });
     const { useInteractions } = await import("./useInteractions");
@@ -59,25 +59,24 @@ describe("useInteractions canonical room actions", () => {
   });
 });
 
-function snapshot(input: { localParticipantId: string; participants: { participantSessionId: string; handRaised: boolean }[] }): ChalkSessionSnapshot {
+function snapshot(input: { localParticipantId: string; participants: { participantId: string; handRaised: boolean }[] }): NativeSpaceSnapshot {
   return {
     subject: {
-      tenantId: "tenant-1",
-      roomId: "room-1",
-      sessionId: "session-1",
-      participantSessionId: input.localParticipantId,
+      episodeId: "episode-1",
+      participantId: input.localParticipantId,
       participantGeneration: 1,
     },
     participants: input.participants.map((participant) => ({
       ...participant,
-      displayName: participant.participantSessionId,
+      displayName: participant.participantId,
       role: "participant",
       eligibleRoles: ["participant"],
       capabilities: [],
+      media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
     })),
-    roomActions: { phase: "healthy", version: 2, capabilities: ["setHandRaised"], error: null },
+    actions: { phase: "healthy", version: 1, capabilities: ["setHandRaised"], error: null },
     reactions: [],
     incomingMediaRequests: [],
     chat: { messages: [], readReceipts: [], pagination: { hasMore: false, loading: false }, pendingMessages: [] },
-  } as unknown as ChalkSessionSnapshot;
+  } as unknown as NativeSpaceSnapshot;
 }

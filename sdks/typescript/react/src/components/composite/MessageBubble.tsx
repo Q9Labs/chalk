@@ -1,4 +1,4 @@
-import type { ChalkChatAttachment, ChalkChatReadReceipt } from "@q9labsai/chalk-client";
+import type { ChatAttachment, ChatReadReceipt } from "../../client-compat";
 import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
@@ -18,8 +18,8 @@ export interface MessageBubbleProps {
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
   status?: "pending" | "sent" | "read";
-  attachments?: readonly ChalkChatAttachment[];
-  readBy?: readonly ChalkChatReadReceipt[];
+  attachments?: readonly ChatAttachment[];
+  readBy?: readonly ChatReadReceipt[];
   participantNames?: Readonly<Record<string, string>>;
   onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
   className?: string;
@@ -98,7 +98,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       };
     }, [attachments, onResolveAttachmentUrl, resolvedAttachmentUrls]);
 
-    const handleAttachmentClick = async (attachment: ChalkChatAttachment) => {
+    const handleAttachmentClick = async (attachment: ChatAttachment) => {
       if (!onResolveAttachmentUrl) return;
       const popup = window.open("about:blank", "_blank");
       if (popup) popup.opener = null;
@@ -175,7 +175,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     const renderStatus = () => {
       if (!isLocal) return null;
 
-      const readers = readBy.map((receipt) => participantNames[receipt.participantSessionId] ?? receipt.participantSessionId);
+      const readers = readBy.map((receipt) => participantNames[receipt.participantId] ?? receipt.participantId);
       const readByCount = readers.length;
       const isRead = status === "read" || readByCount > 0;
       const statusLabel = status === "pending" ? "Pending" : isRead ? "Read" : "Sent";

@@ -1,4 +1,4 @@
-import type { ChalkSessionSnapshot } from "@q9labsai/chalk-client";
+import type { ChalkSessionSnapshot } from "../client-compat";
 import { describe, expect, it, vi } from "vitest";
 
 const snapshot = { state: "live" } as ChalkSessionSnapshot;

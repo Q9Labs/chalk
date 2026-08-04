@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { SpaceClientStore, SpaceSnapshotView } from "../../client-compat";
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -66,11 +67,14 @@ vi.mock("../conference-view/ConferenceView", () => ({
 }));
 
 import { VideoConference } from "./VideoConference";
+import { createSpaceClientStore, createSpaceSnapshot } from "../../session/space-client.test.helpers";
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
+
+const canonicalProps = { roomId: "space-1", userName: "Ada" } as const;
 
 describe("VideoConference", () => {
   it("renders the lifecycle from prejoin through joining, active, reconnecting, and ended", async () => {
@@ -81,14 +85,12 @@ describe("VideoConference", () => {
         vi.fn(() => {
           testSession.setSnapshot({
             ...testSession.getSnapshot(),
-            state: "joining",
-            connection: { sync: "connecting", media: "connecting" },
+            connectionStatus: "joining",
           });
           return joinGate.promise.then(() => {
             testSession.setSnapshot({
               ...testSession.getSnapshot(),
-              state: "live",
-              connection: { sync: "healthy", media: "healthy" },
+              connectionStatus: "live",
             });
           });
         }),
@@ -110,20 +112,50 @@ describe("VideoConference", () => {
 
     testSession.setSnapshot({
       ...testSession.getSnapshot(),
-      connection: { sync: "recovering", media: "healthy" },
+      connectionStatus: "reconnecting",
     });
     await waitFor(() => expect(screen.getByTestId("reconnecting-overlay")).toBeInTheDocument());
     expect(screen.getByTestId("conference-view")).toBeInTheDocument();
 
     testSession.setLeave(
       vi.fn(async () => {
-        testSession.setSnapshot({ ...testSession.getSnapshot(), state: "left", connection: { sync: "stopped", media: "stopped" } });
+        testSession.setSnapshot({ ...testSession.getSnapshot(), connectionStatus: "left" });
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Leave active conference" }));
     await waitFor(() => expect(screen.getByTestId("end-screen")).toBeInTheDocument());
 
     expect(onPhaseChange.mock.calls.map(([phase]) => phase)).toEqual(expect.arrayContaining(["prejoin", "joining", "active", "reconnecting", "ended"]));
+  });
+
+  it("adapts a canonical SpaceClient returned by createSession", async () => {
+    const client = createCanonicalSpaceClient();
+    const onSessionChange = vi.fn();
+
+    render(<VideoConference {...canonicalProps} createSession={() => client} onSessionChange={onSessionChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Join conference" }));
+
+    await waitFor(() => expect(onSessionChange).toHaveBeenCalledWith(expect.any(Object)));
+    const adapted = onSessionChange.mock.calls[0]?.[0] as SpaceClientStore;
+
+    expect(adapted).not.toBe(client);
+    expect(adapted.getSnapshot()).toMatchObject({ connectionStatus: "idle", self: null });
+  });
+
+  it("disposes a canonical client whose creation completes after unmount", async () => {
+    const clientCreation = deferred<SpaceClient>();
+    const leave = vi.fn(async () => undefined);
+    const dispose = vi.fn();
+    const client = createCanonicalSpaceClient({ leave, dispose });
+    const { unmount } = render(<VideoConference {...canonicalProps} createSession={() => clientCreation.promise} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Join conference" }));
+    unmount();
+    clientCreation.resolve(client);
+
+    await waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+    expect(leave).toHaveBeenCalledOnce();
+    expect(leave.mock.invocationCallOrder[0]).toBeLessThan(dispose.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY);
   });
 
   it("does not invent a joiner waiting screen when the session runtime has no admission-wait signal", () => {
@@ -154,7 +186,7 @@ describe("VideoConference", () => {
 
     testSession.setSnapshot({
       ...testSession.getSnapshot(),
-      admissionRequests: [{ admissionRequestId: "request-1", participantSessionId: "guest-1", displayName: "Nia", initialRole: "participant", eligibleRoles: ["participant"], expiresAt: "2026-08-02T00:00:00.000Z" }],
+      admissionRequests: [{ requestId: "request-1", participantId: "guest-1", displayName: "Nia", initialRole: "participant", eligibleRoles: ["participant"], expiresAt: "2026-08-02T00:00:00.000Z" }],
     });
     await waitFor(() => expect(screen.getByTestId("conference-view")).toHaveAttribute("data-active-panel", "admission"));
 
@@ -188,120 +220,100 @@ describe("VideoConference", () => {
 
 function createLiveTestSession() {
   const testSession = createTestSession();
-  testSession.setSnapshot({ ...testSession.getSnapshot(), state: "live", connection: { sync: "healthy", media: "healthy" } });
+  testSession.setSnapshot({ ...testSession.getSnapshot(), connectionStatus: "live" });
   return testSession;
 }
 
 function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
+  let resolve!: (value: T) => void;
   const promise = new Promise<T>((nextResolve) => {
     resolve = nextResolve;
   });
   return { promise, resolve };
 }
 
-async function actResolve<T>(gate: { readonly resolve: (value: T | PromiseLike<T>) => void }): Promise<void> {
-  gate.resolve(undefined as T);
+async function actResolve(gate: { readonly resolve: () => void }): Promise<void> {
+  gate.resolve();
   await Promise.resolve();
 }
 
-function createTestSession(): ChalkSessionStore & {
-  getSnapshot: () => ChalkSessionSnapshot;
-  setSnapshot: (snapshot: ChalkSessionSnapshot) => void;
-  setJoin: (join: ChalkSessionStore["join"]) => void;
-  setLeave: (leave: ChalkSessionStore["leave"]) => void;
-} {
+type TestSpaceClientStore = SpaceClientStore & {
+  readonly setSnapshot: (snapshot: SpaceSnapshotView) => void;
+  readonly setJoin: (join: SpaceClientStore["join"]) => void;
+  readonly setLeave: (leave: SpaceClientStore["leave"]) => void;
+};
+
+function createTestSession(): TestSpaceClientStore {
   let snapshot = createSnapshot();
-  let join = async () => undefined;
-  let leave = async () => undefined;
+  let join: SpaceClientStore["join"] = async () => undefined;
+  let leave: SpaceClientStore["leave"] = async () => undefined;
   const listeners = new Set<() => void>();
-  const session = {
+  const store = createSpaceClientStore(snapshot, {
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    setSnapshot: (nextSnapshot: ChalkSessionSnapshot) => {
+    join: (...args) => join(...args),
+    leave: () => leave(),
+  });
+  return Object.assign(store, {
+    setSnapshot: (nextSnapshot: SpaceSnapshotView) => {
       snapshot = nextSnapshot;
       for (const listener of listeners) listener();
     },
-    setJoin: (nextJoin: ChalkSessionStore["join"]) => {
+    setJoin: (nextJoin: SpaceClientStore["join"]) => {
       join = nextJoin;
     },
-    setLeave: (nextLeave: ChalkSessionStore["leave"]) => {
+    setLeave: (nextLeave: SpaceClientStore["leave"]) => {
       leave = nextLeave;
     },
-    join: (...args: Parameters<ChalkSessionStore["join"]>) => join(...args),
-    leave: (...args: Parameters<ChalkSessionStore["leave"]>) => leave(...args),
-    setMicrophoneEnabled: async () => undefined,
-    setCameraEnabled: async () => undefined,
-    startScreenShare: async () => undefined,
-    stopScreenShare: async () => undefined,
-    setHandRaised: async () => undefined,
-    setDisplayName: async () => undefined,
-    setAdmissionPolicy: async () => undefined,
-    setParticipantRole: async () => undefined,
-    transferHost: async () => undefined,
-    admitParticipant: async () => undefined,
-    denyAdmission: async () => undefined,
-    muteParticipant: async () => undefined,
-    stopParticipantCamera: async () => undefined,
-    stopParticipantScreenShare: async () => undefined,
-    removeParticipant: async () => undefined,
-    endSession: async () => undefined,
-    sendReaction: async () => ({}) as never,
-    sendChatMessage: async () => ({}) as never,
-    retryChatMessage: async () => ({}) as never,
-    loadOlderChatMessages: async () => ({}) as never,
-    markChatRead: async () => null,
-    requestUnmute: async () => ({}) as never,
-    requestStartCamera: async () => ({}) as never,
-    acceptMediaRequest: async () => undefined,
-    declineMediaRequest: () => undefined,
-    chatFiles: null,
-    whiteboard: null,
-  } as unknown as ChalkSessionStore & {
-    getSnapshot: () => ChalkSessionSnapshot;
-    setSnapshot: (snapshot: ChalkSessionSnapshot) => void;
-    setJoin: (join: ChalkSessionStore["join"]) => void;
-    setLeave: (leave: ChalkSessionStore["leave"]) => void;
-  };
-  return session;
+  });
 }
 
-function createSnapshot(overrides: Partial<ChalkSessionSnapshot> = {}): ChalkSessionSnapshot {
-  return {
-    state: "idle",
-    subject: null,
-    connection: { sync: "idle", media: "idle" },
-    admissionPolicy: null,
-    participants: [],
-    admissionRequests: [],
-    localMedia: {
-      microphone: { source: "microphone", state: "unavailable", track: null },
-      camera: { source: "camera", state: "unavailable", track: null },
-      screen: { source: "screen", state: "unavailable", track: null },
+const createSnapshot = (overrides: Partial<SpaceSnapshotView> = {}): SpaceSnapshotView => createSpaceSnapshot(overrides);
+
+function createCanonicalSpaceClient({ leave = async () => undefined, dispose = () => undefined }: Pick<SpaceClient, "leave" | "dispose"> = {}): SpaceClient {
+  const snapshot: SpaceSnapshot = {
+    connection: { status: "idle", episode: null, lastError: null },
+    self: { participantId: null, displayName: null, role: null, capabilities: [], handRaised: false, can: () => false },
+    participants: { roster: [], admissionQueue: [] },
+    media: {
+      devices: { microphones: [], cameras: [], speakers: [] },
+      selection: { microphone: null, camera: null, speaker: null },
+      local: {
+        microphone: { source: "microphone", state: "disabled", track: null },
+        camera: { source: "camera", state: "disabled", track: null },
+        screen: { source: "screen", state: "disabled", track: null },
+      },
+      remote: [],
+      screenShare: { source: "screen", state: "disabled", track: null },
+      incomingRequests: [],
     },
-    remoteMedia: [],
-    failure: null,
-    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
-    participantRoomActionCapabilities: {},
-    participantMedia: {},
-    reactions: [],
     chat: {
       status: "idle",
       messages: [],
-      pending: [],
-      hasOlder: false,
-      historyTruncated: false,
-      retainedFloorSequence: null,
-      unreadCount: 0,
+      pendingSends: [],
       readReceipts: [],
-      localReadThroughSequence: null,
-      error: null,
+      unreadCount: 0,
+      pagination: { cursor: null, hasOlder: false, historyTruncated: false },
+      lastError: null,
     },
-    whiteboard: { status: "unsubscribed", sceneId: null, revision: null, capabilities: [], canDraw: false, canClear: false, error: null },
-    incomingMediaRequests: [],
-    ...overrides,
+    reactions: { active: [] },
+    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, error: null } },
   };
+  return {
+    media: {},
+    chat: { files: { upload: unavailable, url: () => "" } },
+    whiteboard: { transport: () => null },
+    join: async () => undefined,
+    leave,
+    subscribe: () => () => undefined,
+    getSnapshot: () => snapshot,
+    dispose,
+  } as unknown as SpaceClient;
+}
+
+async function unavailable(): Promise<never> {
+  throw new Error("This command is not configured for the test");
 }

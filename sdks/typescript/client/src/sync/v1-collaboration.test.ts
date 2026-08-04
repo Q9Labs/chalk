@@ -15,12 +15,12 @@ const requestIds = Array.from({ length: 12 }, (_, index) => `018f2f65-2a77-7a44-
 
 describe("V1SyncClient collaboration_v1", () => {
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
-    const { client, socket } = await liveRoomActionsClient();
+    const { client, socket } = await liveCollaborationClient();
     expect(socket.frames()[0]).toMatchObject({
       type: "hello",
       extensions: [{ name: "collaboration_v1", chat_cursor: { after_sequence: null, retained_floor_sequence: null } }],
     });
-    expect(client.getRoomActionsExtensionState()).toEqual({
+    expect(client.getCollaborationExtensionState()).toEqual({
       negotiated: true,
       version: 1,
       capabilities: ["sendReaction", "sendChat"],
@@ -28,20 +28,20 @@ describe("V1SyncClient collaboration_v1", () => {
       retainedFloorSequence: "2",
       readReceipts: [
         {
-          participantSessionId: peerId,
-          participantSessionGeneration: 1,
+          participantId: peerId,
+          participantGeneration: 1,
           readThroughSequence: "7",
           readAt: "2026-07-29T12:00:00.000Z",
         },
       ],
     });
-    expect(client.getParticipantRoomActionCapabilities()).toEqual({
+    expect(client.getParticipantCollaborationCapabilities()).toEqual({
       [participantId]: ["sendReaction", "sendChat"],
       [peerId]: ["sendReaction"],
     });
 
     const events: string[] = [];
-    client.subscribeRoomActions((event) => events.push(event.type));
+    client.subscribeCollaboration((event) => events.push(event.type));
 
     const reaction = client.sendReaction("🎉");
     const reactionRequest = socket.frames().at(-1)!;
@@ -49,9 +49,9 @@ describe("V1SyncClient collaboration_v1", () => {
       type: "reaction_result",
       operation_id: reactionRequest.operation_id,
       outcome: "accepted",
-      reaction: roomReaction(reactionRequest.operation_id as string),
+      reaction: reactionEvent(reactionRequest.operation_id as string),
     });
-    await expect(reaction).resolves.toMatchObject({ reaction: "🎉", participantSessionId: participantId });
+    await expect(reaction).resolves.toMatchObject({ reaction: "🎉", participantId });
 
     const attachment = {
       attachmentId: requestIds[11]!,
@@ -75,7 +75,7 @@ describe("V1SyncClient collaboration_v1", () => {
       sequence: "9",
       read_at: "2026-07-29T12:01:00.000Z",
     });
-    await expect(read).resolves.toMatchObject({ participantSessionId: participantId, readThroughSequence: "9" });
+    await expect(read).resolves.toMatchObject({ participantId, readThroughSequence: "9" });
 
     const page = client.readChatPage({ beforeSequence: "9", limit: 20 });
     const pageRequest = socket.frames().at(-1)!;
@@ -91,16 +91,16 @@ describe("V1SyncClient collaboration_v1", () => {
     await expect(page).resolves.toEqual({ status: "loaded", count: 1, hasOlder: false });
     expect(events).toEqual(["chat_message"]);
 
-    socket.receive(roomReaction(requestIds[3]));
+    socket.receive(reactionEvent(requestIds[3]));
     await settle();
     expect(events).toEqual(["chat_message", "reaction"]);
   });
 
-  it("keeps room-action capacity separate from control traffic", async () => {
-    const { client, socket, state } = await liveRoomActionsClient({ maxPendingRoomActions: 1 });
+  it("keeps collaboration capacity separate from control traffic", async () => {
+    const { client, socket, state } = await liveCollaborationClient({ maxPendingCollaborationRequests: 1 });
     void client.sendReaction("👍").catch(() => undefined);
 
-    expect(() => client.sendReaction("❤️")).toThrowError(/room-action in-flight capacity/u);
+    expect(() => client.sendReaction("❤️")).toThrowError(/collaboration in-flight capacity/u);
     const control = client.setHandRaised(false, { commandId: requestIds[4] });
     socket.receive({
       type: "ack",
@@ -114,9 +114,9 @@ describe("V1SyncClient collaboration_v1", () => {
   });
 
   it("emits cursor reset as data and updates retained-floor state", async () => {
-    const { client, socket } = await liveRoomActionsClient();
+    const { client, socket } = await liveCollaborationClient();
     const events: string[] = [];
-    client.subscribeRoomActions((event) => events.push(event.type));
+    client.subscribeCollaboration((event) => events.push(event.type));
     const page = client.readChatPage({ afterSequence: "1", limit: 100 });
     const request = socket.frames().at(-1)!;
 
@@ -129,11 +129,11 @@ describe("V1SyncClient collaboration_v1", () => {
 
     await expect(page).resolves.toEqual({ status: "cursor_reset", retainedFloorSequence: "4" });
     expect(events).toEqual(["chat_cursor_reset"]);
-    expect(client.getRoomActionsExtensionState().retainedFloorSequence).toBe("4");
+    expect(client.getCollaborationExtensionState().retainedFloorSequence).toBe("4");
   });
 });
 
-async function liveRoomActionsClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}) {
+async function liveCollaborationClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}) {
   const socket = new TestSocket();
   const ids = [...requestIds];
   const client = new V1SyncClient({
@@ -208,17 +208,20 @@ function baseState(): V1ControlState {
     stateDigest: "0".repeat(64),
     status: "active",
     admissionPolicy: "open",
+    hostExitPolicy: "require_transfer",
+    hostParticipantId: null,
     deadlineAtMs: 99_999,
     deadlineGeneration: 1,
     roleCapabilities: { owner: ["publishAudio", "subscribe", "endEpisode"], collaborator: ["publishAudio"], observer: ["subscribe"] },
     recording: null,
     participants: [
       {
-        participantSessionId: participantId,
+        participantId: participantId,
         displayName: "Host",
         handRaised: false,
         admissionRevision: 1,
         role: "owner",
+        eligibleRoles: ["owner"],
         capabilities: ["publishAudio", "subscribe", "endEpisode"],
       },
     ],
@@ -243,7 +246,7 @@ function wireSnapshot(state: V1ControlState): Snapshot {
     role_capabilities: state.roleCapabilities,
     recording: null,
     participants: state.participants.map((participant) => ({
-      participant_id: participant.participantSessionId,
+      participant_id: participant.participantId,
       display_name: participant.displayName,
       hand_raised: participant.handRaised,
       admission_revision: participant.admissionRevision,
@@ -254,7 +257,7 @@ function wireSnapshot(state: V1ControlState): Snapshot {
   };
 }
 
-function roomReaction(id: string) {
+function reactionEvent(id: string) {
   return {
     type: "reaction",
     event_id: id,

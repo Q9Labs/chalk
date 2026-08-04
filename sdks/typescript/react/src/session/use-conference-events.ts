@@ -1,22 +1,22 @@
-import type { ChalkParticipant, ChalkSessionSnapshot } from "@q9labsai/chalk-client";
+import type { SpaceParticipant, SpaceSnapshotView } from "../client-compat";
 import { useEffect, useRef } from "react";
 
 export type ParticipantJoinedEvent = {
-  readonly participant: ChalkParticipant;
+  readonly participant: SpaceParticipant;
 };
 
 export type ParticipantLeftEvent = {
-  readonly participant: ChalkParticipant;
+  readonly participant: SpaceParticipant;
 };
 
 export type ScreenShareStartedEvent = {
-  readonly participant: ChalkParticipant | null;
-  readonly participantSessionId: string;
+  readonly participant: SpaceParticipant | null;
+  readonly participantId: string;
 };
 
 export type ScreenShareStoppedEvent = ScreenShareStartedEvent;
 
-export type SessionEndedEvent = {
+export type EpisodeEndedEvent = {
   readonly reason: "left" | "remote" | "failed";
 };
 
@@ -25,16 +25,16 @@ export type ConferenceEventHandlers = {
   readonly onParticipantLeft?: (event: ParticipantLeftEvent) => void;
   readonly onScreenShareStarted?: (event: ScreenShareStartedEvent) => void;
   readonly onScreenShareStopped?: (event: ScreenShareStoppedEvent) => void;
-  readonly onSessionEnded?: (event: SessionEndedEvent) => void;
+  readonly onSessionEnded?: (event: EpisodeEndedEvent) => void;
 };
 
 type EventSnapshot = {
-  readonly participants: ReadonlyMap<string, ChalkParticipant>;
+  readonly participants: ReadonlyMap<string, SpaceParticipant>;
   readonly screenShares: ReadonlySet<string>;
-  readonly endReason: SessionEndedEvent["reason"] | null;
+  readonly endReason: EpisodeEndedEvent["reason"] | null;
 };
 
-export function useConferenceEvents(snapshot: ChalkSessionSnapshot, handlers: ConferenceEventHandlers): void {
+export function useConferenceEvents(snapshot: SpaceSnapshotView, handlers: ConferenceEventHandlers): void {
   const handlersRef = useRef(handlers);
   const previousRef = useRef<EventSnapshot | null>(null);
   handlersRef.current = handlers;
@@ -43,20 +43,20 @@ export function useConferenceEvents(snapshot: ChalkSessionSnapshot, handlers: Co
     const current = eventSnapshot(snapshot);
     const previous = previousRef.current;
     if (previous) {
-      for (const [participantSessionId, participant] of current.participants) {
-        if (!previous.participants.has(participantSessionId)) handlersRef.current.onParticipantJoined?.({ participant });
+      for (const [participantId, participant] of current.participants) {
+        if (!previous.participants.has(participantId)) handlersRef.current.onParticipantJoined?.({ participant });
       }
-      for (const [participantSessionId, participant] of previous.participants) {
-        if (!current.participants.has(participantSessionId)) handlersRef.current.onParticipantLeft?.({ participant });
+      for (const [participantId, participant] of previous.participants) {
+        if (!current.participants.has(participantId)) handlersRef.current.onParticipantLeft?.({ participant });
       }
-      for (const participantSessionId of current.screenShares) {
-        if (!previous.screenShares.has(participantSessionId)) {
-          handlersRef.current.onScreenShareStarted?.({ participant: current.participants.get(participantSessionId) ?? null, participantSessionId });
+      for (const participantId of current.screenShares) {
+        if (!previous.screenShares.has(participantId)) {
+          handlersRef.current.onScreenShareStarted?.({ participant: current.participants.get(participantId) ?? null, participantId });
         }
       }
-      for (const participantSessionId of previous.screenShares) {
-        if (!current.screenShares.has(participantSessionId)) {
-          handlersRef.current.onScreenShareStopped?.({ participant: previous.participants.get(participantSessionId) ?? null, participantSessionId });
+      for (const participantId of previous.screenShares) {
+        if (!current.screenShares.has(participantId)) {
+          handlersRef.current.onScreenShareStopped?.({ participant: previous.participants.get(participantId) ?? null, participantId });
         }
       }
       if (current.endReason && !previous.endReason) handlersRef.current.onSessionEnded?.({ reason: current.endReason });
@@ -65,11 +65,11 @@ export function useConferenceEvents(snapshot: ChalkSessionSnapshot, handlers: Co
   }, [snapshot]);
 }
 
-function eventSnapshot(snapshot: ChalkSessionSnapshot): EventSnapshot {
-  const participants = new Map(snapshot.participants.map((participant) => [participant.participantSessionId, participant] as const));
-  const screenShares = new Set(snapshot.remoteMedia.filter((media) => media.source === "screen").map((media) => media.participantSessionId));
-  const localParticipantSessionId = snapshot.subject?.participantSessionId;
-  if (localParticipantSessionId && snapshot.localMedia.screen.state === "enabled") screenShares.add(localParticipantSessionId);
+function eventSnapshot(snapshot: SpaceSnapshotView): EventSnapshot {
+  const participants = new Map(snapshot.participants.map((participant) => [participant.participantId, participant] as const));
+  const screenShares = new Set(snapshot.remoteMedia.filter((media) => media.source === "screen").map((media) => media.participantId));
+  const localParticipantId = snapshot.self?.participantId;
+  if (localParticipantId && snapshot.localMedia.screen.state === "enabled") screenShares.add(localParticipantId);
 
   return {
     participants,
@@ -78,9 +78,9 @@ function eventSnapshot(snapshot: ChalkSessionSnapshot): EventSnapshot {
   };
 }
 
-function getEndReason(snapshot: ChalkSessionSnapshot): SessionEndedEvent["reason"] | null {
-  if (snapshot.failure?.code === "session_ended") return "remote";
-  if (snapshot.state === "left") return "left";
-  if (snapshot.state === "failed") return "failed";
+function getEndReason(snapshot: SpaceSnapshotView): EpisodeEndedEvent["reason"] | null {
+  if (snapshot.failure?.code === "episode.ended") return "remote";
+  if (snapshot.connectionStatus === "left") return "left";
+  if (snapshot.connectionStatus === "failed") return "failed";
   return null;
 }

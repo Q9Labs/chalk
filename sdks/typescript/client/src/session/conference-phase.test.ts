@@ -1,4 +1,4 @@
-import type { ChalkSessionSnapshot } from "./types";
+import type { ConnectionSnapshot } from "./types";
 import { describe, expect, it } from "vitest";
 
 import { deriveConferencePhase, type ConferencePhaseInput } from "./conference-phase";
@@ -35,7 +35,7 @@ describe("deriveConferencePhase", () => {
   });
 
   it("accepts the current snapshot fields without requiring unrelated session state", () => {
-    const snapshot: Pick<ChalkSessionSnapshot, "state" | "failure" | "connection"> = {
+    const snapshot: Pick<ConnectionSnapshot, "state" | "failure" | "connection"> = {
       state: "live",
       failure: null,
       connection: { sync: "healthy", media: "healthy" },

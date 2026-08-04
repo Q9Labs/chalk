@@ -59,5 +59,5 @@ describe("Cloudflare SFU HTTP transport failures", () => {
 });
 
 function routeOptions() {
-  return { apiBaseURL: "http://localhost:8080", tenantId: "tenant", roomId: "room", sessionId: "session", participantSessionId: "participant" };
+  return { apiBaseURL: "http://localhost:8080", tenantId: "tenant", spaceId: "space", episodeId: "episode", participantId: "participant" };
 }

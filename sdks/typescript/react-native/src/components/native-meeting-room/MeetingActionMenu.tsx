@@ -1,4 +1,4 @@
-import type { ChalkAssignableParticipantRole, ChalkReaction } from "@q9labsai/chalk-client";
+import type { ChalkAssignableParticipantRole, ChalkReaction } from "../../client-compat";
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Theme } from "../../ui/theme";
@@ -140,17 +140,17 @@ function ParticipantsPanel({ controller }: { readonly controller: Controller }):
   return (
     <ScrollView contentContainerStyle={styles.list}>
       {controller.admissionRequests.map((request) => (
-        <View key={request.admissionRequestId} style={styles.request}>
+        <View key={request.requestId} style={styles.request}>
           <View style={styles.flex}>
             <Text style={styles.itemTitle}>{request.displayName}</Text>
             <Text style={styles.meta}>Waiting to join</Text>
           </View>
           {controller.canManageAdmission ? (
             <>
-              <Pressable onPress={() => controller.admitParticipant(request.admissionRequestId)}>
+              <Pressable onPress={() => controller.admitParticipant(request.requestId)}>
                 <Text style={styles.link}>Admit</Text>
               </Pressable>
-              <Pressable onPress={() => controller.denyAdmission(request.admissionRequestId)}>
+              <Pressable onPress={() => controller.denyAdmission(request.requestId)}>
                 <Text style={styles.dangerText}>Deny</Text>
               </Pressable>
             </>
@@ -186,20 +186,20 @@ function canActOnParticipant(controller: Controller): boolean {
   return controller.canMuteParticipants || controller.canRequestMedia || controller.canStopParticipantCamera || controller.canStopParticipantScreenShare || controller.canSetParticipantRole || controller.canTransferHost || controller.canRemoveParticipants;
 }
 
-function openParticipantActions(controller: Controller, participantSessionId: string, role: string): void {
+function openParticipantActions(controller: Controller, participantId: string, role: string): void {
   const buttons: { readonly label: string; readonly action: () => void }[] = [];
-  if (controller.canMuteParticipants) buttons.push({ label: "Mute", action: () => controller.muteParticipant(participantSessionId) });
+  if (controller.canMuteParticipants) buttons.push({ label: "Mute", action: () => controller.muteParticipant(participantId) });
   if (controller.canRequestMedia) {
-    buttons.push({ label: "Request unmute", action: () => controller.requestUnmuteParticipant(participantSessionId) }, { label: "Request camera", action: () => controller.requestStartParticipantCamera(participantSessionId) });
+    buttons.push({ label: "Request unmute", action: () => controller.requestUnmuteParticipant(participantId) }, { label: "Request camera", action: () => controller.requestStartParticipantCamera(participantId) });
   }
-  if (controller.canStopParticipantCamera) buttons.push({ label: "Stop camera", action: () => controller.stopParticipantCamera(participantSessionId) });
-  if (controller.canStopParticipantScreenShare) buttons.push({ label: "Stop presenting", action: () => controller.stopParticipantScreenShare(participantSessionId) });
+  if (controller.canStopParticipantCamera) buttons.push({ label: "Stop camera", action: () => controller.stopParticipantCamera(participantId) });
+  if (controller.canStopParticipantScreenShare) buttons.push({ label: "Stop presenting", action: () => controller.stopParticipantScreenShare(participantId) });
   if (controller.canSetParticipantRole && role !== "host") {
     const nextRole: ChalkAssignableParticipantRole = role === "cohost" ? "participant" : "cohost";
-    buttons.push({ label: nextRole === "cohost" ? "Make cohost" : "Make participant", action: () => controller.setParticipantRole(participantSessionId, nextRole) });
+    buttons.push({ label: nextRole === "cohost" ? "Make cohost" : "Make participant", action: () => controller.setParticipantRole(participantId, nextRole) });
   }
-  if (controller.canTransferHost && role !== "host") buttons.push({ label: "Transfer host", action: () => controller.transferHost(participantSessionId) });
-  if (controller.canRemoveParticipants) buttons.push({ label: "Remove", action: () => controller.removeParticipant(participantSessionId) });
+  if (controller.canTransferHost && role !== "host") buttons.push({ label: "Transfer host", action: () => controller.transferHost(participantId) });
+  if (controller.canRemoveParticipants) buttons.push({ label: "Remove", action: () => controller.removeParticipant(participantId) });
   // A compact nested modal keeps platform behavior predictable without inventing a second role vocabulary.
   controller.closePanel();
   globalThis.setTimeout(() => {

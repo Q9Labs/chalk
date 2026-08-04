@@ -1,4 +1,4 @@
-import type { ChalkAssignableParticipantRole, ChalkReaction, ChalkSessionSnapshot } from "@q9labsai/chalk-client";
+import type { ChalkAssignableParticipantRole, ChalkReaction, ChalkSessionSnapshot } from "../../client-compat";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { UseChatReturn } from "../../hooks/useChat";
@@ -75,14 +75,14 @@ type ExpectedConferenceViewController = {
   readonly markChatMessageVisible: (sequence: string) => void;
   readonly admitParticipant: (admissionRequestId: string) => void;
   readonly denyAdmission: (admissionRequestId: string) => void;
-  readonly setParticipantRole: (participantSessionId: string, role: ChalkAssignableParticipantRole) => void;
-  readonly transferHost: (participantSessionId: string) => void;
-  readonly removeParticipant: (participantSessionId: string) => void;
-  readonly muteParticipant: (participantSessionId: string) => void;
-  readonly requestUnmuteParticipant: (participantSessionId: string) => void;
-  readonly requestStartParticipantCamera: (participantSessionId: string) => void;
-  readonly stopParticipantCamera: (participantSessionId: string) => void;
-  readonly stopParticipantScreenShare: (participantSessionId: string) => void;
+  readonly setParticipantRole: (participantId: string, role: ChalkAssignableParticipantRole) => void;
+  readonly transferHost: (participantId: string) => void;
+  readonly removeParticipant: (participantId: string) => void;
+  readonly muteParticipant: (participantId: string) => void;
+  readonly requestUnmuteParticipant: (participantId: string) => void;
+  readonly requestStartParticipantCamera: (participantId: string) => void;
+  readonly stopParticipantCamera: (participantId: string) => void;
+  readonly stopParticipantScreenShare: (participantId: string) => void;
 };
 
 type IsAssignableBothWays<Current, Expected> = Current extends Expected ? (Expected extends Current ? true : false) : false;

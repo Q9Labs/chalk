@@ -1,8 +1,11 @@
-import { requireParticipantAccess, type ChalkSessionAccessProvider, type ChalkSessionAccessRequest } from "@q9labsai/chalk-client";
+import type { AccessContext, AccessGrant, GetAccess } from "../client-compat";
+import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 
 import type { TelemetryJourney } from "../telemetry";
 
 const capabilityPattern = /^[A-Za-z0-9_-]{43}$/u;
+type ConnectionAccess = NonNullable<SpaceClientPlatform["connectionAccess"]>;
+const connectionAccessHandlers = new WeakMap<GetAccess, ConnectionAccess>();
 
 export type ClientSessionCredential = {
   readonly clientSessionId: string;
@@ -13,7 +16,7 @@ export type ClientSession = ClientSessionCredential & {
   readonly apiBaseURL: string;
   readonly syncURL: string;
   readonly meetingLink: string;
-  readonly access: ChalkSessionAccessProvider;
+  readonly access: GetAccess;
   cleanup(): Promise<void>;
 };
 
@@ -61,18 +64,21 @@ export async function createClientSession(options: CreateClientSessionOptions): 
     inviteToken: session.inviteToken,
   } satisfies ClientSessionCredential;
 
-  const access = async (request?: ChalkSessionAccessRequest) =>
-    requireParticipantAccess(
+  const requestAccess = async (input: { readonly replaceMediaConnection: boolean; readonly currentMediaToken?: string }) =>
+    requireAccessGrantResponse(
       await fetch(`${brokerBaseURL}/participant-access`, {
         method: "POST",
         headers: requestHeaders(options.telemetry),
         body: JSON.stringify({
           ...credential,
-          replaceMediaConnection: request?.replaceMediaConnection ?? false,
-          ...(request?.currentMediaToken ? { currentMediaToken: request.currentMediaToken } : {}),
+          replaceMediaConnection: input.replaceMediaConnection,
+          ...(input.currentMediaToken ? { currentMediaToken: input.currentMediaToken } : {}),
         }),
       }),
     );
+  const connectionAccess: ConnectionAccess = async (request) => requestAccess({ replaceMediaConnection: request?.replaceMediaConnection ?? false, ...(request?.currentMediaToken ? { currentMediaToken: request.currentMediaToken } : {}) });
+  const access: GetAccess = async (context) => await connectionAccess(connectionRequest(context));
+  connectionAccessHandlers.set(access, connectionAccess);
 
   return {
     ...credential,
@@ -88,6 +94,17 @@ export async function createClientSession(options: CreateClientSessionOptions): 
       });
       if (!cleanupResponse.ok) throw await responseError(cleanupResponse, "The client session could not be cleaned up");
     },
+  };
+}
+
+export function connectionAccessFor(access: GetAccess): ConnectionAccess | undefined {
+  return connectionAccessHandlers.get(access);
+}
+
+function connectionRequest(context: AccessContext): NonNullable<Parameters<ConnectionAccess>[0]> {
+  return {
+    reason: context.reason === "join" ? "join" : context.reason === "refresh" ? "scheduled_refresh" : "access_retry",
+    replaceMediaConnection: false,
   };
 }
 
@@ -122,6 +139,13 @@ async function responseError(response: Response, fallback: string): Promise<Clie
     .json()
     .catch(() => null)) as { readonly error?: unknown } | null;
   return new ClientSessionError(response.status, typeof body?.error === "string" && body.error.trim() ? body.error : `${fallback} (HTTP ${response.status})`);
+}
+
+async function requireAccessGrantResponse(response: Response): Promise<AccessGrant> {
+  if (!response.ok) throw await responseError(response, "Participant access could not be refreshed");
+  const value = await response.json().catch(() => null);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new TypeError("The broker returned an invalid access grant");
+  return value as AccessGrant;
 }
 
 function normalizedBaseURL(input: string): string {

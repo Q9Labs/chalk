@@ -24,7 +24,7 @@ describe("createChalkServerClient", () => {
     }
   });
 
-  it("maps routes, bodies, telemetry, authorization, and participant access", async () => {
+  it("maps routes, bodies, telemetry, authorization, and access grant", async () => {
     const requests: Array<{ init?: RequestInit; url: string }> = [];
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       requests.push({ init, url: String(input) });
@@ -71,7 +71,16 @@ describe("createChalkServerClient", () => {
     expect(JSON.parse(String(requests[3]?.init?.body))).toEqual({ participant_generation: 2 });
     expect(new Headers(requests[3]?.init?.headers).get("idempotency-key")).toBe("remove-participant");
     expect(admission.access).toEqual(access);
-    expect(access.subject).toEqual({ tenantId, roomId, sessionId, participantSessionId: participantId, participantGeneration: 2 });
+    expect(JSON.parse(JSON.stringify(access))).toEqual({
+      subject: { tenant_id: tenantId, space_id: roomId, episode_id: sessionId, participant_id: participantId, participant_generation: 2 },
+      sync: { token: expect.any(String), expires_at: "2026-01-01T00:05:00Z" },
+      media: {
+        token: expect.any(String),
+        expires_at: "2026-01-01T00:05:00Z",
+        provider: "cloudflare_sfu",
+        client_payload: { connectionId: "connection", stunServer: "stun:example.test" },
+      },
+    });
     expect(removed.participant.status).toBe("removing");
   });
 
@@ -148,7 +157,7 @@ describe("createChalkServerClient", () => {
         participantSessionGeneration: 2,
         currentMediaToken: "current-media-token",
       }),
-    ).resolves.toMatchObject({ media: { clientPayload: { connectionId: "connection" } } });
+    ).resolves.toMatchObject({ media: { client_payload: { connectionId: "connection" } } });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls.map((call) => JSON.parse(String(call[1]?.body)))).toEqual([
       { current_media_token: "current-media-token", participant_generation: 2, replace_media_connection: false },
@@ -190,7 +199,12 @@ function removal() {
 function accessWire() {
   return {
     subject: { tenant_id: tenantId, space_id: roomId, episode_id: sessionId, participant_id: participantId, participant_generation: 2 },
-    sync: { token: "sync-token", expires_at: "2026-01-01T00:05:00Z" },
-    media: { token: "media-token", expires_at: "2026-01-01T00:05:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection", stunServer: "stun:example.test" } },
+    sync: { token: accessToken("chalk-sync"), expires_at: "2026-01-01T00:05:00Z" },
+    media: { token: accessToken("chalk-media"), expires_at: "2026-01-01T00:05:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection", stunServer: "stun:example.test" } },
   };
+}
+
+function accessToken(audience: "chalk-sync" | "chalk-media"): string {
+  const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  return `${encode({ alg: "EdDSA", typ: "JWT" })}.${encode({ aud: audience })}.signature`;
 }

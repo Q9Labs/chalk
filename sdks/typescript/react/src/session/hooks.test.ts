@@ -1,82 +1,50 @@
 // @vitest-environment happy-dom
 
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClientStore, SpaceSnapshotView } from "../client-compat";
 import { act, renderHook } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ChalkProvider } from "./context";
 import { useChalkActions, useChalkSelector } from "./hooks";
+import { createSpaceClientStore, createSpaceSnapshot } from "./space-client.test.helpers";
 
 const participants = [
   {
-    participantSessionId: "participant-1",
+    participantId: "participant-1",
     displayName: "Ari",
     handRaised: false,
     role: "participant" as const,
     eligibleRoles: ["participant" as const],
     capabilities: [],
+    media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
   },
 ];
 
-function createSnapshot(connection: ChalkSessionSnapshot["connection"]): ChalkSessionSnapshot {
-  return {
-    state: "live",
-    subject: null,
-    connection,
-    admissionPolicy: "open",
-    participants,
-    admissionRequests: [],
-    localMedia: {
-      microphone: { source: "microphone", state: "disabled", track: null },
-      camera: { source: "camera", state: "disabled", track: null },
-      screen: { source: "screen", state: "disabled", track: null },
-    },
-    remoteMedia: [],
-    failure: null,
-  };
-}
+const createSnapshot = (connectionStatus: SpaceSnapshotView["connectionStatus"]) => createSpaceSnapshot({ connectionStatus, participants });
 
 function createSession(leave: () => Promise<void>) {
-  let snapshot = createSnapshot({ sync: "healthy", media: "healthy" });
+  let snapshot = createSnapshot("live");
   const listeners = new Set<() => void>();
-  const resolved = () => Promise.resolve();
-  const store: ChalkSessionStore = {
+  const store = createSpaceClientStore(snapshot, {
     getSnapshot: () => snapshot,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    join: resolved,
     leave,
-    setMicrophoneEnabled: resolved,
-    setCameraEnabled: resolved,
-    startScreenShare: resolved,
-    stopScreenShare: resolved,
-    setHandRaised: resolved,
-    setDisplayName: resolved,
-    setAdmissionPolicy: resolved,
-    setParticipantRole: resolved,
-    transferHost: resolved,
-    admitParticipant: resolved,
-    denyAdmission: resolved,
-    muteParticipant: resolved,
-    stopParticipantCamera: resolved,
-    stopParticipantScreenShare: resolved,
-    removeParticipant: resolved,
-    endSession: resolved,
-  };
+  });
 
   return {
     store,
-    updateConnection: (connection: ChalkSessionSnapshot["connection"]) => {
-      snapshot = createSnapshot(connection);
+    updateConnection: (connectionStatus: SpaceSnapshotView["connectionStatus"]) => {
+      snapshot = createSnapshot(connectionStatus);
       for (const listener of listeners) listener();
     },
   };
 }
 
-function createWrapper(session: ChalkSessionStore) {
+function createWrapper(session: SpaceClientStore) {
   return ({ children }: PropsWithChildren) => createElement(ChalkProvider, { session }, children);
 }
 
@@ -93,7 +61,7 @@ describe("Chalk session hooks", () => {
     );
     const selected = result.current;
 
-    act(() => session.updateConnection({ sync: "recovering", media: "healthy" }));
+    act(() => session.updateConnection("reconnecting"));
 
     expect(result.current).toBe(selected);
     expect(renders).toBe(1);

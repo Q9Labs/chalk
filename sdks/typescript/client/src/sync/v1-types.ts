@@ -1,5 +1,6 @@
 import type { SyncV1ServerFrame } from "../generated/sync";
-import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkRoomReaction, ChalkSendChatMessageInput, ChalkSyncV1RoomActionCapability } from "../room-actions/types";
+import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
+import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
 
 export type V1Capability =
@@ -27,16 +28,15 @@ export type V1Capability =
   | "manageMembers"
   | "clearSpaceContent";
 
-// Roles are customer-defined. The legacy aliases remain in the public client
-// until the SpaceClient wave, but the wire accepts any non-empty role name.
+// Roles are customer-defined; the wire accepts any non-empty role name.
 export type V1Role = string;
 export type V1AssignableRole = string;
 export type V1AdmissionPolicy = "open" | "knock" | "members_only";
-export type V1MediaSource = "microphone" | "camera" | "screen";
+export type V1MediaSource = MediaSource;
 export type V1ConnectionPhase = "idle" | "connecting" | "recovering" | "live" | "terminal" | "stopped";
 
 export type V1Participant = {
-  readonly participantSessionId: string;
+  readonly participantId: string;
   readonly displayName: string;
   readonly handRaised: boolean;
   readonly admissionRevision: number;
@@ -47,7 +47,7 @@ export type V1Participant = {
 
 export type V1AdmissionRequest = {
   readonly admissionRequestId: string;
-  readonly participantSessionId: string;
+  readonly participantId: string;
   readonly displayName: string;
   readonly initialRole: V1Role;
   readonly eligibleRoles: readonly V1Role[];
@@ -67,7 +67,7 @@ export type V1ControlState = {
   readonly status: "active" | "ended";
   readonly admissionPolicy: V1AdmissionPolicy;
   readonly hostExitPolicy: "require_transfer" | "promote_cohost";
-  readonly hostParticipantSessionId: string | null;
+  readonly hostParticipantId: string | null;
   readonly deadlineAtMs: number;
   readonly deadlineGeneration: number;
   readonly roleCapabilities: Readonly<Record<string, readonly V1Capability[]>>;
@@ -76,15 +76,10 @@ export type V1ControlState = {
   readonly admissionRequests: readonly V1AdmissionRequest[];
 };
 
-export type V1MediaPublication = {
-  readonly participantSessionId: string;
-  readonly source: V1MediaSource;
-  readonly enabled: boolean;
-  readonly publicationId: string | null;
-};
+export type V1MediaPublication = MediaPublication;
 
 export type V1Presence = {
-  readonly participantSessionId: string;
+  readonly participantId: string;
   readonly state: "connected" | "disconnected";
   readonly speaking: boolean;
   readonly activeSpeaker: boolean;
@@ -92,25 +87,10 @@ export type V1Presence = {
 
 export type V1Projection<T> = { readonly projectionId: string; readonly sequence: number; readonly items: readonly T[] };
 
-export type V1MediaPlaneOutcome = "confirmed" | "satisfied" | "retryable_failure" | "terminal_failure" | "ambiguous";
-
-export type V1MediaPlaneTarget = {
-  readonly operationId: string;
-  readonly participantSessionId: string;
-  readonly source: V1MediaSource;
-  readonly enabled: boolean;
-};
-
-export type V1MediaPlaneResult = {
-  readonly outcome: V1MediaPlaneOutcome;
-  readonly errorCode: string | null;
-};
-
-export type V1ClientMediaPlane = {
-  readonly setLocalPublicationTarget: (target: V1MediaPlaneTarget) => Promise<V1MediaPlaneResult>;
-  readonly observeLocalPublications: (listener: (publications: readonly V1MediaPublication[]) => void) => () => void;
-  readonly observeRemotePublications: (listener: (publications: readonly V1MediaPublication[]) => void) => () => void;
-};
+export type V1MediaPlaneOutcome = MediaPlaneOutcome;
+export type V1MediaPlaneTarget = MediaPlaneTarget;
+export type V1MediaPlaneResult = MediaPlaneResult;
+export type V1ClientMediaPlane = ClientMediaPlane;
 
 export type V1SelfMediaTargetResult = {
   readonly operationId: string;
@@ -119,10 +99,10 @@ export type V1SelfMediaTargetResult = {
   readonly mediaPlaneOutcome: "confirmed" | "satisfied";
 };
 
-export type V1SessionSnapshot = {
+export type V1EpisodeSnapshot = {
   readonly connection: { readonly phase: V1ConnectionPhase; readonly terminalReason?: string };
-  readonly participantSessionId: string | null;
-  readonly participantSessionGeneration: number | null;
+  readonly participantId: string | null;
+  readonly participantGeneration: number | null;
   readonly control: V1ControlState | null;
   readonly optimisticControl: V1ControlState | null;
   readonly media: V1Projection<V1MediaPublication> | null;
@@ -158,31 +138,31 @@ export type V1ChatCursor = {
   readonly retainedFloorSequence: string | null;
 };
 
-export type V1RoomActionsExtensionRequest = {
+export type V1CollaborationExtensionRequest = {
   readonly name: "collaboration_v1";
   readonly chatCursor: V1ChatCursor;
 };
 
-export type V1RoomActionsExtensionState = {
+export type V1CollaborationExtensionState = {
   readonly negotiated: boolean;
   readonly version: 1 | null;
-  readonly capabilities: readonly ChalkSyncV1RoomActionCapability[];
+  readonly capabilities: readonly ChalkSyncV1CollaborationCapability[];
   readonly chatHeadSequence: string | null;
   readonly retainedFloorSequence: string | null;
   readonly readReceipts: readonly ChalkChatReadReceipt[];
 };
 
-export type V1RoomActionClientEvent =
-  | { readonly type: "reaction"; readonly reaction: ChalkRoomReaction }
+export type V1CollaborationEvent =
+  | { readonly type: "reaction"; readonly reaction: ChalkReactionEvent }
   | { readonly type: "chat_message"; readonly message: ChalkChatMessage }
   | { readonly type: "chat_read_receipt"; readonly receipt: ChalkChatReadReceipt }
   | { readonly type: "chat_cursor_reset"; readonly retainedFloorSequence: string };
 
-export type V1RoomActionsClient = {
-  readonly getRoomActionsExtensionState: () => V1RoomActionsExtensionState;
-  readonly getParticipantRoomActionCapabilities: () => Readonly<Record<string, readonly ChalkSyncV1RoomActionCapability[]>>;
-  readonly subscribeRoomActions: (listener: (event: V1RoomActionClientEvent) => void) => () => void;
-  readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkRoomReaction>;
+export type V1CollaborationClient = {
+  readonly getCollaborationExtensionState: () => V1CollaborationExtensionState;
+  readonly getParticipantCollaborationCapabilities: () => Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>>;
+  readonly subscribeCollaboration: (listener: (event: V1CollaborationEvent) => void) => () => void;
+  readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkReactionEvent>;
   readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
   readonly markChatRead: (sequence: string) => Promise<ChalkChatReadReceipt>;
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
@@ -204,8 +184,8 @@ export type V1SyncClientOptions = {
   readonly maxPendingAgeMs?: number;
   readonly maxOperationPendingAgeMs?: number;
   readonly retryDelayMs?: number;
-  readonly roomActions?: V1RoomActionsExtensionRequest | false;
-  readonly maxPendingRoomActions?: number;
+  readonly collaboration?: V1CollaborationExtensionRequest | false;
+  readonly maxPendingCollaborationRequests?: number;
 };
 
 export type V1Socket = SyncSocket;

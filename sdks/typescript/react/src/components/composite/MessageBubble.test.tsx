@@ -66,9 +66,7 @@ describe("MessageBubble", () => {
     rerender(<MessageBubble content="Update" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" isLocal status="sent" />);
     expect(screen.getByText("Sent")).toBeInTheDocument();
 
-    rerender(
-      <MessageBubble content="Update" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" isLocal status="read" readBy={[{ participantSessionId: "grace", participantSessionGeneration: 2, readThroughSequence: "8", readAt: "2026-07-30T10:01:00.000Z" }]} participantNames={{ grace: "Grace" }} />,
-    );
+    rerender(<MessageBubble content="Update" senderName="Ada" timestamp="2026-07-30T10:00:00.000Z" isLocal status="read" readBy={[{ participantId: "grace", participantGeneration: 2, readThroughSequence: "8", readAt: "2026-07-30T10:01:00.000Z" }]} participantNames={{ grace: "Grace" }} />);
     expect(screen.getByText("Read")).toBeInTheDocument();
     expect(screen.getAllByText(/Read by: Grace/u)).not.toHaveLength(0);
     expect(screen.queryByText("Delivered")).not.toBeInTheDocument();

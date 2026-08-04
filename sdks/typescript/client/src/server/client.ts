@@ -1,5 +1,6 @@
 import { ChalkAPIError } from "./errors.js";
 import { createServerRequester } from "./transport.js";
+import { parseAccessGrant } from "../session/access-grant.js";
 import type {
   APIKeyList,
   APIKeyWithSecret,
@@ -9,9 +10,9 @@ import type {
   CreateAPIKeyInput,
   CreateRoomInput,
   CreateSessionInput,
-  IssueParticipantAccessInput,
+  IssueAccessGrantInput,
   ListAPIKeysInput,
-  ParticipantAccess,
+  AccessGrant,
   ParticipantAdmission,
   ParticipantRemoval,
   RemoveParticipantInput,
@@ -51,14 +52,14 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
         return participantAdmission(lifecycle);
       },
       issueAccess: async (roomId, sessionId, participantId, input) => {
-        const access = await request<ParticipantAccessWire>({
+        const access = await request<AccessGrantWire>({
           method: "POST",
           path: `${tenantPath}/spaces/${segment(roomId)}/episodes/${segment(sessionId)}/participants/${segment(participantId)}/access-grant`,
-          body: participantAccessRequest(input),
+          body: accessGrantRequest(input),
           expectedStatus: 201,
           retry: input.replaceMediaConnection === true ? "never" : "always",
         });
-        return participantAccess(access);
+        return accessGrant(access);
       },
       remove: async (roomId, sessionId, participantId, input, idempotency) => {
         const removal = await request<ParticipantRemovalWire>({
@@ -107,7 +108,7 @@ function participantAdmissionRequest(input: AdmitParticipantInput): Record<strin
   };
 }
 
-function participantAccessRequest(input: IssueParticipantAccessInput): Record<string, unknown> {
+function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknown> {
   return {
     participant_generation: input.participantSessionGeneration,
     replace_media_connection: input.replaceMediaConnection ?? false,
@@ -157,15 +158,12 @@ function segment(value: string): string {
   return encodeURIComponent(required(value, "identifier"));
 }
 
-type ParticipantAccessWire = {
+type AccessGrantWire = {
   readonly subject: {
     readonly tenant_id: string;
-    readonly space_id?: string;
-    readonly episode_id?: string;
-    readonly participant_id?: string;
-    readonly room_id?: string;
-    readonly session_id?: string;
-    readonly participant_session_id?: string;
+    readonly space_id: string;
+    readonly episode_id: string;
+    readonly participant_id: string;
     readonly participant_generation: number;
   };
   readonly sync: { readonly token: string; readonly expires_at: string };
@@ -211,7 +209,7 @@ type EndSessionWire = {
 };
 
 type ParticipantAdmissionWire = {
-  readonly access?: ParticipantAccessWire | null;
+  readonly access?: AccessGrantWire | null;
   readonly admission_request?: { readonly expires_at: string; readonly id: string; readonly status: string } | null;
   readonly expires_at?: string;
   readonly lifecycle_intent: {
@@ -286,30 +284,30 @@ function participantAdmission(value: ParticipantAdmissionWire): ParticipantAdmis
     participant: legacyParticipant(lifecycle.participant),
   };
   if (access === undefined) return admission;
-  return { ...admission, access: access === null ? null : participantAccess(access) };
+  return { ...admission, access: access === null ? null : accessGrant(access) };
 }
 
-function participantAccess(value: ParticipantAccessWire): ParticipantAccess {
+function accessGrant(value: AccessGrantWire): AccessGrant {
   const payload = cloudflareClientPayload(value.media);
-  return {
+  return parseAccessGrant({
     subject: {
-      tenantId: value.subject.tenant_id,
-      roomId: requiredResponseID(value.subject.space_id, value.subject.room_id),
-      sessionId: requiredResponseID(value.subject.episode_id, value.subject.session_id),
-      participantSessionId: requiredResponseID(value.subject.participant_id, value.subject.participant_session_id),
-      participantGeneration: value.subject.participant_generation,
+      tenant_id: value.subject.tenant_id,
+      space_id: requiredResponseID(value.subject.space_id),
+      episode_id: requiredResponseID(value.subject.episode_id),
+      participant_id: requiredResponseID(value.subject.participant_id),
+      participant_generation: value.subject.participant_generation,
     },
-    sync: { token: value.sync.token, expiresAt: value.sync.expires_at },
+    sync: value.sync,
     media: {
       token: value.media.token,
-      expiresAt: value.media.expires_at,
+      expires_at: value.media.expires_at,
       provider: "cloudflare_sfu",
-      clientPayload: payload,
+      client_payload: payload,
     },
-  };
+  });
 }
 
-function cloudflareClientPayload(media: ParticipantAccessWire["media"]): ParticipantAccess["media"]["clientPayload"] {
+function cloudflareClientPayload(media: AccessGrantWire["media"]): { readonly connectionId: string; readonly stunServer: string } {
   const { connectionId, stunServer } = media.client_payload;
   if (media.provider !== "cloudflare_sfu" || typeof connectionId !== "string" || typeof stunServer !== "string") {
     throw invalidResponse(201);
@@ -317,8 +315,7 @@ function cloudflareClientPayload(media: ParticipantAccessWire["media"]): Partici
   return { connectionId, stunServer };
 }
 
-function requiredResponseID(canonical: string | undefined, legacy: string | undefined): string {
-  const value = canonical ?? legacy;
+function requiredResponseID(value: string | undefined): string {
   if (!value) throw invalidResponse(201);
   return value;
 }

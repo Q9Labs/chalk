@@ -1,8 +1,8 @@
-import type { ChalkRoomReaction } from "@q9labsai/chalk-client";
+import type { ActiveReaction } from "../../client-compat";
 import type React from "react";
 
 export interface ReactionsOverlayProps {
-  readonly reactions: readonly ChalkRoomReaction[];
+  readonly reactions: readonly ActiveReaction[];
 }
 
 export function ReactionsOverlay({ reactions }: ReactionsOverlayProps): React.JSX.Element {

@@ -1,126 +1,114 @@
-import { parseParticipantAccess } from "./access";
-import type { ParticipantAccess, ParticipantMediaCredential, ParticipantSyncCredential } from "./access";
-import type { ChalkSessionAccessProvider, ChalkSessionAccessReason } from "./dependencies";
+import { Clock, Context, Data, Effect, Layer, SynchronizedRef } from "effect";
+import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCredential } from "./access-grant";
+import type { ConnectionAccessReason, ConnectionAccessRequest } from "./dependencies";
 
 const DEFAULT_REFRESH_WINDOW_MS = 60_000;
 
-export class ChalkSessionAccessManager {
-  readonly #now: () => number;
-  readonly #provider: ChalkSessionAccessProvider;
-  readonly #refreshWindowMs: number;
-  #access: ParticipantAccess | null = null;
-  #generation = 0;
-  #refresh: Promise<ParticipantAccess> | null = null;
-  #refreshReplacesMedia = false;
+export class ConnectionAccessFailure extends Data.TaggedError("ConnectionAccessFailure")<{
+  readonly code: "access.invalid" | "access.unavailable";
+  readonly cause: unknown;
+}> {}
 
-  constructor(provider: ChalkSessionAccessProvider, now: () => number, refreshWindowMs = DEFAULT_REFRESH_WINDOW_MS) {
-    this.#provider = provider;
-    this.#now = now;
-    this.#refreshWindowMs = refreshWindowMs;
-  }
+export type ConnectionAccessEffectProvider = (request: ConnectionAccessRequest) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
 
-  get current(): ParticipantAccess | null {
-    return this.#access;
-  }
+export type ConnectionAccessEffectService = {
+  readonly current: Effect.Effect<ParsedAccessGrant | null>;
+  readonly currentUnsafe: () => ParsedAccessGrant | null;
+  readonly initialize: (reason?: "join" | "access_retry") => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
+  readonly ensureFresh: (reason?: ConnectionAccessReason) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
+  readonly refresh: (reason: Exclude<ConnectionAccessReason, "join">, replaceMediaConnection: boolean) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
+  readonly refreshAfterRejection: () => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
+  readonly getSyncToken: (reason?: ConnectionAccessReason) => Effect.Effect<ParticipantSyncCredential, ConnectionAccessFailure>;
+  readonly getMediaToken: () => Effect.Effect<ParticipantMediaCredential, ConnectionAccessFailure>;
+  readonly requiresRefresh: Effect.Effect<boolean>;
+  readonly millisecondsUntilRefresh: Effect.Effect<number | null>;
+  readonly clear: Effect.Effect<void>;
+};
 
-  async initialize(): Promise<ParticipantAccess> {
-    if (this.#access) return this.#access;
-    return this.#request("join", false);
-  }
+export class ConnectionAccessService extends Context.Service<ConnectionAccessService, ConnectionAccessEffectService>()("@chalk/client/ConnectionAccess") {}
 
-  async getSyncToken(reason: ChalkSessionAccessReason = "sync_recovery"): Promise<ParticipantSyncCredential> {
-    const access = await this.#fresh(reason, false);
-    return access.sync.token;
-  }
+type AccessState = { readonly access: ParsedAccessGrant | null };
 
-  async getMediaToken(): Promise<ParticipantMediaCredential> {
-    const access = await this.#fresh("scheduled_refresh", false);
-    return access.media.token;
-  }
-
-  refresh(reason: Exclude<ChalkSessionAccessReason, "join">, replaceMediaConnection: boolean): Promise<ParticipantAccess> {
-    return this.#request(reason, replaceMediaConnection);
-  }
-
-  millisecondsUntilRefresh(): number | null {
-    if (!this.#access) return null;
-    return Math.max(0, Math.min(expiresAt(this.#access.sync.expiresAt), expiresAt(this.#access.media.expiresAt)) - this.#now() - this.#refreshWindowMs);
-  }
-
-  clear(): void {
-    this.#generation++;
-    this.#access = null;
-    this.#refresh = null;
-    this.#refreshReplacesMedia = false;
-  }
-
-  async #fresh(reason: ChalkSessionAccessReason, replaceMediaConnection: boolean): Promise<ParticipantAccess> {
-    const current = this.#access;
-    if (!current || this.millisecondsUntilRefresh() === 0) return this.#request(reason, replaceMediaConnection);
-    return current;
-  }
-
-  #request(reason: ChalkSessionAccessReason, replaceMediaConnection: boolean): Promise<ParticipantAccess> {
-    if (this.#refresh) {
-      if (replaceMediaConnection && !this.#refreshReplacesMedia) return this.#refresh.then(() => this.#request(reason, true));
-      return this.#refresh;
-    }
-    const previous = this.#access;
-    const generation = this.#generation;
-    const request = Object.freeze({
-      reason,
-      replaceMediaConnection,
-      ...(previous
-        ? {
-            currentMediaToken: previous.media.token,
-            expectedParticipantGeneration: previous.subject.participantGeneration,
-          }
-        : {}),
-    });
-    const refresh = Promise.resolve(this.#provider(request))
-      .then(parseParticipantAccess)
-      .then((next) => {
-        if (generation !== this.#generation) throw new TypeError("Participant access request was invalidated");
-        validateExpiration(next, this.#now());
-        if (previous) validateRefresh(previous, next, replaceMediaConnection);
-        this.#access = next;
-        return next;
-      })
-      .finally(() => {
-        if (this.#refresh === refresh) {
-          this.#refresh = null;
-          this.#refreshReplacesMedia = false;
-        }
+/**
+ * The sole R1 owner. SynchronizedRef keeps a refresh and its state commit
+ * indivisible, while Clock keeps expiry decisions deterministic in tests.
+ */
+export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvider, refreshWindowMs = DEFAULT_REFRESH_WINDOW_MS) =>
+  Layer.effect(
+    ConnectionAccessService,
+    Effect.gen(function* () {
+      const state = yield* SynchronizedRef.make<AccessState>({ access: null });
+      const fetch = (reason: ConnectionAccessReason, replaceMediaConnection: boolean, force: boolean): Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure> =>
+        SynchronizedRef.modifyEffect(state, (current) =>
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            if (!force && current.access && millisecondsUntil(current.access, now, refreshWindowMs) > 0) return [current.access, current] as const;
+            const request = Object.freeze({
+              reason,
+              replaceMediaConnection,
+              ...(current.access
+                ? {
+                    currentMediaToken: current.access.media.token,
+                    expectedParticipantGeneration: current.access.subject.participantGeneration,
+                  }
+                : {}),
+            });
+            const next = yield* provider(request);
+            try {
+              validateExpiration(next, now);
+              if (current.access) validateRefresh(current.access, next, replaceMediaConnection);
+            } catch (cause) {
+              return yield* Effect.fail(new ConnectionAccessFailure({ code: "access.invalid", cause }));
+            }
+            return [next, { access: next }] as const;
+          }),
+        );
+      const initialize = (reason: "join" | "access_retry" = "join") =>
+        fetch(reason, false, false).pipe(Effect.catchTag("ConnectionAccessFailure", (failure) => (failure.code === "access.invalid" && SynchronizedRef.getUnsafe(state).access === null ? fetch(reason, false, true) : Effect.fail(failure))));
+      const millisecondsUntilRefresh = Effect.gen(function* () {
+        const access = yield* SynchronizedRef.get(state);
+        if (!access.access) return null;
+        return millisecondsUntil(access.access, yield* Clock.currentTimeMillis, refreshWindowMs);
       });
-    this.#refresh = refresh;
-    this.#refreshReplacesMedia = replaceMediaConnection;
-    return refresh;
-  }
+      const ensureFresh = (reason: ConnectionAccessReason = "scheduled_refresh") => fetch(reason, false, false);
+
+      return {
+        current: SynchronizedRef.get(state).pipe(Effect.map((value) => value.access)),
+        currentUnsafe: () => SynchronizedRef.getUnsafe(state).access,
+        initialize,
+        ensureFresh,
+        refresh: (reason, replaceMediaConnection) => fetch(reason, replaceMediaConnection, true),
+        refreshAfterRejection: () => fetch("access_retry", false, true),
+        getSyncToken: (reason = "sync_recovery") => ensureFresh(reason).pipe(Effect.map((access) => access.sync.token)),
+        getMediaToken: () => ensureFresh("scheduled_refresh").pipe(Effect.map((access) => access.media.token)),
+        requiresRefresh: millisecondsUntilRefresh.pipe(Effect.map((milliseconds) => milliseconds === null || milliseconds === 0)),
+        millisecondsUntilRefresh,
+        clear: SynchronizedRef.set(state, { access: null }),
+      } satisfies ConnectionAccessEffectService;
+    }),
+  );
+
+export const makeFakeConnectionAccessLayer = makeConnectionAccessLayer;
+
+function millisecondsUntil(access: ParsedAccessGrant, now: number, refreshWindowMs: number): number {
+  return Math.max(0, Math.min(expiresAt(access.sync.expiresAt), expiresAt(access.media.expiresAt)) - now - refreshWindowMs);
 }
 
-function validateExpiration(access: ParticipantAccess, now: number): void {
-  if (expiresAt(access.sync.expiresAt) <= now || expiresAt(access.media.expiresAt) <= now) throw new TypeError("Participant access is expired");
+function validateExpiration(access: ParsedAccessGrant, now: number): void {
+  if (expiresAt(access.sync.expiresAt) <= now || expiresAt(access.media.expiresAt) <= now) throw new TypeError("Access grant is expired");
 }
 
-function validateRefresh(previous: ParticipantAccess, next: ParticipantAccess, replaceMediaConnection: boolean): void {
-  const previousSubject = previous.subject;
-  const nextSubject = next.subject;
-  if (
-    previousSubject.tenantId !== nextSubject.tenantId ||
-    previousSubject.roomId !== nextSubject.roomId ||
-    previousSubject.sessionId !== nextSubject.sessionId ||
-    previousSubject.participantSessionId !== nextSubject.participantSessionId ||
-    previousSubject.participantGeneration !== nextSubject.participantGeneration
-  ) {
-    throw new TypeError("Participant access refresh changed its subject");
+function validateRefresh(previous: ParsedAccessGrant, next: ParsedAccessGrant, replaceMediaConnection: boolean): void {
+  const left = previous.subject;
+  const right = next.subject;
+  if (left.tenantId !== right.tenantId || left.spaceId !== right.spaceId || left.episodeId !== right.episodeId || left.participantId !== right.participantId || left.participantGeneration !== right.participantGeneration) {
+    throw new TypeError("Access grant refresh changed its subject");
   }
-  if (!replaceMediaConnection && previous.media.clientPayload.connectionId !== next.media.clientPayload.connectionId) {
-    throw new TypeError("Participant access refresh unexpectedly replaced its media connection");
-  }
+  if (!replaceMediaConnection && previous.media.clientPayload.connectionId !== next.media.clientPayload.connectionId) throw new TypeError("Access grant refresh unexpectedly replaced its media connection");
 }
 
 function expiresAt(value: string): number {
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) throw new TypeError("Participant access expiration is invalid");
+  if (!Number.isFinite(timestamp)) throw new TypeError("Access grant expiration is invalid");
   return timestamp;
 }

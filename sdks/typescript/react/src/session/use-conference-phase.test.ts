@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClientStore, SpaceSnapshotView } from "../client-compat";
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { useConferencePhase } from "./use-conference-phase";
+import { createSpaceSnapshot } from "./space-client.test.helpers";
 
 describe("useConferencePhase", () => {
   it("derives the observable lifecycle phase from the session snapshot", () => {
@@ -14,17 +15,17 @@ describe("useConferencePhase", () => {
     expect(result.current).toBe("prejoin");
 
     act(() => {
-      session.setSnapshot({ ...session.getSnapshot(), state: "joining" });
+      session.setSnapshot({ ...session.getSnapshot(), connectionStatus: "joining" });
     });
     expect(result.current).toBe("joining");
 
     act(() => {
-      session.setSnapshot({ ...session.getSnapshot(), state: "live", connection: { sync: "healthy", media: "healthy" } });
+      session.setSnapshot({ ...session.getSnapshot(), connectionStatus: "live" });
     });
     expect(result.current).toBe("active");
 
     act(() => {
-      session.setSnapshot({ ...session.getSnapshot(), connection: { sync: "recovering", media: "healthy" } });
+      session.setSnapshot({ ...session.getSnapshot(), connectionStatus: "reconnecting" });
     });
     expect(result.current).toBe("reconnecting");
   });
@@ -49,50 +50,16 @@ function createSession() {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-  } satisfies Pick<ChalkSessionStore, "getSnapshot" | "subscribe">;
+  } satisfies Pick<SpaceClientStore, "getSnapshot" | "subscribe">;
 
   return {
     store,
     getSnapshot: () => snapshot,
-    setSnapshot: (nextSnapshot: ChalkSessionSnapshot) => {
+    setSnapshot: (nextSnapshot: SpaceSnapshotView) => {
       snapshot = nextSnapshot;
       for (const listener of listeners) listener();
     },
   };
 }
 
-function createSnapshot(): ChalkSessionSnapshot {
-  return {
-    state: "idle",
-    subject: null,
-    connection: { sync: "idle", media: "idle" },
-    admissionPolicy: null,
-    participants: [],
-    admissionRequests: [],
-    localMedia: {
-      microphone: { source: "microphone", state: "unavailable", track: null },
-      camera: { source: "camera", state: "unavailable", track: null },
-      screen: { source: "screen", state: "unavailable", track: null },
-    },
-    remoteMedia: [],
-    failure: null,
-    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
-    participantRoomActionCapabilities: {},
-    participantMedia: {},
-    reactions: [],
-    chat: {
-      status: "idle",
-      messages: [],
-      pending: [],
-      hasOlder: false,
-      historyTruncated: false,
-      retainedFloorSequence: null,
-      unreadCount: 0,
-      readReceipts: [],
-      localReadThroughSequence: null,
-      error: null,
-    },
-    whiteboard: { status: "unsubscribed", sceneId: null, revision: null, capabilities: [], canDraw: false, canClear: false, error: null },
-    incomingMediaRequests: [],
-  };
-}
+const createSnapshot = (): SpaceSnapshotView => createSpaceSnapshot();

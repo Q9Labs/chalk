@@ -1,4 +1,4 @@
-import type { V1MediaSource } from "../sync/v1-types";
+import type { MediaSource } from "./plane";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUPublication, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription } from "./types";
 
@@ -8,13 +8,13 @@ export type PublicationCursor = {
   readonly signature: string;
 };
 
-export function parseCloudflareSFUPublicationID(publicationId: string): { readonly sessionId: string; readonly trackName: string } {
+export function parseCloudflareSFUPublicationID(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
   if (publicationId.startsWith("chalk_pub_v1.")) return parseVersionOnePublicationReference(publicationId.slice("chalk_pub_v1.".length));
   if (publicationId.startsWith("chalk_pub_")) throw new CloudflareSFUError("Cloudflare SFU publication ID uses an unsupported version", "invalid_publication");
   return parseLegacyPublicationReference(publicationId);
 }
 
-function parseVersionOnePublicationReference(encoded: string): { readonly sessionId: string; readonly trackName: string } {
+function parseVersionOnePublicationReference(encoded: string): { readonly connectionId: string; readonly trackName: string } {
   if (!encoded || !/^[A-Za-z0-9_-]+$/.test(encoded) || encoded.length % 4 === 1) {
     throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
   }
@@ -27,7 +27,7 @@ function parseVersionOnePublicationReference(encoded: string): { readonly sessio
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!isVersionOnePublicationPayload(decoded)) throw new Error("invalid publication payload");
-    return { sessionId: decoded.c, trackName: decoded.t };
+    return { connectionId: decoded.c, trackName: decoded.t };
   } catch {
     throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
   }
@@ -55,15 +55,15 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-function parseLegacyPublicationReference(publicationId: string): { readonly sessionId: string; readonly trackName: string } {
+function parseLegacyPublicationReference(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
   const separator = publicationId.indexOf("|");
   if (separator <= 0 || separator === publicationId.length - 1 || publicationId.indexOf("|", separator + 1) !== -1) {
     throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
   }
-  const sessionId = publicationId.slice(0, separator);
+  const connectionId = publicationId.slice(0, separator);
   const trackName = publicationId.slice(separator + 1);
-  if (sessionId.trim() !== sessionId || trackName.trim() !== trackName) throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
-  return { sessionId, trackName };
+  if (connectionId.trim() !== connectionId || trackName.trim() !== trackName) throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");
+  return { connectionId, trackName };
 }
 
 export function requireDescription(description: RTCSessionDescriptionInit): CloudflareSFUSessionDescription {
@@ -84,7 +84,7 @@ export function validatePublicationSnapshot(snapshot: CloudflareSFUPublicationSn
   }
   const seen = new Set<string>();
   for (const publication of snapshot.publications) {
-    if (!publication.participantSessionId.trim() || !publication.publicationId.trim()) {
+    if (!publication.participantId.trim() || !publication.publicationId.trim()) {
       throw new CloudflareSFUError("Cloudflare SFU publication is incomplete", "invalid_publication");
     }
     const key = publicationKey(publication);
@@ -102,8 +102,8 @@ export function comparePublicationCursor(current: PublicationCursor | null, next
   return "same";
 }
 
-export function publicationKey(publication: { readonly participantSessionId: string; readonly source: V1MediaSource }): string {
-  return `${publication.participantSessionId}\u0000${publication.source}`;
+export function publicationKey(publication: { readonly participantId: string; readonly source: MediaSource }): string {
+  return `${publication.participantId}\u0000${publication.source}`;
 }
 
 function publicationSignature(publications: readonly CloudflareSFUPublication[]): string {

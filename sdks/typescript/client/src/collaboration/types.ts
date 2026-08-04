@@ -1,8 +1,7 @@
-export type ChalkRoomActionsPhase = "disabled" | "negotiating" | "healthy" | "recovering" | "failed" | "stopped";
-
-export type ChalkSyncV1RoomActionCapability = "sendReaction" | "sendChat";
+export type ChalkSyncV1CollaborationCapability = "sendReaction" | "sendChat";
 export type ChalkWhiteboardV1Capability = "drawWhiteboard" | "manageWhiteboard";
-export type ChalkRoomActionCapability = ChalkSyncV1RoomActionCapability | ChalkWhiteboardV1Capability;
+export type ChalkCollaborationCapability = ChalkSyncV1CollaborationCapability | ChalkWhiteboardV1Capability;
+export type ChalkCollaborationPhase = "disabled" | "negotiating" | "healthy" | "recovering" | "failed" | "stopped";
 
 export type ChalkParticipantMediaState = {
   readonly microphone: "active" | "inactive" | "unknown";
@@ -12,9 +11,9 @@ export type ChalkParticipantMediaState = {
 
 export type ChalkReaction = "👍" | "❤️" | "😂" | "😮" | "😢" | "🎉";
 
-export type ChalkRoomReaction = {
+export type ChalkReactionEvent = {
   readonly eventId: string;
-  readonly participantSessionId: string;
+  readonly participantId: string;
   readonly displayName: string;
   readonly reaction: ChalkReaction;
   readonly occurredAt: string;
@@ -55,8 +54,8 @@ export type ChalkChatAttachment = {
 };
 
 export type ChalkChatReadReceipt = {
-  readonly participantSessionId: string;
-  readonly participantSessionGeneration: number;
+  readonly participantId: string;
+  readonly participantGeneration: number;
   readonly readThroughSequence: string;
   readonly readAt: string;
 };
@@ -65,7 +64,7 @@ export type ChalkChatMessage = {
   readonly messageId: string;
   readonly clientMessageId: string;
   readonly sequence: string;
-  readonly participantSessionId: string;
+  readonly participantId: string;
   readonly displayName: string;
   readonly text: string;
   readonly createdAt: string;
@@ -104,7 +103,7 @@ export type ChalkSendChatMessageInput = {
 export type ChalkIncomingMediaRequest = {
   readonly requestId: string;
   readonly kind: "unmute" | "start_camera";
-  readonly actorParticipantSessionId: string;
+  readonly actorParticipantId: string;
   readonly actorDisplayName: string | null;
   readonly expiresAt: string;
 };

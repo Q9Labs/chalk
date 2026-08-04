@@ -1,6 +1,5 @@
 import {
   AsyncStorageV1PendingTargetStore,
-  ChalkSession,
   CloudflareSFUClient,
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
@@ -9,38 +8,48 @@ import {
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
   createV1SyncClient,
-  type ChalkSessionChatFileFactoryInput,
-  type ChalkSessionDiagnostic,
-  type ChalkSessionJoinTraceEvent,
-  type ChalkSessionDependencies,
-  type ChalkSessionMediaFactoryInput,
-  type ChalkSessionOptions as ClientChalkSessionOptions,
-  type ChalkSessionSyncFactoryInput,
-  type ChalkSessionWhiteboardFactoryInput,
+  type AccessGrant,
   type DiagnosticObservation,
+  type GetAccess,
   type ReactNativeWebSocket,
   type ReactNativeWebSocketConstructor,
   type ReactNativeAsyncStorage,
-} from "@q9labsai/chalk-client";
+} from "../client-compat";
+import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 
 import { createTelemetry, syncTransportCloseDiagnostic, type RtcPeerConnection, type TelemetryJourney } from "../telemetry";
+import { SpaceClientAdapter, type ChalkSessionStore } from "../client-compat";
+import { connectionAccessFor } from "./create-client-session";
 
-const REACT_NATIVE_SYNC_STARTUP_TIMEOUT_MS = 30_000;
+type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
+type MediaFactoryInput = Parameters<NonNullable<PlatformDependencies["createMediaClient"]>>[0];
+type SyncFactoryInput = Parameters<NonNullable<PlatformDependencies["createSyncClient"]>>[0];
+type ChatFileFactoryInput = Parameters<NonNullable<PlatformDependencies["createChatFileTransport"]>>[0];
+type WhiteboardFactoryInput = Parameters<NonNullable<PlatformDependencies["createWhiteboardClient"]>>[0];
 
-export type ChalkSessionOptions = Omit<ClientChalkSessionOptions, "dependencies"> & {
+export type ChalkSessionOptions = {
+  readonly space?: string;
+  readonly getAccess?: GetAccess;
+  readonly access?: () => AccessGrant | Promise<AccessGrant>;
+  readonly apiBaseURL: string;
+  readonly syncURL: string;
+  readonly whiteboardURL?: string | null;
+  readonly initialMicrophoneEnabled?: boolean;
+  readonly initialCameraEnabled?: boolean;
+  readonly syncStartupTimeoutMs?: number;
   readonly storage?: ReactNativeAsyncStorage;
   readonly telemetry?: TelemetryJourney;
 };
 
-export function createChalkSession(options: ChalkSessionOptions): ChalkSession {
-  const { storage, telemetry: journey, ...sessionOptions } = options;
+export function createChalkSession(options: ChalkSessionOptions): ChalkSessionStore {
+  const { storage, telemetry: journey } = options;
   const telemetry = journey ? createTelemetry(journey) : undefined;
   const fetch = telemetryFetch(journey);
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });
   const webSocket = createReactNativeWebSocketFactory(nativeWebSocketConstructor(journey));
-  const dependencies: ChalkSessionDependencies = {
+  const dependencies: PlatformDependencies = {
     clock: {
       now: () => Date.now(),
       setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
@@ -54,42 +63,59 @@ export function createChalkSession(options: ChalkSessionOptions): ChalkSession {
     createSyncClient: (input) => createSyncClient(options.syncURL, input, lifecycle, webSocket, storage),
     createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input, fetch),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardURL(options.syncURL), input, fetch, lifecycle, webSocket),
+    subscribeForeground: (listener) => {
+      const subscription = AppState.addEventListener("change", (state) => {
+        if (state === "active") listener();
+      });
+      return () => subscription.remove();
+    },
   };
 
-  return new ChalkSession({
-    ...sessionOptions,
-    syncStartupTimeoutMs: sessionOptions.syncStartupTimeoutMs ?? REACT_NATIVE_SYNC_STARTUP_TIMEOUT_MS,
-    diagnostics: {
-      ...options.diagnostics,
-      onEvent: (event) => {
-        options.diagnostics?.onEvent?.(event);
-        options.telemetry?.recordDiagnostic(sessionDiagnostic(event));
-      },
+  const getAccess: GetAccess =
+    options.getAccess ??
+    (async () => {
+      if (!options.access) throw new TypeError("getAccess or access is required");
+      return options.access();
+    });
+  const connectionAccess = connectionAccessFor(getAccess);
+  const client = createSpaceClientForPlatform(
+    { space: options.space ?? "native-space", getAccess, baseUrl: options.apiBaseURL },
+    {
+      apiBaseUrl: options.apiBaseURL,
+      syncUrl: options.syncURL,
+      whiteboardUrl: options.whiteboardURL,
+      dependencies,
+      fetch,
+      syncStartupTimeoutMs: options.syncStartupTimeoutMs ?? 30_000,
+      initialMicrophoneEnabled: options.initialMicrophoneEnabled,
+      initialCameraEnabled: options.initialCameraEnabled,
+      onConnectionDiagnostic: (event) => journey?.recordDiagnostic(connectionDiagnostic(event)),
+      ...(connectionAccess ? { connectionAccess } : {}),
     },
-    dependencies,
-  });
+  );
+  return new SpaceClientAdapter(client);
 }
 
-function sessionDiagnostic(event: ChalkSessionDiagnostic): DiagnosticObservation {
-  if (event.event === "join_span") {
-    const joinEvent = event as ChalkSessionJoinTraceEvent;
+type PlatformDiagnostic = Parameters<NonNullable<SpaceClientPlatform["onConnectionDiagnostic"]>>[0];
+
+function connectionDiagnostic(event: PlatformDiagnostic): DiagnosticObservation {
+  if (event.event === "join_span" && event.step && event.spanId && event.outcome) {
     return {
       category: "session",
-      code: `join.${joinEvent.step}.${joinEvent.outcome}`,
-      phase: joinTracePhase(joinEvent.step),
-      state: joinEvent.outcome === "succeeded" ? "succeeded" : joinEvent.outcome === "failed" ? "failed" : "observed",
-      ...(joinEvent.durationMs === undefined ? {} : { metricValue: joinEvent.durationMs }),
+      code: `join.${event.step}.${event.outcome}`,
+      phase: joinTracePhase(event.step),
+      state: event.outcome === "succeeded" ? "succeeded" : event.outcome === "failed" ? "failed" : "observed",
+      ...(event.durationMs === undefined ? {} : { metricValue: event.durationMs }),
       attributes: {
-        span_id: joinEvent.spanId,
-        ...(joinEvent.parentSpanId ? { parent_span_id: joinEvent.parentSpanId } : {}),
-        step: joinEvent.step,
-        outcome: joinEvent.outcome,
-        epoch: joinEvent.epoch,
-        ...(joinEvent.code ? { failure_code: joinEvent.code } : {}),
+        span_id: event.spanId,
+        ...(event.parentSpanId ? { parent_span_id: event.parentSpanId } : {}),
+        step: event.step,
+        outcome: event.outcome,
+        epoch: event.epoch,
+        ...(event.code ? { failure_code: event.code } : {}),
       },
     };
   }
-
   return {
     category: "session",
     code: event.event,
@@ -98,7 +124,7 @@ function sessionDiagnostic(event: ChalkSessionDiagnostic): DiagnosticObservation
   };
 }
 
-function joinTracePhase(step: NonNullable<ChalkSessionDiagnostic["step"]>): "authentication" | "signaling" | "media" | "recovery" {
+function joinTracePhase(step: NonNullable<PlatformDiagnostic["step"]>): "authentication" | "signaling" | "media" | "recovery" {
   switch (step) {
     case "acquire_initial_media":
     case "create_media_client":
@@ -109,18 +135,18 @@ function joinTracePhase(step: NonNullable<ChalkSessionDiagnostic["step"]>): "aut
   }
 }
 
-function createMediaClient(apiBaseURL: string, input: ChalkSessionMediaFactoryInput, fetch: typeof globalThis.fetch, observePeerConnection: ((peerConnection: RtcPeerConnection) => () => void) | undefined) {
+function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch, observePeerConnection: ((peerConnection: RtcPeerConnection) => () => void) | undefined) {
   const { subject } = input.access;
   return new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
-    participantSessionId: subject.participantSessionId,
+    participantId: subject.participantId,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
       tenantId: subject.tenantId,
-      roomId: subject.roomId,
-      sessionId: subject.sessionId,
-      participantSessionId: subject.participantSessionId,
+      spaceId: subject.spaceId,
+      episodeId: subject.episodeId,
+      participantId: subject.participantId,
       fetch,
     }),
     peerConnectionFactory: (configuration) => {
@@ -133,9 +159,9 @@ function createMediaClient(apiBaseURL: string, input: ChalkSessionMediaFactoryIn
   });
 }
 
-function createSyncClient(syncURL: string, input: ChalkSessionSyncFactoryInput, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>, storage: ReactNativeAsyncStorage | undefined) {
+function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>, storage: ReactNativeAsyncStorage | undefined) {
   const subject = input.access.subject;
-  const scope = `${subject.tenantId}:${subject.sessionId}:${subject.participantSessionId}`;
+  const scope = `${subject.tenantId}:${subject.episodeId}:${subject.participantId}`;
   return createV1SyncClient({
     url: syncURL,
     token: input.token,
@@ -146,11 +172,11 @@ function createSyncClient(syncURL: string, input: ChalkSessionSyncFactoryInput, 
   });
 }
 
-function createChatFileTransport(apiBaseURL: string, input: ChalkSessionChatFileFactoryInput, fetch: typeof globalThis.fetch) {
+function createChatFileTransport(apiBaseURL: string, input: ChatFileFactoryInput, fetch: typeof globalThis.fetch) {
   return createChalkChatFileHttpTransport({ baseUrl: apiBaseURL, token: input.token, fetch });
 }
 
-function createWhiteboardClient(apiBaseURL: string, url: string, input: ChalkSessionWhiteboardFactoryInput, fetch: typeof globalThis.fetch, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>) {
+function createWhiteboardClient(apiBaseURL: string, url: string, input: WhiteboardFactoryInput, fetch: typeof globalThis.fetch, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>) {
   let sceneId: string | null = null;
   const files = createChalkWhiteboardV1FileHttpTransport({
     baseUrl: apiBaseURL,

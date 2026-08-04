@@ -1,7 +1,9 @@
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClientStore } from "../client-compat";
 import { useEffect, useRef } from "react";
 
-export function useLeaveOnUnmount(session: Pick<ChalkSessionStore, "leave"> | null, onUnmount: () => void): void {
+type DisposableSpaceClientStore = Pick<SpaceClientStore, "leave"> & { readonly dispose?: () => void };
+
+export function useLeaveOnUnmount(session: DisposableSpaceClientStore | null, onUnmount: () => void): void {
   const sessionRef = useRef(session);
   const onUnmountRef = useRef(onUnmount);
   sessionRef.current = session;
@@ -10,7 +12,12 @@ export function useLeaveOnUnmount(session: Pick<ChalkSessionStore, "leave"> | nu
   useEffect(
     () => () => {
       onUnmountRef.current();
-      void sessionRef.current?.leave().catch(() => undefined);
+      const currentSession = sessionRef.current;
+      if (currentSession)
+        void currentSession
+          .leave()
+          .catch(() => undefined)
+          .finally(() => currentSession.dispose?.());
     },
     [],
   );

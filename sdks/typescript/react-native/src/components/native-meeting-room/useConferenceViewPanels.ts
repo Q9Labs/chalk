@@ -1,4 +1,4 @@
-import type { ChalkSessionSnapshot, ChalkSessionStore, ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
+import type { ChalkSessionSnapshot, ChalkSessionStore, ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../../client-compat";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
 import { Alert, type AlertButton, Share } from "react-native";
 

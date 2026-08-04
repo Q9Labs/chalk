@@ -1,6 +1,6 @@
-import type { ChalkSessionMediaDevices } from "./dependencies";
+import type { ConnectionMediaDevices } from "./dependencies";
 
-export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices): ChalkSessionMediaDevices {
+export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices): ConnectionMediaDevices {
   return {
     async getUserMedia(constraints) {
       if (!mediaDevices?.getUserMedia) throw new TypeError("Browser media capture is unavailable");
@@ -9,6 +9,10 @@ export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined
     async getDisplayMedia(constraints) {
       if (!mediaDevices?.getDisplayMedia) throw new TypeError("Browser display capture is unavailable");
       return mediaDevices.getDisplayMedia(constraints);
+    },
+    async enumerateDevices() {
+      if (!mediaDevices?.enumerateDevices) return [];
+      return mediaDevices.enumerateDevices();
     },
   };
 }

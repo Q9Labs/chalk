@@ -4,9 +4,13 @@ import { join as joinPath } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("public SDK room", () => {
-  it("creates one ChalkSession and delegates the lifecycle to the turnkey React SDK surface", () => {
+  it("creates one SpaceClient and delegates the lifecycle to the turnkey React SDK surface", () => {
     const source = roomSource();
-    expect(source.match(/new ChalkSession\(/gu)).toHaveLength(1);
+    expect(source.match(/createSpaceClientForPlatform\(/gu)).toHaveLength(1);
+    expect(source).toContain('space: "local-space"');
+    expect(source).toContain("getAccess: createLocalAccessProvider()");
+    expect(source).toContain("baseUrl: browserSession.apiBaseURL");
+    expect(source).toContain("syncUrl: browserSession.syncURL");
     expect(source).toContain("<VideoConference");
     expect(source).not.toContain("<ChalkProvider");
     expect(source).not.toContain("<PreJoinScreen");

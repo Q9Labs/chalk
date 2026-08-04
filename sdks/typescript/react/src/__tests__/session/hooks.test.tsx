@@ -1,46 +1,29 @@
 // @vitest-environment happy-dom
 
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClientStore, SpaceSnapshotView } from "../../client-compat";
 import { act, render, renderHook } from "@testing-library/react";
 import { StrictMode, type PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ChalkProvider, useChalkActions, useChalkSelector, useChalkSession, useChalkSnapshot, useLocalMedia, useParticipants, useRemoteMedia } from "../../session";
+import { createSpaceClientStore, createSpaceSnapshot } from "../../session/space-client.test.helpers";
 
 type TestSession = {
-  readonly store: ChalkSessionStore;
-  readonly setSnapshot: (snapshot: ChalkSessionSnapshot) => void;
+  readonly store: SpaceClientStore;
+  readonly setSnapshot: (snapshot: SpaceSnapshotView) => void;
   readonly activeSubscriptions: () => number;
   readonly subscribeCount: () => number;
   readonly unsubscribeCount: () => number;
 };
 
-function createSnapshot(overrides: Partial<ChalkSessionSnapshot> = {}): ChalkSessionSnapshot {
-  return {
-    state: "idle",
-    subject: null,
-    connection: { sync: "idle", media: "idle" },
-    admissionPolicy: null,
-    participants: [],
-    admissionRequests: [],
-    localMedia: {
-      microphone: { source: "microphone", state: "unavailable", track: null },
-      camera: { source: "camera", state: "unavailable", track: null },
-      screen: { source: "screen", state: "unavailable", track: null },
-    },
-    remoteMedia: [],
-    failure: null,
-    ...overrides,
-  };
-}
+const createSnapshot = (overrides: Partial<SpaceSnapshotView> = {}): SpaceSnapshotView => createSpaceSnapshot(overrides);
 
 function createSession(initialSnapshot = createSnapshot()): TestSession {
   let snapshot = initialSnapshot;
   let subscriptions = 0;
   let unsubscriptions = 0;
   const listeners = new Set<() => void>();
-  const resolved = () => Promise.resolve();
-  const store: ChalkSessionStore = {
+  const store = createSpaceClientStore(snapshot, {
     getSnapshot: () => snapshot,
     subscribe: (listener) => {
       subscriptions += 1;
@@ -50,25 +33,7 @@ function createSession(initialSnapshot = createSnapshot()): TestSession {
         listeners.delete(listener);
       };
     },
-    join: resolved,
-    leave: resolved,
-    setMicrophoneEnabled: resolved,
-    setCameraEnabled: resolved,
-    startScreenShare: resolved,
-    stopScreenShare: resolved,
-    setHandRaised: resolved,
-    setDisplayName: resolved,
-    setAdmissionPolicy: resolved,
-    setParticipantRole: resolved,
-    transferHost: resolved,
-    admitParticipant: resolved,
-    denyAdmission: resolved,
-    muteParticipant: resolved,
-    stopParticipantCamera: resolved,
-    stopParticipantScreenShare: resolved,
-    removeParticipant: resolved,
-    endSession: resolved,
-  };
+  });
 
   return {
     store,
@@ -82,7 +47,7 @@ function createSession(initialSnapshot = createSnapshot()): TestSession {
   };
 }
 
-function Provider({ children, session }: PropsWithChildren<{ readonly session: ChalkSessionStore }>) {
+function Provider({ children, session }: PropsWithChildren<{ readonly session: SpaceClientStore }>) {
   return <ChalkProvider session={session}>{children}</ChalkProvider>;
 }
 
@@ -140,12 +105,13 @@ describe("Chalk React session bindings", () => {
   it("does not rerender a selector when an unrelated snapshot field changes", () => {
     const participants = [
       {
-        participantSessionId: "participant-1",
+        participantId: "participant-1",
         displayName: "Ari",
         handRaised: false,
         role: "participant" as const,
         eligibleRoles: ["participant" as const],
         capabilities: [],
+        media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
       },
     ];
     const initial = createSnapshot({ participants });
@@ -162,7 +128,7 @@ describe("Chalk React session bindings", () => {
     act(() => {
       session.setSnapshot({
         ...initial,
-        connection: { sync: "recovering", media: "healthy" },
+        connectionStatus: "reconnecting",
       });
     });
     expect(renders).toHaveBeenCalledTimes(1);
@@ -174,8 +140,8 @@ describe("Chalk React session bindings", () => {
     const failure = new Error("command rejected");
     const endPromise = Promise.reject(failure);
     const leave = vi.fn(() => leavePromise);
-    const endSession = vi.fn(() => endPromise);
-    const store = { ...session.store, leave, endSession };
+    const endEpisode = vi.fn(() => endPromise);
+    const store = { ...session.store, leave, endEpisode };
     const { result } = renderHook(() => useChalkActions(), {
       wrapper: ({ children }) => <Provider session={store}>{children}</Provider>,
     });
@@ -185,10 +151,10 @@ describe("Chalk React session bindings", () => {
     await returnedLeavePromise;
     expect(leave).toHaveBeenCalledTimes(1);
 
-    const returnedEndPromise = result.current.endSession();
+    const returnedEndPromise = result.current.endEpisode();
     expect(returnedEndPromise).toBe(endPromise);
     await expect(returnedEndPromise).rejects.toBe(failure);
-    expect(endSession).toHaveBeenCalledTimes(1);
+    expect(endEpisode).toHaveBeenCalledTimes(1);
   });
 
   it("opens no network or peer connection when provider and hooks render", () => {
@@ -225,7 +191,7 @@ function ParticipantCount({ onRender }: { readonly onRender: () => void }) {
 function AllHooksProbe() {
   useChalkSession();
   useChalkSnapshot();
-  useChalkSelector((snapshot) => snapshot.state);
+  useChalkSelector((snapshot) => snapshot.connectionStatus);
   useParticipants();
   useLocalMedia();
   useRemoteMedia();

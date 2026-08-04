@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChalkSessionSnapshot, ChalkSessionStore, ConferencePhase } from "@q9labsai/chalk-client";
+import { toSpaceClientStore, type SpaceClientStore, type SpaceClientStoreInput, type SpacePhase, type SpaceSnapshotView } from "../../client-compat";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import type { WaitingParticipant } from "../admission-panel/AdmissionPanel";
@@ -19,6 +19,8 @@ import { cn } from "../../utils/cn";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { uploadChatAttachment } from "../composite/chat-file-upload";
 
+type DisposableSpaceClientStore = SpaceClientStore & { readonly dispose?: () => void };
+
 export type VideoConferenceRole = "host" | "participant";
 
 export interface VideoConferenceProps {
@@ -29,13 +31,13 @@ export interface VideoConferenceProps {
   readonly userName?: string;
   readonly role?: VideoConferenceRole;
   readonly autoJoin?: boolean;
-  readonly initialPhase?: ConferencePhase;
+  readonly initialPhase?: SpacePhase;
   readonly initialJoinSettings?: Partial<PreJoinSettings>;
-  readonly phase?: ConferencePhase;
+  readonly phase?: SpacePhase;
   readonly layout?: ConferenceLayout;
   readonly onLayoutChange?: (layout: ConferenceLayout) => void;
-  readonly onPhaseChange?: (phase: ConferencePhase) => void;
-  readonly createSession: (settings: PreJoinSettings) => ChalkSessionStore | Promise<ChalkSessionStore>;
+  readonly onPhaseChange?: (phase: SpacePhase) => void;
+  readonly createSession: (settings: PreJoinSettings) => SpaceClientStoreInput | Promise<SpaceClientStoreInput>;
   readonly chatEnabled?: boolean;
   readonly participantsEnabled?: boolean;
   readonly admissionEnabled?: boolean;
@@ -56,7 +58,7 @@ export interface VideoConferenceProps {
   readonly canInvite?: boolean;
   readonly canLeave?: boolean;
 
-  readonly onSessionChange?: (session: ChalkSessionStore | null) => void;
+  readonly onSessionChange?: (session: SpaceClientStore | null) => void;
   readonly onParticipantJoined?: ConferenceEventHandlers["onParticipantJoined"];
   readonly onParticipantLeft?: ConferenceEventHandlers["onParticipantLeft"];
   readonly onScreenShareStarted?: ConferenceEventHandlers["onScreenShareStarted"];
@@ -69,9 +71,9 @@ export interface VideoConferenceProps {
 }
 
 type ActiveVideoConferenceProps = VideoConferenceProps & {
-  readonly session: ChalkSessionStore;
+  readonly session: SpaceClientStore;
   readonly settings: PreJoinSettings;
-  readonly phase: ConferencePhase;
+  readonly phase: SpacePhase;
   readonly layout: ConferenceLayout;
   readonly onLayoutChange: (layout: ConferenceLayout) => void;
   readonly onJoinFailure: (error: Error) => void;
@@ -89,7 +91,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
     }),
     [props.initialJoinSettings, props.role, props.userName],
   );
-  const [session, setSession] = useState<ChalkSessionStore | null>(null);
+  const [session, setSession] = useState<SpaceClientStore | null>(null);
   const [settings, setSettings] = useState(defaultSettings);
   const [hasAskedToJoin, setHasAskedToJoin] = useState(props.autoJoin === true || props.initialPhase === "joining");
   const [hasAskedToLeave, setHasAskedToLeave] = useState(props.initialPhase === "ended");
@@ -129,9 +131,15 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
       setEndData(null);
 
       try {
-        const nextSession = await props.createSession(normalizedSettings);
+        const nextSession = toSpaceClientStore(await props.createSession(normalizedSettings));
         if (attempt !== creationAttempt.current) {
-          await nextSession.leave().catch(() => undefined);
+          try {
+            await nextSession.leave();
+          } catch {
+            // A stale creation cannot surface a leave error to an unmounted conference.
+          } finally {
+            (nextSession as DisposableSpaceClientStore).dispose?.();
+          }
           return;
         }
         setSession(nextSession);
@@ -216,7 +224,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
 }
 
 function renderLifecycleScreen(input: {
-  readonly phase: ConferencePhase;
+  readonly phase: SpacePhase;
   readonly roomName: string;
   readonly logoUrl?: string;
   readonly settings: PreJoinSettings;
@@ -269,7 +277,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
 
   const handleJoinError = useCallback((error: Error) => props.onJoinFailure(error), [props.onJoinFailure]);
   useAutoJoin(true, actions.join, handleJoinError);
-  const duration = useConferenceDuration(snapshot.state);
+  const duration = useConferenceDuration(snapshot.connectionStatus);
   const handleWhiteboardError = useCallback((message: string) => setCommandError(message), []);
   useWhiteboardScene(session.whiteboard, isWhiteboardOpen, handleWhiteboardError);
   useConferenceEvents(snapshot, {
@@ -280,28 +288,28 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
     onSessionEnded: props.onSessionEnded,
   });
 
-  const localId = snapshot.subject?.participantSessionId ?? "local";
+  const localId = snapshot.self?.participantId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participants, remoteMedia, localId, props.settings.displayName, localMedia), [localId, localMedia, participants, props.settings.displayName, remoteMedia]);
   const audioParticipants = useMemo(() => toAudioParticipants(remoteMedia), [remoteMedia]);
   const participantNames = useMemo(() => toParticipantNames(participants, localId, props.settings.displayName), [localId, participants, props.settings.displayName]);
-  const listParticipants = useMemo(() => toListParticipants(tiles, participants, snapshot.participantMedia), [participants, snapshot.participantMedia, tiles]);
-  const localParticipant = participants.find((participant) => participant.participantSessionId === localId);
-  const localCapabilities = localParticipant?.capabilities ?? [];
+  const listParticipants = useMemo(() => toListParticipants(tiles, participants, snapshot.participantMediaById), [participants, snapshot.participantMediaById, tiles]);
+  const localParticipant = participants.find((participant) => participant.participantId === localId);
+  const localCapabilities = snapshot.capabilities;
   const microphoneEnabled = localMedia.microphone.state === "enabled" || localMedia.microphone.state === "requesting";
   const cameraEnabled = localMedia.camera.state === "enabled" || localMedia.camera.state === "requesting";
   const screenSharing = localMedia.screen.state === "enabled" || localMedia.screen.state === "requesting";
   const handRaised = localParticipant?.handRaised ?? false;
-  const canChat = props.chatEnabled !== false && (props.canSendChat ?? (snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendChat")));
-  const canReact = props.reactionsEnabled !== false && (props.canReact ?? (snapshot.roomActions.phase === "healthy" && snapshot.roomActions.capabilities.includes("sendReaction")));
+  const canChat = props.chatEnabled !== false && (props.canSendChat ?? snapshot.capabilities.includes("sendChat"));
+  const canReact = props.reactionsEnabled !== false && (props.canReact ?? snapshot.capabilities.includes("sendReaction"));
   const canRequestMedia = localCapabilities.includes("requestMediaOthers");
   const canManageParticipants = props.canManageParticipants ?? localCapabilities.some((capability) => ["muteOthers", "stopVideoOthers", "removeParticipant", "assignRoles"].includes(capability));
   const canShareScreen = props.screenShareEnabled !== false && (props.canShareScreen ?? localCapabilities.includes("publishScreen"));
   const canRaiseHand = props.handRaiseEnabled !== false && (props.canRaiseHand ?? localCapabilities.includes("raiseHand"));
-  const canUseWhiteboard = props.whiteboardEnabled !== false && (props.canUseWhiteboard ?? session.whiteboard !== null);
+  const canUseWhiteboard = props.whiteboardEnabled !== false && (props.canUseWhiteboard ?? (session.whiteboard !== null && snapshot.capabilities.includes("drawWhiteboard")));
   const canInvite = props.canInvite ?? Boolean(props.meetingLink);
   const canLeave = props.canLeave !== false;
   const canAdmit = props.admissionEnabled !== false && (props.canAdmit ?? localCapabilities.includes("manageAdmission"));
-  const chatFiles = snapshot.roomActions.phase === "healthy" && snapshot.roomActions.version === 1 ? session.chatFiles : null;
+  const chatFiles = snapshot.connectionStatus === "live" ? session.files : null;
   const incomingRequest = snapshot.incomingMediaRequests[0];
   const remoteScreenShare = tiles.find((participant) => participant.isScreenSharing && participant.screenShareTrack);
   const screenShare = remoteScreenShare?.screenShareTrack
@@ -312,7 +320,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
     : undefined;
   const effectiveLayout = screenSharing || tiles.some((participant) => participant.isScreenSharing) ? "presentation" : props.layout;
 
-  const admissionKey = snapshot.admissionRequests.map((request) => request.admissionRequestId).join(",");
+  const admissionKey = snapshot.admissionRequests.map((request) => request.requestId).join(",");
   const [dismissedAdmissionKey, setDismissedAdmissionKey] = useState("");
   const activePanel = layoutPanel ?? (canAdmit && admissionKey && dismissedAdmissionKey !== admissionKey ? "admission" : null);
 
@@ -390,19 +398,24 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
       chat: canChat
         ? {
             messages: snapshot.chat.messages,
-            pendingMessages: snapshot.chat.pending,
+            pendingMessages: snapshot.chat.pendingSends,
             readReceipts: snapshot.chat.readReceipts,
-            localReadThroughSequence: snapshot.chat.localReadThroughSequence,
             participantNames,
             localParticipantId: localId,
-            hasOlder: snapshot.chat.hasOlder,
+            hasOlder: snapshot.chat.pagination.hasOlder,
             loadingOlder: loadingOlderChat,
-            error: snapshot.chat.error?.message,
+            error: snapshot.chat.lastError?.message,
             onSendMessage: async ({ text, attachments }) => {
               await actions.sendChatMessage({ text, attachments });
             },
             onUploadAttachment: chatFiles ? (file) => uploadChatAttachment(file, chatFiles) : undefined,
-            onResolveAttachmentUrl: chatFiles ? async (attachmentId) => (await chatFiles.getDownloadUrl(attachmentId)).downloadUrl : undefined,
+            onResolveAttachmentUrl: chatFiles
+              ? async (attachmentId) => {
+                  const attachment = [...snapshot.chat.messages, ...snapshot.chat.pendingSends].flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
+                  if (!attachment) throw new Error("The chat attachment is no longer available");
+                  return chatFiles.url(attachment);
+                }
+              : undefined,
             onMarkRead: (throughSequence) => actions.markChatRead(throughSequence),
             onRetryMessage: async (clientMessageId) => {
               await actions.retryChatMessage(clientMessageId);
@@ -421,13 +434,13 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
               onStopParticipantCamera: localCapabilities.includes("stopVideoOthers") ? (id) => void runCommand(() => actions.stopParticipantCamera(id), "Camera stop failed") : undefined,
               onRequestStartCamera: canRequestMedia ? (id) => void runCommand(() => actions.requestStartCamera(id), "Camera request failed") : undefined,
               onRemoveParticipant: localCapabilities.includes("removeParticipant") ? (id) => void runCommand(() => actions.removeParticipant(id), "Remove failed") : undefined,
-              onMakeHost: localCapabilities.includes("assignRoles") ? (id) => void runCommand(() => actions.transferHost(id), "Host transfer failed") : undefined,
-              onMakeCoHost: localCapabilities.includes("assignRoles") ? (id) => void runCommand(() => actions.setParticipantRole(id, "cohost"), "Role update failed") : undefined,
+              onMakeHost: localCapabilities.includes("assignRoles") ? (id) => void runCommand(() => actions.assignOwner(id), "Host transfer failed") : undefined,
+              onMakeCoHost: localCapabilities.includes("assignRoles") ? (id) => void runCommand(() => actions.assignParticipantRole(id, "collaborator"), "Role update failed") : undefined,
             }
           : undefined,
       admission: canAdmit
         ? {
-            participants: snapshot.admissionRequests.map((request): WaitingParticipant => ({ id: request.admissionRequestId, displayName: request.displayName })),
+            participants: snapshot.admissionRequests.map((request): WaitingParticipant => ({ id: request.requestId, displayName: request.displayName })),
             onAdmit: (id) => void runCommand(() => actions.admitParticipant(id), "Admission failed"),
             onDeny: (id) => void runCommand(() => actions.denyAdmission(id), "Admission denial failed"),
           }
@@ -494,8 +507,14 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
       reconnecting={props.phase === "reconnecting" ? { isVisible: true, status: "reconnecting", message: snapshot.failure?.message, onLeave: canLeave ? () => void leave() : undefined } : undefined}
       overlay={
         <>
-          {incomingRequest ? <MediaRequestDialog request={incomingRequest} onDecline={() => actions.declineMediaRequest(incomingRequest.requestId)} onAllow={() => void runCommand(() => actions.acceptMediaRequest(incomingRequest.requestId), "Media request failed")} /> : null}
-          <CommandErrorAlert message={commandError || (snapshot.state === "live" ? snapshot.failure?.message : undefined)} />
+          {incomingRequest ? (
+            <MediaRequestDialog
+              request={incomingRequest}
+              onDecline={() => void runCommand(() => actions.declineMediaRequest(incomingRequest.requestId), "Media request decline failed")}
+              onAllow={() => void runCommand(() => actions.acceptMediaRequest(incomingRequest.requestId), "Media request failed")}
+            />
+          ) : null}
+          <CommandErrorAlert message={commandError || (snapshot.connectionStatus === "live" ? snapshot.failure?.message : undefined)} />
         </>
       }
       onLeave={canLeave ? leave : undefined}
@@ -561,15 +580,15 @@ function createControls(input: {
   };
 }
 
-function createWhiteboardView(props: ActiveVideoConferenceProps, session: ChalkSessionStore, snapshot: ChalkSessionSnapshot, isOpen: boolean): ConferenceViewProps["whiteboard"] {
+function createWhiteboardView(props: ActiveVideoConferenceProps, session: SpaceClientStore, snapshot: SpaceSnapshotView, isOpen: boolean): ConferenceViewProps["whiteboard"] {
   if (!isOpen || !session.whiteboard || props.whiteboardEnabled === false || props.canUseWhiteboard === false) return undefined;
   const whiteboard = session.whiteboard;
   return {
     isOpen: true,
     props: {
-      canDraw: snapshot.whiteboard.canDraw,
+      canDraw: snapshot.capabilities.includes("drawWhiteboard"),
       collab: {
-        canDraw: snapshot.whiteboard.canDraw,
+        canDraw: snapshot.capabilities.includes("drawWhiteboard"),
         subscribe: (listener) => whiteboard.subscribe((event) => listener(toWhiteboardCollaborationEvent(event))),
         submitUpdate: async (input) => whiteboard.submitUpdate({ sceneId: input.sceneId, syncAll: input.syncAll, elements: input.elements.map(fromWhiteboardWireElement) }),
         sendCursor: (input) => whiteboard.sendCursor(input),

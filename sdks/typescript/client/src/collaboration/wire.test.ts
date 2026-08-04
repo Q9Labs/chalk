@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { chatMessageFromFrame, chatReadReceiptFromFrame, roomReactionFromFrame } from "./wire";
+import { chatMessageFromFrame, chatReadReceiptFromFrame, reactionFromFrame } from "./wire";
 
-const participantSessionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
+const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 const eventId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22";
 const clientMessageId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 
-describe("room-action wire projections", () => {
+describe("collaboration wire projections", () => {
   it("projects server-stamped reactions without retaining wire names", () => {
     expect(
-      roomReactionFromFrame({
-        type: "room_reaction",
+      reactionFromFrame({
+        type: "reaction",
         event_id: eventId,
-        participant_session_id: participantSessionId,
+        participant_id: participantId,
         display_name: "Ada",
         reaction: "🎉",
         occurred_at: "2026-07-29T12:00:00.000Z",
@@ -19,7 +19,7 @@ describe("room-action wire projections", () => {
       }),
     ).toEqual({
       eventId,
-      participantSessionId,
+      participantId,
       displayName: "Ada",
       reaction: "🎉",
       occurredAt: "2026-07-29T12:00:00.000Z",
@@ -34,7 +34,7 @@ describe("room-action wire projections", () => {
         message_id: eventId,
         client_message_id: clientMessageId,
         sequence: "18446744073709551615",
-        participant_session_id: participantSessionId,
+        participant_id: participantId,
         display_name: "Ada",
         text: "Hello",
         created_at: "2026-07-29T12:00:00.000Z",
@@ -43,7 +43,7 @@ describe("room-action wire projections", () => {
       messageId: eventId,
       clientMessageId,
       sequence: "18446744073709551615",
-      participantSessionId,
+      participantId,
       displayName: "Ada",
       text: "Hello",
       createdAt: "2026-07-29T12:00:00.000Z",
@@ -59,7 +59,7 @@ describe("room-action wire projections", () => {
         message_id: eventId,
         client_message_id: clientMessageId,
         sequence: "9",
-        participant_session_id: participantSessionId,
+        participant_id: participantId,
         display_name: "Ada",
         text: "",
         attachments: [{ attachment_id: attachmentId, file_name: "notes.txt", mime_type: "text/plain", byte_length: 128 }],
@@ -71,14 +71,14 @@ describe("room-action wire projections", () => {
     expect(
       chatReadReceiptFromFrame({
         type: "chat_read_receipt",
-        participant_session_id: participantSessionId,
-        participant_session_generation: 2,
+        participant_id: participantId,
+        participant_generation: 2,
         sequence: "9",
         read_at: "2026-07-29T12:01:00.000Z",
       }),
     ).toEqual({
-      participantSessionId,
-      participantSessionGeneration: 2,
+      participantId,
+      participantGeneration: 2,
       readThroughSequence: "9",
       readAt: "2026-07-29T12:01:00.000Z",
     });

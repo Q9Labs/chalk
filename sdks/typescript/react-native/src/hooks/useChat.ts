@@ -1,7 +1,7 @@
-import type { ChalkPendingChatMessage, ChalkReaction, ChalkSendChatMessageInput } from "@q9labsai/chalk-client";
+import type { ChalkPendingChatMessage, ChalkReaction, ChalkSendChatMessageInput } from "../client-compat";
 import { useCallback, useMemo } from "react";
 import { useChalkSession } from "../context/chalk-provider";
-import { createNativeRoomActionCommands, projectNativeRoomActions } from "../room-actions/native-room-actions";
+import { createNativeActionCommands, projectNativeActions } from "../room-actions/native-room-actions";
 import type { NativeChatMessage } from "../ui/native-types";
 import { useChalkSnapshot } from "./useChalkSnapshot";
 
@@ -25,8 +25,8 @@ export interface UseChatReturn {
 export function useChat(): UseChatReturn {
   const store = useChalkSession();
   const snapshot = useChalkSnapshot();
-  const projection = useMemo(() => projectNativeRoomActions(snapshot), [snapshot]);
-  const commands = useMemo(() => createNativeRoomActionCommands(store), [store]);
+  const projection = useMemo(() => projectNativeActions(snapshot), [snapshot]);
+  const commands = useMemo(() => createNativeActionCommands(store), [store]);
 
   const sendMessage = useCallback(
     async (content: string | ChalkSendChatMessageInput) => {
@@ -45,7 +45,7 @@ export function useChat(): UseChatReturn {
     await store.loadOlderChatMessages();
   }, [store]);
   const reactToMessage = useCallback((_messageId: string, _emoji: ChalkReaction) => {
-    throw new Error("Per-message reactions are not part of the room-actions contract.");
+    throw new Error("Per-message reactions are not part of the actions contract.");
   }, []);
   const markAsRead = useCallback(
     async (throughSequence?: string) => {

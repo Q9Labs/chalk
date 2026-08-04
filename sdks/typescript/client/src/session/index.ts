@@ -1,5 +1,5 @@
-export * from "./access";
-export * from "./chalk-session";
+export * from "./access-grant";
+export * from "./connection";
 export * from "./conference-phase";
 export * from "./dependencies";
 export * from "./diagnostics";

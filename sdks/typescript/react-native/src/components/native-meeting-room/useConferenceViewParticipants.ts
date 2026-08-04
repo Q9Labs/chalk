@@ -1,8 +1,8 @@
-import type { ChalkAssignableParticipantRole, ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkAssignableParticipantRole, ChalkSessionSnapshot, ChalkSessionStore } from "../../client-compat";
 import { useEffect, useRef } from "react";
 import { Alert } from "react-native";
 
-import { createNativeMediaRequestPrompt, type NativeRoomActionCommands } from "../../room-actions/native-room-actions";
+import { createNativeMediaRequestPrompt, type NativeActionCommands } from "../../room-actions/native-room-actions";
 import type { UseMeetingParticipantsReturn } from "../../hooks/useMeetingParticipants";
 import type { ConferenceViewActionRunner } from "./types";
 
@@ -14,22 +14,22 @@ export interface ConferenceViewParticipants {
   readonly participants: UseMeetingParticipantsReturn;
   readonly admitParticipant: (admissionRequestId: string) => void;
   readonly denyAdmission: (admissionRequestId: string) => void;
-  readonly setParticipantRole: (participantSessionId: string, role: ChalkAssignableParticipantRole) => void;
-  readonly transferHost: (participantSessionId: string) => void;
-  readonly removeParticipant: (participantSessionId: string) => void;
-  readonly muteParticipant: (participantSessionId: string) => void;
-  readonly requestUnmuteParticipant: (participantSessionId: string) => void;
-  readonly requestStartParticipantCamera: (participantSessionId: string) => void;
-  readonly stopParticipantCamera: (participantSessionId: string) => void;
-  readonly stopParticipantScreenShare: (participantSessionId: string) => void;
+  readonly setParticipantRole: (participantId: string, role: ChalkAssignableParticipantRole) => void;
+  readonly transferHost: (participantId: string) => void;
+  readonly removeParticipant: (participantId: string) => void;
+  readonly muteParticipant: (participantId: string) => void;
+  readonly requestUnmuteParticipant: (participantId: string) => void;
+  readonly requestStartParticipantCamera: (participantId: string) => void;
+  readonly stopParticipantCamera: (participantId: string) => void;
+  readonly stopParticipantScreenShare: (participantId: string) => void;
 }
 
 interface UseConferenceViewParticipantsOptions {
   readonly isHost: boolean;
   readonly snapshot: Pick<ChalkSessionSnapshot, "incomingMediaRequests" | "admissionRequests">;
-  readonly session: Pick<ChalkSessionStore, "admitParticipant" | "denyAdmission" | "setParticipantRole" | "transferHost" | "removeParticipant" | "muteParticipant" | "requestUnmute" | "requestStartCamera" | "stopParticipantCamera" | "stopParticipantScreenShare">;
+  readonly session: Pick<ChalkSessionStore, "admitParticipant" | "denyAdmission" | "assignRole" | "assignOwner" | "removeParticipant" | "muteParticipant" | "requestUnmute" | "requestStartCamera" | "stopParticipantCamera" | "stopParticipantScreenShare">;
   readonly participants: UseMeetingParticipantsReturn;
-  readonly commands: NativeRoomActionCommands;
+  readonly commands: NativeActionCommands;
   readonly run: ConferenceViewActionRunner;
 }
 
@@ -54,13 +54,13 @@ export function useConferenceViewParticipants({ isHost, snapshot, session, parti
     participants,
     admitParticipant: (admissionRequestId: string) => void run(() => session.admitParticipant(admissionRequestId)),
     denyAdmission: (admissionRequestId: string) => void run(() => session.denyAdmission(admissionRequestId)),
-    setParticipantRole: (participantSessionId: string, role: ChalkAssignableParticipantRole) => void run(() => session.setParticipantRole(participantSessionId, role)),
-    transferHost: (participantSessionId: string) => void run(() => session.transferHost(participantSessionId)),
-    removeParticipant: (participantSessionId: string) => void run(() => session.removeParticipant(participantSessionId)),
-    muteParticipant: (participantSessionId: string) => void run(() => session.muteParticipant(participantSessionId)),
-    requestUnmuteParticipant: (participantSessionId: string) => void run(() => session.requestUnmute(participantSessionId)),
-    requestStartParticipantCamera: (participantSessionId: string) => void run(() => session.requestStartCamera(participantSessionId)),
-    stopParticipantCamera: (participantSessionId: string) => void run(() => session.stopParticipantCamera(participantSessionId)),
-    stopParticipantScreenShare: (participantSessionId: string) => void run(() => session.stopParticipantScreenShare(participantSessionId)),
+    setParticipantRole: (participantId: string, role: ChalkAssignableParticipantRole) => void run(() => session.assignRole(participantId, role)),
+    transferHost: (participantId: string) => void run(() => session.assignOwner(participantId)),
+    removeParticipant: (participantId: string) => void run(() => session.removeParticipant(participantId)),
+    muteParticipant: (participantId: string) => void run(() => session.muteParticipant(participantId)),
+    requestUnmuteParticipant: (participantId: string) => void run(() => session.requestUnmute(participantId)),
+    requestStartParticipantCamera: (participantId: string) => void run(() => session.requestStartCamera(participantId)),
+    stopParticipantCamera: (participantId: string) => void run(() => session.stopParticipantCamera(participantId)),
+    stopParticipantScreenShare: (participantId: string) => void run(() => session.stopParticipantScreenShare(participantId)),
   };
 }

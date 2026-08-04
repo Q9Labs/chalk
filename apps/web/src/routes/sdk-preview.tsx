@@ -1,4 +1,4 @@
-import type { ChalkChatMessage, ChalkRoomReaction } from "@q9labsai/chalk-client";
+import type { ChalkChatMessage, ChalkReactionEvent } from "@q9labsai/chalk-client";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
@@ -65,7 +65,7 @@ const INITIAL_CHAT_MESSAGES: ChalkChatMessage[] = [
     messageId: "preview-message-1",
     clientMessageId: "preview-client-1",
     sequence: "1",
-    participantSessionId: "nora",
+    participantId: "nora",
     displayName: "Nora Williams",
     text: "The new room direction feels much calmer.",
     createdAt: "2026-08-01T10:12:00.000Z",
@@ -75,7 +75,7 @@ const INITIAL_CHAT_MESSAGES: ChalkChatMessage[] = [
     messageId: "preview-message-2",
     clientMessageId: "preview-client-2",
     sequence: "2",
-    participantSessionId: "you",
+    participantId: "you",
     displayName: "Hasan",
     text: "Agreed. Let’s keep the controls out of the stage.",
     createdAt: "2026-08-01T10:13:00.000Z",
@@ -85,7 +85,7 @@ const INITIAL_CHAT_MESSAGES: ChalkChatMessage[] = [
     messageId: "preview-message-3",
     clientMessageId: "preview-client-3",
     sequence: "3",
-    participantSessionId: "sofia",
+    participantId: "sofia",
     displayName: "Sofia Chen",
     text: "I’ll share the revised agenda here after the call.",
     createdAt: "2026-08-01T10:14:00.000Z",
@@ -150,11 +150,11 @@ function SdkPreviewPage() {
       })),
     [participants],
   );
-  const reactions = useMemo<ChalkRoomReaction[]>(
+  const reactions = useMemo<ChalkReactionEvent[]>(
     () => [
       {
         eventId: "preview-reaction-1",
-        participantSessionId: "nora",
+        participantId: "nora",
         displayName: "Nora Williams",
         reaction: "🎉",
         occurredAt: "2026-08-01T10:15:00.000Z",
@@ -261,7 +261,7 @@ function SdkPreviewPage() {
                   messageId: `preview-message-${current.length + 1}`,
                   clientMessageId: `preview-client-${current.length + 1}`,
                   sequence: String(current.length + 1),
-                  participantSessionId: "you",
+                  participantId: "you",
                   displayName,
                   text,
                   createdAt: new Date().toISOString(),

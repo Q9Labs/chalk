@@ -1,5 +1,5 @@
 import { resolvePlatformVariant } from "../platform/platform";
-import type { ChalkChatAttachment, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkChatAttachment, ChalkSessionStore } from "../client-compat";
 import { ConferenceViewAndroid } from "./ConferenceView.android";
 import { ConferenceViewIosPad } from "./ConferenceView.ios-pad";
 import { ConferenceViewIosPhone } from "./ConferenceView.ios-phone";

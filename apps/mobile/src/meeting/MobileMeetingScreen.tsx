@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { ChalkSessionAccessProvider, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClient } from "@q9labsai/chalk-client";
 import { VideoConference, ClientSessionError, createClientSession, createChalkSession, type ClientSession, type PreJoinSettings, type VideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +16,7 @@ export interface MeetingScreenProps {
   readonly brokerUrl: string;
   readonly onDiagnosticsChange?: (snapshot: VideoConferenceDiagnosticsSnapshot) => void;
   readonly onDiagnosticsError?: (error: { message: string }) => void;
-  readonly onSessionChange?: (session: ChalkSessionStore | null) => void;
+  readonly onSessionChange?: (client: Pick<SpaceClient, "leave"> | null) => void;
 }
 
 export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsChange, onDiagnosticsError, onSessionChange }: MeetingScreenProps): React.JSX.Element {
@@ -50,7 +50,7 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
   );
 
   const createSession = useCallback(
-    async (settings: PreJoinSettings): Promise<ChalkSessionStore> => {
+    async (settings: PreJoinSettings) => {
       const storedCredential = !clientSessionRef.current && route.joinToken ? await loadClientSessionCredential(route.joinToken) : undefined;
       const create = (credential = storedCredential) =>
         createClientSession({
@@ -73,9 +73,8 @@ export function MobileMeetingScreen({ route, onClose, brokerUrl, onDiagnosticsCh
       clientSessionRef.current = clientSession;
       setMeetingLink(clientSession.meetingLink);
       await saveClientSessionCredential(clientSession);
-      const access: ChalkSessionAccessProvider = (request) => clientSession.access(request);
       return createChalkSession({
-        access,
+        getAccess: clientSession.access,
         apiBaseURL: clientSession.apiBaseURL,
         syncURL: clientSession.syncURL,
         initialMicrophoneEnabled: settings.microphoneEnabled,

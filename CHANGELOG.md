@@ -14,6 +14,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Added the framework-neutral `SpaceClient` architecture with one stable-slice
+  snapshot store, five feature controllers, Promise and Effect entry points,
+  typed client events, opaque `AccessGrant` refresh, and foreground-aware
+  access recovery.
+- Moved the client media-plane interface into a neutral media contract used by
+  both Sync and the Cloudflare adapter, and aligned every `@q9labsai/*`
+  workspace package at version `4.0.0`.
 - Reworked the server contract around durable Spaces, live Episodes, and
   per-Episode Participants, including Space-owned membership, roles, chat, and
   whiteboard state plus Episode-owned coordination and artifacts.
@@ -33,6 +40,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Breaking
 
+- Replaced the client package's `ChalkSession` and `ParticipantAccess` public
+  surfaces with `SpaceClient` and opaque `AccessGrant`; feature commands now
+  live under `media`, `chat`, `participants`, `reactions`, and `whiteboard`,
+  while lifecycle and Episode commands remain flat.
 - Renamed the Go, OpenAPI, webhook v1, Sync v1, and Whiteboard v1 wire
   vocabulary from rooms and sessions to Spaces, Episodes, and Participants.
   Lifecycle routes now use plural `/spaces/{space_id}/episodes` resources, and

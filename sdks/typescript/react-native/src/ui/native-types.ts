@@ -1,4 +1,4 @@
-import type { ChalkChatAttachment, ChalkChatReadReceipt, ChalkParticipant, ChalkReaction } from "@q9labsai/chalk-client";
+import type { ChalkChatAttachment, ChalkChatReadReceipt, ChalkParticipant, ChalkReaction } from "../client-compat";
 
 export type Layout = "grid" | "focus" | "presentation";
 export type NativePanel = "chat" | "participants" | "whiteboard" | null;

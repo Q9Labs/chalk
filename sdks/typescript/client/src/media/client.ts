@@ -1,4 +1,4 @@
-import type { V1ClientMediaPlane, V1MediaPlaneResult, V1MediaPlaneTarget, V1MediaPublication, V1MediaSource } from "../sync/v1-types";
+import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "./plane";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { CloudflareSFUError } from "./types";
 import type {
@@ -18,7 +18,7 @@ import type {
 import type { PublicationCursor } from "./tracks";
 
 type LocalTrackState = {
-  readonly source: V1MediaSource;
+  readonly source: MediaSource;
   readonly track: MediaStreamTrack;
   transceiver: RTCRtpTransceiver | null;
   providerPublicationId: string | null;
@@ -40,18 +40,18 @@ const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const CONNECTION_TIMEOUT_MS = 8_000;
 
-export class CloudflareSFUClient implements V1ClientMediaPlane {
-  readonly #localListeners = new Set<(publications: readonly V1MediaPublication[]) => void>();
+export class CloudflareSFUClient implements ClientMediaPlane {
+  readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: ((error: unknown) => void) | undefined;
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
-  readonly #participantSessionId: string;
+  readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
   readonly #pollIntervalMs: number;
-  readonly #remoteListeners = new Set<(publications: readonly V1MediaPublication[]) => void>();
+  readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
-  readonly #localTracks = new Map<V1MediaSource, LocalTrackState>();
-  readonly #reusableLocalTransceivers = new Map<V1MediaSource, RTCRtpTransceiver>();
+  readonly #localTracks = new Map<MediaSource, LocalTrackState>();
+  readonly #reusableLocalTransceivers = new Map<MediaSource, RTCRtpTransceiver>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -67,7 +67,7 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
 
   constructor(options: CloudflareSFUClientOptions) {
     validateClientOptions(options);
-    this.#participantSessionId = options.participantSessionId;
+    this.#participantId = options.participantId;
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
     this.#pollIntervalMs = options.pollIntervalMs ?? 1_000;
@@ -95,7 +95,7 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
     return () => this.#snapshotListeners.delete(listener);
   }
 
-  prepareLocalTrack(source: V1MediaSource, track: MediaStreamTrack): void {
+  prepareLocalTrack(source: MediaSource, track: MediaStreamTrack): void {
     this.#requireActive();
     validateTrackSource(source, track);
     if (this.#localTracks.has(source)) throw new CloudflareSFUError(`A ${source} track is already prepared`, "media_failed");
@@ -122,7 +122,7 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
     this.#emitLocal();
   }
 
-  async clearPreparedLocalTrack(source: V1MediaSource): Promise<void> {
+  async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
@@ -164,8 +164,8 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
     }
   }
 
-  async setLocalPublicationTarget(target: V1MediaPlaneTarget): Promise<V1MediaPlaneResult> {
-    if (target.participantSessionId !== this.#participantSessionId) return { outcome: "terminal_failure", errorCode: "invalid_participant" };
+  async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
+    if (target.participantId !== this.#participantId) return { outcome: "terminal_failure", errorCode: "invalid_participant" };
     if (this.#stopped) return { outcome: "terminal_failure", errorCode: "media_stopped" };
     const state = this.#localTracks.get(target.source);
     if (!state) return { outcome: "terminal_failure", errorCode: "source_unavailable" };
@@ -179,13 +179,13 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
     }
   }
 
-  observeLocalPublications(listener: (publications: readonly V1MediaPublication[]) => void): () => void {
+  observeLocalPublications(listener: (publications: readonly MediaPublication[]) => void): () => void {
     this.#localListeners.add(listener);
     this.#invokeListener(() => listener(this.#projectLocalPublications()));
     return () => this.#localListeners.delete(listener);
   }
 
-  observeRemotePublications(listener: (publications: readonly V1MediaPublication[]) => void): () => void {
+  observeRemotePublications(listener: (publications: readonly MediaPublication[]) => void): () => void {
     this.#remoteListeners.add(listener);
     this.#invokeListener(() => listener(this.#projectRemotePublications()));
     return () => this.#remoteListeners.delete(listener);
@@ -389,7 +389,7 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
     const ordering = comparePublicationCursor(this.#cursor, cursor);
     if (ordering !== "newer") return;
 
-    const desired = desiredRemotePublications(authoritative.publications, this.#participantSessionId);
+    const desired = desiredRemotePublications(authoritative.publications, this.#participantId);
     const toPull = [...desired].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId).map(([, publication]) => publication);
     const pulled = await this.#pull(toPull, generation);
     this.#requireGeneration(generation);
@@ -410,7 +410,7 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
     return this.#serializeSDP(async () => {
       const requested = publications.map((publication) => {
         const reference = parseCloudflareSFUPublicationID(publication.publicationId);
-        return { location: "remote" as const, sessionId: reference.sessionId, trackName: reference.trackName };
+        return { location: "remote" as const, sessionId: reference.connectionId, trackName: reference.trackName };
       });
       const received = new Map<string, MediaStreamTrack>();
       const onTrack = (event: RTCTrackEvent) => {
@@ -545,17 +545,17 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
     this.#pollTimer = undefined;
   }
 
-  #projectLocalPublications(): readonly V1MediaPublication[] {
+  #projectLocalPublications(): readonly MediaPublication[] {
     return [...this.#localTracks.values()].map((state) => ({
-      participantSessionId: this.#participantSessionId,
+      participantId: this.#participantId,
       source: state.source,
       enabled: state.enabled,
       publicationId: state.enabled ? state.providerPublicationId : null,
     }));
   }
 
-  #projectRemotePublications(): readonly V1MediaPublication[] {
-    return [...this.#remoteTracks.values()].map(({ participantSessionId, source, publicationId }) => ({ participantSessionId, source, publicationId, enabled: true }));
+  #projectRemotePublications(): readonly MediaPublication[] {
+    return [...this.#remoteTracks.values()].map(({ participantId, source, publicationId }) => ({ participantId, source, publicationId, enabled: true }));
   }
 
   #publishSnapshot(phase = this.#snapshot.connection.phase, failure = this.#snapshot.failure): void {
@@ -636,7 +636,7 @@ export class CloudflareSFUClient implements V1ClientMediaPlane {
 
 function validateClientOptions(options: CloudflareSFUClientOptions): void {
   validateBootstrap(options.bootstrap);
-  if (!options.participantSessionId.trim()) throw new CloudflareSFUError("Cloudflare SFU participant is missing", "invalid_bootstrap");
+  if (!options.participantId.trim()) throw new CloudflareSFUError("Cloudflare SFU participant is missing", "invalid_bootstrap");
   if (options.pollIntervalMs !== undefined && (!Number.isFinite(options.pollIntervalMs) || options.pollIntervalMs < 0)) {
     throw new CloudflareSFUError("Cloudflare SFU polling interval is invalid", "invalid_bootstrap");
   }
@@ -646,13 +646,13 @@ function validateBootstrap(bootstrap: CloudflareSFUBootstrap): void {
   if (!bootstrap.connectionId.trim() || !bootstrap.stunServer.trim()) throw new CloudflareSFUError("Cloudflare SFU bootstrap is incomplete", "invalid_bootstrap");
 }
 
-function validateTrackSource(source: V1MediaSource, track: MediaStreamTrack): void {
+function validateTrackSource(source: MediaSource, track: MediaStreamTrack): void {
   const valid = source === "microphone" ? track.kind === "audio" : track.kind === "video";
   if (!valid) throw new CloudflareSFUError(`The prepared ${source} track has an incompatible kind`, "media_failed");
 }
 
-function desiredRemotePublications(publications: readonly CloudflareSFUPublication[], participantSessionId: string): Map<string, CloudflareSFUPublication> {
-  return new Map(publications.filter((publication) => publication.participantSessionId !== participantSessionId).map((publication) => [publicationKey(publication), publication]));
+function desiredRemotePublications(publications: readonly CloudflareSFUPublication[], participantId: string): Map<string, CloudflareSFUPublication> {
+  return new Map(publications.filter((publication) => publication.participantId !== participantId).map((publication) => [publicationKey(publication), publication]));
 }
 
 function reconcileRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], current: ReadonlyMap<string, CloudflareSFURemoteTrack>): Map<string, CloudflareSFURemoteTrack> {
@@ -734,5 +734,5 @@ function publicationEqual(left: CloudflareSFULocalTrack, right: CloudflareSFULoc
 }
 
 function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: CloudflareSFURemoteTrack | undefined): boolean {
-  return right !== undefined && left.participantSessionId === right.participantSessionId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
+  return right !== undefined && left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
 }

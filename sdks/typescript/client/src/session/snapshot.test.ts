@@ -1,25 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import type { V1SessionSnapshot } from "../sync";
-import { initialChalkSessionSnapshot, projectChalkSessionSnapshot } from "./snapshot";
+import type { V1EpisodeSnapshot } from "../sync";
+import { initialConnectionSnapshot, projectConnectionSnapshot } from "./snapshot";
 
-describe("ChalkSession snapshot projection", () => {
+describe("Connection snapshot projection", () => {
   it("creates a deeply immutable idle snapshot", () => {
-    const snapshot = initialChalkSessionSnapshot();
+    const snapshot = initialConnectionSnapshot();
     expect(snapshot).toMatchObject({ state: "idle", subject: null, connection: { sync: "idle", media: "idle" } });
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot.localMedia)).toBe(true);
     expect(Object.isFrozen(snapshot.localMedia.camera)).toBe(true);
-    expect(snapshot.roomActions).toEqual({ phase: "disabled", version: null, capabilities: [], error: null });
+    expect(snapshot.collaboration).toEqual({ phase: "disabled", version: null, capabilities: [], error: null });
     expect(snapshot.chat).toMatchObject({ status: "idle", messages: [], pending: [], unreadCount: 0 });
     expect(snapshot.whiteboard).toMatchObject({ status: "unsubscribed", canDraw: false, canClear: false });
-    expect(Object.isFrozen(snapshot.roomActions.capabilities)).toBe(true);
+    expect(Object.isFrozen(snapshot.collaboration.capabilities)).toBe(true);
     expect(Object.isFrozen(snapshot.chat.messages)).toBe(true);
     expect(Object.isFrozen(snapshot.whiteboard.capabilities)).toBe(true);
   });
 
   it("projects failed intended media without manufacturing tracks or healthy connections", () => {
-    const snapshot = projectChalkSessionSnapshot({
+    const snapshot = projectConnectionSnapshot({
       state: "failed",
       subject: null,
       sync: null,
@@ -38,8 +38,8 @@ describe("ChalkSession snapshot projection", () => {
     const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
     const sync = {
       connection: { phase: "live" },
-      participantSessionId: participantId,
-      participantSessionGeneration: 1,
+      participantId,
+      participantGeneration: 1,
       control: {
         revision: 1,
         stateSchemaVersion: 1,
@@ -47,14 +47,14 @@ describe("ChalkSession snapshot projection", () => {
         status: "active",
         admissionPolicy: "open",
         hostExitPolicy: "require_transfer",
-        hostParticipantSessionId: participantId,
+        hostParticipantId: participantId,
         deadlineAtMs: 1,
         deadlineGeneration: 1,
         roleCapabilities: { host: ["publishAudio"], cohost: [], participant: [] },
         recording: null,
         participants: [
           {
-            participantSessionId: participantId,
+            participantId,
             displayName: "Ada",
             handRaised: false,
             admissionRevision: 1,
@@ -69,15 +69,15 @@ describe("ChalkSession snapshot projection", () => {
       media: {
         projectionId: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
         sequence: 1,
-        items: [{ participantSessionId: participantId, source: "microphone", enabled: true, publicationId: "publication-1" }],
+        items: [{ participantId, source: "microphone", enabled: true, publicationId: "publication-1" }],
       },
       presence: null,
       mediaPlane: { local: [], remote: [] },
       localMedia: { microphone: "enabled", camera: "disabled", screen: "disabled" },
       pendingCommandCount: 0,
-    } satisfies V1SessionSnapshot;
+    } satisfies V1EpisodeSnapshot;
 
-    const snapshot = projectChalkSessionSnapshot({
+    const snapshot = projectConnectionSnapshot({
       state: "live",
       subject: null,
       sync,
@@ -85,12 +85,12 @@ describe("ChalkSession snapshot projection", () => {
       localTracks: new Map(),
       localIntent: { microphone: false, camera: false },
       failure: null,
-      roomActions: { phase: "healthy", version: 2, capabilities: ["sendReaction", "sendChat"], error: null },
-      participantRoomActionCapabilities: { [participantId]: ["sendReaction", "sendChat"] },
+      collaboration: { phase: "healthy", version: 1, capabilities: ["sendReaction", "sendChat"], error: null },
+      participantCollaborationCapabilities: { [participantId]: ["sendReaction", "sendChat"] },
       reactions: [
         {
           eventId: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
-          participantSessionId: participantId,
+          participantId,
           displayName: "Ada",
           reaction: "🎉",
           occurredAt: "2026-07-29T14:00:00.000Z",
@@ -105,7 +105,7 @@ describe("ChalkSession snapshot projection", () => {
       screenShare: "inactive",
     });
     expect(Object.isFrozen(snapshot.participantMedia[participantId])).toBe(true);
-    expect(Object.isFrozen(snapshot.participantRoomActionCapabilities[participantId])).toBe(true);
+    expect(Object.isFrozen(snapshot.participantCollaborationCapabilities[participantId])).toBe(true);
     expect(Object.isFrozen(snapshot.reactions[0])).toBe(true);
   });
 });

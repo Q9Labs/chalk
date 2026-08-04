@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChalkReaction, ChalkRoomReaction } from "@q9labsai/chalk-client";
+import type { ActiveReaction, Reaction } from "../../client-compat";
 import type React from "react";
 import { useState } from "react";
 
@@ -55,9 +55,9 @@ export type ConferenceViewInviteDialogProps = Omit<InviteDialogProps, "isOpen" |
 };
 
 export type ConferenceViewReactions = {
-  readonly reactions: readonly ChalkRoomReaction[];
-  readonly allowedReactions?: readonly ChalkReaction[];
-  readonly onSelect: (reaction: ChalkReaction) => void | Promise<void>;
+  readonly reactions: readonly ActiveReaction[];
+  readonly allowedReactions?: readonly Reaction[];
+  readonly onSelect: (reaction: Reaction) => void | Promise<void>;
 };
 
 export type ConferenceViewScreenShare = Omit<ScreenShareViewProps, "participants" | "className"> & {
@@ -100,7 +100,7 @@ export interface ConferenceViewProps {
   readonly className?: string;
 }
 
-const DEFAULT_REACTIONS: readonly ChalkReaction[] = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
+const DEFAULT_REACTIONS: readonly Reaction[] = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
 
 export function ConferenceView({
   roomName,
@@ -249,6 +249,6 @@ function renderPanel(panels: ConferenceViewPanelProps): React.ReactNode {
   }
 }
 
-function isAllowedReaction(value: string, allowedReactions: readonly ChalkReaction[]): value is ChalkReaction {
+function isAllowedReaction(value: string, allowedReactions: readonly Reaction[]): value is Reaction {
   return allowedReactions.some((reaction) => reaction === value);
 }

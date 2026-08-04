@@ -1,12 +1,12 @@
-import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachment, type ChalkSessionStore } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChatAttachment, type SpaceClient } from "@q9labsai/chalk-client";
 import { uploadChatAttachment } from "@q9labsai/chalk-react-native";
 import { CryptoDigestAlgorithm, digest, randomUUID } from "expo-crypto";
 import { getDocumentAsync } from "expo-document-picker";
 import { File } from "expo-file-system";
 
-type ChatFiles = NonNullable<ChalkSessionStore["chatFiles"]>;
+type ChatFiles = SpaceClient["chat"]["files"];
 
-export async function pickAndUploadChatAttachments(chatFiles: ChatFiles): Promise<readonly ChalkChatAttachment[]> {
+export async function pickAndUploadChatAttachments(chatFiles: ChatFiles): Promise<readonly ChatAttachment[]> {
   const result = await getDocumentAsync({
     copyToCacheDirectory: true,
     multiple: true,
@@ -17,7 +17,7 @@ export async function pickAndUploadChatAttachments(chatFiles: ChatFiles): Promis
     throw new Error(`Choose at most ${CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} files.`);
   }
 
-  const attachments: ChalkChatAttachment[] = [];
+  const attachments: ChatAttachment[] = [];
   for (const asset of result.assets) {
     const file = new File(asset.uri);
     const bytes = await file.arrayBuffer();

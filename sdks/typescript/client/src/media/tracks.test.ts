@@ -6,11 +6,11 @@ describe("Cloudflare SFU track contracts", () => {
   it("decodes the real versioned Chalk publication reference for remote pulls", () => {
     const publicationId = "chalk_pub_v1.eyJjIjoiY29ubmVjdGlvbi0xIiwibSI6IjAiLCJ0IjoiY2FtZXJhLXRyYWNrIiwiZyI6N30";
 
-    expect(parseCloudflareSFUPublicationID(publicationId)).toEqual({ sessionId: "connection-1", trackName: "camera-track" });
+    expect(parseCloudflareSFUPublicationID(publicationId)).toEqual({ connectionId: "connection-1", trackName: "camera-track" });
   });
 
   it("retains explicit legacy pull compatibility and rejects unknown Chalk versions", () => {
-    expect(parseCloudflareSFUPublicationID("provider-session|camera-track")).toEqual({ sessionId: "provider-session", trackName: "camera-track" });
+    expect(parseCloudflareSFUPublicationID("provider-connection|camera-track")).toEqual({ connectionId: "provider-connection", trackName: "camera-track" });
     expect(() => parseCloudflareSFUPublicationID("chalk_pub_v2.payload")).toThrowError(expect.objectContaining({ code: "invalid_publication" }));
   });
 
@@ -24,10 +24,10 @@ describe("Cloudflare SFU track contracts", () => {
   });
 
   it("validates publication identity and detects conflicting equal cursors", () => {
-    const snapshot = { incarnation: 2, sequence: 4, publications: [{ participantSessionId: "participant-2", source: "camera" as const, publicationId: "provider-session|camera-track" }] };
+    const snapshot = { incarnation: 2, sequence: 4, publications: [{ participantId: "participant-2", source: "camera" as const, publicationId: "provider-connection|camera-track" }] };
     const cursor = validatePublicationSnapshot(snapshot);
 
-    expect(parseCloudflareSFUPublicationID(snapshot.publications[0]!.publicationId)).toEqual({ sessionId: "provider-session", trackName: "camera-track" });
+    expect(parseCloudflareSFUPublicationID(snapshot.publications[0]!.publicationId)).toEqual({ connectionId: "provider-connection", trackName: "camera-track" });
     expect(comparePublicationCursor(null, cursor)).toBe("newer");
     expect(() => comparePublicationCursor(cursor, { ...cursor, signature: "conflict" })).toThrowError(expect.objectContaining({ code: "invalid_publication" }));
   });

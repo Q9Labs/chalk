@@ -1,4 +1,4 @@
-import type { ChalkRemoteMedia, ChalkSessionSnapshot } from "@q9labsai/chalk-client";
+import type { ChalkRemoteMedia, ChalkSessionSnapshot } from "../client-compat";
 
 import { useChalkSelector } from "./useChalkSelector";
 

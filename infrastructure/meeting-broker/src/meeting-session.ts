@@ -1,5 +1,5 @@
 import { DurableObject, type DurableObjectState } from "cloudflare:workers";
-import { ChalkAPIError, createChalkServerClient, type ChalkServerClient, type ParticipantAccess } from "@q9labsai/chalk-client/server";
+import { ChalkAPIError, createChalkServerClient, type AccessGrant, type ChalkServerClient } from "@q9labsai/chalk-client/server";
 
 import { BrokerError, maximumDisplayNameLength, maximumMeetingParticipants, meetingLifetimeSeconds, type InternalAccessInput, type InternalClientSessionInput, type InternalSessionInput, type TraceContext, type WorkerEnv } from "./contracts";
 import { empty, json } from "./http";
@@ -214,7 +214,7 @@ export class MeetingSession extends DurableObject<WorkerEnv> {
   }
 }
 
-async function issueAccess(chalk: ChalkServerClient, roomId: string, sessionId: string, client: ClientRecord, input: InternalAccessInput): Promise<ParticipantAccess> {
+async function issueAccess(chalk: ChalkServerClient, roomId: string, sessionId: string, client: ClientRecord, input: InternalAccessInput): Promise<AccessGrant> {
   if (!client.participantSessionId || client.participantGeneration === undefined) throw new BrokerError(502, "The participant session is incomplete.");
   if (input.replaceMediaConnection) {
     return chalk.participants.issueAccess(roomId, sessionId, client.participantSessionId, { participantSessionGeneration: client.participantGeneration, replaceMediaConnection: true });

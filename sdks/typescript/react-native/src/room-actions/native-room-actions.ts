@@ -1,10 +1,10 @@
-import type { ChalkIncomingMediaRequest, ChalkReaction, ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkIncomingMediaRequest, ChalkReaction, ChalkSessionSnapshot, ChalkSessionStore } from "../client-compat";
 
 import type { NativeChatMessage, NativeReaction } from "../ui/native-types";
 
 const ROOM_REACTIONS = new Set<ChalkReaction>(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
 
-export interface NativeRoomActionsProjection {
+export interface NativeActionsProjection {
   readonly chatEnabled: boolean;
   readonly reactionEnabled: boolean;
   readonly messages: readonly NativeChatMessage[];
@@ -12,16 +12,16 @@ export interface NativeRoomActionsProjection {
   readonly incomingRequest: ChalkIncomingMediaRequest | null;
 }
 
-export interface NativeRoomActionCommands {
+export interface NativeActionCommands {
   readonly sendChatMessage: (text: string) => Promise<void>;
   readonly sendReaction: (reaction: string) => Promise<void>;
-  readonly requestUnmute: (participantSessionId: string) => Promise<void>;
-  readonly requestStartCamera: (participantSessionId: string) => Promise<void>;
-  readonly muteParticipant: (participantSessionId: string) => Promise<void>;
-  readonly stopParticipantCamera: (participantSessionId: string) => Promise<void>;
-  readonly removeParticipant: (participantSessionId: string) => Promise<void>;
+  readonly requestUnmute: (participantId: string) => Promise<void>;
+  readonly requestStartCamera: (participantId: string) => Promise<void>;
+  readonly muteParticipant: (participantId: string) => Promise<void>;
+  readonly stopParticipantCamera: (participantId: string) => Promise<void>;
+  readonly removeParticipant: (participantId: string) => Promise<void>;
   readonly acceptMediaRequest: (requestId: string) => Promise<void>;
-  readonly declineMediaRequest: (requestId: string) => void;
+  readonly declineMediaRequest: (requestId: string) => Promise<void>;
 }
 
 export interface NativeMediaRequestPrompt {
@@ -34,7 +34,7 @@ export interface NativeMediaRequestPrompt {
   }[];
 }
 
-export function projectNativeRoomActions(snapshot: ChalkSessionSnapshot | null): NativeRoomActionsProjection {
+export function projectNativeActions(snapshot: ChalkSessionSnapshot | null): NativeActionsProjection {
   if (!snapshot) {
     return {
       chatEnabled: false,
@@ -45,37 +45,37 @@ export function projectNativeRoomActions(snapshot: ChalkSessionSnapshot | null):
     };
   }
 
-  const negotiated = snapshot.roomActions.phase === "healthy";
+  const negotiated = snapshot.actions.phase === "healthy";
   return {
-    chatEnabled: negotiated && snapshot.roomActions.capabilities.includes("sendChat"),
-    reactionEnabled: negotiated && snapshot.roomActions.capabilities.includes("sendReaction"),
+    chatEnabled: negotiated && snapshot.actions.capabilities.includes("sendChat"),
+    reactionEnabled: negotiated && snapshot.actions.capabilities.includes("sendReaction"),
     messages: snapshot.chat.messages.map((message) => ({
       id: message.messageId,
       sequence: message.sequence,
-      senderId: message.participantSessionId,
+      senderId: message.participantId,
       senderName: message.displayName,
       text: message.text,
       content: message.text,
       attachments: message.attachments.map((attachment) => ({ ...attachment })),
       readBy: snapshot.chat.readReceipts
-        .filter((receipt) => receipt.participantSessionId !== message.participantSessionId && !isLocalReceipt(snapshot, receipt.participantSessionId, receipt.participantSessionGeneration) && sequenceAtOrAfter(receipt.readThroughSequence, message.sequence))
+        .filter((receipt) => receipt.participantId !== message.participantId && !isLocalReceipt(snapshot, receipt.participantId, receipt.participantGeneration) && sequenceAtOrAfter(receipt.readThroughSequence, message.sequence))
         .map((receipt) => ({
           ...receipt,
-          displayName: snapshot.participants.find((participant) => participant.participantSessionId === receipt.participantSessionId)?.displayName ?? "Participant",
+          displayName: snapshot.participants.find((participant) => participant.participantId === receipt.participantId)?.displayName ?? "Participant",
         })),
       timestamp: Date.parse(message.createdAt),
     })),
     reactions: snapshot.reactions.map((reaction) => ({
       id: reaction.eventId,
       emoji: reaction.reaction,
-      participantId: reaction.participantSessionId,
+      participantId: reaction.participantId,
       participantName: reaction.displayName,
     })),
     incomingRequest: snapshot.incomingMediaRequests[0] ?? null,
   };
 }
 
-export function createNativeRoomActionCommands(store: ChalkSessionStore): NativeRoomActionCommands {
+export function createNativeActionCommands(store: ChalkSessionStore): NativeActionCommands {
   return {
     async sendChatMessage(text) {
       await store.sendChatMessage({ text });
@@ -84,21 +84,21 @@ export function createNativeRoomActionCommands(store: ChalkSessionStore): Native
       if (!isRoomReaction(reaction)) throw new Error("Unsupported room reaction.");
       await store.sendReaction(reaction);
     },
-    async requestUnmute(participantSessionId) {
-      await store.requestUnmute(participantSessionId);
+    async requestUnmute(participantId) {
+      await store.requestUnmute(participantId);
     },
-    async requestStartCamera(participantSessionId) {
-      await store.requestStartCamera(participantSessionId);
+    async requestStartCamera(participantId) {
+      await store.requestStartCamera(participantId);
     },
-    muteParticipant: (participantSessionId) => store.muteParticipant(participantSessionId),
-    stopParticipantCamera: (participantSessionId) => store.stopParticipantCamera(participantSessionId),
-    removeParticipant: (participantSessionId) => store.removeParticipant(participantSessionId),
+    muteParticipant: (participantId) => store.muteParticipant(participantId),
+    stopParticipantCamera: (participantId) => store.stopParticipantCamera(participantId),
+    removeParticipant: (participantId) => store.removeParticipant(participantId),
     acceptMediaRequest: (requestId) => store.acceptMediaRequest(requestId),
     declineMediaRequest: (requestId) => store.declineMediaRequest(requestId),
   };
 }
 
-export function createNativeMediaRequestPrompt(request: ChalkIncomingMediaRequest, commands: NativeRoomActionCommands, reportFailure: (cause: unknown) => void): NativeMediaRequestPrompt {
+export function createNativeMediaRequestPrompt(request: ChalkIncomingMediaRequest, commands: NativeActionCommands, reportFailure: (cause: unknown) => void): NativeMediaRequestPrompt {
   const actor = request.actorDisplayName ?? "A meeting moderator";
   const action = request.kind === "unmute" ? "unmute" : "start your camera";
   return {
@@ -108,7 +108,9 @@ export function createNativeMediaRequestPrompt(request: ChalkIncomingMediaReques
       {
         text: "Not now",
         style: "cancel",
-        onPress: () => commands.declineMediaRequest(request.requestId),
+        onPress: () => {
+          void commands.declineMediaRequest(request.requestId).catch(reportFailure);
+        },
       },
       {
         text: "Allow",
@@ -125,8 +127,8 @@ function isRoomReaction(value: string): value is ChalkReaction {
   return ROOM_REACTIONS.has(value as ChalkReaction);
 }
 
-function isLocalReceipt(snapshot: ChalkSessionSnapshot, participantSessionId: string, participantSessionGeneration: number): boolean {
-  return snapshot.subject?.participantSessionId === participantSessionId && snapshot.subject.participantGeneration === participantSessionGeneration;
+function isLocalReceipt(snapshot: ChalkSessionSnapshot, participantId: string, participantGeneration: number): boolean {
+  return snapshot.subject?.participantId === participantId && snapshot.subject.participantGeneration === participantGeneration;
 }
 
 function sequenceAtOrAfter(value: string, floor: string): boolean {

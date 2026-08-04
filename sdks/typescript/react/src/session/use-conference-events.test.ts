@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 
-import type { ChalkParticipant, ChalkSessionSnapshot } from "@q9labsai/chalk-client";
+import type { SpaceParticipant, SpaceSnapshotView } from "../client-compat";
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { useConferenceEvents, type ConferenceEventHandlers } from "./use-conference-events";
+import { createSpaceSnapshot } from "./space-client.test.helpers";
 
 describe("useConferenceEvents", () => {
   it("emits participant, screen-share, and session-end facts from snapshot changes", () => {
@@ -24,71 +25,36 @@ describe("useConferenceEvents", () => {
       rerender({
         snapshot: {
           ...first,
-          state: "live",
-          connection: { sync: "healthy", media: "healthy" },
+          connectionStatus: "live",
           participants: [participant],
-          remoteMedia: [{ participantSessionId: participant.participantSessionId, source: "screen", publicationId: "publication-1", track }],
+          remoteMedia: [{ participantId: participant.participantId, source: "screen", publicationId: "publication-1", track }],
         },
       });
     });
 
     expect(handlers.onParticipantJoined).toHaveBeenCalledWith({ participant });
-    expect(handlers.onScreenShareStarted).toHaveBeenCalledWith({ participant, participantSessionId: participant.participantSessionId });
+    expect(handlers.onScreenShareStarted).toHaveBeenCalledWith({ participant, participantId: participant.participantId });
 
     act(() => {
-      rerender({ snapshot: { ...first, state: "failed", failure: { code: "session_ended", action: null, recoverable: false, message: "The session ended" } } });
+      rerender({ snapshot: { ...first, connectionStatus: "failed", failure: { code: "episode.ended", recoverable: false, message: "The episode ended" } } });
     });
 
     expect(handlers.onParticipantLeft).toHaveBeenCalledWith({ participant });
-    expect(handlers.onScreenShareStopped).toHaveBeenCalledWith({ participant, participantSessionId: participant.participantSessionId });
+    expect(handlers.onScreenShareStopped).toHaveBeenCalledWith({ participant, participantId: participant.participantId });
     expect(handlers.onSessionEnded).toHaveBeenCalledWith({ reason: "remote" });
   });
 });
 
-function createSnapshot(overrides: Partial<ChalkSessionSnapshot> = {}): ChalkSessionSnapshot {
-  return {
-    state: "idle",
-    subject: null,
-    connection: { sync: "idle", media: "idle" },
-    admissionPolicy: null,
-    participants: [],
-    admissionRequests: [],
-    localMedia: {
-      microphone: { source: "microphone", state: "unavailable", track: null },
-      camera: { source: "camera", state: "unavailable", track: null },
-      screen: { source: "screen", state: "unavailable", track: null },
-    },
-    remoteMedia: [],
-    failure: null,
-    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
-    participantRoomActionCapabilities: {},
-    participantMedia: {},
-    reactions: [],
-    chat: {
-      status: "idle",
-      messages: [],
-      pending: [],
-      hasOlder: false,
-      historyTruncated: false,
-      retainedFloorSequence: null,
-      unreadCount: 0,
-      readReceipts: [],
-      localReadThroughSequence: null,
-      error: null,
-    },
-    whiteboard: { status: "unsubscribed", sceneId: null, revision: null, capabilities: [], canDraw: false, canClear: false, error: null },
-    incomingMediaRequests: [],
-    ...overrides,
-  };
-}
+const createSnapshot = (overrides: Partial<SpaceSnapshotView> = {}) => createSpaceSnapshot(overrides);
 
-function createParticipant(participantSessionId: string): ChalkParticipant {
+function createParticipant(participantId: string): SpaceParticipant {
   return {
-    participantSessionId,
+    participantId,
     displayName: "Grace",
     handRaised: false,
     role: "participant",
     eligibleRoles: ["participant"],
     capabilities: ["subscribe"],
+    media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
   };
 }

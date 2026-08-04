@@ -5,5 +5,5 @@ export type { ChalkSelectionEquality, ChalkSelector } from "./session/hooks";
 export { VideoConference } from "./components/video-conference/VideoConference";
 export type { VideoConferenceProps, VideoConferenceRole } from "./components/video-conference/VideoConference";
 export type { PreJoinSettings } from "./components/pre-join-screen/PreJoinScreen";
-export type { ConferenceEventHandlers, ParticipantJoinedEvent, ParticipantLeftEvent, ScreenShareStartedEvent, ScreenShareStoppedEvent, SessionEndedEvent } from "./session/use-conference-events";
-export type { ConferencePhase } from "@q9labsai/chalk-client";
+export type { ConferenceEventHandlers, EpisodeEndedEvent, ParticipantJoinedEvent, ParticipantLeftEvent, ScreenShareStartedEvent, ScreenShareStoppedEvent } from "./session/use-conference-events";
+export type { SpacePhase } from "./client-compat";

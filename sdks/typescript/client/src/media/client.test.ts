@@ -7,8 +7,8 @@ describe("CloudflareSFUClient options", () => {
   it("rejects incomplete bootstrap and participant identity before creating WebRTC resources", () => {
     const transport = inertTransport();
 
-    expect(() => new CloudflareSFUClient({ bootstrap: { connectionId: "", stunServer: "stun:test" }, participantSessionId: "participant-1", transport })).toThrowError(expect.objectContaining({ code: "invalid_bootstrap" }));
-    expect(() => new CloudflareSFUClient({ bootstrap: { connectionId: "connection-1", stunServer: "stun:test" }, participantSessionId: " ", transport })).toThrowError(expect.objectContaining({ code: "invalid_bootstrap" }));
+    expect(() => new CloudflareSFUClient({ bootstrap: { connectionId: "", stunServer: "stun:test" }, participantId: "participant-1", transport })).toThrowError(expect.objectContaining({ code: "invalid_bootstrap" }));
+    expect(() => new CloudflareSFUClient({ bootstrap: { connectionId: "connection-1", stunServer: "stun:test" }, participantId: " ", transport })).toThrowError(expect.objectContaining({ code: "invalid_bootstrap" }));
   });
 });
 

@@ -53,7 +53,7 @@ try {
     ],
     consumerDirectory,
   );
-  await assertPackedInstall(consumerDirectory, clientArchive, reactArchive);
+  await assertPackedInstall(consumerDirectory, { clientArchive, reactArchive, supportingArchives });
   await run("pnpm", ["exec", "tsc", "--project", "tsconfig.json"], consumerDirectory);
   await run(process.execPath, ["build.mjs"], consumerDirectory);
 
@@ -94,7 +94,7 @@ async function runChromiumMatrix(browser, baseURL, secretMarker) {
   const bob = await openParticipant(browser, baseURL, "bob");
   try {
     await verifyPairJoined(alice.page, bob.page);
-    await verifyRoomActions(alice.page, bob.page);
+    await verifyCollaborations(alice.page, bob.page);
     await verifyDirectedRequests(alice.page, bob.page);
     await verifyScreenShare(alice.page, bob.page);
     await verifyRecovery(alice.page, bob.page, baseURL);
@@ -118,10 +118,10 @@ async function verifyDirectedRequests(alice, bob) {
   await invoke(bob, "declineMediaRequest", camera.requestId);
 }
 
-async function verifyRoomActions(alice, bob) {
-  const chatMessage = await invoke(alice, "sendChatMessage", { clientMessageId: "packed-chat-1", text: "Hello from the packed SDK" });
+async function verifyCollaborations(alice, bob) {
+  const chatMessage = await invoke(alice, "sendChatMessage", { text: "Hello from the packed SDK" });
   if (chatMessage.text !== "Hello from the packed SDK") throw new TypeError("Packed SDK chat action returned the wrong message");
-  await waitFor(bob, (snapshot) => snapshot.chat.messages.some((message) => message.clientMessageId === "packed-chat-1" && message.participantSessionId === "alice"));
+  await waitFor(bob, (snapshot, expected) => snapshot.chat.messages.some((message) => message.clientMessageId === expected && message.participantId === "alice"), chatMessage.clientMessageId);
 
   const reaction = await invoke(bob, "sendReaction", "🎉");
   if (reaction.reaction !== "🎉") throw new TypeError("Packed SDK reaction action returned the wrong reaction");
@@ -132,16 +132,16 @@ async function verifyPairJoined(alice, bob) {
   await Promise.all([invoke(alice, "join"), invoke(bob, "join")]);
   await Promise.all([waitForState(alice, "live"), waitForState(bob, "live")]);
   await Promise.all([
-    waitFor(alice, (snapshot) => snapshot.participants.length === 2 && snapshot.remoteMedia.some((item) => item.participantSessionId === "bob" && item.source === "camera" && item.readyState === "live")),
-    waitFor(bob, (snapshot) => snapshot.participants.length === 2 && snapshot.remoteMedia.some((item) => item.participantSessionId === "alice" && item.source === "camera" && item.readyState === "live")),
+    waitFor(alice, (snapshot) => snapshot.participants.length === 2 && snapshot.remoteMedia.some((item) => item.participantId === "bob" && item.source === "camera" && item.readyState === "live")),
+    waitFor(bob, (snapshot) => snapshot.participants.length === 2 && snapshot.remoteMedia.some((item) => item.participantId === "alice" && item.source === "camera" && item.readyState === "live")),
   ]);
 }
 
 async function verifyScreenShare(alice, bob) {
   await invoke(alice, "startScreenShare");
-  await waitFor(bob, (snapshot) => snapshot.remoteMedia.some((item) => item.participantSessionId === "alice" && item.source === "screen" && item.readyState === "live"));
+  await waitFor(bob, (snapshot) => snapshot.remoteMedia.some((item) => item.participantId === "alice" && item.source === "screen" && item.readyState === "live"));
   await invoke(alice, "stopScreenShare");
-  await waitFor(bob, (snapshot) => !snapshot.remoteMedia.some((item) => item.participantSessionId === "alice" && item.source === "screen"));
+  await waitFor(bob, (snapshot) => !snapshot.remoteMedia.some((item) => item.participantId === "alice" && item.source === "screen"));
 }
 
 async function verifyRecovery(alice, bob, baseURL) {
@@ -158,8 +158,9 @@ async function forceAndWaitForRecovery(page, url) {
 
 async function verifyRemovalAndLeave(alice, bob) {
   await invoke(alice, "removeParticipant", "bob");
-  await waitFor(alice, (snapshot) => !snapshot.participants.includes("bob") && !snapshot.remoteMedia.some((item) => item.participantSessionId === "bob"));
+  await waitFor(alice, (snapshot) => !snapshot.participants.includes("bob") && !snapshot.remoteMedia.some((item) => item.participantId === "bob"));
   await Promise.all([invoke(alice, "leave"), invoke(bob, "leave")]);
+  await Promise.all([invoke(alice, "dispose"), invoke(bob, "dispose")]);
   await Promise.all([waitForClean(alice), waitForClean(bob)]);
 }
 
@@ -168,12 +169,17 @@ async function verifyDeniedAccess(browser, baseURL) {
   try {
     const deniedCode = await denied.page.evaluate(tryDeniedJoin);
     if (deniedCode === "unexpected_success") throw new TypeError("Denied participant joined");
-    await denied.page.waitForFunction(() => window.__chalk.snapshot().state === "failed" && Object.values(window.__chalk.resources()).every((count) => count === 0));
+    await waitForDeniedAccess(denied.page);
     await invoke(denied.page, "leave");
+    await invoke(denied.page, "dispose");
     await waitForClean(denied.page);
   } finally {
     await denied.context.close();
   }
+}
+
+async function waitForDeniedAccess(page) {
+  await waitForSettledState(page, () => window.__chalk.snapshot().state === "failed" && Object.values(window.__chalk.resources()).every((count) => count === 0), 30_000, "Denied participant did not settle in the public failure state");
 }
 
 async function tryDeniedJoin() {
@@ -217,8 +223,8 @@ function assertMediaRecovered(state) {
 }
 
 function assertRefreshReasons(state, stateText) {
-  if (!state.metrics.accessReasons.includes("scheduled_refresh")) throw new TypeError(`Scheduled access refresh was not observed: ${stateText}`);
-  if (!state.metrics.accessReasons.includes("media_recovery")) throw new TypeError(`Media recovery access was not observed: ${stateText}`);
+  if (!state.metrics.accessReasons.includes("refresh")) throw new TypeError(`Scheduled access refresh was not observed: ${stateText}`);
+  if (!state.metrics.accessReasons.includes("retry")) throw new TypeError(`Media recovery access was not observed: ${stateText}`);
 }
 
 async function runLaunchSmoke(browser, browserName, baseURL) {
@@ -233,6 +239,7 @@ async function runLaunchSmoke(browser, browserName, baseURL) {
     await invoke(participant.page, "startScreenShare");
     await invoke(participant.page, "stopScreenShare");
     await invoke(participant.page, "leave");
+    await invoke(participant.page, "dispose");
     await waitForClean(participant.page);
   } finally {
     await participant.context.close();
@@ -267,15 +274,21 @@ async function waitForAccessRefresh(page) {
 }
 
 async function waitForClean(page) {
-  await page.waitForFunction(
-    () => {
-      const snapshot = window.__chalk.snapshot();
-      const resources = window.__chalk.resources();
-      return snapshot.state === "left" && Object.values(resources).every((count) => count === 0);
-    },
-    null,
-    { timeout: 5_000 },
-  );
+  const isClean = () => {
+    const snapshot = window.__chalk.snapshot();
+    const resources = window.__chalk.resources();
+    return snapshot.state === "left" && Object.values(resources).every((count) => count === 0);
+  };
+  await waitForSettledState(page, isClean, 5_000, "Packed SDK resources did not settle after Leave");
+}
+
+async function waitForSettledState(page, predicate, timeout, message) {
+  try {
+    await page.waitForFunction(predicate, null, { timeout });
+  } catch (cause) {
+    const state = await page.evaluate(() => ({ snapshot: window.__chalk.snapshot(), resources: window.__chalk.resources() }));
+    throw new TypeError(`${message}: ${JSON.stringify(state)}`, { cause });
+  }
 }
 
 async function post(url) {
@@ -283,11 +296,18 @@ async function post(url) {
   if (!response.ok) throw new TypeError(`Fixture control request failed with HTTP ${response.status}: ${url}`);
 }
 
-async function assertPackedInstall(directory, clientArchive, reactArchive) {
+async function assertPackedInstall(directory, archives) {
   const packageJSON = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
-  assertArchiveDependency(packageJSON, "@q9labsai/chalk-client", clientArchive);
-  assertArchiveDependency(packageJSON, "@q9labsai/chalk-react", reactArchive);
-  await run(process.execPath, ["-e", 'for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); }'], directory);
+  const packages = [
+    ["@q9labsai/chalk-client", archives.clientArchive],
+    ["@q9labsai/chalk-react", archives.reactArchive],
+    ["@q9labsai/chalk-assets", archives.supportingArchives[0]],
+    ["@q9labsai/facehash", archives.supportingArchives[1]],
+    ["@q9labsai/chalk-ui", archives.supportingArchives[2]],
+    ["@q9labsai/chalk-whiteboard", archives.supportingArchives[3]],
+  ];
+  for (const [packageName, archive] of packages) assertArchiveDependency(packageJSON, packageName, archive);
+  await run(process.execPath, ["-e", 'for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react"]) { const path = require.resolve(name); if (!path.includes("node_modules")) throw new Error(`${name} did not resolve from the clean install`); }'], directory);
 }
 
 function assertArchiveDependency(packageJSON, packageName, archive) {

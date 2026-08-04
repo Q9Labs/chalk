@@ -1,25 +1,25 @@
 "use client";
 
-import type { ChalkLocalMedia, ChalkMediaSource, ChalkParticipant, ChalkRemoteMedia, ChalkSessionActions, ChalkSessionSnapshot, ChalkSessionStore, ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
+import type { ChalkWhiteboardV1Transport, SpaceClientActions, SpaceClientStore, SpaceLocalMedia, SpaceMediaSource, SpaceParticipant, SpaceRemoteMedia, SpaceSnapshotView } from "../client-compat";
 import { useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { ChalkSessionContext } from "./context";
 
-export type ChalkSelector<T> = (snapshot: ChalkSessionSnapshot) => T;
+export type ChalkSelector<T> = (snapshot: SpaceSnapshotView) => T;
 export type ChalkSelectionEquality<T> = (previous: T, next: T) => boolean;
 
 type SelectionCache<T> = {
   readonly selector: ChalkSelector<T>;
-  readonly snapshot: ChalkSessionSnapshot;
+  readonly snapshot: SpaceSnapshotView;
   readonly selection: T;
 };
 
-const selectSnapshot = (snapshot: ChalkSessionSnapshot) => snapshot;
-const selectParticipants = (snapshot: ChalkSessionSnapshot) => snapshot.participants;
-const selectLocalMedia = (snapshot: ChalkSessionSnapshot) => snapshot.localMedia;
-const selectRemoteMedia = (snapshot: ChalkSessionSnapshot) => snapshot.remoteMedia;
+const selectSnapshot = (snapshot: SpaceSnapshotView) => snapshot;
+const selectParticipants = (snapshot: SpaceSnapshotView) => snapshot.participants;
+const selectLocalMedia = (snapshot: SpaceSnapshotView) => snapshot.localMedia;
+const selectRemoteMedia = (snapshot: SpaceSnapshotView) => snapshot.remoteMedia;
 
-export function useChalkSession(): ChalkSessionStore {
+export function useChalkSession(): SpaceClientStore {
   const session = useContext(ChalkSessionContext);
 
   if (session === null) {
@@ -53,26 +53,26 @@ export function useChalkSelector<T>(selector: ChalkSelector<T>, isEqual: ChalkSe
   return useSyncExternalStore(subscribe, getSelection, getSelection);
 }
 
-export function useChalkSnapshot(): ChalkSessionSnapshot {
+export function useChalkSnapshot(): SpaceSnapshotView {
   return useChalkSelector(selectSnapshot);
 }
 
-export function useParticipants(): readonly ChalkParticipant[] {
+export function useParticipants(): readonly SpaceParticipant[] {
   return useChalkSelector(selectParticipants);
 }
 
-export function useLocalMedia(): Readonly<Record<ChalkMediaSource, ChalkLocalMedia>> {
+export function useLocalMedia(): Readonly<Record<SpaceMediaSource, SpaceLocalMedia>> {
   return useChalkSelector(selectLocalMedia);
 }
 
-export function useRemoteMedia(): readonly ChalkRemoteMedia[] {
+export function useRemoteMedia(): readonly SpaceRemoteMedia[] {
   return useChalkSelector(selectRemoteMedia);
 }
 
-export function useChalkActions(): ChalkSessionActions {
+export function useChalkActions(): SpaceClientActions {
   const session = useChalkSession();
 
-  return useMemo<ChalkSessionActions>(
+  return useMemo<SpaceClientActions>(
     () => ({
       join: () => session.join(),
       leave: () => session.leave(),
@@ -82,23 +82,22 @@ export function useChalkActions(): ChalkSessionActions {
       stopScreenShare: () => session.stopScreenShare(),
       setHandRaised: (raised) => session.setHandRaised(raised),
       setDisplayName: (displayName) => session.setDisplayName(displayName),
-      setAdmissionPolicy: (policy) => session.setAdmissionPolicy(policy),
-      setParticipantRole: (participantSessionId, role) => session.setParticipantRole(participantSessionId, role),
-      transferHost: (participantSessionId) => session.transferHost(participantSessionId),
-      admitParticipant: (admissionRequestId) => session.admitParticipant(admissionRequestId),
-      denyAdmission: (admissionRequestId) => session.denyAdmission(admissionRequestId),
-      muteParticipant: (participantSessionId) => session.muteParticipant(participantSessionId),
-      stopParticipantCamera: (participantSessionId) => session.stopParticipantCamera(participantSessionId),
-      stopParticipantScreenShare: (participantSessionId) => session.stopParticipantScreenShare(participantSessionId),
-      removeParticipant: (participantSessionId) => session.removeParticipant(participantSessionId),
-      endSession: () => session.endSession(),
+      assignParticipantRole: (participantId, role) => session.assignParticipantRole(participantId, role),
+      assignOwner: (participantId) => session.assignOwner(participantId),
+      admitParticipant: (requestId) => session.admitParticipant(requestId),
+      denyAdmission: (requestId) => session.denyAdmission(requestId),
+      muteParticipant: (participantId) => session.muteParticipant(participantId),
+      stopParticipantCamera: (participantId) => session.stopParticipantCamera(participantId),
+      stopParticipantScreenShare: (participantId) => session.stopParticipantScreenShare(participantId),
+      removeParticipant: (participantId) => session.removeParticipant(participantId),
+      endEpisode: () => session.endEpisode(),
       sendReaction: (reaction) => session.sendReaction(reaction),
       sendChatMessage: (input) => session.sendChatMessage(input),
       retryChatMessage: (clientMessageId) => session.retryChatMessage(clientMessageId),
-      loadOlderChatMessages: (limit) => session.loadOlderChatMessages(limit),
+      loadOlderChatMessages: () => session.loadOlderChatMessages(),
       markChatRead: (throughSequence) => session.markChatRead(throughSequence),
-      requestUnmute: (participantSessionId) => session.requestUnmute(participantSessionId),
-      requestStartCamera: (participantSessionId) => session.requestStartCamera(participantSessionId),
+      requestUnmute: (participantId) => session.requestUnmute(participantId),
+      requestStartCamera: (participantId) => session.requestStartCamera(participantId),
       acceptMediaRequest: (requestId) => session.acceptMediaRequest(requestId),
       declineMediaRequest: (requestId) => session.declineMediaRequest(requestId),
     }),

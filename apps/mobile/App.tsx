@@ -1,4 +1,4 @@
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClient } from "@q9labsai/chalk-client";
 import type { VideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
 import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsClientSession, setDevDiagnosticsEnvironment, setDevDiagnosticsSession } from "@q9labsai/chalk-react-native/diagnostics";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
@@ -17,6 +17,8 @@ import { MobileWhiteboardPlayground } from "./src/meeting/MobileWhiteboardPlaygr
 import { shouldShowWhiteboardRendererPlayground } from "./src/meeting/mobile-whiteboard-playground-policy";
 import { HomeScreen } from "./src/screens/HomeScreen";
 
+type ConnectedSpaceClient = Pick<SpaceClient, "leave">;
+
 export default function App(): React.JSX.Element {
   const brokerUrl = useMemo(() => getBrokerUrl(), []);
   const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, brokerUrl }), [brokerUrl]);
@@ -25,7 +27,7 @@ export default function App(): React.JSX.Element {
   const [isBooting, setIsBooting] = useState(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [whiteboardPlaygroundOpen, setWhiteboardPlaygroundOpen] = useState(false);
-  const diagnosticsSessionRef = useRef<ChalkSessionStore | null>(null);
+  const diagnosticsSessionRef = useRef<ConnectedSpaceClient | null>(null);
   const lastJoinErrorRef = useRef<string | null>(null);
 
   const syncStaticDiagnostics = useCallback(async () => {
@@ -183,7 +185,7 @@ function renderContent({
   readonly onClose: () => Promise<void>;
   readonly onDiagnosticsFailure: (source: string, message: string) => void;
   readonly onNavigate: (route: LobbyRoute) => void;
-  readonly onSessionChange: (session: ChalkSessionStore | null) => void;
+  readonly onSessionChange: (session: ConnectedSpaceClient | null) => void;
   readonly route: MobileRoute;
 }): ReactElement {
   if (isBooting) return <AppBootstrapScreen label="Starting Chalk..." />;

@@ -1,5 +1,3 @@
-import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt } from "@q9labsai/chalk-client";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt } from "../../client-compat";
 
-export type ChatAttachment = ChalkChatAttachment;
-export type ChatMessage = ChalkChatMessage;
-export type ChatReadReceipt = ChalkChatReadReceipt;
+export type { ChatAttachment, ChatMessage, ChatReadReceipt };

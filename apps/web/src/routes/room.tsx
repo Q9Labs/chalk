@@ -1,4 +1,5 @@
-import { ChalkSession } from "@q9labsai/chalk-client";
+import type { SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { VideoConference, type PreJoinSettings } from "@q9labsai/chalk-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -11,20 +12,25 @@ function LocalRoomPage() {
   const initialName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "Hasan", []);
   const [meetingLink, setMeetingLink] = useState(() => globalThis.location?.href);
 
-  const createSession = async (settings: PreJoinSettings) => {
+  const createSession = async (settings: PreJoinSettings): Promise<SpaceClient> => {
     const browserSession = await createLocalBrowserSession(settings.displayName, meetingInviteToken());
     if (browserSession.inviteToken) {
       setMeetingInviteToken(browserSession.inviteToken);
       setMeetingLink(globalThis.location?.href);
     }
 
-    return new ChalkSession({
-      access: createLocalAccessProvider(),
-      apiBaseURL: browserSession.apiBaseURL,
-      syncURL: browserSession.syncURL,
-      initialMicrophoneEnabled: settings.microphoneEnabled,
-      initialCameraEnabled: settings.cameraEnabled,
-    });
+    return createSpaceClientForPlatform(
+      {
+        space: "local-space",
+        getAccess: createLocalAccessProvider(),
+        baseUrl: browserSession.apiBaseURL,
+      },
+      {
+        syncUrl: browserSession.syncURL,
+        initialMicrophoneEnabled: settings.microphoneEnabled,
+        initialCameraEnabled: settings.cameraEnabled,
+      },
+    );
   };
 
   return (

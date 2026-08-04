@@ -6,7 +6,7 @@ import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { AsyncStorageV1PendingTargetStore, IndexedDbV1PendingTargetStore } from "./v1-platform-persistence";
 import { applyV1Event, computeV1StateDigest, restoreV1Snapshot, snapshotToState, V1ReplicaError } from "./v1-reducer";
 import type { SyncSocket, SyncWebSocketFactory } from "./types";
-import type { V1ClientMediaPlane, V1ControlState, V1MediaPlaneResult, V1MediaPlaneTarget, V1MediaPublication, V1PendingTarget, V1PendingTargetStore, V1SessionSnapshot } from "./v1-types";
+import type { V1ClientMediaPlane, V1ControlState, V1MediaPlaneResult, V1MediaPlaneTarget, V1MediaPublication, V1PendingTarget, V1PendingTargetStore, V1EpisodeSnapshot } from "./v1-types";
 
 type Snapshot = typeof SnapshotSchema.Type;
 
@@ -178,8 +178,8 @@ describe("V1SyncClient", () => {
     void client.setHandRaised(true, { commandId: commandIds[index++] });
     void client.setDisplayName("Renamed", { commandId: commandIds[index++] });
     void client.setAdmissionPolicy("knock", { commandId: commandIds[index++] });
-    void client.setParticipantRole(peerId, "collaborator", { commandId: commandIds[index++] });
-    void client.transferHost(peerId, { commandId: commandIds[index++] });
+    void client.assignRole(peerId, "collaborator", { commandId: commandIds[index++] });
+    void client.assignRole(peerId, "owner", { commandId: commandIds[index++] });
     void client.admit(recoveryId, { commandId: commandIds[index++] });
     void client.deny(recoveryId, { commandId: commandIds[index++] });
     void client.muteParticipant(peerId, { commandId: commandIds[index++] });
@@ -189,7 +189,7 @@ describe("V1SyncClient", () => {
     void client.startRecording({ commandId: commandIds[index++], recordingId: recoveryId });
     void client.stopRecording(recoveryId, { commandId: commandIds[index++] });
     void client.leave({ commandId: commandIds[index++] });
-    void client.endSession({ commandId: commandIds[index++] });
+    void client.endEpisode({ commandId: commandIds[index++] });
     await settle();
 
     expect(
@@ -217,6 +217,10 @@ describe("V1SyncClient", () => {
         "end_episode",
       ].sort(),
     );
+    expect(client.getSnapshot()).toMatchObject({ participantId: hostId, participantGeneration: 1, control: { participants: [{ participantId: hostId }] } });
+    expect("endSession" in client).toBe(false);
+    expect("setParticipantRole" in client).toBe(false);
+    expect("transferHost" in client).toBe(false);
     expect("setParticipantMediaEnabled" in client).toBe(false);
   });
 
@@ -359,9 +363,9 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().pendingCommandCount).toBe(0);
   });
 
-  it.each(["participant_leave", "end_session"] as const)("settles %s from its committed ACK without waiting for a control event the departing client may not receive", async (operationName) => {
+  it.each(["participant_leave", "end_episode"] as const)("settles %s from its committed ACK without waiting for a control event the departing client may not receive", async (operationName) => {
     const { client, socket } = await liveClient();
-    const operation = operationName === "participant_leave" ? client.leave({ commandId: commandIds[0] }) : client.endSession({ commandId: commandIds[0] });
+    const operation = operationName === "participant_leave" ? client.leave({ commandId: commandIds[0] }) : client.endEpisode({ commandId: commandIds[0] });
 
     socket.receive({
       type: "ack",
@@ -376,11 +380,11 @@ describe("V1SyncClient", () => {
     await expect(operation).resolves.toMatchObject({ outcome: "committed" });
   });
 
-  it("settles Session end from the terminal control event when the server closes without a final ACK", async () => {
+  it("settles Episode end from the terminal control event when the server closes without a final ACK", async () => {
     const { client, socket, state } = await liveClient();
-    const ended = { ...state, revision: 2, stateDigest: "0".repeat(64), status: "ended" as const, hostParticipantSessionId: null, participants: [], admissionRequests: [], recording: null };
+    const ended = { ...state, revision: 2, stateDigest: "0".repeat(64), status: "ended" as const, hostParticipantId: null, participants: [], admissionRequests: [], recording: null };
     const digest = await computeV1StateDigest(ended);
-    const operation = client.endSession({ commandId: commandIds[0] });
+    const operation = client.endEpisode({ commandId: commandIds[0] });
 
     socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
     socket.close();
@@ -404,7 +408,7 @@ describe("V1SyncClient", () => {
   it("settles participant Leave from the self-removal control event when the server closes without a final ACK", async () => {
     const initial = stateWithPeer("participant");
     const { client, socket, state } = await liveClient({}, initial, peerId);
-    const left = { ...state, revision: 2, stateDigest: "0".repeat(64), participants: state.participants.filter((participant) => participant.participantSessionId !== peerId) };
+    const left = { ...state, revision: 2, stateDigest: "0".repeat(64), participants: state.participants.filter((participant) => participant.participantId !== peerId) };
     const digest = await computeV1StateDigest(left);
     const operation = client.leave({ commandId: commandIds[0] });
 
@@ -452,7 +456,7 @@ describe("V1SyncClient", () => {
     sockets[0]!.open();
     await settle();
     await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
-    const pending = operation === "end_episode" ? client.endSession({ commandId: commandIds[0] }) : client.leave({ commandId: commandIds[0] });
+    const pending = operation === "end_episode" ? client.endEpisode({ commandId: commandIds[0] }) : client.leave({ commandId: commandIds[0] });
     sockets[0]!.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
     await settle();
 
@@ -521,8 +525,8 @@ describe("V1SyncClient", () => {
     await expect(camera).resolves.toMatchObject({ serverOutcome: "satisfied", mediaPlaneOutcome: "confirmed" });
     await expect(screen).rejects.toMatchObject({ code: "terminal_failure" });
     expect(mediaPlane.targets).toEqual([
-      { operationId: commandIds[0], participantSessionId: hostId, source: "microphone", enabled: true },
-      { operationId: commandIds[1], participantSessionId: hostId, source: "camera", enabled: false },
+      { operationId: commandIds[0], participantId: hostId, source: "microphone", enabled: true },
+      { operationId: commandIds[1], participantId: hostId, source: "camera", enabled: false },
     ]);
   });
 
@@ -587,7 +591,7 @@ describe("V1SyncClient", () => {
     socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
 
     await expect(result).resolves.toMatchObject({ serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" });
-    expect(mediaPlane.targets).toEqual([{ operationId: commandIds[0], participantSessionId: hostId, source: "microphone", enabled: false }]);
+    expect(mediaPlane.targets).toEqual([{ operationId: commandIds[0], participantId: hostId, source: "microphone", enabled: false }]);
   });
 
   it("bounds self-media confirmation when the server never responds", async () => {
@@ -620,8 +624,8 @@ describe("V1SyncClient", () => {
 
   it("projects bounded local and remote MediaPlane observations without a remote control surface", async () => {
     const { client, mediaPlane } = await liveClient();
-    mediaPlane.emitLocal([{ participantSessionId: hostId, source: "microphone", enabled: true, publicationId: "local-microphone" }]);
-    mediaPlane.emitRemote([{ participantSessionId: peerId, source: "camera", enabled: true, publicationId: "remote-camera" }]);
+    mediaPlane.emitLocal([{ participantId: hostId, source: "microphone", enabled: true, publicationId: "local-microphone" }]);
+    mediaPlane.emitRemote([{ participantId: peerId, source: "camera", enabled: true, publicationId: "remote-camera" }]);
     expect(client.getSnapshot()).toMatchObject({
       localMedia: { microphone: "enabled" },
       mediaPlane: { local: [{ publicationId: "local-microphone" }], remote: [{ publicationId: "remote-camera" }] },
@@ -747,7 +751,7 @@ describe("V1SyncClient", () => {
     const store = new InMemoryV1PendingTargetStore();
     const initial = stateWithPeer("cohost");
     const { client, socket } = await liveClient({ clock, pendingStore: store, maxOperationPendingAgeMs: 10_000 }, initial);
-    const operation = client.setParticipantRole(peerId, "observer", { commandId: commandIds[0] });
+    const operation = client.assignRole(peerId, "observer", { commandId: commandIds[0] });
     await settle();
     socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
     await settle();
@@ -756,7 +760,7 @@ describe("V1SyncClient", () => {
       ...initial,
       revision: 2,
       stateDigest: "0".repeat(64),
-      participants: initial.participants.map((participant) => (participant.participantSessionId === peerId ? { ...participant, role: "observer" as const, capabilities: [...initial.roleCapabilities.observer] } : participant)),
+      participants: initial.participants.map((participant) => (participant.participantId === peerId ? { ...participant, role: "observer" as const, capabilities: [...initial.roleCapabilities.observer] } : participant)),
     };
     const digest = await computeV1StateDigest(next);
     const event = {
@@ -852,7 +856,7 @@ describe("V1SyncClient", () => {
   it("rejects and removes a command when its maximum pending-operation age is exhausted", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock, maxOperationPendingAgeMs: 2_500, maxPendingCommands: 1 });
-    const operation = client.endSession({ commandId: commandIds[0] });
+    const operation = client.endEpisode({ commandId: commandIds[0] });
     const rejected = expect(operation).rejects.toMatchObject({ code: "operation_pending_timeout" });
     socket.receive({ type: "retryable_error", command_id: commandIds[0], code: "external_operation_pending" });
     await settle();
@@ -877,7 +881,7 @@ describe("V1SyncClient", () => {
     const clock = new TestClock();
     const store = new FailOnceRemoveStore();
     const { client, socket } = await liveClient({ clock, pendingStore: store, maxOperationPendingAgeMs: 10, retryDelayMs: 100 });
-    const operation = client.setParticipantRole(peerId, "cohost", { commandId: commandIds[0] });
+    const operation = client.assignRole(peerId, "cohost", { commandId: commandIds[0] });
     const rejected = expect(operation).rejects.toMatchObject({ code: "operation_pending_timeout" });
     await settle();
 
@@ -1001,14 +1005,14 @@ describe("v1 exact decoding and durable state", () => {
     const empty: V1ControlState = {
       ...baseState(),
       revision: 0,
-      hostParticipantSessionId: null,
+      hostParticipantId: null,
       participants: [],
     };
     const expected: V1ControlState = {
       ...empty,
       revision: 1,
-      hostParticipantSessionId: null,
-      participants: [{ participantSessionId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: [...empty.roleCapabilities.owner] }],
+      hostParticipantId: null,
+      participants: [{ participantId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: [...empty.roleCapabilities.owner] }],
     };
     const resultingStateDigest = await computeV1StateDigest(expected);
     const reduced = await applyV1Event(empty, {
@@ -1023,7 +1027,7 @@ describe("v1 exact decoding and durable state", () => {
       payload: { participant_id: hostId, display_name: "Host", role: "owner", admission_revision: 1 },
       lifecycle_intent_id: projectionId,
     });
-    expect(reduced).toMatchObject({ hostParticipantSessionId: null, participants: [{ role: "owner" }] });
+    expect(reduced).toMatchObject({ hostParticipantId: null, participants: [{ role: "owner" }] });
   });
 
   it("rejects noncanonical display names and an ineligible pending host envelope", async () => {
@@ -1071,7 +1075,7 @@ describe("v1 exact decoding and durable state", () => {
     const initial = snapshotToState(snapshot);
     const rawState: V1ControlState = {
       ...initial,
-      admissionRequests: [{ admissionRequestId: recoveryId, participantSessionId: peerId, displayName: "Pending", initialRole: "participant", eligibleRoles: ["participant"], expiresAtMs: 120_000 }],
+      admissionRequests: [{ admissionRequestId: recoveryId, participantId: peerId, displayName: "Pending", initialRole: "participant", eligibleRoles: ["participant"], expiresAtMs: 120_000 }],
     };
     const state = { ...rawState, stateDigest: await computeV1StateDigest(rawState) };
     const next = { ...state, revision: 2, stateDigest: "0".repeat(64), admissionRequests: [] };
@@ -1180,7 +1184,7 @@ describe("v1 exact decoding and durable state", () => {
   });
 });
 
-async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantSessionId = hostId) {
+async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = hostId) {
   const socket = new TestSocket();
   const factory: SyncWebSocketFactory = { connect: () => socket };
   const mediaPlane = new TestMediaPlane();
@@ -1193,7 +1197,7 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V1Sync
   socket.receive({
     type: "welcome",
     protocol: 1,
-    participant_session_id: participantSessionId,
+    participant_session_id: participantId,
     participant_session_generation: 1,
     recovery_id: recoveryId,
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
@@ -1247,12 +1251,12 @@ function baseState(): V1ControlState {
     status: "active",
     admissionPolicy: "open",
     hostExitPolicy: "require_transfer",
-    hostParticipantSessionId: null,
+    hostParticipantId: null,
     deadlineAtMs: 99_999,
     deadlineGeneration: 1,
     roleCapabilities: { owner: ["publishAudio", "subscribe", "endEpisode"], collaborator: ["publishAudio"], observer: ["subscribe"] },
     recording: null,
-    participants: [{ participantSessionId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: ["publishAudio", "subscribe", "endEpisode"] }],
+    participants: [{ participantId: hostId, displayName: "Host", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: ["publishAudio", "subscribe", "endEpisode"] }],
     admissionRequests: [],
   };
 }
@@ -1265,7 +1269,7 @@ function stateWithPeer(role: "cohost" | "participant"): V1ControlState {
     participants: [
       ...state.participants,
       {
-        participantSessionId: peerId,
+        participantId: peerId,
         displayName: "Peer",
         handRaised: false,
         admissionRevision: 2,
@@ -1290,7 +1294,7 @@ async function wireSnapshot(initial: V1ControlState): Promise<Snapshot> {
     role_capabilities: state.roleCapabilities,
     recording: null,
     participants: state.participants.map((participant) => ({
-      participant_id: participant.participantSessionId,
+      participant_id: participant.participantId,
       display_name: participant.displayName,
       hand_raised: participant.handRaised,
       admission_revision: participant.admissionRevision,
@@ -1586,7 +1590,7 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function snapshotWhen(client: V1SyncClient, predicate: (snapshot: V1SessionSnapshot) => boolean): Promise<V1SessionSnapshot> {
+function snapshotWhen(client: V1SyncClient, predicate: (snapshot: V1EpisodeSnapshot) => boolean): Promise<V1EpisodeSnapshot> {
   const current = client.getSnapshot();
   if (predicate(current)) return Promise.resolve(current);
   return new Promise((resolve) => {

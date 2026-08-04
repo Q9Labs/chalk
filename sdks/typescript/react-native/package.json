@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-react-native",
-  "version": "0.0.85",
+  "version": "4.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -142,9 +142,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@q9labsai/chalk-client": "workspace:^",
-    "@q9labsai/chalk-whiteboard": "workspace:^",
-    "@q9labsai/facehash": "workspace:^"
+    "@q9labsai/chalk-client": "workspace:^4.0.0",
+    "@q9labsai/chalk-whiteboard": "workspace:^4.0.0",
+    "@q9labsai/facehash": "workspace:^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

@@ -1,11 +1,11 @@
 # @q9labsai/chalk-react
 
-Turnkey React conference experience and composable UI components for Chalk.
+React bindings and composable UI for a Chalk Space.
 
-`VideoConference` owns the embedded lifecycle from pre-join through the active
-conference and end state. Applications provide credentials and a
-`createSession` function; the component owns the session store after the user
-joins.
+`@q9labsai/chalk-client` owns the framework-agnostic `SpaceClient`: lifecycle,
+access refresh, transport, recovery, controllers, and the stable
+`SpaceSnapshot` store. This package binds that store to React and provides the
+current turnkey and composable components.
 
 ## Installation
 
@@ -13,41 +13,72 @@ joins.
 pnpm add @q9labsai/chalk-client @q9labsai/chalk-react @q9labsai/chalk-ui
 ```
 
-## Turnkey conference
+## Create the client
+
+The only client integration seam is `getAccess`. The backend returns an opaque
+`AccessGrant`; the browser forwards it unchanged and never constructs,
+parses, or reads its fields.
 
 ```tsx
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
-import type { PreJoinSettings } from "@q9labsai/chalk-react";
-import { VideoConference } from "@q9labsai/chalk-react";
+import { createSpaceClient, type AccessGrant } from "@q9labsai/chalk-client";
 
-export function App({ createSession }: { createSession: (settings: PreJoinSettings) => Promise<ChalkSessionStore> }) {
-  return <VideoConference roomId="design-review" roomName="Design review" createSession={createSession} chatEnabled participantsEnabled screenShareEnabled />;
+const client = createSpaceClient({
+  space: "design-review",
+  getAccess: ({ space, reason }): Promise<AccessGrant> => fetchAccess({ space, reason }),
+});
+```
+
+`SpaceClient` exposes flat `join`/`leave` lifecycle methods and the
+`media`, `chat`, `participants`, `reactions`, and `whiteboard` controllers.
+React code can subscribe to `client.getSnapshot()` directly, or use the
+package bindings below.
+
+## Turnkey Space experience
+
+The current compatibility component owns the pre-live, active, and terminal
+states. Applications provide the binding store through a callback; keep the
+underlying access callback on `SpaceClient`.
+
+```tsx
+import type { VideoConferenceProps as CompatibilityProps } from "@q9labsai/chalk-react";
+import { VideoConference as SpaceExperience } from "@q9labsai/chalk-react";
+
+export function App({ createStore }: { createStore: CompatibilityProps["createSession"] }) {
+  const props = {
+    roomId: "design-review",
+    roomName: "Design review",
+    createSession: createStore,
+    chatEnabled: true,
+    participantsEnabled: true,
+    screenShareEnabled: true,
+  } satisfies CompatibilityProps;
+  return <SpaceExperience {...props} />;
 }
 ```
 
-`createSession` is called with the settings selected in `PreJoinScreen`. Set
-`autoJoin` when the application has already collected identity and device
-settings. Use `phase`/`onPhaseChange` and `layout`/`onLayoutChange` for
-controlled observability. Feature availability uses props such as
-`chatEnabled`; capability overrides use props such as `canShareScreen`.
+The callback receives the selected `PreJoinSettings` and returns the
+SpaceClient-backed binding store. Set `autoJoin` when identity and device
+settings are already known. Use `layout`/`onLayoutChange` for controlled layout
+state. Feature props such as `chatEnabled` describe available UI; capability
+checks on the snapshot decide which commands the current Participant may use.
 
-## Composable session bindings
+## Composable client bindings
 
-The provider and hooks project an existing `ChalkSessionStore` from
-`@q9labsai/chalk-client` into React. They never join a room or open network
-connections on their own; the application creates and owns the session store.
+`ChalkProvider` accepts the public `SpaceClient` and binds its store to React.
+It does not open connections or refresh access on its own; `SpaceClient` owns
+those operations.
 
 ```tsx
 import "@q9labsai/chalk-ui/styles.css";
 ```
 
-Wrap the part of the application that consumes session state:
+Wrap the part of the application that consumes the store:
 
 ```tsx
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { SpaceClient } from "@q9labsai/chalk-client";
 import { ChalkProvider, useChalkActions, useParticipants } from "@q9labsai/chalk-react";
 
-function Meeting() {
+function SpacePanel() {
   const participants = useParticipants();
   const actions = useChalkActions();
 
@@ -59,37 +90,38 @@ function Meeting() {
   );
 }
 
-export function App({ session }: { session: ChalkSessionStore }) {
+export function App({ client }: { client: SpaceClient }) {
   return (
-    <ChalkProvider session={session}>
-      <Meeting />
+    <ChalkProvider session={client}>
+      <SpacePanel />
     </ChalkProvider>
   );
 }
 ```
 
-`useChalkSnapshot` returns the complete immutable snapshot.
-`useChalkSelector` limits rerenders to the selected value, while
-`useParticipants`, `useLocalMedia`, and `useRemoteMedia` expose the common
-collections. `useChalkActions` delegates commands to the provided store and
-returns each command's original promise.
+The provider's compatibility prop accepts the public `SpaceClient`.
+`useChalkSnapshot` returns the immutable snapshot; `useChalkSelector`
+limits rerenders to a selected value; and `useParticipants`, `useLocalMedia`,
+and `useRemoteMedia` expose common slices. `useChalkActions` delegates commands
+to the store and preserves each command's original promise.
 
-## Import Surface
+## Import surface
 
 Use the narrowest import that matches the UI layer you need:
 
 ```tsx
-import { Avatar, ParticipantTile, ChatPanel, ControlBar, EndScreen, JoiningScreen, ConferenceView } from "@q9labsai/chalk-react/components";
+import { Avatar, ParticipantTile, ChatPanel, ControlBar, EndScreen, JoiningScreen, ConferenceView as SpaceView } from "@q9labsai/chalk-react/components";
 ```
 
-The package root exports `VideoConference`, `ChalkProvider`, and the canonical
-session hooks. Active composition components such as `ConferenceView` are
-available only from `/components`.
+The package root exports the compatibility turnkey component, `ChalkProvider`,
+and the client-backed hooks. Active composition components are available only
+from `/components`.
 
-## Ownership Boundary
+## Ownership boundary
 
 The hooks own React subscriptions only. Joining, transport, permissions,
-diagnostics, and recovery stay in `@q9labsai/chalk-client`. Recording and
-transcription are not part of this launch surface. The styled `WhiteboardView`
-is backed by `@q9labsai/chalk-whiteboard`; callers still own its room state and
-transport wiring.
+diagnostics, recovery, and opaque `AccessGrant` refresh stay in
+`@q9labsai/chalk-client`. Recording and transcription are not part of this
+launch surface. The styled `WhiteboardView` is backed by
+`@q9labsai/chalk-whiteboard`; callers still own its Space state and transport
+wiring.

@@ -1,4 +1,4 @@
-import type { ChalkWhiteboardV1Element, ChalkWhiteboardV1Event } from "@q9labsai/chalk-client";
+import type { ChalkWhiteboardV1Element, ChalkWhiteboardV1Event } from "../client-compat";
 import type { WhiteboardWireElement } from "@q9labsai/chalk-whiteboard";
 import { describe, expect, it } from "vitest";
 

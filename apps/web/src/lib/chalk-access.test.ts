@@ -1,24 +1,24 @@
-import type { ChalkSessionAccessRequest, ParticipantAccess } from "@q9labsai/chalk-client";
+import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { beaconLocalBrowserSessionCleanup, cleanupLocalBrowserSession, createLocalAccessProvider, createLocalBrowserSession } from "./chalk-access";
 
 const access = {
   subject: {
-    tenantId: "tenant-1",
-    roomId: "room-1",
-    sessionId: "session-1",
-    participantSessionId: "participant-1",
-    participantGeneration: 3,
+    tenant_id: "tenant-1",
+    space_id: "space-1",
+    episode_id: "episode-1",
+    participant_id: "participant-1",
+    participant_generation: 3,
   },
-  sync: { token: credential("chalk-sync"), expiresAt: "2026-07-21T14:30:00Z" },
+  sync: { token: credential("chalk-sync"), expires_at: "2026-07-21T14:30:00Z" },
   media: {
     token: credential("chalk-media"),
-    expiresAt: "2026-07-21T14:30:00Z",
+    expires_at: "2026-07-21T14:30:00Z",
     provider: "cloudflare_sfu",
-    clientPayload: { connectionId: "connection-1", stunServer: "stun:example.test" },
+    client_payload: { connectionId: "connection-1", stunServer: "stun:example.test" },
   },
-} as unknown as ParticipantAccess;
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -50,34 +50,24 @@ describe("local Chalk access client", () => {
     expectRequest(fetchMock, "/local-chalk/browser-session", { displayName: "Ada", inviteToken: "i".repeat(43) });
   });
 
-  it("does not request participant access until the SDK invokes the provider", async () => {
+  it("does not request an access grant until the client invokes getAccess", async () => {
     const fetchMock = stubFetch(jsonResponse(access, 201));
 
     const provider = createLocalAccessProvider();
     expect(fetchMock).not.toHaveBeenCalled();
-    await expect(provider()).resolves.toEqual(access);
-    expectRequest(fetchMock, "/local-chalk/access", { replaceMediaConnection: false });
+    const grant: AccessGrant = await provider({ space: "local-space", reason: "join" });
+    expect(grant).toEqual(access);
+    expectRequest(fetchMock, "/local-chalk/access", {});
   });
 
-  it("forwards only media refresh inputs and leaves identity on the backend", async () => {
+  it("keeps public access context and the opaque grant at the client boundary", async () => {
     const fetchMock = stubFetch(jsonResponse(access, 201));
     const provider = createLocalAccessProvider();
-    const request = {
-      reason: "media_recovery",
-      replaceMediaConnection: true,
-      currentMediaToken: "opaque-current-media-token",
-      expectedParticipantGeneration: 999,
-    } as unknown as ChalkSessionAccessRequest;
+    const context = { space: "local-space", reason: "refresh" } satisfies Parameters<GetAccess>[0];
 
-    await provider(request);
+    await provider(context);
 
-    expectRequest(fetchMock, "/local-chalk/access", {
-      currentMediaToken: "opaque-current-media-token",
-      replaceMediaConnection: true,
-    });
-    const body = requestBody(fetchMock);
-    expect(body).not.toHaveProperty("expectedParticipantGeneration");
-    expect(body).not.toHaveProperty("participantSessionId");
+    expectRequest(fetchMock, "/local-chalk/access", {});
   });
 
   it("clears the server-held browser session and surfaces backend errors", async () => {
@@ -124,9 +114,4 @@ function expectRequest(fetchMock: ReturnType<typeof stubFetch>, path: string, bo
   expect(url).toBe(path);
   expect(init).toMatchObject({ method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" } });
   expect(JSON.parse(String(init?.body))).toEqual(body);
-}
-
-function requestBody(fetchMock: ReturnType<typeof stubFetch>): Record<string, unknown> {
-  const [, init] = fetchMock.mock.calls[0] ?? [];
-  return JSON.parse(String(init?.body)) as Record<string, unknown>;
 }

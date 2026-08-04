@@ -1,9 +1,9 @@
-import type { ChalkSessionSnapshot } from "./types";
+import type { ConnectionSnapshot } from "./types";
 
 export type ConferencePhase = "prejoin" | "joining" | "waiting" | "active" | "reconnecting" | "ended";
 
 export type ConferencePhaseInput = {
-  readonly snapshot: Pick<ChalkSessionSnapshot, "state" | "failure" | "connection">;
+  readonly snapshot: Pick<ConnectionSnapshot, "state" | "failure" | "connection">;
   readonly hasAskedToJoin: boolean;
   readonly hasAskedToLeave: boolean;
 };
@@ -27,6 +27,6 @@ export function deriveConferencePhase(input: ConferencePhaseInput): ConferencePh
   }
 }
 
-function isRecovering(connection: ChalkSessionSnapshot["connection"]): boolean {
+function isRecovering(connection: ConnectionSnapshot["connection"]): boolean {
   return connection.sync === "recovering" || connection.media === "recovering";
 }

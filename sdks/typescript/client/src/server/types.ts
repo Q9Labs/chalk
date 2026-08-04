@@ -1,3 +1,7 @@
+import type { AccessGrant } from "../session/access-grant.js";
+
+export type { AccessGrant } from "../session/access-grant.js";
+
 export type ChalkServerHeaders = Readonly<Record<string, string>>;
 
 export type ChalkServerTelemetry = {
@@ -84,25 +88,8 @@ export type AdmitParticipantInput = {
   readonly participant_session_id: string;
 };
 
-export type ParticipantAccess = {
-  readonly subject: {
-    readonly tenantId: string;
-    readonly roomId: string;
-    readonly sessionId: string;
-    readonly participantSessionId: string;
-    readonly participantGeneration: number;
-  };
-  readonly sync: { readonly token: string; readonly expiresAt: string };
-  readonly media: {
-    readonly token: string;
-    readonly expiresAt: string;
-    readonly provider: "cloudflare_sfu";
-    readonly clientPayload: { readonly connectionId: string; readonly stunServer: string };
-  };
-};
-
 export type ParticipantAdmission = {
-  readonly access?: ParticipantAccess | null;
+  readonly access?: AccessGrant | null;
   readonly admission_request?: { readonly expires_at: string; readonly id: string; readonly status: string } | null;
   readonly expires_at?: string;
   readonly lifecycle_intent: {
@@ -148,7 +135,7 @@ export type ParticipantRemoval = {
   };
 };
 
-export type IssueParticipantAccessInput =
+export type IssueAccessGrantInput =
   | {
       readonly participantSessionGeneration: number;
       readonly currentMediaToken: string;
@@ -192,7 +179,7 @@ export type ChalkServerClient = {
   };
   readonly participants: {
     admit(roomId: string, sessionId: string, input: AdmitParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantAdmission>;
-    issueAccess(roomId: string, sessionId: string, participantSessionId: string, input: IssueParticipantAccessInput): Promise<ParticipantAccess>;
+    issueAccess(roomId: string, sessionId: string, participantSessionId: string, input: IssueAccessGrantInput): Promise<AccessGrant>;
     remove(roomId: string, sessionId: string, participantSessionId: string, input: RemoveParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantRemoval>;
   };
   readonly apiKeys: {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { ChalkChatMessage } from "@q9labsai/chalk-client";
+import type { ChatMessage } from "../../client-compat";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -82,12 +82,12 @@ describe("ChatPanel", () => {
   });
 });
 
-function message(sequence: string): ChalkChatMessage {
+function message(sequence: string): ChatMessage {
   return {
     messageId: `message-${sequence}`,
     clientMessageId: `client-${sequence}`,
     sequence,
-    participantSessionId: "remote",
+    participantId: "remote",
     displayName: "Grace",
     text: `Message ${sequence}`,
     attachments: [],

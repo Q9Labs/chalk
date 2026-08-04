@@ -1,4 +1,4 @@
-import { parseParticipantAccess, type ChalkSessionAccessProvider, type ChalkSessionAccessRequest } from "@q9labsai/chalk-client";
+import type { AccessGrant, GetAccess } from "@q9labsai/chalk-client";
 
 const localBackendPath = "/local-chalk";
 
@@ -15,15 +15,8 @@ export async function createLocalBrowserSession(displayName: string, inviteToken
   });
 }
 
-export function createLocalAccessProvider(): ChalkSessionAccessProvider {
-  return async (input?: ChalkSessionAccessRequest) => {
-    return parseParticipantAccess(
-      await request<unknown>("/access", {
-        currentMediaToken: input?.currentMediaToken,
-        replaceMediaConnection: input?.replaceMediaConnection ?? false,
-      }),
-    );
-  };
+export function createLocalAccessProvider(): GetAccess {
+  return async (): Promise<AccessGrant> => request<AccessGrant>("/access");
 }
 
 export async function cleanupLocalBrowserSession(): Promise<void> {

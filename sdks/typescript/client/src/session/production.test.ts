@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createDefaultChalkSessionDependencies } from "./production";
+import { createDefaultConnectionDependencies } from "./production";
 
-describe("default ChalkSession production dependencies", () => {
-  afterEach(() => vi.useRealTimers());
+describe("default Connection production dependencies", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it("provides the real clock and browser factory seams", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-21T12:00:00.000Z"));
-    const dependencies = createDefaultChalkSessionDependencies({ apiBaseURL: "https://api.chalk.video", syncURL: "wss://sync.chalk.video/v1" });
+    const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.chalk.video", syncURL: "wss://sync.chalk.video/v1" });
     const callback = vi.fn();
     const timer = dependencies.clock.setTimeout(callback, 25);
 
@@ -23,12 +26,34 @@ describe("default ChalkSession production dependencies", () => {
   });
 
   it("keeps native or custom runtimes free of a browser whiteboard client when disabled", () => {
-    const dependencies = createDefaultChalkSessionDependencies({
+    const dependencies = createDefaultConnectionDependencies({
       apiBaseURL: "https://api.chalk.video",
       syncURL: "wss://sync.chalk.video/v1/sync",
       whiteboardURL: null,
     });
 
     expect(dependencies.createWhiteboardClient).toBeUndefined();
+  });
+
+  it("revalidates on visible browser wake and removes both listeners", () => {
+    const documentTarget = Object.assign(new EventTarget(), { visibilityState: "hidden" });
+    const windowTarget = new EventTarget();
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("window", windowTarget);
+    const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.chalk.video", syncURL: "wss://sync.chalk.video/v1" });
+    const listener = vi.fn();
+    const unsubscribe = dependencies.subscribeForeground?.(listener);
+
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    expect(listener).not.toHaveBeenCalled();
+    documentTarget.visibilityState = "visible";
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    windowTarget.dispatchEvent(new Event("pageshow"));
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe?.();
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    windowTarget.dispatchEvent(new Event("pageshow"));
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });

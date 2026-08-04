@@ -17,7 +17,7 @@ export {
 export { V1SyncClient, V1SyncError } from "./v1-client";
 export { createV1SyncClient, type CreateV1SyncClientOptions } from "./v1-create";
 export { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
-export type { V1ChatCursor, V1RoomActionClientEvent, V1RoomActionsClient, V1RoomActionsExtensionRequest, V1RoomActionsExtensionState } from "./v1-room-actions";
+export type { V1ChatCursor, V1CollaborationClient, V1CollaborationEvent, V1CollaborationExtensionRequest, V1CollaborationExtensionState } from "./v1-types";
 export { InMemoryV1PendingTargetStore } from "./v1-persistence";
 export { AsyncStorageV1PendingTargetStore, IndexedDbV1PendingTargetStore, type AsyncStorageV1PendingTargetStoreOptions, type IndexedDbV1PendingTargetStoreOptions } from "./v1-platform-persistence";
 export { applyV1Event, assertV1ControlSemantics, computeV1StateDigest, optimisticV1Control, restoreV1Snapshot, V1ReplicaError } from "./v1-reducer";
@@ -46,7 +46,7 @@ export type {
   V1Recording,
   V1Role,
   V1SelfMediaTargetResult,
-  V1SessionSnapshot,
+  V1EpisodeSnapshot,
   V1SyncClientOptions,
   V1TargetCommand,
 } from "./v1-types";

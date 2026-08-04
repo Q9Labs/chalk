@@ -1,4 +1,4 @@
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkSessionSnapshot, ChalkSessionStore } from "../client-compat";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ store: null as ChalkSessionStore | null }));

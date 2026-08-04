@@ -9,7 +9,7 @@ import { useMeetingParticipants } from "../../hooks/useMeetingParticipants";
 import { useRoom } from "../../hooks/useRoom";
 import { useScreenShare } from "../../hooks/useScreenShare";
 import { useChalkSnapshot } from "../../hooks/useChalkSnapshot";
-import { createNativeRoomActionCommands } from "../../room-actions/native-room-actions";
+import { createNativeActionCommands } from "../../room-actions/native-room-actions";
 import { isIosSimulator } from "../../utils/ios-simulator";
 import type { ConferenceViewProps } from "../ConferenceView";
 import type { ConferenceViewAction } from "./types";
@@ -40,7 +40,7 @@ export function useConferenceViewController({ roomName, meetingLink, features, o
       Alert.alert("Action failed", cause instanceof Error ? cause.message : "Chalk could not complete the action.");
     }
   }, []);
-  const commands = useMemo(() => createNativeRoomActionCommands(session), [session]);
+  const commands = useMemo(() => createNativeActionCommands(session), [session]);
   const capabilities = useConferenceViewCapabilities({ features, session, snapshot, chat, interactions });
   const roomMedia = useConferenceViewMedia({ media, screenShare, run });
   const roomInteractions = useConferenceViewInteractions({ interactions, run });

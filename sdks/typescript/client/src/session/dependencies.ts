@@ -1,37 +1,45 @@
-import type { CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
+import type { ClientMediaPlane, CloudflareSFUBootstrap, CloudflareSFUSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
-import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1SelfMediaTargetResult, V1SessionSnapshot, V1ClientMediaPlane } from "../sync";
-import type { V1DirectedRequest, V1DirectedRequestResult, V1RoomActionsClient } from "../sync/v1-types";
+import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
+import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
-import type { ParticipantAccess, ParticipantMediaCredential } from "./access";
+import type { ParsedAccessGrant, ParticipantMediaCredential } from "./access-grant";
+import { Context, Layer } from "effect";
 
-export type ChalkSessionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery";
+export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery" | "access_retry";
 
-export type ChalkSessionAccessRequest = {
-  readonly reason: ChalkSessionAccessReason;
+export type ConnectionAccessRequest = {
+  readonly reason: ConnectionAccessReason;
   readonly replaceMediaConnection: boolean;
   readonly currentMediaToken?: ParticipantMediaCredential;
   readonly expectedParticipantGeneration?: number;
 };
 
-export type ChalkSessionAccessProvider = (request?: ChalkSessionAccessRequest) => ParticipantAccess | Promise<ParticipantAccess>;
+export type ConnectionAccessProvider = (request?: ConnectionAccessRequest) => ParsedAccessGrant | Promise<ParsedAccessGrant>;
 
-export type ChalkSessionClock = {
+export type ConnectionClock = {
   readonly now: () => number;
   readonly setTimeout: (callback: () => void, milliseconds: number) => unknown;
   readonly clearTimeout: (handle: unknown) => void;
 };
 
-export type ChalkSessionMediaDevices = {
+export type ConnectionMediaDevices = {
   readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
+  readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
+  /**
+   * An application-provided output sink selector. Browser capture APIs have no
+   * global speaker switch, so a host that renders remote audio supplies the
+   * element-specific implementation here.
+   */
+  readonly selectSpeaker?: (deviceId: string) => Promise<void>;
 };
 
-export type ChalkSessionSyncClient = V1RoomActionsClient & {
+export type ConnectionSyncClient = V1CollaborationClient & {
   readonly start: () => Promise<void>;
   readonly stop: () => void;
-  readonly getSnapshot: () => V1SessionSnapshot;
-  readonly subscribe: (listener: (snapshot: V1SessionSnapshot) => void) => () => void;
+  readonly getSnapshot: () => V1EpisodeSnapshot;
+  readonly subscribe: (listener: (snapshot: V1EpisodeSnapshot) => void) => () => void;
   readonly leave: () => Promise<V1CommandResult>;
   readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
   readonly setCameraEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
@@ -39,21 +47,21 @@ export type ChalkSessionSyncClient = V1RoomActionsClient & {
   readonly setHandRaised: (raised: boolean) => Promise<V1CommandResult>;
   readonly setDisplayName: (displayName: string) => Promise<V1CommandResult>;
   readonly setAdmissionPolicy: (policy: V1AdmissionPolicy) => Promise<V1CommandResult>;
-  readonly setParticipantRole: (participantSessionId: string, role: V1AssignableRole) => Promise<V1CommandResult>;
-  readonly transferHost: (participantSessionId: string) => Promise<V1CommandResult>;
+  readonly assignRole: (participantId: string, role: V1AssignableRole) => Promise<V1CommandResult>;
   readonly admit: (admissionRequestId: string) => Promise<V1CommandResult>;
   readonly deny: (admissionRequestId: string) => Promise<V1CommandResult>;
-  readonly muteParticipant: (participantSessionId: string) => Promise<V1CommandResult>;
-  readonly stopParticipantCamera: (participantSessionId: string) => Promise<V1CommandResult>;
-  readonly stopParticipantScreenShare: (participantSessionId: string) => Promise<V1CommandResult>;
-  readonly removeParticipant: (participantSessionId: string) => Promise<V1CommandResult>;
-  readonly endSession: () => Promise<V1CommandResult>;
+  readonly muteParticipant: (participantId: string) => Promise<V1CommandResult>;
+  readonly stopParticipantCamera: (participantId: string) => Promise<V1CommandResult>;
+  readonly stopParticipantScreenShare: (participantId: string) => Promise<V1CommandResult>;
+  readonly removeParticipant: (participantId: string) => Promise<V1CommandResult>;
+  readonly endEpisode: () => Promise<V1CommandResult>;
+  readonly extendEpisode: (minutes: number) => Promise<V1CommandResult>;
   readonly onDirectedRequest: (listener: (request: V1DirectedRequest) => void) => () => void;
-  readonly requestUnmute: (participantSessionId: string) => Promise<V1DirectedRequestResult>;
-  readonly requestStartCamera: (participantSessionId: string) => Promise<V1DirectedRequestResult>;
+  readonly requestUnmute: (participantId: string) => Promise<V1DirectedRequestResult>;
+  readonly requestStartCamera: (participantId: string) => Promise<V1DirectedRequestResult>;
 };
 
-export type ChalkSessionMediaClient = V1ClientMediaPlane & {
+export type ConnectionMediaClient = ClientMediaPlane & {
   readonly start: (stream: MediaStream) => Promise<void>;
   readonly stop: () => void;
   readonly restart: (input: CloudflareSFUBootstrap) => Promise<void>;
@@ -63,33 +71,51 @@ export type ChalkSessionMediaClient = V1ClientMediaPlane & {
   readonly subscribe: (listener: () => void) => () => void;
 };
 
-export type ChalkSessionMediaFactoryInput = {
-  readonly access: ParticipantAccess;
+export type ConnectionMediaFactoryInput = {
+  readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
   readonly onFailure: (error: unknown) => void;
   readonly onScreenEnded: () => void;
 };
 
-export type ChalkSessionSyncFactoryInput = {
-  readonly access: ParticipantAccess;
+export type ConnectionSyncFactoryInput = {
+  readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
-  readonly media: ChalkSessionMediaClient;
+  readonly media: ConnectionMediaClient;
 };
 
-export type ChalkSessionWhiteboardFactoryInput = {
+export type ConnectionWhiteboardFactoryInput = {
   readonly token: () => Promise<string>;
   readonly onSummary: (summary: ChalkWhiteboardSummary) => void;
 };
 
-export type ChalkSessionChatFileFactoryInput = {
+export type ConnectionChatFileFactoryInput = {
   readonly token: () => Promise<string>;
 };
 
-export type ChalkSessionDependencies = {
-  readonly clock: ChalkSessionClock;
-  readonly mediaDevices: ChalkSessionMediaDevices;
-  readonly createMediaClient: (input: ChalkSessionMediaFactoryInput) => ChalkSessionMediaClient;
-  readonly createSyncClient: (input: ChalkSessionSyncFactoryInput) => ChalkSessionSyncClient;
-  readonly createChatFileTransport?: (input: ChalkSessionChatFileFactoryInput) => ChalkChatFileTransport | null;
-  readonly createWhiteboardClient?: (input: ChalkSessionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null;
+export type ConnectionDependencies = {
+  readonly clock: ConnectionClock;
+  readonly mediaDevices: ConnectionMediaDevices;
+  readonly createMediaClient: (input: ConnectionMediaFactoryInput) => ConnectionMediaClient;
+  readonly createSyncClient: (input: ConnectionSyncFactoryInput) => ConnectionSyncClient;
+  readonly createChatFileTransport?: (input: ConnectionChatFileFactoryInput) => ChalkChatFileTransport | null;
+  readonly createWhiteboardClient?: (input: ConnectionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null;
+  readonly subscribeForeground?: (listener: () => void) => () => void;
+  /**
+   * Browser-only identifier creation lives in the platform adapter. Lifecycle
+   * and feature code consume this seam so Effect tests can be deterministic.
+   */
+  readonly createId?: () => string;
 };
+
+/**
+ * The foreign browser and transport boundary used by Connection. The Layer is
+ * deliberately small: all scheduling and state ownership stays in Effect
+ * programs above this adapter.
+ */
+export class ConnectionPlatformService extends Context.Service<ConnectionPlatformService, ConnectionDependencies>()("@chalk/client/ConnectionPlatform") {}
+
+export const makeConnectionPlatformLayer = (dependencies: ConnectionDependencies) => Layer.succeed(ConnectionPlatformService, dependencies);
+
+/** A named alias makes fake platform Layers self-documenting in host tests. */
+export const makeFakeConnectionPlatformLayer = makeConnectionPlatformLayer;

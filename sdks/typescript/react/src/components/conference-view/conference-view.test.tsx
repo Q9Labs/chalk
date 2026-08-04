@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { ChalkRoomReaction } from "@q9labsai/chalk-client";
+import type { ActiveReaction } from "../../client-compat";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -123,12 +123,13 @@ describe("ConferenceView", () => {
 
   it("passes reactions through the overlay and picker callback", () => {
     const onSelect = vi.fn();
-    const reaction: ChalkRoomReaction = {
+    const reaction: ActiveReaction = {
       eventId: "reaction-1",
-      participantSessionId: "grace",
+      participantId: "grace",
       displayName: "Grace",
       reaction: "🎉",
-      createdAt: "2026-08-01T10:00:00.000Z",
+      occurredAt: "2026-08-01T10:00:00.000Z",
+      expiresAt: "2026-08-01T10:00:05.000Z",
     };
     render(
       <ConferenceView

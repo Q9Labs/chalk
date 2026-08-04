@@ -1,4 +1,4 @@
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkSessionStore } from "../client-compat";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import type { VideoConferenceDiagnosticsSnapshot, VideoConferencePhase } from "../components/VideoConference";

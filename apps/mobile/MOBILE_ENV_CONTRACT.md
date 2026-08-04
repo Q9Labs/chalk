@@ -12,8 +12,8 @@ Rules:
 - never put a tenant, API key, participant credential, or client-session
   credential in an `EXPO_PUBLIC_*` variable; Expo embeds public variables in the
   application bundle
-- both meeting creation and invite joins use the broker's opaque client-session
-  and `ParticipantAccess` contract
+- both Space creation and invite joins use the broker's opaque client-session
+  wire contract and forward its `AccessGrant` response unchanged
 - API and Sync endpoints come from the broker response and are not independently
   configured in the application bundle
 - local prod builds must run through `apps/mobile/scripts/run-with-production-mobile-env.ts`

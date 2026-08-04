@@ -48,15 +48,15 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
     stateDigest: snapshot.state_digest,
     status: snapshot.status,
     admissionPolicy: snapshot.admission_policy,
-    // Kept as an internal compatibility alias until the SpaceClient wave.
+    // The wire no longer carries host authority; role projection remains canonical.
     hostExitPolicy: "require_transfer",
-    hostParticipantSessionId: null,
+    hostParticipantId: null,
     deadlineAtMs: snapshot.deadline_at_ms,
     deadlineGeneration: snapshot.deadline_generation,
     roleCapabilities,
     recording: snapshot.recording && { recordingId: snapshot.recording.recording_id, status: snapshot.recording.status, failureCode: snapshot.recording.failure_code },
     participants: snapshot.participants.map((participant) => ({
-      participantSessionId: participant.participant_id,
+      participantId: participant.participant_id,
       displayName: participant.display_name,
       handRaised: participant.hand_raised,
       admissionRevision: participant.admission_revision,
@@ -68,7 +68,7 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
     })),
     admissionRequests: snapshot.admission_requests.map((request) => ({
       admissionRequestId: request.admission_request_id,
-      participantSessionId: request.participant_id,
+      participantId: request.participant_id,
       displayName: request.display_name,
       initialRole: request.role,
       eligibleRoles: [request.role],
@@ -80,19 +80,18 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
 export function assertV1ControlSemantics(state: V1ControlState): void {
   const participantIds = new Set<string>();
   for (const participant of state.participants) {
-    if (participantIds.has(participant.participantSessionId)) throw new V1ReplicaError("duplicate participant ID");
-    participantIds.add(participant.participantSessionId);
+    if (participantIds.has(participant.participantId)) throw new V1ReplicaError("duplicate participant ID");
+    participantIds.add(participant.participantId);
     const capabilities = state.roleCapabilities[participant.role];
     if (!capabilities) throw new V1ReplicaError("participant role has no capability bundle");
     if (!sameStrings(participant.capabilities, capabilities)) throw new V1ReplicaError("participant capabilities do not match the durable role map");
     if (participant.displayName !== participant.displayName.trim() || participant.displayName.length === 0) throw new V1ReplicaError("participant display name has surrounding whitespace");
   }
-  // Legacy callers may still populate the former host authority alias. It is
-  // not part of the canonical Episode snapshot, but when present it must not
-  // silently disagree with the role projection.
-  if (state.hostParticipantSessionId !== null) {
+  // Host authority is not part of the canonical Episode snapshot, but when
+  // present it must not silently disagree with the role projection.
+  if (state.hostParticipantId !== null) {
     const hosts = state.participants.filter((participant) => participant.role === "host");
-    if (hosts.length !== 1 || hosts[0]?.participantSessionId !== state.hostParticipantSessionId) throw new V1ReplicaError("host authority does not match role projection");
+    if (hosts.length !== 1 || hosts[0]?.participantId !== state.hostParticipantId) throw new V1ReplicaError("host authority does not match role projection");
   }
   if (state.status === "ended" && (state.participants.length !== 0 || state.admissionRequests.length !== 0 || state.recording !== null)) {
     throw new V1ReplicaError("ended control state retains active Episode state");
@@ -102,9 +101,9 @@ export function assertV1ControlSemantics(state: V1ControlState): void {
   const pendingParticipantIds = new Set<string>();
   for (const request of state.admissionRequests) {
     if (requestIds.has(request.admissionRequestId)) throw new V1ReplicaError("duplicate admission request ID");
-    if (pendingParticipantIds.has(request.participantSessionId) || participantIds.has(request.participantSessionId)) throw new V1ReplicaError("active and pending participant IDs overlap");
+    if (pendingParticipantIds.has(request.participantId) || participantIds.has(request.participantId)) throw new V1ReplicaError("active and pending participant IDs overlap");
     requestIds.add(request.admissionRequestId);
-    pendingParticipantIds.add(request.participantSessionId);
+    pendingParticipantIds.add(request.participantId);
     if (request.displayName !== request.displayName.trim() || request.displayName.length === 0) throw new V1ReplicaError("admission display name has surrounding whitespace");
   }
 
@@ -127,20 +126,20 @@ function durableProjection(state: V1ControlState): unknown {
       admission_request_id: request.admissionRequestId,
       display_name: request.displayName,
       expires_at_ms: request.expiresAtMs,
-      participant_id: request.participantSessionId,
+      participant_id: request.participantId,
       role: request.initialRole,
     })),
     control_revision: state.revision,
     deadline_at_ms: state.deadlineAtMs,
     deadline_generation: state.deadlineGeneration,
     participants: [...state.participants]
-      .sort((left, right) => left.participantSessionId.localeCompare(right.participantSessionId))
+      .sort((left, right) => left.participantId.localeCompare(right.participantId))
       .map((participant) => ({
         admission_revision: participant.admissionRevision,
         capabilities: state.roleCapabilities[participant.role],
         display_name: participant.displayName,
         hand_raised: participant.handRaised,
-        participant_id: participant.participantSessionId,
+        participant_id: participant.participantId,
         role: participant.role,
       })),
     recording: state.recording && { failure_code: state.recording.failureCode, recording_id: state.recording.recordingId, status: state.recording.status },
@@ -157,12 +156,12 @@ async function assertDigest(state: V1ControlState): Promise<void> {
 function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
   switch (event.name) {
     case "participant_joined": {
-      if (state.participants.some((participant) => participant.participantSessionId === event.payload.participant_id)) throw new V1ReplicaError("duplicate participant join");
+      if (state.participants.some((participant) => participant.participantId === event.payload.participant_id)) throw new V1ReplicaError("duplicate participant join");
       const participant = participantFromJoin(state, event.payload);
       return {
         ...state,
         participants: [...state.participants, participant],
-        admissionRequests: state.admissionRequests.filter((request) => request.participantSessionId !== participant.participantSessionId),
+        admissionRequests: state.admissionRequests.filter((request) => request.participantId !== participant.participantId),
       };
     }
     case "participant_left":
@@ -216,7 +215,7 @@ function participantFromJoin(state: V1ControlState, payload: Extract<EventFrame,
   if (!capabilities) throw new V1ReplicaError("participant join references an unknown role");
 
   return {
-    participantSessionId: payload.participant_id,
+    participantId: payload.participant_id,
     displayName: payload.display_name,
     handRaised: false,
     admissionRevision: payload.admission_revision,
@@ -229,7 +228,7 @@ function participantFromJoin(state: V1ControlState, payload: Extract<EventFrame,
 function admissionRequestFromEvent(payload: Extract<EventFrame, { readonly name: "admission_requested" }>["payload"]): V1AdmissionRequest {
   return {
     admissionRequestId: payload.admission_request_id,
-    participantSessionId: payload.participant_id,
+    participantId: payload.participant_id,
     displayName: payload.display_name,
     initialRole: payload.role,
     eligibleRoles: [payload.role],
@@ -246,7 +245,7 @@ function withDerivedRole(state: V1ControlState, participant: V1Participant, role
 function updateParticipant(state: V1ControlState, participantId: string, update: (participant: V1Participant) => V1Participant, required = true): V1ControlState {
   let found = false;
   const participants = state.participants.map((participant) => {
-    if (participant.participantSessionId !== participantId) return participant;
+    if (participant.participantId !== participantId) return participant;
     found = true;
     return update(participant);
   });
@@ -255,13 +254,13 @@ function updateParticipant(state: V1ControlState, participantId: string, update:
 }
 
 function removeParticipant(state: V1ControlState, participantId: string): V1ControlState {
-  const participants = state.participants.filter((participant) => participant.participantSessionId !== participantId);
+  const participants = state.participants.filter((participant) => participant.participantId !== participantId);
   if (participants.length === state.participants.length) throw new V1ReplicaError("control event references an unknown participant");
   return { ...state, participants };
 }
 
 function requireParticipant(state: V1ControlState, participantId: string): V1Participant {
-  const participant = state.participants.find((candidate) => candidate.participantSessionId === participantId);
+  const participant = state.participants.find((candidate) => candidate.participantId === participantId);
   if (!participant) throw new V1ReplicaError("control event references an unknown participant");
   return participant;
 }

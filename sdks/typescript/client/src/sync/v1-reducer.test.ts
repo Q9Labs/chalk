@@ -24,7 +24,7 @@ describe("SyncEngine v1 reducer", () => {
     const durable = controlState();
     expect(() => assertV1ControlSemantics(durable)).not.toThrow();
     expect(() => assertV1ControlSemantics({ ...durable, participants: [...durable.participants, durable.participants[0]!] })).toThrow(V1ReplicaError);
-    expect(() => assertV1ControlSemantics({ ...durable, hostParticipantSessionId: participantId })).toThrow("host authority");
+    expect(() => assertV1ControlSemantics({ ...durable, hostParticipantId: participantId })).toThrow("host authority");
 
     const reversed = { ...durable, participants: [...durable.participants].reverse() };
     expect(await computeV1StateDigest(reversed)).toBe(await computeV1StateDigest(durable));
@@ -40,7 +40,7 @@ describe("SyncEngine v1 reducer", () => {
 
 function controlState(): V1ControlState {
   const roleCapabilities: V1ControlState["roleCapabilities"] = {
-    host: ["subscribe", "transferHost"],
+    host: ["subscribe", "assignRoles"],
     cohost: ["subscribe"],
     participant: ["subscribe"],
   };
@@ -51,7 +51,7 @@ function controlState(): V1ControlState {
     status: "active",
     admissionPolicy: "open",
     hostExitPolicy: "require_transfer",
-    hostParticipantSessionId: hostId,
+    hostParticipantId: hostId,
     deadlineAtMs: 2_000_000_000_000,
     deadlineGeneration: 3,
     roleCapabilities,
@@ -59,7 +59,7 @@ function controlState(): V1ControlState {
     admissionRequests: [],
     participants: [
       {
-        participantSessionId: hostId,
+        participantId: hostId,
         displayName: "Host",
         handRaised: false,
         admissionRevision: 1,
@@ -68,7 +68,7 @@ function controlState(): V1ControlState {
         capabilities: [...roleCapabilities.host],
       },
       {
-        participantSessionId: participantId,
+        participantId: participantId,
         displayName: "Participant",
         handRaised: false,
         admissionRevision: 2,

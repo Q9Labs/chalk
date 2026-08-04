@@ -1,5 +1,5 @@
-import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
-import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkPendingChatMessage, ChalkSendChatMessageInput } from "@q9labsai/chalk-client";
+import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "../../client-compat";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, SpacePendingChatSend } from "../../client-compat";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "../../utils/cn";
@@ -12,13 +12,13 @@ export type { ChatMessage } from "./chat-types";
 
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
 export interface ChatPanelProps {
-  readonly messages: readonly ChalkChatMessage[];
-  readonly pendingMessages?: readonly ChalkPendingChatMessage[];
-  readonly readReceipts?: readonly ChalkChatReadReceipt[];
+  readonly messages: readonly ChatMessage[];
+  readonly pendingMessages?: readonly SpacePendingChatSend[];
+  readonly readReceipts?: readonly ChatReadReceipt[];
   readonly localReadThroughSequence?: string | null;
   readonly participantNames?: Readonly<Record<string, string>>;
-  readonly onSendMessage: (input: Pick<ChalkSendChatMessageInput, "text" | "attachments">) => Promise<void>;
-  readonly onUploadAttachment?: (file: File) => Promise<ChalkChatAttachment>;
+  readonly onSendMessage: (input: Pick<ChatSendInput, "text" | "attachments">) => Promise<void>;
+  readonly onUploadAttachment?: (file: File) => Promise<ChatAttachment>;
   readonly onResolveAttachmentUrl?: (attachmentId: string) => Promise<string>;
   readonly onMarkRead?: (throughSequence: string) => void | Promise<unknown>;
   readonly onRetryMessage?: (id: string) => Promise<void>;
@@ -205,9 +205,9 @@ export const ChatPanel = React.memo(
             </div>
           ) : (
             grouped.map((group) => (
-              <div key={`${group.participantSessionId}-${group.firstMessageId}`}>
+              <div key={`${group.participantId}-${group.firstMessageId}`}>
                 {group.messages.map((message, index) => {
-                  const isLocal = localParticipantId !== undefined && message.participantSessionId === localParticipantId;
+                  const isLocal = localParticipantId !== undefined && message.participantId === localParticipantId;
                   const readBy = isLocal ? receiptsForChatMessage(message.sequence, readReceipts, localParticipantId) : [];
                   return (
                     <div key={message.messageId} data-chat-sequence={message.sequence}>
@@ -236,7 +236,7 @@ export const ChatPanel = React.memo(
           {pendingMessages.map((pending) => (
             <div key={pending.clientMessageId} className="my-2">
               <MessageBubble content={pending.text} senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"} timestamp={new Date().toISOString()} isLocal status="pending" attachments={pending.attachments} onResolveAttachmentUrl={onResolveAttachmentUrl} />
-              {pending.state === "failed" ? (
+              {pending.status === "failed" ? (
                 <div className="mr-14 flex items-center justify-end gap-2 text-xs text-muted-foreground">
                   <span>{pending.error?.message || "Not sent"}</span>
                   {onRetryMessage ? (

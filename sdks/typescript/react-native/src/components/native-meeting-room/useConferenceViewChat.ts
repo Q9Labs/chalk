@@ -1,4 +1,4 @@
-import type { ChalkChatAttachment, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkChatAttachment, ChalkSessionStore } from "../../client-compat";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { Linking } from "react-native";
 

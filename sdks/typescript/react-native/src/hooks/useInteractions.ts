@@ -1,7 +1,7 @@
-import type { ChalkReaction } from "@q9labsai/chalk-client";
+import type { ChalkReaction } from "../client-compat";
 import { useCallback, useMemo } from "react";
 import { useChalkSession } from "../context/chalk-provider";
-import { createNativeRoomActionCommands, projectNativeRoomActions } from "../room-actions/native-room-actions";
+import { createNativeActionCommands, projectNativeActions } from "../room-actions/native-room-actions";
 import type { NativeReaction } from "../ui/native-types";
 import { useChalkSnapshot } from "./useChalkSnapshot";
 
@@ -20,10 +20,10 @@ export interface UseInteractionsReturn {
 export function useInteractions(): UseInteractionsReturn {
   const store = useChalkSession();
   const snapshot = useChalkSnapshot();
-  const projection = useMemo(() => projectNativeRoomActions(snapshot), [snapshot]);
-  const commands = useMemo(() => createNativeRoomActionCommands(store), [store]);
-  const raisedHands = useMemo(() => snapshot.participants.filter((participant) => participant.handRaised).map((participant) => participant.participantSessionId), [snapshot.participants]);
-  const localParticipantId = snapshot.subject?.participantSessionId ?? null;
+  const projection = useMemo(() => projectNativeActions(snapshot), [snapshot]);
+  const commands = useMemo(() => createNativeActionCommands(store), [store]);
+  const raisedHands = useMemo(() => snapshot.participants.filter((participant) => participant.handRaised).map((participant) => participant.participantId), [snapshot.participants]);
+  const localParticipantId = snapshot.subject?.participantId ?? null;
   const isHandRaised = localParticipantId ? raisedHands.includes(localParticipantId) : false;
 
   const setHandRaised = useCallback(

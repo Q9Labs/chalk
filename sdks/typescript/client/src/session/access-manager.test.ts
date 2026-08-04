@@ -1,103 +1,66 @@
-import { describe, expect, it, vi } from "vitest";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
+import { describe, expect, it } from "vitest";
+import { ConnectionAccessService, makeConnectionAccessLayer } from "./access-manager";
+import { ACCESS_SUBJECT, accessGrant } from "./access-grant.test.helpers";
 
-import { ChalkSessionAccessManager } from "./access-manager";
-import type { ParticipantAccess } from "./access";
+const START = Date.parse("2026-07-21T12:00:00.000Z");
+describe("ConnectionAccessService", () => {
+  it("uses TestClock for the R1 refresh window and supplies the current media proof", async () => {
+    const first = accessGrant(START + 61_000, "first", "connection-1");
+    const second = accessGrant(START + 300_000, "second", "connection-1");
+    const requests: unknown[] = [];
+    const harness = accessHarness((request) =>
+      Effect.sync(() => {
+        requests.push(request);
+        return requests.length === 1 ? first : second;
+      }),
+    );
 
-const SUBJECT = { tenantId: "tenant-1", roomId: "room-1", sessionId: "session-1", participantSessionId: "participant-1", participantGeneration: 1 } as const;
+    await expect(harness.initialize()).resolves.toEqual(first);
+    await harness.runtime.runPromise(TestClock.adjust(1_000));
+    await expect(harness.runtime.runPromise(harness.service.getMediaToken())).resolves.toEqual(second.media.token);
+    expect(requests[1]).toEqual({ reason: "scheduled_refresh", replaceMediaConnection: false, currentMediaToken: first.media.token, expectedParticipantGeneration: 1 });
 
-describe("ChalkSessionAccessManager", () => {
-  it("refreshes at sixty seconds and proves the current media connection with its signed token", async () => {
-    let now = Date.parse("2026-07-21T12:00:00.000Z");
-    const first = access(now + 61_000, "connection-1", "first");
-    const second = access(now + 300_000, "connection-1", "second");
-    const provider = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
-    const manager = new ChalkSessionAccessManager(provider, () => now);
-
-    await expect(manager.initialize()).resolves.toEqual(first);
-    expect(manager.millisecondsUntilRefresh()).toBe(1_000);
-    now += 1_000;
-    await expect(manager.getMediaToken()).resolves.toBe(second.media.token);
-    expect(provider.mock.calls[1]?.[0]).toEqual({
-      reason: "scheduled_refresh",
-      replaceMediaConnection: false,
-      currentMediaToken: first.media.token,
-      expectedParticipantGeneration: 1,
-    });
+    await harness.runtime.dispose();
   });
 
-  it("rejects subject changes and ordinary media-connection replacement", async () => {
-    const now = Date.parse("2026-07-21T12:00:00.000Z");
-    const initial = access(now + 300_000, "connection-1", "initial");
-    const provider = vi
-      .fn()
-      .mockResolvedValueOnce(initial)
-      .mockResolvedValueOnce(access(now + 300_000, "connection-2", "replacement"));
-    const manager = new ChalkSessionAccessManager(provider, () => now);
+  it("rejects a refresh that changes identity or replaces media outside recovery", async () => {
+    const first = accessGrant(START + 300_000, "first", "connection-1");
+    const changed = { ...accessGrant(START + 300_000, "second", "connection-2"), subject: { ...ACCESS_SUBJECT, participantId: "participant-2" } };
+    let calls = 0;
+    const harness = accessHarness(() => Effect.sync(() => (calls++ === 0 ? first : changed)));
 
-    await manager.initialize();
-    await expect(manager.refresh("scheduled_refresh", false)).rejects.toThrow("unexpectedly replaced");
+    await harness.initialize();
+    await expect(harness.runtime.runPromise(harness.service.refresh("scheduled_refresh", false))).rejects.toMatchObject({ _tag: "ConnectionAccessFailure", code: "access.invalid" });
+
+    await harness.runtime.dispose();
   });
 
-  it("serializes refreshes but follows an ordinary in-flight refresh with an explicit replacement", async () => {
-    const now = Date.parse("2026-07-21T12:00:00.000Z");
-    const initial = access(now + 300_000, "connection-1", "initial");
-    let release!: (value: ParticipantAccess) => void;
-    const ordinary = new Promise<ParticipantAccess>((resolve) => (release = resolve));
-    const provider = vi
-      .fn()
-      .mockResolvedValueOnce(initial)
-      .mockReturnValueOnce(ordinary)
-      .mockResolvedValueOnce(access(now + 300_000, "connection-2", "replacement"));
-    const manager = new ChalkSessionAccessManager(provider, () => now);
-    await manager.initialize();
+  it("replaces one expired Join grant before publishing it", async () => {
+    let calls = 0;
+    const harness = accessHarness(() => Effect.sync(() => (calls++ === 0 ? accessGrant(START - 1, "expired", "connection-1") : accessGrant(START + 300_000, "fresh", "connection-1"))));
 
-    const scheduled = manager.refresh("scheduled_refresh", false);
-    const replacement = manager.refresh("media_recovery", true);
-    release(access(now + 300_000, "connection-1", "ordinary"));
+    await expect(harness.initialize()).resolves.toMatchObject({ media: { clientPayload: { connectionId: "connection-1" } } });
+    expect(calls).toBe(2);
 
-    await expect(scheduled).resolves.toMatchObject({ media: { clientPayload: { connectionId: "connection-1" } } });
-    await expect(replacement).resolves.toMatchObject({ media: { clientPayload: { connectionId: "connection-2" } } });
-    expect(provider.mock.calls[2]?.[0]).toMatchObject({ reason: "media_recovery", replaceMediaConnection: true });
-  });
-
-  it("invalidates a pending commit on clear so it cannot overwrite a newer join", async () => {
-    const now = Date.parse("2026-07-21T12:00:00.000Z");
-    const stale = deferred<ParticipantAccess>();
-    const fresh = access(now + 300_000, "connection-fresh", "fresh");
-    const provider = vi.fn().mockReturnValueOnce(stale.promise).mockResolvedValueOnce(fresh);
-    const manager = new ChalkSessionAccessManager(provider, () => now);
-
-    const first = manager.initialize();
-    const invalidated = expect(first).rejects.toThrow("invalidated");
-    manager.clear();
-    await expect(manager.initialize()).resolves.toEqual(fresh);
-    stale.resolve(access(now + 300_000, "connection-stale", "stale"));
-
-    await invalidated;
-    expect(manager.current).toEqual(fresh);
+    await harness.runtime.dispose();
   });
 });
 
-function access(expiresAt: number, connectionId: string, tokenSuffix: string): ParticipantAccess {
+function runtimeFor(provider: Parameters<typeof makeConnectionAccessLayer>[0]) {
+  return ManagedRuntime.make(makeConnectionAccessLayer(provider).pipe(Layer.provideMerge(TestClock.layer({ warningDelay: "1 hour" }))));
+}
+
+function accessHarness(provider: Parameters<typeof makeConnectionAccessLayer>[0]) {
+  const runtime = runtimeFor(provider);
+  const service = runtime.runSync(Effect.service(ConnectionAccessService));
   return {
-    subject: SUBJECT,
-    sync: { token: credential("chalk-sync", tokenSuffix), expiresAt: new Date(expiresAt).toISOString() },
-    media: {
-      token: credential("chalk-media", tokenSuffix),
-      expiresAt: new Date(expiresAt).toISOString(),
-      provider: "cloudflare_sfu",
-      clientPayload: { connectionId, stunServer: "stun:stun.cloudflare.com:3478" },
+    runtime,
+    service,
+    initialize: async () => {
+      await runtime.runPromise(TestClock.setTime(START));
+      return runtime.runPromise(service.initialize());
     },
   };
-}
-
-function credential(audience: "chalk-sync" | "chalk-media", suffix: string) {
-  const encode = (json: string) => btoa(json).replace(/[+/=]/g, (character) => ({ "+": "-", "/": "_", "=": "" })[character] ?? "");
-  return `${encode('{"alg":"EdDSA"}')}.${encode(`{"aud":"${audience}"}`)}.${suffix}` as ParticipantAccess["sync"]["token"] & ParticipantAccess["media"]["token"];
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => (resolve = complete));
-  return { promise, resolve };
 }

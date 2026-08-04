@@ -1,55 +1,59 @@
 # @q9labsai/chalk-react-native
 
-React Native components and native platform adapters for Chalk.
+React Native bindings and native platform adapters for Chalk.
 
-The public surface uses the same session vocabulary as `@q9labsai/chalk-client`:
-`VideoConference`, `ConferenceView`, `PreJoinScreen`, `EndScreen`, and the canonical
-session hooks. Platform implementations stay behind the React Native package
-namespace, so shared exports do not carry a `Native` prefix.
+The framework-agnostic `SpaceClient` owns lifecycle, access refresh, transport,
+recovery, controllers, and the `SpaceSnapshot` store. The current compatibility
+component exports retain `VideoConference`, `ConferenceView`, `PreJoinScreen`,
+`EndScreen`, and the client-backed hooks while both platforms bind to the same
+snapshot shape.
 
-The React Native lobby exposes the same `PreJoinSettings` contract as React,
-with `microphoneEnabled` and `cameraEnabled` fields. Native platform preview
-components keep their internal audio/video state names behind this public
-settings boundary.
+The React Native pre-live UI uses the same `PreJoinSettings` contract as React,
+with `microphoneEnabled` and `cameraEnabled` fields. Native preview components
+keep their platform audio/video state behind this public settings boundary.
 
 ## Embedded whiteboard
 
 `ChalkEmbeddedWhiteboard` hosts Chalk's pinned Excalidraw renderer in
-`react-native-webview`. Pass the canonical `ChalkSessionStore.whiteboard`
-transport only after a participant session is live:
+`react-native-webview`. Pass the `SpaceClient` whiteboard transport only after
+the client has joined a live Episode:
 
 ```tsx
+import type { SpaceClient } from "@q9labsai/chalk-client";
 import { ChalkEmbeddedWhiteboard } from "@q9labsai/chalk-react-native";
 
-const whiteboard = session?.whiteboard;
+function Whiteboard({ client, journey }: { client: SpaceClient; journey: { context: { journeyId: string; traceparent: string } } }) {
+  const snapshot = client.getSnapshot();
+  const transport = client.whiteboard.transport();
 
-return whiteboard ? (
-  <ChalkEmbeddedWhiteboard
-    canClear={session.getSnapshot().whiteboard.canClear}
-    canDraw={session.getSnapshot().whiteboard.canDraw}
-    journeyId={journey.context.journeyId}
-    onError={({ code, recoverable }) => reportWhiteboardError(code, recoverable)}
-    onMetric={({ name, value }) => reportWhiteboardMetric(name, value)}
-    traceparent={journey.context.traceparent}
-    transport={whiteboard}
-  />
-) : null;
+  return transport ? (
+    <ChalkEmbeddedWhiteboard
+      canClear={snapshot.self.can("manageWhiteboard")}
+      canDraw={snapshot.self.can("drawWhiteboard")}
+      journeyId={journey.context.journeyId}
+      onError={({ code, recoverable }) => reportWhiteboardError(code, recoverable)}
+      onMetric={({ name, value }) => reportWhiteboardMetric(name, value)}
+      traceparent={journey.context.traceparent}
+      transport={transport}
+    />
+  ) : null;
+}
 ```
 
 The SDK packages the renderer as Android library assets and an iOS resource
 bundle. The WebView accepts local file navigation only, disables remote
 connections through CSP, and exchanges scene operations through a versioned,
-bounded bridge. File uploads and downloads are performed by the host so
+bounded bridge. File uploads and downloads are performed by the application so
 temporary storage URLs do not cross into the renderer.
 
 The renderer build and bridge version are exact compatibility boundaries. A
 document containing a required element type newer than the bundled renderer
 opens read-only with an “Update required” message; it is never silently
-rewritten. Bridge messages are limited to 32 MiB. Host-owned image transfers
-are limited to 20 MiB and validate MIME declarations, signatures, dimensions,
-decoded-memory cost, and SHA-256 digests before upload. Downloads must declare
-an identity-encoded content length within the same limit before the host
-buffers them.
+rewritten. Bridge messages are limited to 32 MiB. Application-owned image
+transfers are limited to 20 MiB and validate MIME declarations, signatures,
+dimensions, decoded-memory cost, and SHA-256 digests before upload. Downloads
+must declare an identity-encoded content length within the same limit before
+the application buffers them.
 
 The whiteboard transport persists submitted operations for retry and recovers
 incomplete multipart updates with a fresh snapshot. It does not permit new

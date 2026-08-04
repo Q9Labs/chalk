@@ -1,4 +1,4 @@
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkSessionSnapshot, ChalkSessionStore } from "../../client-compat";
 import { useMemo } from "react";
 
 import type { UseChatReturn } from "../../hooks/useChat";
@@ -38,11 +38,11 @@ interface UseConferenceViewCapabilitiesOptions {
   readonly interactions: Pick<UseInteractionsReturn, "reactionEnabled">;
 }
 
-type CapabilityParticipant = Pick<ChalkSessionSnapshot["participants"][number], "participantSessionId" | "role" | "capabilities">;
-type CapabilitySubject = Pick<NonNullable<ChalkSessionSnapshot["subject"]>, "participantSessionId">;
+type CapabilityParticipant = Pick<ChalkSessionSnapshot["participants"][number], "participantId" | "role" | "capabilities">;
+type CapabilitySubject = Pick<NonNullable<ChalkSessionSnapshot["subject"]>, "participantId">;
 
 export function useConferenceViewCapabilities({ features, session, snapshot, chat, interactions }: UseConferenceViewCapabilitiesOptions): ConferenceViewCapabilities {
-  const localParticipant = snapshot.participants.find((participant) => participant.participantSessionId === snapshot.subject?.participantSessionId);
+  const localParticipant = snapshot.participants.find((participant) => participant.participantId === snapshot.subject?.participantId);
   const capabilities = localParticipant?.capabilities ?? [];
   const isHost = localParticipant?.role === "host";
   const canChat = features?.chat !== false && chat.isEnabled;

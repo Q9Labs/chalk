@@ -1,59 +1,59 @@
-import type { ChalkSessionErrorCode, ChalkSessionState } from "./types";
+import type { ConnectionErrorCode, ConnectionState } from "./types";
 
-export type ChalkSessionDiagnosticEventName = "state_changed" | "access_refreshed" | "access_refresh_failed" | "recovery_attempt" | "recovery_succeeded" | "recovery_exhausted" | "cleanup_completed" | "cleanup_unconfirmed" | "join_span";
+export type ConnectionDiagnosticEventName = "state_changed" | "access_refreshed" | "access_refresh_failed" | "recovery_attempt" | "recovery_succeeded" | "recovery_exhausted" | "cleanup_completed" | "cleanup_unconfirmed" | "join_span";
 
-export type ChalkSessionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live";
+export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live";
 
-export type ChalkSessionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
+export type ConnectionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
 
-export type ChalkSessionJoinTraceEvent = ChalkSessionDiagnostic & {
+export type ConnectionJoinTraceEvent = ConnectionDiagnostic & {
   readonly event: "join_span";
-  readonly step: ChalkSessionJoinTraceStep;
+  readonly step: ConnectionJoinTraceStep;
   readonly spanId: string;
   readonly parentSpanId?: string;
-  readonly outcome: ChalkSessionJoinTraceOutcome;
+  readonly outcome: ConnectionJoinTraceOutcome;
 };
 
-export type ChalkSessionJoinTraceSpan = {
+export type ConnectionJoinTraceSpan = {
   readonly spanId: string;
-  readonly end: (input: ChalkSessionJoinTraceEnd) => void;
+  readonly end: (input: ConnectionJoinTraceEnd) => void;
 };
 
-export type ChalkSessionJoinTraceEnd = {
-  readonly state: ChalkSessionState;
+export type ConnectionJoinTraceEnd = {
+  readonly state: ConnectionState;
   readonly epoch: number;
-  readonly outcome: Exclude<ChalkSessionJoinTraceOutcome, "started">;
-  readonly code?: ChalkSessionErrorCode;
+  readonly outcome: Exclude<ConnectionJoinTraceOutcome, "started">;
+  readonly code?: ConnectionErrorCode;
 };
 
-export type ChalkSessionDiagnostic = {
+export type ConnectionDiagnostic = {
   readonly timestamp: number;
-  readonly event: ChalkSessionDiagnosticEventName;
-  readonly state: ChalkSessionState;
+  readonly event: ConnectionDiagnosticEventName;
+  readonly state: ConnectionState;
   readonly epoch: number;
   readonly attempt?: number;
-  readonly code?: ChalkSessionErrorCode;
-  readonly step?: ChalkSessionJoinTraceStep;
+  readonly code?: ConnectionErrorCode;
+  readonly step?: ConnectionJoinTraceStep;
   readonly spanId?: string;
   readonly parentSpanId?: string;
-  readonly outcome?: ChalkSessionJoinTraceOutcome;
+  readonly outcome?: ConnectionJoinTraceOutcome;
   readonly durationMs?: number;
 };
 
-export class ChalkSessionDiagnostics {
+export class ConnectionDiagnostics {
   readonly #limit: number;
   readonly #now: () => number;
-  readonly #onEvent: ((event: ChalkSessionDiagnostic) => void) | undefined;
-  readonly #events: ChalkSessionDiagnostic[] = [];
+  readonly #onEvent: ((event: ConnectionDiagnostic) => void) | undefined;
+  readonly #events: ConnectionDiagnostic[] = [];
   #spanSequence = 0;
 
-  constructor(options: { readonly now: () => number; readonly limit?: number; readonly onEvent?: (event: ChalkSessionDiagnostic) => void }) {
+  constructor(options: { readonly now: () => number; readonly limit?: number; readonly onEvent?: (event: ConnectionDiagnostic) => void }) {
     this.#now = options.now;
     this.#limit = Math.max(1, Math.min(200, options.limit ?? 50));
     this.#onEvent = options.onEvent;
   }
 
-  record(input: Omit<ChalkSessionDiagnostic, "timestamp">): void {
+  record(input: Omit<ConnectionDiagnostic, "timestamp">): void {
     const event = Object.freeze({ timestamp: this.#now(), ...input });
     this.#events.push(event);
     if (this.#events.length > this.#limit) this.#events.splice(0, this.#events.length - this.#limit);
@@ -64,11 +64,11 @@ export class ChalkSessionDiagnostics {
     }
   }
 
-  snapshot(): readonly ChalkSessionDiagnostic[] {
+  snapshot(): readonly ConnectionDiagnostic[] {
     return Object.freeze([...this.#events]);
   }
 
-  startSpan(input: { readonly step: ChalkSessionJoinTraceStep; readonly state: ChalkSessionState; readonly epoch: number; readonly parentSpanId?: string }): ChalkSessionJoinTraceSpan {
+  startSpan(input: { readonly step: ConnectionJoinTraceStep; readonly state: ConnectionState; readonly epoch: number; readonly parentSpanId?: string }): ConnectionJoinTraceSpan {
     const spanId = `join-span-${++this.#spanSequence}`;
     const startedAt = this.#now();
     let ended = false;
@@ -94,7 +94,7 @@ export class ChalkSessionDiagnostics {
     };
   }
 
-  joinTrace(): readonly ChalkSessionJoinTraceEvent[] {
-    return Object.freeze(this.#events.filter((event): event is ChalkSessionJoinTraceEvent => event.event === "join_span"));
+  joinTrace(): readonly ConnectionJoinTraceEvent[] {
+    return Object.freeze(this.#events.filter((event): event is ConnectionJoinTraceEvent => event.event === "join_span"));
   }
 }

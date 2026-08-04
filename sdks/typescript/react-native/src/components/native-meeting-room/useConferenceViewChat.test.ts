@@ -1,4 +1,4 @@
-import type { ChalkChatFileTransport } from "@q9labsai/chalk-client";
+import type { ChalkChatFileTransport } from "../../client-compat";
 import { describe, expect, it, vi } from "vitest";
 
 const linking = vi.hoisted(() => ({ openURL: vi.fn(async () => undefined) }));

@@ -1,7 +1,7 @@
-import type { ChalkSessionSnapshot } from "@q9labsai/chalk-client";
+import type { SpaceSnapshotView } from "../client-compat";
 import { useEffect, useState } from "react";
 
-export function useConferenceDuration(state: ChalkSessionSnapshot["state"]): number {
+export function useConferenceDuration(state: SpaceSnapshotView["connectionStatus"]): number {
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {

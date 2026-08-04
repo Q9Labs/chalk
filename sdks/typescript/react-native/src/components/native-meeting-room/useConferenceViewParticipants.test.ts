@@ -1,5 +1,5 @@
 import type { UseMeetingParticipantsReturn } from "../../hooks/useMeetingParticipants";
-import type { NativeRoomActionCommands } from "../../room-actions/native-room-actions";
+import type { NativeActionCommands } from "../../room-actions/native-room-actions";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("react", () => ({
@@ -15,8 +15,8 @@ describe("useConferenceViewParticipants", () => {
     const session = {
       admitParticipant: vi.fn(async () => undefined),
       denyAdmission: vi.fn(async () => undefined),
-      setParticipantRole: vi.fn(async () => undefined),
-      transferHost: vi.fn(async () => undefined),
+      assignRole: vi.fn(async () => undefined),
+      assignOwner: vi.fn(async () => undefined),
       removeParticipant: vi.fn(async () => undefined),
       muteParticipant: vi.fn(async () => undefined),
       requestUnmute: vi.fn(async () => undefined),
@@ -34,7 +34,7 @@ describe("useConferenceViewParticipants", () => {
       getParticipant: () => undefined,
       updateDisplayName: vi.fn(async () => undefined),
     };
-    const commands: NativeRoomActionCommands = {
+    const commands: NativeActionCommands = {
       sendChatMessage: vi.fn(async () => undefined),
       sendReaction: vi.fn(async () => undefined),
       requestUnmute: vi.fn(async () => undefined),

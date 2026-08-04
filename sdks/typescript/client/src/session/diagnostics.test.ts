@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ChalkSessionDiagnostics } from "./diagnostics";
+import { ConnectionDiagnostics } from "./diagnostics";
 
-describe("ChalkSessionDiagnostics", () => {
+describe("ConnectionDiagnostics", () => {
   it("keeps an immutable bounded timeline and isolates callback failures", () => {
     const onEvent = vi.fn(() => {
       throw new Error("consumer callback");
     });
-    const diagnostics = new ChalkSessionDiagnostics({ now: () => 123, limit: 2, onEvent });
+    const diagnostics = new ConnectionDiagnostics({ now: () => 123, limit: 2, onEvent });
 
     diagnostics.record({ event: "state_changed", state: "joining", epoch: 1 });
     diagnostics.record({ event: "recovery_attempt", state: "reconnecting", epoch: 2, attempt: 1 });
@@ -23,7 +23,7 @@ describe("ChalkSessionDiagnostics", () => {
 
   it("records idempotent parent-linked join spans with bounded durations", () => {
     let now = 100;
-    const diagnostics = new ChalkSessionDiagnostics({ now: () => now });
+    const diagnostics = new ConnectionDiagnostics({ now: () => now });
     const root = diagnostics.startSpan({ step: "join", state: "joining", epoch: 4 });
     const media = diagnostics.startSpan({ step: "start_media", state: "joining", epoch: 4, parentSpanId: root.spanId });
 

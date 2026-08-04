@@ -1,34 +1,35 @@
-import type { ChalkLocalMedia, ChalkParticipant, ChalkParticipantMediaState, ChalkRemoteMedia } from "@q9labsai/chalk-client";
+import type { LocalMedia, Participant, RemoteMedia } from "../client-compat";
 import { describe, expect, it } from "vitest";
 
 import { toAudioParticipants, toListParticipants, toParticipantNames, toVideoParticipants } from "./meeting-room-selectors";
 
-const localMedia: Readonly<Record<"microphone" | "camera" | "screen", ChalkLocalMedia>> = {
+const localMedia: Readonly<Record<"microphone" | "camera" | "screen", LocalMedia>> = {
   microphone: { source: "microphone", state: "enabled", track: null },
   camera: { source: "camera", state: "disabled", track: null },
   screen: { source: "screen", state: "disabled", track: null },
 };
 
-const participant = (overrides: Partial<ChalkParticipant> = {}): ChalkParticipant => ({
-  participantSessionId: "remote",
+const participant = (overrides: Partial<Participant> = {}): Participant => ({
+  participantId: "remote",
   displayName: "Grace",
   handRaised: false,
   role: "participant",
   eligibleRoles: ["participant"],
   capabilities: [],
+  media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
   ...overrides,
 });
 
-const media = (source: ChalkRemoteMedia["source"], track: MediaStreamTrack, participantSessionId = "remote"): ChalkRemoteMedia => ({
-  participantSessionId,
+const media = (source: RemoteMedia["source"], track: MediaStreamTrack, participantId = "remote"): RemoteMedia => ({
+  participantId,
   source,
-  publicationId: `${participantSessionId}-${source}`,
+  publicationId: `${participantId}-${source}`,
   track,
 });
 
 describe("meeting room selectors", () => {
   it("gives the synced local participant name precedence over the fallback display name", () => {
-    const participants = [participant({ participantSessionId: "local", displayName: "Synced Ada" })];
+    const participants = [participant({ participantId: "local", displayName: "Synced Ada" })];
 
     expect(toVideoParticipants(participants, [], "local", "Fallback Ada", localMedia)[0]?.displayName).toBe("Synced Ada");
     expect(toParticipantNames(participants, "local", "Fallback Ada")).toEqual({ local: "Synced Ada" });
@@ -57,13 +58,13 @@ describe("meeting room selectors", () => {
       { id: "inactive", displayName: "Inactive", isMuted: false, isVideoEnabled: true },
       { id: "unknown", displayName: "Unknown", isMuted: true, isVideoEnabled: false },
     ];
-    const participantMedia: Readonly<Record<string, ChalkParticipantMediaState>> = {
+    const participantMedia: Readonly<Record<string, Participant["media"]>> = {
       active: { microphone: "active", camera: "active", screenShare: "unknown" },
       inactive: { microphone: "inactive", camera: "inactive", screenShare: "unknown" },
       unknown: { microphone: "unknown", camera: "unknown", screenShare: "unknown" },
     };
 
-    expect(toListParticipants(tiles, [participant({ participantSessionId: "active" }), participant({ participantSessionId: "inactive" }), participant({ participantSessionId: "unknown" })], participantMedia)).toEqual([
+    expect(toListParticipants(tiles, [participant({ participantId: "active" }), participant({ participantId: "inactive" }), participant({ participantId: "unknown" })], participantMedia)).toEqual([
       expect.objectContaining({ id: "active", isMuted: false, isVideoEnabled: true }),
       expect.objectContaining({ id: "inactive", isMuted: true, isVideoEnabled: false }),
       expect.objectContaining({ id: "unknown", isMuted: true, isVideoEnabled: false }),

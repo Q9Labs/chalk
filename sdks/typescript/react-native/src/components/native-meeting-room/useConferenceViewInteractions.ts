@@ -1,4 +1,4 @@
-import type { ChalkReaction } from "@q9labsai/chalk-client";
+import type { ChalkReaction } from "../../client-compat";
 
 import type { UseInteractionsReturn } from "../../hooks/useInteractions";
 import type { NativeReaction } from "../../ui/native-types";

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkSessionStore } from "../client-compat";
 import { describe, expect, it, vi } from "vitest";
 
 import { renderHook, waitFor } from "./test-renderer";

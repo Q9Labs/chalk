@@ -1,4 +1,4 @@
-import type { V1MediaPublication, V1MediaSource } from "../sync/v1-types";
+import type { MediaPublication, MediaSource } from "./plane";
 
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
@@ -15,13 +15,13 @@ export type CloudflareSFUTrackRequest = {
   readonly mid?: string;
   readonly trackName: string;
   readonly sessionId?: string;
-  readonly source?: V1MediaSource;
+  readonly source?: MediaSource;
   readonly publicationId?: string;
 };
 
 export type CloudflareSFUCloseTrackRequest = {
   readonly mid: string;
-  readonly source: V1MediaSource;
+  readonly source: MediaSource;
   readonly publicationId: string;
 };
 
@@ -32,8 +32,8 @@ export type CloudflareSFUTracksResponse = {
 };
 
 export type CloudflareSFUPublication = {
-  readonly participantSessionId: string;
-  readonly source: V1MediaSource;
+  readonly participantId: string;
+  readonly source: MediaSource;
   readonly publicationId: string;
 };
 
@@ -54,7 +54,7 @@ export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
   readonly track: MediaStreamTrack;
 };
 
-export type CloudflareSFULocalTrack = Pick<V1MediaPublication, "source" | "enabled" | "publicationId"> & {
+export type CloudflareSFULocalTrack = Pick<MediaPublication, "source" | "enabled" | "publicationId"> & {
   readonly track: MediaStreamTrack;
 };
 
@@ -80,7 +80,7 @@ export type CloudflareSFUSnapshot = {
 
 export type CloudflareSFUClientOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;
-  readonly participantSessionId: string;
+  readonly participantId: string;
   readonly transport: CloudflareSFUSignalingTransport;
   readonly pollIntervalMs?: number;
   readonly onError?: (error: unknown) => void;
@@ -103,15 +103,9 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly bearerToken?: string;
   readonly tenantId: string;
   /** Canonical Space/Episode/Participant route identifiers. */
-  readonly spaceId?: string;
-  readonly episodeId?: string;
-  readonly participantId?: string;
-  /** @deprecated Use spaceId, episodeId, and participantId. */
-  readonly roomId?: string;
-  /** @deprecated Use episodeId. */
-  readonly sessionId?: string;
-  /** @deprecated Use participantId. */
-  readonly participantSessionId?: string;
+  readonly spaceId: string;
+  readonly episodeId: string;
+  readonly participantId: string;
   readonly fetch?: typeof globalThis.fetch;
 };
 

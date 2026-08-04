@@ -11,6 +11,9 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "paths": {
+      "@q9labsai/chalk-client": ["../client/dist/index.d.ts"],
+      "@q9labsai/chalk-client/effect": ["../client/dist/effect.d.ts"],
+      "@q9labsai/chalk-client/telemetry": ["../client/dist/telemetry/index.d.ts"],
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.native.ts"],
       "@q9labsai/facehash/react-native": ["../../../packages/facehash/src/index.native.ts"]
     }

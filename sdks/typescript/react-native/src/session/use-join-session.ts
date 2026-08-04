@@ -1,4 +1,4 @@
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkSessionSnapshot, ChalkSessionStore } from "../client-compat";
 import { useEffect, useRef } from "react";
 
 export type JoinSessionOptions = {

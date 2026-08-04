@@ -7,7 +7,7 @@ export interface UseConnectionReturn {
   readonly isJoining: boolean;
   readonly join: () => Promise<void>;
   readonly leave: () => Promise<void>;
-  readonly endSession: () => Promise<void>;
+  readonly endEpisode: () => Promise<void>;
 }
 
 export function useConnection(): UseConnectionReturn {
@@ -19,6 +19,6 @@ export function useConnection(): UseConnectionReturn {
     isJoining: snapshot.state === "joining",
     join: session.join,
     leave: session.leave,
-    endSession: session.endSession,
+    endEpisode: session.endEpisode,
   };
 }

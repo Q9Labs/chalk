@@ -39,13 +39,13 @@ export function useScreenShare(): UseScreenShareReturn {
       isActive: isLocalSharing || remote !== null,
       isStarting: local.state === "requesting",
       isLocalSharing,
-      sharerParticipantId: isLocalSharing ? (snapshot.subject?.participantSessionId ?? null) : (remote?.participantSessionId ?? null),
+      sharerParticipantId: isLocalSharing ? (snapshot.subject?.participantId ?? null) : (remote?.participantId ?? null),
       videoTrack: isLocalSharing ? local.track : (remote?.track ?? null),
       audioTrack: null,
       start,
       stop,
       toggle,
     }),
-    [isLocalSharing, local.state, local.track, remote, snapshot.subject?.participantSessionId, start, stop, toggle],
+    [isLocalSharing, local.state, local.track, remote, snapshot.subject?.participantId, start, stop, toggle],
   );
 }

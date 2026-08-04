@@ -12,8 +12,8 @@ describe("useConferenceViewCapabilities", () => {
       features: { screenShare: false, whiteboard: false },
       session: { whiteboard: null },
       snapshot: {
-        subject: { participantSessionId: "local" },
-        participants: [{ participantSessionId: "local", role: "host", capabilities: ["manageAdmission", "removeParticipant"] }],
+        subject: { participantId: "local" },
+        participants: [{ participantId: "local", role: "host", capabilities: ["manageAdmission", "removeParticipant"] }],
       },
       chat: { isEnabled: true },
       interactions: { reactionEnabled: true },

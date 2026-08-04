@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkSessionStore, SpaceClientStore } from "../client-compat";
 import { describe, expect, it, vi } from "vitest";
 
-import { renderHook } from "./test-renderer";
+import { renderHook, waitFor } from "./test-renderer";
 import { useLeaveOnUnmount } from "./use-leave-on-unmount";
 
 describe("useLeaveOnUnmount", () => {
@@ -21,5 +21,18 @@ describe("useLeaveOnUnmount", () => {
     expect(onUnmount).toHaveBeenCalledOnce();
     expect(firstLeave).not.toHaveBeenCalled();
     expect(secondLeave).toHaveBeenCalledOnce();
+  });
+
+  it("disposes after the best-effort leave settles", async () => {
+    const leave = vi.fn(() => Promise.reject(new Error("leave failed")));
+    const dispose = vi.fn();
+    const store = { leave, dispose } satisfies Pick<SpaceClientStore, "leave"> & { readonly dispose: () => void };
+    const { unmount } = renderHook(() => useLeaveOnUnmount(store, () => undefined));
+
+    unmount();
+
+    await waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+    expect(leave).toHaveBeenCalledOnce();
+    expect(leave.mock.invocationCallOrder[0]).toBeLessThan(dispose.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY);
   });
 });

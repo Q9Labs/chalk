@@ -278,12 +278,12 @@ async function baseState() {
     status: "active",
     admissionPolicy: "open",
     hostExitPolicy: "require_transfer",
-    hostParticipantSessionId: null,
+    hostParticipantId: null,
     deadlineAtMs: 900_000,
     deadlineGeneration: 1,
     roleCapabilities,
     recording: null,
-    participants: [{ participantSessionId: ids.participant, displayName: "Owner", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: roleCapabilities.owner }],
+    participants: [{ participantId: ids.participant, displayName: "Owner", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: ["owner"], capabilities: roleCapabilities.owner }],
     admissionRequests: [],
   };
   return { ...state, stateDigest: await computeV1StateDigest(state) };
@@ -306,7 +306,7 @@ function snapshotFor(state) {
     role_capabilities: state.roleCapabilities,
     recording: null,
     participants: state.participants.map((participant) => ({
-      participant_id: participant.participantSessionId,
+      participant_id: participant.participantId,
       display_name: participant.displayName,
       hand_raised: participant.handRaised,
       admission_revision: participant.admissionRevision,

@@ -1,8 +1,8 @@
-import type { ChalkIncomingMediaRequest } from "@q9labsai/chalk-client";
+import type { IncomingMediaRequest } from "../../client-compat";
 import type React from "react";
 
 export interface MediaRequestDialogProps {
-  readonly request: ChalkIncomingMediaRequest;
+  readonly request: IncomingMediaRequest;
   readonly onDecline: () => void;
   readonly onAllow: () => void;
 }

@@ -16,12 +16,12 @@ export function useRoom(): UseRoomReturn {
   return useMemo(() => {
     const host = snapshot.participants.find((participant) => participant.role === "host");
     return {
-      roomId: snapshot.subject?.roomId ?? null,
+      roomId: snapshot.subject?.episodeId ?? null,
       roomName: null,
       status: sessionStatus(snapshot.state),
       isConnected: snapshot.state === "live",
       isJoining: snapshot.state === "joining",
-      hostId: host?.participantSessionId ?? null,
+      hostId: host?.participantId ?? null,
     };
   }, [snapshot]);
 }

@@ -1,4 +1,4 @@
-import type { ChalkChatAttachment, ChalkSessionSnapshot, ChalkSessionStore, ConferencePhase } from "@q9labsai/chalk-client";
+import type { ChalkChatAttachment, ChalkSessionSnapshot, ChalkSessionStore, NativeLifecyclePhase } from "../client-compat";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import type { TelemetryJourney } from "../telemetry";
@@ -8,7 +8,7 @@ import { useMeetingParticipants } from "../hooks/useMeetingParticipants";
 import { useAutoJoin } from "../session/use-auto-join";
 import { useConferencePhase } from "../session/use-conference-phase";
 import { useJoinSession } from "../session/use-join-session";
-import { useLeaveOnUnmount } from "../session/use-leave-on-unmount";
+import { leaveAndDispose, useLeaveOnUnmount } from "../session/use-leave-on-unmount";
 import { useVideoConferenceDiagnostics } from "../session/use-video-conference-diagnostics";
 import { isIosSimulator } from "../utils/ios-simulator";
 import { EndScreen, type MeetingEndData } from "./EndScreen";
@@ -99,7 +99,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
       try {
         const nextSession = await props.createSession(normalized);
         if (attempt !== creationAttempt.current) {
-          await nextSession.leave().catch(() => undefined);
+          await leaveAndDispose(nextSession);
           return;
         }
         setSession(nextSession);
@@ -121,7 +121,7 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
 
   const handleJoinFailure = useCallback(
     (error: Error) => {
-      void session?.leave().catch(() => undefined);
+      if (session) void leaveAndDispose(session);
       setSession((current) => (current === session ? null : current));
       props.onSessionChange?.(null);
       setJoinError(error.message);
@@ -157,6 +157,8 @@ export function VideoConference(props: VideoConferenceProps): React.JSX.Element 
         data={endData}
         onGoHome={() => props.onClose?.()}
         onRejoin={() => {
+          const store = session;
+          store?.dispose?.();
           setSession(null);
           props.onSessionChange?.(null);
           setHasAskedToJoin(false);
@@ -216,19 +218,16 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   });
 
   const finish = useCallback(async () => {
-    try {
-      await session.leave();
-    } finally {
-      const data = meetingEndData(props, joinedAt.current, participants.participantCount, snapshot.chat.messages.length);
-      props.setEndData(data);
-      props.setHasAskedToLeave(true);
-      props.onSessionChange?.(null);
-      props.onLeave?.();
-      props.onEnd?.(data);
-    }
+    await leaveAndDispose(session);
+    const data = meetingEndData(props, joinedAt.current, participants.participantCount, snapshot.chat.messages.length);
+    props.setEndData(data);
+    props.setHasAskedToLeave(true);
+    props.onSessionChange?.(null);
+    props.onLeave?.();
+    props.onEnd?.(data);
   }, [participants.participantCount, props.onEnd, props.onLeave, props.onSessionChange, props.roomId, props.roomName, props.setEndData, props.setHasAskedToLeave, session, snapshot.chat.messages.length]);
   const endForAll = useCallback(async () => {
-    await session.endSession();
+    await session.endEpisode();
     await finish();
   }, [finish, session]);
 
@@ -245,7 +244,7 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   );
 }
 
-function toVideoConferencePhase(phase: ConferencePhase): VideoConferencePhase {
+function toVideoConferencePhase(phase: NativeLifecyclePhase): VideoConferencePhase {
   switch (phase) {
     case "prejoin":
       return "lobby";

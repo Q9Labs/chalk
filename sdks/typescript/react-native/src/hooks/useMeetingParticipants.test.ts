@@ -1,17 +1,16 @@
-import type { ChalkSessionSnapshot } from "@q9labsai/chalk-client";
+import type { NativeSpaceSnapshot } from "../client-compat";
 import { describe, expect, it, vi } from "vitest";
 
 const setDisplayName = vi.fn(async () => undefined);
 const snapshot = {
-  subject: { participantSessionId: "local" },
+  subject: { episodeId: "episode-1", participantId: "local", participantGeneration: 1 },
   participants: [
-    { participantSessionId: "local", displayName: "Local", role: "participant" },
-    { participantSessionId: "remote", displayName: "Remote", role: "participant" },
+    { participantId: "local", displayName: "Local", role: "participant", eligibleRoles: ["participant"], capabilities: [], handRaised: false, media: { microphone: "active", camera: "inactive", screenShare: "inactive" } },
+    { participantId: "remote", displayName: "Remote", role: "participant", eligibleRoles: ["participant"], capabilities: [], handRaised: false, media: { microphone: "active", camera: "inactive", screenShare: "inactive" } },
   ],
-  participantMedia: { remote: { microphone: "active", camera: "inactive" } },
   localMedia: { microphone: { state: "enabled", track: null }, camera: { state: "disabled", track: null }, screen: { state: "disabled", track: null } },
   remoteMedia: [],
-} as unknown as ChalkSessionSnapshot;
+} as unknown as NativeSpaceSnapshot;
 
 vi.mock("react", () => ({
   useCallback: <T>(callback: T) => callback,

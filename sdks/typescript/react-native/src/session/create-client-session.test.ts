@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createClientSession } from "./create-client-session";
+import { connectionAccessFor, createClientSession } from "./create-client-session";
 
 const clientSessionId = "c".repeat(43);
 const inviteToken = "i".repeat(43);
 
 describe("createClientSession", () => {
-  it("creates a client session and supplies contextual participant access", async () => {
+  it("keeps public access contextual while media recovery replaces its connection", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
@@ -17,20 +17,22 @@ describe("createClientSession", () => {
           syncURL: "wss://sync.chalkmeet.com/v1/sync",
         }),
       )
+      .mockResolvedValueOnce(json(participantAccess()))
+      .mockResolvedValueOnce(json(participantAccess()))
       .mockResolvedValueOnce(json(participantAccess()));
-    const session = await createClientSession({
+    const client = await createClientSession({
       brokerBaseURL: "https://chalkmeet.com/local-chalk/",
       displayName: "Ada",
       fetch,
       telemetry: telemetry(),
     });
 
-    expect(session.meetingLink).toBe(`https://chalkmeet.com/#meeting=${inviteToken}`);
-    await session.access({
-      reason: "media_recovery",
-      replaceMediaConnection: true,
-      currentMediaToken: mediaToken("old"),
-    });
+    expect(client.meetingLink).toBe(`https://chalkmeet.com/#meeting=${inviteToken}`);
+    await client.access({ space: "design-review", reason: "retry" });
+    const connectionAccess = connectionAccessFor(client.access);
+    expect(connectionAccess).toBeTypeOf("function");
+    await connectionAccess?.({ reason: "media_recovery", replaceMediaConnection: true });
+    await connectionAccess?.({ reason: "access_retry", replaceMediaConnection: false, currentMediaToken: mediaToken("current") as never });
 
     expect(request(fetch, 0)).toMatchObject({
       url: "https://chalkmeet.com/local-chalk/client-session",
@@ -38,7 +40,15 @@ describe("createClientSession", () => {
     });
     expect(request(fetch, 1)).toMatchObject({
       url: "https://chalkmeet.com/local-chalk/participant-access",
-      body: { clientSessionId, currentMediaToken: mediaToken("old"), inviteToken, replaceMediaConnection: true },
+      body: { clientSessionId, inviteToken, replaceMediaConnection: false },
+    });
+    expect(request(fetch, 2)).toMatchObject({
+      url: "https://chalkmeet.com/local-chalk/participant-access",
+      body: { clientSessionId, inviteToken, replaceMediaConnection: true },
+    });
+    expect(request(fetch, 3)).toMatchObject({
+      url: "https://chalkmeet.com/local-chalk/participant-access",
+      body: { clientSessionId, currentMediaToken: mediaToken("current"), inviteToken, replaceMediaConnection: false },
     });
     expect((fetch.mock.calls[0]?.[1]?.headers as Headers).get("x-chalk-journey-id")).toBe("journey-1");
   });
@@ -56,13 +66,13 @@ describe("createClientSession", () => {
       )
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    const session = await createClientSession({
+    const client = await createClientSession({
       brokerBaseURL: "https://chalkmeet.com/local-chalk",
       credential: { clientSessionId, inviteToken },
       displayName: "Ada",
       fetch,
     });
-    await session.cleanup();
+    await client.cleanup();
 
     expect(request(fetch, 0).body).toEqual({ clientSessionId, displayName: "Ada", inviteToken });
     expect(request(fetch, 1)).toMatchObject({
@@ -105,18 +115,18 @@ function json(body: unknown, status = 201): Response {
 function participantAccess() {
   return {
     subject: {
-      tenantId: "tenant",
-      roomId: "room",
-      sessionId: "session",
-      participantSessionId: "participant",
-      participantGeneration: 1,
+      tenant_id: "tenant",
+      space_id: "space",
+      episode_id: "episode",
+      participant_id: "participant",
+      participant_generation: 1,
     },
-    sync: { token: syncToken("sync"), expiresAt: "2026-07-30T18:00:00.000Z" },
+    sync: { token: syncToken("sync"), expires_at: "2026-07-30T18:00:00.000Z" },
     media: {
       token: mediaToken("media"),
-      expiresAt: "2026-07-30T18:00:00.000Z",
+      expires_at: "2026-07-30T18:00:00.000Z",
       provider: "cloudflare_sfu",
-      clientPayload: { connectionId: "connection", stunServer: "stun:stun.cloudflare.com:3478" },
+      client_payload: { connectionId: "connection", stunServer: "stun:stun.cloudflare.com:3478" },
     },
   };
 }

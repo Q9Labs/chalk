@@ -1,4 +1,4 @@
-import type { ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { ChalkSessionStore } from "../client-compat";
 import type { ReactNode } from "react";
 import { createContext, useContext, useMemo } from "react";
 

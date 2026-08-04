@@ -1,30 +1,29 @@
-import type { ChalkSessionSnapshot, ChalkSessionStore } from "@q9labsai/chalk-client";
+import type { NativeSpaceSnapshot, SpaceClientStore } from "../client-compat";
 import { describe, expect, it, vi } from "vitest";
 
-import { createNativeMediaRequestPrompt, createNativeRoomActionCommands, projectNativeRoomActions } from "./native-room-actions";
+import { createNativeActionCommands, createNativeMediaRequestPrompt, projectNativeActions } from "./native-room-actions";
 
 describe("native room-actions bridge", () => {
   it("projects only negotiated chat and reactions into native view models", () => {
-    const projection = projectNativeRoomActions(
+    const projection = projectNativeActions(
       snapshot({
         subject: {
-          tenantId: "tenant-1",
-          roomId: "room-1",
-          sessionId: "session-1",
-          participantSessionId: "participant-local",
+          episodeId: "episode-1",
+          participantId: "participant-local",
           participantGeneration: 2,
         },
         participants: [
           {
-            participantSessionId: "participant-2",
+            participantId: "participant-2",
             displayName: "Grace",
             handRaised: false,
             role: "participant",
             eligibleRoles: ["participant"],
             capabilities: [],
+            media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
           },
         ],
-        roomActions: { phase: "healthy", version: 2, capabilities: ["sendChat", "sendReaction"], error: null },
+        actions: { phase: "healthy", version: 1, capabilities: ["sendChat", "sendReaction"], error: null },
         chat: {
           status: "ready",
           messages: [
@@ -32,7 +31,7 @@ describe("native room-actions bridge", () => {
               messageId: "message-1",
               clientMessageId: "client-1",
               sequence: "1",
-              participantSessionId: "participant-1",
+              participantId: "participant-1",
               displayName: "Ada",
               text: "Hello",
               createdAt: "2026-07-29T20:00:00.000Z",
@@ -59,20 +58,20 @@ describe("native room-actions bridge", () => {
           unreadCount: 1,
           readReceipts: [
             {
-              participantSessionId: "participant-2",
-              participantSessionGeneration: 1,
+              participantId: "participant-2",
+              participantGeneration: 1,
               readThroughSequence: "10",
               readAt: "2026-07-29T20:01:00.000Z",
             },
             {
-              participantSessionId: "participant-local",
-              participantSessionGeneration: 2,
+              participantId: "participant-local",
+              participantGeneration: 2,
               readThroughSequence: "10",
               readAt: "2026-07-29T20:01:00.000Z",
             },
             {
-              participantSessionId: "participant-1",
-              participantSessionGeneration: 1,
+              participantId: "participant-1",
+              participantGeneration: 1,
               readThroughSequence: "10",
               readAt: "2026-07-29T20:01:00.000Z",
             },
@@ -83,7 +82,7 @@ describe("native room-actions bridge", () => {
         reactions: [
           {
             eventId: "reaction-1",
-            participantSessionId: "participant-1",
+            participantId: "participant-1",
             displayName: "Ada",
             reaction: "🎉",
             occurredAt: "2026-07-29T20:00:00.000Z",
@@ -104,7 +103,7 @@ describe("native room-actions bridge", () => {
             senderId: "participant-1",
             content: "Hello",
             attachments: [expect.objectContaining({ attachmentId: "attachment-image", fileName: "diagram.png" }), expect.objectContaining({ attachmentId: "attachment-file", fileName: "notes.pdf" })],
-            readBy: [expect.objectContaining({ participantSessionId: "participant-2", displayName: "Grace" })],
+            readBy: [expect.objectContaining({ participantId: "participant-2", displayName: "Grace" })],
           }),
         ],
         reactions: [expect.objectContaining({ id: "reaction-1", emoji: "🎉", participantName: "Ada" })],
@@ -114,7 +113,7 @@ describe("native room-actions bridge", () => {
 
   it("delegates chat, reaction, and directed media actions to the injected canonical store", async () => {
     const store = actionStore();
-    const commands = createNativeRoomActionCommands(store);
+    const commands = createNativeActionCommands(store);
 
     await commands.sendChatMessage("Hello");
     await commands.sendReaction("👍");
@@ -135,13 +134,13 @@ describe("native room-actions bridge", () => {
 
   it("maps incoming prompt buttons to accept and decline without legacy fallbacks", async () => {
     const store = actionStore();
-    const commands = createNativeRoomActionCommands(store);
+    const commands = createNativeActionCommands(store);
     const reportFailure = vi.fn();
     const prompt = createNativeMediaRequestPrompt(
       {
         requestId: "request-1",
         kind: "start_camera",
-        actorParticipantSessionId: "host-1",
+        actorParticipantId: "host-1",
         actorDisplayName: "Grace",
         expiresAt: "2026-07-29T20:01:00.000Z",
       },
@@ -159,7 +158,7 @@ describe("native room-actions bridge", () => {
   });
 });
 
-function actionStore(): ChalkSessionStore {
+function actionStore(): SpaceClientStore {
   return {
     sendChatMessage: vi.fn(() => Promise.resolve()),
     sendReaction: vi.fn(() => Promise.resolve()),
@@ -169,13 +168,13 @@ function actionStore(): ChalkSessionStore {
     stopParticipantCamera: vi.fn(() => Promise.resolve()),
     removeParticipant: vi.fn(() => Promise.resolve()),
     acceptMediaRequest: vi.fn(() => Promise.resolve()),
-    declineMediaRequest: vi.fn(),
-  } as unknown as ChalkSessionStore;
+    declineMediaRequest: vi.fn(() => Promise.resolve()),
+  } as unknown as SpaceClientStore;
 }
 
-function snapshot(overrides: Partial<ChalkSessionSnapshot>): ChalkSessionSnapshot {
+function snapshot(overrides: Partial<NativeSpaceSnapshot>): NativeSpaceSnapshot {
   return {
-    roomActions: { phase: "disabled", version: null, capabilities: [], error: null },
+    actions: { phase: "disabled", version: null, capabilities: [], error: null },
     chat: {
       status: "idle",
       messages: [],
@@ -191,5 +190,5 @@ function snapshot(overrides: Partial<ChalkSessionSnapshot>): ChalkSessionSnapsho
     reactions: [],
     incomingMediaRequests: [],
     ...overrides,
-  } as ChalkSessionSnapshot;
+  } as NativeSpaceSnapshot;
 }

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const chalkSession = vi.hoisted(() => vi.fn(function ChalkSession() {}));
+const createSpaceClientForPlatform = vi.hoisted(() => vi.fn());
+const addAppStateListener = vi.hoisted(() => vi.fn());
+const resolveConnectionAccess = vi.hoisted(() => vi.fn());
 
 vi.mock("@q9labsai/chalk-client", () => ({
   AsyncStorageV1PendingTargetStore: vi.fn(),
-  ChalkSession: chalkSession,
   CloudflareSFUClient: vi.fn(),
   createChalkChatFileHttpTransport: vi.fn(),
   createChalkWhiteboardV1Client: vi.fn(),
@@ -14,6 +15,8 @@ vi.mock("@q9labsai/chalk-client", () => ({
   createReactNativeWebSocketFactory: vi.fn(() => ({})),
   createV1SyncClient: vi.fn(),
 }));
+vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform }));
+vi.mock("./create-client-session", () => ({ connectionAccessFor: resolveConnectionAccess }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({
   RTCPeerConnection: vi.fn(),
   mediaDevices: {
@@ -23,28 +26,53 @@ vi.mock("@cloudflare/react-native-webrtc", () => ({
 }));
 vi.mock("react-native", () => ({
   AppState: {
-    addEventListener: vi.fn(),
+    addEventListener: addAppStateListener,
     currentState: "active",
   },
 }));
 
-import { createChalkSession } from "./create-chalk-session";
+import { createChalkSession as createNativeClient } from "./create-chalk-session";
 
-describe("createChalkSession", () => {
+describe("native client creation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    createSpaceClientForPlatform.mockReturnValue(spaceClient());
+    addAppStateListener.mockReturnValue({ remove: vi.fn() });
+    resolveConnectionAccess.mockReturnValue(undefined);
   });
 
   it("allows multiple native WebSocket attempts before Sync startup expires", () => {
-    createChalkSession(options());
+    createNativeClient(options());
 
-    expect(chalkSession).toHaveBeenCalledWith(expect.objectContaining({ syncStartupTimeoutMs: 30_000 }));
+    expect(createSpaceClientForPlatform.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ syncStartupTimeoutMs: 30_000 }));
   });
 
   it("preserves an explicit consumer Sync startup budget", () => {
-    createChalkSession({ ...options(), syncStartupTimeoutMs: 45_000 });
+    createNativeClient({ ...options(), syncStartupTimeoutMs: 45_000 });
 
-    expect(chalkSession).toHaveBeenCalledWith(expect.objectContaining({ syncStartupTimeoutMs: 45_000 }));
+    expect(createSpaceClientForPlatform.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ syncStartupTimeoutMs: 45_000 }));
+  });
+
+  it("keeps arbitrary consumer access on the closed public context", () => {
+    const getAccess = vi.fn();
+    createNativeClient({ ...options(), getAccess });
+
+    const platform = createSpaceClientForPlatform.mock.calls[0]?.[1] as { readonly connectionAccess?: unknown };
+    expect(resolveConnectionAccess).toHaveBeenCalledWith(getAccess);
+    expect(platform.connectionAccess).toBeUndefined();
+  });
+
+  it("passes broker recovery requests through the private bridge", async () => {
+    const privateAccess = vi.fn().mockResolvedValue({ marker: "opaque-grant" });
+    resolveConnectionAccess.mockReturnValue(privateAccess);
+    createNativeClient(options());
+
+    const platform = createSpaceClientForPlatform.mock.calls[0]?.[1] as {
+      readonly connectionAccess: (request: { readonly reason: "media_recovery"; readonly replaceMediaConnection: true }) => Promise<unknown>;
+    };
+    const request = { reason: "media_recovery", replaceMediaConnection: true } as const;
+    await platform.connectionAccess(request);
+    expect(privateAccess).toHaveBeenCalledWith(request);
   });
 
   it("forwards join spans into the correlated diagnostic timeline", () => {
@@ -56,9 +84,9 @@ describe("createChalkSession", () => {
       recordSyncFrame: vi.fn(),
     };
 
-    createChalkSession({ ...options(), telemetry: journey });
-    const sessionOptions = chalkSession.mock.calls[0]?.[0] as { readonly diagnostics: { readonly onEvent: (event: unknown) => void } };
-    sessionOptions.diagnostics.onEvent({
+    createNativeClient({ ...options(), telemetry: journey });
+    const platform = createSpaceClientForPlatform.mock.calls[0]?.[1] as { readonly onConnectionDiagnostic: (event: unknown) => void };
+    platform.onConnectionDiagnostic({
       event: "join_span",
       state: "live",
       epoch: 2,
@@ -86,6 +114,25 @@ describe("createChalkSession", () => {
       },
     });
   });
+
+  it("revalidates access when the app returns to the foreground", () => {
+    createNativeClient(options());
+    const platform = createSpaceClientForPlatform.mock.calls[0]?.[1] as {
+      readonly dependencies: { readonly subscribeForeground: (listener: () => void) => () => void };
+    };
+
+    const refresh = vi.fn();
+    const unsubscribe = platform.dependencies.subscribeForeground(refresh);
+    const stateListener = addAppStateListener.mock.calls[0]?.[1] as (state: string) => void;
+
+    stateListener("background");
+    expect(refresh).not.toHaveBeenCalled();
+    stateListener("active");
+    expect(refresh).toHaveBeenCalledOnce();
+
+    unsubscribe();
+    expect(addAppStateListener.mock.results[0]?.value.remove).toHaveBeenCalledOnce();
+  });
 });
 
 function options() {
@@ -93,5 +140,37 @@ function options() {
     access: vi.fn(),
     apiBaseURL: "https://api.chalk.test",
     syncURL: "wss://sync.chalk.test/v1/sync",
+  };
+}
+
+function spaceClient() {
+  const snapshot = {
+    connection: { status: "idle", episode: null, lastError: null },
+    self: { participantId: null, displayName: null, role: null, capabilities: [], handRaised: false, can: () => false },
+    participants: { roster: [], admissionQueue: [] },
+    media: {
+      devices: { microphones: [], cameras: [], speakers: [] },
+      selection: { microphone: null, camera: null, speaker: null },
+      local: {
+        microphone: { source: "microphone", state: "unavailable", track: null },
+        camera: { source: "camera", state: "unavailable", track: null },
+        screen: { source: "screen", state: "unavailable", track: null },
+      },
+      remote: [],
+      screenShare: { source: "screen", state: "unavailable", track: null },
+      incomingRequests: [],
+    },
+    chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
+    reactions: { active: [] },
+    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, error: null } },
+  } as const;
+  return {
+    media: {},
+    chat: { files: {} },
+    participants: {},
+    reactions: {},
+    whiteboard: { transport: () => null },
+    getSnapshot: () => snapshot,
+    subscribe: () => () => undefined,
   };
 }

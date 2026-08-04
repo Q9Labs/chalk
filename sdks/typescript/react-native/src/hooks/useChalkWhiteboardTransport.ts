@@ -1,4 +1,4 @@
-import type { ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
+import type { ChalkWhiteboardV1Transport } from "../client-compat";
 
 import { useChalkSession } from "../context/chalk-provider";
 
