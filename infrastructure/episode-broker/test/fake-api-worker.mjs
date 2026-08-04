@@ -1,5 +1,5 @@
 const calls = [];
-let sessionEndCalls = 0;
+let episodeEndCalls = 0;
 
 export default {
   async fetch(request) {
@@ -15,8 +15,8 @@ export default {
     if (url.pathname.endsWith("/access-grant")) return response(201, access(url.pathname.split("/").at(-2)));
     if (url.pathname.endsWith("/remove")) return response(202, { external_operation: { id: "operation-1" }, participant: { ...participant(url.pathname.split("/").at(-2)), status: "removing" } });
     if (url.pathname.endsWith("/end")) {
-      sessionEndCalls += 1;
-      if (sessionEndCalls === 2) return response(409, { error: { code: "episode_not_active" } });
+      episodeEndCalls += 1;
+      if (episodeEndCalls === 2) return response(409, { error: { code: "episode_not_active" } });
       return response(202, { external_operation: { id: "operation-1" }, episode_id: "episode-1", status: "ending" });
     }
     return response(404, { error: { code: "not_found" } });
@@ -32,13 +32,19 @@ function lifecycle(participantId) {
 }
 
 function participant(participantId) {
-  return { generation: 1, id: participantId, space_id: "test-room", episode_id: "episode-1", status: "active", tenant_id: "test-tenant" };
+  return { generation: 1, id: participantId, space_id: "test-space", episode_id: "episode-1", status: "active", tenant_id: "test-tenant" };
 }
 
 function access(participantId) {
+  const expiresAt = new Date(Date.now() + 300_000).toISOString();
   return {
-    subject: { tenant_id: "test-tenant", space_id: "test-room", episode_id: "episode-1", participant_id: participantId, participant_generation: 1 },
-    sync: { token: "sync-token", expires_at: "2026-07-22T18:00:00Z" },
-    media: { token: "media-token", expires_at: "2026-07-22T18:00:00Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:example.test" } },
+    subject: { tenant_id: "test-tenant", space_id: "test-space", episode_id: "episode-1", participant_id: participantId, participant_generation: 1 },
+    sync: { token: credential("chalk-sync"), expires_at: expiresAt },
+    media: { token: credential("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:example.test" } },
   };
+}
+
+function credential(audience) {
+  const encode = (json) => btoa(json).replace(/[+/=]/g, (character) => ({ "+": "-", "/": "_", "=": "" })[character] ?? "");
+  return `${encode('{"alg":"EdDSA"}')}.${encode(`{"aud":"${audience}"}`)}.signature`;
 }

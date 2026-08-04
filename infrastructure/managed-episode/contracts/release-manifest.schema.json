@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://chalkmeet.com/schemas/managed-meeting-release-manifest-v1.json",
+  "$id": "https://chalkmeet.com/schemas/managed-episode-release-manifest-v1.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "release_id", "generated_at", "source_revision", "source_tree_state", "architectures", "images", "database_compatibility", "protocol_compatibility", "runtime_artifacts"],

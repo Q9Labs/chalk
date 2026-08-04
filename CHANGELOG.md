@@ -37,6 +37,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Consolidated the React UI primitives under `@q9labsai/chalk-ui`, preserving the
   public SDK subpath while aligning shared styling with the paper, cool-neutral,
   watercolor, and chalk-stick design language.
+- Renamed the Cloudflare edge broker and managed runtime to Episode vocabulary,
+  with an `EpisodeLease` Durable Object, opaque Participant credentials,
+  Episode-based capacity inputs, and a guarded recorder KMS-context cutover.
 
 ### Breaking
 
@@ -51,6 +54,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Removed built-in host/cohost authority, host-exit behavior, and legacy role
   grids. Episode admission now resolves a single customer-defined role and its
   frozen capabilities.
+- Renamed the server SDK namespaces from `rooms` and `sessions` to `spaces` and
+  `episodes`, and replaced Participant-session parameters with canonical
+  Participant identifiers and generations.
+- Replaced the broker's legacy routes, cookie, bindings, environment keys, and
+  worker identity with `/participant-credentials`, `/access-grants`,
+  `EPISODE_LEASES`, `CHALK_EPISODE_DEADLINE_SECONDS`, and
+  `chalk-episode-broker`. The production route requires the documented client
+  rollout, bounded drain, verification, and rollback sequence.
 
 Phase 1 unifies the published TypeScript SDK vocabulary. Historical names are
 removed without compatibility aliases.

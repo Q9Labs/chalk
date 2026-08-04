@@ -9,7 +9,7 @@
     "apps/transcription-dispatcher",
     "apps/mobile",
     "apps/web",
-    "infrastructure/meeting-broker",
+    "infrastructure/episode-broker",
     "infrastructure/uptime-worker"
   ],
   "type": "module",

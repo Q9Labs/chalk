@@ -144,4 +144,4 @@ if "${managed_root}/scripts/validate-runtime" \
   exit 1
 fi
 
-echo "PASS managed-meeting config smoke"
+echo "PASS managed-episode config smoke"

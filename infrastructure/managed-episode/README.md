@@ -1,4 +1,4 @@
-# Managed meeting runtime
+# Managed Episode runtime
 
 These artifacts package Chalk's API and SyncEngine for the ratified production
 application tier: one AWS Singapore node, rootless Podman supervised by systemd
@@ -25,20 +25,20 @@ default of `go1.25.11+auto` is no longer the module's exact toolchain.
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --build-context api_source=apps/api \
-  --file infrastructure/managed-meeting/images/api.Dockerfile \
+  --file infrastructure/managed-episode/images/api.Dockerfile \
   --build-arg RELEASE_ID="$RELEASE_ID" \
   --build-arg SOURCE_REVISION="$GIT_SHA" \
   --tag "ghcr.io/q9labs/chalk-api:$RELEASE_ID" \
-  infrastructure/managed-meeting
+  infrastructure/managed-episode
 
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --build-context sync_source=apps/sync \
-  --file infrastructure/managed-meeting/images/sync.Dockerfile \
+  --file infrastructure/managed-episode/images/sync.Dockerfile \
   --build-arg RELEASE_ID="$RELEASE_ID" \
   --build-arg SOURCE_REVISION="$GIT_SHA" \
   --tag "ghcr.io/q9labs/chalk-sync:$RELEASE_ID" \
-  infrastructure/managed-meeting
+  infrastructure/managed-episode
 ```
 
 Both final application images run as numeric UID/GID 65532. The API image is a
@@ -58,13 +58,13 @@ checksum, and creates a unique release ID without recording environment values
 or secrets.
 
 ```bash
-infrastructure/managed-meeting/scripts/generate-release-manifest \
+infrastructure/managed-episode/scripts/generate-release-manifest \
   --api-image "ghcr.io/q9labs/chalk-api@sha256:<index-digest>" \
   --sync-image "ghcr.io/q9labs/chalk-sync@sha256:<index-digest>" \
   --architectures linux/amd64,linux/arm64 \
   --output "/tmp/chalk-release/release-manifest.json"
 
-infrastructure/managed-meeting/scripts/render-runtime \
+infrastructure/managed-episode/scripts/render-runtime \
   /tmp/chalk-release/release-manifest.json \
   /tmp/chalk-release/runtime
 ```
@@ -98,14 +98,14 @@ artifact checksums, the exact production Tunnel route contract, and rendered
 Quadlet invariants. It never prints environment or secret values.
 
 ```bash
-infrastructure/managed-meeting/scripts/validate-runtime \
+infrastructure/managed-episode/scripts/validate-runtime \
   --env-root /run/chalk/env \
   --secret-root /run/chalk/secret-inputs \
   --manifest /run/chalk/release/release-manifest.json \
   --sync-proof /run/chalk/evidence/planetscale-sync-proof.json \
   --rendered-root /run/chalk/release/runtime
 
-infrastructure/managed-meeting/scripts/test-config
+infrastructure/managed-episode/scripts/test-config
 ```
 
 The host-side `chalk-runtime-watchdog` checks user-unit activity, local API and

@@ -1,24 +1,24 @@
+import { parseAccessGrant } from "../access/grant.js";
 import { ChalkAPIError } from "./errors.js";
 import { createServerRequester } from "./transport.js";
-import { parseAccessGrant } from "../access/grant.js";
 import type {
   APIKeyList,
   APIKeyWithSecret,
+  AccessGrant,
   AdmitParticipantInput,
   ChalkServerClient,
   ChalkServerClientOptions,
   CreateAPIKeyInput,
-  CreateRoomInput,
-  CreateSessionInput,
+  CreateEpisodeInput,
+  CreateSpaceInput,
+  Episode,
+  EpisodeEnd,
   IssueAccessGrantInput,
   ListAPIKeysInput,
-  AccessGrant,
-  ParticipantAdmission,
+  ParticipantLifecycle,
   ParticipantRemoval,
   RemoveParticipantInput,
-  Room,
-  RoomSession,
-  EndSessionResult,
+  Space,
 } from "./types.js";
 
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
@@ -32,46 +32,44 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   const request = createServerRequester(options, apiKey, apiBaseURL, fetchImplementation);
 
   return {
-    rooms: {
-      create: async (input) => roomFromSpace(await request<SpaceWire>({ method: "POST", path: `${tenantPath}/spaces`, body: createSpaceRequest(input), expectedStatus: 201, retry: "never" })),
+    spaces: {
+      create: (input) => request<Space>({ method: "POST", path: `${tenantPath}/spaces`, body: createSpaceRequest(input), expectedStatus: 201, retry: "never" }),
     },
-    sessions: {
-      create: async (roomId, input, idempotency) => sessionFromEpisode(await request<EpisodeWire>({ method: "POST", path: `${tenantPath}/spaces/${segment(roomId)}/episodes`, body: createEpisodeRequest(input), expectedStatus: 201, idempotency, retry: "caller_idempotency" })),
-      end: async (roomId, sessionId, idempotency) => endSession(await request<EndSessionWire>({ method: "POST", path: `${tenantPath}/spaces/${segment(roomId)}/episodes/${segment(sessionId)}/end`, expectedStatus: 202, idempotency, retry: "caller_idempotency" })),
+    episodes: {
+      create: (spaceId, input, idempotency) => request<Episode>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/episodes`, body: createEpisodeRequest(input), expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
+      end: (spaceId, episodeId, idempotency) => request<EpisodeEnd>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/end`, expectedStatus: 202, idempotency, retry: "caller_idempotency" }),
     },
     participants: {
-      admit: async (roomId, sessionId, input, idempotency) => {
-        const lifecycle = await request<ParticipantAdmissionWire>({
+      admit: async (spaceId, episodeId, input, idempotency) => {
+        const lifecycle = await request<ParticipantLifecycleWire>({
           method: "POST",
-          path: `${tenantPath}/spaces/${segment(roomId)}/episodes/${segment(sessionId)}/participants`,
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants`,
           body: participantAdmissionRequest(input),
           expectedStatus: 201,
           idempotency,
           retry: "caller_idempotency",
         });
-        return participantAdmission(lifecycle);
+        return participantLifecycle(lifecycle);
       },
-      issueAccess: async (roomId, sessionId, participantId, input) => {
+      issueAccess: async (spaceId, episodeId, participantId, input) => {
         const access = await request<AccessGrantWire>({
           method: "POST",
-          path: `${tenantPath}/spaces/${segment(roomId)}/episodes/${segment(sessionId)}/participants/${segment(participantId)}/access-grant`,
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants/${segment(participantId)}/access-grant`,
           body: accessGrantRequest(input),
           expectedStatus: 201,
           retry: input.replaceMediaConnection === true ? "never" : "always",
         });
         return accessGrant(access);
       },
-      remove: async (roomId, sessionId, participantId, input, idempotency) => {
-        const removal = await request<ParticipantRemovalWire>({
+      remove: (spaceId, episodeId, participantId, input, idempotency) =>
+        request<ParticipantRemoval>({
           method: "POST",
-          path: `${tenantPath}/spaces/${segment(roomId)}/episodes/${segment(sessionId)}/participants/${segment(participantId)}/remove`,
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants/${segment(participantId)}/remove`,
           body: participantRemovalRequest(input),
           expectedStatus: 202,
           idempotency,
           retry: "caller_idempotency",
-        });
-        return participantRemoval(removal);
-      },
+        }),
     },
     apiKeys: {
       create: (input) => request<APIKeyWithSecret>({ method: "POST", path: `${tenantPath}/api-keys`, body: apiKeyCreateRequest(input), expectedStatus: 201, retry: "never" }),
@@ -82,42 +80,47 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   };
 }
 
-function createSpaceRequest(input: CreateRoomInput): Record<string, unknown> {
+function createSpaceRequest(input: CreateSpaceInput): Record<string, unknown> {
   return {
-    media_plane: input.media_plane,
+    default_episode_duration_seconds: input.defaultEpisodeDurationSeconds,
+    linger_window_seconds: input.lingerWindowSeconds,
+    maximum_episode_duration_seconds: input.maximumEpisodeDurationSeconds,
+    media_plane: input.mediaPlane,
     name: input.name,
     slug: input.slug,
+    ...(input.admissionPolicy === undefined ? {} : { admission_policy: input.admissionPolicy }),
     ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
-    ...(input.recurring_policy === undefined ? {} : { recurring_policy: input.recurring_policy }),
+    ...(input.recurringPolicy === undefined ? {} : { recurring_policy: input.recurringPolicy }),
   };
 }
 
-function createEpisodeRequest(input: CreateSessionInput): Record<string, unknown> {
+function createEpisodeRequest(input: CreateEpisodeInput): Record<string, unknown> {
   return {
     ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
-    ...(input.started_at === undefined ? {} : { started_at: input.started_at }),
+    ...(input.startedAt === undefined ? {} : { started_at: input.startedAt }),
   };
 }
 
 function participantAdmissionRequest(input: AdmitParticipantInput): Record<string, unknown> {
   return {
-    participant_id: input.participant_session_id,
     name: input.name,
-    role: input.initial_role,
+    role: input.role,
+    ...(input.identityId === undefined ? {} : { identity_id: input.identityId }),
     ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+    ...(input.participantId === undefined ? {} : { participant_id: input.participantId }),
   };
 }
 
 function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknown> {
   return {
-    participant_generation: input.participantSessionGeneration,
+    participant_generation: input.participantGeneration,
     replace_media_connection: input.replaceMediaConnection ?? false,
     ...(input.currentMediaToken ? { current_media_token: input.currentMediaToken } : {}),
   };
 }
 
 function participantRemovalRequest(input: RemoveParticipantInput): Record<string, unknown> {
-  return { participant_generation: input.participantSessionGeneration };
+  return { participant_generation: input.participantGeneration };
 }
 
 function apiKeyCreateRequest(input: CreateAPIKeyInput): Record<string, unknown> {
@@ -175,116 +178,12 @@ type AccessGrantWire = {
   };
 };
 
-type SpaceWire = {
-  readonly created_at: string;
-  readonly created_by_user_id: string | null;
-  readonly id: string;
-  readonly media_plane: string;
-  readonly metadata: unknown;
-  readonly name: string;
-  readonly recurring_policy: unknown;
-  readonly slug: string;
-  readonly tenant_id: string;
-  readonly updated_at: string;
-};
+type ParticipantLifecycleWire = Omit<ParticipantLifecycle, "access"> & { readonly access?: AccessGrantWire | null };
 
-type EpisodeWire = {
-  readonly created_at: string;
-  readonly created_by_user_id?: string | null;
-  readonly ended_at?: string | null;
-  readonly id: string;
-  readonly metadata: unknown;
-  readonly space_id: string;
-  readonly started_at?: string | null;
-  readonly status: string;
-  readonly tenant_id: string;
-  readonly updated_at: string;
-};
-
-type EndSessionWire = {
-  readonly external_operation: NonNullable<ParticipantRemovalWire["external_operation"]>;
-  readonly episode_id?: string;
-  readonly session_id?: string;
-  readonly status: string;
-};
-
-type ParticipantAdmissionWire = {
-  readonly access?: AccessGrantWire | null;
-  readonly admission_request?: { readonly expires_at: string; readonly id: string; readonly status: string } | null;
-  readonly expires_at?: string;
-  readonly lifecycle_intent: {
-    readonly created_at: string;
-    readonly id: string;
-    readonly intent_name: string;
-    readonly participant_generation?: number | null;
-    readonly participant_id?: string | null;
-    readonly participant_session_generation?: number | null;
-    readonly participant_session_id?: string | null;
-    readonly request_key: string;
-    readonly status: string;
-  };
-  readonly media_plane?: { readonly client_payload: Readonly<Record<string, unknown>>; readonly provider: string } | null;
-  readonly participant: {
-    readonly generation: number;
-    readonly id: string;
-    readonly space_id?: string;
-    readonly episode_id?: string;
-    readonly room_id?: string;
-    readonly session_id?: string;
-    readonly status: string;
-    readonly tenant_id: string;
-  };
-  readonly sync_token?: string;
-};
-
-type ParticipantRemovalWire = {
-  readonly external_operation?: {
-    readonly created_at: string;
-    readonly deadline_generation?: number | null;
-    readonly id: string;
-    readonly operation_name: string;
-    readonly request_key: string;
-    readonly status: string;
-    readonly target_participant_generation?: number | null;
-    readonly target_participant_id?: string | null;
-    readonly target_participant_session_generation?: number | null;
-    readonly target_participant_session_id?: string | null;
-  };
-  readonly lifecycle_intent?: ParticipantAdmissionWire["lifecycle_intent"];
-  readonly participant: ParticipantAdmissionWire["participant"];
-};
-
-function roomFromSpace(value: SpaceWire): Room {
-  return {
-    ...value,
-    status: "active",
-  };
-}
-
-function sessionFromEpisode(value: EpisodeWire): RoomSession {
-  return {
-    created_at: value.created_at,
-    created_by_user_id: value.created_by_user_id ?? null,
-    ended_at: value.ended_at ?? null,
-    id: value.id,
-    metadata: value.metadata,
-    room_id: value.space_id,
-    started_at: value.started_at ?? null,
-    status: value.status as RoomSession["status"],
-    tenant_id: value.tenant_id,
-    updated_at: value.updated_at,
-  };
-}
-
-function participantAdmission(value: ParticipantAdmissionWire): ParticipantAdmission {
+function participantLifecycle(value: ParticipantLifecycleWire): ParticipantLifecycle {
   const { access, ...lifecycle } = value;
-  const admission = {
-    ...lifecycle,
-    lifecycle_intent: lifecycleIntent(lifecycle.lifecycle_intent),
-    participant: legacyParticipant(lifecycle.participant),
-  };
-  if (access === undefined) return admission;
-  return { ...admission, access: access === null ? null : accessGrant(access) };
+  if (access === undefined) return lifecycle;
+  return { ...lifecycle, access: access === null ? null : accessGrant(access) };
 }
 
 function accessGrant(value: AccessGrantWire): AccessGrant {
@@ -322,54 +221,4 @@ function requiredResponseID(value: string | undefined): string {
 
 function invalidResponse(status: number): ChalkAPIError {
   return new ChalkAPIError({ code: "invalid_response", retryable: false, status });
-}
-
-function endSession(value: EndSessionWire): EndSessionResult {
-  return {
-    external_operation: {
-      ...value.external_operation,
-      target_participant_session_generation: value.external_operation.target_participant_session_generation ?? value.external_operation.target_participant_generation,
-      target_participant_session_id: value.external_operation.target_participant_session_id ?? value.external_operation.target_participant_id,
-    },
-    session_id: value.session_id ?? value.episode_id ?? "",
-    status: value.status,
-  };
-}
-
-function participantRemoval(value: ParticipantRemovalWire): ParticipantRemoval {
-  return {
-    lifecycle_intent: removalIntent(value),
-    participant: legacyParticipant(value.participant),
-  };
-}
-
-function removalIntent(value: ParticipantRemovalWire): ParticipantRemoval["lifecycle_intent"] {
-  if (value.lifecycle_intent) return lifecycleIntent(value.lifecycle_intent);
-  const operation = value.external_operation;
-  if (!operation) throw invalidResponse(202);
-  return {
-    created_at: operation.created_at,
-    id: operation.id,
-    intent_name: operation.operation_name,
-    participant_session_generation: operation.target_participant_session_generation ?? operation.target_participant_generation ?? null,
-    participant_session_id: operation.target_participant_session_id ?? operation.target_participant_id ?? null,
-    request_key: operation.request_key,
-    status: operation.status,
-  };
-}
-
-function lifecycleIntent(intent: ParticipantAdmissionWire["lifecycle_intent"]): ParticipantAdmission["lifecycle_intent"] {
-  return {
-    ...intent,
-    participant_session_generation: intent.participant_session_generation ?? intent.participant_generation ?? null,
-    participant_session_id: intent.participant_session_id ?? intent.participant_id ?? null,
-  };
-}
-
-function legacyParticipant(participant: ParticipantAdmissionWire["participant"]): ParticipantAdmission["participant"] {
-  return {
-    ...participant,
-    room_id: participant.room_id ?? participant.space_id ?? "",
-    session_id: participant.session_id ?? participant.episode_id ?? "",
-  };
 }

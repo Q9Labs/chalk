@@ -91,7 +91,7 @@ artifacts_json="$(
 generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 entropy="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
-release_id="managed-meeting-${timestamp}-${source_revision:0:12}-${entropy}"
+release_id="managed-episode-${timestamp}-${source_revision:0:12}-${entropy}"
 mkdir -p "$(dirname "${output}")"
 jq -n \
   --arg release_id "${release_id}" \

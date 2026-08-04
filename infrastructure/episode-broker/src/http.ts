@@ -1,4 +1,4 @@
-import { BrokerError, browserSessionCookie, maximumBodyBytes, maximumDisplayNameLength, type AccessInput, type BrowserSessionInput, type ClientSessionInput, type ParticipantAccessInput, type TraceContext } from "./contracts";
+import { BrokerError, browserCredentialCookie, maximumBodyBytes, maximumDisplayNameLength, type AccessGrantInput, type AccessInput, type BrowserParticipantCredentialInput, type ParticipantCredentialInput, type TraceContext } from "./contracts";
 
 const capabilityPattern = /^[A-Za-z0-9_-]{43}$/u;
 const traceparentPattern = /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/u;
@@ -39,16 +39,16 @@ export async function readJSON(request: Request): Promise<unknown> {
   }
 }
 
-export function browserSessionInput(value: unknown): BrowserSessionInput {
-  if (!isRecord(value) || hasUnexpectedKeys(value, ["displayName", "inviteToken"])) throw new BrokerError(400, "Only displayName and inviteToken are accepted.");
+export function browserParticipantCredentialInput(value: unknown): BrowserParticipantCredentialInput {
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["displayName", "spaceInviteToken"])) throw new BrokerError(400, "Only displayName and spaceInviteToken are accepted.");
   const displayName = typeof value.displayName === "string" ? value.displayName.trim() : "";
   if (!displayName || displayName.length > maximumDisplayNameLength) throw new BrokerError(400, "Display name must be between 1 and 80 characters.");
-  if (value.inviteToken !== undefined && !isCapability(value.inviteToken)) throw new BrokerError(400, "The meeting invite is invalid.");
-  return { displayName, ...(typeof value.inviteToken === "string" ? { inviteToken: value.inviteToken } : {}) };
+  if (value.spaceInviteToken !== undefined && !isCapability(value.spaceInviteToken)) throw new BrokerError(400, "The Space invite is invalid.");
+  return { displayName, ...(typeof value.spaceInviteToken === "string" ? { spaceInviteToken: value.spaceInviteToken } : {}) };
 }
 
 export function accessInput(value: unknown): AccessInput {
-  if (!isRecord(value) || hasUnexpectedKeys(value, ["currentMediaToken", "replaceMediaConnection"])) throw new BrokerError(400, "The access refresh request is invalid.");
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["currentMediaToken", "replaceMediaConnection"])) throw new BrokerError(400, "The access grant refresh request is invalid.");
   const replaceMediaConnection = value.replaceMediaConnection ?? false;
   if (typeof replaceMediaConnection !== "boolean") throw new BrokerError(400, "replaceMediaConnection must be a boolean.");
   if (value.currentMediaToken !== undefined && (typeof value.currentMediaToken !== "string" || value.currentMediaToken.length > maximumMediaTokenLength)) {
@@ -60,29 +60,29 @@ export function accessInput(value: unknown): AccessInput {
   };
 }
 
-export function clientSessionInput(value: unknown): ClientSessionInput {
-  if (!isRecord(value) || hasUnexpectedKeys(value, ["clientSessionId", "displayName", "inviteToken"])) throw new BrokerError(400, "Only clientSessionId, displayName, and inviteToken are accepted.");
+export function participantCredentialInput(value: unknown): ParticipantCredentialInput {
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["displayName", "participantCredentialId", "spaceInviteToken"])) throw new BrokerError(400, "Only displayName, participantCredentialId, and spaceInviteToken are accepted.");
   const displayName = typeof value.displayName === "string" ? value.displayName.trim() : "";
   if (!displayName || displayName.length > maximumDisplayNameLength) throw new BrokerError(400, "Display name must be between 1 and 80 characters.");
-  if (value.inviteToken !== undefined && !isCapability(value.inviteToken)) throw new BrokerError(400, "The meeting invite is invalid.");
-  if (value.clientSessionId !== undefined && !isCapability(value.clientSessionId)) throw new BrokerError(400, "The client session is invalid.");
+  if (value.spaceInviteToken !== undefined && !isCapability(value.spaceInviteToken)) throw new BrokerError(400, "The Space invite is invalid.");
+  if (value.participantCredentialId !== undefined && !isCapability(value.participantCredentialId)) throw new BrokerError(400, "The Participant credential is invalid.");
   return {
     displayName,
-    ...(typeof value.inviteToken === "string" ? { inviteToken: value.inviteToken } : {}),
-    ...(typeof value.clientSessionId === "string" ? { clientSessionId: value.clientSessionId } : {}),
+    ...(typeof value.spaceInviteToken === "string" ? { spaceInviteToken: value.spaceInviteToken } : {}),
+    ...(typeof value.participantCredentialId === "string" ? { participantCredentialId: value.participantCredentialId } : {}),
   };
 }
 
-export function participantAccessInput(value: unknown): ParticipantAccessInput {
-  if (!isRecord(value) || hasUnexpectedKeys(value, ["clientSessionId", "currentMediaToken", "inviteToken", "replaceMediaConnection"])) throw new BrokerError(400, "The participant access request is invalid.");
-  if (!isCapability(value.inviteToken) || !isCapability(value.clientSessionId)) throw new BrokerError(401, "The client session is missing or expired.");
-  return { ...accessInput({ currentMediaToken: value.currentMediaToken, replaceMediaConnection: value.replaceMediaConnection }), inviteToken: value.inviteToken, clientSessionId: value.clientSessionId };
+export function accessGrantInput(value: unknown): AccessGrantInput {
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["currentMediaToken", "participantCredentialId", "replaceMediaConnection", "spaceInviteToken"])) throw new BrokerError(400, "The access grant request is invalid.");
+  if (!isCapability(value.spaceInviteToken) || !isCapability(value.participantCredentialId)) throw new BrokerError(401, "The Participant credential is missing or expired.");
+  return { ...accessInput({ currentMediaToken: value.currentMediaToken, replaceMediaConnection: value.replaceMediaConnection }), spaceInviteToken: value.spaceInviteToken, participantCredentialId: value.participantCredentialId };
 }
 
-export function clientSessionCredentialInput(value: unknown): { readonly inviteToken: string; readonly clientSessionId: string } {
-  if (!isRecord(value) || hasUnexpectedKeys(value, ["clientSessionId", "inviteToken"])) throw new BrokerError(400, "The client session request is invalid.");
-  if (!isCapability(value.inviteToken) || !isCapability(value.clientSessionId)) throw new BrokerError(401, "The client session is missing or expired.");
-  return { inviteToken: value.inviteToken, clientSessionId: value.clientSessionId };
+export function credentialInput(value: unknown): { readonly participantCredentialId: string; readonly spaceInviteToken: string } {
+  if (!isRecord(value) || hasUnexpectedKeys(value, ["participantCredentialId", "spaceInviteToken"])) throw new BrokerError(400, "The Participant credential request is invalid.");
+  if (!isCapability(value.spaceInviteToken) || !isCapability(value.participantCredentialId)) throw new BrokerError(401, "The Participant credential is missing or expired.");
+  return { spaceInviteToken: value.spaceInviteToken, participantCredentialId: value.participantCredentialId };
 }
 
 export function emptyInput(value: unknown): void {
@@ -94,10 +94,10 @@ export function requireOrigin(request: Request, expectedOrigin: string): void {
   try {
     configured = new URL(expectedOrigin);
   } catch {
-    throw new BrokerError(503, "The meeting broker is not configured.");
+    throw new BrokerError(503, "The Episode broker is not configured.");
   }
   if (configured.origin !== expectedOrigin || request.headers.get("origin") !== configured.origin) {
-    throw new BrokerError(403, "The meeting broker only accepts requests from the Chalk web app.");
+    throw new BrokerError(403, "The Episode broker only accepts requests from the Chalk web app.");
   }
 }
 
@@ -126,16 +126,16 @@ function isCapability(value: unknown): value is string {
   return typeof value === "string" && capabilityPattern.test(value);
 }
 
-export function cookieValue(header: string | null): { readonly inviteToken: string; readonly browserSessionId: string } | undefined {
+export function cookieValue(header: string | null): { readonly participantCredentialId: string; readonly spaceInviteToken: string } | undefined {
   for (const pair of header?.split(";") ?? []) {
     const separator = pair.indexOf("=");
-    if (separator < 0 || pair.slice(0, separator).trim() !== browserSessionCookie) continue;
-    const [inviteToken, browserSessionId, extra] = pair
+    if (separator < 0 || pair.slice(0, separator).trim() !== browserCredentialCookie) continue;
+    const [spaceInviteToken, participantCredentialId, extra] = pair
       .slice(separator + 1)
       .trim()
       .split(".");
-    if (extra !== undefined || !isCapability(inviteToken) || !isCapability(browserSessionId)) return undefined;
-    return { inviteToken, browserSessionId };
+    if (extra !== undefined || !isCapability(spaceInviteToken) || !isCapability(participantCredentialId)) return undefined;
+    return { spaceInviteToken, participantCredentialId };
   }
   return undefined;
 }

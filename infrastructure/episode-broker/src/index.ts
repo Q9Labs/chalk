@@ -1,4 +1,4 @@
-export { MeetingSession } from "./meeting-session";
+export { EpisodeLease } from "./episode-lease";
 import type { WorkerEnv } from "./contracts";
 import { handleBrokerRequest } from "./worker";
 

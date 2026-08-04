@@ -1,4 +1,4 @@
-name = "chalk-meeting-broker-fake-api"
+name = "chalk-episode-broker-fake-api"
 main = "fake-api-worker.mjs"
 compatibility_date = "2026-07-01"
 workers_dev = false
