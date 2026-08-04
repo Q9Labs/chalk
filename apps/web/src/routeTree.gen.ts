@@ -12,8 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WhiteboardRouteImport } from './routes/whiteboard'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatusRouteImport } from './routes/status'
+import { Route as SpaceRouteImport } from './routes/space'
 import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
-import { Route as RoomRouteImport } from './routes/room'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as IndexRouteImport } from './routes/index'
@@ -33,14 +33,14 @@ const StatusRoute = StatusRouteImport.update({
   path: '/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpaceRoute = SpaceRouteImport.update({
+  id: '/space',
+  path: '/space',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SdkPreviewRoute = SdkPreviewRouteImport.update({
   id: '/sdk-preview',
   path: '/sdk-preview',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RoomRoute = RoomRouteImport.update({
-  id: '/room',
-  path: '/room',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -63,8 +63,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
-  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
+  '/space': typeof SpaceRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -73,8 +73,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
-  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
+  '/space': typeof SpaceRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -84,8 +84,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
   '/privacy': typeof PrivacyRoute
-  '/room': typeof RoomRoute
   '/sdk-preview': typeof SdkPreviewRoute
+  '/space': typeof SpaceRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
   '/whiteboard': typeof WhiteboardRoute
@@ -96,8 +96,8 @@ export interface FileRouteTypes {
     | '/'
     | '/new'
     | '/privacy'
-    | '/room'
     | '/sdk-preview'
+    | '/space'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -106,8 +106,8 @@ export interface FileRouteTypes {
     | '/'
     | '/new'
     | '/privacy'
-    | '/room'
     | '/sdk-preview'
+    | '/space'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -116,8 +116,8 @@ export interface FileRouteTypes {
     | '/'
     | '/new'
     | '/privacy'
-    | '/room'
     | '/sdk-preview'
+    | '/space'
     | '/status'
     | '/terms'
     | '/whiteboard'
@@ -127,8 +127,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   NewRoute: typeof NewRoute
   PrivacyRoute: typeof PrivacyRoute
-  RoomRoute: typeof RoomRoute
   SdkPreviewRoute: typeof SdkPreviewRoute
+  SpaceRoute: typeof SpaceRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
   WhiteboardRoute: typeof WhiteboardRoute
@@ -157,18 +157,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/space': {
+      id: '/space'
+      path: '/space'
+      fullPath: '/space'
+      preLoaderRoute: typeof SpaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sdk-preview': {
       id: '/sdk-preview'
       path: '/sdk-preview'
       fullPath: '/sdk-preview'
       preLoaderRoute: typeof SdkPreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/room': {
-      id: '/room'
-      path: '/room'
-      fullPath: '/room'
-      preLoaderRoute: typeof RoomRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -199,8 +199,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   NewRoute: NewRoute,
   PrivacyRoute: PrivacyRoute,
-  RoomRoute: RoomRoute,
   SdkPreviewRoute: SdkPreviewRoute,
+  SpaceRoute: SpaceRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
   WhiteboardRoute: WhiteboardRoute,

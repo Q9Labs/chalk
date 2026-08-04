@@ -153,7 +153,7 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
         pinned && "ring-2",
         participant.isSpeaking && !prefersReducedMotion && "chalk-animate-harmonic-pulse",
         participant.isSpeaking && prefersReducedMotion && "border-solid",
-        onClick && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+        onClick && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-canvas)]",
         className,
       )}
       style={
@@ -188,23 +188,23 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
 
       {/* Poor connection warning, top-right */}
       {showStatus && hasPoorConnection && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-zinc-950/80 border border-white/5 pointer-events-none" role="status" aria-label={`${participant.displayName} has a poor connection`}>
-          <WifiOffIcon size={12} className="text-amber-400" />
+        <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-[var(--chalk-text)] border border-[var(--chalk-line)] pointer-events-none" role="status" aria-label={`${participant.displayName} has a poor connection`}>
+          <WifiOffIcon size={12} className="text-[var(--chalk-danger)]" />
         </div>
       )}
 
       {/* Compact bottom-left info chip */}
       {(showName || showStatus) && (
         <div className="pointer-events-none absolute right-2 bottom-2 left-2">
-          <div className="inline-flex items-center gap-1.5 rounded-[5px] border border-white/10 bg-zinc-950/80 px-2 py-1">
+          <div className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--chalk-line)] bg-[var(--chalk-text)] px-2 py-1">
             {/* Small avatar when video is off */}
             {!showVideo && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={Boolean(participant.avatarUrl)} gradientPreference={gradientPreference} />}
 
             {/* Name */}
             {showName && (
-              <span className="max-w-[120px] truncate text-xs font-medium !text-[#fff]" title={participant.displayName}>
+              <span className="max-w-[120px] truncate text-xs font-medium !text-[var(--chalk-accent-text)]" title={participant.displayName}>
                 {participant.displayName}
-                {participant.isLocal && participant.displayName !== "You" && <span className="!text-white/60"> (You)</span>}
+                {participant.isLocal && participant.displayName !== "You" && <span className="!text-[var(--chalk-accent-text)]"> (You)</span>}
               </span>
             )}
 
@@ -212,18 +212,18 @@ export const ParticipantTile = React.memo(({ participant, videoTrack, mirror, sh
             {showStatus && (
               <div className="flex items-center gap-1 ml-auto">
                 {participant.isMuted && (
-                  <div className="rounded-full bg-red-500/80 p-0.5">
-                    <MicrophoneOff01Icon size={10} className="text-white" />
+                  <div className="rounded-full bg-[var(--chalk-danger)] p-0.5">
+                    <MicrophoneOff01Icon size={10} className="text-[var(--chalk-accent-text)]" />
                   </div>
                 )}
                 {participant.isHandRaised && (
-                  <div className={cn("rounded-full bg-amber-500/80 p-0.5", !prefersReducedMotion && "chalk-animate-hand-bounce")}>
-                    <HandIcon size={10} className="text-white" />
+                  <div className={cn("rounded-full bg-[var(--chalk-danger-surface)] p-0.5", !prefersReducedMotion && "chalk-animate-hand-bounce")}>
+                    <HandIcon size={10} className="text-[var(--chalk-accent-text)]" />
                   </div>
                 )}
                 {participant.isScreenSharing && (
                   <div className="rounded-full p-0.5" style={{ backgroundColor: `${participantColors.primary}CC` }}>
-                    <Monitor01Icon size={10} className="text-white" />
+                    <Monitor01Icon size={10} className="text-[var(--chalk-accent-text)]" />
                   </div>
                 )}
               </div>

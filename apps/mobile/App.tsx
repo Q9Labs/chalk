@@ -1,37 +1,29 @@
-import type { SpaceClient } from "@q9labsai/chalk-client";
-import type { VideoConferenceDiagnosticsSnapshot } from "@q9labsai/chalk-react-native";
-import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsClientSession, setDevDiagnosticsEnvironment, setDevDiagnosticsSession } from "@q9labsai/chalk-react-native/diagnostics";
+import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
 import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { StatusBar } from "expo-status-bar";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
-import { clearJoinContext, getBrokerUrl, getMobileDebugContext, parseUrlLike, type LobbyRoute, type MobileRoute } from "./src/lib/chalk";
-import { MobileMeetingScreen } from "./src/meeting/MobileMeetingScreen";
-import { MobileWhiteboardPlayground } from "./src/meeting/MobileWhiteboardPlayground";
-import { shouldShowWhiteboardRendererPlayground } from "./src/meeting/mobile-whiteboard-playground-policy";
+import { clearSpaceContext, getBrokerUrl, getMobileDeviceContext, isMobileTelemetryEnabled, parseSpaceLink, type MobileRoute, type SpaceRoute } from "./src/lib/spaces";
+import { MobileSpaceScreen } from "./src/space/MobileSpaceScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
-
-type ConnectedSpaceClient = Pick<SpaceClient, "leave">;
 
 export default function App(): React.JSX.Element {
   const brokerUrl = useMemo(() => getBrokerUrl(), []);
+  const telemetryEnabled = useMemo(() => isMobileTelemetryEnabled(), []);
   const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, brokerUrl }), [brokerUrl]);
   const diagnosticsEnabled = diagnosticsMode.enabled;
   const [route, setRoute] = useState<MobileRoute>({ kind: "home" });
   const [isBooting, setIsBooting] = useState(true);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const [whiteboardPlaygroundOpen, setWhiteboardPlaygroundOpen] = useState(false);
-  const diagnosticsSessionRef = useRef<ConnectedSpaceClient | null>(null);
-  const lastJoinErrorRef = useRef<string | null>(null);
 
-  const syncStaticDiagnostics = useCallback(async () => {
-    if (diagnosticsEnabled) setDevDiagnosticsClientSession(await getMobileDebugContext());
+  const syncStaticDiagnostics = useCallback(() => {
+    if (diagnosticsEnabled) setDevDiagnosticsDevice(getMobileDeviceContext().device);
   }, [diagnosticsEnabled]);
 
   const openDiagnosticsForFailure = useCallback(
@@ -45,14 +37,14 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     if (!diagnosticsEnabled) return;
-    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "lobby" ? `Meeting: ${route.roomId}` : undefined);
+    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "space" ? `Space: ${route.space}` : undefined);
   }, [diagnosticsEnabled, route]);
 
   useEffect(() => {
     let mounted = true;
     const openURL = (url: string | null) => {
       if (!url || !mounted) return;
-      const nextRoute = parseUrlLike(url);
+      const nextRoute = parseSpaceLink(url);
       if (nextRoute) setRoute(nextRoute);
     };
     void Linking.getInitialURL()
@@ -73,45 +65,25 @@ export default function App(): React.JSX.Element {
       buildProfile: diagnosticsMode.buildProfile,
       brokerUrl,
       routeKind: route.kind,
-      routeRoomId: route.kind === "lobby" ? route.roomId : null,
-      routeSource: route.kind === "lobby" ? route.source : null,
+      routeSource: route.kind === "space" ? route.source : null,
+      routeSpaceId: route.kind === "space" ? route.space : null,
     });
-    void syncStaticDiagnostics();
+    syncStaticDiagnostics();
   }, [brokerUrl, diagnosticsEnabled, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
 
   useEffect(() => {
-    if (route.kind === "lobby") return;
-    diagnosticsSessionRef.current = null;
-    lastJoinErrorRef.current = null;
-    setDevDiagnosticsSession(null);
+    if (route.kind !== "home") return;
+    setDevDiagnosticsConnection(null);
   }, [route.kind]);
 
   const goHome = useCallback(async () => {
-    await clearJoinContext();
+    await clearSpaceContext();
     setRoute({ kind: "home" });
   }, []);
 
-  const handleConferenceDiagnostics = useCallback(
-    (snapshot: VideoConferenceDiagnosticsSnapshot) => {
-      if (!diagnosticsEnabled) return;
-      setDevDiagnosticsSession(snapshot);
-      if (snapshot.lastJoinError && snapshot.lastJoinError !== lastJoinErrorRef.current) {
-        lastJoinErrorRef.current = snapshot.lastJoinError;
-        openDiagnosticsForFailure("native-join", snapshot.lastJoinError);
-      } else if (!snapshot.lastJoinError) {
-        lastJoinErrorRef.current = null;
-      }
-    },
-    [diagnosticsEnabled, openDiagnosticsForFailure],
-  );
-
-  const handleForceDisconnect = useCallback(async () => {
-    await diagnosticsSessionRef.current?.leave().catch(() => undefined);
-  }, []);
-
-  const handleClearClientSession = useCallback(async () => {
-    await clearJoinContext();
-    await syncStaticDiagnostics();
+  const handleClearSpaceContext = useCallback(async () => {
+    await clearSpaceContext();
+    syncStaticDiagnostics();
   }, [syncStaticDiagnostics]);
 
   const handleResetDiagnostics = useCallback(async () => {
@@ -120,48 +92,32 @@ export default function App(): React.JSX.Element {
       buildProfile: diagnosticsMode.buildProfile,
       brokerUrl,
       routeKind: route.kind,
-      routeRoomId: route.kind === "lobby" ? route.roomId : null,
-      routeSource: route.kind === "lobby" ? route.source : null,
+      routeSource: route.kind === "space" ? route.source : null,
+      routeSpaceId: route.kind === "space" ? route.space : null,
     });
-    await syncStaticDiagnostics();
+    setDevDiagnosticsConnection(null);
+    syncStaticDiagnostics();
   }, [brokerUrl, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
-
-  const showWhiteboardPlaygroundEntry = shouldShowWhiteboardRendererPlayground({
-    isDevRuntime: __DEV__,
-    routeKind: route.kind,
-  });
 
   return (
     <SafeAreaProvider>
       <View style={styles.appShell}>
         <StatusBar style="light" />
-        {whiteboardPlaygroundOpen ? (
-          <MobileWhiteboardPlayground onClose={() => setWhiteboardPlaygroundOpen(false)} />
-        ) : (
-          renderContent({
-            brokerUrl,
-            handleConferenceDiagnostics,
-            isBooting,
-            onClose: goHome,
-            onDiagnosticsFailure: openDiagnosticsForFailure,
-            onNavigate: setRoute,
-            onSessionChange: (session) => {
-              diagnosticsSessionRef.current = session;
-            },
-            route,
-          })
-        )}
-        {showWhiteboardPlaygroundEntry && !whiteboardPlaygroundOpen ? (
-          <Pressable accessibilityRole="button" onPress={() => setWhiteboardPlaygroundOpen(true)} style={({ pressed }) => [styles.whiteboardPlaygroundButton, pressed && styles.whiteboardPlaygroundButtonPressed]}>
-            <Text style={styles.whiteboardPlaygroundButtonText}>Whiteboard renderer playground (local only)</Text>
-          </Pressable>
-        ) : null}
+        {renderContent({
+          brokerUrl,
+          isBooting,
+          onClose: goHome,
+          onDiagnosticsFailure: openDiagnosticsForFailure,
+          onNavigate: setRoute,
+          route,
+          telemetryEnabled,
+        })}
         {diagnosticsEnabled ? (
           <>
             <Pressable hitSlop={16} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
               <HugeiconsIcon color={Theme.colors.primary} icon={Bug02Icon} size={18} />
             </Pressable>
-            <DevDiagnosticsSheet onClearClientSession={handleClearClientSession} onClose={() => setDiagnosticsOpen(false)} onForceDisconnect={handleForceDisconnect} onResetDiagnostics={handleResetDiagnostics} visible={diagnosticsOpen} />
+            <DevDiagnosticsSheet onClearSpaceContext={handleClearSpaceContext} onClose={() => setDiagnosticsOpen(false)} onResetDiagnostics={handleResetDiagnostics} visible={diagnosticsOpen} />
           </>
         ) : null}
       </View>
@@ -171,28 +127,25 @@ export default function App(): React.JSX.Element {
 
 function renderContent({
   brokerUrl,
-  handleConferenceDiagnostics,
   isBooting,
   onClose,
   onDiagnosticsFailure,
   onNavigate,
-  onSessionChange,
   route,
+  telemetryEnabled,
 }: {
   readonly brokerUrl: string;
-  readonly handleConferenceDiagnostics: (snapshot: VideoConferenceDiagnosticsSnapshot) => void;
   readonly isBooting: boolean;
   readonly onClose: () => Promise<void>;
   readonly onDiagnosticsFailure: (source: string, message: string) => void;
-  readonly onNavigate: (route: LobbyRoute) => void;
-  readonly onSessionChange: (session: ConnectedSpaceClient | null) => void;
+  readonly onNavigate: (route: SpaceRoute) => void;
   readonly route: MobileRoute;
+  readonly telemetryEnabled: boolean;
 }): ReactElement {
   if (isBooting) return <AppBootstrapScreen label="Starting Chalk..." />;
-  if (route.kind === "home") {
-    return <HomeScreen onDiagnosticsFailure={onDiagnosticsFailure} onNavigate={onNavigate} />;
-  }
-  return <MobileMeetingScreen brokerUrl={brokerUrl} onClose={onClose} onDiagnosticsChange={handleConferenceDiagnostics} onDiagnosticsError={(error) => onDiagnosticsFailure("conference-error", error.message)} onSessionChange={onSessionChange} route={route} />;
+  if (route.kind === "home") return <HomeScreen onDiagnosticsFailure={onDiagnosticsFailure} onNavigate={onNavigate} />;
+
+  return <MobileSpaceScreen brokerUrl={brokerUrl} onClose={onClose} onDiagnosticsFailure={(error) => onDiagnosticsFailure("space-error", error.message)} route={route} telemetryEnabled={telemetryEnabled} />;
 }
 
 const styles = StyleSheet.create({
@@ -210,17 +163,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.colors.border,
   },
-  whiteboardPlaygroundButton: {
-    position: "absolute",
-    left: 16,
-    bottom: 24,
-    borderRadius: Theme.radius.full,
-    backgroundColor: Theme.colors.card,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    paddingHorizontal: Theme.spacing.md,
-    paddingVertical: Theme.spacing.sm,
-  },
-  whiteboardPlaygroundButtonPressed: { opacity: 0.72 },
-  whiteboardPlaygroundButtonText: { ...Theme.typography.meta, color: Theme.colors.foreground },
 });

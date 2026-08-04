@@ -1,6 +1,6 @@
 import { createSpaceClient, type AccessGrant, type SpaceClient, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
-import { VideoConference as ReactSpaceView } from "@q9labsai/chalk-react";
+import { Chalk } from "@q9labsai/chalk-react";
 import { createRoot } from "react-dom/client";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
@@ -106,7 +106,7 @@ async function joinFromHarness(nextClient: SpaceClient): Promise<void> {
 }
 
 async function failJoin(lastError: HarnessConnection["lastError"]): Promise<void> {
-  throw lastError ?? new Error("The conference could not join");
+  throw lastError ?? new Error("The Space could not be joined");
 }
 
 function waitForJoin(nextClient: SpaceClient): Promise<void> {
@@ -125,12 +125,12 @@ function waitForJoin(nextClient: SpaceClient): Promise<void> {
 
 function settleJoin(connection: HarnessConnection, resolveJoin: () => void, rejectJoin: (error: unknown) => void): void {
   if (connection.status === "live" || connection.status === "reconnecting") resolveJoin();
-  else rejectJoin(connection.lastError ?? new Error("The conference could not join"));
+  else rejectJoin(connection.lastError ?? new Error("The Space could not be joined"));
 }
 
 installHarness(client);
 
-createRoot(document.getElementById("root")!).render(<ReactSpaceView roomId="packed-e2e-room" roomName="Packed SDK consumer" userName={fixtureUser ?? "Packed user"} autoJoin createSession={() => client} chatEnabled participantsEnabled screenShareEnabled reactionsEnabled handRaiseEnabled canLeave />);
+createRoot(document.getElementById("root")!).render(<Chalk client={client} entrance={false} displayName={fixtureUser ?? "Packed user"} spaceName="Packed SDK consumer" features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }} />);
 
 function publicSnapshot(snapshot: SpaceSnapshot) {
   return {

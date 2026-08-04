@@ -218,20 +218,20 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
 
   return (
     <div className={cn("flex h-full w-full gap-2 transition-all duration-500", thumbnailPosition === "bottom" ? "flex-col" : "flex-row", className)}>
-      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-black group" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
+      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden bg-[var(--chalk-text)] group" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
         {/* Loading State */}
         {isLoading && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 transition-opacity duration-500">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[var(--chalk-canvas)] transition-opacity duration-500">
             <div className="relative">
-              <div className="absolute -inset-4 rounded-full bg-primary/20 blur-xl animate-pulse" />
-              <Spinner size="lg" className="text-primary relative z-10" />
+              <div className="absolute -inset-4 rounded-full bg-[var(--chalk-accent)] blur-xl animate-pulse" />
+              <Spinner size="lg" className="text-[var(--chalk-accent)] relative z-10" />
             </div>
             <div className="mt-6 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-              <div className="flex items-center gap-2 text-white/90 font-medium">
-                <Monitor01Icon size={18} className="text-primary" />
+              <div className="flex items-center gap-2 text-[var(--chalk-accent-text)] font-medium">
+                <Monitor01Icon size={18} className="text-[var(--chalk-accent)]" />
                 <span>Connecting to {sharedByName}'s screen...</span>
               </div>
-              <p className="text-xs text-white/50">Setting up the high-quality stream</p>
+              <p className="text-xs text-[var(--chalk-accent-text)]">Setting up the high-quality stream</p>
             </div>
           </div>
         )}
@@ -244,28 +244,45 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
             muted
             onLoadedData={handleVideoLoaded}
             onLoadedMetadata={handleVideoLoaded}
-            className={cn("h-full w-full rounded-xl bg-black transition-all duration-700", isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100", zoom > 1 && isDragging && "cursor-grabbing", zoom > 1 && !isDragging && "cursor-grab")}
+            className={cn("h-full w-full rounded-xl bg-[var(--chalk-text)] transition-all duration-700", isLoading ? "opacity-0 scale-95" : "opacity-100 scale-100", zoom > 1 && isDragging && "cursor-grabbing", zoom > 1 && !isDragging && "cursor-grab")}
           />
         </div>
 
-        <div className={cn("absolute top-3 left-3 px-2 py-1 rounded-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-xs font-medium transition-opacity duration-500", isLoading ? "opacity-0" : "opacity-100")}>Shared by {sharedByName}</div>
+        <div className={cn("absolute top-3 left-3 px-2 py-1 rounded-full bg-[var(--chalk-stage)] backdrop-blur-sm text-[var(--chalk-text)] text-xs font-medium transition-opacity duration-500", isLoading ? "opacity-0" : "opacity-100")}>Shared by {sharedByName}</div>
 
         {/* Zoom controls */}
         {enableZoom && (
           <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button type="button" onClick={toggleRotation} className={cn("p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-all mr-1", rotation !== 0 && "text-primary border-primary/50")} aria-label="Rotate view">
+            <button
+              type="button"
+              onClick={toggleRotation}
+              className={cn("p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-all mr-1", rotation !== 0 && "text-[var(--chalk-accent)] border-[var(--chalk-accent)]")}
+              aria-label="Rotate view"
+            >
               <RefreshIcon size={14} style={{ transform: `rotate(${-rotation}deg)` }} className="transition-transform duration-500 ease-in-out" />
             </button>
-            <div className="w-px h-4 bg-white/20 mx-1" />
-            <button type="button" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Zoom out">
+            <div className="w-px h-4 bg-[var(--chalk-surface)] mx-1" />
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              disabled={zoom <= MIN_ZOOM}
+              className="p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Zoom out"
+            >
               <ZoomOutIcon size={14} />
             </button>
-            <span className="px-1.5 py-0.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 text-xs font-medium min-w-[2.5rem] text-center">{Math.round(zoom * 100)}%</span>
-            <button type="button" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Zoom in">
+            <span className="px-1.5 py-0.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] text-xs font-medium min-w-[2.5rem] text-center">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              disabled={zoom >= MAX_ZOOM}
+              className="p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Zoom in"
+            >
               <ZoomInIcon size={14} />
             </button>
             {(zoom > 1 || rotation !== 0) && (
-              <button type="button" onClick={handleResetZoom} className="p-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md text-white border border-white/10 hover:bg-zinc-800 transition-colors ml-0.5" aria-label="Reset zoom">
+              <button type="button" onClick={handleResetZoom} className="p-1.5 rounded-full bg-[var(--chalk-text)] backdrop-blur-md text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] hover:bg-[var(--chalk-text)] transition-colors ml-0.5" aria-label="Reset zoom">
                 <Maximize01Icon size={14} />
               </button>
             )}
@@ -273,11 +290,11 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
         )}
 
         {/* Zoom indicator when zoomed */}
-        {zoom > 1 && <div className="absolute bottom-3 right-3 px-1.5 py-0.5 rounded bg-secondary/80 backdrop-blur-sm text-secondary-foreground text-[10px]">Drag to pan • Scroll to zoom</div>}
+        {zoom > 1 && <div className="absolute bottom-3 right-3 px-1.5 py-0.5 rounded bg-[var(--chalk-stage)] backdrop-blur-sm text-[var(--chalk-text)] text-[10px]">Drag to pan • Scroll to zoom</div>}
 
         {onStopShare && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button type="button" onClick={onStopShare} className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-md font-medium shadow-lg transition-colors">
+            <button type="button" onClick={onStopShare} className="px-4 py-2 bg-[var(--chalk-danger)] hover:bg-[var(--chalk-danger)] text-[var(--chalk-accent-text)] rounded-md font-medium shadow-lg transition-colors">
               Stop Sharing
             </button>
           </div>
@@ -289,7 +306,7 @@ export const ScreenShareView = React.memo(({ screenShareTrack, sharedByName, par
             type="button"
             onClick={toggleThumbnails}
             className={cn(
-              "absolute z-20 flex items-center justify-center bg-zinc-950/50 backdrop-blur-md border border-white/10 text-white/80 hover:text-white hover:bg-zinc-950/80 transition-all duration-300 shadow-lg",
+              "absolute z-20 flex items-center justify-center bg-[var(--chalk-text)] backdrop-blur-md border border-[var(--chalk-line)] text-[var(--chalk-accent-text)] hover:text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-text)] transition-all duration-300 shadow-lg",
               thumbnailPosition === "right" ? "top-1/2 -translate-y-1/2 right-1 w-6 h-12 rounded-l-xl" : "left-1/2 -translate-x-1/2 bottom-1 w-12 h-6 rounded-t-xl",
             )}
             aria-label={isThumbnailsOpen ? "Collapse sidebar" : "Expand sidebar"}

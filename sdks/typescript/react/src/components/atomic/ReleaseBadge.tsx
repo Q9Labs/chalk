@@ -9,15 +9,15 @@ export interface ReleaseBadgeProps {
 const typeConfig = {
   major: {
     label: "Major",
-    className: "bg-destructive/10 text-destructive border-destructive/20",
+    className: "bg-[var(--chalk-danger-surface)] text-[var(--chalk-danger)] border-[var(--chalk-danger)]",
   },
   minor: {
     label: "Minor",
-    className: "bg-primary/10 text-primary border-primary/20",
+    className: "bg-[var(--chalk-stage)] text-[var(--chalk-accent)] border-[var(--chalk-accent)]",
   },
   patch: {
     label: "Patch",
-    className: "bg-muted text-muted-foreground border-border",
+    className: "bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)] border-[var(--chalk-line)]",
   },
 } as const;
 

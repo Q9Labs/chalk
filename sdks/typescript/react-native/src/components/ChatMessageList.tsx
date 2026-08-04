@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyTitle: {
-    color: "#ffffff",
+    color: Theme.colors.onDark,
     fontSize: 15,
     fontWeight: "700",
   },
@@ -157,18 +157,18 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 6,
   },
   remoteBubble: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Theme.colors.whiteOverlay06,
     borderBottomLeftRadius: 6,
   },
   messageText: {
-    color: "#ffffff",
+    color: Theme.colors.onDark,
     fontSize: 14,
     lineHeight: 20,
   },
   attachment: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: Theme.colors.darkOverlay16,
+    borderColor: Theme.colors.whiteOverlay16,
     borderRadius: 10,
     borderWidth: 1,
     flexDirection: "row",
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   attachmentKind: {
-    color: "rgba(255,255,255,0.72)",
+    color: Theme.colors.whiteOverlay72,
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.6,
@@ -188,12 +188,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   attachmentName: {
-    color: "#ffffff",
+    color: Theme.colors.onDark,
     fontSize: 13,
     fontWeight: "700",
   },
   attachmentDetails: {
-    color: "rgba(255,255,255,0.68)",
+    color: Theme.colors.whiteOverlay68,
     fontSize: 10,
     marginTop: 2,
   },

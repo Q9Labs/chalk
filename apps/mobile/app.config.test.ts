@@ -7,6 +7,23 @@ describe("createExpoConfig", () => {
 
     expect(config.expo.plugins).toEqual(["expo-secure-store"]);
     expect(config.expo.android.blockedPermissions).toContain("android.permission.SYSTEM_ALERT_WINDOW");
+    expect(config.expo.extra.telemetryEnabled).toBe(false);
+  });
+
+  it("only enables telemetry when the deployment opts in explicitly", () => {
+    const originalTelemetry = process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED;
+
+    delete process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED;
+    expect(createExpoConfig("development").expo.extra.telemetryEnabled).toBe(false);
+
+    process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED = "false";
+    expect(createExpoConfig("development").expo.extra.telemetryEnabled).toBe(false);
+
+    process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED = "true";
+    expect(createExpoConfig("development").expo.extra.telemetryEnabled).toBe(true);
+
+    if (originalTelemetry === undefined) delete process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED;
+    else process.env.EXPO_PUBLIC_CHALK_TELEMETRY_ENABLED = originalTelemetry;
   });
 
   it("configures production builds without development-only native modules", () => {
@@ -25,12 +42,8 @@ describe("createExpoConfig", () => {
     expect(config.expo.splash.backgroundColor).toBe("#0b0c14");
     expect(config.expo.android.adaptiveIcon.backgroundColor).toBe("#0b0c14");
     expect(config.expo.android.intentFilters?.[0]?.data).toEqual([
-      { scheme: "https", host: "chalkmeet.com", pathPrefix: "/j/" },
-      { scheme: "https", host: "chalkmeet.com", path: "/room" },
-      { scheme: "https", host: "chalkmeet.com", pathPrefix: "/room/" },
-      { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/j/" },
-      { scheme: "https", host: "chalk.q9labs.ai", path: "/room" },
-      { scheme: "https", host: "chalk.q9labs.ai", pathPrefix: "/room/" },
+      { scheme: "https", host: "chalkmeet.com", path: "/space" },
+      { scheme: "https", host: "chalk.q9labs.ai", path: "/space" },
     ]);
     expect(config.expo.extra.brokerUrl).toBe("https://chalkmeet.com/local-chalk");
   });
@@ -44,7 +57,19 @@ describe("createExpoConfig", () => {
 
     expect(config.expo.extra.brokerUrl).toBe("https://chalkmeet.com/local-chalk");
 
-    process.env.EXPO_PUBLIC_CHALK_BROKER_URL = originalBrokerUrl;
+    if (originalBrokerUrl === undefined) delete process.env.EXPO_PUBLIC_CHALK_BROKER_URL;
+    else process.env.EXPO_PUBLIC_CHALK_BROKER_URL = originalBrokerUrl;
+  });
+
+  it("falls back to the production broker when the configured URL is invalid", () => {
+    const originalBrokerUrl = process.env.EXPO_PUBLIC_CHALK_BROKER_URL;
+
+    process.env.EXPO_PUBLIC_CHALK_BROKER_URL = "not-a-url";
+
+    expect(createExpoConfig("development").expo.extra.brokerUrl).toBe("https://chalkmeet.com/local-chalk");
+
+    if (originalBrokerUrl === undefined) delete process.env.EXPO_PUBLIC_CHALK_BROKER_URL;
+    else process.env.EXPO_PUBLIC_CHALK_BROKER_URL = originalBrokerUrl;
   });
 
   it("passes the local broker URL into development builds", () => {

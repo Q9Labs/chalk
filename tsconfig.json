@@ -41,6 +41,7 @@
       "@q9labsai/chalk-react/ui": ["./sdks/typescript/react/src/components/ui/index.ts"],
       "@q9labsai/chalk-react/utils": ["./sdks/typescript/react/src/utils/index.ts"],
       "@q9labsai/chalk-react-native": ["./sdks/typescript/react-native/src/index.ts"],
+      "@q9labsai/chalk-react-native/client": ["./sdks/typescript/react-native/src/client.ts"],
       "@q9labsai/chalk-react-native/android": ["./sdks/typescript/react-native/src/android.ts"],
       "@q9labsai/chalk-react-native/ios": ["./sdks/typescript/react-native/src/ios.ts"],
       "@q9labsai/chalk-react-native/ios-phone": ["./sdks/typescript/react-native/src/ios-phone.ts"],

@@ -3,6 +3,7 @@ import type { ParticipantGradientPreference } from "../ui/native-types";
 import { FacehashNative } from "@q9labsai/facehash/react-native";
 import { memo, useMemo, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { Theme } from "../ui/theme";
 import { GradientSurface } from "./GradientSurface";
 
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
@@ -18,10 +19,10 @@ const sizeMap: Record<AvatarSize, { size: number }> = {
 };
 
 const statusColorMap: Record<AvatarStatus, string> = {
-  online: "#22c55e",
-  away: "#f59e0b",
-  busy: "#ef4444",
-  offline: "#6b7280",
+  online: Theme.colors.success,
+  away: Theme.colors.warning,
+  busy: Theme.colors.error,
+  offline: Theme.colors.statusOffline,
 };
 
 export interface FaceAvatarProps {
@@ -92,7 +93,7 @@ function FaceAvatarBase({ name, src, size = "md", status, gradientPreference, au
               borderRadius: statusSize / 2,
               backgroundColor: statusColorMap[status],
               borderWidth: 2,
-              borderColor: "#000000",
+              borderColor: Theme.colors.darkCanvas,
             },
           ]}
         />

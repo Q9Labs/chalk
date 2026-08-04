@@ -1,6 +1,8 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View, Modal, TouchableWithoutFeedback } from "react-native";
 
+import { Theme } from "../ui/theme";
+
 export interface ReactionPickerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -39,20 +41,20 @@ function ReactionPickerBase({ isOpen, onClose, onSelect }: ReactionPickerProps):
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: Theme.colors.darkOverlay30,
     justifyContent: "flex-end",
     alignItems: "center",
     paddingBottom: 100,
   },
   picker: {
     flexDirection: "row",
-    backgroundColor: "#0c0c0e",
+    backgroundColor: Theme.colors.insetSurface,
     borderRadius: 28,
     padding: 6,
     gap: 4,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    shadowColor: "#000",
+    borderColor: Theme.colors.whiteOverlay08,
+    shadowColor: Theme.colors.darkCanvas,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
@@ -66,7 +68,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emojiButtonPressed: {
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: Theme.colors.whiteOverlay12,
     transform: [{ scale: 0.88 }],
   },
   emojiText: {

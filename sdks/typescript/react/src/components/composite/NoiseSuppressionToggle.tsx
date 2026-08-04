@@ -1,5 +1,6 @@
 import React from "react";
-import { Toggle, Select } from "../atomic";
+import { Select } from "../atomic";
+import { Toggle } from "../atomic/Toggle";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 
@@ -19,11 +20,11 @@ export const NoiseSuppressionToggle = React.memo(({ enabled, onChange, level = "
   };
 
   return (
-    <div className={cn("flex flex-col gap-2 p-3 bg-chalk-bg-subtle rounded-lg border border-chalk-border-subtle", className)}>
+    <div className={cn("flex flex-col gap-2 p-3 bg-[var(--chalk-stage)] rounded-lg border border-[var(--chalk-line)]", className)}>
       <div className="flex items-center justify-between">
         <div className="flex flex-col">
-          <span className="text-sm font-medium text-chalk-text-primary">Noise Suppression</span>
-          <span className="text-xs text-chalk-text-muted">Reduce background noise</span>
+          <span className="text-sm font-medium text-[var(--chalk-accent)]">Noise Suppression</span>
+          <span className="text-xs text-[var(--chalk-muted-text)]">Reduce background noise</span>
         </div>
         <Toggle checked={enabled} onChange={onChange} disabled={disabled} aria-label="Enable noise suppression" />
       </div>

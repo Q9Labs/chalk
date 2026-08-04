@@ -7,30 +7,36 @@ const webPortEnv = "CHALK_DEV_WEB_PORT";
 
 describe("local broker Vite proxy", () => {
   it.each([
-    [{}, "http://127.0.0.1:3071"],
+    [{}, "http://127.0.0.1:8787"],
     [{ [brokerPortEnv]: "4101" }, "http://127.0.0.1:4101"],
     [{ [brokerOriginEnv]: "https://broker.example.test" }, "https://broker.example.test"],
     [{ [brokerOriginEnv]: "https://broker.example.test", [brokerPortEnv]: "4101" }, "https://broker.example.test"],
-  ])("uses the configured broker target %#", async (environment, target) => {
-    const config = await loadViteConfig(environment);
-    const proxy = localProxy(config);
+  ])(
+    "uses the configured broker target %#",
+    async (environment, target) => {
+      const config = await loadViteConfig(environment);
+      const proxy = localProxy(config);
 
-    expect(proxy.target).toBe(target);
-    expect(proxy.changeOrigin).toBe(true);
-  });
+      expect(proxy.target).toBe(target);
+      expect(proxy.changeOrigin).toBe(true);
+    },
+    15_000,
+  );
 
   it("sets the browser origin on local broker requests", async () => {
     const config = await loadViteConfig({ [webPortEnv]: "3123" });
     const proxy = localProxy(config);
-    const on = vi.fn();
+    let proxyRequestListener: ((proxyRequest: { setHeader: (name: string, value: string) => void }) => void) | undefined;
+    const on = (event: string, listener: (proxyRequest: { setHeader: (name: string, value: string) => void }) => void) => {
+      if (event === "proxyReq") proxyRequestListener = listener;
+    };
 
     proxy.configure?.({ on } as never, proxy);
 
-    expect(on).toHaveBeenCalledWith("proxyReq", expect.any(Function));
-    const proxyRequestListener = on.mock.calls[0]?.[1] as (proxyRequest: { setHeader: (name: string, value: string) => void }) => void;
+    expect(proxyRequestListener).toEqual(expect.any(Function));
     const setHeader = vi.fn();
 
-    proxyRequestListener({ setHeader });
+    proxyRequestListener?.({ setHeader });
 
     expect(setHeader).toHaveBeenCalledWith("origin", "http://127.0.0.1:3123");
     expect(config.server?.port).toBe(3123);

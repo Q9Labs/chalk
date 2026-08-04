@@ -14,9 +14,9 @@ internal class ChalkSelfManagedConnection(
   private val isClosed = AtomicBoolean(false)
 
   init {
-    val uriToken = callSpec.roomId.lowercase().replace("[^a-z0-9._-]".toRegex(), "-")
+    val uriToken = callSpec.spaceId.lowercase().replace("[^a-z0-9._-]".toRegex(), "-")
     setAddress(Uri.fromParts(PhoneAccount.SCHEME_SIP, "$uriToken@chalkmeet.local", null), TelecomManager.PRESENTATION_ALLOWED)
-    setCallerDisplayName(callSpec.roomName, TelecomManager.PRESENTATION_ALLOWED)
+    setCallerDisplayName(callSpec.spaceName, TelecomManager.PRESENTATION_ALLOWED)
     setConnectionProperties(PROPERTY_SELF_MANAGED)
     setAudioModeIsVoip(true)
     setInitializing()

@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Chalk",
   "short_name": "Chalk",
-  "description": "Ultra low-latency video conferencing for education.",
+  "description": "Ultra low-latency real-time collaboration for education.",
   "lang": "en-US",
   "scope": "/",
   "start_url": "/",
@@ -44,9 +44,9 @@
   "categories": ["education", "productivity", "communication"],
   "shortcuts": [
     {
-      "name": "New meeting",
-      "short_name": "New",
-      "url": "/new",
+      "name": "New Space",
+      "short_name": "Space",
+      "url": "/space",
       "icons": [
         {
           "src": "/brand/chalk/shortcut-new-192.png",

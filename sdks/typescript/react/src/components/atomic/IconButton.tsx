@@ -1,5 +1,5 @@
 import React from "react";
-import type { ChalkHapticInput } from "../../internal/useHaptics";
+import type { HapticInput } from "../../internal/useHaptics";
 import { useHaptics } from "../../internal/useHaptics";
 import { cn } from "../../utils/cn";
 
@@ -9,7 +9,7 @@ interface IconButtonProps {
   variant?: "default" | "ghost" | "outline";
   onClick?: () => void;
   disabled?: boolean;
-  haptic?: ChalkHapticInput | false;
+  haptic?: HapticInput | false;
   "aria-label": string;
   className?: string;
 }
@@ -21,9 +21,9 @@ const sizeClasses = {
 };
 
 const variantClasses = {
-  default: "bg-secondary text-foreground hover:bg-accent shadow-sm",
-  ghost: "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
-  outline: "border border-border bg-transparent text-foreground hover:bg-accent",
+  default: "bg-[var(--chalk-stage)] text-[var(--chalk-text)] hover:bg-[var(--chalk-stage)] shadow-sm",
+  ghost: "bg-transparent text-[var(--chalk-muted-text)] hover:bg-[var(--chalk-stage)] hover:text-[var(--chalk-text)]",
+  outline: "border border-[var(--chalk-line)] bg-transparent text-[var(--chalk-text)] hover:bg-[var(--chalk-stage)]",
 };
 
 export const IconButton = React.memo(

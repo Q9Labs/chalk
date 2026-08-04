@@ -62,10 +62,10 @@ export function Hero() {
       <div className="container hero-inner">
         <div className="hero-copy">
           <h1>
-            Video calls.
-            <span className="hero-highlight">Your call.</span>
+            Real-time Spaces.
+            <span className="hero-highlight">Your way.</span>
           </h1>
-          <p className="hero-sub">Open-source video infrastructure for TypeScript, React, and React Native.</p>
+          <p className="hero-sub">Open-source real-time collaboration infrastructure for TypeScript, React, and React Native.</p>
           <div className="hero-ctas">
             <a href="/sdk-preview" className="btn btn-primary">
               View SDK preview
@@ -78,7 +78,7 @@ export function Hero() {
 
         <figure className="hero-product">
           <div className="hero-product-wash" aria-hidden="true" />
-          <img src="/images/marketing/chalk-speaker-view-20260801.webp" width={1586} height={992} alt="Chalk speaker-view meeting interface with an active speaker, participant filmstrip, and call controls." />
+          <img src="/images/marketing/chalk-speaker-view-20260801.webp" width={1586} height={992} alt="Chalk Space interface with an active speaker, Participant filmstrip, and media controls." />
         </figure>
       </div>
 

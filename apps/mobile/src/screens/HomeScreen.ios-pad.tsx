@@ -1,6 +1,4 @@
-import { ChalkLogoElements } from "@q9labsai/chalk-react-native";
 import { useClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/clipboard";
-import { getClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/invites";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
 import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
@@ -9,37 +7,35 @@ import ArrowRight02Icon from "@hugeicons/core-free-icons/dist/esm/ArrowRight02Ic
 import CancelCircleIcon from "@hugeicons/core-free-icons/dist/esm/CancelCircleIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useMemo, useState, useRef, useEffect } from "react";
-import { KeyboardAvoidingView, Linking, Pressable, StyleSheet, Text, TextInput, View, Animated, ActivityIndicator, LayoutAnimation } from "react-native";
+import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View, Animated, ActivityIndicator, LayoutAnimation } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { canCreateMeeting, createMeetingLobbyRoute, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
+import { BrandMark } from "../components/BrandMark";
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
-
-const PUBLIC_SITE_URL = "https://chalkmeet.com";
+import { enterLocalSpaceRoute, getClipboardSpaceSuggestion, parseSpaceLink, resolveSpaceInvite, type SpaceRoute } from "../lib/spaces";
 
 interface HomeScreenProps {
-  onNavigate: (route: LobbyRoute) => void;
-  onDiagnosticsFailure?: (source: "resolve-join-link" | "create-meeting", message: string) => void;
+  onNavigate: (route: SpaceRoute) => void;
+  onDiagnosticsFailure?: (source: "resolve-space-link" | "enter-space", message: string) => void;
 }
 
 export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScreenProps): React.JSX.Element {
-  const createEnabled = useMemo(() => canCreateMeeting(), []);
   const [input, setInput] = useState("");
-  const [newRoomName, setNewRoomName] = useState("");
+  const [spaceLabel, setSpaceLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
-  const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
+  const [isEnteringSpace, setIsEnteringSpace] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [activeMode, setActiveMode] = useState<"dual" | "naming">("dual");
   const inputRef = useRef<TextInput>(null);
   const namingInputRef = useRef<TextInput>(null);
 
-  const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
-  const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
-  const clipboardInviteLink = useClipboardInviteSuggestion(input, {
+  const spaceDestination = useMemo(() => parseSpaceLink(input), [input]);
+  const canOpenSpaceLink = Boolean(spaceDestination?.spaceInviteToken);
+  const clipboardSpaceLink = useClipboardInviteSuggestion(input, {
     clipboard: Clipboard,
-    getSuggestion: getClipboardInviteSuggestion,
+    getSuggestion: getClipboardSpaceSuggestion,
   });
 
   const entryHeroAnim = useRef(new Animated.Value(0)).current;
@@ -62,11 +58,11 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
     ]).start();
   }, [entryHeroAnim, entryActionsAnim]);
 
-  const openInviteLink = async (inviteLink: string) => {
-    const destination = parseInputDestination(inviteLink);
-    const joinToken = destination?.joinToken;
-    if (!joinToken) {
-      setError("Please paste a valid invite link.");
+  const openSpaceLink = async (spaceLink: string) => {
+    const destination = parseSpaceLink(spaceLink);
+    const spaceInviteToken = destination?.spaceInviteToken;
+    if (!spaceInviteToken) {
+      setError("Paste a valid Space link.");
       return;
     }
 
@@ -74,43 +70,37 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
 
     try {
       setIsResolving(true);
-      onNavigate(await resolveJoinToken(joinToken));
+      onNavigate(await resolveSpaceInvite(spaceInviteToken));
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Invalid invite link";
+      const message = nextError instanceof Error ? nextError.message : "The Space link is invalid.";
       setError(message);
-      onDiagnosticsFailure?.("resolve-join-link", message);
+      onDiagnosticsFailure?.("resolve-space-link", message);
     } finally {
       setIsResolving(false);
     }
   };
 
   const handleOpenInput = async () => {
-    await openInviteLink(input);
+    await openSpaceLink(input);
   };
 
   const handleClipboardSuggestion = async () => {
-    if (!clipboardInviteLink) return;
-    setInput(clipboardInviteLink);
-    await openInviteLink(clipboardInviteLink);
+    if (!clipboardSpaceLink) return;
+    setInput(clipboardSpaceLink);
+    await openSpaceLink(clipboardSpaceLink);
   };
 
-  const handleNewMeeting = async () => {
-    if (!createEnabled) {
-      setError(null);
-      void Linking.openURL(PUBLIC_SITE_URL);
-      return;
-    }
-
+  const handleEnterSpace = async () => {
     try {
       setError(null);
-      setIsCreatingMeeting(true);
-      onNavigate(await createMeetingLobbyRoute(newRoomName.trim() || undefined));
+      setIsEnteringSpace(true);
+      onNavigate(await enterLocalSpaceRoute(spaceLabel.trim() || undefined));
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Unable to create meeting";
+      const message = nextError instanceof Error ? nextError.message : "Unable to open the Space.";
       setError(message);
-      onDiagnosticsFailure?.("create-meeting", message);
+      onDiagnosticsFailure?.("enter-space", message);
     } finally {
-      setIsCreatingMeeting(false);
+      setIsEnteringSpace(false);
     }
   };
 
@@ -150,10 +140,10 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
           >
             <View style={styles.illustrationFrame}>
               <View style={styles.glow} />
-              <ChalkLogoElements size={120} />
+              <BrandMark size={120} />
             </View>
-            <Text style={styles.heroTitle}>Video meetings for everyone</Text>
-            <Text style={styles.heroSubtitle}>Connect, collaborate, and celebrate from anywhere with Chalk.</Text>
+            <Text style={styles.heroTitle}>Spaces for live collaboration</Text>
+            <Text style={styles.heroSubtitle}>Join a Space to collaborate in real time with Chalk.</Text>
           </Animated.View>
 
           <Animated.View
@@ -175,9 +165,9 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
             <View style={styles.commandSurface}>
               {activeMode === "dual" ? (
                 <>
-                  <Pressable disabled={isCreatingMeeting} onPress={() => switchMode("naming")} accessibilityRole="button" accessibilityLabel="Create a new meeting" style={({ pressed }) => [styles.newMeetingAction, pressed && styles.buttonPressed]}>
+                  <Pressable disabled={isEnteringSpace} onPress={() => switchMode("naming")} accessibilityRole="button" accessibilityLabel="Enter the local Space" style={({ pressed }) => [styles.enterSpaceAction, pressed && styles.buttonPressed]}>
                     <HugeiconsIcon icon={Add01Icon} size={24} color={Theme.colors.primary} />
-                    <Text style={styles.actionLabel}>New Meeting</Text>
+                    <Text style={styles.actionLabel}>Enter Space</Text>
                   </Pressable>
 
                   <View style={styles.divider} />
@@ -194,7 +184,7 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
                         setInput(text);
                         if (error) setError(null);
                       }}
-                      placeholder="Paste invite link to join..."
+                      placeholder="Paste a Space link"
                       placeholderTextColor={Theme.colors.placeholder}
                       style={styles.input}
                       value={input}
@@ -207,8 +197,8 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
                       </Pressable>
                     )}
 
-                    <Pressable onPress={() => void handleOpenInput()} disabled={!canOpenInviteLink || isResolving} style={({ pressed }) => [styles.goButton, canOpenInviteLink && styles.goButtonReady, pressed && canOpenInviteLink && styles.buttonPressed, isResolving && styles.buttonDisabled]}>
-                      {isResolving ? <ActivityIndicator color="white" size="small" /> : <HugeiconsIcon icon={ArrowRight02Icon} size={24} color={canOpenInviteLink ? "white" : Theme.colors.mutedForeground} />}
+                    <Pressable onPress={() => void handleOpenInput()} disabled={!canOpenSpaceLink || isResolving} style={({ pressed }) => [styles.goButton, canOpenSpaceLink && styles.goButtonReady, pressed && canOpenSpaceLink && styles.buttonPressed, isResolving && styles.buttonDisabled]}>
+                      {isResolving ? <ActivityIndicator color="white" size="small" /> : <HugeiconsIcon icon={ArrowRight02Icon} size={24} color={canOpenSpaceLink ? "white" : Theme.colors.mutedForeground} />}
                     </Pressable>
                   </View>
                 </>
@@ -219,22 +209,22 @@ export function HomeScreenIosPad({ onNavigate, onDiagnosticsFailure }: HomeScree
                   </Pressable>
 
                   <View style={styles.namingModeInputWrapper}>
-                    <TextInput ref={namingInputRef} onChangeText={setNewRoomName} placeholder="Meeting Name (Optional)" placeholderTextColor="rgba(255,255,255,0.3)" style={styles.namingModeInput} value={newRoomName} onSubmitEditing={() => void handleNewMeeting()} maxLength={40} />
-                    {newRoomName.length > 0 && (
-                      <Pressable onPress={() => setNewRoomName("")} style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}>
+                    <TextInput ref={namingInputRef} onChangeText={setSpaceLabel} placeholder="Space label (optional)" placeholderTextColor="rgba(255,255,255,0.3)" style={styles.namingModeInput} value={spaceLabel} onSubmitEditing={() => void handleEnterSpace()} maxLength={40} />
+                    {spaceLabel.length > 0 && (
+                      <Pressable onPress={() => setSpaceLabel("")} style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}>
                         <HugeiconsIcon icon={CancelCircleIcon} size={20} color={Theme.colors.mutedForeground} />
                       </Pressable>
                     )}
                   </View>
 
-                  <Pressable onPress={() => void handleNewMeeting()} disabled={isCreatingMeeting} style={({ pressed }) => [styles.goButton, styles.goButtonReady, pressed && styles.buttonPressed, isCreatingMeeting && styles.buttonDisabled]}>
-                    {isCreatingMeeting ? <ActivityIndicator color="white" size="small" /> : <HugeiconsIcon icon={ArrowRight02Icon} size={24} color="white" />}
+                  <Pressable onPress={() => void handleEnterSpace()} disabled={isEnteringSpace} style={({ pressed }) => [styles.goButton, styles.goButtonReady, pressed && styles.buttonPressed, isEnteringSpace && styles.buttonDisabled]}>
+                    {isEnteringSpace ? <ActivityIndicator color="white" size="small" /> : <HugeiconsIcon icon={ArrowRight02Icon} size={24} color="white" />}
                   </Pressable>
                 </View>
               )}
             </View>
 
-            {clipboardInviteLink && activeMode === "dual" && (
+            {clipboardSpaceLink && activeMode === "dual" && (
               <View style={styles.clipboardSection}>
                 <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} />
               </View>
@@ -320,7 +310,7 @@ const styles = StyleSheet.create({
     padding: 8,
     height: 80,
   },
-  newMeetingAction: {
+  enterSpaceAction: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 24,

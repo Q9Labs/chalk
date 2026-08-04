@@ -1,127 +1,99 @@
 # @q9labsai/chalk-react
 
-React bindings and composable UI for a Chalk Space.
-
-`@q9labsai/chalk-client` owns the framework-agnostic `SpaceClient`: lifecycle,
-access refresh, transport, recovery, controllers, and the stable
-`SpaceSnapshot` store. This package binds that store to React and provides the
-current turnkey and composable components.
+`@q9labsai/chalk-react` provides the React surface for a Chalk Space. Use
+`<Chalk />` for the complete embedded experience, or share a `SpaceClient`
+with `<ChalkProvider>` and the snapshot hooks when building custom UI.
 
 ## Installation
 
 ```bash
-pnpm add @q9labsai/chalk-client @q9labsai/chalk-react @q9labsai/chalk-ui
+pnpm add @q9labsai/chalk-client @q9labsai/chalk-react
 ```
 
-## Create the client
+## Turnkey UI
 
-The only client integration seam is `getAccess`. The backend returns an opaque
-`AccessGrant`; the browser forwards it unchanged and never constructs,
-parses, or reads its fields.
-
-```tsx
-import { createSpaceClient, type AccessGrant } from "@q9labsai/chalk-client";
-
-const client = createSpaceClient({
-  space: "design-review",
-  getAccess: ({ space, reason }): Promise<AccessGrant> => fetchAccess({ space, reason }),
-});
-```
-
-`SpaceClient` exposes flat `join`/`leave` lifecycle methods and the
-`media`, `chat`, `participants`, `reactions`, and `whiteboard` controllers.
-React code can subscribe to `client.getSnapshot()` directly, or use the
-package bindings below.
-
-## Turnkey Space experience
-
-The current compatibility component owns the pre-live, active, and terminal
-states. Applications provide the binding store through a callback; keep the
-underlying access callback on `SpaceClient`.
+Provide a Space slug and a `getAccess` callback. Chalk creates and owns the
+client, renders the Entrance by default, and releases its owned client when it
+unmounts.
 
 ```tsx
-import type { VideoConferenceProps as CompatibilityProps } from "@q9labsai/chalk-react";
-import { VideoConference as SpaceExperience } from "@q9labsai/chalk-react";
+import { Chalk } from "@q9labsai/chalk-react";
+import type { AccessGrant } from "@q9labsai/chalk-client";
 
-export function App({ createStore }: { createStore: CompatibilityProps["createSession"] }) {
-  const props = {
-    roomId: "design-review",
-    roomName: "Design review",
-    createSession: createStore,
-    chatEnabled: true,
-    participantsEnabled: true,
-    screenShareEnabled: true,
-  } satisfies CompatibilityProps;
-  return <SpaceExperience {...props} />;
+export function SpacePage() {
+  return (
+    <Chalk
+      space="design-review"
+      getAccess={async ({ space, reason }): Promise<AccessGrant> => fetchAccess({ space, reason })}
+      defaults={{ microphone: true, camera: true }}
+      features={{ chat: true, screenShare: true, reactions: true }}
+      spaceName="Design review"
+      onEpisodeEnded={({ episode }) => console.log(episode?.id)}
+    />
+  );
 }
 ```
 
-The callback receives the selected `PreJoinSettings` and returns the
-SpaceClient-backed binding store. Set `autoJoin` when identity and device
-settings are already known. Use `layout`/`onLayoutChange` for controlled layout
-state. Feature props such as `chatEnabled` describe available UI; capability
-checks on the snapshot decide which commands the current Participant may use.
-
-## Composable client bindings
-
-`ChalkProvider` accepts the public `SpaceClient` and binds its store to React.
-It does not open connections or refresh access on its own; `SpaceClient` owns
-those operations.
+Pass an existing client when its lifecycle belongs to the embedding
+application. Chalk will use it without disposing it.
 
 ```tsx
-import "@q9labsai/chalk-ui/styles.css";
+<Chalk client={spaceClient} entrance={false} />
 ```
 
-Wrap the part of the application that consumes the store:
+`theme` is the only styling door. It accepts a closed token-key set, which
+Chalk emits as CSS custom properties scoped to its root. Size and place Chalk
+with its parent element.
+
+`colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows
+the browser preference while keeping explicit token overrides in place.
+
+```tsx
+<Chalk
+  client={spaceClient}
+  theme={{
+    colorScheme: "dark",
+    accent: "#4b9bb8",
+    tokens: { canvas: "#152127", surface: "#1d2b31" },
+  }}
+/>
+```
+
+## Custom UI
+
+`ChalkProvider` only shares a `SpaceClient` with React. It does not join,
+leave, refresh access, or own the client’s lifetime.
 
 ```tsx
 import type { SpaceClient } from "@q9labsai/chalk-client";
-import { ChalkProvider, useChalkActions, useParticipants } from "@q9labsai/chalk-react";
+import { ChalkProvider, useCan, useParticipants, useSpaceClient } from "@q9labsai/chalk-react";
 
-function SpacePanel() {
-  const participants = useParticipants();
-  const actions = useChalkActions();
+function ParticipantPanel() {
+  const client = useSpaceClient();
+  const { roster } = useParticipants();
+  const canRaiseHand = useCan("raiseHand");
 
   return (
     <>
-      <p>{participants.length} participants</p>
-      <button onClick={() => void actions.leave()}>Leave</button>
+      <p>{roster.length} participants</p>
+      {canRaiseHand ? <button onClick={() => void client.participants.raiseHand()}>Raise hand</button> : null}
     </>
   );
 }
 
-export function App({ client }: { client: SpaceClient }) {
+export function SpacePanel({ client }: { readonly client: SpaceClient }) {
   return (
-    <ChalkProvider session={client}>
-      <SpacePanel />
+    <ChalkProvider client={client}>
+      <ParticipantPanel />
     </ChalkProvider>
   );
 }
 ```
 
-The provider's compatibility prop accepts the public `SpaceClient`.
-`useChalkSnapshot` returns the immutable snapshot; `useChalkSelector`
-limits rerenders to a selected value; and `useParticipants`, `useLocalMedia`,
-and `useRemoteMedia` expose common slices. `useChalkActions` delegates commands
-to the store and preserves each command's original promise.
+The public hook set is closed: `useSpaceClient`, `useConnection`, `useSelf`,
+`useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and
+`useCan`. Each snapshot hook returns its stable `SpaceSnapshot` slice; use the
+client hook for commands.
 
-## Import surface
-
-Use the narrowest import that matches the UI layer you need:
-
-```tsx
-import { Avatar, ParticipantTile, ChatPanel, ControlBar, EndScreen, JoiningScreen, ConferenceView as SpaceView } from "@q9labsai/chalk-react/components";
-```
-
-The package root exports the compatibility turnkey component, `ChalkProvider`,
-and the client-backed hooks. Active composition components are available only
-from `/components`.
-
-## Ownership boundary
-
-The hooks own React subscriptions only. Joining, transport, permissions,
-diagnostics, recovery, and opaque `AccessGrant` refresh stay in
-`@q9labsai/chalk-client`. Recording and transcription are not part of this
-launch surface. The styled `WhiteboardView` is backed by
-`@q9labsai/chalk-whiteboard`; callers still own its Space state and transport
-wiring.
+`AccessGrant` remains opaque. The application backend creates it, `getAccess`
+returns it unchanged, and `SpaceClient` handles refresh and recovery.

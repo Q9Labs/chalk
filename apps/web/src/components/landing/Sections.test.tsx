@@ -8,7 +8,7 @@ describe("FrontDoors", () => {
     const markup = renderToStaticMarkup(<FrontDoors />);
 
     expect(markup).toContain("Start with the SDKs");
-    expect(markup).toContain("Shape the whole room");
+    expect(markup).toContain("Shape the whole Space");
     expect(markup).toContain("@q9labsai/chalk-react");
     expect(markup).not.toContain("eyebrow");
   });
@@ -29,7 +29,7 @@ describe("SelfHost", () => {
   it("renders the stack ownership points", () => {
     const markup = renderToStaticMarkup(<SelfHost />);
 
-    expect(markup).toContain("Meeting surfaces");
+    expect(markup).toContain("Space surfaces");
     expect(markup).toContain("Portable core");
     expect(markup).toContain("Your infrastructure");
     expect(markup).toContain("future SFU adapter");

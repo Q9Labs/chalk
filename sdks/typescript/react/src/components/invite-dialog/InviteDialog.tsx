@@ -7,15 +7,15 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 export interface InviteDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  meetingLink: string;
-  meetingId?: string;
+  inviteLink: string;
+  spaceId?: string;
   onCopyLink?: () => void | Promise<void>;
   onShareEmail?: () => void;
   onShareCalendar?: () => void;
   className?: string;
 }
 
-export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, meetingLink, meetingId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
+export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, inviteLink, spaceId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
@@ -56,52 +56,52 @@ export const InviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, me
   if (!isOpen) return null;
 
   return (
-    <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-[#0c0e12]/35 p-4 backdrop-blur-[2px]", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
-      <div ref={modalRef} className={cn("w-full max-w-md overflow-hidden rounded-[12px] border border-[#c9c8c2] bg-white shadow-[0_24px_64px_rgba(12,14,18,0.2)]", !prefersReducedMotion && "animate-in fade-in zoom-in-[0.97] duration-200")}>
-        <div className="flex items-center justify-between border-b border-[#deddd7] px-5 py-4">
-          <h2 id="invite-modal-title" className="text-xl font-semibold tracking-[-0.025em] text-[#0c0e12]">
+    <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-[var(--chalk-stage)] p-4 backdrop-blur-[2px]", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
+      <div ref={modalRef} className={cn("w-full max-w-md overflow-hidden rounded-[12px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)]", !prefersReducedMotion && "animate-in fade-in zoom-in-[0.97] duration-200")}>
+        <div className="flex items-center justify-between border-b border-[var(--chalk-line)] px-5 py-4">
+          <h2 id="invite-modal-title" className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-text)]">
             Invite people
           </h2>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[#deddd7] text-[#555b65] transition hover:bg-[#f7f6f2] hover:text-[#0c0e12]" aria-label="Close invite dialog">
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--chalk-line)] text-[var(--chalk-muted-text)] transition hover:bg-[var(--chalk-canvas)] hover:text-[var(--chalk-text)]" aria-label="Close invite dialog">
             <Cancel01Icon size={19} />
           </button>
         </div>
 
         <div className="space-y-5 p-5">
           <div className="space-y-4">
-            <Input label="Meeting link" value={meetingLink} readOnly fullWidth icon={<Link01Icon size={16} />} iconPosition="left" onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <Input label="Space link" value={inviteLink} readOnly fullWidth icon={<Link01Icon size={16} />} iconPosition="left" onClick={(e) => (e.target as HTMLInputElement).select()} />
             {onCopyLink && (
               <button
                 type="button"
                 onClick={handleCopyLink}
                 disabled={isCopyFeedbackVisible}
-                className={cn("flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-[#202329] text-sm font-semibold text-white transition-colors hover:bg-[#343840]", isCopyFeedbackVisible && "cursor-default bg-[#49645d]")}
+                className={cn("flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--chalk-text)] text-sm font-semibold text-[var(--chalk-accent-text)] transition-colors hover:bg-[var(--chalk-text)]", isCopyFeedbackVisible && "cursor-default bg-[var(--chalk-accent)]")}
               >
                 <Copy01Icon size={18} />
                 {isCopyFeedbackVisible ? "Copied" : "Copy Link"}
                 <span className="sr-only" aria-live="polite">
-                  {isCopyFeedbackVisible ? "Copied meeting link to clipboard" : ""}
+                  {isCopyFeedbackVisible ? "Copied space link to clipboard" : ""}
                 </span>
               </button>
             )}
           </div>
 
-          {meetingId && (
-            <div className="flex items-center justify-between rounded-[8px] border border-[#deddd7] bg-[#fbfaf7] p-3">
-              <span className="text-sm text-[#555b65]">Meeting ID</span>
-              <span className="select-all font-mono text-sm font-medium text-[#202329]">{meetingId}</span>
+          {spaceId && (
+            <div className="flex items-center justify-between rounded-[8px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-3">
+              <span className="text-sm text-[var(--chalk-muted-text)]">Space ID</span>
+              <span className="select-all font-mono text-sm font-medium text-[var(--chalk-text)]">{spaceId}</span>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             {onShareEmail && (
-              <button type="button" onClick={onShareEmail} className="flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#c9c8c2] bg-white px-4 text-sm font-semibold text-[#202329] transition hover:bg-[#f7f6f2]">
+              <button type="button" onClick={onShareEmail} className="flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-4 text-sm font-semibold text-[var(--chalk-text)] transition hover:bg-[var(--chalk-canvas)]">
                 <Mail01Icon size={16} />
                 Email
               </button>
             )}
             {onShareCalendar && (
-              <button type="button" onClick={onShareCalendar} className="flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#c9c8c2] bg-white px-4 text-sm font-semibold text-[#202329] transition hover:bg-[#f7f6f2]">
+              <button type="button" onClick={onShareCalendar} className="flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-4 text-sm font-semibold text-[var(--chalk-text)] transition hover:bg-[var(--chalk-canvas)]">
                 <Calendar01Icon size={16} />
                 Calendar
               </button>

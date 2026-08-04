@@ -213,7 +213,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
                   <ParticipantTile key={p.id} participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} aspectRatio="fill" className="w-full h-full" />
                 ))}
                 {/* Fill empty slots in last page */}
-                {pageIndex === pages.length - 1 && page.length < 4 && Array.from({ length: 4 - page.length }).map((_, i) => <div key={`empty-${i}`} className="rounded-lg bg-[var(--chalk-bg-tile)]" />)}
+                {pageIndex === pages.length - 1 && page.length < 4 && Array.from({ length: 4 - page.length }).map((_, i) => <div key={`empty-${i}`} className="rounded-lg bg-[var(--chalk-stage)]" />)}
               </div>
             ))}
           </div>
@@ -223,13 +223,13 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
         {pages.length > 1 && (
           <div className="flex justify-center gap-1.5 py-2">
             {pages.map((_, i) => (
-              <button key={i} type="button" onClick={() => goToPage(i)} className={cn("w-2 h-2 rounded-full transition-all", i === carouselIndex ? "bg-white w-4" : "bg-white/40")} aria-label={`Go to page ${i + 1}`} />
+              <button key={i} type="button" onClick={() => goToPage(i)} className={cn("w-2 h-2 rounded-full transition-all", i === carouselIndex ? "bg-[var(--chalk-surface)] w-4" : "bg-[var(--chalk-surface)]")} aria-label={`Go to page ${i + 1}`} />
             ))}
           </div>
         )}
 
         {/* Overflow indicator */}
-        {overflowCount > 0 && <div className="text-center text-xs text-white/60 pb-1">+{overflowCount} more</div>}
+        {overflowCount > 0 && <div className="text-center text-xs text-[var(--chalk-accent-text)] pb-1">+{overflowCount} more</div>}
       </div>
     );
   }
@@ -255,7 +255,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
                 <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" showName={true} />
               </div>
             ))}
-            {overflowCount > 0 && <div className="h-full aspect-video flex-shrink-0 rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center text-muted-foreground">+{overflowCount} more</div>}
+            {overflowCount > 0 && <div className="h-full aspect-video flex-shrink-0 rounded-2xl bg-[var(--chalk-stage)] flex items-center justify-center text-[var(--chalk-muted-text)]">+{overflowCount} more</div>}
           </div>
         )}
       </div>
@@ -270,7 +270,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
 
     return (
       <div className={cn("flex h-full gap-2", className)} data-tour="video-grid">
-        <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[#eeede8]">
+        <div className="relative min-w-0 flex-1 overflow-hidden rounded-[8px] bg-[var(--chalk-stage)]">
           {screenShareContent ??
             (primaryParticipant && (
               <ParticipantTile
@@ -291,7 +291,7 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
                 <ParticipantTile participant={mapToVideoTileParticipant(p)} videoTrack={p.videoTrack} onClick={() => onParticipantClick?.(p.id)} onDoubleClick={() => onParticipantDoubleClick?.(p.id)} className="w-full h-full" showName={true} />
               </div>
             ))}
-            {overflowCount > 0 && <div className="w-full aspect-video rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center text-muted-foreground flex-shrink-0">+{overflowCount} more</div>}
+            {overflowCount > 0 && <div className="w-full aspect-video rounded-2xl bg-[var(--chalk-stage)] flex items-center justify-center text-[var(--chalk-muted-text)] flex-shrink-0">+{overflowCount} more</div>}
           </div>
         )}
       </div>
@@ -328,8 +328,8 @@ export const ParticipantGrid = React.memo(({ participants, layout = "grid", vari
         />
       ))}
       {overflowCount > 0 && (
-        <div className={cn("rounded-2xl bg-[var(--chalk-bg-tile)] flex items-center justify-center w-full h-full chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: getTileDelay(visibleParticipants.length) }}>
-          <span className="text-xl font-medium text-muted-foreground">+{overflowCount} more</span>
+        <div className={cn("rounded-2xl bg-[var(--chalk-stage)] flex items-center justify-center w-full h-full chalk-animate-tile-pop", getGridItemClass(totalGridItems, visibleParticipants.length))} style={{ animationDelay: getTileDelay(visibleParticipants.length) }}>
+          <span className="text-xl font-medium text-[var(--chalk-muted-text)]">+{overflowCount} more</span>
         </div>
       )}
     </div>

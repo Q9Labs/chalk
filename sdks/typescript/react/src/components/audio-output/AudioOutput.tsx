@@ -4,7 +4,7 @@
  * WebRTC audio tracks must be attached to HTML audio elements to be heard.
  * This component creates and manages audio elements for all remote participants.
  *
- * Usage: Place once in your room component, passing all remote participants.
+ * Usage: Place once in your space component, passing all remote participants.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -29,7 +29,7 @@ export interface AudioOutputProps {
 
 /**
  * Renders audio for all remote participants.
- * Must be included once in your room to hear other participants.
+ * Must be included once in your space to hear other participants.
  */
 type SinkAwareAudioElement = HTMLAudioElement & {
   setSinkId?: (sinkId: string) => Promise<void>;

@@ -6,7 +6,9 @@ import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe, getParticipantColor, getParticipantThemeVariables, PARTICIPANT_GRADIENT_PRESETS } from "../../utils/colorGenerator";
 import { ArrowLeft02Icon, Cancel01Icon, ColumnIcon, LayoutGridIcon, LayoutTableIcon, Message01Icon, Microphone01Icon, Monitor01Icon, Moon02Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, SparklesIcon, Sun02Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
-import { IconButton, Input, Toggle, VolumeSlider } from "../atomic";
+import { IconButton, VolumeSlider } from "../atomic";
+import { Input } from "../atomic/Input";
+import { Toggle } from "../atomic/Toggle";
 import { BackgroundEffectsPicker, type BackgroundEffect } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
@@ -150,10 +152,10 @@ const SECTIONS = [
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[10px] border border-[#deddd7] bg-white p-4 shadow-none sm:p-5">
+    <section className="rounded-[10px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4 shadow-none sm:p-5">
       <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[#202329]">{title}</h3>
-        <p className="mt-1 text-xs text-[#6d727b]">{description}</p>
+        <h3 className="text-sm font-semibold text-[var(--chalk-text)]">{title}</h3>
+        <p className="mt-1 text-xs text-[var(--chalk-muted-text)]">{description}</p>
       </div>
       <div className="space-y-4">{children}</div>
     </section>
@@ -164,12 +166,12 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
   const titleId = React.useId();
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[#deddd7] bg-white p-4">
+    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
       <div className="min-w-0 flex-1">
-        <div id={titleId} className="text-sm font-medium text-[#202329]">
+        <div id={titleId} className="text-sm font-medium text-[var(--chalk-text)]">
           {title}
         </div>
-        <div className="text-xs text-[#6d727b]">{description}</div>
+        <div className="text-xs text-[var(--chalk-muted-text)]">{description}</div>
       </div>
       <Toggle checked={checked} onChange={onChange} ariaLabelledby={titleId} />
     </div>
@@ -334,9 +336,9 @@ export const SettingsDialog = React.memo(
                   participantColorSeed={participantColorSeed}
                   participantGradientPreference={settings.appearance.profileGradient}
                 />
-                <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
-                    <VolumeHighIcon className="h-4 w-4 text-primary" />
+                <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[var(--chalk-text)]">
+                    <VolumeHighIcon className="h-4 w-4 text-[var(--chalk-accent)]" />
                     Output volume
                   </div>
                   <VolumeSlider value={settings.audio.outputVolume} onChange={(value) => onUpdateAudio({ outputVolume: value })} showValue />
@@ -372,7 +374,7 @@ export const SettingsDialog = React.memo(
                       participantGradientPreference={settings.appearance.profileGradient}
                     />
                   ) : (
-                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4 text-sm text-muted-foreground">Background effects are not supported in this browser yet.</div>
+                    <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4 text-sm text-[var(--chalk-muted-text)]">Background effects are not supported in this browser yet.</div>
                   )}
                 </SectionCard>
               ) : null}
@@ -381,7 +383,7 @@ export const SettingsDialog = React.memo(
         case "appearance":
           return (
             <div className="space-y-5">
-              <SectionCard title="Theme" description="Switch the room between light, dark, or follow the system.">
+              <SectionCard title="Theme" description="Switch the space between light, dark, or follow the system.">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {(
                     [
@@ -394,7 +396,10 @@ export const SettingsDialog = React.memo(
                       key={value}
                       type="button"
                       onClick={() => onUpdateAppearance({ theme: value })}
-                      className={cn("rounded-2xl border p-4 text-left transition-colors", settings.appearance.theme === value ? "border-primary bg-primary/10 text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
+                      className={cn(
+                        "rounded-2xl border p-4 text-left transition-colors",
+                        settings.appearance.theme === value ? "border-[var(--chalk-accent)] bg-[var(--chalk-stage)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
+                      )}
                     >
                       <Icon className="mb-3 h-5 w-5" />
                       <div className="text-sm font-semibold">{label}</div>
@@ -409,36 +414,42 @@ export const SettingsDialog = React.memo(
                     <button
                       type="button"
                       onClick={() => onUpdateAppearance({ gradient: "default" })}
-                      className={cn("group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors", settings.appearance.gradient === "default" ? "border-primary text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
+                      className={cn(
+                        "group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors",
+                        settings.appearance.gradient === "default" ? "border-[var(--chalk-accent)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
+                      )}
                     >
-                      {settings.appearance.gradient === "default" && <div className="absolute inset-0 bg-primary/10" />}
-                      <div className="absolute inset-0 opacity-20 transition-opacity group-hover:opacity-40" style={{ background: "radial-gradient(ellipse at top left, var(--primary) 0%, transparent 70%)" }} />
-                      <div className="absolute inset-0 opacity-10 transition-opacity group-hover:opacity-30" style={{ background: "radial-gradient(ellipse at bottom right, var(--accent) 0%, transparent 70%)" }} />
+                      {settings.appearance.gradient === "default" && <div className="absolute inset-0 bg-[var(--chalk-accent)]" />}
+                      <div className="absolute inset-0 opacity-20 transition-opacity group-hover:opacity-40" style={{ background: "radial-gradient(ellipse at top left, var(--chalk-accent) 0%, transparent 70%)" }} />
+                      <div className="absolute inset-0 opacity-10 transition-opacity group-hover:opacity-30" style={{ background: "radial-gradient(ellipse at bottom right, var(--chalk-focus) 0%, transparent 70%)" }} />
                       <div className="relative z-10 text-sm font-semibold">Default</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => onUpdateAppearance({ gradient: "darker" })}
-                      className={cn("group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors", settings.appearance.gradient === "darker" ? "border-primary text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
+                      className={cn(
+                        "group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors",
+                        settings.appearance.gradient === "darker" ? "border-[var(--chalk-accent)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
+                      )}
                     >
-                      {settings.appearance.gradient === "darker" && <div className="absolute inset-0 bg-primary/10" />}
-                      <div className="absolute inset-0 opacity-5 transition-opacity group-hover:opacity-10" style={{ background: "radial-gradient(ellipse at top left, var(--primary) 0%, transparent 70%)" }} />
-                      <div className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-5" style={{ background: "radial-gradient(ellipse at bottom right, var(--accent) 0%, transparent 70%)" }} />
+                      {settings.appearance.gradient === "darker" && <div className="absolute inset-0 bg-[var(--chalk-accent)]" />}
+                      <div className="absolute inset-0 opacity-5 transition-opacity group-hover:opacity-10" style={{ background: "radial-gradient(ellipse at top left, var(--chalk-accent) 0%, transparent 70%)" }} />
+                      <div className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-5" style={{ background: "radial-gradient(ellipse at bottom right, var(--chalk-focus) 0%, transparent 70%)" }} />
                       <div className="relative z-10 text-sm font-semibold">Darker</div>
                     </button>
                   </div>
                 </SectionCard>
               )}
 
-              <SectionCard title="Profile Gradient" description="Personalize how you appear to others in the room. Default follows your name.">
-                <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+              <SectionCard title="Profile Gradient" description="Personalize how you appear to others in the space. Default follows your name.">
+                <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
                   <div className="mb-4 flex items-center gap-4">
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold text-white shadow-lg ring-1 ring-white/20" style={{ background: profilePreviewRecipe.avatarGradient }} aria-hidden="true">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-bold text-[var(--chalk-accent-text)] shadow-lg ring-1 ring-[var(--chalk-surface)]" style={{ background: profilePreviewRecipe.avatarGradient }} aria-hidden="true">
                       {profilePreviewRecipe.initials}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-bold text-foreground">{participantColorSeed?.trim() || "You"}</div>
-                      <div className="text-xs text-muted-foreground">{profileGradientMode === "auto" ? "Currently dynamic based on your name" : selectedProfileGradientPreset ? `Using the "${selectedProfileGradientPreset.label}" preset` : "Using a custom pinned colorway"}</div>
+                      <div className="text-sm font-bold text-[var(--chalk-text)]">{participantColorSeed?.trim() || "You"}</div>
+                      <div className="text-xs text-[var(--chalk-muted-text)]">{profileGradientMode === "auto" ? "Currently dynamic based on your name" : selectedProfileGradientPreset ? `Using the "${selectedProfileGradientPreset.label}" preset` : "Using a custom pinned colorway"}</div>
                     </div>
                   </div>
 
@@ -449,20 +460,22 @@ export const SettingsDialog = React.memo(
                       aria-label="Use automatic profile gradient"
                       className={cn(
                         "flex w-full items-center justify-between rounded-xl border p-3.5 transition-all",
-                        profileGradientMode === "auto" ? "border-primary bg-primary/10 text-primary shadow-sm shadow-primary/10" : "border-border/50 bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        profileGradientMode === "auto"
+                          ? "border-[var(--chalk-accent)] bg-[var(--chalk-stage)] text-[var(--chalk-accent)] shadow-[var(--chalk-shadow)]"
+                          : "border-[var(--chalk-line)] bg-[var(--chalk-stage)] text-[var(--chalk-muted-text)] hover:border-[var(--chalk-accent)] hover:text-[var(--chalk-text)]",
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg border", profileGradientMode === "auto" ? "border-primary/30 bg-primary/20" : "border-border/60 bg-background")}>
+                        <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg border", profileGradientMode === "auto" ? "border-[var(--chalk-accent)] bg-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-canvas)]")}>
                           <SparklesIcon className="h-4 w-4" />
                         </div>
                         <div className="text-left text-sm font-semibold">Automatic Identity</div>
                       </div>
-                      {profileGradientMode === "auto" && <div className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">Active</div>}
+                      {profileGradientMode === "auto" && <div className="rounded-full bg-[var(--chalk-accent)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--chalk-accent-text)]">Active</div>}
                     </button>
 
                     <div className="space-y-3">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">Color Presets</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--chalk-muted-text)]">Color Presets</div>
                       <div className="grid grid-cols-4 gap-3 sm:grid-cols-6" role="radiogroup" aria-label="Profile gradient presets">
                         {PARTICIPANT_GRADIENT_PRESETS.map((preset) => {
                           const isSelected = profileGradientMode === "custom" && preset.id === selectedProfileGradientPreset?.id;
@@ -474,10 +487,13 @@ export const SettingsDialog = React.memo(
                               onClick={() => selectProfileGradientPreset(preset.from, preset.to)}
                               aria-label={`Use ${preset.label} profile gradient`}
                               aria-pressed={isSelected}
-                              className={cn("group relative flex aspect-square w-full items-center justify-center rounded-xl border shadow-sm transition-all", isSelected ? "border-primary ring-2 ring-primary/30 ring-offset-2 ring-offset-background" : "border-border/60 hover:border-primary/40")}
+                              className={cn(
+                                "group relative flex aspect-square w-full items-center justify-center rounded-xl border shadow-sm transition-all",
+                                isSelected ? "border-[var(--chalk-accent)] ring-2 ring-[var(--chalk-focus)] ring-offset-2 ring-offset-[var(--chalk-canvas)]" : "border-[var(--chalk-line)] hover:border-[var(--chalk-accent)]",
+                              )}
                               style={{ background: `linear-gradient(135deg, ${preset.from} 0%, ${preset.to} 100%)` }}
                             >
-                              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background opacity-0 transition-opacity group-hover:opacity-100">{preset.label}</span>
+                              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[var(--chalk-text)] px-2 py-1 text-[10px] font-medium text-[var(--chalk-canvas)] opacity-0 transition-opacity group-hover:opacity-100">{preset.label}</span>
                             </button>
                           );
                         })}
@@ -487,7 +503,7 @@ export const SettingsDialog = React.memo(
                 </div>
               </SectionCard>
 
-              <SectionCard title="Layout" description="Persist the room composition you want to land in first.">
+              <SectionCard title="Layout" description="Persist the space composition you want to land in first.">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {(
                     [
@@ -500,7 +516,10 @@ export const SettingsDialog = React.memo(
                       key={value}
                       type="button"
                       onClick={() => onUpdateAppearance({ layout: value })}
-                      className={cn("rounded-2xl border p-4 text-left transition-colors", settings.appearance.layout === value ? "border-primary bg-primary/10 text-primary" : "border-border/50 bg-card/60 text-foreground hover:border-primary/40")}
+                      className={cn(
+                        "rounded-2xl border p-4 text-left transition-colors",
+                        settings.appearance.layout === value ? "border-[var(--chalk-accent)] bg-[var(--chalk-stage)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
+                      )}
                     >
                       <Icon className="mb-3 h-5 w-5" />
                       <div className="text-sm font-semibold">{label}</div>
@@ -509,7 +528,7 @@ export const SettingsDialog = React.memo(
                 </div>
                 <ToggleRow title="Show filmstrip" description="Keep the participant strip visible by default." checked={settings.appearance.showFilmstrip} onChange={(checked) => onUpdateAppearance({ showFilmstrip: checked })} />
                 <ToggleRow title="Fun avatars" description="Use generated FaceHash avatars when no photo is set. Turn this off for plain initials." checked={settings.appearance.generatedAvatars} onChange={(checked) => onUpdateAppearance({ generatedAvatars: checked })} />
-                <ToggleRow title="Ambient background" description="Show a glowing animated gradient behind the meeting room." checked={settings.appearance.ambientBackground} onChange={(checked) => onUpdateAppearance({ ambientBackground: checked })} />
+                <ToggleRow title="Ambient background" description="Show a glowing animated gradient behind the Space." checked={settings.appearance.ambientBackground} onChange={(checked) => onUpdateAppearance({ ambientBackground: checked })} />
                 <ToggleRow title="Reduced motion" description="Turn down transitions and ambient motion." checked={settings.appearance.reducedMotion} onChange={(checked) => onUpdateAppearance({ reducedMotion: checked })} />
               </SectionCard>
             </div>
@@ -518,19 +537,26 @@ export const SettingsDialog = React.memo(
           return (
             <div className="space-y-5">
               <SectionCard title="Identity & join" description="Set the name and join state Chalk should remember for this browser.">
-                <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-                  <label htmlFor="chalk-settings-display-name" className="mb-2 block text-sm font-medium text-foreground">
+                <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
+                  <label htmlFor="chalk-settings-display-name" className="mb-2 block text-sm font-medium text-[var(--chalk-text)]">
                     Default display name
                   </label>
-                  <Input id="chalk-settings-display-name" value={settings.identity.displayName} onChange={(event) => onUpdateIdentity({ displayName: event.target.value })} placeholder="How your name appears when you join" fullWidth className="rounded-2xl border-border/50 bg-background/80" />
-                  <p className="mt-2 text-xs text-muted-foreground">Used as the starting name in the lobby and settings preview.</p>
+                  <Input
+                    id="chalk-settings-display-name"
+                    value={settings.identity.displayName}
+                    onChange={(event) => onUpdateIdentity({ displayName: event.target.value })}
+                    placeholder="How your name appears when you join"
+                    fullWidth
+                    className="rounded-2xl border-[var(--chalk-line)] bg-[var(--chalk-canvas)]"
+                  />
+                  <p className="mt-2 text-xs text-[var(--chalk-muted-text)]">Used as the starting name in the Entrance and settings preview.</p>
                 </div>
-                <ToggleRow title="Join muted" description="Start with your microphone off the next time you enter a room." checked={!settings.join.audioEnabled} onChange={(checked) => onUpdateJoin({ audioEnabled: !checked })} />
-                <ToggleRow title="Join with video off" description="Start with your camera off the next time you enter a room." checked={!settings.join.videoEnabled} onChange={(checked) => onUpdateJoin({ videoEnabled: !checked })} />
+                <ToggleRow title="Join muted" description="Start with your microphone off the next time you enter a space." checked={!settings.join.audioEnabled} onChange={(checked) => onUpdateJoin({ audioEnabled: !checked })} />
+                <ToggleRow title="Join with video off" description="Start with your camera off the next time you enter a space." checked={!settings.join.videoEnabled} onChange={(checked) => onUpdateJoin({ videoEnabled: !checked })} />
               </SectionCard>
 
-              <SectionCard title="In-room defaults" description="Choose what opens by default the next time you enter a room.">
-                <ToggleRow title="Show invite toast" description="Keep the share reminder visible when the room loads." checked={settings.experience.showInviteToast} onChange={(checked) => onUpdateExperience({ showInviteToast: checked })} />
+              <SectionCard title="In-space defaults" description="Choose what opens by default the next time you enter a space.">
+                <ToggleRow title="Show invite toast" description="Keep the share reminder visible when the space loads." checked={settings.experience.showInviteToast} onChange={(checked) => onUpdateExperience({ showInviteToast: checked })} />
                 <ToggleRow title="Open chat by default" description="Start with the chat drawer open." checked={settings.experience.defaultOpenChat} onChange={(checked) => onUpdateExperience({ defaultOpenChat: checked })} />
                 <ToggleRow
                   title="Open people by default"
@@ -555,7 +581,7 @@ export const SettingsDialog = React.memo(
                 {enablePictureInPicture ? (
                   <ToggleRow
                     title="Auto-open Picture-in-Picture"
-                    description="Try to open PiP automatically when the meeting loads. Some browsers may wait for your first interaction."
+                    description="Try to open PiP automatically when the space loads. Some browsers may wait for your first interaction."
                     checked={settings.experience.autoOpenPictureInPicture}
                     onChange={(checked) =>
                       onUpdateExperience({
@@ -567,13 +593,15 @@ export const SettingsDialog = React.memo(
               </SectionCard>
               {enablePictureInPicture ? (
                 <SectionCard title="Picture in Picture" description="Fallback controls if automatic opening is blocked by the browser.">
-                  <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                  <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-foreground">Manual open</div>
-                        <div className="text-xs text-muted-foreground">{isPictureInPictureSupported ? (isPictureInPictureActive ? "Picture-in-Picture is already open." : "Open PiP manually if the browser blocked automatic opening.") : "Picture-in-Picture is not supported in this browser."}</div>
+                        <div className="text-sm font-medium text-[var(--chalk-text)]">Manual open</div>
+                        <div className="text-xs text-[var(--chalk-muted-text)]">
+                          {isPictureInPictureSupported ? (isPictureInPictureActive ? "Picture-in-Picture is already open." : "Open PiP manually if the browser blocked automatic opening.") : "Picture-in-Picture is not supported in this browser."}
+                        </div>
                       </div>
-                      <PictureInPictureIcon className="h-5 w-5 shrink-0 text-primary" />
+                      <PictureInPictureIcon className="h-5 w-5 shrink-0 text-[var(--chalk-accent)]" />
                     </div>
                     <button
                       type="button"
@@ -583,9 +611,9 @@ export const SettingsDialog = React.memo(
                       disabled={!isPictureInPictureSupported || isPictureInPictureActive || !onOpenPictureInPicture}
                       className={cn(
                         "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
-                        "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                        "focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2",
                         "disabled:cursor-not-allowed disabled:opacity-50",
-                        "bg-primary text-primary-foreground hover:bg-primary/90",
+                        "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]",
                       )}
                       aria-label="Open Picture-in-Picture now"
                     >
@@ -612,33 +640,33 @@ export const SettingsDialog = React.memo(
         }}
       >
         <Dialog.Portal>
-          <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-[#0c0e12]/20 backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
+          <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-[var(--chalk-stage)] backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
           <Dialog.Popup
             data-chalk
             data-chalk-theme={portalTheme}
             className={cn(
               "chalk-root",
-              "fixed inset-4 z-[101] m-auto flex max-h-[min(680px,calc(100dvh-32px))] w-auto max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-[#c9c8c2] bg-[#fbfaf7] text-[#202329] shadow-[0_28px_80px_rgba(12,14,18,0.2)] md:inset-0",
+              "fixed inset-4 z-[101] m-auto flex max-h-[min(680px,calc(100dvh-32px))] w-auto max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] shadow-[var(--chalk-shadow)] md:inset-0",
               !disableMotion && "animate-in fade-in duration-300 ease-out",
               !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
             )}
             style={settingsChromeVariables}
           >
-            <Dialog.Title className="sr-only">Meeting settings</Dialog.Title>
+            <Dialog.Title className="sr-only">Space settings</Dialog.Title>
             <div className="flex h-full flex-col md:flex-row">
-              <aside className={cn("flex w-full shrink-0 flex-col border-[#deddd7] bg-[#f4f3ef] md:w-44 md:border-r", !showSidebar && "hidden")}>
+              <aside className={cn("flex w-full shrink-0 flex-col border-[var(--chalk-line)] bg-[var(--chalk-stage)] md:w-44 md:border-r", !showSidebar && "hidden")}>
                 <div className="p-3 pb-2">
                   <div className="mb-5 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Settings01Icon className="h-5 w-5 text-[#6d727b]" />
+                      <Settings01Icon className="h-5 w-5 text-[var(--chalk-muted-text)]" />
                       <div>
                         <div className="text-base font-semibold">Settings</div>
-                        <div className="text-xs text-[#6d727b]">Local to this browser</div>
+                        <div className="text-xs text-[var(--chalk-muted-text)]">Local to this browser</div>
                       </div>
                     </div>
                     <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" className="md:hidden" />
                   </div>
-                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" icon={<Search01Icon className="h-4 w-4" />} fullWidth className="rounded-[8px] border-[#c9c8c2] bg-white" aria-label="Search settings" />
+                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings" icon={<Search01Icon className="h-4 w-4" />} fullWidth className="rounded-[8px] border-[var(--chalk-line)] bg-[var(--chalk-surface)]" aria-label="Search settings" />
                 </div>
                 <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
                   {filteredSections.map((section) => {
@@ -651,7 +679,10 @@ export const SettingsDialog = React.memo(
                           setActiveSection(section.id);
                           setIsNavOpen(false);
                         }}
-                        className={cn("flex w-full items-start gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors", activeSection === section.id ? "bg-white text-[#202329] shadow-[0_1px_2px_rgba(12,14,18,0.06)]" : "text-[#6d727b] hover:text-[#202329]")}
+                        className={cn(
+                          "flex w-full items-start gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors",
+                          activeSection === section.id ? "bg-[var(--chalk-surface)] text-[var(--chalk-text)] shadow-[var(--chalk-shadow)]" : "text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]",
+                        )}
                       >
                         <Icon className="mt-0.5 h-4 w-4 shrink-0" />
                         <span className="min-w-0">
@@ -661,22 +692,22 @@ export const SettingsDialog = React.memo(
                       </button>
                     );
                   })}
-                  {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[#deddd7] px-4 py-8 text-center text-sm text-[#6d727b]">No matching settings.</div>}
+                  {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[var(--chalk-line)] px-4 py-8 text-center text-sm text-[var(--chalk-muted-text)]">No matching settings.</div>}
                 </nav>
               </aside>
 
               <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
-                <div className="flex items-start justify-between border-b border-[#deddd7] bg-[#fbfaf7] px-5 py-4 md:px-6">
+                <div className="flex items-start justify-between border-b border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-5 py-4 md:px-6">
                   <div className="flex items-center gap-3">
                     <IconButton icon={<ArrowLeft02Icon className="h-5 w-5" />} variant="ghost" onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections" />
                     <div>
-                      <h2 className="text-lg font-semibold text-[#202329] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
-                      <p className="mt-0.5 text-xs text-[#6d727b] md:mt-1 md:text-sm">Changes apply to this device.</p>
+                      <h2 className="text-lg font-semibold text-[var(--chalk-text)] md:text-xl">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                      <p className="mt-0.5 text-xs text-[var(--chalk-muted-text)] md:mt-1 md:text-sm">Changes apply to this device.</p>
                     </div>
                   </div>
                   <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbfaf7] px-5 py-5 md:px-6">
+                <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-surface)] px-5 py-5 md:px-6">
                   <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                 </div>
               </div>

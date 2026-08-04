@@ -31,10 +31,10 @@ export const Tooltip = React.memo(({ content, children, position = "top", delay 
             <BaseTooltip.Popup
               data-chalk
               data-chalk-theme={portalTheme}
-              className={cn("chalk-root", "z-[1000] whitespace-nowrap rounded-lg bg-popover px-3 py-1.5 text-xs font-medium text-popover-foreground shadow-xl border border-border", !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200", className)}
+              className={cn("chalk-root", "z-[1000] whitespace-nowrap rounded-lg bg-[var(--chalk-surface)] px-3 py-1.5 text-xs font-medium text-[var(--chalk-text)] shadow-xl border border-[var(--chalk-line)]", !prefersReducedMotion && "animate-in fade-in zoom-in-95 duration-200", className)}
             >
               {content}
-              <BaseTooltip.Arrow className="fill-popover [&>path]:stroke-border" />
+              <BaseTooltip.Arrow className="fill-[var(--chalk-surface)] [&>path]:stroke-[var(--chalk-line)]" />
             </BaseTooltip.Popup>
           </BaseTooltip.Positioner>
         </BaseTooltip.Portal>

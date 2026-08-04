@@ -5,9 +5,9 @@ import { Chalked } from "./Chalked";
 
 describe("Chalked", () => {
   it("renders the text with a decorative underline", () => {
-    const markup = renderToStaticMarkup(<Chalked>meeting surface</Chalked>);
+    const markup = renderToStaticMarkup(<Chalked>Space surface</Chalked>);
 
-    expect(markup).toContain("meeting surface");
+    expect(markup).toContain("Space surface");
     expect(markup).toContain('aria-hidden="true"');
   });
 });

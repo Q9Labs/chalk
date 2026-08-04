@@ -18,9 +18,9 @@ describe("Hero", () => {
     const markup = renderToStaticMarkup(<Hero />);
 
     expect(markup).toContain("/images/marketing/chalk-speaker-view-20260801.webp");
-    expect(markup).toContain("Chalk speaker-view meeting interface");
-    expect(markup).toContain("Video calls.");
-    expect(markup).toContain("Your call.");
+    expect(markup).toContain("Chalk Space interface");
+    expect(markup).toContain("Real-time Spaces.");
+    expect(markup).toContain("Your way.");
     expect(markup).not.toContain("eyebrow");
     expect(markup).toContain("View SDK preview");
     expect(markup).toContain('aria-label="TypeScript"');

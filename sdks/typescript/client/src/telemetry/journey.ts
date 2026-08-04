@@ -26,7 +26,7 @@ export type SyncFrameObservation = {
 };
 
 export type DiagnosticObservation = {
-  readonly category: "device" | "network" | "permission" | "recovery" | "session" | "whiteboard_renderer";
+  readonly category: "connection" | "device" | "network" | "permission" | "recovery" | "session" | "whiteboard_renderer";
   readonly code: string;
   readonly attributes?: TelemetryAttributes;
   readonly metricValue?: number;

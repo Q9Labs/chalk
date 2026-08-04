@@ -106,22 +106,22 @@ export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, posi
       closeButton
       icons={{
         info: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#e6f3f8] text-[#315f72]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-danger-surface)] text-[var(--chalk-accent)]">
             <InformationCircleIcon size={18} />
           </div>
         ),
         success: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#e8f1e4] text-[#49645d]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-positive)] text-[var(--chalk-accent)]">
             <CheckmarkCircle02Icon size={18} />
           </div>
         ),
         warning: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#fdf2cf] text-[#9a7314]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-stage)] text-[var(--chalk-accent)]">
             <Alert02Icon size={18} />
           </div>
         ),
         error: (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#f8e4e4] text-[#9f3f3f]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--chalk-danger-surface)] text-[var(--chalk-danger)]">
             <CancelCircleIcon size={18} />
           </div>
         ),
@@ -129,11 +129,11 @@ export const ToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, posi
       toastOptions={{
         unstyled: true,
         classNames: {
-          toast: cn("group flex min-w-[300px] max-w-[360px] items-center gap-3 rounded-[12px] border border-[#c9c8c2] bg-[#fbfaf7] p-2.5 pr-3 text-[#0c0e12] shadow-[0_18px_48px_rgba(12,14,18,0.14)]", "chalk-animate-toast-in"),
+          toast: cn("group flex min-w-[300px] max-w-[360px] items-center gap-3 rounded-[12px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-2.5 pr-3 text-[var(--chalk-text)] shadow-[var(--chalk-shadow)]", "chalk-animate-toast-in"),
           title: "text-sm font-medium leading-5",
-          description: "text-[11px] text-muted-foreground leading-tight",
-          actionButton: "ml-auto rounded-[7px] bg-[#202329] px-2.5 py-1.5 text-[11px] font-semibold !text-white transition hover:bg-[#343840]",
-          closeButton: "!static !transform-none !bg-transparent !border-none !p-1 !m-0 !text-muted-foreground hover:!text-foreground transition-colors",
+          description: "text-[11px] text-[var(--chalk-muted-text)] leading-tight",
+          actionButton: "ml-auto rounded-[7px] bg-[var(--chalk-text)] px-2.5 py-1.5 text-[11px] font-semibold !text-[var(--chalk-accent-text)] transition hover:bg-[var(--chalk-text)]",
+          closeButton: "!static !transform-none !bg-transparent !border-none !p-1 !m-0 !text-[var(--chalk-muted-text)] hover:!text-[var(--chalk-text)] transition-colors",
         },
       }}
       className={cn(className)}

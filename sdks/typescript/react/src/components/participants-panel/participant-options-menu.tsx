@@ -1,4 +1,4 @@
-import { Crown01Icon, Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, Shield01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
+import { Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { VolumeSlider } from "../atomic";
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
@@ -13,39 +13,22 @@ export interface ParticipantOptionsMenuProps {
   onStopParticipantCamera?: (id: string) => void;
   onRequestStartCamera?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
-  onMakeHost?: (id: string) => void;
-  onMakeCoHost?: (id: string) => void;
   onEditName?: () => void;
   participantVolumes?: ReadonlyMap<string, number>;
   onParticipantVolumeChange?: (id: string, volume: number) => void;
 }
 
-export function ParticipantOptionsMenu({
-  participant,
-  variant,
-  canManageParticipants,
-  onClose,
-  onMuteParticipant,
-  onRequestUnmute,
-  onStopParticipantCamera,
-  onRequestStartCamera,
-  onRemoveParticipant,
-  onMakeHost,
-  onMakeCoHost,
-  onEditName,
-  participantVolumes,
-  onParticipantVolumeChange,
-}: ParticipantOptionsMenuProps) {
+export function ParticipantOptionsMenu({ participant, variant, canManageParticipants, onClose, onMuteParticipant, onRequestUnmute, onStopParticipantCamera, onRequestStartCamera, onRemoveParticipant, onEditName, participantVolumes, onParticipantVolumeChange }: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
-  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant || (!!onMakeHost && participant.role !== "host") || (!!onMakeCoHost && participant.role === "participant"));
+  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant);
 
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
 
-  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm font-medium transition-colors", variant === "sidebar" ? "text-[#202329] hover:bg-white" : "text-chalk-text-primary hover:bg-chalk-bg-subtle");
+  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm font-medium transition-colors", variant === "sidebar" ? "text-[var(--chalk-text)] hover:bg-[var(--chalk-surface)]" : "text-[var(--chalk-accent)] hover:bg-[var(--chalk-stage)]");
 
-  const dividerClassName = cn("my-1.5 h-px", variant === "sidebar" ? "bg-[#e5e4df]" : "bg-chalk-border-subtle");
+  const dividerClassName = cn("my-1.5 h-px", variant === "sidebar" ? "bg-[var(--chalk-line)]" : "bg-[var(--chalk-line)]");
 
   return (
     <>
@@ -59,13 +42,13 @@ export function ParticipantOptionsMenu({
       {hasLocalActions && (hasVolumeControl || hasManageActions) ? <div className={dividerClassName} /> : null}
 
       {hasVolumeControl ? (
-        <div className={cn("px-3.5 py-2.5", variant === "sidebar" ? "text-[#202329]" : "text-chalk-text-primary")}>
+        <div className={cn("px-3.5 py-2.5", variant === "sidebar" ? "text-[var(--chalk-text)]" : "text-[var(--chalk-accent)]")}>
           <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-[#555b65]">Volume</span>
+            <span className="text-sm font-medium text-[var(--chalk-muted-text)]">Volume</span>
             <button
               type="button"
               onClick={() => onParticipantVolumeChange?.(participant.id, 100)}
-              className={cn("text-xs", variant === "sidebar" ? "text-[#858a92] hover:text-[#202329]" : "text-chalk-text-muted hover:text-chalk-text-primary")}
+              className={cn("text-xs", variant === "sidebar" ? "text-[var(--chalk-muted-text)] hover:text-[var(--chalk-text)]" : "text-[var(--chalk-muted-text)] hover:text-[var(--chalk-accent)]")}
               aria-label={`Reset volume for ${participant.displayName}`}
             >
               Reset
@@ -143,34 +126,6 @@ export function ParticipantOptionsMenu({
             </button>
           ) : null}
 
-          {onMakeHost && participant.role !== "host" ? (
-            <button
-              type="button"
-              onClick={() => {
-                onMakeHost(participant.id);
-                onClose();
-              }}
-              className={menuItemClassName}
-            >
-              <Crown01Icon className="h-4 w-4" />
-              Make Host
-            </button>
-          ) : null}
-
-          {onMakeCoHost && participant.role === "participant" ? (
-            <button
-              type="button"
-              onClick={() => {
-                onMakeCoHost(participant.id);
-                onClose();
-              }}
-              className={menuItemClassName}
-            >
-              <Shield01Icon className="h-4 w-4" />
-              Make Co-Host
-            </button>
-          ) : null}
-
           {onRemoveParticipant ? (
             <button
               type="button"
@@ -178,7 +133,7 @@ export function ParticipantOptionsMenu({
                 onRemoveParticipant(participant.id);
                 onClose();
               }}
-              className={cn("flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors", variant === "sidebar" ? "text-[#b94c4c] hover:bg-[#fdf0f0]" : "text-chalk-error-main hover:bg-chalk-error-subtle")}
+              className={cn("flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors", variant === "sidebar" ? "text-[var(--chalk-danger)] hover:bg-[var(--chalk-danger-surface)]" : "text-[var(--chalk-danger)] hover:bg-[var(--chalk-danger-surface)]")}
             >
               <UserRemove01Icon className="h-4 w-4" />
               Remove

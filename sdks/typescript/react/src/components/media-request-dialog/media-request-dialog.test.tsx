@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { IncomingMediaRequest } from "../../client-compat";
+import type { IncomingMediaRequest } from "@q9labsai/chalk-client";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -11,7 +11,7 @@ describe("MediaRequestDialog", () => {
     const request: IncomingMediaRequest = {
       requestId: "request-1",
       kind: "unmute",
-      actorParticipantId: "host",
+      actorParticipantId: "moderator",
       actorDisplayName: "Grace",
       expiresAt: "2026-08-01T08:00:00.000Z",
     };

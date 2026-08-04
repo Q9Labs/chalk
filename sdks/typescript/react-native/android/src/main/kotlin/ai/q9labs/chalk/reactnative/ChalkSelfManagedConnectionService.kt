@@ -12,7 +12,7 @@ class ChalkSelfManagedConnectionService : ConnectionService() {
   }
 
   override fun onCreateIncomingConnectionFailed(connectionManagerPhoneAccount: PhoneAccountHandle, request: ConnectionRequest) {
-    // Chalk currently starts telecom calls from app-driven outgoing meeting joins only.
+    // Chalk currently starts telecom calls from app-driven Space joins only.
   }
 
   override fun onCreateOutgoingConnection(connectionManagerPhoneAccount: PhoneAccountHandle, request: ConnectionRequest): Connection {

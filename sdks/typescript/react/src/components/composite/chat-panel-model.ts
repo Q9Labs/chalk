@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatReadReceipt } from "../../client-compat";
+import type { ChatMessage, ChatReadReceipt } from "@q9labsai/chalk-client";
 import type React from "react";
 
 const BOTTOM_THRESHOLD_PX = 24;
