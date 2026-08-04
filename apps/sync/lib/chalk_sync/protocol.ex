@@ -12,6 +12,8 @@ defmodule ChalkSync.ProtocolV1 do
   @inbound_frame_bytes @limits["decodedInboundFrameBytes"]
   @replay_page_events @limits["replayPageMaxEvents"]
   @replay_page_bytes @limits["replayPageEncodedBytes"]
+  @correlation_reserved_bytes @limits["correlationReservedBytes"]
+  @replay_page_producer_bytes @replay_page_bytes - @correlation_reserved_bytes
   @error_detail_bytes @limits["protocolErrorDetailBytes"]
 
   def decode(text)
@@ -93,7 +95,7 @@ defmodule ChalkSync.ProtocolV1 do
       "events" => frames
     }
 
-    if frame |> JSON.encode!() |> byte_size() <= @replay_page_bytes,
+    if frame |> JSON.encode!() |> byte_size() <= @replay_page_producer_bytes,
       do: {:ok, encode!(frame), List.last(frames)["revision"]},
       else: {:error, :replay_page_too_large}
   end
@@ -214,6 +216,7 @@ defmodule ChalkSync.ProtocolV1 do
           %{
             token: token,
             streams: streams,
+            correlation: correlation,
             extensions: [
               %{
                 "name" => extension,
@@ -225,15 +228,23 @@ defmodule ChalkSync.ProtocolV1 do
             ]
           }}
        ) do
-    normalize_hello(token, streams, %{
-      extension: extension,
-      after_sequence: after_sequence,
-      retained_floor_sequence: retained_floor_sequence
-    })
+    normalize_hello(
+      token,
+      streams,
+      correlation,
+      %{
+        extension: extension,
+        after_sequence: after_sequence,
+        retained_floor_sequence: retained_floor_sequence
+      }
+    )
   end
 
+  defp normalize({:hello, %{token: token, streams: streams, correlation: correlation}}),
+    do: normalize_hello(token, streams, correlation, nil)
+
   defp normalize({:hello, %{token: token, streams: streams}}),
-    do: normalize_hello(token, streams, nil)
+    do: normalize_hello(token, streams, %{}, nil)
 
   defp normalize({:operation, operation}) do
     {:ok,
@@ -248,12 +259,12 @@ defmodule ChalkSync.ProtocolV1 do
 
   defp normalize(frame), do: {:ok, frame}
 
-  defp normalize_hello(token, streams, collaboration) do
+  defp normalize_hello(token, streams, correlation, collaboration) do
     cursor = streams["control"]["cursor"]
 
     case cursor do
       nil ->
-        {:ok, {:hello, hello(token, nil, collaboration)}}
+        {:ok, {:hello, hello(token, nil, correlation, collaboration)}}
 
       cursor ->
         with {:ok, decoded} <- Base.decode16(cursor["state_digest"], case: :lower) do
@@ -263,15 +274,16 @@ defmodule ChalkSync.ProtocolV1 do
             digest: decoded
           }
 
-          {:ok, {:hello, hello(token, normalized_cursor, collaboration)}}
+          {:ok, {:hello, hello(token, normalized_cursor, correlation, collaboration)}}
         end
     end
   end
 
-  defp hello(token, cursor, nil), do: %{token: token, cursor: cursor}
+  defp hello(token, cursor, correlation, nil),
+    do: %{token: token, cursor: cursor, correlation: correlation}
 
-  defp hello(token, cursor, collaboration),
-    do: %{token: token, cursor: cursor, collaboration: collaboration}
+  defp hello(token, cursor, correlation, collaboration),
+    do: %{token: token, cursor: cursor, correlation: correlation, collaboration: collaboration}
 
   defp normalize_operation_payload(name, %{"participant_id" => id})
        when name in [

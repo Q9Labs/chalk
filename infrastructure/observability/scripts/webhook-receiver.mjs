@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { dirname } from "node:path";
 import { createWebhookProcessor, verifyWebhook } from "../../../sdks/typescript/client/dist/webhooks/index.js";
 
-const coreEventTypes = ["room.created", "room.updated", "room.archived", "room.restored", "session.started", "session.ended", "participant.joined", "participant.left"];
+const coreEventTypes = ["space.created", "space.updated", "episode.started", "episode.ended", "participant.joined", "participant.left"];
 
 async function main() {
   const host = "127.0.0.1";

@@ -15,6 +15,8 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
   @journey_id "00000000-0000-4000-8000-000000000013"
   @trace_id "4bf92f3577b34da6a3ce929d0e0e4736"
   @span_id "00f067aa0ba902b7"
+  @traceparent "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+  @tracestate "acme=deferred"
 
   test "dispatches every local operation through authoritative local confirmation" do
     for name <- [
@@ -93,7 +95,9 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
       operation(:participant_leave)
       | journey_id: @journey_id,
         producing_trace_id: @trace_id,
-        producing_span_id: @span_id
+        producing_span_id: @span_id,
+        producing_traceparent: @traceparent,
+        producing_tracestate: @tracestate
     }
 
     assert :confirmed = execute(traced, {MediaPlane, adapter}, nil)
@@ -101,7 +105,8 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
     assert {"x-chalk-journey-id", @journey_id} in headers
     {"traceparent", traceparent} = List.keyfind!(headers, "traceparent", 0)
     assert traceparent =~ "00-#{@trace_id}-"
-    refute traceparent == "00-#{@trace_id}-#{@span_id}-01"
+    assert String.ends_with?(traceparent, "-00")
+    assert {"tracestate", @tracestate} in headers
     assert payload["participant_generation"] == 1
     refute inspect(headers) =~ @operation_id
 
@@ -112,6 +117,57 @@ defmodule ChalkSync.ExternalOperationConsumerTest do
                       journey_id: @journey_id,
                       attributes: %{operation: :participant_leave}
                     }}
+  end
+
+  test "retries preserve unsampled flags and tracestate from the durable carrier" do
+    test = self()
+    calls = :counters.new(1, [:atomics])
+    previous_observability = Application.get_env(:chalk_sync, :observability)
+    Application.put_env(:chalk_sync, :observability, enabled: true)
+
+    on_exit(fn -> Application.put_env(:chalk_sync, :observability, previous_observability) end)
+
+    transport = fn _method, _url, headers, body, _options ->
+      :counters.add(calls, 1, 1)
+      call = :counters.get(calls, 1)
+      payload = JSON.decode!(body)
+      send(test, {:retry_bridge_request, headers, payload})
+
+      if call == 1 do
+        {:ok, 503, [], "{}"}
+      else
+        {:ok, 200, [],
+         JSON.encode!(%{
+           "operation_id" => @operation_id,
+           "effect" => payload["effect"],
+           "outcome" => "confirmed"
+         })}
+      end
+    end
+
+    adapter =
+      MediaPlane.new!(Client.new!(base_url: "http://localhost:4101", transport: transport))
+
+    traced = %{
+      operation(:participant_leave)
+      | journey_id: @journey_id,
+        producing_trace_id: @trace_id,
+        producing_span_id: @span_id,
+        producing_traceparent: @traceparent,
+        producing_tracestate: @tracestate
+    }
+
+    assert :pending = execute(traced, {MediaPlane, adapter}, nil)
+    assert :confirmed = execute(traced, {MediaPlane, adapter}, nil)
+    assert_received {:finalize, @operation_id, {:confirmed, :provider}}
+
+    for _ <- 1..2 do
+      assert_receive {:retry_bridge_request, headers, _payload}
+      {"traceparent", traceparent} = List.keyfind!(headers, "traceparent", 0)
+      assert traceparent =~ "00-#{@trace_id}-"
+      assert String.ends_with?(traceparent, "-00")
+      assert {"tracestate", @tracestate} in headers
+    end
   end
 
   test "dispatches recording operations through the recording port" do

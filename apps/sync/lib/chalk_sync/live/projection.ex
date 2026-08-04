@@ -1,10 +1,15 @@
 defmodule ChalkSync.Live.Projection do
   @moduledoc "Bounded latest-replace media and presence projections."
 
+  alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.UUID
 
-  @snapshot_byte_limit 1_048_576
-  @event_byte_limit 32_768
+  @protocol_limits GeneratedV1.limits()
+  @snapshot_byte_limit @protocol_limits["projectionSnapshotEncodedBytes"]
+  @event_byte_limit @protocol_limits["encodedLiveEventBytes"]
+  @correlation_reserved_bytes @protocol_limits["correlationReservedBytes"]
+  @snapshot_producer_byte_limit @snapshot_byte_limit - @correlation_reserved_bytes
+  @event_producer_byte_limit @event_byte_limit - @correlation_reserved_bytes
   @default_max_age_ms 30_000
   @limits %{media: 1_500, presence: 500}
 
@@ -32,7 +37,7 @@ defmodule ChalkSync.Live.Projection do
          projection_id = id_generator.(),
          true <- canonical_uuid?(projection_id),
          frame = snapshot_frame(stream, projection_id, items),
-         :ok <- encoded_bound(frame, @snapshot_byte_limit) do
+         :ok <- encoded_bound(frame, @snapshot_producer_byte_limit) do
       projection = %__MODULE__{
         stream: stream,
         projection_id: projection_id,
@@ -57,14 +62,14 @@ defmodule ChalkSync.Live.Projection do
          true <- frame["projection_id"] == projection.projection_id,
          true <- frame["sequence"] == projection.sequence + 1,
          :ok <- validate_items(projection.stream, [frame["item"]]),
-         :ok <- encoded_bound(frame, @event_byte_limit),
+         :ok <- encoded_bound(frame, @event_producer_byte_limit),
          items =
            Map.put(projection.items, item_key(projection.stream, frame["item"]), frame["item"]),
          true <- map_size(items) <= Map.fetch!(@limits, projection.stream),
          :ok <-
            encoded_bound(
              snapshot_frame(projection.stream, projection.projection_id, Map.values(items)),
-             @snapshot_byte_limit
+             @snapshot_producer_byte_limit
            ) do
       {:ok, %{projection | sequence: frame["sequence"], items: items}}
     else

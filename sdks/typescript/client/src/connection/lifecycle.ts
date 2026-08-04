@@ -346,7 +346,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const sync = yield* trace(
               "create_sync_client",
               Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause)),
               }),
             );
@@ -505,7 +505,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.syncBindingCleanup?.();
           model.sync = null;
           const sync = yield* Effect.try({
-            try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media }),
+            try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry }),
             catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause),
           });
           model.sync = sync;

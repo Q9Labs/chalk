@@ -1,9 +1,9 @@
-name: chalk-observability
+name: ${CHALK_OBSERVABILITY_COMPOSE_PROJECT:-chalk-observability}
 
 services:
   canary:
     image: node:24-alpine
-    container_name: chalk-observability-canary
+    container_name: ${CHALK_OBSERVABILITY_CANARY_CONTAINER:-chalk-observability-canary}
     command: ["node", "/app/canary.mjs"]
     depends_on:
       lgtm:
@@ -19,7 +19,7 @@ services:
 
   postgres:
     image: postgres:18.3-alpine
-    container_name: chalk-observability-postgres
+    container_name: ${CHALK_OBSERVABILITY_POSTGRES_CONTAINER:-chalk-observability-postgres}
     environment:
       POSTGRES_DB: chalk_observability
       POSTGRES_PASSWORD: postgres
@@ -37,7 +37,7 @@ services:
 
   lgtm:
     image: grafana/otel-lgtm:0.28.0
-    container_name: chalk-observability-lgtm
+    container_name: ${CHALK_OBSERVABILITY_LGTM_CONTAINER:-chalk-observability-lgtm}
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
@@ -54,14 +54,14 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
-      - 127.0.0.1:3000:3000
-      - 127.0.0.1:3100:3100
-      - 127.0.0.1:3200:3200
-      - 127.0.0.1:4040:4040
-      - 127.0.0.1:4317:4317
-      - 127.0.0.1:4318:4318
-      - 127.0.0.1:9090:9090
-      - 127.0.0.1:13133:13133
+      - 127.0.0.1:${CHALK_OBSERVABILITY_GRAFANA_PORT:-3000}:3000
+      - 127.0.0.1:${CHALK_OBSERVABILITY_LOKI_PORT:-3100}:3100
+      - 127.0.0.1:${CHALK_OBSERVABILITY_TEMPO_PORT:-3200}:3200
+      - 127.0.0.1:${CHALK_OBSERVABILITY_PYROSCOPE_PORT:-4040}:4040
+      - 127.0.0.1:${CHALK_OBSERVABILITY_OTLP_GRPC_PORT:-4317}:4317
+      - 127.0.0.1:${CHALK_OBSERVABILITY_OTLP_HTTP_PORT:-4318}:4318
+      - 127.0.0.1:${CHALK_OBSERVABILITY_PROMETHEUS_PORT:-9090}:9090
+      - 127.0.0.1:${CHALK_OBSERVABILITY_COLLECTOR_PORT:-13133}:13133
     restart: unless-stopped
     volumes:
       - chalk-observability-data:/data
@@ -72,6 +72,6 @@ services:
 
 volumes:
   chalk-observability-data:
-    name: chalk-observability-lgtm-data
+    name: ${CHALK_OBSERVABILITY_LGTM_VOLUME:-chalk-observability-lgtm-data}
   chalk-observability-postgres-data:
-    name: chalk-observability-postgres-data
+    name: ${CHALK_OBSERVABILITY_POSTGRES_VOLUME:-chalk-observability-postgres-data}

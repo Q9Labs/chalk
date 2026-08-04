@@ -23,25 +23,63 @@ receiver_pid=""
 tunnel_pid=""
 webhook_proof_pid=""
 sfu_stub_pid=""
-observability_postgres_port="${CHALK_OBSERVABILITY_POSTGRES_PORT:-55432}"
+observability_stack_started="false"
+observability_postgres_port="${CHALK_OBSERVABILITY_POSTGRES_PORT:-}"
 
 free_port() {
   node -e 'const server=require("node:net").createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close()})'
 }
 
+if [[ -z "${observability_postgres_port}" ]]; then
+  observability_postgres_port="$(free_port)"
+fi
 api_port="$(free_port)"
 sync_port="$(free_port)"
 receiver_port="$(free_port)"
 provider_bridge_port="$(free_port)"
 sfu_stub_port="$(free_port)"
+grafana_port="$(free_port)"
+loki_port="$(free_port)"
+tempo_port="$(free_port)"
+pyroscope_port="$(free_port)"
+otlp_grpc_port="$(free_port)"
+otlp_http_port="$(free_port)"
+prometheus_port="$(free_port)"
+collector_port="$(free_port)"
+compose_project="chalk-observability-e2e-${artifact_suffix}"
+canary_container="${compose_project}-canary"
+postgres_container="${compose_project}-postgres"
+lgtm_container="${compose_project}-lgtm"
+lgtm_volume="${compose_project}-lgtm-data"
+postgres_volume="${compose_project}-postgres-data"
+grafana_url="http://127.0.0.1:${grafana_port}"
+loki_url="http://127.0.0.1:${loki_port}"
+tempo_url="http://127.0.0.1:${tempo_port}"
+prometheus_url="http://127.0.0.1:${prometheus_port}"
+otlp_http_url="http://127.0.0.1:${otlp_http_port}"
 database_url="postgres://postgres:postgres@127.0.0.1:${observability_postgres_port}/${database}?sslmode=disable"
+export CHALK_OBSERVABILITY_COMPOSE_PROJECT="${compose_project}"
+export CHALK_OBSERVABILITY_CANARY_CONTAINER="${canary_container}"
+export CHALK_OBSERVABILITY_POSTGRES_CONTAINER="${postgres_container}"
+export CHALK_OBSERVABILITY_LGTM_CONTAINER="${lgtm_container}"
+export CHALK_OBSERVABILITY_LGTM_VOLUME="${lgtm_volume}"
+export CHALK_OBSERVABILITY_POSTGRES_VOLUME="${postgres_volume}"
+export CHALK_OBSERVABILITY_POSTGRES_PORT="${observability_postgres_port}"
+export CHALK_OBSERVABILITY_GRAFANA_PORT="${grafana_port}"
+export CHALK_OBSERVABILITY_LOKI_PORT="${loki_port}"
+export CHALK_OBSERVABILITY_TEMPO_PORT="${tempo_port}"
+export CHALK_OBSERVABILITY_PYROSCOPE_PORT="${pyroscope_port}"
+export CHALK_OBSERVABILITY_OTLP_GRPC_PORT="${otlp_grpc_port}"
+export CHALK_OBSERVABILITY_OTLP_HTTP_PORT="${otlp_http_port}"
+export CHALK_OBSERVABILITY_PROMETHEUS_PORT="${prometheus_port}"
+export CHALK_OBSERVABILITY_COLLECTOR_PORT="${collector_port}"
 receiver_secret_file="${artifact_dir}/webhook-receiver-secret.json"
 receiver_state_file="${artifact_dir}/webhook-receiver-state.json"
 receiver_inbox_file="${artifact_dir}/webhook-receiver-inbox.json"
 restart_request_file="${artifact_dir}/webhook-restart-request.json"
 restart_complete_file="${artifact_dir}/webhook-restart-complete.json"
-host_seed_request_file="${artifact_dir}/webhook-host-seed-request.json"
-host_seed_complete_file="${artifact_dir}/webhook-host-seed-complete.json"
+participant_seed_request_file="${artifact_dir}/webhook-participant-seed-request.json"
+participant_seed_complete_file="${artifact_dir}/webhook-participant-seed-complete.json"
 sync_token_key_file="${artifact_dir}/sync-token-key.json"
 provider_bridge_trust_domain="chalk.local"
 provider_bridge_client_id="$(node -e 'process.stdout.write(crypto.randomUUID())')"
@@ -56,6 +94,8 @@ sfu_stub_app_secret="local-observability-sfu-secret-${artifact_suffix}"
 sfu_stub_request_log="${artifact_dir}/cloudflare-sfu-requests.jsonl"
 
 cleanup() {
+  local exit_code=$?
+  local cleanup_failed="false"
   for pid in "${webhook_proof_pid}" "${tunnel_pid}" "${receiver_pid}" "${sfu_stub_pid}"; do
     if [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1; then
       kill -TERM "${pid}" >/dev/null 2>&1 || true
@@ -70,7 +110,31 @@ cleanup() {
     kill -TERM "${sync_pid}" >/dev/null 2>&1 || true
     wait "${sync_pid}" >/dev/null 2>&1 || true
   fi
+  for pid in "${webhook_proof_pid}" "${tunnel_pid}" "${receiver_pid}" "${sfu_stub_pid}" "${api_pid}" "${sync_pid}"; do
+    if [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1; then
+      echo "Task process ${pid} remained after observability E2E cleanup." >&2
+      cleanup_failed="true"
+    fi
+  done
+  if [[ "${observability_stack_started}" == "true" ]]; then
+    if ! CHALK_OBSERVABILITY_LEDGER_TARGET=observability bash "${root}/infrastructure/observability/scripts/local.sh" reset >/dev/null 2>&1; then
+      echo "The task-owned observability stack did not tear down cleanly for project ${compose_project}." >&2
+      cleanup_failed="true"
+    fi
+    if [[ -n "$(docker ps -aq --filter "label=com.docker.compose.project=${compose_project}")" ]]; then
+      echo "Task-owned observability containers remain for project ${compose_project}." >&2
+      cleanup_failed="true"
+    fi
+    if docker volume inspect "${lgtm_volume}" >/dev/null 2>&1 || docker volume inspect "${postgres_volume}" >/dev/null 2>&1; then
+      echo "Task-owned observability volumes remain for project ${compose_project}." >&2
+      cleanup_failed="true"
+    fi
+  fi
   rm -f "${sync_token_key_file}"
+  if [[ "${cleanup_failed}" == "true" && "${exit_code}" -eq 0 ]]; then
+    exit_code=1
+  fi
+  exit "${exit_code}"
 }
 trap cleanup EXIT
 
@@ -158,7 +222,7 @@ start_api() {
   CHALK_API_ENV=local \
   CHALK_API_LOCAL_SYSTEM_TOKEN="${system_token}" \
   CHALK_API_OPERATION_LOGS=1 \
-  CHALK_API_OTLP_ENDPOINT="http://127.0.0.1:4318" \
+  CHALK_API_OTLP_ENDPOINT="${otlp_http_url}" \
   CHALK_API_OTLP_INSECURE=1 \
   CHALK_API_REQUEST_LOGS=all \
   CHALK_DATABASE_URL="${database_url}" \
@@ -228,7 +292,7 @@ start_sync() {
     CHALK_DATABASE_URL="${database_url}" \
     CHALK_SYNC_LOCAL_PROOF=true \
     CHALK_SYNC_MAX_WAL_LAG_BYTES=0 \
-    CHALK_SYNC_OTLP_ENDPOINT="http://127.0.0.1:4318" \
+    CHALK_SYNC_OTLP_ENDPOINT="${otlp_http_url}" \
     CHALK_SYNC_PORT="${sync_port}" \
     CHALK_SYNC_REQUIRED_MIGRATION="${sync_required_migration}" \
     CHALK_SYNC_TOKEN_AUDIENCE="${sync_token_audience}" \
@@ -266,13 +330,14 @@ node -e 'const { generateKeyPairSync }=require("node:crypto"); const { writeFile
 generate_provider_bridge_certificates
 start_sfu_stub
 wait_for_sfu_stub
+observability_stack_started="true"
 CHALK_OBSERVABILITY_LEDGER_TARGET=observability \
   bash "${root}/infrastructure/observability/scripts/local.sh" start
-docker exec chalk-observability-postgres dropdb -U postgres --force --if-exists "${database}"
-docker exec chalk-observability-postgres createdb -U postgres "${database}"
+docker exec "${postgres_container}" dropdb -U postgres --force --if-exists "${database}"
+docker exec "${postgres_container}" createdb -U postgres "${database}"
 
 CHALK_DATABASE_URL="${database_url}" bash "${root}/apps/api/scripts/db-migrate.sh" up
-sync_required_migration="$(docker exec chalk-observability-postgres psql -U postgres -d "${database}" -Atc 'select max(version_id) from goose_db_version where is_applied')"
+sync_required_migration="$(docker exec "${postgres_container}" psql -U postgres -d "${database}" -Atc 'select max(version_id) from goose_db_version where is_applied')"
 pnpm --dir "${root}/sdks/typescript/client" run build
 
 (
@@ -360,12 +425,16 @@ CHALK_E2E_API_URL="http://127.0.0.1:${api_port}" \
 CHALK_E2E_SYNC_URL="ws://127.0.0.1:${sync_port}/v1/sync" \
 CHALK_E2E_SYSTEM_TOKEN="${system_token}" \
 CHALK_E2E_WEBHOOK_URL="${webhook_url}/webhook" \
+CHALK_E2E_GRAFANA_URL="${grafana_url}" \
+CHALK_E2E_TEMPO_URL="${tempo_url}" \
+CHALK_E2E_LOKI_URL="${loki_url}" \
+CHALK_E2E_PROMETHEUS_URL="${prometheus_url}" \
 CHALK_WEBHOOK_RECEIVER_SECRET_FILE="${receiver_secret_file}" \
 CHALK_WEBHOOK_RECEIVER_STATE_FILE="${receiver_state_file}" \
 CHALK_E2E_RESTART_REQUEST_FILE="${restart_request_file}" \
 CHALK_E2E_RESTART_COMPLETE_FILE="${restart_complete_file}" \
-CHALK_E2E_HOST_SEED_REQUEST_FILE="${host_seed_request_file}" \
-CHALK_E2E_HOST_SEED_COMPLETE_FILE="${host_seed_complete_file}" \
+CHALK_E2E_PARTICIPANT_SEED_REQUEST_FILE="${participant_seed_request_file}" \
+CHALK_E2E_PARTICIPANT_SEED_COMPLETE_FILE="${participant_seed_complete_file}" \
   node "${root}/infrastructure/observability/scripts/e2e-webhook.mjs" >"${artifact_dir}/webhook-proof.json" 2>"${artifact_dir}/webhook-proof.err" &
 webhook_proof_pid=$!
 
@@ -394,36 +463,37 @@ if [[ ! -f "${restart_complete_file}" ]]; then
 fi
 
 for _ in {1..240}; do
-  if [[ -f "${host_seed_request_file}" ]]; then
-    tenant_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).tenant_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${host_seed_request_file}")"
-    room_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).room_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${host_seed_request_file}")"
-    session_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).session_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${host_seed_request_file}")"
-    participant_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).participant_session_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${host_seed_request_file}")"
-    verified_control_rows="$(docker exec chalk-observability-postgres psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select count(*) from room_sessions as session join sync_session_control as control on control.tenant_id = session.tenant_id and control.room_id = session.room_id and control.session_id = session.id where session.tenant_id = '${tenant_id}'::uuid and session.room_id = '${room_id}'::uuid and session.id = '${session_id}'::uuid and session.status = 'active' and session.host_exit_policy = 'require_transfer' and control.control_revision = 0 and control.state_schema_version = 1 and control.host_participant_session_id is null and control.snapshot_bytes > 0 and octet_length(control.state_digest) = 32 and control.folded_state @> jsonb_build_object('control_revision', 0, 'state_schema_version', 1, 'status', 'active', 'admission_policy', 'open', 'host_exit_policy', session.host_exit_policy, 'role_capabilities', session.role_capabilities, 'participants', jsonb_build_array())")"
+  if [[ -f "${participant_seed_request_file}" ]]; then
+    tenant_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).tenant_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${participant_seed_request_file}")"
+    space_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).space_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${participant_seed_request_file}")"
+    episode_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).episode_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${participant_seed_request_file}")"
+    participant_id="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).participant_id; if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) process.exit(2); process.stdout.write(value)' "${participant_seed_request_file}")"
+    participant_generation="$(node -e 'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).participant_generation; if (!Number.isSafeInteger(value) || value < 1) process.exit(2); process.stdout.write(String(value))' "${participant_seed_request_file}")"
+    verified_control_rows="$(docker exec "${postgres_container}" psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select count(*) from sync_episode_control as control where control.tenant_id = '${tenant_id}'::uuid and control.space_id = '${space_id}'::uuid and control.episode_id = '${episode_id}'::uuid and control.control_revision = 0 and control.state_schema_version = 1 and control.snapshot_bytes > 0 and octet_length(control.state_digest) = 32 and control.folded_state @> jsonb_build_object('control_revision', 0, 'state_schema_version', 1, 'status', 'active', 'participants', jsonb_build_array(), 'admission_policy', jsonb_build_object('mode', 'open')) and control.folded_state -> 'config_snapshot' -> 'roles' ?& array['owner', 'collaborator', 'observer']")"
     if [[ "${verified_control_rows}" != "1" ]]; then
-      echo "The public API created ${verified_control_rows:-0} valid schema-v1 Session control projections, want exactly one." >&2
+      echo "The public API created ${verified_control_rows:-0} valid schema-v1 Episode control projections, want exactly one." >&2
       exit 1
     fi
-    verified_participant_rows="$(docker exec chalk-observability-postgres psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select count(*) from participants where tenant_id = '${tenant_id}'::uuid and room_id = '${room_id}'::uuid and session_id = '${session_id}'::uuid and id = '${participant_id}'::uuid and status = 'joining' and role = 'host' and eligible_roles = array['host','cohost','participant']::text[]")"
+    verified_participant_rows="$(docker exec "${postgres_container}" psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select count(*) from participants where tenant_id = '${tenant_id}'::uuid and space_id = '${space_id}'::uuid and episode_id = '${episode_id}'::uuid and id = '${participant_id}'::uuid and generation = ${participant_generation} and status in ('joining', 'active') and role = 'owner' and cardinality(capabilities) > 0")"
     if [[ "${verified_participant_rows}" != "1" ]]; then
-      echo "The public API created ${verified_participant_rows:-0} valid Host participants, want exactly one." >&2
+      echo "The public API created ${verified_participant_rows:-0} valid owner Participants, want exactly one." >&2
       exit 1
     fi
     start_sync
     wait_for_sync
-    node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ api_created_host_role: true, api_created_v1_control_policy: true, verified_at: new Date().toISOString() }) + "\n", { mode: 0o600 })' "${host_seed_complete_file}"
+    node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ api_created_owner_role: true, api_created_v1_control_policy: true, verified_at: new Date().toISOString() }) + "\n", { mode: 0o600 })' "${participant_seed_complete_file}"
     break
   fi
   if ! kill -0 "${webhook_proof_pid}" >/dev/null 2>&1; then
     wait "${webhook_proof_pid}" || true
-    echo "The signed webhook proof exited before requesting public Session bootstrap verification." >&2
+    echo "The signed webhook proof exited before requesting public Episode bootstrap verification." >&2
     cat "${artifact_dir}/webhook-proof.err" >&2 || true
     exit 1
   fi
   sleep 0.25
 done
-if [[ ! -f "${host_seed_complete_file}" ]]; then
-  echo "The signed webhook proof never reached public Session bootstrap verification." >&2
+if [[ ! -f "${participant_seed_complete_file}" ]]; then
+  echo "The signed webhook proof never reached public Episode bootstrap verification." >&2
   exit 1
 fi
 if ! wait "${webhook_proof_pid}"; then
@@ -434,10 +504,10 @@ fi
 webhook_proof_pid=""
 cat "${artifact_dir}/webhook-proof.json"
 
-provider_bridge_receipts="$(docker exec chalk-observability-postgres psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select coalesce(json_agg(json_build_object('operation_id', operation_id, 'effect', effect, 'state', state, 'outcome', outcome) order by effect), '[]'::json)::text from provider_operation_receipts where tenant_id = '${tenant_id}'::uuid and session_id = '${session_id}'::uuid and effect in ('media.remove_participant', 'media.end_session')")"
+provider_bridge_receipts="$(docker exec "${postgres_container}" psql -U postgres -d "${database}" -v ON_ERROR_STOP=1 -qAtc "select coalesce(json_agg(json_build_object('operation_id', operation_id, 'effect', effect, 'state', state, 'outcome', outcome) order by effect), '[]'::json)::text from provider_operation_receipts where tenant_id = '${tenant_id}'::uuid and episode_id = '${episode_id}'::uuid and effect in ('media.remove_participant', 'media.end_episode')")"
 node -e '
 const receipts = JSON.parse(process.argv[1]);
-const expected = new Set(["media.remove_participant", "media.end_session"]);
+const expected = new Set(["media.remove_participant", "media.end_episode"]);
 if (receipts.length !== expected.size) throw new Error(`provider bridge receipt count = ${receipts.length}, want ${expected.size}`);
 for (const receipt of receipts) {
   if (!expected.delete(receipt.effect)) throw new Error(`unexpected provider bridge receipt: ${JSON.stringify(receipt)}`);
@@ -461,12 +531,25 @@ if (traces.size !== 2) throw new Error(`provider bridge trace count = ${traces.s
 process.stdout.write([...traces].join(" "));
 ' "${artifact_dir}/api.log")"
 for provider_bridge_trace_id in ${provider_bridge_trace_ids}; do
-  provider_bridge_trace="$(curl -fsS "http://127.0.0.1:3200/api/traces/${provider_bridge_trace_id}")"
+  provider_bridge_trace="$(curl -fsS "${tempo_url}/api/traces/${provider_bridge_trace_id}")"
   if [[ "${provider_bridge_trace}" != *'chalk-api'* || "${provider_bridge_trace}" != *'chalk-sync'* || "${provider_bridge_trace}" != *'provider_bridge.execute'* ]]; then
     echo "Provider bridge trace ${provider_bridge_trace_id} did not contain the API, Sync, and execution spans." >&2
     exit 1
   fi
 done
 node -e 'console.log(JSON.stringify({ provider_bridge_mtls: true, provider_bridge_cross_service_traces: process.argv[2].split(" "), provider_bridge_receipts: JSON.parse(process.argv[1]) }, null, 2))' "${provider_bridge_receipts}" "${provider_bridge_trace_ids}"
+
+if ! CHALK_E2E_API_URL="http://127.0.0.1:${api_port}" \
+  CHALK_E2E_SYNC_URL="ws://127.0.0.1:${sync_port}/v1/sync" \
+  CHALK_E2E_SYSTEM_TOKEN="${system_token}" \
+  CHALK_E2E_GRAFANA_URL="${grafana_url}" \
+  CHALK_E2E_TEMPO_URL="${tempo_url}" \
+  CHALK_E2E_LOKI_URL="${loki_url}" \
+  CHALK_E2E_PROMETHEUS_URL="${prometheus_url}" \
+    node "${root}/infrastructure/observability/scripts/e2e-journey.mjs" >"${artifact_dir}/journey-proof.json" 2>"${artifact_dir}/journey-proof.err"; then
+  cat "${artifact_dir}/journey-proof.err" >&2 || true
+  exit 1
+fi
+cat "${artifact_dir}/journey-proof.json"
 
 echo "Private E2E artifacts: ${artifact_dir}"

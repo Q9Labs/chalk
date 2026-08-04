@@ -78,6 +78,37 @@ export const SyncProtocolMetadata = {
       recovery: ["none"],
     },
   },
+  correlation: {
+    optionalTopLevelFields: {
+      journey_id: {
+        kind: "string",
+        minBytes: 36,
+        maxBytes: 36,
+        format: "chalk-journey-id",
+        pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      },
+      traceparent: {
+        kind: "string",
+        minBytes: 55,
+        maxBytes: 55,
+        format: "w3c-traceparent",
+        pattern: "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      },
+      tracestate: {
+        kind: "string",
+        minBytes: 1,
+        maxBytes: 512,
+        format: "w3c-tracestate",
+        pattern: "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$",
+      },
+    },
+    acceptedOn: {
+      hello: "client-to-server",
+      serverFrames: "server-to-client",
+    },
+    upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate"],
+    rule: "propagate_from_first_observed_layer_to_every_downstream_frame",
+  },
   externalIntents: [
     "admit_participant",
     "deny_admission",
@@ -98,6 +129,7 @@ export const SyncProtocolMetadata = {
   ],
   limits: {
     decodedInboundFrameBytes: 65536,
+    correlationReservedBytes: 1160,
     tokenBytes: 8192,
     commandIdMinBytes: 16,
     commandIdMaxBytes: 64,
@@ -309,6 +341,39 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return isObject(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
+const syncCorrelationKeys = ["journey_id", "traceparent", "tracestate"] as const;
+function completeSyncCorrelation(value: unknown): boolean {
+  return isObject(value) && syncCorrelationKeys.every((key) => Object.hasOwn(value, key));
+}
+function boundedServerFrame(maxBytes: number) {
+  return Schema.makeFilter((frame) => {
+    const budget = completeSyncCorrelation(frame) ? maxBytes : maxBytes - SyncProtocolLimits.correlationReservedBytes;
+    return encodedSyncFrameBytes(frame) <= budget ? undefined : { path: [], issue: "must fit the encoded byte limit including correlation reserve" };
+  });
+}
+const syncJourneyIdPattern = new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "iu");
+const syncTraceparentPattern = new RegExp("^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$", "u");
+const syncTracestatePattern = new RegExp("^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$", "u");
+function boundedCorrelationString(value: unknown, minBytes: number, maxBytes: number): value is string {
+  return typeof value === "string" && textEncoder.encode(value).byteLength >= minBytes && textEncoder.encode(value).byteLength <= maxBytes;
+}
+function validSyncCorrelation(value: unknown): value is Record<string, unknown> {
+  if (!isObject(value)) return false;
+  const journeyId = value.journey_id;
+  const traceparent = value.traceparent;
+  const tracestate = value.tracestate;
+  return (
+    (journeyId === undefined || (boundedCorrelationString(journeyId, 36, 36) && syncJourneyIdPattern.test(journeyId) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/u.test(journeyId))) &&
+    (traceparent === undefined || (boundedCorrelationString(traceparent, 55, 55) && syncTraceparentPattern.test(traceparent) && !/^00-0{32}-[0-9a-f]{16}-[0-9a-f]{2}$/u.test(traceparent) && !/^00-[0-9a-f]{32}-0{16}-[0-9a-f]{2}$/u.test(traceparent))) &&
+    (tracestate === undefined || (boundedCorrelationString(tracestate, 1, 512) && syncTracestatePattern.test(tracestate)))
+  );
+}
+function exactObjectWithCorrelation(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return validSyncCorrelation(value) && isObject(value) && Object.keys(value).length >= keys.length && keys.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => keys.includes(key) || (syncCorrelationKeys as readonly string[]).includes(key));
+}
+function serverExactKeys(keys: readonly string[]) {
+  return Schema.makeFilter((value) => (exactObjectWithCorrelation(value, keys) ? undefined : { path: [], issue: "must not contain unknown or missing fields" }));
+}
 function exactKeys(keys: readonly string[]) {
   return Schema.makeFilter((value) => (exactObject(value, keys) ? undefined : { path: [], issue: "must not contain unknown or missing fields" }));
 }
@@ -340,8 +405,8 @@ function strictCollaborationsHelloExtension(value: unknown): boolean {
   return exactObject(value, ["name", "chat_cursor"]) && value.name === "collaboration_v1" && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
 }
 function strictHello(value: Record<string, unknown>): boolean {
-  const base = exactObject(value, ["type", "protocol", "token", "streams"]);
-  const extended = exactObject(value, ["type", "protocol", "token", "streams", "extensions"]) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictCollaborationsHelloExtension(value.extensions[0]);
+  const base = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams"]);
+  const extended = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams", "extensions"]) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictCollaborationsHelloExtension(value.extensions[0]);
   if ((!base && !extended) || !exactObject(value.streams, ["control", "media", "presence", "requests"])) return false;
   const streams = value.streams;
   return (
@@ -356,13 +421,13 @@ function strictHello(value: Record<string, unknown>): boolean {
   );
 }
 function strictChatMessage(value: unknown): boolean {
-  return exactObject(value, ["type", "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text", "attachments", "created_at"]) && Array.isArray(value.attachments) && value.attachments.every(strictChatAttachment);
+  return exactObjectWithCorrelation(value, ["type", "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text", "attachments", "created_at"]) && Array.isArray(value.attachments) && value.attachments.every(strictChatAttachment);
 }
 function strictChatAttachment(value: unknown): boolean {
   return exactObject(value, ["attachment_id", "file_name", "mime_type", "byte_length"]);
 }
 function strictReaction(value: unknown): boolean {
-  return exactObject(value, ["type", "event_id", "participant_id", "display_name", "reaction", "occurred_at", "expires_at"]);
+  return exactObjectWithCorrelation(value, ["type", "event_id", "participant_id", "display_name", "reaction", "occurred_at", "expires_at"]);
 }
 function strictOperation(value: Record<string, unknown>): boolean {
   if (!exactObject(value, ["type", "command_id", "name", "payload"]) || !isObject(value.payload)) return false;
@@ -462,39 +527,39 @@ function strictEvent(value: Record<string, unknown>): boolean {
   const common = ["type", "stream", "name", "event_id", "base_revision", "revision", "schema_version", "resulting_state_digest", "payload"];
   switch (value.name) {
     case "participant_joined":
-      return exactObject(value.payload, ["participant_id", "display_name", "role", "admission_revision"]) && exactObject(value, [...common, "lifecycle_intent_id"]);
+      return exactObject(value.payload, ["participant_id", "display_name", "role", "admission_revision"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "participant_left":
-      return exactObject(value.payload, ["participant_id", "reason"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["participant_id", "reason"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "episode_started":
-      return exactObject(value.payload, ["episode_id"]) && exactObject(value, [...common, "lifecycle_intent_id"]);
+      return exactObject(value.payload, ["episode_id"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "episode_ended":
-      return exactObject(value.payload, ["reason"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["reason"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "hand_raised":
-      return exactObject(value.payload, ["participant_id"]) && exactObject(value, [...common, "command_id"]);
+      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "hand_lowered":
-      return exactObject(value.payload, ["participant_id"]) && exactObject(value, [...common, "command_id"]);
+      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "participant_display_name_changed":
-      return exactObject(value.payload, ["participant_id", "display_name"]) && exactObject(value, [...common, "command_id"]);
+      return exactObject(value.payload, ["participant_id", "display_name"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "admission_policy_changed":
-      return exactObject(value.payload, ["policy"]) && exactObject(value, [...common, "command_id"]);
+      return exactObject(value.payload, ["policy"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "role_assigned":
-      return exactObject(value.payload, ["participant_id", "role"]) && exactObject(value, [...common, "command_id"]);
+      return exactObject(value.payload, ["participant_id", "role"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "deadline_changed":
-      return exactObject(value.payload, ["deadline_at_ms", "deadline_generation"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["deadline_at_ms", "deadline_generation"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "admission_requested":
-      return exactObject(value.payload, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]) && exactObject(value, [...common, "lifecycle_intent_id"]);
+      return exactObject(value.payload, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "admission_denied":
-      return exactObject(value.payload, ["admission_request_id"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["admission_request_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "admission_expired":
-      return exactObject(value.payload, ["admission_request_id"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["admission_request_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "participant_microphone_stopped":
-      return exactObject(value.payload, ["participant_id"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "participant_camera_stopped":
-      return exactObject(value.payload, ["participant_id"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "participant_screen_share_stopped":
-      return exactObject(value.payload, ["participant_id"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["participant_id"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     case "recording_status_changed":
-      return exactObject(value.payload, ["recording_id", "status", "failure_code"]) && exactObject(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["recording_id", "status", "failure_code"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
     default:
       return false;
   }
@@ -505,8 +570,8 @@ function strictProjectionItem(value: unknown, stream: unknown): boolean {
   return false;
 }
 function strictProjection(value: Record<string, unknown>): boolean {
-  if (value.type === "projection_snapshot") return exactObject(value, ["type", "stream", "projection_id", "sequence", "items"]) && Array.isArray(value.items) && value.items.every((item) => strictProjectionItem(item, value.stream));
-  return exactObject(value, ["type", "stream", "projection_id", "sequence", "item"]) && strictProjectionItem(value.item, value.stream);
+  if (value.type === "projection_snapshot") return exactObjectWithCorrelation(value, ["type", "stream", "projection_id", "sequence", "items"]) && Array.isArray(value.items) && value.items.every((item) => strictProjectionItem(item, value.stream));
+  return exactObjectWithCorrelation(value, ["type", "stream", "projection_id", "sequence", "item"]) && strictProjectionItem(value.item, value.stream);
 }
 function strictWelcome(value: Record<string, unknown>): boolean {
   const base = ["type", "protocol", "participant_id", "participant_generation", "recovery_id", "head", "mode"];
@@ -514,62 +579,86 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extensionValid = isObject(extension) && extension.name === "collaboration_v1" && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
   const fields = extensionValid ? [...base, "extensions"] : base;
   if (!strictCursor(value.head)) return false;
-  if (value.mode === "snapshot") return exactObject(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
-  if (value.mode === "terminal") return exactObject(value, [...fields, "reason"]);
-  return (value.mode === "replay" || value.mode === "up_to_date") && exactObject(value, fields);
+  if (value.mode === "snapshot") return exactObjectWithCorrelation(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
+  if (value.mode === "terminal") return exactObjectWithCorrelation(value, [...fields, "reason"]);
+  return (value.mode === "replay" || value.mode === "up_to_date") && exactObjectWithCorrelation(value, fields);
+}
+function serverFrameWithinLimit(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  const limit =
+    value.type === "welcome" && value.mode === "snapshot"
+      ? SyncProtocolLimits.snapshotEncodedBytes
+      : value.type === "replay_page"
+        ? SyncProtocolLimits.replayPageEncodedBytes
+        : value.type === "event"
+          ? SyncProtocolLimits.encodedLiveEventBytes
+          : value.type === "projection_snapshot"
+            ? SyncProtocolLimits.projectionSnapshotEncodedBytes
+            : value.type === "projection_event"
+              ? SyncProtocolLimits.encodedLiveEventBytes
+              : value.type === "reaction"
+                ? SyncProtocolLimits.collaborationFrameBytes
+                : value.type === "chat_message"
+                  ? SyncProtocolLimits.collaborationFrameBytes
+                  : value.type === "chat_page" && value.outcome === "loaded"
+                    ? SyncProtocolLimits.chatPageEncodedBytes
+                    : undefined;
+  if (limit === undefined) return true;
+  const budget = completeSyncCorrelation(value) ? limit : limit - SyncProtocolLimits.correlationReservedBytes;
+  return encodedSyncFrameBytes(value) <= budget;
 }
 function strictServerFrame(value: unknown): boolean {
-  if (!isObject(value)) return false;
+  if (!isObject(value) || !validSyncCorrelation(value)) return false;
   switch (value.type) {
     case "welcome":
       return strictWelcome(value);
     case "replay_page":
-      return exactObject(value, ["type", "recovery_id", "first_revision", "last_revision", "events"]) && Array.isArray(value.events) && value.events.every((event) => isObject(event) && strictEvent(event));
+      return exactObjectWithCorrelation(value, ["type", "recovery_id", "first_revision", "last_revision", "events"]) && Array.isArray(value.events) && value.events.every((event) => isObject(event) && strictEvent(event));
     case "recovery_complete":
-      return exactObject(value, ["type", "recovery_id", "head"]) && strictCursor(value.head);
+      return exactObjectWithCorrelation(value, ["type", "recovery_id", "head"]) && strictCursor(value.head);
     case "event":
       return strictEvent(value);
     case "ack":
       return value.outcome === "committed"
-        ? exactObject(value, ["type", "command_id", "delivery", "outcome", "event_id", "revision", "state_digest"])
+        ? exactObjectWithCorrelation(value, ["type", "command_id", "delivery", "outcome", "event_id", "revision", "state_digest"])
         : value.outcome === "satisfied"
-          ? exactObject(value, ["type", "command_id", "delivery", "outcome", "revision", "state_digest"])
+          ? exactObjectWithCorrelation(value, ["type", "command_id", "delivery", "outcome", "revision", "state_digest"])
           : value.outcome === "rejected"
-            ? exactObject(value, ["type", "command_id", "delivery", "outcome", "reason"])
-            : value.outcome === "command_id_conflict" && exactObject(value, ["type", "command_id", "delivery", "outcome", "reason"]);
+            ? exactObjectWithCorrelation(value, ["type", "command_id", "delivery", "outcome", "reason"])
+            : value.outcome === "command_id_conflict" && exactObjectWithCorrelation(value, ["type", "command_id", "delivery", "outcome", "reason"]);
     case "projection_snapshot":
     case "projection_event":
       return strictProjection(value);
     case "live_target_result":
-      return exactObject(value, ["type", "operation_id", "name", "outcome", "error_code"]);
+      return exactObjectWithCorrelation(value, ["type", "operation_id", "name", "outcome", "error_code"]);
     case "directed_request":
-      return exactObject(value, ["type", "request_id", "name", "actor_participant_id", "expires_at_ms"]);
+      return exactObjectWithCorrelation(value, ["type", "request_id", "name", "actor_participant_id", "expires_at_ms"]);
     case "directed_request_result":
-      return exactObject(value, ["type", "request_id", "result"]);
+      return exactObjectWithCorrelation(value, ["type", "request_id", "result"]);
     case "reaction":
       return strictReaction(value);
     case "reaction_result":
-      return value.outcome === "accepted" ? exactObject(value, ["type", "operation_id", "outcome", "reaction"]) && strictReaction(value.reaction) : value.outcome === "rejected" && exactObject(value, ["type", "operation_id", "outcome", "error_code"]);
+      return value.outcome === "accepted" ? exactObjectWithCorrelation(value, ["type", "operation_id", "outcome", "reaction"]) && strictReaction(value.reaction) : value.outcome === "rejected" && exactObjectWithCorrelation(value, ["type", "operation_id", "outcome", "error_code"]);
     case "chat_message":
       return strictChatMessage(value);
     case "chat_send_result":
-      return value.outcome === "accepted" ? exactObject(value, ["type", "client_message_id", "outcome", "message"]) && strictChatMessage(value.message) : value.outcome === "rejected" && exactObject(value, ["type", "client_message_id", "outcome", "error_code"]);
+      return value.outcome === "accepted" ? exactObjectWithCorrelation(value, ["type", "client_message_id", "outcome", "message"]) && strictChatMessage(value.message) : value.outcome === "rejected" && exactObjectWithCorrelation(value, ["type", "client_message_id", "outcome", "error_code"]);
     case "chat_page":
       return value.outcome === "loaded"
-        ? exactObject(value, ["type", "request_id", "outcome", "messages", "has_more", "head_sequence", "retained_floor_sequence"]) && Array.isArray(value.messages) && value.messages.every(strictChatMessage)
-        : value.outcome === "cursor_reset" && exactObject(value, ["type", "request_id", "outcome", "retained_floor_sequence"]);
+        ? exactObjectWithCorrelation(value, ["type", "request_id", "outcome", "messages", "has_more", "head_sequence", "retained_floor_sequence"]) && Array.isArray(value.messages) && value.messages.every(strictChatMessage)
+        : value.outcome === "cursor_reset" && exactObjectWithCorrelation(value, ["type", "request_id", "outcome", "retained_floor_sequence"]);
     case "chat_head":
-      return exactObject(value, ["type", "head_sequence", "retained_floor_sequence"]);
+      return exactObjectWithCorrelation(value, ["type", "head_sequence", "retained_floor_sequence"]);
     case "chat_read_receipt":
-      return exactObject(value, ["type", "participant_id", "participant_generation", "sequence", "read_at"]);
+      return exactObjectWithCorrelation(value, ["type", "participant_id", "participant_generation", "sequence", "read_at"]);
     case "chat_read_result":
-      return value.outcome === "accepted" ? exactObject(value, ["type", "request_id", "outcome", "participant_id", "participant_generation", "sequence", "read_at"]) : value.outcome === "rejected" && exactObject(value, ["type", "request_id", "outcome", "error_code"]);
+      return value.outcome === "accepted" ? exactObjectWithCorrelation(value, ["type", "request_id", "outcome", "participant_id", "participant_generation", "sequence", "read_at"]) : value.outcome === "rejected" && exactObjectWithCorrelation(value, ["type", "request_id", "outcome", "error_code"]);
     case "retryable_error":
-      return exactObject(value, ["type", "command_id", "code"]);
+      return exactObjectWithCorrelation(value, ["type", "command_id", "code"]);
     case "error":
-      return exactObject(value, ["type", "code", "detail"]);
+      return exactObjectWithCorrelation(value, ["type", "code", "detail"]);
     case "pong":
-      return exactObject(value, ["type"]);
+      return exactObjectWithCorrelation(value, ["type"]);
     default:
       return false;
   }
@@ -578,6 +667,17 @@ function strictServerFrame(value: unknown): boolean {
 export const NonNegativeIntegerSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 export const PositiveIntegerSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
 export const UuidSchema = Schema.String.check(Schema.makeFilter((value) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value) ? undefined : { path: [], issue: "must be an RFC 4122 UUID" })));
+export const JourneyIdSchema = UuidSchema.check(Schema.makeFilter((value) => (!/^0{8}-0{4}-0{4}-0{4}-0{12}$/u.test(value) ? undefined : { path: [], issue: "must be a non-zero Chalk journey UUID" })));
+export const TraceparentSchema = boundedUtf8String(55, 55).check(
+  Schema.makeFilter((value) => (/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/u.test(value) && !/^00-0{32}-[0-9a-f]{16}-[0-9a-f]{2}$/u.test(value) && !/^00-[0-9a-f]{32}-0{16}-[0-9a-f]{2}$/u.test(value) ? undefined : { path: [], issue: "must be a valid non-zero W3C traceparent" })),
+);
+export const TracestateSchema = boundedUtf8String(512, 1).check(
+  Schema.makeFilter((value) => (new RegExp("^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$", "u").test(value) ? undefined : { path: [], issue: "must be a valid bounded W3C tracestate" })),
+);
+export const SyncCorrelationFieldsSchema = Schema.Struct({ journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) });
+export type SyncCorrelationFields = typeof SyncCorrelationFieldsSchema.Type;
+const HelloCorrelationFields = { journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) };
+const ServerCorrelationFields = { ...HelloCorrelationFields };
 export const StateDigestSchema = Schema.String.check(Schema.makeFilter((value) => (/^[0-9a-f]{64}$/u.test(value) ? undefined : { path: [], issue: "must be a lowercase hexadecimal SHA-256 digest" })));
 export const UnsignedDecimalSchema = Schema.String.check(Schema.makeFilter((value) => (/^(?:0|[1-9][0-9]*)$/u.test(value) ? undefined : { path: [], issue: "must be an unsigned decimal integer" })));
 export const CommandIdSchema = boundedUtf8String(64).check(Schema.makeFilter((value) => (textEncoder.encode(value).byteLength >= 16 ? undefined : { path: [], issue: "must meet the command ID minimum byte length" })));
@@ -669,10 +769,10 @@ export const SnapshotSchema = Schema.Struct({
 
 const NullCursorStreamSchema = Schema.Struct({ cursor: Schema.Null }).check(exactKeys(["cursor"]));
 const StreamsSchema = Schema.Struct({ control: Schema.Struct({ cursor: Schema.NullOr(ControlCursorSchema) }).check(exactKeys(["cursor"])), media: NullCursorStreamSchema, presence: NullCursorStreamSchema, requests: NullCursorStreamSchema });
-export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema }).check(boundedFrame(65536));
+export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema, ...HelloCorrelationFields }).check(boundedFrame(65536));
 export const ChatCursorSchema = Schema.Struct({ after_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(["after_sequence", "retained_floor_sequence"]));
 export const CollaborationHelloExtensionSchema = Schema.Struct({ name: Schema.Literal("collaboration_v1"), chat_cursor: ChatCursorSchema }).check(exactKeys(["name", "chat_cursor"]));
-export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema, extensions: Schema.Tuple([CollaborationHelloExtensionSchema]) }).check(boundedFrame(65536));
+export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema, extensions: Schema.Tuple([CollaborationHelloExtensionSchema]), ...HelloCorrelationFields }).check(boundedFrame(65536));
 export const DeliveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("delivery_ack"), stream: Schema.Literal("control"), revision: PositiveIntegerSchema, state_digest: StateDigestSchema });
 export const RecoveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("recovery_ack"), recovery_id: UuidSchema, revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });
 
@@ -780,6 +880,7 @@ const ParticipantJoinedLifecycleIntentIdEventVariantSchema = Schema.Struct({
     admission_revision: PositiveIntegerSchema,
   }),
   lifecycle_intent_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -795,6 +896,7 @@ const ParticipantLeftExternalOperationIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema, reason: Schema.Union([Schema.Literal("left"), Schema.Literal("removed")]) }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -810,6 +912,7 @@ const EpisodeStartedLifecycleIntentIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ episode_id: UuidSchema }),
   lifecycle_intent_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -825,6 +928,7 @@ const EpisodeEndedExternalOperationIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ reason: Schema.Union([Schema.Literal("ended_by_participant"), Schema.Literal("tenant_recovery"), Schema.Literal("maximum_duration")]) }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -840,6 +944,7 @@ const HandRaisedCommandIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema }),
   command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -855,6 +960,7 @@ const HandLoweredCommandIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema }),
   command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -870,6 +976,7 @@ const ParticipantDisplayNameChangedCommandIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema, display_name: boundedUtf8String(256, 1) }),
   command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -885,6 +992,7 @@ const AdmissionPolicyChangedCommandIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ policy: Schema.Union([Schema.Literal("open"), Schema.Literal("knock"), Schema.Literal("members_only")]) }),
   command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -900,6 +1008,7 @@ const RoleAssignedCommandIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema, role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))) }),
   command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -915,6 +1024,7 @@ const DeadlineChangedExternalOperationIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ deadline_at_ms: PositiveIntegerSchema, deadline_generation: PositiveIntegerSchema }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -936,6 +1046,7 @@ const AdmissionRequestedLifecycleIntentIdEventVariantSchema = Schema.Struct({
     expires_at_ms: PositiveIntegerSchema,
   }),
   lifecycle_intent_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -951,6 +1062,7 @@ const AdmissionDeniedExternalOperationIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ admission_request_id: UuidSchema }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -966,6 +1078,7 @@ const AdmissionExpiredExternalOperationIdEventVariantSchema = Schema.Struct({
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ admission_request_id: UuidSchema }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -981,6 +1094,7 @@ const ParticipantMicrophoneStoppedExternalOperationIdEventVariantSchema = Schema
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -996,6 +1110,7 @@ const ParticipantCameraStoppedExternalOperationIdEventVariantSchema = Schema.Str
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -1011,6 +1126,7 @@ const ParticipantScreenShareStoppedExternalOperationIdEventVariantSchema = Schem
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -1026,6 +1142,7 @@ const RecordingStatusChangedExternalOperationIdEventVariantSchema = Schema.Struc
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ recording_id: UuidSchema, status: Schema.Union([Schema.Literal("starting"), Schema.Literal("recording"), Schema.Literal("stopping"), Schema.Literal("stopped"), Schema.Literal("failed")]), failure_code: Schema.NullOr(boundedUtf8String(96, 1)) }),
   external_operation_id: UuidSchema,
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
   boundedFrame(32768),
@@ -1084,14 +1201,14 @@ export const CollaborationWelcomeExtensionSchema = Schema.Struct({
 }).check(exactKeys(["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]));
 const WelcomeBase = { type: Schema.Literal("welcome"), protocol: Schema.Literal(1), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
-export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));
-export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("replay") });
-export const WelcomeUpToDateFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("up_to_date") });
-export const WelcomeTerminalFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema });
-export const ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema }).check(boundedFrame(SyncProtocolLimits.snapshotEncodedBytes));
-export const ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("replay") });
-export const ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("up_to_date") });
-export const ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema });
+export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));
+export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("replay"), ...ServerCorrelationFields });
+export const WelcomeUpToDateFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("up_to_date"), ...ServerCorrelationFields });
+export const WelcomeTerminalFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema, ...ServerCorrelationFields });
+export const ExtendedWelcomeSnapshotFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));
+export const ExtendedWelcomeReplayFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("replay"), ...ServerCorrelationFields });
+export const ExtendedWelcomeUpToDateFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("up_to_date"), ...ServerCorrelationFields });
+export const ExtendedWelcomeTerminalFrameSchema = Schema.Struct({ ...ExtendedWelcomeBase, mode: Schema.Literal("terminal"), reason: TerminalRecoveryReasonSchema, ...ServerCorrelationFields });
 export const WelcomeFrameSchema = Schema.Union([
   ExtendedWelcomeSnapshotFrameSchema,
   ExtendedWelcomeReplayFrameSchema,
@@ -1108,27 +1225,24 @@ export const ReplayPageFrameSchema = Schema.Struct({
   first_revision: PositiveIntegerSchema,
   last_revision: PositiveIntegerSchema,
   events: Schema.Array(EventFrameSchema).check(Schema.isMaxLength(SyncProtocolLimits.replayPageMaxEvents)),
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => {
     const first = frame.events[0];
     const last = frame.events.at(-1);
-    return encodedSyncFrameBytes(frame) <= SyncProtocolLimits.replayPageEncodedBytes &&
-      first !== undefined &&
-      last !== undefined &&
-      first.revision === frame.first_revision &&
-      last.revision === frame.last_revision &&
-      frame.events.every((event, index) => index === 0 || event.base_revision === frame.events[index - 1]!.revision)
+    const budget = completeSyncCorrelation(frame) ? SyncProtocolLimits.replayPageEncodedBytes : SyncProtocolLimits.replayPageEncodedBytes - SyncProtocolLimits.correlationReservedBytes;
+    return encodedSyncFrameBytes(frame) <= budget && first !== undefined && last !== undefined && first.revision === frame.first_revision && last.revision === frame.last_revision && frame.events.every((event, index) => index === 0 || event.base_revision === frame.events[index - 1]!.revision)
       ? undefined
       : { path: [], issue: "must declare one bounded contiguous replay page" };
   }),
 );
-export const RecoveryCompleteFrameSchema = Schema.Struct({ type: Schema.Literal("recovery_complete"), recovery_id: UuidSchema, head: ControlCursorSchema });
+export const RecoveryCompleteFrameSchema = Schema.Struct({ type: Schema.Literal("recovery_complete"), recovery_id: UuidSchema, head: ControlCursorSchema, ...ServerCorrelationFields });
 
 export const AckDeliverySchema = Schema.Union([Schema.Literal("original"), Schema.Literal("duplicate")]);
-export const CommittedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("committed"), event_id: UuidSchema, revision: PositiveIntegerSchema, state_digest: StateDigestSchema });
-export const SatisfiedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("satisfied"), revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });
-export const RejectedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("rejected"), reason: RejectionReasonSchema });
-export const CommandIdConflictAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("command_id_conflict"), reason: Schema.Literal("command_id_conflict") });
+export const CommittedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("committed"), event_id: UuidSchema, revision: PositiveIntegerSchema, state_digest: StateDigestSchema, ...ServerCorrelationFields });
+export const SatisfiedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("satisfied"), revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema, ...ServerCorrelationFields });
+export const RejectedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("rejected"), reason: RejectionReasonSchema, ...ServerCorrelationFields });
+export const CommandIdConflictAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("command_id_conflict"), reason: Schema.Literal("command_id_conflict"), ...ServerCorrelationFields });
 
 export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]), enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(
   Schema.makeFilter((item) => (item.enabled === (item.publication_id !== null) ? undefined : { path: [], issue: "enabled must equal whether publication_id is non-null" })),
@@ -1136,26 +1250,52 @@ export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSch
 export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: Schema.Union([Schema.Literal("connected"), Schema.Literal("disconnected")]), speaking: Schema.Boolean, active_speaker: Schema.Boolean }).check(
   Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })),
 );
-export const MediaProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal("projection_snapshot"), stream: Schema.Literal("media"), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(1500)) }).check(
-  boundedFrame(SyncProtocolLimits.projectionSnapshotEncodedBytes),
+export const MediaProjectionSnapshotFrameSchema = Schema.Struct({
+  type: Schema.Literal("projection_snapshot"),
+  stream: Schema.Literal("media"),
+  projection_id: UuidSchema,
+  sequence: Schema.Literal(0),
+  items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(1500)),
+  ...ServerCorrelationFields,
+}).check(boundedServerFrame(SyncProtocolLimits.projectionSnapshotEncodedBytes));
+export const PresenceProjectionSnapshotFrameSchema = Schema.Struct({
+  type: Schema.Literal("projection_snapshot"),
+  stream: Schema.Literal("presence"),
+  projection_id: UuidSchema,
+  sequence: Schema.Literal(0),
+  items: Schema.Array(PresenceProjectionItemSchema).check(Schema.isMaxLength(500)),
+  ...ServerCorrelationFields,
+}).check(boundedServerFrame(SyncProtocolLimits.projectionSnapshotEncodedBytes));
+export const MediaProjectionEventFrameSchema = Schema.Struct({ type: Schema.Literal("projection_event"), stream: Schema.Literal("media"), projection_id: UuidSchema, sequence: PositiveIntegerSchema, item: MediaProjectionItemSchema, ...ServerCorrelationFields }).check(
+  boundedServerFrame(SyncProtocolLimits.encodedLiveEventBytes),
 );
-export const PresenceProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal("projection_snapshot"), stream: Schema.Literal("presence"), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(PresenceProjectionItemSchema).check(Schema.isMaxLength(500)) }).check(
-  boundedFrame(SyncProtocolLimits.projectionSnapshotEncodedBytes),
-);
-export const MediaProjectionEventFrameSchema = Schema.Struct({ type: Schema.Literal("projection_event"), stream: Schema.Literal("media"), projection_id: UuidSchema, sequence: PositiveIntegerSchema, item: MediaProjectionItemSchema }).check(boundedFrame(SyncProtocolLimits.encodedLiveEventBytes));
-export const PresenceProjectionEventFrameSchema = Schema.Struct({ type: Schema.Literal("projection_event"), stream: Schema.Literal("presence"), projection_id: UuidSchema, sequence: PositiveIntegerSchema, item: PresenceProjectionItemSchema }).check(
-  boundedFrame(SyncProtocolLimits.encodedLiveEventBytes),
+export const PresenceProjectionEventFrameSchema = Schema.Struct({ type: Schema.Literal("projection_event"), stream: Schema.Literal("presence"), projection_id: UuidSchema, sequence: PositiveIntegerSchema, item: PresenceProjectionItemSchema, ...ServerCorrelationFields }).check(
+  boundedServerFrame(SyncProtocolLimits.encodedLiveEventBytes),
 );
 export const ProjectionFrameSchema = Schema.Union([MediaProjectionSnapshotFrameSchema, PresenceProjectionSnapshotFrameSchema, MediaProjectionEventFrameSchema, PresenceProjectionEventFrameSchema]);
 
 export const LiveTargetOutcomeSchema = Schema.Union([Schema.Literal("confirmed"), Schema.Literal("satisfied"), Schema.Literal("retryable_failure"), Schema.Literal("terminal_failure"), Schema.Literal("ambiguous")]);
-export const LiveTargetResultFrameSchema = Schema.Struct({ type: Schema.Literal("live_target_result"), operation_id: RequestIdSchema, name: LiveTargetNameSchema, outcome: LiveTargetOutcomeSchema, error_code: Schema.NullOr(boundedUtf8String(SyncProtocolLimits.protocolErrorDetailBytes, 1)) });
-export const DirectedRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request"), request_id: RequestIdSchema, name: DirectedRequestNameSchema, actor_participant_id: UuidSchema, expires_at_ms: PositiveIntegerSchema });
+export const LiveTargetResultFrameSchema = Schema.Struct({
+  type: Schema.Literal("live_target_result"),
+  operation_id: RequestIdSchema,
+  name: LiveTargetNameSchema,
+  outcome: LiveTargetOutcomeSchema,
+  error_code: Schema.NullOr(boundedUtf8String(SyncProtocolLimits.protocolErrorDetailBytes, 1)),
+  ...ServerCorrelationFields,
+});
+export const DirectedRequestDeliverFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request"), request_id: RequestIdSchema, name: DirectedRequestNameSchema, actor_participant_id: UuidSchema, expires_at_ms: PositiveIntegerSchema, ...ServerCorrelationFields });
 export const DirectedRequestResultSchema = Schema.Union([Schema.Literal("delivered"), Schema.Literal("target_unavailable"), Schema.Literal("expired"), Schema.Literal("rejected"), Schema.Literal("rate_limited")]);
-export const DirectedRequestResultFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request_result"), request_id: RequestIdSchema, result: DirectedRequestResultSchema });
-export const ReactionEventFrameSchema = Schema.Struct({ type: Schema.Literal("reaction"), event_id: UuidSchema, participant_id: UuidSchema, display_name: boundedUtf8String(256, 1), reaction: ReactionSchema, occurred_at: boundedUtf8String(64, 1), expires_at: boundedUtf8String(64, 1) }).check(
-  boundedFrame(SyncProtocolLimits.collaborationFrameBytes),
-);
+export const DirectedRequestResultFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request_result"), request_id: RequestIdSchema, result: DirectedRequestResultSchema, ...ServerCorrelationFields });
+export const ReactionEventFrameSchema = Schema.Struct({
+  type: Schema.Literal("reaction"),
+  event_id: UuidSchema,
+  participant_id: UuidSchema,
+  display_name: boundedUtf8String(256, 1),
+  reaction: ReactionSchema,
+  occurred_at: boundedUtf8String(64, 1),
+  expires_at: boundedUtf8String(64, 1),
+  ...ServerCorrelationFields,
+}).check(boundedFrame(SyncProtocolLimits.collaborationFrameBytes));
 export const CollaborationErrorCodeSchema = Schema.Union([
   Schema.Literal("capability_denied"),
   Schema.Literal("invalid_payload"),
@@ -1170,8 +1310,8 @@ export const CollaborationErrorCodeSchema = Schema.Union([
   Schema.Literal("attachment_quota_exceeded"),
   Schema.Literal("dependency_unavailable"),
 ]);
-export const AcceptedReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("accepted"), reaction: ReactionEventFrameSchema });
-export const RejectedReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: CollaborationErrorCodeSchema });
+export const AcceptedReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("accepted"), reaction: ReactionEventFrameSchema, ...ServerCorrelationFields });
+export const RejectedReactionResultFrameSchema = Schema.Struct({ type: Schema.Literal("reaction_result"), operation_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: CollaborationErrorCodeSchema, ...ServerCorrelationFields });
 export const ReactionResultFrameSchema = Schema.Union([AcceptedReactionResultFrameSchema, RejectedReactionResultFrameSchema]);
 export const ChatAttachmentSchema = Schema.Struct({ attachment_id: UuidSchema, file_name: boundedUtf8String(SyncProtocolLimits.chatAttachmentFileNameUtf8Bytes, 1), mime_type: ChatAttachmentMimeTypeSchema, byte_length: PositiveIntegerSchema }).check(
   Schema.makeFilter((attachment) => (attachment.byte_length <= SyncProtocolLimits.chatAttachmentMaxBytes ? undefined : { path: ["byte_length"], issue: "must fit the attachment byte limit" })),
@@ -1188,13 +1328,14 @@ export const ChatMessageFrameSchema = Schema.Struct({
   text: ChatTextSchema,
   attachments: Schema.Array(ChatAttachmentSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems)),
   created_at: boundedUtf8String(64, 1),
+  ...ServerCorrelationFields,
 }).check(
   Schema.makeFilter((frame) => (frame.text.length > 0 || frame.attachments.length > 0 ? undefined : { path: [], issue: "must contain text or at least one attachment" })),
   boundedFrame(SyncProtocolLimits.collaborationFrameBytes),
 );
 export const AnyChatMessageFrameSchema = ChatMessageFrameSchema;
-export const AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("accepted"), message: ChatMessageFrameSchema });
-export const RejectedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: CollaborationErrorCodeSchema });
+export const AcceptedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("accepted"), message: ChatMessageFrameSchema, ...ServerCorrelationFields });
+export const RejectedChatSendResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_send_result"), client_message_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: CollaborationErrorCodeSchema, ...ServerCorrelationFields });
 export const ChatSendResultFrameSchema = Schema.Union([AcceptedChatSendResultFrameSchema, RejectedChatSendResultFrameSchema]);
 export const LoadedChatPageFrameSchema = Schema.Struct({
   type: Schema.Literal("chat_page"),
@@ -1204,12 +1345,13 @@ export const LoadedChatPageFrameSchema = Schema.Struct({
   has_more: Schema.Boolean,
   head_sequence: Schema.NullOr(UnsignedDecimalSchema),
   retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
-}).check(boundedFrame(SyncProtocolLimits.chatPageEncodedBytes));
-export const ResetChatPageFrameSchema = Schema.Struct({ type: Schema.Literal("chat_page"), request_id: RequestIdSchema, outcome: Schema.Literal("cursor_reset"), retained_floor_sequence: UnsignedDecimalSchema });
+  ...ServerCorrelationFields,
+}).check(boundedServerFrame(SyncProtocolLimits.chatPageEncodedBytes));
+export const ResetChatPageFrameSchema = Schema.Struct({ type: Schema.Literal("chat_page"), request_id: RequestIdSchema, outcome: Schema.Literal("cursor_reset"), retained_floor_sequence: UnsignedDecimalSchema, ...ServerCorrelationFields });
 export const ChatPageFrameSchema = Schema.Union([LoadedChatPageFrameSchema, ResetChatPageFrameSchema]);
-export const ChatHeadFrameSchema = Schema.Struct({ type: Schema.Literal("chat_head"), head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) });
-export const ChatReadReceiptFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_receipt"), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(
-  exactKeys(["type", "participant_id", "participant_generation", "sequence", "read_at"]),
+export const ChatHeadFrameSchema = Schema.Struct({ type: Schema.Literal("chat_head"), head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), ...ServerCorrelationFields });
+export const ChatReadReceiptFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_receipt"), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1), ...ServerCorrelationFields }).check(
+  serverExactKeys(["type", "participant_id", "participant_generation", "sequence", "read_at"]),
 );
 export const AcceptedChatReadResultFrameSchema = Schema.Struct({
   type: Schema.Literal("chat_read_result"),
@@ -1219,13 +1361,14 @@ export const AcceptedChatReadResultFrameSchema = Schema.Struct({
   participant_generation: PositiveIntegerSchema,
   sequence: UnsignedDecimalSchema,
   read_at: boundedUtf8String(64, 1),
+  ...ServerCorrelationFields,
 });
-export const RejectedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_result"), request_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: CollaborationErrorCodeSchema });
+export const RejectedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_result"), request_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: CollaborationErrorCodeSchema, ...ServerCorrelationFields });
 export const ChatReadResultFrameSchema = Schema.Union([AcceptedChatReadResultFrameSchema, RejectedChatReadResultFrameSchema]);
-export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal("retryable_error"), command_id: CommandIdSchema, code: RetryableErrorCodeSchema });
-export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(1024) });
+export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal("retryable_error"), command_id: CommandIdSchema, code: RetryableErrorCodeSchema, ...ServerCorrelationFields });
+export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(1024), ...ServerCorrelationFields });
 export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
-export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong") });
+export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong"), ...ServerCorrelationFields });
 
 export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => (strictClientFrame(frame) ? undefined : { path: [], issue: "must not contain unknown or missing fields" })))
   .pipe(
@@ -1264,35 +1407,37 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
   )
   .check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));
 export type SyncV1ClientFrame = typeof SyncV1ClientFrameSchema.Type;
-export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => (strictServerFrame(frame) ? undefined : { path: [], issue: "must not contain unknown or missing fields" }))).pipe(
-  Schema.decodeTo(
-    Schema.Union([
-      WelcomeFrameSchema,
-      ReplayPageFrameSchema,
-      RecoveryCompleteFrameSchema,
-      EventFrameSchema,
-      CommittedAckFrameSchema,
-      SatisfiedAckFrameSchema,
-      RejectedAckFrameSchema,
-      CommandIdConflictAckFrameSchema,
-      ProjectionFrameSchema,
-      LiveTargetResultFrameSchema,
-      DirectedRequestDeliverFrameSchema,
-      DirectedRequestResultFrameSchema,
-      ReactionEventFrameSchema,
-      ReactionResultFrameSchema,
-      ChatMessageFrameSchema,
-      ChatSendResultFrameSchema,
-      ChatPageFrameSchema,
-      ChatHeadFrameSchema,
-      ChatReadReceiptFrameSchema,
-      ChatReadResultFrameSchema,
-      RetryableErrorFrameSchema,
-      ErrorFrameSchema,
-      PongFrameSchema,
-    ]),
-  ),
-);
+export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => (strictServerFrame(frame) ? undefined : { path: [], issue: "must not contain unknown or missing fields" })))
+  .pipe(
+    Schema.decodeTo(
+      Schema.Union([
+        WelcomeFrameSchema,
+        ReplayPageFrameSchema,
+        RecoveryCompleteFrameSchema,
+        EventFrameSchema,
+        CommittedAckFrameSchema,
+        SatisfiedAckFrameSchema,
+        RejectedAckFrameSchema,
+        CommandIdConflictAckFrameSchema,
+        ProjectionFrameSchema,
+        LiveTargetResultFrameSchema,
+        DirectedRequestDeliverFrameSchema,
+        DirectedRequestResultFrameSchema,
+        ReactionEventFrameSchema,
+        ReactionResultFrameSchema,
+        ChatMessageFrameSchema,
+        ChatSendResultFrameSchema,
+        ChatPageFrameSchema,
+        ChatHeadFrameSchema,
+        ChatReadReceiptFrameSchema,
+        ChatReadResultFrameSchema,
+        RetryableErrorFrameSchema,
+        ErrorFrameSchema,
+        PongFrameSchema,
+      ]),
+    ),
+  )
+  .check(Schema.makeFilter((frame) => (serverFrameWithinLimit(frame) ? undefined : { path: [], issue: "must fit the encoded byte limit including correlation reserve" })));
 export type SyncV1ServerFrame = typeof SyncV1ServerFrameSchema.Type;
 export function encodeSyncFrame(frame: SyncV1ClientFrame | SyncV1ServerFrame): string {
   return JSON.stringify(frame);

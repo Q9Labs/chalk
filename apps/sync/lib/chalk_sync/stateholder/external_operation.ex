@@ -30,6 +30,8 @@ defmodule ChalkSync.Stateholder.ExternalOperation do
     :parent_journey_event_id,
     :producing_trace_id,
     :producing_span_id,
+    :producing_traceparent,
+    :producing_tracestate,
     :applied_event_id,
     :applied_revision,
     :last_error_code

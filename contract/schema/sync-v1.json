@@ -11,8 +11,40 @@
     "clientToServer": "client-to-server",
     "serverToClient": "server-to-client"
   },
+  "correlation": {
+    "optionalTopLevelFields": {
+      "journey_id": {
+        "kind": "string",
+        "minBytes": 36,
+        "maxBytes": 36,
+        "format": "chalk-journey-id",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      },
+      "traceparent": {
+        "kind": "string",
+        "minBytes": 55,
+        "maxBytes": 55,
+        "format": "w3c-traceparent",
+        "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+      },
+      "tracestate": {
+        "kind": "string",
+        "minBytes": 1,
+        "maxBytes": 512,
+        "format": "w3c-tracestate",
+        "pattern": "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$"
+      }
+    },
+    "acceptedOn": {
+      "hello": "client-to-server",
+      "serverFrames": "server-to-client"
+    },
+    "upgradeHeaders": ["x-chalk-journey-id", "traceparent", "tracestate"],
+    "rule": "propagate_from_first_observed_layer_to_every_downstream_frame"
+  },
   "limits": {
     "decodedInboundFrameBytes": 65536,
+    "correlationReservedBytes": 1160,
     "tokenBytes": 8192,
     "commandIdMinBytes": 16,
     "commandIdMaxBytes": 64,

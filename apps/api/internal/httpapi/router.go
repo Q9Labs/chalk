@@ -26,7 +26,7 @@ type TenantAuthorizer interface {
 	AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error
 }
 
-type MeetingCredentialVerifier interface {
+type EpisodeCredentialVerifier interface {
 	Verify(ctx context.Context, credential string) error
 }
 
@@ -53,7 +53,7 @@ type Options struct {
 	Journeys               JourneyService
 	JourneyMetrics         JourneyMetricRecorder
 	LocalTelemetry         bool
-	MeetingCredentials     MeetingCredentialVerifier
+	EpisodeCredentials     EpisodeCredentialVerifier
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
 	ParticipantMediaIssuer ParticipantMediaIssuer

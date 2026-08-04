@@ -4,7 +4,7 @@ import { createTelemetryClient } from "./client";
 describe("createTelemetryClient", () => {
   it("is inert unless explicitly enabled", () => {
     const telemetry = createTelemetryClient();
-    telemetry.startJourney({ kind: "meeting.join" });
+    telemetry.startJourney({ kind: "space.join" });
 
     expect(telemetry.enabled).toBe(false);
     expect(telemetry.getPendingEvents()).toEqual([]);

@@ -1,10 +1,9 @@
 # Chalk Sync
 
-Vocabulary follows the repo-root `GLOSSARY.md` (Sessions are being renamed to
-Episodes in waves); read it before naming anything.
+Vocabulary follows the repo-root `GLOSSARY.md`; read it before naming anything.
 
 Elixir/OTP WebSocket sync server and primary `SyncEngine` adapter. Postgres is
-the sole durable authority for Session control state, exact event history,
+the sole durable authority for Episode control state, exact event history,
 command receipts, and lifecycle intents. Node-local coordinators, ETS queues,
 notifications, presence, and SDK replicas are disposable. Redis is optional
 acceleration only.
@@ -12,7 +11,7 @@ acceleration only.
 ## Working Here
 
 - Always read `README.md` before touching sync code.
-- Preserve the tenant-and-Session authority key and semantic Stateholder
+- Preserve the tenant-and-Episode authority key and semantic Stateholder
   transaction boundary.
 - Durable lifecycle comes only from API intents. Socket loss is volatile
   presence and never a durable participant leave.

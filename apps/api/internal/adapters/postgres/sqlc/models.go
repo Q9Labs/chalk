@@ -624,6 +624,8 @@ type SyncExternalOperation struct {
 	AppliedRevision             pgtype.Int8        `json:"applied_revision"`
 	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
 	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
+	ProducingTraceparent        pgtype.Text        `json:"producing_traceparent"`
+	ProducingTracestate         pgtype.Text        `json:"producing_tracestate"`
 }
 
 type SyncLifecycleIntent struct {

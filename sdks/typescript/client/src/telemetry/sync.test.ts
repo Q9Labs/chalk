@@ -12,4 +12,15 @@ describe("syncTelemetryCorrelation", () => {
       }),
     ).toMatchObject({ journey_id: "00000000-0000-4000-8000-000000000001", tracestate: "chalk=local" });
   });
+
+  it.each(["acme@tenant=value", "vendor=value, other=thing"])("omits unsupported W3C tracestate %s while preserving journey correlation", (tracestate) => {
+    expect(
+      syncTelemetryCorrelation({
+        journeyId: "00000000-0000-4000-8000-000000000001",
+        rootJourneyId: "00000000-0000-4000-8000-000000000001",
+        traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+        tracestate,
+      }),
+    ).toEqual({ journey_id: "00000000-0000-4000-8000-000000000001", traceparent: "00-11111111111111111111111111111111-2222222222222222-01" });
+  });
 });

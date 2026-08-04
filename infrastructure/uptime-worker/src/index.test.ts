@@ -84,7 +84,7 @@ describe("chalk ops monitor worker", () => {
 
   it("checks the launch surfaces and supports environment-specific target overrides", () => {
     expect(__internal.DEFAULT_MONITORS).toEqual([
-      expect.objectContaining({ key: "web.room", url: "https://chalkmeet.com/room", method: "GET" }),
+      expect.objectContaining({ key: "web.space", url: "https://chalkmeet.com/space", method: "GET" }),
       expect.objectContaining({ key: "api.health", url: "https://api.chalkmeet.com/healthz", method: "GET" }),
       expect.objectContaining({ key: "api.readiness", url: "https://api.chalkmeet.com/readyz", method: "GET" }),
       expect.objectContaining({ key: "sync.health", url: "https://sync.chalkmeet.com/healthz", method: "GET" }),
@@ -99,7 +99,7 @@ describe("chalk ops monitor worker", () => {
       WEB_BASE_URL: "https://web.staging.example/ignored",
     });
     expect(overridden.map(({ key, url }) => ({ key, url }))).toEqual([
-      { key: "web.room", url: "https://web.staging.example/room" },
+      { key: "web.space", url: "https://web.staging.example/space" },
       { key: "api.health", url: "https://api.staging.example/healthz" },
       { key: "api.readiness", url: "https://api.staging.example/readyz" },
       { key: "sync.health", url: "https://sync.staging.example/healthz" },

@@ -528,9 +528,21 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   defp persisted_provider_context(operation) do
     case operation do
-      %{journey_id: journey_id, producing_trace_id: trace_id, producing_span_id: span_id}
+      %{
+        journey_id: journey_id,
+        producing_trace_id: trace_id,
+        producing_span_id: span_id,
+        producing_traceparent: traceparent,
+        producing_tracestate: tracestate
+      }
       when is_binary(journey_id) ->
-        Observability.persisted_context(journey_id, trace_id, span_id)
+        Observability.persisted_context(
+          journey_id,
+          trace_id,
+          span_id,
+          traceparent,
+          tracestate
+        )
 
       _other ->
         nil

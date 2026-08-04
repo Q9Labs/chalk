@@ -3,6 +3,7 @@ import { createBrowserRuntimeTelemetryStorage, createTelemetryClient, type Start
 const telemetryEnabled = import.meta.env.VITE_CHALK_TELEMETRY_ENABLED === "true";
 
 export type WebTelemetryJourney = Pick<TelemetryJourney, "headers" | "recordDiagnostic" | "recordHttpRequest"> & {
+  readonly context?: TelemetryJourney["context"];
   readonly terminal: (...args: Parameters<TelemetryJourney["terminal"]>) => void;
 };
 

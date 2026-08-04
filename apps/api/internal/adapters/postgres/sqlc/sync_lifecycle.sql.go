@@ -716,7 +716,7 @@ insert into sync_external_operations (
     $16,
     $17
 )
-returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at
+returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 `
 
 type CreateTenantExternalOperationParams struct {
@@ -790,6 +790,8 @@ func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateT
 		&i.AppliedRevision,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
 	)
 	return i, err
 }
@@ -1338,7 +1340,7 @@ func (q *Queries) LockLifecycleParticipantForUpdate(ctx context.Context, arg Loc
 }
 
 const lockPendingDeadlineOperation = `-- name: LockPendingDeadlineOperation :one
-select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at
+select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 from sync_external_operations
 where
     tenant_id = $1
@@ -1390,6 +1392,8 @@ func (q *Queries) LockPendingDeadlineOperation(ctx context.Context, arg LockPend
 		&i.AppliedRevision,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
 	)
 	return i, err
 }
@@ -1464,7 +1468,7 @@ func (q *Queries) LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockS
 }
 
 const lockTenantExternalOperationForRequest = `-- name: LockTenantExternalOperationForRequest :one
-select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at
+select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 from sync_external_operations
 where
     tenant_id = $1
@@ -1522,6 +1526,8 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 		&i.AppliedRevision,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
 	)
 	return i, err
 }

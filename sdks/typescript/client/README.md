@@ -144,6 +144,28 @@ Events are `participantJoined`, `participantLeft`, `episodeEnded`,
 stable codes such as `access.invalid`, `episode.ended`, and
 `chat.payload_invalid`.
 
+## Journey telemetry
+
+Client telemetry is opt-in. Start a `space.join` journey when a Participant
+joins a Space, pass its `context` to HTTP or Sync boundaries, and flush the
+bounded queue when the surface is ready to export:
+
+```ts
+import { createTelemetryClient } from "@q9labsai/chalk-client/telemetry";
+
+const telemetry = createTelemetryClient({ enabled: true, baseUrl: "https://api.example.com" });
+const journey = telemetry.startJourney({ kind: "space.join" });
+const response = await fetch("/api/chalk/spaces/design-review", { headers: journey.headers });
+journey.terminal(response.ok ? "succeeded" : "failed");
+await telemetry.flush();
+```
+
+Journey events carry `journey_id`, W3C `traceparent`, and optional
+`tracestate`. Attributes and the in-memory timeline are bounded, and the
+built-in client observations record aggregate RTC state only: access-grant
+contents, Participant identity, Space or Episode identifiers, media payloads,
+and request bodies stay out of telemetry.
+
 ## Effect entry
 
 The default entry is Promise-based. Effect applications can use the

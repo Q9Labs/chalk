@@ -172,6 +172,31 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("live");
   });
 
+  it("emits the validated journey correlation envelope on hello", async () => {
+    const context = {
+      journeyId: "00000000-0000-4000-8000-000000000042",
+      rootJourneyId: "00000000-0000-4000-8000-000000000042",
+      traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      tracestate: "vendor=value",
+    } as const;
+    const { socket } = await liveClient({ telemetry: context, collaboration: false });
+    expect(socket.frames()[0]).toMatchObject({ journey_id: context.journeyId, traceparent: context.traceparent, tracestate: context.tracestate });
+    expect(socket.frames()[0]).not.toHaveProperty("rootJourneyId");
+  });
+
+  it.each(["acme@tenant=value", "vendor=value, other=thing"])("keeps hello open when W3C tracestate %s is outside the v1 wire subset", async (tracestate) => {
+    const context = {
+      journeyId: "00000000-0000-4000-8000-000000000042",
+      rootJourneyId: "00000000-0000-4000-8000-000000000042",
+      traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      tracestate,
+    } as const;
+    const { client, socket } = await liveClient({ telemetry: context, collaboration: false });
+    expect(socket.frames()[0]).toMatchObject({ journey_id: context.journeyId, traceparent: context.traceparent });
+    expect(socket.frames()[0]).not.toHaveProperty("tracestate");
+    client.stop();
+  });
+
   it("encodes every approved target and operation with stable IDs", async () => {
     const { client, socket } = await liveClient();
     let index = 0;

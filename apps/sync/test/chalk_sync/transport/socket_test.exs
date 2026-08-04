@@ -44,6 +44,24 @@ defmodule ChalkSync.Transport.SocketV1Test do
     def end_episode(_adapter, _operation_id, _episode), do: :confirmed
   end
 
+  defmodule DropCommandResultGate do
+    @moduledoc false
+
+    @behaviour ChalkSync.DeliveryGate
+
+    @impl true
+    def decide(_checkpoint, _metadata), do: :deliver
+
+    @impl true
+    def emit(:command_result, _metadata, _recipient, _message), do: :ok
+
+    @impl true
+    def emit(_checkpoint, _metadata, recipient, message) do
+      send(recipient, message)
+      :ok
+    end
+  end
+
   defmodule CollaborationRepository do
     @moduledoc false
     @behaviour ChalkSync.Chat.Repository
@@ -194,13 +212,78 @@ defmodule ChalkSync.Transport.SocketV1Test do
     assert {:push, {:text, encoded}, live} =
              SocketV1.handle_info({:sync_recovery_live, self()}, buffered)
 
-    assert JSON.decode!(encoded) == receipt
+    decoded = JSON.decode!(encoded)
+    assert Map.take(decoded, Map.keys(receipt)) == receipt
+    assert decoded["journey_id"] == buffered.observability.journey_id
+    refute Map.has_key?(decoded, "traceparent")
+    refute Map.has_key?(decoded, "tracestate")
     assert live.phase == :live
     assert {:ok, %{queued_frames: 0}} = CollaborationQueue.stats(live.collaboration_queue)
 
     Process.cancel_timer(initial.hello_timer)
     Process.cancel_timer(live.heartbeat_timer)
     assert :ok = CollaborationQueue.close(live.collaboration_queue)
+  end
+
+  test "propagates first-observed correlation through recovery, command, pong, and errors", %{
+    port: port
+  } do
+    identity = seed_identity()
+
+    correlation = %{
+      "journey_id" => @journey_id,
+      "traceparent" => "00-#{@trace_id}-#{@span_id}-00",
+      "tracestate" => "acme=first"
+    }
+
+    {:ok, client} = Client.connect(port, "/v1/sync")
+    client = Client.send_json(client, hello(identity, correlation))
+
+    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    assert_correlation(welcome, correlation)
+
+    client = Client.acknowledge_recovery(client, welcome)
+
+    assert {:json, %{"type" => "recovery_complete"} = recovery_complete, client} =
+             Client.recv(client)
+
+    assert_correlation(recovery_complete, correlation)
+
+    assert {:json, %{"type" => "projection_snapshot", "stream" => "media"} = media, client} =
+             Client.recv(client)
+
+    assert_correlation(media, correlation)
+
+    assert {:json, %{"type" => "projection_snapshot", "stream" => "presence"} = presence, client} =
+             Client.recv(client)
+
+    assert_correlation(presence, correlation)
+
+    client = Client.send_json(client, %{"type" => "ping"})
+    assert {:json, %{"type" => "pong"} = pong, client} = Client.recv(client)
+    assert_correlation(pong, correlation)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "command",
+        "command_id" => "context-command-0001",
+        "name" => "set_hand_raised",
+        "payload" => %{"raised" => true}
+      })
+
+    assert {:json, %{"type" => "ack", "outcome" => "committed"} = ack, client} =
+             Client.recv(client)
+
+    assert_correlation(ack, correlation)
+
+    assert {:json, %{"type" => "event", "name" => "hand_raised"} = event, client} =
+             Client.recv(client)
+
+    assert_correlation(event, correlation)
+
+    client = Client.send_json(client, %{"type" => "unknown"})
+    assert {:json, %{"type" => "error"} = error, _client} = Client.recv(client)
+    assert_correlation(error, correlation)
   end
 
   test "extended Sync v1 negotiates and carries reactions, chat, and paging", %{
@@ -832,7 +915,89 @@ defmodule ChalkSync.Transport.SocketV1Test do
              Client.recv(client)
   end
 
-  defp hello(identity) do
+  test "durable command event telemetry survives a dropped result and ignores duplicate receipts",
+       %{
+         port: port
+       } do
+    handler_id = "socket-command-observability-#{System.unique_integer([:positive])}"
+    parent = self()
+    previous_gate = Application.get_env(:chalk_sync, :delivery_gate_adapter)
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:chalk_sync, :observability, :event],
+        fn _event, _measurements, metadata, _config ->
+          if metadata.event == "sync.episode.event.committed" do
+            send(parent, {:episode_event, metadata})
+          end
+        end,
+        nil
+      )
+
+    Application.put_env(:chalk_sync, :delivery_gate_adapter, DropCommandResultGate)
+
+    on_exit(fn ->
+      :telemetry.detach(handler_id)
+      restore_env(:delivery_gate_adapter, previous_gate)
+    end)
+
+    identity = seed_identity()
+
+    correlation = %{
+      "journey_id" => @journey_id,
+      "traceparent" => "00-#{@trace_id}-#{@span_id}-01"
+    }
+
+    client = connect_live(port, identity, [], correlation)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "command",
+        "command_id" => "dropped-command-0001",
+        "name" => "set_hand_raised",
+        "payload" => %{"raised" => true}
+      })
+
+    _client = Client.close_tcp(client)
+
+    assert_receive {:episode_event,
+                    %{
+                      event: "sync.episode.event.committed",
+                      journey_id: @journey_id,
+                      attributes: %{event_name: "hand_raised"}
+                    }},
+                   2_000
+
+    Application.delete_env(:chalk_sync, :delivery_gate_adapter)
+    client = connect_live(port, identity, [], correlation)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "command",
+        "command_id" => "dropped-command-0001",
+        "name" => "set_hand_raised",
+        "payload" => %{"raised" => true}
+      })
+
+    assert {:json, %{"type" => "ack", "delivery" => "duplicate"}, client} = Client.recv(client)
+
+    client =
+      Client.send_json(client, %{
+        "type" => "command",
+        "command_id" => "rejected-command-0001",
+        "name" => "assign_roles",
+        "payload" => %{
+          "participant_id" => "00000000-0000-4000-8000-000000000099",
+          "role" => "observer"
+        }
+      })
+
+    assert {:json, %{"type" => "ack", "outcome" => "rejected"}, _client} = Client.recv(client)
+    refute_receive {:episode_event, _metadata}, 500
+  end
+
+  defp hello(identity, correlation \\ %{}) do
     token =
       DevTokenVerifier.token(%{
         "tenant_id" => identity.episode.tenant_id,
@@ -847,7 +1012,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
         "expires_at" => 4_102_444_800
       })
 
-    %{
+    frame = %{
       "type" => "hello",
       "protocol" => 1,
       "token" => token,
@@ -858,11 +1023,13 @@ defmodule ChalkSync.Transport.SocketV1Test do
         "requests" => %{"cursor" => nil}
       }
     }
+
+    Map.merge(frame, correlation)
   end
 
-  defp connect_live(port, identity, headers \\ []) do
+  defp connect_live(port, identity, headers \\ [], correlation \\ %{}) do
     {:ok, client} = Client.connect(port, "/v1/sync", headers)
-    client = Client.send_json(client, hello(identity))
+    client = Client.send_json(client, hello(identity, correlation))
     {:json, %{"type" => "welcome", "protocol" => 1} = welcome, client} = Client.recv(client)
     client = Client.acknowledge_recovery(client, welcome)
     {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
@@ -927,6 +1094,15 @@ defmodule ChalkSync.Transport.SocketV1Test do
     {:json, %{"type" => "event", "command_id" => ^command_id}, client} = Client.recv(client)
     {client, ack}
   end
+
+  defp assert_correlation(frame, correlation) do
+    assert frame["journey_id"] == correlation["journey_id"]
+    assert frame["traceparent"] == correlation["traceparent"]
+    assert frame["tracestate"] == correlation["tracestate"]
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
+  defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
   defp receive_presence_replacement(client) do
     {:json, %{"type" => "projection_snapshot", "stream" => "media"}, client} =

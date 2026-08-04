@@ -1,4 +1,5 @@
 import { Context, Data, Deferred, Effect, Layer, ManagedRuntime, Queue, Schedule, Semaphore, Stream, SubscriptionRef, type Scope } from "effect";
+import { normalizeTelemetryAttributes, TELEMETRY_BUILT_IN_ATTRIBUTE_KEYS } from "./attributes";
 import { encodedByteLength, isRetriableTelemetryExportError, journeyContextBatches, journeyIntakeBody, MAX_JOURNEY_INTAKE_EVENTS_PER_BATCH, MAX_KEEPALIVE_BODY_BYTES, sharesJourneyContext, toJourneyIntakeEvent, type TelemetryExporter, type TelemetryExportOptions } from "./exporter";
 import type { TelemetryStorage } from "./storage";
 import type { JourneyPhase, JourneyState, TelemetryEvent } from "./types";
@@ -424,7 +425,7 @@ class DeliveryService implements TelemetryDeliveryEffectService {
   }
 
   private mergeRestored(persisted: readonly TelemetryEvent[]): void {
-    const restored = persisted.filter((event) => !this.#knownEventIds.has(event.event_id));
+    const restored = persisted.map((event) => sanitizeRestoredEvent(event)).filter((event) => !this.#knownEventIds.has(event.event_id));
     for (const event of restored) this.trackEventID(event.event_id);
     this.setPendingUnsafe([...restored, ...this.getPendingEventsUnsafe()]);
     this.handleQueueOverflowUnsafe();
@@ -503,9 +504,14 @@ class DeliveryService implements TelemetryDeliveryEffectService {
     try {
       this.options.onDrop?.(dropped);
     } catch {
-      // A consumer signal must not interrupt the meeting path.
+      // A consumer signal must not interrupt the Space join path.
     }
   }
+}
+
+function sanitizeRestoredEvent(event: TelemetryEvent): TelemetryEvent {
+  const attributes = normalizeTelemetryAttributes(event.attributes, { reservedKeys: TELEMETRY_BUILT_IN_ATTRIBUTE_KEYS });
+  return attributes ? { ...event, attributes } : { ...event, attributes: undefined };
 }
 
 function createTelemetryDeliveryService(options: TelemetryDeliveryOptions, exporter: TelemetryExporterCapability, storage: TelemetryStorageCapability, scope: Scope.Scope): DeliveryService {

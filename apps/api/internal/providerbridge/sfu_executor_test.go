@@ -60,6 +60,23 @@ func TestSFUExecutorPreservesNewParticipantGeneration(t *testing.T) {
 	}
 }
 
+func TestSFUExecutorTreatsMissingConnectionAsIdempotentSuccess(t *testing.T) {
+	participantID := mustID(t, "33333333-3333-4333-8333-333333333333")
+	registry := &publicationRegistryStub{snapshot: mediapublications.Snapshot{Publications: []provideroperations.Publication{{
+		ParticipantID: participantID, Source: "camera", Enabled: true,
+		PublicationID: publicationReference("connection-missing", "mid-1", "camera-track", 7),
+	}}}}
+	closer := &trackCloserStub{err: mediaplane.ErrConnectionNotFound}
+	result := NewSFUExecutor(registry, closer).Dispatch(context.Background(), provideroperations.OperationInput{
+		Effect: provideroperations.EffectRevokePublication, TenantID: mustID(t, "11111111-1111-4111-8111-111111111111"),
+		EpisodeID: mustID(t, "22222222-2222-4222-8222-222222222222"), ParticipantID: participantID,
+		ParticipantGeneration: 7, PublicationSource: "camera",
+	})
+	if result.Outcome != provideroperations.OutcomeConfirmed || len(closer.inputs) != 1 || len(registry.closed) != 1 {
+		t.Fatalf("missing connection result = %#v close inputs = %#v registry closes = %#v", result, closer.inputs, registry.closed)
+	}
+}
+
 func TestSFUExecutorAuthorizesClientOwnedPublicationGrant(t *testing.T) {
 	registry := &publicationRegistryStub{}
 	closer := &trackCloserStub{}

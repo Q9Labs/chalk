@@ -25,6 +25,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `SpaceClient` construction with custom API and Sync endpoints.
 - Added the Episode broker, managed-Episode runtime assets, and recorder
   transition guards. Deployment and hosted cutovers remain manual.
+- Added end-to-end W3C journey propagation from the SDK Sync hello through every
+  Sync server frame, plus the durable `sync.episode.event.committed` signal
+  emitted after the Episode command and event are committed.
+- Added credential- and PII-safe telemetry restoration and export. Persisted
+  events are sanitized before requeue, re-persistence, and export while bounded
+  journey metadata remains available for diagnosis.
 
 ### Changed
 
@@ -46,6 +52,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Space/Episode baseline and aligned generated contracts with it.
 - Consolidated reusable React primitives under `@q9labsai/chalk-ui` while
   keeping the public SDK subpath and shared visual language aligned.
+- Renamed observability-facing webhook, provider, and uptime vocabulary to the
+  canonical Space/Episode/Participant and connection terms, and isolated the
+  observability E2E stack with unique resources, dynamic ports, durable-event
+  checks, and task-owned cleanup. Hosted dashboard, provider-rule, and uptime
+  consumer cutovers remain manual; this entry does not imply a deployment.
 
 ### Breaking
 

@@ -2,6 +2,7 @@ import type { AccessSubject } from "../access/grant";
 import type { ConnectionDiagnostic } from "./diagnostics";
 import type { ConnectionAccessProvider, ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "./dependencies";
 import type { ConnectionConnectionPhase, ConnectionFailure, ConnectionState } from "./types";
+import type { JourneyTelemetryContext } from "../telemetry/types";
 
 /** Public lifecycle data contracts. Runtime ownership lives in ConnectionLifecycleService. */
 export type ConnectionLifecycleSnapshot = {
@@ -21,6 +22,7 @@ export type ConnectionOptions = {
   readonly syncStartupTimeoutMs?: number;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
+  readonly telemetry?: JourneyTelemetryContext;
   readonly accessRefreshWindowMs?: number;
   readonly recovery?: { readonly maxAttempts?: number; readonly budgetMs?: number; readonly backoffMs?: readonly number[] };
   readonly diagnostics?: { readonly limit?: number; readonly onEvent?: (event: ConnectionDiagnostic) => void };

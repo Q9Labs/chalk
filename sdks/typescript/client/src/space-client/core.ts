@@ -9,6 +9,7 @@ import { normalizeClientError, SpaceClientError } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
+import type { JourneyTelemetryContext } from "../telemetry/types";
 
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => AccessGrant | Promise<AccessGrant>;
@@ -25,6 +26,7 @@ export type SpaceClientPlatform = {
   readonly syncStartupTimeoutMs?: number;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
+  readonly telemetry?: JourneyTelemetryContext;
   readonly onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void;
 };
 
@@ -42,6 +44,7 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
     syncStartupTimeoutMs: platform.syncStartupTimeoutMs,
     initialMicrophoneEnabled: platform.initialMicrophoneEnabled,
     initialCameraEnabled: platform.initialCameraEnabled,
+    telemetry: platform.telemetry,
     dependencies,
     diagnostics: {
       onEvent: (event) => {

@@ -17,6 +17,60 @@
       }
     },
     {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "journey_id": "not-a-journey-uuid"
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "traceparent": "00-00000000000000000000000000000000-00f067aa0ba902b7-01"
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01"
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "tracestate": "x"
+    },
+    {
+      "type": "ping",
+      "journey_id": "00000000-0000-4000-8000-000000000042",
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "tracestate": "vendor=value"
+    },
+    {
       "type": "command",
       "command_id": "command-00000001",
       "name": "set_hand_raised",
@@ -103,6 +157,14 @@
       "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23",
       "revision": 1,
       "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "type": "pong",
+      "traceparent": "00-00000000000000000000000000000000-00f067aa0ba902b7-01"
+    },
+    {
+      "type": "pong",
+      "unexpected": true
     },
     {
       "type": "projection_snapshot",

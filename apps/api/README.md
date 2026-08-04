@@ -50,9 +50,9 @@ Integrations and transcription are explicit runtime capabilities:
 - `CHALK_TRANSCRIPTION_ENABLED=true|false`
 
 Both default to `true` outside `local`, preserving fail-closed production
-startup. Local development defaults both to `false`. A meeting-only deployment
-must set both flags to `false`; omitting provider credentials never disables a
-capability implicitly.
+startup. Local development defaults both to `false`. A capability-disabled
+deployment must set both flags to `false`; omitting provider credentials never
+disables a capability implicitly.
 
 ```bash
 CHALK_INTEGRATIONS_ENABLED=false

@@ -19,6 +19,13 @@ defmodule ChalkSync.Observability do
   @runtime_event [:chalk_sync, :runtime, :health]
   @runtime_interval_ms 30_000
   @journey_id_pattern ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  @episode_event_names ~w(
+    admission_denied admission_expired admission_policy_changed admission_requested
+    deadline_changed episode_ended episode_started hand_lowered hand_raised
+    participant_camera_stopped participant_display_name_changed participant_joined
+    participant_left participant_microphone_stopped participant_screen_share_stopped
+    recording_status_changed role_assigned
+  )
 
   @type context :: %{
           journey_id: String.t() | nil,
@@ -120,20 +127,37 @@ defmodule ChalkSync.Observability do
         DateTime.utc_now()
       )
 
-    observed
+    fields = frame_fields(context)
+    ObservedContext.with_w3c(observed, fields["traceparent"], fields["tracestate"])
   end
 
   @doc "Reconstructs a bounded context from correlation fields stored with durable work."
   @spec persisted_context(String.t(), String.t() | nil, String.t() | nil) :: context()
-  def persisted_context(journey_id, trace_id, span_id) do
+  def persisted_context(journey_id, trace_id, span_id),
+    do: persisted_context(journey_id, trace_id, span_id, nil, nil)
+
+  @spec persisted_context(
+          String.t(),
+          String.t() | nil,
+          String.t() | nil,
+          String.t() | nil,
+          String.t() | nil
+        ) :: context()
+  def persisted_context(journey_id, trace_id, span_id, traceparent, tracestate) do
     fields =
-      if is_binary(trace_id) and is_binary(span_id) do
-        %{
-          "journey_id" => journey_id,
-          "traceparent" => "00-#{trace_id}-#{span_id}-01"
-        }
-      else
-        %{"journey_id" => journey_id}
+      cond do
+        is_binary(traceparent) ->
+          %{"journey_id" => journey_id, "traceparent" => traceparent}
+          |> maybe_put_tracestate(tracestate)
+
+        is_binary(trace_id) and is_binary(span_id) ->
+          %{
+            "journey_id" => journey_id,
+            "traceparent" => "00-#{trace_id}-#{span_id}-01"
+          }
+
+        true ->
+          %{"journey_id" => journey_id}
       end
 
     build_context(fields)
@@ -150,6 +174,14 @@ defmodule ChalkSync.Observability do
   @doc "Emits a terminal event. Every close path calls this once from `terminate/2`."
   @spec terminal(context() | nil, String.t(), map()) :: context()
   def terminal(context, name, attributes \\ %{}), do: emit(context, name, attributes, :terminal)
+
+  @doc "Emits the bounded phase for a committed Episode control event."
+  @spec episode_event(context() | nil, map()) :: context()
+  def episode_event(context, event) when is_map(event) do
+    linked_phase(context, "sync.episode.event.committed", %{
+      event_name: bounded_episode_event_name(event)
+    })
+  end
 
   @doc "Emits a short span for work that crossed an OTP process boundary while preserving the explicit upstream trace context."
   @spec linked_phase(context() | nil, String.t(), map()) :: context()
@@ -398,12 +430,29 @@ defmodule ChalkSync.Observability do
     [trace_id: Span.hex_trace_id(span), span_id: Span.hex_span_id(span)]
   end
 
+  defp bounded_episode_event_name(event) do
+    event
+    |> Map.get(:name, Map.get(event, "name"))
+    |> episode_event_label()
+  end
+
+  defp episode_event_label(name) when is_atom(name),
+    do: name |> Atom.to_string() |> episode_event_label()
+
+  defp episode_event_label(name) when is_binary(name) and name in @episode_event_names, do: name
+  defp episode_event_label(_name), do: "other"
+
   defp deliver_to_sink(metadata) do
     case config() do
       %{event_sink: sink} when is_function(sink, 1) -> sink.(metadata)
       _ -> :ok
     end
   end
+
+  defp maybe_put_tracestate(fields, tracestate) when is_binary(tracestate),
+    do: Map.put(fields, "tracestate", tracestate)
+
+  defp maybe_put_tracestate(fields, _tracestate), do: fields
 
   defp stateholder_ready? do
     case ChalkSync.Stateholder.impl() do

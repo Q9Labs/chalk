@@ -1,5 +1,6 @@
 import { rtcSummaryAttributes, type RtcConnectionStateSnapshot, type RtcStatsLike } from "./rtc";
 import { journeyHeaders } from "./trace";
+import type { TelemetryAttributeNormalizationOptions } from "./attributes";
 import type { JourneyPhase, JourneyState, JourneyTelemetryContext, TelemetryAttributes, TelemetryEvent, TelemetryEventDraft } from "./types";
 
 export type StartJourneyOptions = {
@@ -26,7 +27,7 @@ export type SyncFrameObservation = {
 };
 
 export type DiagnosticObservation = {
-  readonly category: "connection" | "device" | "network" | "permission" | "recovery" | "session" | "whiteboard_renderer";
+  readonly category: "connection" | "device" | "episode" | "network" | "permission" | "recovery" | "whiteboard_renderer";
   readonly code: string;
   readonly attributes?: TelemetryAttributes;
   readonly metricValue?: number;
@@ -35,7 +36,7 @@ export type DiagnosticObservation = {
 };
 
 export type JourneyTelemetryHost = {
-  emit(context: JourneyTelemetryContext, sequence: number, draft: TelemetryEventDraft): TelemetryEvent;
+  emit(context: JourneyTelemetryContext, sequence: number, draft: TelemetryEventDraft, options?: TelemetryAttributeNormalizationOptions): TelemetryEvent;
   startJourney(options: StartJourneyOptions): TelemetryJourney;
 };
 
@@ -96,29 +97,37 @@ export class TelemetryJourney {
 
   recordDiagnostic(observation: DiagnosticObservation): TelemetryEvent | undefined {
     if (this.#terminalEvent) return undefined;
-    return this.record({
-      name: "diagnostic.timeline",
-      phase: observation.phase ?? "recovery",
-      state: observation.state ?? "observed",
-      origin_kind: "diagnostic",
-      attributes: {
-        ...observation.attributes,
-        category: observation.category,
-        code: observation.code,
-        ...(observation.metricValue !== undefined ? { metric_value: observation.metricValue } : {}),
+    return this.record(
+      {
+        name: "diagnostic.timeline",
+        phase: observation.phase ?? "recovery",
+        state: observation.state ?? "observed",
+        origin_kind: "diagnostic",
+        attributes: {
+          ...observation.attributes,
+          category: observation.category,
+          code: observation.code,
+          ...(observation.metricValue !== undefined ? { metric_value: observation.metricValue } : {}),
+        },
       },
-    });
+      { reservedKeys: ["category", "code", ...(observation.metricValue === undefined ? [] : ["metric_value"])] },
+    );
   }
 
   startChild(options: Omit<StartJourneyOptions, "parent">): TelemetryJourney {
     return this.#telemetry.startJourney({ ...options, parent: this });
   }
 
-  record(draft: TelemetryEventDraft): TelemetryEvent {
-    const event = this.#telemetry.emit(this.context, ++this.#sequence, {
-      ...draft,
-      ...(draft.parent_event_id || !this.#lastEventId ? {} : { parent_event_id: this.#lastEventId }),
-    });
+  record(draft: TelemetryEventDraft, options?: TelemetryAttributeNormalizationOptions): TelemetryEvent {
+    const event = this.#telemetry.emit(
+      this.context,
+      ++this.#sequence,
+      {
+        ...draft,
+        ...(draft.parent_event_id || !this.#lastEventId ? {} : { parent_event_id: this.#lastEventId }),
+      },
+      options,
+    );
     this.#lastEventId = event.event_id;
     return event;
   }

@@ -1,4 +1,5 @@
 import type { SyncV1ServerFrame } from "../generated/sync";
+import type { JourneyTelemetryContext } from "../telemetry/types";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
@@ -183,6 +184,7 @@ export type V1SyncClientOptions = {
   readonly maxOperationPendingAgeMs?: number;
   readonly retryDelayMs?: number;
   readonly collaboration?: V1CollaborationExtensionRequest | false;
+  readonly telemetry?: JourneyTelemetryContext;
   readonly maxPendingCollaborationRequests?: number;
 };
 

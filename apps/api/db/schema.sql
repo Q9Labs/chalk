@@ -1334,6 +1334,8 @@ create table sync_external_operations (
     applied_revision bigint,
     created_at timestamptz not null default now(),
     completed_at timestamptz,
+    producing_traceparent text,
+    producing_tracestate text,
     unique (tenant_id, space_id, episode_id, external_operation_id),
     unique (tenant_id, episode_id, external_operation_id),
     unique (tenant_id, episode_id, operation_name, request_key),
@@ -1377,6 +1379,15 @@ create table sync_external_operations (
     check (producing_trace_id is null or producing_trace_id ~ '^[0-9a-f]{32}$'),
     check (producing_span_id is null or producing_span_id ~ '^[0-9a-f]{16}$'),
     check ((producing_trace_id is null) = (producing_span_id is null)),
+    check (
+        producing_traceparent is null
+        or producing_traceparent ~ '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+    ),
+    check (
+        producing_tracestate is null
+        or octet_length(producing_tracestate) between 1 and 512
+    ),
+    check (producing_traceparent is not null or producing_tracestate is null),
     check (attempt_count between 0 and 100),
     check (
         (operation_name = 'role_transition_cleanup' and parent_external_operation_id is null and source is null)

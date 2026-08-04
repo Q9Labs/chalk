@@ -1,10 +1,10 @@
 {
   "apps/api": {
-    "meeting": 51,
+    "meeting": 17,
     "conference": 0,
     "videoconference": 0,
-    "room": 33,
-    "session": 1085,
+    "room": 31,
+    "session": 1044,
     "attendee": 0,
     "lobby": 0,
     "waitingroom": 0,
@@ -16,7 +16,7 @@
     "conference": 0,
     "videoconference": 0,
     "room": 0,
-    "session": 2,
+    "session": 0,
     "attendee": 0,
     "lobby": 0,
     "waitingroom": 0,
@@ -60,7 +60,7 @@
     "waiting-room": 0
   },
   "sdks/typescript/client": {
-    "meeting": 18,
+    "meeting": 0,
     "conference": 0,
     "videoconference": 0,
     "room": 3,
@@ -108,11 +108,11 @@
     "waiting-room": 0
   },
   "infrastructure": {
-    "meeting": 1,
+    "meeting": 0,
     "conference": 0,
     "videoconference": 0,
-    "room": 54,
-    "session": 104,
+    "room": 0,
+    "session": 41,
     "attendee": 0,
     "lobby": 0,
     "waitingroom": 0,

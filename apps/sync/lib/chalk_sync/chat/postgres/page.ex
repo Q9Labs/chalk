@@ -3,13 +3,17 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
 
   alias ChalkSync.Chat.Repository.Message
   alias ChalkSync.Chat.Repository.SQL
+  alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Database
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
-  @page_encoded_bytes 131_072
-  @page_max_messages 100
+  @limits GeneratedV1.limits()
+  @page_encoded_bytes @limits["chatPageEncodedBytes"]
+  @correlation_reserved_bytes @limits["correlationReservedBytes"]
+  @page_producer_encoded_bytes @page_encoded_bytes - @correlation_reserved_bytes
+  @page_max_messages @limits["chatPageMaxMessages"]
   @max_signed_bigint 9_223_372_036_854_775_807
 
   def read(
@@ -140,7 +144,7 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
         |> JSON.encode!()
         |> byte_size()
 
-      if bytes <= @page_encoded_bytes,
+      if bytes <= @page_producer_encoded_bytes,
         do: {:cont, candidate},
         else: {:halt, selected}
     end)

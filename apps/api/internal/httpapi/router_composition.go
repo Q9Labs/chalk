@@ -31,7 +31,7 @@ func mountPublicAuthRoutes(r chi.Router, options Options) {
 func mountJourneyRoutes(r chi.Router, options Options) {
 	r.Group(func(r chi.Router) {
 		r.Use(rejectTenantAPIKeyCredential)
-		r.Use(requireTelemetryIntakeCredential(options.Authentication, options.MeetingCredentials))
+		r.Use(requireTelemetryIntakeCredential(options.Authentication, options.EpisodeCredentials))
 		mountJourneyIntakeRoutes(r, options.Journeys, options.JourneyMetrics, options.RateLimit)
 	})
 }

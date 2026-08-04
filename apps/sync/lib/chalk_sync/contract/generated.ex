@@ -47,6 +47,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   }
   @limits %{
     "decodedInboundFrameBytes" => 65_536,
+    "correlationReservedBytes" => 1160,
     "tokenBytes" => 8192,
     "commandIdMinBytes" => 16,
     "commandIdMaxBytes" => 64,
@@ -78,6 +79,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "reactionRateMax" => 10,
     "protocolErrorDetailBytes" => 1024
   }
+  @correlation_reserved_bytes @limits["correlationReservedBytes"]
   @close_codes %{
     1000 => %{
       "code" => 1000,
@@ -172,6 +174,35 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "recovery" => ["none"]
       }
     },
+    "correlation" => %{
+      "optionalTopLevelFields" => %{
+        "journey_id" => %{
+          "kind" => "string",
+          "minBytes" => 36,
+          "maxBytes" => 36,
+          "format" => "chalk-journey-id",
+          "pattern" => "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "traceparent" => %{
+          "kind" => "string",
+          "minBytes" => 55,
+          "maxBytes" => 55,
+          "format" => "w3c-traceparent",
+          "pattern" => "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+        },
+        "tracestate" => %{
+          "kind" => "string",
+          "minBytes" => 1,
+          "maxBytes" => 512,
+          "format" => "w3c-tracestate",
+          "pattern" =>
+            "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$"
+        }
+      },
+      "acceptedOn" => %{"hello" => "client-to-server", "serverFrames" => "server-to-client"},
+      "upgradeHeaders" => ["x-chalk-journey-id", "traceparent", "tracestate"],
+      "rule" => "propagate_from_first_observed_layer_to_every_downstream_frame"
+    },
     "externalIntents" => [
       "admit_participant",
       "deny_admission",
@@ -192,6 +223,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     ],
     "limits" => %{
       "decodedInboundFrameBytes" => 65_536,
+      "correlationReservedBytes" => 1160,
       "tokenBytes" => 8192,
       "commandIdMinBytes" => 16,
       "commandIdMaxBytes" => 64,
@@ -437,6 +469,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       }
     ]
   }
+  @correlation_field_keys ["journey_id", "traceparent", "tracestate"]
   @capabilities [
     "publishAudio",
     "publishVideo",
@@ -519,6 +552,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   @media_sources ["microphone", "camera", "screen"]
   @presence_states ["connected", "disconnected"]
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
+  @traceparent ~r/\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/
+  @tracestate ~r/\A[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256}(,[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256})*\z/
   @digest ~r/\A[0-9a-f]{64}\z/
 
   def protocol_version, do: @protocol_version
@@ -593,14 +628,28 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ) do
     cond do
-      exact_keys?(frame, ["type", "protocol", "token", "streams"]) and valid_token?(token) and
-          valid_streams?(streams) ->
-        {:ok, {:hello, %{token: token, streams: streams, extensions: []}}}
+      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams"]) and
+        valid_token?(token) and valid_streams?(streams) ->
+        {:ok,
+         {:hello,
+          %{
+            token: token,
+            streams: streams,
+            extensions: [],
+            correlation: correlation_fields(frame)
+          }}}
 
-      exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
+      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
         valid_token?(token) and valid_streams?(streams) and
           valid_collaborations_hello_extensions?(frame["extensions"]) ->
-        {:ok, {:hello, %{token: token, streams: streams, extensions: frame["extensions"]}}}
+        {:ok,
+         {:hello,
+          %{
+            token: token,
+            streams: streams,
+            extensions: frame["extensions"],
+            correlation: correlation_fields(frame)
+          }}}
 
       true ->
         {:error, :invalid_hello}
@@ -854,10 +903,13 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 
   def valid_server_frame?(%{"type" => "recovery_complete"} = frame),
     do:
-      exact_keys?(frame, ["type", "recovery_id", "head"]) and valid_uuid?(frame["recovery_id"]) and
-        valid_cursor?(frame["head"])
+      correlation_exact_keys?(frame, ["type", "recovery_id", "head"]) and
+        valid_uuid?(frame["recovery_id"]) and valid_cursor?(frame["head"])
 
-  def valid_server_frame?(%{"type" => "event"} = frame), do: valid_event?(frame)
+  def valid_server_frame?(%{"type" => "event"} = frame),
+    do:
+      valid_event?(frame) and server_frame_within_limit?(frame, @limits["encodedLiveEventBytes"])
+
   def valid_server_frame?(%{"type" => "ack"} = frame), do: valid_ack?(frame)
 
   def valid_server_frame?(%{"type" => type} = frame)
@@ -872,12 +924,18 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   def valid_server_frame?(%{"type" => "directed_request_result"} = frame),
     do: valid_directed_request_result?(frame)
 
-  def valid_server_frame?(%{"type" => "reaction"} = frame), do: valid_reaction?(frame)
+  def valid_server_frame?(%{"type" => "reaction"} = frame),
+    do:
+      valid_reaction?(frame) and
+        server_frame_within_limit?(frame, @limits["collaborationFrameBytes"])
 
   def valid_server_frame?(%{"type" => "reaction_result"} = frame),
     do: valid_reaction_result?(frame)
 
-  def valid_server_frame?(%{"type" => "chat_message"} = frame), do: valid_chat_message?(frame)
+  def valid_server_frame?(%{"type" => "chat_message"} = frame),
+    do:
+      valid_chat_message?(frame) and
+        server_frame_within_limit?(frame, @limits["collaborationFrameBytes"])
 
   def valid_server_frame?(%{"type" => "chat_send_result"} = frame),
     do: valid_chat_send_result?(frame)
@@ -895,15 +953,17 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         %{"type" => "retryable_error", "command_id" => id, "code" => code} = frame
       ),
       do:
-        exact_keys?(frame, ["type", "command_id", "code"]) and valid_command_id?(id) and
+        correlation_exact_keys?(frame, ["type", "command_id", "code"]) and valid_command_id?(id) and
           code in @retryable_codes
 
   def valid_server_frame?(%{"type" => "error", "code" => code, "detail" => detail} = frame),
     do:
-      exact_keys?(frame, ["type", "code", "detail"]) and code in @protocol_error_codes and
+      correlation_exact_keys?(frame, ["type", "code", "detail"]) and code in @protocol_error_codes and
         bounded_string?(detail, 0, @limits["protocolErrorDetailBytes"])
 
-  def valid_server_frame?(%{"type" => "pong"} = frame), do: exact_keys?(frame, ["type"])
+  def valid_server_frame?(%{"type" => "pong"} = frame),
+    do: correlation_exact_keys?(frame, ["type"])
+
   def valid_server_frame?(_frame), do: false
 
   defp valid_streams?(
@@ -961,14 +1021,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 
     case mode do
       "snapshot" ->
-        exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
-          valid_snapshot?(frame["snapshot"])
+        correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
+          valid_snapshot?(frame["snapshot"]) and
+          server_frame_within_limit?(frame, @limits["snapshotEncodedBytes"])
 
       mode when mode in ["replay", "up_to_date"] ->
-        exact_keys?(frame, base) and valid_base
+        correlation_exact_keys?(frame, base) and valid_base
 
       "terminal" ->
-        exact_keys?(frame, base ++ ["reason"]) and valid_base and
+        correlation_exact_keys?(frame, base ++ ["reason"]) and valid_base and
           frame["reason"] in @terminal_reasons
 
       _ ->
@@ -1180,7 +1241,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         ]
 
     Enum.any?(origin_keys, fn key ->
-      exact_keys?(frame, common ++ [key]) and valid_origin_id?(key, frame[key])
+      correlation_exact_keys?(frame, common ++ [key]) and valid_origin_id?(key, frame[key])
     end) and frame["stream"] == "control" and valid_uuid?(event_id) and
       valid_revision_pair?(base_revision, revision) and valid_positive_integer?(schema_version) and
       valid_digest?(digest) and valid_event_payload?(name, payload) and
@@ -1336,10 +1397,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
            "events" => events
          } = frame
        ) do
-    exact_keys?(frame, ["type", "recovery_id", "first_revision", "last_revision", "events"]) and
-      valid_uuid?(recovery_id) and is_list(events) and
+    correlation_exact_keys?(frame, [
+      "type",
+      "recovery_id",
+      "first_revision",
+      "last_revision",
+      "events"
+    ]) and valid_uuid?(recovery_id) and is_list(events) and
       length(events) <= @limits["replayPageMaxEvents"] and
-      frame_within_limit?(frame, @limits["replayPageEncodedBytes"]) and
+      server_frame_within_limit?(frame, @limits["replayPageEncodedBytes"]) and
       valid_replay_range?(events, first_revision, last_revision)
   end
 
@@ -1370,7 +1436,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, [
+         correlation_exact_keys?(frame, [
            "type",
            "command_id",
            "delivery",
@@ -1391,7 +1457,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, [
+         correlation_exact_keys?(frame, [
            "type",
            "command_id",
            "delivery",
@@ -1407,7 +1473,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
        )
        when outcome in ["rejected", "command_id_conflict"],
        do:
-         exact_keys?(frame, ["type", "command_id", "delivery", "outcome", "reason"]) and
+         correlation_exact_keys?(frame, ["type", "command_id", "delivery", "outcome", "reason"]) and
            valid_ack_base?(id, delivery) and reason in @rejection_reasons and
            (outcome != "command_id_conflict" or reason == "command_id_conflict")
 
@@ -1425,11 +1491,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
            "items" => items
          } = frame
        ) do
-    exact_keys?(frame, ["type", "stream", "projection_id", "sequence", "items"]) and
+    correlation_exact_keys?(frame, ["type", "stream", "projection_id", "sequence", "items"]) and
       valid_uuid?(projection_id) and is_list(items) and
       length(items) <= projection_item_limit(stream) and
       Enum.all?(items, &valid_projection_item?(stream, &1)) and
-      frame_within_limit?(frame, @limits["projectionSnapshotEncodedBytes"])
+      server_frame_within_limit?(frame, @limits["projectionSnapshotEncodedBytes"])
   end
 
   defp valid_projection?(
@@ -1441,10 +1507,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
            "item" => item
          } = frame
        ) do
-    exact_keys?(frame, ["type", "stream", "projection_id", "sequence", "item"]) and
+    correlation_exact_keys?(frame, ["type", "stream", "projection_id", "sequence", "item"]) and
       valid_uuid?(projection_id) and valid_positive_integer?(sequence) and
       valid_projection_item?(stream, item) and
-      frame_within_limit?(frame, @limits["encodedLiveEventBytes"])
+      server_frame_within_limit?(frame, @limits["encodedLiveEventBytes"])
   end
 
   defp valid_projection?(_frame), do: false
@@ -1488,7 +1554,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
            frame
        ),
        do:
-         exact_keys?(frame, ["type", "operation_id", "name", "outcome", "error_code"]) and
+         correlation_exact_keys?(frame, ["type", "operation_id", "name", "outcome", "error_code"]) and
            valid_request_id?(id) and name in @live_target_names and
            outcome in @live_target_outcomes and
            (is_nil(error_code) or
@@ -1505,7 +1571,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, [
+         correlation_exact_keys?(frame, [
            "type",
            "request_id",
            "name",
@@ -1518,7 +1584,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 
   defp valid_directed_request_result?(%{"request_id" => id, "result" => result} = frame),
     do:
-      exact_keys?(frame, ["type", "request_id", "result"]) and valid_request_id?(id) and
+      correlation_exact_keys?(frame, ["type", "request_id", "result"]) and valid_request_id?(id) and
         result in @directed_request_results
 
   defp valid_directed_request_result?(_frame), do: false
@@ -1534,7 +1600,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, [
+         correlation_exact_keys?(frame, [
            "type",
            "event_id",
            "participant_id",
@@ -1554,7 +1620,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
            frame
        ),
        do:
-         exact_keys?(frame, ["type", "operation_id", "outcome", "reaction"]) and
+         correlation_exact_keys?(frame, ["type", "operation_id", "outcome", "reaction"]) and
            valid_request_id?(operation_id) and valid_reaction?(reaction)
 
   defp valid_reaction_result?(
@@ -1562,7 +1628,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
            frame
        ),
        do:
-         exact_keys?(frame, ["type", "operation_id", "outcome", "error_code"]) and
+         correlation_exact_keys?(frame, ["type", "operation_id", "outcome", "error_code"]) and
            valid_request_id?(operation_id) and error_code in @collaboration_error_codes
 
   defp valid_reaction_result?(_frame), do: false
@@ -1580,7 +1646,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, [
+         correlation_exact_keys?(frame, [
            "type",
            "message_id",
            "client_message_id",
@@ -1640,7 +1706,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, ["type", "client_message_id", "outcome", "message"]) and
+         correlation_exact_keys?(frame, ["type", "client_message_id", "outcome", "message"]) and
            valid_request_id?(client_message_id) and valid_chat_message?(message)
 
   defp valid_chat_send_result?(
@@ -1651,7 +1717,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, ["type", "client_message_id", "outcome", "error_code"]) and
+         correlation_exact_keys?(frame, ["type", "client_message_id", "outcome", "error_code"]) and
            valid_request_id?(client_message_id) and error_code in @collaboration_error_codes
 
   defp valid_chat_send_result?(_frame), do: false
@@ -1667,7 +1733,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, [
+         correlation_exact_keys?(frame, [
            "type",
            "request_id",
            "outcome",
@@ -1679,7 +1745,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
            length(messages) <= @limits["chatPageMaxMessages"] and
            Enum.all?(messages, &valid_chat_message?/1) and is_boolean(has_more) and
            valid_nullable_unsigned_decimal?(head) and valid_nullable_unsigned_decimal?(floor) and
-           frame_within_limit?(frame, @limits["chatPageEncodedBytes"])
+           server_frame_within_limit?(frame, @limits["chatPageEncodedBytes"])
 
   defp valid_chat_page?(
          %{
@@ -1689,28 +1755,31 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          } = frame
        ),
        do:
-         exact_keys?(frame, ["type", "request_id", "outcome", "retained_floor_sequence"]) and
-           valid_request_id?(request_id) and valid_unsigned_decimal?(floor)
+         correlation_exact_keys?(frame, [
+           "type",
+           "request_id",
+           "outcome",
+           "retained_floor_sequence"
+         ]) and valid_request_id?(request_id) and valid_unsigned_decimal?(floor)
 
   defp valid_chat_page?(_frame), do: false
 
   defp valid_chat_head?(%{"head_sequence" => head, "retained_floor_sequence" => floor} = frame),
     do:
-      exact_keys?(frame, ["type", "head_sequence", "retained_floor_sequence"]) and
+      correlation_exact_keys?(frame, ["type", "head_sequence", "retained_floor_sequence"]) and
         valid_nullable_unsigned_decimal?(head) and valid_nullable_unsigned_decimal?(floor)
 
   defp valid_chat_head?(_frame), do: false
 
   defp valid_chat_read_receipt?(%{"type" => "chat_read_receipt"} = frame),
     do:
-      valid_chat_read_receipt_body?(Map.delete(frame, "type")) and
-        exact_keys?(frame, [
-          "type",
-          "participant_id",
-          "participant_generation",
-          "sequence",
-          "read_at"
-        ])
+      correlation_exact_keys?(frame, [
+        "type",
+        "participant_id",
+        "participant_generation",
+        "sequence",
+        "read_at"
+      ]) and valid_chat_read_receipt_body?(Map.drop(frame, ["type" | @correlation_field_keys]))
 
   defp valid_chat_read_receipt?(_frame), do: false
 
@@ -1731,7 +1800,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 
   defp valid_chat_read_result?(%{"outcome" => "accepted", "request_id" => request_id} = frame),
     do:
-      exact_keys?(frame, [
+      correlation_exact_keys?(frame, [
         "type",
         "request_id",
         "outcome",
@@ -1740,14 +1809,16 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "sequence",
         "read_at"
       ]) and valid_request_id?(request_id) and
-        valid_chat_read_receipt_body?(Map.drop(frame, ["type", "request_id", "outcome"]))
+        valid_chat_read_receipt_body?(
+          Map.drop(frame, ["type", "request_id", "outcome" | @correlation_field_keys])
+        )
 
   defp valid_chat_read_result?(
          %{"outcome" => "rejected", "request_id" => request_id, "error_code" => error_code} =
            frame
        ),
        do:
-         exact_keys?(frame, ["type", "request_id", "outcome", "error_code"]) and
+         correlation_exact_keys?(frame, ["type", "request_id", "outcome", "error_code"]) and
            valid_request_id?(request_id) and error_code in @collaboration_error_codes
 
   defp valid_chat_read_result?(_frame), do: false
@@ -1806,9 +1877,50 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_revision_pair?(base, revision),
     do: valid_non_negative_integer?(base) and revision == base + 1
 
+  defp valid_correlation_fields?(frame) when is_map(frame),
+    do:
+      Enum.all?(@correlation_field_keys, fn key ->
+        not Map.has_key?(frame, key) or valid_correlation_field?(key, frame[key])
+      end)
+
+  defp valid_correlation_field?("journey_id", value),
+    do: valid_uuid?(value) and not (value =~ ~r/\A0{8}-0{4}-0{4}-0{4}-0{12}\z/)
+
+  defp valid_correlation_field?("traceparent", value),
+    do:
+      bounded_string?(value, 55, 55) and value =~ @traceparent and
+        not (value =~ ~r/\A00-0{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/) and
+        not (value =~ ~r/\A00-[0-9a-f]{32}-0{16}-[0-9a-f]{2}\z/)
+
+  defp valid_correlation_field?("tracestate", value),
+    do: bounded_string?(value, 1, 512) and value =~ @tracestate
+
+  defp valid_correlation_field?(_key, _value), do: false
+
+  defp correlation_fields(frame),
+    do:
+      Enum.reduce(@correlation_field_keys, %{}, fn key, fields ->
+        if Map.has_key?(frame, key), do: Map.put(fields, key, frame[key]), else: fields
+      end)
+
+  defp correlation_exact_keys?(map, keys) when is_map(map),
+    do:
+      valid_correlation_fields?(map) and map_size(map) >= length(keys) and
+        Enum.all?(keys, &Map.has_key?(map, &1)) and
+        Enum.all?(Map.keys(map), &(&1 in keys or &1 in @correlation_field_keys))
+
   defp exact_keys?(map, keys) when is_map(map),
     do: map_size(map) == length(keys) and Enum.all?(keys, &Map.has_key?(map, &1))
 
   defp exact_keys?(_value, _keys), do: false
+
+  defp server_frame_within_limit?(frame, limit) do
+    budget = if complete_correlation?(frame), do: limit, else: limit - @correlation_reserved_bytes
+    frame_within_limit?(frame, budget)
+  end
+
+  defp complete_correlation?(frame),
+    do: Enum.all?(@correlation_field_keys, &Map.has_key?(frame, &1))
+
   defp frame_within_limit?(frame, limit), do: frame |> JSON.encode!() |> byte_size() <= limit
 end
