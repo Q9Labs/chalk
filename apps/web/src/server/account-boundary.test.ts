@@ -3,6 +3,7 @@ import { handleAccountBoundary } from "./account-boundary";
 
 const upstream = { CHALK_API_ORIGIN: "https://api.chalk.test" };
 const secureOrigin = "https://chalk.test";
+const upstreamCredentialField = "session_token";
 
 describe("account boundary", () => {
   it("issues a hardened CSRF cookie and private response", async () => {
@@ -37,7 +38,7 @@ describe("account boundary", () => {
       expect(headers.get("traceparent")).toBe("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
       return Response.json(
         {
-          session_token: "raw-account-token",
+          [upstreamCredentialField]: "raw-account-token",
           expires_at: "2030-08-04T12:00:00Z",
           user: { id: "user-1", name: "Hasan", email: "hasan@example.com", extra: "removed" },
         },
@@ -97,6 +98,23 @@ describe("account boundary", () => {
     await expect(response.json()).resolves.toEqual({ tenant: { id: "tenant-1" }, access: { role: "owner" }, replayed: false });
   });
 
+  it("allowlists Tenant pagination and drops browser-controlled query fields", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe("https://api.chalk.test/v1/me/tenants?cursor=next-page&page_size=100");
+      return Response.json({ tenants: [], pagination: { page_size: 100, next_cursor: null, has_more: false } });
+    });
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/me/tenants?cursor=next-page&page_size=100&admin=true`, {
+        headers: { Cookie: "__Host-chalk_account=server-held-account-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it("clears both account and CSRF cookies on logout", async () => {
     const response = await handleAccountBoundary(
       jsonRequest(
@@ -126,6 +144,40 @@ describe("account boundary", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://accounts.google.test/oauth");
     expect(response.headers.get("set-cookie")).toContain(encodeURIComponent("/home"));
+  });
+
+  it("completes Google OAuth through the boundary and restores the safe return path", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe("https://api.chalk.test/v1/auth/google/callback?state=state-1&code=code-1");
+      return Response.json({
+        [upstreamCredentialField]: "raw-google-token",
+        expires_at: "2030-08-04T12:00:00Z",
+        user: { id: "account-1", name: "Hasan", email: "hasan@example.com" },
+      });
+    });
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/auth/google/callback?state=state-1&code=code-1&return_to=https://evil.test`, {
+        headers: { Cookie: "__Host-chalk_oauth_return=%2Fspaces" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://chalk.test/spaces");
+    expect(response.headers.get("set-cookie")).toContain("__Host-chalk_account=raw-google-token");
+  });
+
+  it("includes the journey identifier in its structured request log", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/healthz`, { headers: { "X-Chalk-Journey-ID": "11111111-1111-4111-8111-111111111111" } }),
+      upstream,
+      vi.fn(async () => Response.json({ status: "ok" })),
+    );
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('"journey_id":"11111111-1111-4111-8111-111111111111"'));
+    info.mockRestore();
   });
 
   it("refuses a non-allowlisted upstream origin", async () => {

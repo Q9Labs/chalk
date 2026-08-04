@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { DashboardAPIError, listAccountTenants, loginAccount, registerAccount } from "../../lib/dashboard-api";
+import { DashboardAPIError, listAllAccountTenants, loginAccount, registerAccount } from "../../lib/dashboard-api";
 
 export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
       } else {
         await loginAccount({ email: String(data.get("email") ?? ""), password: String(data.get("password") ?? "") });
       }
-      const tenants = await listAccountTenants();
+      const tenants = await listAllAccountTenants();
       await navigate({ to: tenants.length === 0 ? "/onboarding" : "/home", replace: true });
     } catch (cause) {
       setError(cause instanceof DashboardAPIError ? cause.message : "Chalk could not complete sign-in");

@@ -135,7 +135,16 @@ export const AccountTenantListSchema = Schema.Struct({
 export type AccountTenantList = typeof AccountTenantListSchema.Type;
 
 export const AccountTenantOnboardingResponseSchema = Schema.Struct({
+  access: Schema.Struct({
+    account_id: UUIDSchema,
+    created_at: DateTimeStringSchema,
+    id: UUIDSchema,
+    role: Schema.Literals(["owner", "admin", "member", "viewer"]),
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+  }),
   replayed: Schema.Boolean,
+  tenant: TenantSchema,
 });
 export type AccountTenantOnboardingResponse = typeof AccountTenantOnboardingResponseSchema.Type;
 

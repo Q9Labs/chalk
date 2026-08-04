@@ -12416,11 +12416,40 @@
       "AccountTenantOnboardingResponse": {
         "additionalProperties": false,
         "properties": {
+          "access": {
+            "additionalProperties": false,
+            "properties": {
+              "account_id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "created_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "role": {
+                "enum": ["owner", "admin", "member", "viewer"],
+                "type": "string"
+              },
+              "tenant_id": {
+                "$ref": "#/components/schemas/TenantId"
+              },
+              "updated_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              }
+            },
+            "required": ["account_id", "created_at", "id", "role", "tenant_id", "updated_at"],
+            "type": "object"
+          },
           "replayed": {
             "type": "boolean"
+          },
+          "tenant": {
+            "$ref": "#/components/schemas/Tenant"
           }
         },
-        "required": ["replayed"],
+        "required": ["access", "replayed", "tenant"],
         "type": "object"
       },
       "AdmitSessionParticipantRequest": {

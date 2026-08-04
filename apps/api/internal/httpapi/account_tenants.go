@@ -37,8 +37,9 @@ type accountTenantListResponse struct {
 }
 
 type onboardTenantResponse struct {
-	accountTenantResponse
-	Replayed bool `json:"replayed"`
+	Tenant   tenantResponse       `json:"tenant"`
+	Access   tenantAccessResponse `json:"access"`
+	Replayed bool                 `json:"replayed"`
 }
 
 type listAccountTenantsRequest struct {
@@ -92,7 +93,8 @@ func onboardTenantEndpoint(service AccountTenantService) Endpoint[onboardTenantR
 		if err != nil {
 			return onboardTenantResponse{}, err
 		}
-		return onboardTenantResponse{accountTenantResponse: newAccountTenantResponse(result.AccountTenant), Replayed: result.Replayed}, nil
+		accountTenant := newAccountTenantResponse(result.AccountTenant)
+		return onboardTenantResponse{Tenant: accountTenant.Tenant, Access: accountTenant.Access, Replayed: result.Replayed}, nil
 	}).
 		UserAuth().
 		RateLimit(authenticatedWriteRateLimit).

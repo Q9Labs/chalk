@@ -1177,7 +1177,17 @@ export interface components {
       }[];
     };
     AccountTenantOnboardingResponse: {
+      access: {
+        account_id: components["schemas"]["UUID"];
+        created_at: components["schemas"]["DateTimeString"];
+        id: components["schemas"]["UUID"];
+        /** @enum {string} */
+        role: "owner" | "admin" | "member" | "viewer";
+        tenant_id: components["schemas"]["TenantId"];
+        updated_at: components["schemas"]["DateTimeString"];
+      };
       replayed: boolean;
+      tenant: components["schemas"]["Tenant"];
     };
     AdmitSessionParticipantRequest: {
       eligible_roles: string[];

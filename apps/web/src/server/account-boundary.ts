@@ -18,7 +18,7 @@ type BoundaryRoute = {
   authenticated?: boolean;
   mutation?: boolean;
   authResult?: boolean;
-  forwardQuery?: boolean;
+  queryParameters?: readonly string[];
 };
 
 export async function handleAccountBoundary(request: Request, env: AccountBoundaryEnv, fetcher: Fetcher = fetch): Promise<Response> {
@@ -64,7 +64,7 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
       return secureResponse(errorResponse(401, "unauthenticated", "Authentication required"), journeyID);
     }
 
-    const upstreamURL = resolveUpstreamURL(env.CHALK_API_ORIGIN, route.upstreamPath, route.forwardQuery ? url.search : "");
+    const upstreamURL = resolveUpstreamURL(env.CHALK_API_ORIGIN, route.upstreamPath, allowedSearch(url, route.queryParameters));
     const headers = upstreamHeaders(request, journeyID, sessionToken);
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : await boundedBody(request);
     const upstream = await fetcher(upstreamURL, { method: request.method, headers, body, redirect: "manual" });
@@ -116,7 +116,7 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
     responseStatus = response.status;
     return secureResponse(response, journeyID);
   } finally {
-    console.info(JSON.stringify({ event: "account_boundary.request", route: boundedRouteName(url.pathname), method: request.method, outcome, status: responseStatus, duration_ms: Date.now() - startedAt }));
+    console.info(JSON.stringify({ event: "account_boundary.request", journey_id: journeyID, route: boundedRouteName(url.pathname), method: request.method, outcome, status: responseStatus, duration_ms: Date.now() - startedAt }));
   }
 }
 
@@ -125,14 +125,25 @@ function resolveRoute(method: string, pathname: string): BoundaryRoute | undefin
     ["POST /api/auth/register", { upstreamPath: "/v1/auth/register", mutation: true, authResult: true }],
     ["POST /api/auth/login", { upstreamPath: "/v1/auth/login", mutation: true, authResult: true }],
     ["POST /api/auth/logout", { upstreamPath: "/v1/auth/logout", mutation: true, authenticated: true }],
-    ["GET /api/auth/google/start", { upstreamPath: "/v1/auth/google/start", forwardQuery: true }],
-    ["GET /api/auth/google/callback", { upstreamPath: "/v1/auth/google/callback", authResult: true, forwardQuery: true }],
+    ["GET /api/auth/google/start", { upstreamPath: "/v1/auth/google/start" }],
+    ["GET /api/auth/google/callback", { upstreamPath: "/v1/auth/google/callback", authResult: true, queryParameters: ["state", "code"] }],
     ["GET /api/me", { upstreamPath: "/v1/me", authenticated: true }],
-    ["GET /api/me/tenants", { upstreamPath: "/v1/me/tenants", authenticated: true }],
+    ["GET /api/me/tenants", { upstreamPath: "/v1/me/tenants", authenticated: true, queryParameters: ["cursor", "page_size"] }],
     ["POST /api/me/tenants", { upstreamPath: "/v1/me/tenants", authenticated: true, mutation: true }],
     ["GET /api/regions", { upstreamPath: "/v1/regions", authenticated: true }],
   ]);
   return routes.get(`${method.toUpperCase()} ${pathname}`);
+}
+
+function allowedSearch(url: URL, names: readonly string[] | undefined): string {
+  if (!names?.length) return "";
+  const allowed = new URLSearchParams();
+  for (const name of names) {
+    const value = url.searchParams.get(name);
+    if (value !== null) allowed.set(name, value);
+  }
+  const query = allowed.toString();
+  return query ? `?${query}` : "";
 }
 
 function validateMutationRequest(request: Request, url: URL): Response | undefined {

@@ -88,7 +88,7 @@ func TestOnboardTenantDerivesAccountScopeFromPrincipal(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&raw); err != nil {
 		t.Fatal(err)
 	}
-	if raw["replayed"] != true {
+	if raw["replayed"] != true || raw["tenant"].(map[string]any)["name"] != "Acme studio" || raw["access"].(map[string]any)["role"] != "owner" {
 		t.Fatalf("response = %#v", raw)
 	}
 }

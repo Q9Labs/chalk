@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { DashboardAPIError, getAccount, listAccountTenants, logoutAccount, type AccountTenant, type DashboardAccount } from "../../lib/dashboard-api";
+import { DashboardAPIError, getAccount, listAllAccountTenants, logoutAccount, type AccountTenant, type DashboardAccount } from "../../lib/dashboard-api";
 
 type DashboardAccountValue = {
   account: DashboardAccount;
@@ -21,7 +21,7 @@ export function DashboardAccountGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([getAccount(), listAccountTenants()])
+    void Promise.all([getAccount(), listAllAccountTenants()])
       .then(([account, tenants]) => {
         if (!active) return;
         if (tenants.length === 0) {

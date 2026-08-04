@@ -26,9 +26,15 @@ export type TenantAccess = {
 };
 
 export type AccountTenant = { tenant: Tenant; access: TenantAccess };
+type AccountTenantPage = {
+  tenants: AccountTenant[];
+  pagination: { page_size: number; next_cursor: string | null; has_more: boolean };
+};
 export type Region = { code: string; name: string };
 
 let csrfToken: string | undefined;
+let csrfExpiresAt = 0;
+const CSRF_REFRESH_MS = 55 * 60 * 1000;
 
 export class DashboardAPIError extends Error {
   constructor(
@@ -53,15 +59,30 @@ export async function loginAccount(input: { email: string; password: string }): 
 export async function logoutAccount(): Promise<void> {
   await dashboardRequest("/api/auth/logout", { method: "POST", body: {} });
   csrfToken = undefined;
+  csrfExpiresAt = 0;
 }
 
 export function getAccount(): Promise<DashboardAccount> {
   return dashboardRequest("/api/me");
 }
 
-export async function listAccountTenants(): Promise<AccountTenant[]> {
-  const response = await dashboardRequest<{ tenants: AccountTenant[] }>("/api/me/tenants");
-  return response.tenants;
+function listAccountTenants(options: { cursor?: string; pageSize?: number } = {}): Promise<AccountTenantPage> {
+  const query = new URLSearchParams();
+  if (options.cursor) query.set("cursor", options.cursor);
+  if (options.pageSize) query.set("page_size", String(options.pageSize));
+  const search = query.toString();
+  return dashboardRequest(`/api/me/tenants${search ? `?${search}` : ""}`);
+}
+
+export async function listAllAccountTenants(): Promise<AccountTenant[]> {
+  const tenants: AccountTenant[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await listAccountTenants({ cursor, pageSize: 100 });
+    tenants.push(...page.tenants);
+    cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
+  } while (cursor);
+  return tenants;
 }
 
 export async function listRegions(): Promise<Region[]> {
@@ -87,7 +108,7 @@ type DashboardRequestOptions = {
   headers?: HeadersInit;
 };
 
-async function dashboardRequest<T = unknown>(path: string, options: DashboardRequestOptions = {}): Promise<T> {
+async function dashboardRequest<T = unknown>(path: string, options: DashboardRequestOptions = {}, retryCSRF = true): Promise<T> {
   const method = options.method ?? "GET";
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
@@ -106,19 +127,26 @@ async function dashboardRequest<T = unknown>(path: string, options: DashboardReq
   if (!response.ok) {
     const value = await readJSON(response);
     const error = isRecord(value.error) ? value.error : {};
-    throw new DashboardAPIError(response.status, stringValue(error.code) ?? "request_failed", stringValue(error.message) ?? "Request failed");
+    const code = stringValue(error.code) ?? "request_failed";
+    if (retryCSRF && method !== "GET" && response.status === 403 && code === "csrf_mismatch") {
+      csrfToken = undefined;
+      csrfExpiresAt = 0;
+      return dashboardRequest(path, options, false);
+    }
+    throw new DashboardAPIError(response.status, code, stringValue(error.message) ?? "Request failed");
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
 async function getCSRFToken(): Promise<string> {
-  if (csrfToken) return csrfToken;
+  if (csrfToken && Date.now() < csrfExpiresAt) return csrfToken;
   const response = await fetch("/api/auth/csrf", { credentials: "same-origin", headers: { Accept: "application/json" } });
   if (!response.ok) throw new DashboardAPIError(response.status, "csrf_unavailable", "Could not secure this request");
   const value = (await response.json()) as { csrf_token?: unknown };
   if (typeof value.csrf_token !== "string") throw new DashboardAPIError(502, "csrf_unavailable", "Could not secure this request");
   csrfToken = value.csrf_token;
+  csrfExpiresAt = Date.now() + CSRF_REFRESH_MS;
   return csrfToken;
 }
 

@@ -3,16 +3,20 @@ package postgres
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type accountTenantQuerier interface {
@@ -20,6 +24,7 @@ type accountTenantQuerier interface {
 	CreateTenant(context.Context, sqlc.CreateTenantParams) (sqlc.CreateTenantRow, error)
 	GetAccountTenantByOnboarding(context.Context, sqlc.GetAccountTenantByOnboardingParams) (sqlc.GetAccountTenantByOnboardingRow, error)
 	GetTenantOnboarding(context.Context, sqlc.GetTenantOnboardingParams) (sqlc.TenantOnboardingRequest, error)
+	InsertJourneyEvent(context.Context, sqlc.InsertJourneyEventParams) (pgtype.UUID, error)
 	ListAccountTenants(context.Context, sqlc.ListAccountTenantsParams) ([]sqlc.ListAccountTenantsRow, error)
 	ReserveTenantOnboarding(context.Context, sqlc.ReserveTenantOnboardingParams) (sqlc.TenantOnboardingRequest, error)
 }
@@ -116,10 +121,55 @@ func (r AccountTenantRepository) OnboardTenant(ctx context.Context, input tenant
 	if err != nil {
 		return tenants.OnboardTenantResult{}, fmt.Errorf("get onboarded tenant: %w", err)
 	}
+	if !replayed {
+		if err := appendTenantOnboardingJourney(ctx, queries, row); err != nil {
+			return tenants.OnboardTenantResult{}, fmt.Errorf("append tenant onboarding journey: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return tenants.OnboardTenantResult{}, fmt.Errorf("commit tenant onboarding: %w", err)
 	}
 	return tenants.OnboardTenantResult{AccountTenant: mapOnboardedAccountTenant(row), Replayed: replayed}, nil
+}
+
+func appendTenantOnboardingJourney(ctx context.Context, queries accountTenantQuerier, row sqlc.GetAccountTenantByOnboardingRow) error {
+	journeyID, ok := observability.JourneyIDFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	attributes, err := json.Marshal(map[string]string{
+		"tenant_id":        utilities.IDFromBytes(row.ID.Bytes).String(),
+		"tenant_access_id": utilities.IDFromBytes(row.TenantAccessID.Bytes).String(),
+	})
+	if err != nil {
+		return fmt.Errorf("encode journey attributes: %w", err)
+	}
+	var traceID, spanID *string
+	if spanContext := trace.SpanContextFromContext(ctx); spanContext.IsValid() {
+		traceValue := spanContext.TraceID().String()
+		spanValue := spanContext.SpanID().String()
+		traceID, spanID = &traceValue, &spanValue
+	}
+	event := journeys.Event{
+		EventID:            utilities.IDFromBytes(row.TenantAccessID.Bytes),
+		JourneyID:          journeyID,
+		Sequence:           1,
+		OccurredAt:         timestamp(row.CreatedAt),
+		Name:               "tenant.onboarded",
+		Phase:              "terminal",
+		State:              "succeeded",
+		OriginKind:         "dashboard_account",
+		FirstObservedLayer: "api",
+		UpstreamVisibility: "complete",
+		TraceID:            traceID,
+		SpanID:             spanID,
+		Attributes:         attributes,
+	}
+	_, err = queries.InsertJourneyEvent(ctx, insertJourneyEventParams(event))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	return err
 }
 
 func createAccountTenantParams(input tenants.CreateTenantInput) sqlc.CreateTenantParams {

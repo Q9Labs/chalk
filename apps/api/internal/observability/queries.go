@@ -160,6 +160,34 @@ func (q operationQuerier) GetUser(ctx context.Context, id pgtype.UUID) (sqlc.Use
 	return user, err
 }
 
+func (q operationQuerier) GetAccountTenantByOnboarding(ctx context.Context, arg sqlc.GetAccountTenantByOnboardingParams) (sqlc.GetAccountTenantByOnboardingRow, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetAccountTenantByOnboarding(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetAccountTenantByOnboarding", startedAt, err)
+	return value, err
+}
+
+func (q operationQuerier) GetTenantOnboarding(ctx context.Context, arg sqlc.GetTenantOnboardingParams) (sqlc.TenantOnboardingRequest, error) {
+	startedAt := time.Now()
+	value, err := q.next.GetTenantOnboarding(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "GetTenantOnboarding", startedAt, err)
+	return value, err
+}
+
+func (q operationQuerier) ListAccountTenants(ctx context.Context, arg sqlc.ListAccountTenantsParams) ([]sqlc.ListAccountTenantsRow, error) {
+	startedAt := time.Now()
+	value, err := q.next.ListAccountTenants(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListAccountTenants", startedAt, err)
+	return value, err
+}
+
+func (q operationQuerier) ReserveTenantOnboarding(ctx context.Context, arg sqlc.ReserveTenantOnboardingParams) (sqlc.TenantOnboardingRequest, error) {
+	startedAt := time.Now()
+	value, err := q.next.ReserveTenantOnboarding(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ReserveTenantOnboarding", startedAt, err)
+	return value, err
+}
+
 func (q operationQuerier) InsertJourneyEvent(ctx context.Context, arg sqlc.InsertJourneyEventParams) (pgtype.UUID, error) {
 	startedAt := time.Now()
 	eventID, err := q.next.InsertJourneyEvent(ctx, arg)

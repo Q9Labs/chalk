@@ -100,7 +100,7 @@ const (
 	DefaultDeadlineSchedulerIntervalMS        = int64(1000)
 	DefaultDeadlineSchedulerBatch             = int32(50)
 	DefaultEnvironment                        = "local"
-	DefaultGoogleRedirectURL                  = "http://127.0.0.1:8080/v1/auth/google/callback"
+	DefaultGoogleRedirectURL                  = "http://127.0.0.1:3070/api/auth/google/callback"
 	DefaultLogFormat                          = "json"
 	DefaultLogLevel                           = "info"
 	DefaultOAuthStateTTLMS                    = int64(10 * 60 * 1000)

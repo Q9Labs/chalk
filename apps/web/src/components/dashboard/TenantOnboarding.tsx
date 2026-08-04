@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { DashboardAPIError, getAccount, listAccountTenants, listRegions, onboardTenant, type DashboardAccount, type Region } from "../../lib/dashboard-api";
+import { DashboardAPIError, getAccount, listAllAccountTenants, listRegions, onboardTenant, type DashboardAccount, type Region } from "../../lib/dashboard-api";
 
 export function TenantOnboarding() {
   const navigate = useNavigate();
@@ -11,7 +11,7 @@ export function TenantOnboarding() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([getAccount(), listAccountTenants(), listRegions()])
+    void Promise.all([getAccount(), listAllAccountTenants(), listRegions()])
       .then(([nextAccount, tenants, nextRegions]) => {
         if (!active) return;
         if (tenants.length > 0) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -19,6 +20,8 @@ func TestAccountTenantOnboardingIsAtomicScopedAndIdempotent(t *testing.T) {
 	ctx := context.Background()
 	accountID := accountTenantIntegrationID(t)
 	otherAccountID := accountTenantIntegrationID(t)
+	journeyID := accountTenantIntegrationID(t)
+	ctx = observability.ContextWithJourneyID(ctx, journeyID)
 	for _, account := range []struct {
 		id   utilities.ID
 		name string
@@ -28,6 +31,7 @@ func TestAccountTenantOnboardingIsAtomicScopedAndIdempotent(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
+		pool.Exec(ctx, `delete from observability_journey_events where journey_id=$1`, uuid(journeyID))
 		pool.Exec(ctx, `delete from tenant_onboarding_requests where account_id in ($1,$2)`, uuid(accountID), uuid(otherAccountID))
 		pool.Exec(ctx, `delete from memberships where user_id in ($1,$2)`, uuid(accountID), uuid(otherAccountID))
 		pool.Exec(ctx, `delete from tenants where name in ('Atomic studio','Changed studio','Must roll back')`)
@@ -51,6 +55,10 @@ func TestAccountTenantOnboardingIsAtomicScopedAndIdempotent(t *testing.T) {
 	}
 	if first.AccountTenant.Access.Role != "owner" || first.AccountTenant.Access.AccountID != accountID {
 		t.Fatalf("owner access = %#v", first.AccountTenant.Access)
+	}
+	var journeyEvents int
+	if err := pool.QueryRow(ctx, `select count(*) from observability_journey_events where journey_id=$1 and name='tenant.onboarded' and state='succeeded'`, uuid(journeyID)).Scan(&journeyEvents); err != nil || journeyEvents != 1 {
+		t.Fatalf("tenant onboarding journey events = %d, err = %v", journeyEvents, err)
 	}
 
 	_, err = service.OnboardTenant(ctx, tenants.OnboardTenantInput{AccountID: accountID, RequestKey: input.RequestKey, Name: "Changed studio"})
