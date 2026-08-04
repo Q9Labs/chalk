@@ -14,9 +14,10 @@ import { isIosSimulator } from "../utils/ios-simulator";
 import { EndScreen, type MeetingEndData } from "./EndScreen";
 import { JoinFailedScreen } from "./JoinFailedScreen";
 import { JoiningScreen } from "./JoiningScreen";
-import { ConferenceView, type ConferenceViewFeatures } from "./ConferenceView";
+import { ConferenceView as SpaceView, type ConferenceViewFeatures } from "./ConferenceView";
 import { PreJoinScreen, type PreJoinSettings } from "./PreJoinScreen";
 import type { ConferenceViewDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
+import type { ThemeAppearance, ThemePalette, ThemeTexture } from "../ui/appearance";
 
 export type VideoConferencePhase = "lobby" | "joining" | "meeting" | "end";
 
@@ -52,6 +53,9 @@ export interface VideoConferenceProps {
   readonly initialPhase?: VideoConferencePhase;
   readonly initialJoinSettings?: Partial<PreJoinSettings>;
   readonly features?: ConferenceViewFeatures;
+  readonly initialPalette?: ThemePalette;
+  readonly initialTexture?: ThemeTexture;
+  readonly onAppearanceChange?: (appearance: ThemeAppearance) => void;
   readonly telemetry?: TelemetryJourney;
   readonly createSession: (settings: PreJoinSettings) => ChalkSessionStore | Promise<ChalkSessionStore>;
   readonly pickChatAttachments?: (chatFiles: NonNullable<ChalkSessionStore["chatFiles"]>) => Promise<readonly ChalkChatAttachment[]>;
@@ -241,7 +245,18 @@ function ActiveVideoConference(props: ActiveVideoConferenceProps): React.JSX.Ele
   }
 
   return (
-    <ConferenceView features={props.features} meetingLink={props.meetingLink} onDiagnosticsChange={setConferenceViewDiagnostics} onEndForAll={props.role === "host" ? endForAll : undefined} onLeave={finish} pickChatAttachments={props.pickChatAttachments} roomName={props.roomName || props.roomId} />
+    <SpaceView
+      features={props.features}
+      initialPalette={props.initialPalette}
+      initialTexture={props.initialTexture}
+      meetingLink={props.meetingLink}
+      onAppearanceChange={props.onAppearanceChange}
+      onDiagnosticsChange={setConferenceViewDiagnostics}
+      onEndForAll={props.role === "host" ? endForAll : undefined}
+      onLeave={finish}
+      pickChatAttachments={props.pickChatAttachments}
+      roomName={props.roomName || props.roomId}
+    />
   );
 }
 

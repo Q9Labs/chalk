@@ -11,6 +11,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { Theme } from "../../ui/theme";
 import { CloseButton, IconTile, SheetGrip } from "./SpaceSurfacePrimitives";
 import type { SpaceController } from "./space-progressive-surface-types";
+import { AppearanceSettings } from "./AppearanceSettings";
 
 type SettingsTab = "devices" | "appearance" | "space";
 
@@ -89,27 +90,6 @@ function DeviceControl({ disabled, enabled, icon, label, onPress, value }: { rea
   );
 }
 
-function AppearanceSettings(): React.JSX.Element {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionIntro}>Appearance is managed by the embedding app. Chalk Light is active for this Space.</Text>
-      <View style={styles.appearanceCard}>
-        <View style={styles.appearancePreview}>
-          <View style={styles.previewLine} />
-          <View style={[styles.previewLine, styles.previewLineShort]} />
-          <View style={styles.previewChip} />
-        </View>
-        <View style={styles.appearanceCopy}>
-          <Text style={styles.rowLabel}>Chalk Light</Text>
-          <Text style={styles.rowMeta}>Warm paper, clear lines, calm accents</Text>
-        </View>
-        <HugeiconsIcon color={Theme.colors.success} icon={CheckmarkCircle01Icon} size={22} />
-      </View>
-      <Text style={styles.caption}>Palette and texture controls will appear when the embedding app exposes appearance state.</Text>
-    </View>
-  );
-}
-
 function SpaceSettings({ controller }: { readonly controller: SpaceController }): React.JSX.Element {
   return (
     <View style={styles.section}>
@@ -173,13 +153,6 @@ const styles = StyleSheet.create({
   readyCard: { alignItems: "center", backgroundColor: Theme.colors.successBackground, borderColor: Theme.colors.line, borderRadius: Theme.radius.md, borderWidth: 1, flexDirection: "row", gap: Theme.spacing.sm, minHeight: 58, paddingHorizontal: Theme.spacing.md },
   readyText: { color: Theme.colors.ink2, fontSize: 15, fontWeight: "600" },
   disabled: { opacity: 0.52 },
-  appearanceCard: { alignItems: "center", borderColor: Theme.colors.chalkBlue, borderRadius: Theme.radius.md, borderWidth: 1, flexDirection: "row", gap: Theme.spacing.md, padding: Theme.spacing.md },
-  appearancePreview: { backgroundColor: Theme.colors.paper, borderColor: Theme.colors.line, borderRadius: Theme.radius.sm, borderWidth: 1, gap: 5, height: 66, justifyContent: "center", padding: 9, width: 72 },
-  previewLine: { backgroundColor: Theme.colors.ink, borderRadius: 2, height: 5, width: 44 },
-  previewLineShort: { backgroundColor: Theme.colors.ink2, width: 30 },
-  previewChip: { backgroundColor: Theme.colors.washBlue, borderRadius: 4, height: 15, width: 52 },
-  appearanceCopy: { flex: 1, minWidth: 0 },
-  caption: { ...Theme.typography.meta, color: Theme.colors.ink3, lineHeight: 19 },
   infoRow: { alignItems: "center", borderBottomColor: Theme.colors.line, borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", minHeight: 54, paddingHorizontal: Theme.spacing.sm },
   infoValue: { color: Theme.colors.ink2, flexShrink: 1, fontSize: 15, marginLeft: Theme.spacing.md, maxWidth: "62%", textAlign: "right" },
   infoCard: { backgroundColor: Theme.colors.washBlue, borderColor: Theme.colors.line, borderRadius: Theme.radius.md, borderWidth: 1, gap: Theme.spacing.sm, marginTop: Theme.spacing.sm, padding: Theme.spacing.md },

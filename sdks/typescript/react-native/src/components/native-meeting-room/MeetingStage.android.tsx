@@ -7,6 +7,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import type { MeetingPrimaryContent } from "../../utils/native-meeting-layout";
 import { Theme } from "../../ui/theme";
+import { useNativeAppearance } from "../../ui/native-appearance-context";
 import { GradientSurface } from "../GradientSurface";
 import { MediaView } from "../MediaView";
 import type { RoomParticipant } from "./types";
@@ -37,7 +38,8 @@ function getParticipantStripTrack(participant: RoomParticipant): MediaStreamTrac
 }
 
 function StageSurface({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <View style={styles.surface}>{children}</View>;
+  const { appearance } = useNativeAppearance();
+  return <View style={[styles.surface, { backgroundColor: appearance.tokens.tileBase, borderColor: appearance.tokens.line }]}>{children}</View>;
 }
 
 function InfoChip({ icon, label, align = "left" }: { icon: React.ComponentProps<typeof HugeiconsIcon>["icon"]; label: string; align?: "left" | "right" }): React.JSX.Element {
@@ -50,6 +52,7 @@ function InfoChip({ icon, label, align = "left" }: { icon: React.ComponentProps<
 }
 
 function NativeWhiteboardPlaceholder({ whiteboard }: Pick<MeetingStageProps, "whiteboard">): React.JSX.Element {
+  const { appearance } = useNativeAppearance();
   return (
     <StageSurface>
       <GradientSurface angle="diagonal" borderRadius={Theme.radius.md} opacity={0.6} participantId="whiteboard-stage" />
@@ -58,14 +61,15 @@ function NativeWhiteboardPlaceholder({ whiteboard }: Pick<MeetingStageProps, "wh
           <HugeiconsIcon color={Theme.colors.chalkBlue} icon={Presentation01Icon} size={30} />
         </View>
         <Text style={styles.placeholderEyebrow}>SHARED BOARD</Text>
-        <Text style={styles.placeholderTitle}>Board active</Text>
-        <Text style={styles.placeholderCopy}>{whiteboard.canDraw ? "Collaborative board is open." : "Board is open in view-only mode."}</Text>
+        <Text style={[styles.placeholderTitle, { color: appearance.tokens.text }]}>Board active</Text>
+        <Text style={[styles.placeholderCopy, { color: appearance.tokens.textMuted }]}>{whiteboard.canDraw ? "Collaborative board is open." : "Board is open in view-only mode."}</Text>
       </View>
     </StageSurface>
   );
 }
 
 function NativeLocalSharePlaceholder(): React.JSX.Element {
+  const { appearance } = useNativeAppearance();
   return (
     <StageSurface>
       <GradientSurface angle="diagonal" borderRadius={Theme.radius.md} opacity={0.4} participantId="local-presenting" />
@@ -74,8 +78,8 @@ function NativeLocalSharePlaceholder(): React.JSX.Element {
           <HugeiconsIcon color={Theme.colors.chalkBlue} icon={ComputerScreenShareIcon} size={30} />
         </View>
         <Text style={styles.placeholderEyebrow}>YOU ARE PRESENTING</Text>
-        <Text style={styles.placeholderTitle}>Screen sharing active</Text>
-        <Text style={styles.placeholderCopy}>Your preview is hidden here to prevent an infinite mirror effect. Everyone else can see your screen.</Text>
+        <Text style={[styles.placeholderTitle, { color: appearance.tokens.text }]}>Screen sharing active</Text>
+        <Text style={[styles.placeholderCopy, { color: appearance.tokens.textMuted }]}>Your preview is hidden here to prevent an infinite mirror effect. Everyone else can see your screen.</Text>
       </View>
     </StageSurface>
   );

@@ -9,5 +9,6 @@ describe("SettingsSheet", () => {
     expect(source).toContain('["devices", "appearance", "space"]');
     expect(source).toContain("controller.toggleAudio");
     expect(source).toContain("controller.toggleVideo");
+    expect(source).toContain("<AppearanceSettings />");
   });
 });

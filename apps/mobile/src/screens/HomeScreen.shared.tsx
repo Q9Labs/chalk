@@ -1,9 +1,8 @@
-import Add01Icon from "@hugeicons/core-free-icons/dist/esm/Add01Icon";
-import ArrowLeft01Icon from "@hugeicons/core-free-icons/dist/esm/ArrowLeft01Icon";
 import ArrowRight02Icon from "@hugeicons/core-free-icons/dist/esm/ArrowRight02Icon";
 import CancelCircleIcon from "@hugeicons/core-free-icons/dist/esm/CancelCircleIcon";
 import Link01Icon from "@hugeicons/core-free-icons/dist/esm/Link01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { ChalkLogoElements } from "@q9labsai/chalk-react-native";
 import { useClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/clipboard";
 import { getClipboardInviteSuggestion } from "@q9labsai/chalk-react-native/invites";
 import { Theme } from "@q9labsai/chalk-react-native/theme";
@@ -14,6 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ClipboardInviteSuggestion } from "../components/ClipboardInviteSuggestion";
 import { canCreateMeeting, createMeetingLobbyRoute, parseInputDestination, resolveJoinToken, type LobbyRoute } from "../lib/chalk";
+import { CreateSpaceSheet } from "./CreateSpaceSheet";
+import { CreateSpaceIllustration, SpaceHistoryIllustration } from "./HomeIllustrations";
 import { useReducedMotion } from "./onboarding-motion";
 
 const PUBLIC_SITE_URL = "https://chalkmeet.com";
@@ -32,78 +33,31 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
   const [isResolving, setIsResolving] = useState(false);
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [activeMode, setActiveMode] = useState<"dual" | "naming">("dual");
-  const inputRef = useRef<TextInput>(null);
-  const namingInputRef = useRef<TextInput>(null);
+  const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const reducedMotion = useReducedMotion();
-  const heroAnimation = useRef(new Animated.Value(0)).current;
-  const contentAnimation = useRef(new Animated.Value(0)).current;
-  const modeAnimation = useRef(new Animated.Value(1)).current;
+  const entrance = useRef(new Animated.Value(0)).current;
 
   const inviteDestination = useMemo(() => parseInputDestination(input), [input]);
   const canOpenInviteLink = Boolean(inviteDestination?.joinToken);
-  const clipboardInviteLink = useClipboardInviteSuggestion(input, {
-    clipboard: Clipboard,
-    getSuggestion: getClipboardInviteSuggestion,
-  });
+  const clipboardInviteLink = useClipboardInviteSuggestion(input, { clipboard: Clipboard, getSuggestion: getClipboardInviteSuggestion });
 
   useEffect(() => {
     if (reducedMotion) {
-      heroAnimation.setValue(1);
-      contentAnimation.setValue(1);
+      entrance.setValue(1);
       return;
     }
-
-    heroAnimation.setValue(0);
-    contentAnimation.setValue(0);
-    Animated.stagger(110, [
-      Animated.timing(heroAnimation, {
-        toValue: 1,
-        duration: 360,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentAnimation, {
-        toValue: 1,
-        duration: 420,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [contentAnimation, heroAnimation, reducedMotion]);
-
-  useEffect(() => {
-    if (reducedMotion) {
-      modeAnimation.setValue(1);
-      return;
-    }
-
-    modeAnimation.setValue(0);
-    const animation = Animated.timing(modeAnimation, {
-      toValue: 1,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    });
+    const animation = Animated.timing(entrance, { duration: 420, easing: Easing.out(Easing.cubic), toValue: 1, useNativeDriver: true });
     animation.start();
     return () => animation.stop();
-  }, [activeMode, modeAnimation, reducedMotion]);
-
-  useEffect(() => {
-    if (activeMode !== "naming") return;
-    const focusTimer = setTimeout(() => namingInputRef.current?.focus(), 180);
-    return () => clearTimeout(focusTimer);
-  }, [activeMode]);
+  }, [entrance, reducedMotion]);
 
   const openInviteLink = useCallback(
     async (inviteLink: string) => {
-      const destination = parseInputDestination(inviteLink);
-      const joinToken = destination?.joinToken;
+      const joinToken = parseInputDestination(inviteLink)?.joinToken;
       if (!joinToken) {
         setError("Paste a valid invite link to join this Space.");
         return;
       }
-
       setError(null);
       try {
         setIsResolving(true);
@@ -127,15 +81,15 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
 
   const handleCreateSpace = useCallback(async () => {
     if (!createEnabled) {
-      setError(null);
+      setCreateSheetOpen(false);
       void Linking.openURL(PUBLIC_SITE_URL);
       return;
     }
-
     try {
       setError(null);
       setIsCreatingSpace(true);
       onNavigate(await createMeetingLobbyRoute(newSpaceName.trim() || undefined));
+      setCreateSheetOpen(false);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to create this Space.";
       setError(message);
@@ -145,254 +99,136 @@ export function HomeScreenShared({ onNavigate, onDiagnosticsFailure }: HomeScree
     }
   }, [createEnabled, newSpaceName, onDiagnosticsFailure, onNavigate]);
 
-  const switchMode = useCallback((mode: "dual" | "naming") => {
-    setError(null);
-    setActiveMode(mode);
-  }, []);
+  const animatedStyle = {
+    opacity: entrance,
+    transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView bounces contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <Animated.View style={[styles.header, { opacity: heroAnimation, transform: [{ translateY: heroAnimation.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
-            <ChalkWordmark />
-            <View style={styles.headerRule} />
-            <Text style={styles.headerLabel}>Spaces</Text>
+          <Animated.View style={[styles.header, animatedStyle]}>
+            <View accessibilityLabel="Chalk" style={styles.wordmark}>
+              <ChalkLogoElements size={34} />
+              <Text style={styles.wordmarkText}>chalk</Text>
+            </View>
           </Animated.View>
 
-          <Animated.View style={[styles.hero, { opacity: heroAnimation, transform: [{ translateY: heroAnimation.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }]}>
-            <Text style={styles.eyebrow}>YOUR WORK, TOGETHER</Text>
-            <Text style={styles.heroTitle}>A Space for{`\n`}work in motion.</Text>
-            <Text style={styles.heroSubtitle}>Create a Space or join one with an invite link. Your Spaces and living work stay close at hand.</Text>
+          <Animated.View style={[styles.hero, animatedStyle]}>
+            <Text style={styles.heroTitle}>A Space for work{`\n`}in motion.</Text>
+            <Text style={styles.heroSubtitle}>Start something new or open an invite. Your shared work stays close.</Text>
           </Animated.View>
 
-          <Animated.View style={[styles.content, { opacity: contentAnimation, transform: [{ translateY: contentAnimation.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
-            {activeMode === "dual" ? (
-              <>
-                <View style={styles.createCard}>
-                  <View style={styles.cardIcon}>
-                    <HugeiconsIcon color={Theme.colors.primaryForeground} icon={Add01Icon} size={23} />
-                  </View>
-                  <View style={styles.cardCopy}>
-                    <Text style={styles.cardTitle}>Create a Space</Text>
-                    <Text style={styles.cardDescription}>A calm place for people, chat, and shared work.</Text>
-                  </View>
-                  <Pressable
-                    accessibilityLabel="Create a Space"
-                    accessibilityRole="button"
-                    disabled={isCreatingSpace}
-                    onPress={() => (createEnabled ? switchMode("naming") : void handleCreateSpace())}
-                    style={({ pressed }) => [styles.createButton, pressed && styles.buttonPressed, isCreatingSpace && styles.buttonDisabled]}
-                  >
-                    <Text style={styles.createButtonText}>{createEnabled ? "Create" : "Create on web"}</Text>
-                    <HugeiconsIcon color={Theme.colors.primaryForeground} icon={ArrowRight02Icon} size={19} />
-                  </Pressable>
+          <Animated.View style={[styles.content, animatedStyle]}>
+            <Pressable accessibilityLabel="Create a Space" accessibilityRole="button" onPress={() => setCreateSheetOpen(true)} style={({ pressed }) => [styles.createRow, pressed && styles.rowPressed]}>
+              <View style={styles.createCopy}>
+                <Text style={styles.sectionTitle}>Create a Space</Text>
+                <Text style={styles.sectionDescription}>People, conversation, and shared work in one place.</Text>
+                <View style={styles.textAction}>
+                  <Text style={styles.textActionLabel}>{createEnabled ? "Create" : "Create on web"}</Text>
+                  <HugeiconsIcon color={Theme.colors.ink} icon={ArrowRight02Icon} size={18} />
                 </View>
+              </View>
+              <CreateSpaceIllustration />
+            </Pressable>
 
-                {!createEnabled ? <Text style={styles.helperText}>Invite links still work in mobile. Create your Space on the web.</Text> : null}
-
-                <View style={styles.joinSection}>
-                  <View style={styles.sectionHeading}>
-                    <Text style={styles.sectionTitle}>Join a Space</Text>
-                    <Text style={styles.sectionMeta}>Have an invite?</Text>
-                  </View>
-                  <View style={[styles.joinContainer, isInputFocused && styles.joinContainerFocused]}>
-                    <HugeiconsIcon color={isInputFocused ? Theme.colors.primary : Theme.colors.mutedForeground} icon={Link01Icon} size={20} />
-                    <TextInput
-                      ref={inputRef}
-                      accessibilityLabel="Invite link"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      onBlur={() => setIsInputFocused(false)}
-                      onChangeText={(text) => {
-                        setInput(text);
-                        if (error) setError(null);
-                      }}
-                      onFocus={() => setIsInputFocused(true)}
-                      onSubmitEditing={() => void openInviteLink(input)}
-                      placeholder="Paste invite link"
-                      placeholderTextColor={Theme.colors.mutedForeground}
-                      style={styles.input}
-                      value={input}
-                    />
-                    {input.length > 0 ? (
-                      <Pressable accessibilityLabel="Clear invite link" accessibilityRole="button" hitSlop={8} onPress={() => setInput("")} style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}>
-                        <HugeiconsIcon color={Theme.colors.mutedForeground} icon={CancelCircleIcon} size={19} />
-                      </Pressable>
-                    ) : null}
-                    <Pressable
-                      accessibilityLabel="Join Space"
-                      accessibilityRole="button"
-                      disabled={!canOpenInviteLink || isResolving}
-                      onPress={() => void openInviteLink(input)}
-                      style={({ pressed }) => [styles.joinButton, canOpenInviteLink && styles.joinButtonReady, pressed && canOpenInviteLink && styles.buttonPressed, isResolving && styles.buttonDisabled]}
-                    >
-                      {isResolving ? <ActivityIndicator color={Theme.colors.primaryForeground} size="small" /> : <HugeiconsIcon color={canOpenInviteLink ? Theme.colors.primaryForeground : Theme.colors.mutedForeground} icon={ArrowRight02Icon} size={20} />}
-                    </Pressable>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <Animated.View style={[styles.namingCard, { opacity: modeAnimation, transform: [{ translateY: modeAnimation.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
-                <View style={styles.namingHeader}>
-                  <Pressable accessibilityLabel="Back to Spaces" accessibilityRole="button" hitSlop={8} onPress={() => switchMode("dual")} style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}>
-                    <HugeiconsIcon color={Theme.colors.foreground} icon={ArrowLeft01Icon} size={22} />
+            <View style={styles.joinSection}>
+              <View style={styles.sectionHeading}>
+                <Text style={styles.sectionTitle}>Join a Space</Text>
+                <Text style={styles.sectionMeta}>Have an invite?</Text>
+              </View>
+              <View style={[styles.joinContainer, isInputFocused && styles.joinContainerFocused]}>
+                <HugeiconsIcon color={isInputFocused ? Theme.colors.ink : Theme.colors.ink3} icon={Link01Icon} size={20} />
+                <TextInput
+                  accessibilityLabel="Invite link"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onBlur={() => setIsInputFocused(false)}
+                  onChangeText={(text) => {
+                    setInput(text);
+                    setError(null);
+                  }}
+                  onFocus={() => setIsInputFocused(true)}
+                  onSubmitEditing={() => void openInviteLink(input)}
+                  placeholder="Paste invite link"
+                  placeholderTextColor={Theme.colors.placeholder}
+                  style={styles.input}
+                  value={input}
+                />
+                {input ? (
+                  <Pressable accessibilityLabel="Clear invite link" hitSlop={8} onPress={() => setInput("")}>
+                    <HugeiconsIcon color={Theme.colors.ink3} icon={CancelCircleIcon} size={19} />
                   </Pressable>
-                  <View style={styles.namingHeaderCopy}>
-                    <Text style={styles.cardTitle}>Create a Space</Text>
-                    <Text style={styles.cardDescription}>Give this Space a name or start with the default.</Text>
-                  </View>
-                </View>
-                <Text style={styles.fieldLabel}>
-                  Space name <Text style={styles.optionalLabel}>Optional</Text>
-                </Text>
-                <View style={styles.namingInputContainer}>
-                  <TextInput
-                    ref={namingInputRef}
-                    accessibilityLabel="Space name"
-                    autoCapitalize="sentences"
-                    autoCorrect
-                    maxLength={64}
-                    onChangeText={setNewSpaceName}
-                    onSubmitEditing={() => void handleCreateSpace()}
-                    placeholder="e.g. Product design"
-                    placeholderTextColor={Theme.colors.mutedForeground}
-                    returnKeyType="go"
-                    style={styles.namingInput}
-                    value={newSpaceName}
-                  />
-                  {newSpaceName.length > 0 ? (
-                    <Pressable accessibilityLabel="Clear Space name" accessibilityRole="button" hitSlop={8} onPress={() => setNewSpaceName("")} style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}>
-                      <HugeiconsIcon color={Theme.colors.mutedForeground} icon={CancelCircleIcon} size={19} />
-                    </Pressable>
-                  ) : null}
-                </View>
-                <Pressable accessibilityLabel="Create Space" accessibilityRole="button" disabled={isCreatingSpace} onPress={() => void handleCreateSpace()} style={({ pressed }) => [styles.primaryAction, pressed && styles.buttonPressed, isCreatingSpace && styles.buttonDisabled]}>
-                  {isCreatingSpace ? (
-                    <ActivityIndicator color={Theme.colors.primaryForeground} size="small" />
-                  ) : (
-                    <>
-                      <Text style={styles.primaryActionText}>{createEnabled ? "Create Space" : "Create on web"}</Text>
-                      <HugeiconsIcon color={Theme.colors.primaryForeground} icon={ArrowRight02Icon} size={20} />
-                    </>
-                  )}
+                ) : null}
+                <Pressable accessibilityLabel="Join Space" accessibilityRole="button" disabled={!canOpenInviteLink || isResolving} onPress={() => void openInviteLink(input)} style={({ pressed }) => [styles.joinButton, canOpenInviteLink && styles.joinButtonReady, pressed && styles.rowPressed]}>
+                  {isResolving ? <ActivityIndicator color={Theme.colors.primaryForeground} size="small" /> : <HugeiconsIcon color={canOpenInviteLink ? Theme.colors.primaryForeground : Theme.colors.ink3} icon={ArrowRight02Icon} size={20} />}
                 </Pressable>
-              </Animated.View>
-            )}
-
-            {clipboardInviteLink && activeMode === "dual" ? (
-              <View style={styles.clipboardSection}>
-                <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} />
               </View>
-            ) : null}
+            </View>
 
+            {clipboardInviteLink ? <ClipboardInviteSuggestion isLoading={isResolving} onPress={() => void handleClipboardSuggestion()} /> : null}
             {error ? (
-              <View accessibilityLiveRegion="assertive" style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
+              <Text accessibilityLiveRegion="assertive" style={styles.errorText}>
+                {error}
+              </Text>
             ) : null}
 
-            {activeMode === "dual" ? (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyStateRule} />
-                <Text style={styles.emptyStateTitle}>Spaces you join will appear here.</Text>
-                <Text style={styles.emptyStateDescription}>Your next Space is always one invite away.</Text>
-              </View>
-            ) : null}
+            <View style={styles.historySection}>
+              <SpaceHistoryIllustration />
+              <Text style={styles.emptyTitle}>Your Spaces will gather here.</Text>
+              <Text style={styles.emptyDescription}>Open an invite or create a Space to begin your history.</Text>
+            </View>
           </Animated.View>
         </ScrollView>
 
-        {activeMode === "dual" ? (
-          <View style={styles.footer}>
-            <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PUBLIC_SITE_URL)}>
-              <Text style={styles.footerText}>
-                Learn more at <Text style={styles.footerLink}>chalkmeet.com</Text>
-              </Text>
-            </Pressable>
-            <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PUBLIC_PRIVACY_URL)}>
-              <Text style={styles.footerText}>
-                <Text style={styles.footerLink}>Privacy Policy</Text>
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
+        <View style={styles.footer}>
+          <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PUBLIC_SITE_URL)}>
+            <Text style={styles.footerText}>
+              Learn more at <Text style={styles.footerLink}>chalkmeet.com</Text>
+            </Text>
+          </Pressable>
+          <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PUBLIC_PRIVACY_URL)}>
+            <Text style={styles.footerLink}>Privacy Policy</Text>
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
+      <CreateSpaceSheet createEnabled={createEnabled} isCreating={isCreatingSpace} isOpen={createSheetOpen} name={newSpaceName} onChangeName={setNewSpaceName} onClose={() => setCreateSheetOpen(false)} onCreate={() => void handleCreateSpace()} />
     </SafeAreaView>
   );
 }
 
-function ChalkWordmark(): React.JSX.Element {
-  return (
-    <View accessibilityLabel="Chalk" style={styles.wordmark}>
-      <View style={styles.wordmarkMark}>
-        <View style={[styles.wordmarkBar, styles.wordmarkGreen]} />
-        <View style={[styles.wordmarkBar, styles.wordmarkYellow]} />
-        <View style={[styles.wordmarkBar, styles.wordmarkBlue]} />
-        <View style={[styles.wordmarkBar, styles.wordmarkPink]} />
-      </View>
-      <Text style={styles.wordmarkText}>chalk</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.colors.background },
+  container: { backgroundColor: Theme.colors.background, flex: 1 },
   flex: { flex: 1 },
-  scrollContent: { paddingHorizontal: Theme.spacing["2xl"], paddingTop: Theme.spacing.lg, paddingBottom: Theme.spacing["4xl"] },
-  header: { minHeight: 44, flexDirection: "row", alignItems: "center" },
-  wordmark: { flexDirection: "row", alignItems: "center", gap: Theme.spacing.sm },
-  wordmarkMark: { width: 29, height: 28, flexDirection: "row", alignItems: "flex-end", gap: 2 },
-  wordmarkBar: { width: 5, borderRadius: 3 },
-  wordmarkGreen: { height: 20, backgroundColor: Theme.colors.chalkGreen, transform: [{ rotate: "-16deg" }] },
-  wordmarkYellow: { height: 24, backgroundColor: Theme.colors.chalkYellow, transform: [{ rotate: "-5deg" }] },
-  wordmarkBlue: { height: 28, backgroundColor: Theme.colors.chalkBlue, transform: [{ rotate: "16deg" }] },
-  wordmarkPink: { height: 23, backgroundColor: Theme.colors.chalkPink, transform: [{ rotate: "8deg" }] },
-  wordmarkText: { color: Theme.colors.foreground, fontSize: 22, fontWeight: "800", letterSpacing: -0.8 },
-  headerRule: { width: 1, height: 20, backgroundColor: Theme.colors.border, marginHorizontal: Theme.spacing.md },
-  headerLabel: { ...Theme.typography.label, color: Theme.colors.mutedForeground },
-  hero: { marginTop: Theme.spacing["5xl"], marginBottom: Theme.spacing["3xl"] },
-  eyebrow: { ...Theme.typography.eyebrow, color: Theme.colors.mutedForeground, marginBottom: Theme.spacing.md },
-  heroTitle: { ...Theme.typography.title, color: Theme.colors.foreground, fontSize: 40, lineHeight: 45, letterSpacing: -1.4 },
-  heroSubtitle: { ...Theme.typography.body, color: Theme.colors.mutedForeground, fontSize: 16, lineHeight: 24, marginTop: Theme.spacing.lg, maxWidth: 360 },
-  content: { gap: Theme.spacing.lg },
-  createCard: { borderWidth: 1, borderColor: Theme.colors.border, borderRadius: Theme.radius.lg, backgroundColor: Theme.colors.card, padding: Theme.spacing.lg, ...Theme.shadows.sm },
-  cardIcon: { width: 42, height: 42, borderRadius: Theme.radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: Theme.colors.primary, marginBottom: Theme.spacing.md },
-  cardCopy: { marginBottom: Theme.spacing.lg },
-  cardTitle: { ...Theme.typography.subheading, color: Theme.colors.foreground, fontSize: 19 },
-  cardDescription: { ...Theme.typography.body, color: Theme.colors.mutedForeground, marginTop: Theme.spacing.xs, lineHeight: 21 },
-  createButton: { minHeight: 46, borderRadius: Theme.radius.sm, backgroundColor: Theme.colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Theme.spacing.sm, paddingHorizontal: Theme.spacing.lg },
-  createButtonText: { ...Theme.typography.label, color: Theme.colors.primaryForeground, fontSize: 15 },
-  helperText: { ...Theme.typography.meta, color: Theme.colors.mutedForeground, textAlign: "center", marginTop: -Theme.spacing.sm },
+  scrollContent: { paddingBottom: Theme.spacing["4xl"], paddingHorizontal: Theme.spacing["2xl"], paddingTop: Theme.spacing.md },
+  header: { alignItems: "center", flexDirection: "row", minHeight: 44 },
+  wordmark: { alignItems: "center", flexDirection: "row", gap: 7 },
+  wordmarkText: { color: Theme.colors.ink, fontSize: 22, fontWeight: "800", letterSpacing: -0.8 },
+  hero: { marginBottom: Theme.spacing["3xl"], marginTop: Theme.spacing["3xl"] },
+  heroTitle: { color: Theme.colors.ink, fontSize: 34, fontWeight: "800", letterSpacing: -1.1, lineHeight: 39 },
+  heroSubtitle: { color: Theme.colors.ink2, fontSize: 15, lineHeight: 22, marginTop: Theme.spacing.md, maxWidth: 330 },
+  content: { gap: Theme.spacing["3xl"] },
+  createRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginHorizontal: -4, minHeight: 122 },
+  createCopy: { flex: 1, paddingRight: Theme.spacing.sm },
+  sectionTitle: { color: Theme.colors.ink, fontSize: 19, fontWeight: "700", letterSpacing: -0.25 },
+  sectionDescription: { color: Theme.colors.ink2, fontSize: 14, lineHeight: 20, marginTop: 5 },
+  textAction: { alignItems: "center", flexDirection: "row", gap: 5, marginTop: 11 },
+  textActionLabel: { color: Theme.colors.ink, fontSize: 14, fontWeight: "700" },
   joinSection: { gap: Theme.spacing.sm },
-  sectionHeading: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
-  sectionTitle: { ...Theme.typography.subheading, color: Theme.colors.foreground, fontSize: 18 },
-  sectionMeta: { ...Theme.typography.meta, color: Theme.colors.mutedForeground },
-  joinContainer: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: Theme.spacing.sm, paddingLeft: Theme.spacing.lg, paddingRight: Theme.spacing.xs, borderWidth: 1, borderColor: Theme.colors.input, borderRadius: Theme.radius.md, backgroundColor: Theme.colors.card },
-  joinContainerFocused: { borderColor: Theme.colors.primary },
-  input: { flex: 1, minHeight: 56, color: Theme.colors.foreground, fontSize: 16 },
-  clearButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  joinButton: { width: 46, height: 46, borderRadius: Theme.radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: Theme.colors.secondary },
-  joinButtonReady: { backgroundColor: Theme.colors.primary },
-  clipboardSection: { marginTop: -Theme.spacing.xs },
-  namingCard: { borderWidth: 1, borderColor: Theme.colors.border, borderRadius: Theme.radius.lg, backgroundColor: Theme.colors.card, padding: Theme.spacing.lg, ...Theme.shadows.sm },
-  namingHeader: { flexDirection: "row", alignItems: "center", marginBottom: Theme.spacing["2xl"] },
-  backButton: { width: 44, height: 44, borderRadius: Theme.radius.sm, borderWidth: 1, borderColor: Theme.colors.border, alignItems: "center", justifyContent: "center", marginRight: Theme.spacing.md },
-  namingHeaderCopy: { flex: 1 },
-  fieldLabel: { ...Theme.typography.label, color: Theme.colors.foreground, marginBottom: Theme.spacing.sm },
-  optionalLabel: { ...Theme.typography.meta, color: Theme.colors.mutedForeground, fontWeight: "400" },
-  namingInputContainer: { minHeight: 56, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Theme.colors.input, borderRadius: Theme.radius.md, backgroundColor: Theme.colors.background, paddingHorizontal: Theme.spacing.md },
-  namingInput: { flex: 1, minHeight: 54, color: Theme.colors.foreground, fontSize: 17 },
-  primaryAction: { minHeight: 52, marginTop: Theme.spacing.lg, borderRadius: Theme.radius.sm, backgroundColor: Theme.colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Theme.spacing.sm },
-  primaryActionText: { ...Theme.typography.label, color: Theme.colors.primaryForeground, fontSize: 16 },
-  emptyState: { alignItems: "center", paddingTop: Theme.spacing["2xl"], paddingBottom: Theme.spacing.lg },
-  emptyStateRule: { width: 38, height: 3, borderRadius: 2, backgroundColor: Theme.colors.border, marginBottom: Theme.spacing.md },
-  emptyStateTitle: { ...Theme.typography.label, color: Theme.colors.foreground, textAlign: "center" },
-  emptyStateDescription: { ...Theme.typography.meta, color: Theme.colors.mutedForeground, textAlign: "center", marginTop: Theme.spacing.xs },
-  errorContainer: { borderRadius: Theme.radius.md, borderWidth: 1, borderColor: Theme.colors.error, backgroundColor: Theme.colors.secondary, paddingHorizontal: Theme.spacing.md, paddingVertical: Theme.spacing.md },
-  errorText: { ...Theme.typography.label, color: Theme.colors.error, textAlign: "center" },
-  buttonPressed: { opacity: 0.76, transform: [{ translateY: 1 }] },
-  buttonDisabled: { opacity: 0.45 },
-  footer: { paddingHorizontal: Theme.spacing["2xl"], paddingTop: Theme.spacing.sm, paddingBottom: Platform.OS === "ios" ? Theme.spacing.md : Theme.spacing.lg, gap: Theme.spacing.xs },
-  footerText: { ...Theme.typography.meta, color: Theme.colors.mutedForeground, textAlign: "center" },
-  footerLink: { color: Theme.colors.foreground, fontWeight: "700" },
+  sectionHeading: { alignItems: "baseline", flexDirection: "row", justifyContent: "space-between" },
+  sectionMeta: { color: Theme.colors.ink3, fontSize: 13 },
+  joinContainer: { alignItems: "center", backgroundColor: Theme.colors.surface, borderColor: Theme.colors.lineStrong, borderRadius: Theme.radius.md, borderWidth: 1, flexDirection: "row", gap: Theme.spacing.sm, minHeight: 58, paddingLeft: Theme.spacing.lg, paddingRight: 5 },
+  joinContainerFocused: { borderColor: Theme.colors.chalkBlue, borderWidth: 2, paddingLeft: Theme.spacing.lg - 1, paddingRight: 4 },
+  input: { color: Theme.colors.ink, flex: 1, fontSize: 15, minHeight: 54, paddingVertical: 0 },
+  joinButton: { alignItems: "center", backgroundColor: Theme.colors.paper2, borderRadius: Theme.radius.sm, height: 46, justifyContent: "center", width: 46 },
+  joinButtonReady: { backgroundColor: Theme.colors.ink },
+  historySection: { alignItems: "center", borderTopColor: Theme.colors.line, borderTopWidth: 1, paddingTop: Theme.spacing["2xl"] },
+  emptyTitle: { color: Theme.colors.ink, fontSize: 16, fontWeight: "700", marginTop: Theme.spacing.sm },
+  emptyDescription: { color: Theme.colors.ink2, fontSize: 13, lineHeight: 19, marginTop: 5, maxWidth: 270, textAlign: "center" },
+  errorText: { color: Theme.colors.error, fontSize: 13, textAlign: "center" },
+  footer: { alignItems: "center", borderTopColor: Theme.colors.line, borderTopWidth: 1, flexDirection: "row", justifyContent: "space-between", marginHorizontal: Theme.spacing["2xl"], minHeight: 52 },
+  footerText: { color: Theme.colors.ink3, fontSize: 12 },
+  footerLink: { color: Theme.colors.ink2, fontSize: 12, fontWeight: "600" },
+  rowPressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
 });

@@ -12,9 +12,19 @@ import { MeetingTopBarAndroid } from "./native-meeting-room/MeetingTopBar.androi
 import { MeetingWhiteboardSurface } from "./native-meeting-room/MeetingWhiteboardSurface";
 import { useConferenceViewController } from "./native-meeting-room/useConferenceViewController";
 import { Theme } from "../ui/theme";
+import { NativeAppearanceProvider, NativeTextureOverlay, useNativeAppearance } from "../ui/native-appearance-context";
 
 export function ConferenceViewShared(props: ConferenceViewProps): React.JSX.Element {
+  return (
+    <NativeAppearanceProvider initialAppearance={{ palette: props.initialPalette, texture: props.initialTexture }} onAppearanceChange={props.onAppearanceChange}>
+      <AppearanceAwareSpace {...props} />
+    </NativeAppearanceProvider>
+  );
+}
+
+function AppearanceAwareSpace(props: ConferenceViewProps): React.JSX.Element {
   const controller = useConferenceViewController(props);
+  const { appearance } = useNativeAppearance();
   const stageProgress = useRef(new Animated.Value(0)).current;
   const toggleMedia = (action: () => void) => {
     if (controller.simulatorMediaDisabled) {
@@ -47,9 +57,10 @@ export function ConferenceViewShared(props: ConferenceViewProps): React.JSX.Elem
   }, [stageProgress]);
 
   return (
-    <SafeAreaView style={styles.room}>
+    <SafeAreaView style={[styles.room, { backgroundColor: appearance.tokens.canvas }]}>
+      <NativeTextureOverlay />
       <MeetingTopBarAndroid formattedDuration={controller.formattedDuration} participantCount={controller.participantCount} roomName={controller.roomName} />
-      <Animated.View style={[styles.stage, { opacity: stageProgress, transform: [{ translateY: stageProgress.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }]}>
+      <Animated.View style={[styles.stage, { backgroundColor: appearance.tokens.stage, opacity: stageProgress, transform: [{ translateY: stageProgress.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }]}>
         {controller.whiteboard.isOpen ? (
           <MeetingWhiteboardSurface whiteboard={controller.whiteboard} />
         ) : controller.derived.isStageMode ? (

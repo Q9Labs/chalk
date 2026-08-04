@@ -48,3 +48,5 @@ export { useRemoteMedia } from "./hooks/useRemoteMedia";
 export type { PlatformVariant } from "./platform/platform";
 export { resolvePlatformVariant } from "./platform/platform";
 export { Theme } from "./ui/theme";
+export { getThemeMode, isDarkThemePalette, resolveNativeAppearance, THEME_PALETTES, THEME_TEXTURES } from "./ui/appearance";
+export type { NativeAppearance, NativeAppearanceTokens, NativeShadowToken, NativeTextureBlendMode, NativeTextureDescriptor, NativeTextureKind, ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./ui/appearance";

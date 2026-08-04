@@ -3,6 +3,7 @@ import { FlatList, StyleSheet, Text, View, useWindowDimensions, type DimensionVa
 import MicOff01Icon from "@hugeicons/core-free-icons/dist/esm/MicOff01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Theme } from "../../ui/theme";
+import { useNativeAppearance } from "../../ui/native-appearance-context";
 import { MediaView } from "../MediaView";
 import type { RoomParticipant } from "./types";
 import { createMeetingPageStore, type MeetingPageStore } from "./native-meeting-page-store";
@@ -27,6 +28,8 @@ function buildWideParticipantRows(participants: readonly RoomParticipant[], colu
 }
 
 export function MeetingGridAndroid({ participants, gridPages }: MeetingGridProps): React.JSX.Element {
+  const { appearance } = useNativeAppearance();
+  const tokens = appearance.tokens;
   const { width, height } = useWindowDimensions();
   const isTablet = width >= 768;
   const pageStoreRef = useRef<MeetingPageStore | null>(null);
@@ -60,9 +63,9 @@ export function MeetingGridAndroid({ participants, gridPages }: MeetingGridProps
   if (participants.length === 0) {
     return (
       <View ref={clampPageRef} style={styles.emptyState}>
-        <Text style={styles.emptyEyebrow}>Space ready</Text>
-        <Text style={styles.emptyTitle}>You're the first one here</Text>
-        <Text style={styles.emptyCopy}>Other Participants will appear here when they join.</Text>
+        <Text style={[styles.emptyEyebrow, { color: tokens.controlActiveLine }]}>Space ready</Text>
+        <Text style={[styles.emptyTitle, { color: tokens.text }]}>You're the first one here</Text>
+        <Text style={[styles.emptyCopy, { color: tokens.textMuted }]}>Other Participants will appear here when they join.</Text>
       </View>
     );
   }
@@ -169,8 +172,9 @@ export function MeetingGridAndroid({ participants, gridPages }: MeetingGridProps
 }
 
 function ParticipantTile({ participant, width, height }: { participant: RoomParticipant; width?: DimensionValue; height?: DimensionValue }) {
+  const { appearance } = useNativeAppearance();
   return (
-    <View style={[styles.tile, width !== undefined && { width }, height !== undefined && { height }]}>
+    <View style={[styles.tile, { backgroundColor: appearance.tokens.tileBase, borderColor: appearance.tokens.line }, width !== undefined && { width }, height !== undefined && { height }]}>
       <MediaView participant={participant} track={participant.videoTrack ?? null} />
       <View style={styles.identityPuck}>
         <Text style={styles.participantName} numberOfLines={1}>

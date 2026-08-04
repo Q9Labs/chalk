@@ -5,6 +5,7 @@ import { ConferenceViewIosPad } from "./ConferenceView.ios-pad";
 import { ConferenceViewIosPhone } from "./ConferenceView.ios-phone";
 import { ConferenceViewMacos } from "./ConferenceView.macos";
 import type { ConferenceViewDiagnosticsSnapshot } from "./native-meeting-room/diagnostics";
+import type { ThemeAppearance, ThemePalette, ThemeTexture } from "../ui/appearance";
 
 export interface ConferenceViewFeatures {
   chat?: boolean;
@@ -23,6 +24,9 @@ export interface ConferenceViewProps {
   onLeave: () => void | Promise<void>;
   onEndForAll?: () => void | Promise<void>;
   onDiagnosticsChange?: (snapshot: ConferenceViewDiagnosticsSnapshot) => void;
+  initialPalette?: ThemePalette;
+  initialTexture?: ThemeTexture;
+  onAppearanceChange?: (appearance: ThemeAppearance) => void;
 }
 
 export type { ConferenceViewDiagnosticsSnapshot };

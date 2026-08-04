@@ -9,22 +9,25 @@ import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Theme } from "../../ui/theme";
+import { useNativeAppearance } from "../../ui/native-appearance-context";
 
 import type { MeetingBottomDockProps } from "./types";
 
 export function MeetingBottomDockAndroid({ simulatorMediaDisabled, isMuted, isCameraOff, unreadChatCount, onToggleAudio, onToggleVideo, onOpenChat, onOpenParticipants, onOpenMore, onLeave }: MeetingBottomDockProps): React.JSX.Element {
+  const { appearance } = useNativeAppearance();
+  const tokens = appearance.tokens;
   return (
-    <View style={styles.bottomDock}>
+    <View style={[styles.bottomDock, { backgroundColor: tokens.chrome, borderColor: tokens.line }]}>
       <View style={styles.controlPill}>
         <DockButton dark disabled={simulatorMediaDisabled} icon={isMuted ? MicOff01Icon : Mic01Icon} label="Microphone" onPress={onToggleAudio} showOffState={isMuted} />
         <DockButton dark disabled={simulatorMediaDisabled} icon={isCameraOff ? VideoOffIcon : Video01Icon} label="Camera" onPress={onToggleVideo} showOffState={isCameraOff} />
         {onOpenParticipants ? <DockButton icon={UserGroupIcon} label="People" onPress={onOpenParticipants} /> : null}
         {onOpenChat ? (
           <Pressable accessibilityLabel="Open Chat" accessibilityRole="button" onPress={onOpenChat} style={({ pressed }) => [styles.control, pressed && styles.controlButtonPressed]}>
-            <View style={styles.controlButton}>
-              <HugeiconsIcon color={Theme.colors.foreground} icon={Chat01Icon} size={21} />
+            <View style={[styles.controlButton, { backgroundColor: tokens.control, borderColor: tokens.line }]}>
+              <HugeiconsIcon color={tokens.text} icon={Chat01Icon} size={21} />
             </View>
-            <Text style={styles.controlLabel}>Chat</Text>
+            <Text style={[styles.controlLabel, { color: tokens.textMuted }]}>Chat</Text>
             {unreadChatCount > 0 ? (
               <View style={styles.controlBadge}>
                 <Text style={styles.controlBadgeText}>{unreadChatCount > 9 ? "9+" : String(unreadChatCount)}</Text>
@@ -56,13 +59,15 @@ function DockButton({
   readonly onPress: () => void;
   readonly showOffState?: boolean;
 }): React.JSX.Element {
+  const { appearance } = useNativeAppearance();
+  const tokens = appearance.tokens;
   return (
     <Pressable accessibilityLabel={label} accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.control, disabled && styles.controlButtonDisabled, pressed && styles.controlButtonPressed]}>
-      <View style={[styles.controlButton, dark && styles.controlButtonDark, destructive && styles.controlButtonEndCall]}>
-        <HugeiconsIcon color={dark || destructive ? "#FFFFFF" : Theme.colors.foreground} icon={icon} size={21} />
+      <View style={[styles.controlButton, { backgroundColor: tokens.control, borderColor: tokens.line }, dark && { backgroundColor: tokens.controlPrimary, borderColor: tokens.controlPrimary }, destructive && styles.controlButtonEndCall]}>
+        <HugeiconsIcon color={dark || destructive ? "#FFFFFF" : tokens.text} icon={icon} size={21} />
         {showOffState ? <View style={styles.offDot} /> : null}
       </View>
-      <Text style={[styles.controlLabel, destructive && styles.leaveLabel]}>{label}</Text>
+      <Text style={[styles.controlLabel, { color: tokens.textMuted }, destructive && styles.leaveLabel]}>{label}</Text>
     </Pressable>
   );
 }

@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added six labeled Home and Entrance mobile inspiration studies, including
+  cardless, illustrated, bottom-sheet, and preview-first directions.
 - Added a development-only, URL-addressable SDK state gallery for the Entrance
   and Space, including loading, waiting, empty, warning, retry, confirmation,
   timeout, failure, recovery, and ended states built from production React SDK
@@ -36,6 +38,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   with first-run onboarding, a new Spaces home, a responsive Entrance, polished
   live Space controls and progressive sheets, reduced-motion-aware transitions,
   and the current gradient Chalk launcher icon.
+- Refined the React Native Home with illustrated cardless creation and history
+  states plus a Create Space bottom sheet, increased the Entrance preview and
+  safe-area spacing, and added all 15 React SDK palettes and three material
+  textures as native appearance controls.
 - Added independently composable palette and texture options to the React
   `ConferenceView` and `VideoConference`, including seven paired light and dark
   color families plus clean, paper, and slate materials. Appearance settings now

@@ -18,7 +18,7 @@ export function EntrancePhone({ roomName, error, joinDisabled = false, logo, onC
   const controller = usePreJoinScreenController({ ...props, joinDisabled });
   const { height, width } = useWindowDimensions();
   const entranceProgress = useRef(new Animated.Value(0)).current;
-  const previewHeight = Math.min(width - Theme.spacing["2xl"] * 2, 520, height * 0.38);
+  const previewHeight = Math.min(Math.max(width * 1.06, height * 0.44), height * 0.52, 560);
 
   useEffect(() => {
     let mounted = true;
@@ -72,7 +72,7 @@ export function EntrancePhone({ roomName, error, joinDisabled = false, logo, onC
               </Text>
               <Text style={styles.entranceLabel}>Entrance</Text>
             </View>
-            <View style={[styles.headerSide, styles.logo]}>{logo ?? <ChalkLogoElements size={30} />}</View>
+            <View style={[styles.headerSide, styles.logo]}>{logo ?? <ChalkLogoElements size={34} />}</View>
           </View>
 
           <Animated.View style={[styles.content, animatedStyle]}>
@@ -145,11 +145,12 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Theme.colors.background },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: Platform.OS === "android" ? Theme.spacing.lg : Theme.spacing.sm,
+    paddingTop: Platform.OS === "android" ? Theme.spacing["2xl"] : Theme.spacing.md,
     paddingBottom: Platform.OS === "ios" ? Theme.spacing["3xl"] : Theme.spacing.xl,
   },
   header: {
     minHeight: 64,
+    marginTop: Platform.OS === "android" ? Theme.spacing.md : 0,
     paddingHorizontal: Theme.spacing.lg,
     flexDirection: "row",
     alignItems: "center",
@@ -170,7 +171,7 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, alignItems: "center", paddingHorizontal: Theme.spacing.sm },
   spaceName: { ...Theme.typography.subheading, color: Theme.colors.foreground, textAlign: "center" },
   entranceLabel: { ...Theme.typography.meta, color: Theme.colors.mutedForeground, marginTop: 1 },
-  content: { alignSelf: "center", flex: 1, gap: Theme.spacing.lg, maxWidth: 720, paddingHorizontal: Theme.spacing.lg, paddingTop: Theme.spacing.sm, width: "100%" },
+  content: { alignSelf: "center", flex: 1, gap: Theme.spacing.md, maxWidth: 720, paddingHorizontal: Theme.spacing.lg, paddingTop: Theme.spacing.sm, width: "100%" },
   previewSurface: {
     width: "100%",
     overflow: "hidden",
@@ -192,9 +193,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(12,14,18,0.80)",
   },
   nameTagText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
-  mediaRow: { flexDirection: "row", justifyContent: "center", gap: Theme.spacing["2xl"] },
-  mediaControl: { minWidth: 104, minHeight: 82, alignItems: "center", justifyContent: "center" },
-  mediaButton: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", backgroundColor: Theme.colors.ink },
+  mediaRow: { flexDirection: "row", justifyContent: "center", gap: Theme.spacing["3xl"], paddingVertical: Theme.spacing.xs },
+  mediaControl: { minWidth: 100, minHeight: 76, alignItems: "center", justifyContent: "center" },
+  mediaButton: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: Theme.colors.ink },
   mediaButtonOff: { backgroundColor: Theme.colors.error },
   mediaLabel: { ...Theme.typography.label, color: Theme.colors.foreground, marginTop: 8 },
   mediaState: { ...Theme.typography.meta, color: Theme.colors.mutedForeground },
