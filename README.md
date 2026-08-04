@@ -1,8 +1,8 @@
 # Chalk
 
-Chalk is an open-source monorepo for low-latency video conferencing on Cloudflare RealtimeKit. It contains the Go control-plane API, Elixir SyncEngine, TypeScript/React/React Native SDKs, first-party web and mobile surfaces, reusable whiteboard/UI packages, and supporting infrastructure.
+Chalk is an open-source monorepo for low-latency real-time collaboration and communication on Cloudflare RealtimeKit. A Space is the durable place where Users and Agents participate; each bounded run is an Episode that can leave Recording and Transcript artifacts. The repository contains the Go control-plane API, Elixir SyncEngine, TypeScript/React/React Native SDKs, first-party web and mobile surfaces, reusable whiteboard/UI packages, and supporting infrastructure.
 
-The core room, session, admission, media-adapter, Sync v1, webhook, and telemetry boundaries are implemented. Chalk is still under active development: the hosted web product, public docs app, durable chat, native whiteboard, production recorder/transcription qualification, and managed operations are not complete.
+The core Space, Episode, admission, media-adapter, Sync v1, webhook, and telemetry boundaries are implemented. Chalk is still under active development: the hosted web product, public docs app, durable chat, native whiteboard, production recorder/transcription qualification, and managed operations are not complete.
 
 Use these files instead of inferring product readiness from a component or route name:
 
@@ -10,6 +10,7 @@ Use these files instead of inferring product readiness from a component or route
 - [`checklist.md`](./checklist.md) — the same inventory as a domain-grouped checklist
 - [`architecture.html`](./architecture.html) — interactive technical architecture and open boundary gaps
 - [`docs/redesign/north-star.md`](./docs/redesign/north-star.md) — intended end state and deliberate v1 exclusions
+- [`docs/sdk-web-quickstart.md`](./docs/sdk-web-quickstart.md) — executable web SDK guide for `SpaceClient`, `AccessGrant`, and `<Chalk />`
 
 ## Development
 

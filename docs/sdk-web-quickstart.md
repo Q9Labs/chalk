@@ -78,7 +78,7 @@ try {
 }
 ```
 
-Call `leave()` before disposing an application-owned client so Chalk can finish the durable Leave operation. `dispose()` releases the client after the application is done with it.
+Run `leave()` before disposing an application-owned client so Chalk can finish the durable Leave operation. `dispose()` releases the client after the application is done with it.
 
 ## Render the turnkey Chalk experience
 

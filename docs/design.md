@@ -2,7 +2,7 @@
 
 > Descriptive snapshot, last verified against code on 2026-08-02. Not a source of truth.
 
-This document describes Chalk's visual language across marketing, web, meetings, SDK surfaces, and mobile. It defines one light-first system built around calm paper surfaces, precise structure, direct controls, and the four colors in the Chalk mark.
+This document describes Chalk's visual language across marketing, web, Spaces, SDK surfaces, and mobile. It defines one light-first system built around calm paper surfaces, precise structure, direct controls, and the four colors in the Chalk mark.
 
 ![Chalk design system board](./redesign/chalk-design-system-board.png)
 
@@ -10,13 +10,13 @@ The 2026-08-01 board is the current visual canon. The written tokens and rules h
 
 ## Character
 
-Chalk should feel clear, warm, and quietly confident. It is a realtime work surface, so the design must help people understand the room at a glance and act without hesitation.
+Chalk should feel clear, warm, and quietly confident. It is a real-time work surface, so the design must help people understand the Space at a glance and act without hesitation.
 
 Five principles govern the system:
 
-1. **The content owns the room.** Video, shared screens, whiteboards, and conversation take the available space. Controls sit in reserved chrome and never cover participant content.
+1. **The content owns the Space.** Video, shared screens, whiteboards, and conversation take the available space. Controls sit in reserved chrome and never cover Participant content.
 2. **Structure comes from spacing and lines.** Use a consistent grid, generous whitespace, and crisp one-pixel borders. Shadows explain elevation only when one surface truly floats above another.
-3. **Black means decisive.** Primary calls to action and live microphone or camera controls use near-black. The result is direct, stable, and easy to find.
+3. **Black means decisive.** Primary actions and live microphone or camera controls use near-black. The result is direct, stable, and easy to find.
 4. **Chalk color carries meaning.** Green, yellow, blue, and pink identify states, participants, sections, or gentle background washes. They do not become decorative gradients or compete with content.
 5. **Every state stays legible.** Active, muted, selected, loading, error, and focus states must remain clear without relying on color alone.
 
@@ -28,7 +28,7 @@ The product uses warm neutrals as its base. Pure white is reserved for contained
 
 | Token             | Value     | Use                                     |
 | ----------------- | --------- | --------------------------------------- |
-| `--paper`         | `#F7F6F2` | Page canvas, meeting shell background   |
+| `--paper`         | `#F7F6F2` | Page canvas, Space shell background     |
 | `--paper-2`       | `#F1F0EB` | Recessed or grouped control background  |
 | `--surface`       | `#FFFFFF` | Cards, inputs, panels, dialogs          |
 | `--surface-muted` | `#FBFAF7` | Headers, soft panels, app chrome        |
@@ -80,9 +80,9 @@ Type scale:
 | ------------- | ------------------------- | ---------------- | ----------- | ------------------------------ |
 | Display XL    | `clamp(58px, 7vw, 100px)` | `50px` to `72px` | `1.02`      | Marketing hero                 |
 | Display L     | `38px` to `68px`          | `36px` to `50px` | `1.02`      | Marketing section title        |
-| Product title | `28px` to `40px`          | `28px` to `36px` | `1.08`      | Lobby and empty-state title    |
+| Product title | `28px` to `40px`          | `28px` to `36px` | `1.08`      | Entrance and empty-state title |
 | Panel title   | `20px` to `24px`          | `20px`           | `1.2`       | Dialog and side-panel title    |
-| UI heading    | `16px`                    | `16px`           | `1.35`      | Room and card headings         |
+| UI heading    | `16px`                    | `16px`           | `1.35`      | Space and card headings        |
 | Body          | `15px` to `16px`          | `15px` to `16px` | `1.5`       | Product and marketing copy     |
 | Label         | `13px` to `14px`          | `13px` to `14px` | `1.35`      | Form and control labels        |
 | Meta          | `11px` to `12px`          | `11px` to `12px` | `1.4`       | Time, counts, secondary status |
@@ -102,7 +102,7 @@ Use a four-pixel base grid. Product UI favors the smaller steps; marketing compo
 | `space-5`  | `20px` | Panel padding                          |
 | `space-6`  | `24px` | Section inside a card                  |
 | `space-8`  | `32px` | Desktop panel and card padding         |
-| `space-10` | `40px` | Page-level breathing room              |
+| `space-10` | `40px` | Page-level breathing space             |
 | `space-14` | `56px` | Desktop container edge                 |
 | `space-22` | `88px` | Minimum marketing section space        |
 
@@ -112,12 +112,12 @@ Spacing describes relationships. Use less space inside a component, more space b
 
 Corners are restrained so the interface feels precise rather than toy-like.
 
-| Token         | Value   | Use                                     |
-| ------------- | ------- | --------------------------------------- |
-| `--radius-sm` | `6px`   | Buttons, tags, tabs                     |
-| `--radius-md` | `10px`  | Cards, panels, media tiles              |
-| `--radius-lg` | `16px`  | Large dialogs and special containers    |
-| Circle        | `999px` | Avatars and round meeting controls only |
+| Token         | Value   | Use                                  |
+| ------------- | ------- | ------------------------------------ |
+| `--radius-sm` | `6px`   | Buttons, tags, tabs                  |
+| `--radius-md` | `10px`  | Cards, panels, media tiles           |
+| `--radius-lg` | `16px`  | Large dialogs and special containers |
+| Circle        | `999px` | Avatars and round live controls only |
 
 Use one-pixel borders. A component should not combine a heavy border, large shadow, and tinted background unless it represents a critical state.
 
@@ -131,11 +131,11 @@ Chalk has two standard shadows:
 --shadow-md: 0 2px 4px rgba(12, 14, 18, 0.05), 0 20px 50px rgba(12, 14, 18, 0.09);
 ```
 
-Use no shadow for elements that remain in normal document flow. Use `shadow-sm` for a compact floating control or card. Use `shadow-md` for a modal, lobby frame, or hero product image. Full-screen dialogs may use `0 28px 80px rgba(12, 14, 18, 0.20)` because the dimmed backdrop establishes a separate layer.
+Use no shadow for elements that remain in normal document flow. Use `shadow-sm` for a compact floating control or card. Use `shadow-md` for a modal, Entrance frame, or hero product image. Full-screen dialogs may use `0 28px 80px rgba(12, 14, 18, 0.20)` because the dimmed backdrop establishes a separate layer.
 
 ### Icons
 
-Icons use a simple rounded-outline family with consistent optical weight. Standard sizes are `15px`, `18px`, and `20px`; large meeting controls may use `22px` to `24px`.
+Icons use a simple rounded-outline family with consistent optical weight. Standard sizes are `15px`, `18px`, and `20px`; large live controls may use `22px` to `24px`.
 
 - Use icons to reinforce clear labels, not replace unfamiliar concepts.
 - Keep decorative icons out of headings and marketing copy.
@@ -144,7 +144,7 @@ Icons use a simple rounded-outline family with consistent optical weight. Standa
 
 ### Logo
 
-Use the full-color Chalk mark on paper, muted surface, or white. Preserve its proportions and clear space. The divider after the logo sits `12px` to `16px` away, followed by the room name at the same interval. Do not stretch the mark, recolor individual chalk sticks, put it inside a pill, or add a glow.
+Use the full-color Chalk mark on paper, muted surface, or white. Preserve its proportions and clear space. The divider after the logo sits `12px` to `16px` away, followed by the Space name at the same interval. Do not stretch the mark, recolor individual chalk sticks, put it inside a pill, or add a glow.
 
 ## Components
 
@@ -164,11 +164,11 @@ Standard product buttons are `40px` to `44px` high. Marketing buttons are `50px`
 
 Primary controls may lift by one pixel on hover. Active press returns them to their resting position. Do not animate controls with bounce, elastic scale, or glow.
 
-### Meeting media controls
+### Space media controls
 
 Microphone and camera are the visual anchors of the dock. When available, both use circular ink buttons with white icons. A small adjacent chevron opens the related device menu. Off state keeps the dark control but uses a clear crossed icon and danger cue.
 
-Other meeting actions use circular white buttons with a line border. Selected actions use a pale blue surface. Leave is always separated from the rest of the cluster and uses a red circle.
+Other Space actions use circular white buttons with a line border. Selected actions use a pale blue surface. Leave is always separated from the rest of the cluster and uses a red circle.
 
 The dock sits in a reserved footer row. It may float visually, but it must never overlap a video tile, participant label, or side panel.
 
@@ -202,7 +202,7 @@ Select triggers follow input dimensions and show one down chevron. Custom menus 
 
 Tabs use text with a two-pixel ink underline. Segmented controls sit on `--paper-2` with `4px` inner padding. The selected segment uses white plus a tiny shadow; unselected segments remain ghost controls.
 
-Layout controls in the meeting header use the segmented pattern at `32px` square per option. They remain visually quiet because layout is a secondary action.
+Layout controls in the Space header use the segmented pattern at `32px` square per option. They remain visually quiet because layout is a secondary action.
 
 ### Avatars and identity
 
@@ -224,7 +224,7 @@ The raised-hand circle must remain smaller than the avatar and clear of the iden
 
 ### Panels
 
-People, chat, and other meeting panels use a shared shell:
+Participants, chat, and other Space panels use a shared shell:
 
 - `340px` desktop width
 - white surface
@@ -250,13 +250,13 @@ Popovers anchor to their trigger, use a white surface, strong-line border, `10px
 
 Dialogs center on a dimmed `rgba(12, 14, 18, 0.20)` backdrop. Use `14px` to `16px` radius and a maximum width based on the task:
 
-| Dialog          | Width              |
-| --------------- | ------------------ |
-| Confirmation    | `420px` to `500px` |
-| Meeting details | `560px` to `640px` |
-| Settings        | Up to `720px`      |
+| Dialog        | Width              |
+| ------------- | ------------------ |
+| Confirmation  | `420px` to `500px` |
+| Space details | `560px` to `640px` |
+| Settings      | Up to `720px`      |
 
-Meeting details contains the room name, time, join link, security note, and connection information. Settings uses a left navigation on desktop and horizontal tabs on mobile. Close actions remain in the top-right, and the initial focus moves inside the dialog.
+Space details contains the Space name, time, join link, security note, and connection information. Settings uses a left navigation on desktop and horizontal tabs on mobile. Close actions remain in the top-right, and the initial focus moves inside the dialog.
 
 ### Notifications
 
@@ -280,36 +280,36 @@ Marketing pages use a centered container up to `1320px`, with responsive side pa
 
 The hero pairs a large display headline with a realistic product surface. Use the blue chalk stroke as a single highlight behind one phrase. Technology proof uses logos alone. Supporting sections use rows, ruled grids, and gentle washes rather than stacks of generic floating cards.
 
-### Lobby
+### Entrance
 
-The lobby has three levels:
+The Entrance has three levels:
 
-1. A `72px` header with the Chalk logo, compact divider, room name, and “Device setup” metadata.
+1. A `72px` header with the Chalk logo, compact divider, Space name, and “Device setup” metadata.
 2. A centered preparation frame up to `1260px` wide.
 3. A media preview on the left and a focused join form on the right.
 
 On desktop, the join form is `400px` wide. Microphone and camera toggles sit directly below the preview and appear only once. The name field and join action stay together. On mobile, the preview stacks above the form and all touch controls meet the `44px` minimum.
 
-### Meeting room
+### Live Space
 
-The meeting shell uses a centered maximum width of `1440px` with quiet side borders. Its vertical structure is fixed:
+The live Space shell uses a centered maximum width of `1440px` with quiet side borders. Its vertical structure is fixed:
 
-1. Meeting header, `76px`
+1. Space header, `76px`
 2. Flexible stage and optional panel
 3. Reserved control row with safe-area padding
 
-The stage has `12px` tile gaps and outer padding from `12px` on mobile to `32px` on desktop. Opening People or Chat creates a `340px` second column at desktop sizes. The header shows the room name, duration, information action, and subtle layout selector.
+The stage has `12px` tile gaps and outer padding from `12px` on mobile to `32px` on desktop. Opening Participants or Chat creates a `340px` second column at desktop sizes. The header shows the Space name, Episode duration, information action, and subtle layout selector.
 
-Grid layout gives peers equal weight. Spotlight layout gives the active or pinned participant the large stage and keeps others in a stable filmstrip. Sidebar layout reserves a narrow participant column. Screen share and whiteboard take the full main stage while participant access remains available.
+Grid layout gives Participants equal weight. Spotlight layout gives the active or pinned Participant the large stage and keeps others in a stable filmstrip. Sidebar layout reserves a narrow Participant column. Screen share and whiteboard take the full main stage while the roster remains available.
 
 ### Mobile
 
 Mobile preserves the same hierarchy rather than shrinking desktop UI.
 
 - The marketing home moves to one column and uses full-width actions where needed.
-- The lobby stacks preview, media toggles, and join form in that order.
-- The meeting room keeps the header compact, uses one dominant tile or a two-column grid, and opens People and Chat as sheets or full-height panels.
-- The meeting dock may scroll horizontally only when every visible control retains a `44px` target. Primary mic, camera, and leave controls remain immediately reachable.
+- The Entrance stacks preview, media toggles, and join form in that order.
+- The live Space keeps the header compact, uses one dominant tile or a two-column grid, and opens Participants and Chat as sheets or full-height panels.
+- The Space dock may scroll horizontally only when every visible control retains a `44px` target. Primary mic, camera, and leave controls remain immediately reachable.
 - Safe-area insets apply to headers, docks, composers, and sheets.
 
 ## Interaction and motion
@@ -332,7 +332,7 @@ Chalk targets WCAG 2.2 AA.
 - Body text and essential icons need at least `4.5:1` contrast; large text and non-text boundaries need at least `3:1`.
 - Every icon-only control has an accessible name and visible tooltip where the meaning is not universal.
 - Focus order follows the visible layout. Opening a menu, panel, or dialog moves focus predictably and returns it to the trigger on close.
-- Keyboard users can operate all meeting controls, device menus, tabs, participant actions, and the chat composer.
+- Keyboard users can operate all Space controls, device menus, tabs, Participant actions, and the chat composer.
 - Touch targets are at least `44px` square. Closely grouped controls still keep enough separation to prevent accidental activation.
 - Live captions, notification announcements, recording status, hand raises, and connection problems expose semantic status text.
 - Video tiles identify participants and state to assistive technology without reading the same name twice.
@@ -340,9 +340,9 @@ Chalk targets WCAG 2.2 AA.
 
 ## Product language
 
-Copy is calm, direct, and role-neutral. Use familiar meeting terms: “People,” “Chat,” “Share,” “Board,” “Settings,” and “Leave.” Labels state the result of an action when state changes, such as “Mute microphone” and “Turn off camera.”
+Copy is calm, direct, and role-neutral. Use the product terms “Participants,” “Chat,” “Share,” “Board,” “Settings,” and “Leave.” Labels state the result of an action when state changes, such as “Mute microphone” and “Turn off camera.”
 
-Avoid technical provider names, implementation status, or SDK language inside the meeting experience. Error messages state what happened, whether the meeting can continue, and the next available action.
+Avoid technical provider names, implementation status, or SDK language inside the Space experience. Error messages state what happened, whether the Episode can continue, and the next available action.
 
 ## Implementation contract
 
@@ -355,9 +355,9 @@ Use these layers consistently:
 | Base        | `0`     | Canvas and normal content         |
 | Tile        | `10`    | Video, whiteboard, shared content |
 | Tile chrome | `20`    | Name tags and tile status         |
-| Dock        | `30`    | Meeting controls                  |
-| Panel       | `40`    | People, chat, transcript          |
-| Dialog      | `70`    | Meeting details and settings      |
+| Dock        | `30`    | Space controls                    |
+| Panel       | `40`    | Participants, chat, transcript    |
+| Dialog      | `70`    | Space details and settings        |
 | Popover     | `80`    | Device and participant menus      |
 | Toast       | `90`    | Notifications and urgent feedback |
 
