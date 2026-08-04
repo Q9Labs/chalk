@@ -1,7 +1,6 @@
-import SecurityCheckIcon from "@hugeicons/core-free-icons/dist/esm/SecurityCheckIcon";
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { Theme } from "../../ui/theme";
 import { useNativeAppearance } from "../../ui/native-appearance-context";
 import { ChalkLogoElements } from "../ChalkLogoElements";
@@ -26,13 +25,9 @@ export function MeetingTopBarAndroid({ roomName, participantCount, formattedDura
         <Text style={[styles.timerText, { color: tokens.textMuted }]}>{formattedDuration}</Text>
       </View>
       <View style={styles.topBarRight}>
-        <View style={styles.secureState}>
-          <HugeiconsIcon color={Theme.colors.success} icon={SecurityCheckIcon} size={16} />
-          <Text style={styles.secureText}>Secure</Text>
-        </View>
-        <View style={[styles.participantCount, { backgroundColor: tokens.control, borderColor: tokens.line }]}>
-          <HugeiconsIcon color={tokens.text} icon={UserGroupIcon} size={16} />
-          <Text style={[styles.topBarCount, { color: tokens.text }]}>{participantCount}</Text>
+        <View style={[styles.participantCount, { backgroundColor: tokens.control }]}>
+          <HugeiconsIcon color={tokens.textMuted} icon={UserGroupIcon} size={15} />
+          <Text style={[styles.topBarCount, { color: tokens.textMuted }]}>{participantCount}</Text>
         </View>
       </View>
     </View>
@@ -43,7 +38,7 @@ export { MeetingTopBarAndroid as MeetingTopBar };
 
 const styles = StyleSheet.create({
   topBar: {
-    paddingTop: Platform.OS === "ios" ? 48 : 30,
+    paddingTop: Theme.spacing.md,
     paddingBottom: 12,
     paddingHorizontal: Theme.spacing.lg,
     backgroundColor: Theme.colors.surfaceMuted,
@@ -87,24 +82,19 @@ const styles = StyleSheet.create({
     gap: Theme.spacing.sm,
     marginLeft: Theme.spacing.sm,
   },
-  secureState: { flexDirection: "row", alignItems: "center", gap: 4 },
-  secureText: { color: Theme.colors.success, fontSize: 11, fontWeight: "600" },
   participantCount: {
-    minWidth: 40,
-    height: 36,
-    paddingHorizontal: 8,
-    borderRadius: Theme.radius.sm,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.surface,
+    minWidth: 42,
+    height: 30,
+    paddingHorizontal: 9,
+    borderRadius: Theme.radius.full,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: 5,
   },
   topBarCount: {
     color: Theme.colors.foreground,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
 });

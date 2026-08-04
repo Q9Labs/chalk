@@ -7,7 +7,7 @@ import Presentation01Icon from "@hugeicons/core-free-icons/dist/esm/Presentation
 import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import WavingHand01Icon from "@hugeicons/core-free-icons/dist/esm/WavingHand01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Theme } from "../../ui/theme";
 import { IconTile, SheetGrip, type SpaceIcon } from "./SpaceSurfacePrimitives";
@@ -137,16 +137,15 @@ export function SpaceMoreSheet({ controller, onOpenSettings }: { readonly contro
 
 const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: "flex-end" },
-  backdrop: { backgroundColor: "rgba(12,14,18,0.22)", bottom: 94, left: 0, position: "absolute", right: 0, top: 0 },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(12,14,18,0.22)" },
   sheet: {
     backgroundColor: Theme.colors.surface,
     borderColor: Theme.colors.line,
     borderTopLeftRadius: Theme.radius.xl,
     borderTopRightRadius: Theme.radius.xl,
     elevation: 8,
-    marginBottom: 94,
     maxHeight: "78%",
-    paddingBottom: Theme.spacing.md,
+    paddingBottom: Platform.OS === "ios" ? Theme.spacing["2xl"] : Theme.spacing.lg,
     shadowColor: Theme.colors.ink,
     shadowOffset: { height: -8, width: 0 },
     shadowOpacity: 0.12,

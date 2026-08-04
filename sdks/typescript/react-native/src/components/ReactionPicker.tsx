@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Theme } from "../ui/theme";
 
@@ -46,8 +46,8 @@ function ReactionPickerBase({ isOpen, onClose, onSelect }: ReactionPickerProps):
 }
 
 const styles = StyleSheet.create({
-  overlay: { alignItems: "center", flex: 1, justifyContent: "flex-end", paddingBottom: 110, paddingHorizontal: Theme.spacing.lg },
-  backdrop: { backgroundColor: "rgba(12,14,18,0.22)", bottom: 94, left: 0, position: "absolute", right: 0, top: 0 },
+  overlay: { alignItems: "center", flex: 1, justifyContent: "flex-end", paddingBottom: Platform.OS === "ios" ? Theme.spacing["2xl"] : Theme.spacing.lg, paddingHorizontal: Theme.spacing.lg },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(12,14,18,0.22)" },
   picker: { backgroundColor: Theme.colors.surface, borderColor: Theme.colors.line, borderRadius: Theme.radius.lg, elevation: 8, padding: Theme.spacing.sm, shadowColor: Theme.colors.ink, shadowOffset: { height: 6, width: 0 }, shadowOpacity: 0.14, shadowRadius: 18, width: "100%" },
   header: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", minHeight: 46, paddingHorizontal: Theme.spacing.sm },
   title: { color: Theme.colors.ink, fontSize: 16, fontWeight: "700" },

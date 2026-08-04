@@ -8,5 +8,8 @@ describe("SpaceMoreSheet", () => {
     for (const label of ['label: controller.whiteboard.isOpen ? "Close Board" : "Board"', 'label: "People"', 'label: "Chat"', 'label: "Settings"', ">Leave<"]) {
       expect(source).toContain(label);
     }
+    expect(source).toContain("StyleSheet.absoluteFillObject");
+    expect(source).not.toContain("marginBottom: 94");
+    expect(source).not.toContain("bottom: 94");
   });
 });

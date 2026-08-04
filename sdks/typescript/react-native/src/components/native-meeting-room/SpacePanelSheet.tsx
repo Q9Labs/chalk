@@ -1,4 +1,4 @@
-import { Modal, Pressable, SafeAreaView, StyleSheet, View } from "react-native";
+import { Modal, Platform, Pressable, SafeAreaView, StyleSheet, View } from "react-native";
 
 import { Theme } from "../../ui/theme";
 import { SpaceChatSheet } from "./SpaceChatSheet";
@@ -26,7 +26,7 @@ export function SpacePanelSheet({ controller }: { readonly controller: SpaceCont
 
 const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: "flex-end" },
-  backdrop: { backgroundColor: "rgba(12,14,18,0.22)", bottom: 94, left: 0, position: "absolute", right: 0, top: 0 },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(12,14,18,0.22)" },
   sheet: {
     backgroundColor: Theme.colors.surface,
     borderColor: Theme.colors.line,
@@ -34,9 +34,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: Theme.radius.xl,
     elevation: 8,
     flex: 1,
-    marginBottom: 94,
     marginTop: 78,
     overflow: "hidden",
+    paddingBottom: Platform.OS === "android" ? Theme.spacing.sm : 0,
     shadowColor: Theme.colors.ink,
     shadowOffset: { height: -8, width: 0 },
     shadowOpacity: 0.12,

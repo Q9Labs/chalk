@@ -108,6 +108,6 @@ function AppearanceAwareSpace(props: ConferenceViewProps): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  room: { backgroundColor: Theme.colors.background, flex: 1, paddingBottom: Platform.OS === "android" ? Theme.spacing.sm : 0, paddingTop: Platform.OS === "android" ? Theme.spacing["2xl"] : 0 },
+  room: { backgroundColor: Theme.colors.background, flex: 1, paddingBottom: Platform.OS === "android" ? Theme.spacing.sm : 0 },
   stage: { flex: 1, width: "100%", overflow: "hidden", justifyContent: "center", padding: Theme.spacing.md },
 });

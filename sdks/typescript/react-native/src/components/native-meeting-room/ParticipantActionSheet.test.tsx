@@ -8,5 +8,8 @@ describe("ParticipantActionSheet", () => {
     expect(source).toContain("buildParticipantActionDescriptors(role");
     expect(source).toContain("descriptor.destructive");
     expect(source).toContain('accessibilityLabel="Close Participant actions"');
+    expect(source).toContain("StyleSheet.absoluteFillObject");
+    expect(source).not.toContain("paddingBottom: 112");
+    expect(source).not.toContain("bottom: 94");
   });
 });

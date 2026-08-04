@@ -8,5 +8,7 @@ describe("EntrancePhone", () => {
     expect(source).toContain(">Entrance<");
     expect(source).toContain('"Join Space"');
     expect(source).toContain('accessibilityLabel={`${label} ${enabled ? "on" : "off"}`}');
+    expect(source).toContain("paddingTop: Theme.spacing.sm");
+    expect(source).not.toContain('paddingTop: Platform.OS === "android" ? Theme.spacing["2xl"]');
   });
 });

@@ -10,5 +10,8 @@ describe("SettingsSheet", () => {
     expect(source).toContain("controller.toggleAudio");
     expect(source).toContain("controller.toggleVideo");
     expect(source).toContain("<AppearanceSettings />");
+    expect(source).toContain("StyleSheet.absoluteFillObject");
+    expect(source).not.toContain("marginBottom: 94");
+    expect(source).not.toContain("bottom: 94");
   });
 });

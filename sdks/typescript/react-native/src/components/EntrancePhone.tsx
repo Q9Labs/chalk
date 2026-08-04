@@ -145,12 +145,12 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Theme.colors.background },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: Platform.OS === "android" ? Theme.spacing["2xl"] : Theme.spacing.md,
+    paddingTop: Theme.spacing.sm,
     paddingBottom: Platform.OS === "ios" ? Theme.spacing["3xl"] : Theme.spacing.xl,
   },
   header: {
     minHeight: 64,
-    marginTop: Platform.OS === "android" ? Theme.spacing.md : 0,
+    marginTop: 0,
     paddingHorizontal: Theme.spacing.lg,
     flexDirection: "row",
     alignItems: "center",

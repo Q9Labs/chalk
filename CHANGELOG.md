@@ -42,6 +42,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   states plus a Create Space bottom sheet, increased the Entrance preview and
   safe-area spacing, and added all 15 React SDK palettes and three material
   textures as native appearance controls.
+- Tightened the React Native Space and Entrance headers, removed the redundant
+  Secure badge, softened the participant count, and made every Space sheet
+  cover the persistent control dock through the device safe area.
 - Added independently composable palette and texture options to the React
   `ConferenceView` and `VideoConference`, including seven paired light and dark
   color families plus clean, paper, and slate materials. Appearance settings now

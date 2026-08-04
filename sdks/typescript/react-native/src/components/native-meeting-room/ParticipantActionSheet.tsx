@@ -4,7 +4,7 @@ import UserGroupIcon from "@hugeicons/core-free-icons/dist/esm/UserGroupIcon";
 import UserIcon from "@hugeicons/core-free-icons/dist/esm/UserIcon";
 import Video01Icon from "@hugeicons/core-free-icons/dist/esm/Video01Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Theme } from "../../ui/theme";
 import { buildParticipantActionDescriptors, type AssignableParticipantRole, type ParticipantActionDescriptor } from "./space-progressive-surface-helpers";
@@ -91,8 +91,8 @@ function ParticipantActionRow({ descriptor, onPress }: { readonly descriptor: Pa
 }
 
 const styles = StyleSheet.create({
-  modalRoot: { alignItems: "center", flex: 1, justifyContent: "flex-end", paddingBottom: 112, paddingHorizontal: Theme.spacing.lg, paddingTop: Theme.spacing.lg },
-  backdrop: { backgroundColor: "rgba(12,14,18,0.22)", bottom: 94, left: 0, position: "absolute", right: 0, top: 0 },
+  modalRoot: { alignItems: "center", flex: 1, justifyContent: "flex-end", paddingBottom: Platform.OS === "ios" ? Theme.spacing["2xl"] : Theme.spacing.lg, paddingHorizontal: Theme.spacing.lg, paddingTop: Theme.spacing.lg },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(12,14,18,0.22)" },
   card: { backgroundColor: Theme.colors.surface, borderColor: Theme.colors.line, borderRadius: Theme.radius.lg, elevation: 8, maxHeight: "78%", overflow: "hidden", shadowColor: Theme.colors.ink, shadowOffset: { height: 4, width: 0 }, shadowOpacity: 0.14, shadowRadius: 20, width: "100%" },
   cardHeader: { alignItems: "center", borderBottomColor: Theme.colors.line, borderBottomWidth: 1, flexDirection: "row", gap: Theme.spacing.md, minHeight: 78, paddingHorizontal: Theme.spacing.md },
   headerCopy: { flex: 1, minWidth: 0 },

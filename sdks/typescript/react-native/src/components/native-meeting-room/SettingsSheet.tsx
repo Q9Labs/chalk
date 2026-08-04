@@ -6,7 +6,7 @@ import Video01Icon from "@hugeicons/core-free-icons/dist/esm/Video01Icon";
 import VideoOffIcon from "@hugeicons/core-free-icons/dist/esm/VideoOffIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Theme } from "../../ui/theme";
 import { CloseButton, IconTile, SheetGrip } from "./SpaceSurfacePrimitives";
@@ -118,7 +118,7 @@ function InfoRow({ label, value }: { readonly label: string; readonly value: str
 
 const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: "flex-end" },
-  backdrop: { backgroundColor: "rgba(12,14,18,0.22)", bottom: 94, left: 0, position: "absolute", right: 0, top: 0 },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(12,14,18,0.22)" },
   sheet: {
     backgroundColor: Theme.colors.surface,
     borderColor: Theme.colors.line,
@@ -126,9 +126,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: Theme.radius.xl,
     elevation: 8,
     flex: 1,
-    marginBottom: 94,
     marginTop: 72,
     overflow: "hidden",
+    paddingBottom: Platform.OS === "ios" ? Theme.spacing.md : Theme.spacing.xs,
     shadowColor: Theme.colors.ink,
     shadowOffset: { height: -8, width: 0 },
     shadowOpacity: 0.12,
